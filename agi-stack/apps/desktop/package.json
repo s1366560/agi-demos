@@ -24,11 +24,15 @@
     "build:electron": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && electron-vite build",
     "qa:browser": "playwright test --config browser-qa/playwright.config.mjs",
     "qa:neo4j-matched-state": "playwright test --config browser-qa/neo4j-matched-state.playwright.config.mjs",
-    "package:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run build:workspace-core && corepack pnpm run stage:sidecar && corepack pnpm run stage:workspace-core && corepack pnpm exec electron-builder --config electron-builder.local.yml --publish never",
-    "release:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run build:workspace-core && corepack pnpm run stage:sidecar && corepack pnpm run stage:workspace-core && corepack pnpm exec electron-builder --publish never",
+    "package:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run build:workspace-core && corepack pnpm run build:cua-helper && corepack pnpm run stage:cua-helper && corepack pnpm run stage:sidecar && corepack pnpm run stage:workspace-core && corepack pnpm exec electron-builder --config electron-builder.local.yml --publish never",
+    "release:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run build:workspace-core && corepack pnpm run build:cua-helper && corepack pnpm run stage:cua-helper && corepack pnpm run stage:sidecar && corepack pnpm run stage:workspace-core && corepack pnpm exec electron-builder --publish never",
     "preview": "vite preview --host 127.0.0.1",
     "preview:electron": "electron-vite preview",
-    "test:integration:extension": "pnpm --dir ../browser-extension build && playwright test --config browser-qa/browser-extension-accessibility.playwright.config.mjs"
+    "test:integration:extension": "pnpm --dir ../browser-extension build && playwright test --config browser-qa/browser-extension-accessibility.playwright.config.mjs",
+    "build:cua-helper": "node scripts/build-cua-helper.mjs",
+    "stage:cua-helper": "node scripts/stage-cua-helper.mjs",
+    "test:cua-helper": "node scripts/test-cua-helper.mjs",
+    "test:cua-packaging": "node --test scripts/cua-packaging.test.mjs scripts/cua-staging.test.mjs"
   },
   "dependencies": {
     "@copilotkit/a2ui-renderer": "1.53.0",

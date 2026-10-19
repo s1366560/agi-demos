@@ -8,8 +8,17 @@ metadata, attachments, error flagging, and pipeline event signaling.
 from __future__ import annotations
 
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
+
+
+class ToolControlOutcome(str, Enum):
+    """Trusted native user control; never inferred from tool output text."""
+
+    USER_PAUSED = "user_paused"
+    USER_STOPPED = "user_stopped"
 
 
 @dataclass
@@ -23,7 +32,7 @@ class ToolAttachment:
     """
 
     name: str
-    content: bytes | str
+    content: bytes | str = field(repr=False)
     mime_type: str = "application/octet-stream"
 
 
@@ -53,6 +62,10 @@ class ToolResult:
     was_truncated: bool = False
     original_bytes: int | None = None
     full_output_path: str | None = None
+    control_outcome: ToolControlOutcome | None = None
+    control_wait: Callable[[], Awaitable[ToolControlOutcome | None]] | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 @dataclass

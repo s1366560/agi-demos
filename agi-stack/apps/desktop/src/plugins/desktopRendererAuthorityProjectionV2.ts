@@ -92,6 +92,9 @@ export function projectDesktopRendererAuthorityV2(
         );
       }),
     ),
+    settingsSectionIds: freezeStringsV2(artifacts.flatMap((artifact) => artifact.kind === 'settings-page' ? artifact.sectionIds : [])),
+    commandIds: freezeStringsV2(artifacts.flatMap((artifact) => artifact.kind === 'command' ? artifact.commandIds : [])),
+    shortcutIds: freezeStringsV2(artifacts.flatMap((artifact) => artifact.kind === 'command' ? artifact.shortcutIds : [])),
     status: 'ready',
     uiSlotArtifactIds: freezeStringsV2(uiSlotArtifacts.map(({ artifact }) => artifact.id)),
   });

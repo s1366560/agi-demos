@@ -85,6 +85,28 @@ impl PgAgentExecutionEventRepository {
         Self { pool }
     }
 
+    /// Replay one already prepared request without resolving plugins or a provider.
+    pub async fn replay_prepared_model_request(
+        &self,
+        conversation_id: &str,
+        message_id: Option<&str>,
+        attempt_id: &str,
+    ) -> CoreResult<Option<Value>> {
+        sqlx::query_scalar::<_, Value>(
+            "SELECT event_data->'request' FROM agent_execution_events \
+             WHERE conversation_id = $1 AND message_id IS NOT DISTINCT FROM $2 \
+             AND event_type = 'model_request_prepared' AND event_data->>'attempt_id' = $3 \
+             AND event_data->>'schema_version' = '1' AND event_data->>'format' = 'provider.http.json/v1' \
+             ORDER BY event_time_us, event_counter LIMIT 1",
+        )
+        .bind(conversation_id)
+        .bind(message_id)
+        .bind(attempt_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)
+    }
+
     pub async fn insert_event(
         &self,
         record: AgentExecutionEventInsertRecord<'_>,

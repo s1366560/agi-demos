@@ -201,7 +201,9 @@ async def test_plan_can_finish_with_pending_execution_tasks(has_task_reader) -> 
     evaluator._load_session_tasks = AsyncMock(return_value=[{"status": "pending"}])
     evaluator._call_goal_check_llm = AsyncMock(
         return_value=SimpleNamespace(
-            achieved=True, rationale="The plan is ready for approval; execution remains pending."
+            achieved=True,
+            rationale="The plan is ready for approval; execution remains pending.",
+            control_handoff=False,
         )
     )
     evaluator.generate_suggestions = AsyncMock(return_value=None)

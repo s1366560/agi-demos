@@ -317,6 +317,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(graph_api::router())
         .merge(agent_commands_api::router())
         .merge(agent_conversations_api::router())
+        .merge(crate::computer_use_device_v2::router())
         .merge(conversation_session_api::router())
         .merge(agent_events_api::router())
         .merge(events_api::router())
@@ -347,6 +348,10 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(skill_api::router())
         .merge(tenant_skill_config_api::router())
         .merge(trust_api::router_authed())
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::feature_operation_http_v2::guard,
+        ))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             auth::require_api_key,

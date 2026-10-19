@@ -107,6 +107,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "infrastructure.adapters.secondary.sandbox" = ["chromium_seccomp_profile.json"]
+"infrastructure.agent.native_computer_use" = ["guidance.md"]
 
 [tool.black]
 line-length = 100
@@ -203,6 +204,21 @@ ignore = [
     "S101",   # assert is expected in tests
     "S105", "S106", "S107", "S108",  # hardcoded passwords/paths in test fixtures
     "PT",     # pytest style rules relaxed for existing tests
+]
+
+# Native helper fixtures use the same test-only policy, including unittest assertions.
+# Keep production helpers and all other lint rules under the normal project checks.
+"agi-stack/apps/desktop/cua-helper/tests/**" = [
+    "ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN401",
+    "N802", "N803", "E741", "B017", "B023", "RUF043",
+    "S101", "S105", "S106", "S107", "S108",
+    "PT",
+]
+"agi-stack/apps/desktop/cua-native-helper/tests/**" = [
+    "ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN401",
+    "N802", "N803", "E741", "B017", "B023", "RUF043",
+    "S101", "S105", "S106", "S107", "S108",
+    "PT",
 ]
 
 # Alembic migration files

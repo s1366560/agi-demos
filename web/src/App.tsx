@@ -1,14 +1,16 @@
-import { Fragment, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import './i18n/config';
 import { Login } from './pages/Login';
+import { WebPluginBootstrapBoundaryV2 } from './plugins/WebPluginBootstrapBoundaryV2';
 import { WebPluginGenerationHostV2 } from './plugins/WebPluginGenerationHostV2';
 import { createWebRendererAppCompositionPortV2 } from './plugins/webRendererAppCompositionV2';
 import { WebRendererAuthenticatedShellV2 } from './plugins/WebRendererAuthenticatedShellV2';
 import { LoginRedirect, RedirectToLogin } from './routes/v2/webCoreRouteRedirectsV2';
+import { composeWebRouteArtifactsV2 } from './routes/v2/webFeatureCompositionV2';
 import { WebNavigationAuthorityProviderV2 } from './routes/v2/WebNavigationAuthorityV2';
 import { WebRouteAuthorityProviderV2 } from './routes/v2/WebRouteAuthorityV2';
 import { WebRoutePageLoaderV2 as PageLoader } from './routes/v2/WebRoutePageLoaderV2';
@@ -121,21 +123,15 @@ function App() {
                       />
 
                       <Route element={<WebRendererAuthenticatedShellV2 />}>
-                        {status === 'ready'
-                          ? routeArtifacts.map((artifact) => (
-                              <Fragment key={artifact.id}>
-                                {artifact.createRouteElements()}
-                              </Fragment>
-                            ))
-                          : null}
+                        {status === 'ready' ? composeWebRouteArtifactsV2(routeArtifacts) : null}
                       </Route>
 
                       {/* Fallback */}
                       <Route
                         path="*"
                         element={
-                          isAuthenticated && status === 'loading' ? (
-                            <PageLoader />
+                          isAuthenticated && status !== 'ready' ? (
+                            <WebPluginBootstrapBoundaryV2 unavailable={status === 'unavailable'} />
                           ) : (
                             <Suspense fallback={<PageLoader />}>
                               <NotFound />

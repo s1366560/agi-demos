@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
 const {
   canConfirmMessageDeletion,
   filterHiddenMessages,

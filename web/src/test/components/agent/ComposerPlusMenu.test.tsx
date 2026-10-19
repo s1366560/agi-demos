@@ -9,6 +9,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
+const featureEnabled = vi.hoisted(() => vi.fn(() => true));
+vi.mock('@/routes/v2/webFeatureAuthorityV2', () => ({ useWebFeatureEnabledV2: featureEnabled }));
 const commandListMock = vi.hoisted(() => vi.fn());
 const skillListMock = vi.hoisted(() => vi.fn());
 const listDefinitionsMock = vi.hoisted(() => vi.fn());
@@ -133,6 +135,7 @@ async function openMenu() {
 describe('ComposerPlusMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    featureEnabled.mockReturnValue(true);
     Object.keys(mockApps).forEach((key) => delete mockApps[key]);
     commandListMock.mockResolvedValue({
       commands: [{ name: 'goal', description: 'Set a session goal', category: 'core' }],
@@ -142,6 +145,18 @@ describe('ComposerPlusMenu', () => {
     });
     listDefinitionsMock.mockResolvedValue({ definitions: [], total: 0 });
     fetchAppsMock.mockResolvedValue(undefined);
+  });
+
+  it('does not fetch or expose disabled feature catalogs', async () => {
+    featureEnabled.mockReturnValue(false);
+    renderMenu();
+    await openMenu();
+    expect(commandListMock).not.toHaveBeenCalled();
+    expect(skillListMock).not.toHaveBeenCalled();
+    expect(fetchAppsMock).not.toHaveBeenCalled();
+    expect(listDefinitionsMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('Researcher')).toBeNull();
+    expect(screen.queryByText('/goal')).toBeNull();
   });
 
   it('renders categorized sections with entries after opening', async () => {
@@ -254,9 +269,7 @@ describe('ComposerPlusMenu', () => {
     });
     fireEvent.keyDown(search, { key: 'Enter' });
 
-    expect(props.onSlashSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'command' })
-    );
+    expect(props.onSlashSelect).toHaveBeenCalledWith(expect.objectContaining({ kind: 'command' }));
     expect(screen.queryByTestId('composer-plus-menu')).not.toBeInTheDocument();
   });
 

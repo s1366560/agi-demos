@@ -11,6 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.agent_run_tool_settlement import (
+    settle_cancelled_run_tools,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
     AgentPlanRunModel,
@@ -197,6 +200,8 @@ async def settle_agent_run(
 ) -> None:
     """Settle queued inputs and persist an explicit current-run summary."""
 
+    await settle_cancelled_run_tools(db, run=run)
+
     input_result = await db.execute(
         refresh_select_statement(
             select(AgentRunInputModel)
@@ -248,8 +253,7 @@ async def settle_agent_run(
                 {"kind": "artifact", "value": item} for item in artifacts if isinstance(item, str)
             )
 
-    token_usage = execution_summary.get("total_tokens")
-    token_usage = token_usage if isinstance(token_usage, dict) else {}
+    token_usage = usage if isinstance(usage := execution_summary.get("total_tokens"), dict) else {}
     model_breakdown = _structured_model_breakdown(events, execution_summary)
     existing_result = await db.execute(
         refresh_select_statement(

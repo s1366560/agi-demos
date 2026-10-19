@@ -86,11 +86,18 @@ export function workspaceTreeStatusIsLiveRun(status: string | null | undefined):
 
 export const UNBOUND_CONVERSATIONS_KEY = '';
 
+export function isWorkspaceDefaultSelectionEligible(
+  workspace: Pick<WorkspaceSummary, 'is_archived' | 'status'>,
+): boolean {
+  return workspace.is_archived !== true && workspace.status?.trim().toLowerCase() !== 'archived';
+}
+
 export function resolveRuntimeWorkspaceId(
   requestedWorkspaceId: string,
   projectId: string,
-  workspaces: readonly Pick<WorkspaceSummary, 'id'>[],
+  workspaces: readonly Pick<WorkspaceSummary, 'id' | 'is_archived' | 'status'>[],
   activeConversation: Pick<AgentConversation, 'project_id' | 'workspace_id'> | null,
+  preferredWorkspaceId: string | null = null,
 ): string {
   const requested = requestedWorkspaceId.trim();
   if (requested && workspaces.some((workspace) => workspace.id === requested)) return requested;
@@ -98,7 +105,19 @@ export function resolveRuntimeWorkspaceId(
     !requested &&
     activeConversation?.project_id.trim() === projectId.trim() &&
     activeConversation.workspace_id === null;
-  return preservesUnboundSession ? UNBOUND_CONVERSATIONS_KEY : workspaces[0]?.id ?? '';
+  if (preservesUnboundSession) return UNBOUND_CONVERSATIONS_KEY;
+  if (!requested && preferredWorkspaceId !== null) {
+    const preferred = preferredWorkspaceId.trim();
+    if (!preferred) return UNBOUND_CONVERSATIONS_KEY;
+    if (
+      workspaces.some(
+        (workspace) => workspace.id === preferred && isWorkspaceDefaultSelectionEligible(workspace),
+      )
+    ) {
+      return preferred;
+    }
+  }
+  return workspaces.find(isWorkspaceDefaultSelectionEligible)?.id ?? '';
 }
 
 const CONVERSATION_STATUS_PRESENTATIONS: Readonly<

@@ -14,12 +14,14 @@ from src.infrastructure.plugins.v1_retirement import (
     PLUGIN_PROTOCOL_V1_RETIRED_CODE,
 )
 
+from .platform_plugin_instances_v2 import router as instances_router
 from .platform_plugin_profile_sources_v2 import router as profile_sources_router
 from .platform_plugins_v2 import router as protocol_v2_router
 
 router = APIRouter(prefix="/api/v1/platform-plugins", tags=["Platform Plugins"])
 router.include_router(protocol_v2_router)
 router.include_router(profile_sources_router)
+router.include_router(instances_router)
 
 
 def raise_plugin_protocol_v1_retired() -> NoReturn:

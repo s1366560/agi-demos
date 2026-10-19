@@ -640,6 +640,9 @@ impl PendingHitlRow {
         } else {
             Map::new()
         };
+        let decision=self.request_metadata.as_ref().and_then(|metadata|metadata.get("decision"))
+            .and_then(|value|serde_json::from_value::<agistack_core::agent::types::DecisionContext>(value.clone()).ok())
+            .filter(|decision|decision.is_complete());
         Some(SessionPendingHitlResponse {
             id: self.id,
             conversation_id: self.conversation_id,
@@ -656,6 +659,8 @@ impl PendingHitlRow {
             status: "pending",
             created_at: self.created_at,
             expires_at: self.expires_at,
+            authority_revision:1,
+            decision,
         })
     }
 }

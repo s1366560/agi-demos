@@ -248,6 +248,8 @@ class OperationContextV2:
         return self.generation.descriptor
 
     async def __aenter__(self) -> OperationContextV2:
+        if self.generation._disposed:
+            raise RuntimeV2Error("disposed_generation", "generation is disposed")
         if self.phase is not FiberPhaseV2.PENDING:
             raise RuntimeV2Error(
                 "invalid_operation_transition",
@@ -302,6 +304,8 @@ class OperationContextV2:
             self.phase = FiberPhaseV2.DISPOSED
 
     def _ensure_active(self) -> None:
+        if self.generation._disposed:
+            raise RuntimeV2Error("disposed_generation", "generation is disposed")
         if self.phase is not FiberPhaseV2.ACTIVE:
             raise RuntimeV2Error(
                 "inactive_operation",

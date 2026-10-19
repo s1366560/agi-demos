@@ -113,7 +113,7 @@ test('conversation renderer is an independent ordered contribution with an expli
     'entry_id: builtin-desktop-conversation-renderer',
   );
   const routesIndex = profile.indexOf(
-    'entry_id: builtin-desktop-tenant-creation-routes',
+    'entry_id: builtin-desktop-feature-tenant-creation',
   );
   assert.ok(surfaceIndex >= 0);
   assert.ok(rendererIndex > surfaceIndex);
@@ -126,7 +126,7 @@ test('conversation renderer is an independent ordered contribution with an expli
     rendererEntry,
     /permissions:\s*\n\s*- ui\.conversation\.renderer/u,
   );
-  assert.deepEqual(rendererManifest.permissions, ['ui.conversation.renderer', 'ui.render']);
+  assert.deepEqual(rendererManifest.permissions, ['ui.conversation.renderer', 'ui.render', 'ui.work-panel']);
 
   const rendererBootstrap = bootstrap.entries.find(
     ({ entry_id: entryId }) =>

@@ -98,6 +98,7 @@ def test_tenant_webhooks_row_preserves_route_order_and_openapi() -> None:
 
 @pytest.mark.unit
 async def test_generation_dispatcher_executes_tenant_webhooks_v2_before_static_fallback(
+    isolated_feature_admission: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = datetime(2026, 8, 22, tzinfo=UTC)

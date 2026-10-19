@@ -53,19 +53,19 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   );
   assert.doesNotMatch(hook, /memstack-default-bootstrap\.v2\.json|bootstrapProfileV2/u);
   assert.match(hook, /startRendererGenerationPollingV2/u);
-  assert.match(hook, /source:\s*fetchDesktopPluginDistributionV2/u);
+  assert.match(hook, /fetchDesktopPluginDistributionV2\(signal, config\)/u);
   assert.match(
     hook,
-    /apply:\s*\(payload\) => desktopRendererDistributionReconcilerV2\.apply\(payload\)/u
+    /await desktopRendererDistributionReconcilerV2\.apply\(payload\)/u
   );
-  assert.match(hook, /\}, \[enabled\]\);/u);
+  assert.match(hook, /\}, \[enabled, owner\]\);/u);
   const remoteFetchIndex = lifecycle.search(/await options\.source\(signal\)/u);
   const applyIndex = lifecycle.search(/await applyRendererDistributionV2\(options, payload\)/u);
   assert.ok(
     remoteFetchIndex >= 0 && applyIndex > remoteFetchIndex,
     'a stopped IPC request must be checked before its payload can be applied'
   );
-  assert.match(host, /useDesktopPluginGenerationV2\(\s*config,\s*enabled\s*,?\s*\)/u);
+  assert.match(host, /useDesktopPluginGenerationV2\(\s*config,\s*enabled,\s*accountId\s*,?\s*\)/u);
   assert.match(host, /DesktopRendererCompositionPortV2/u);
   assert.doesNotMatch(host, /AppRouteRegistryRefs/u);
   assert.match(
@@ -181,7 +181,7 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   assert.doesNotMatch(artifactCatalog, /createAppTenantCreationRouteRegistry/u);
   assert.doesNotMatch(artifactCatalog, /DESKTOP_DEFAULT_(?:ROUTE|NAVIGATION)_ARTIFACT_ID_V2/u);
   assert.doesNotMatch(artifactCatalog, /desktop\.(?:routes\.production|navigation\.default)\.v1/u);
-  assert.match(authority, /composition\.createRouteRegistry\(artifact\.id\)/u);
+  assert.match(authority, /composition\.createRouteRegistry\(artifact\.compositionArtifactId \?\? artifact\.id\)/u);
   assert.doesNotMatch(authority, /AppRouteRegistryRefs/u);
   assert.match(composition, /createAppAuthenticationRouteRegistry/u);
   assert.match(composition, /createAppTenantCreationRouteRegistry/u);

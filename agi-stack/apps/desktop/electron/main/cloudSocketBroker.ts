@@ -7,6 +7,7 @@ import {
   type CloudSocketFrame,
   type VaultBoundCloudSocketInput,
 } from './cloudSocketPolicy';
+import type { ComputerUseCloudDeviceHooks } from './computerUseCloudDeviceBridge';
 
 type CloudSocketBrokerFrame =
   | Readonly<{ binary: false; text: string }>
@@ -14,7 +15,11 @@ type CloudSocketBrokerFrame =
 
 export type CloudSocketBrokerEvent =
   | Readonly<{ socketId: string; type: 'open'; protocol: 'memstack.auth' }>
-  | Readonly<{ socketId: string; type: 'message'; frame: CloudSocketBrokerFrame }>
+  | Readonly<{
+      socketId: string;
+      type: 'message';
+      frame: CloudSocketBrokerFrame;
+    }>
   | Readonly<{ socketId: string; type: 'error'; reason: string }>
   | Readonly<{
       socketId: string;
@@ -32,14 +37,13 @@ export type CloudSocketLike = {
   onopen: (() => void) | null;
   onmessage: ((event: Readonly<{ data: unknown }>) => void) | null;
   onerror: (() => void) | null;
-  onclose:
-    | ((event: Readonly<{ code: number; reason: string; wasClean: boolean }>) => void)
-    | null;
+  onclose: ((event: Readonly<{ code: number; reason: string; wasClean: boolean }>) => void) | null;
   send(data: string | ArrayBuffer): void;
   close(code?: number, reason?: string): void;
 };
 
 export type DesktopCloudSocketBrokerDependencies = Readonly<{
+  computerUse?: ComputerUseCloudDeviceHooks;
   authorize(input: unknown): Promise<AuthorizedCloudSocket>;
   createSocket(url: string, protocols: readonly string[]): CloudSocketLike;
   emit(ownerId: number, event: CloudSocketBrokerEvent): void;
@@ -54,6 +58,8 @@ type ActiveBrokerSocket = {
   socket: CloudSocketLike;
   lease: CloudSocketExecutionLease;
   receiveQueue: Promise<void>;
+  heartbeatTimer?: ReturnType<typeof setInterval>;
+  lastInboundAt: number;
   finalized: boolean;
 };
 
@@ -64,12 +70,15 @@ const CLOSE_KEYS = new Set(['socketId', 'code', 'reason']);
 const TEXT_FRAME_KEYS = new Set(['binary', 'text']);
 const BINARY_FRAME_KEYS = new Set(['binary', 'data']);
 const SOCKET_OPEN = 1;
+const AGENT_HEARTBEAT_INTERVAL_MS = 20_000;
+const AGENT_RESPONSE_TIMEOUT_MS = 60_000;
 
 export class DesktopCloudSocketBroker {
   readonly #authorize: DesktopCloudSocketBrokerDependencies['authorize'];
   readonly #createSocket: DesktopCloudSocketBrokerDependencies['createSocket'];
   readonly #emit: DesktopCloudSocketBrokerDependencies['emit'];
   readonly #registry: CloudSocketExecutionRegistry;
+  readonly #computerUse?: ComputerUseCloudDeviceHooks;
   readonly #connections = new Map<string, ActiveBrokerSocket>();
 
   constructor(dependencies: DesktopCloudSocketBrokerDependencies) {
@@ -80,6 +89,7 @@ export class DesktopCloudSocketBroker {
       perOwnerLimit: dependencies.perOwnerLimit ?? 8,
       globalLimit: dependencies.globalLimit ?? 32,
     });
+    this.#computerUse = dependencies.computerUse;
   }
 
   get activeCount(): number {
@@ -112,6 +122,7 @@ export class DesktopCloudSocketBroker {
       socket,
       lease,
       receiveQueue: Promise.resolve(),
+      lastInboundAt: Date.now(),
       finalized: false,
     };
     this.#connections.set(request.socketId, connection);
@@ -124,7 +135,27 @@ export class DesktopCloudSocketBroker {
   }
 
   async send(ownerId: number, input: unknown): Promise<void> {
+    return this.#sendFrame(ownerId, input, false);
+  }
+  async #sendFrame(ownerId: number, input: unknown, device: boolean): Promise<void> {
     const request = parseSendInput(input);
+    if (!device && !request.frame.binary) {
+      let message: unknown;
+      try {
+        message = JSON.parse(request.frame.text);
+      } catch {
+        message = null;
+      }
+      if (
+        message !== null &&
+        typeof message === 'object' &&
+        !Array.isArray(message) &&
+        ['computer_use_device', 'computer_use_result', 'computer_use_media', 'computer_use_control_state'].includes(
+          (message as Record<string, unknown>).type as string
+        )
+      )
+        throw new Error('cua_cloud_renderer_frame_forbidden');
+    }
     const connection = this.#owned(ownerId, request.socketId);
     if (!connection || connection.socket.readyState !== SOCKET_OPEN) {
       throw new Error('cloud socket is unavailable');
@@ -138,9 +169,16 @@ export class DesktopCloudSocketBroker {
       frame
     );
     try {
-      connection.socket.send(request.frame.binary ? request.frame.data.slice(0) : request.frame.text);
+      connection.socket.send(
+        request.frame.binary ? request.frame.data.slice(0) : request.frame.text
+      );
       if (connection.socket.bufferedAmount > connection.policy.limits.max_aggregate_bytes) {
-        this.#registry.close(ownerId, request.socketId, 1009, 'cloud socket aggregate is too large');
+        this.#registry.close(
+          ownerId,
+          request.socketId,
+          1009,
+          'cloud socket aggregate is too large'
+        );
         throw new Error('cloud socket aggregate is too large');
       }
       this.#registry.touch(ownerId, request.socketId);
@@ -186,15 +224,53 @@ export class DesktopCloudSocketBroker {
       return;
     }
     if (!this.#registry.markConnected(connection.ownerId, connection.socketId)) return;
-    this.#safeEmit(connection.ownerId, {
-      socketId: connection.socketId,
-      type: 'open',
-      protocol: 'memstack.auth',
-    });
+    this.#startAgentKeepalive(connection);
+    const opened = () =>
+      this.#safeEmit(connection.ownerId, {
+        socketId: connection.socketId,
+        type: 'open',
+        protocol: 'memstack.auth',
+      });
+    if (connection.policy.kind === 'agent' && this.#computerUse) {
+      const computerUse = this.#computerUse;
+      // A server may send its connected frame before native device discovery finishes.
+      // Serialize initialization and Open with inbound delivery so the renderer sees Open first.
+      connection.receiveQueue = connection.receiveQueue.then(async () => {
+        if (connection.finalized) return;
+        try {
+          await computerUse.opened(connection.socketId, connection.policy.scope, (value) =>
+            this.#sendDeviceFrame(connection, value)
+          );
+        } catch {
+          // Ordinary cloud chat remains available when this optional device cannot register.
+        }
+        if (!connection.finalized) opened();
+      });
+    } else {
+      opened();
+    }
   }
 
   #handleMessage(connection: ActiveBrokerSocket, data: unknown): void {
     if (connection.finalized || this.#connections.get(connection.socketId) !== connection) return;
+    let reservation;
+    try {
+      // Charge bytes before queueing, including while native registration is pending.
+      reservation = this.#registry.reserveFrame(
+        connection.ownerId,
+        connection.socketId,
+        'server_to_client',
+        inboundPolicyFrame(data)
+      );
+    } catch {
+      this.#registry.close(
+        connection.ownerId,
+        connection.socketId,
+        1008,
+        'cloud socket policy violation'
+      );
+      return;
+    }
     connection.receiveQueue = connection.receiveQueue
       .then(() => {
         if (connection.finalized) return;
@@ -213,29 +289,33 @@ export class DesktopCloudSocketBroker {
             'cloud socket policy violation'
           );
         }
-      });
+      })
+      .finally(() => reservation.release());
   }
 
   #emitInboundFrame(connection: ActiveBrokerSocket, frame: CloudSocketBrokerFrame): void {
     if (connection.finalized) return;
     assertNoBinaryCredentialReflection(connection.policy, frame);
-    const policy = policyFrame(frame);
-    const reservation = this.#registry.reserveFrame(
-      connection.ownerId,
-      connection.socketId,
-      'server_to_client',
-      policy
-    );
-    try {
-      this.#safeEmit(connection.ownerId, {
-        socketId: connection.socketId,
-        type: 'message',
-        frame,
-      });
+    connection.lastInboundAt = Date.now();
+    if (
+      !frame.binary &&
+      connection.policy.kind === 'agent' &&
+      this.#computerUse?.receive(
+        connection.socketId,
+        connection.policy.scope,
+        frame.text,
+        (value) => this.#sendDeviceFrame(connection, value)
+      )
+    ) {
       this.#registry.touch(connection.ownerId, connection.socketId);
-    } finally {
-      reservation.release();
+      return;
     }
+    this.#safeEmit(connection.ownerId, {
+      socketId: connection.socketId,
+      type: 'message',
+      frame,
+    });
+    this.#registry.touch(connection.ownerId, connection.socketId);
   }
 
   #handleTransportError(connection: ActiveBrokerSocket): void {
@@ -253,6 +333,30 @@ export class DesktopCloudSocketBroker {
     );
   }
 
+  #startAgentKeepalive(connection: ActiveBrokerSocket): void {
+    if (connection.policy.kind !== 'agent') return;
+    connection.lastInboundAt = Date.now();
+    // Native device waits outlive renderer painting and background timer throttling.
+    // Only valid incoming frames prove liveness; our own heartbeats cannot renew it.
+    connection.heartbeatTimer = setInterval(() => {
+      if (connection.finalized) return;
+      if (Date.now() - connection.lastInboundAt >= AGENT_RESPONSE_TIMEOUT_MS) {
+        this.#registry.close(
+          connection.ownerId,
+          connection.socketId,
+          4001,
+          'cloud socket response timed out'
+        );
+        return;
+      }
+      void this.#sendFrame(connection.ownerId, {
+        socketId: connection.socketId,
+        frame: { binary: false, text: '{"type":"heartbeat"}' },
+      }, false).catch(() => this.#handleTransportError(connection));
+    }, AGENT_HEARTBEAT_INTERVAL_MS);
+    connection.heartbeatTimer.unref?.();
+  }
+
   #handleRemoteClose(
     connection: ActiveBrokerSocket,
     event: Readonly<{ code: number; reason: string; wasClean: boolean }>
@@ -263,10 +367,7 @@ export class DesktopCloudSocketBroker {
     this.#finalize(connection, code, '', event.wasClean === true && code === 1000);
   }
 
-  #closeFromRegistry(
-    connection: ActiveBrokerSocket,
-    directive: CloudSocketCloseDirective
-  ): void {
+  #closeFromRegistry(connection: ActiveBrokerSocket, directive: CloudSocketCloseDirective): void {
     if (connection.finalized) return;
     const reason = sanitizedDirectiveReason(directive);
     if (directive.code !== 1000 && directive.code !== 1001) {
@@ -284,14 +385,12 @@ export class DesktopCloudSocketBroker {
     this.#finalize(connection, directive.code, reason, directive.code === 1000);
   }
 
-  #finalize(
-    connection: ActiveBrokerSocket,
-    code: number,
-    reason: string,
-    wasClean: boolean
-  ): void {
+  #finalize(connection: ActiveBrokerSocket, code: number, reason: string, wasClean: boolean): void {
     if (connection.finalized) return;
     connection.finalized = true;
+    if (connection.heartbeatTimer) clearInterval(connection.heartbeatTimer);
+    if (connection.policy.kind === 'agent')
+      this.#computerUse?.closed(connection.socketId, connection.policy.scope);
     this.#connections.delete(connection.socketId);
     connection.socket.onopen = null;
     connection.socket.onmessage = null;
@@ -305,6 +404,27 @@ export class DesktopCloudSocketBroker {
       reason,
       wasClean,
     });
+  }
+
+  async #sendDeviceFrame(
+    connection: ActiveBrokerSocket,
+    value: Record<string, unknown>
+  ): Promise<void> {
+    while (
+      !connection.finalized &&
+      connection.socket.bufferedAmount > connection.policy.limits.max_aggregate_bytes / 2
+    ) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    }
+    if (connection.finalized) throw new Error('cua_cloud_connection_closed');
+    await this.#sendFrame(
+      connection.ownerId,
+      {
+        socketId: connection.socketId,
+        frame: { binary: false, text: JSON.stringify(value) },
+      },
+      true
+    );
   }
 
   #safeEmit(ownerId: number, event: CloudSocketBrokerEvent): void {
@@ -393,6 +513,19 @@ function inboundFrame(input: unknown): CloudSocketBrokerFrame | Promise<CloudSoc
       .arrayBuffer()
       .then((data) => Object.freeze({ binary: true, data }) as CloudSocketBrokerFrame);
   }
+  throw new Error('cloud socket frame is invalid');
+}
+
+function inboundPolicyFrame(input: unknown): CloudSocketFrame {
+  if (typeof input === 'string')
+    return {
+      binary: false,
+      byteLength: new TextEncoder().encode(input).byteLength,
+      text: input,
+    };
+  if (input instanceof ArrayBuffer || ArrayBuffer.isView(input))
+    return { binary: true, byteLength: input.byteLength };
+  if (input instanceof Blob) return { binary: true, byteLength: input.size };
   throw new Error('cloud socket frame is invalid');
 }
 

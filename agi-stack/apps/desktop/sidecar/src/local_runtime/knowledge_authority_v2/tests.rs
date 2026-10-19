@@ -116,6 +116,13 @@ impl Drop for TestDirectory {
 
 fn fixture(number: u64) -> ProfileSnapshotV2 {
     let mut snapshot: Value = serde_json::from_str(BOOTSTRAP).unwrap();
+    // This fixture supplies the knowledge authority and its host/routes only.
+    // Native computer use is exercised by its own sidecar integration tests.
+    for entry in snapshot["entries"].as_array_mut().unwrap() {
+        if entry["module_ref"] == "builtin://memstack/computer-use/native" {
+            entry["enabled"] = json!(false);
+        }
+    }
     let entry = snapshot["entries"]
         .as_array_mut()
         .unwrap()

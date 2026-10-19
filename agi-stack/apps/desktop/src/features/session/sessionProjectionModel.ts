@@ -706,6 +706,9 @@ function runActionsForStatus(status: DesktopRunStatus | null): SessionRunAction[
       return ['pause', 'cancel'];
     case 'paused':
       return ['resume', 'cancel'];
+    case 'needs_input':
+    case 'needs_approval':
+      return ['cancel'];
     case 'disconnected':
     case 'interrupted':
       return ['reconnect', 'fork', 'cancel'];

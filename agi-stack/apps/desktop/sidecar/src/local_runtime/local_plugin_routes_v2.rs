@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, sync::Arc};
 type Failure = (StatusCode, Json<Value>);
 type ResultJson = Result<Json<Value>, Failure>;
-static MUTATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+pub(super) static MUTATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -340,7 +340,7 @@ async fn lifecycle(
 }
 
 // Serialize the final approval check and mutation on the same application-store connection.
-fn manager_connection<'a>(
+pub(super) fn manager_connection<'a>(
     state: &'a LocalRuntimeState,
     auth: &AuthenticatedContext,
 ) -> Result<std::sync::MutexGuard<'a, rusqlite::Connection>, Failure> {

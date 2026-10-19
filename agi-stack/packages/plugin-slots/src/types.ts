@@ -29,7 +29,8 @@ export type UiSlotKind =
   | 'workbench_tab_bar_surface'
   | 'settings_window_surface'
   | 'session_canvas_surface'
-  | 'workbench_surface';
+  | 'workbench_surface'
+  | 'work_panel';
 
 export interface UiSlotDefinition {
   pluginId: string;

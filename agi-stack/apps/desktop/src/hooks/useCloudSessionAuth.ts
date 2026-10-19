@@ -184,7 +184,7 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
     setLoginPassword('');
 
     if (projectId) {
-      await refreshRuntime(nextConfig, scopedProjects);
+      await refreshRuntime(nextConfig, scopedProjects, user.user_id);
       if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
       applySectionSideEffects('workspace');
     } else {

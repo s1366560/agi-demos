@@ -1,55 +1,42 @@
-/**
- * Keyed builtin renderer registry (I3).
- *
- * Builtin (trusted) renderers register a React component under the slot's
- * contract id (e.g. `tool-result:memory_search`) or under the slot's
- * `pluginId/slotId` key. Slots without a keyed renderer fall back to the
- * sandboxed PluginSlotHost iframe. External modules never register here —
- * the extraction gate keeps them sandboxed by construction.
- */
+import { createElement, type ComponentType } from 'react';
 
-import type { ComponentType } from 'react';
+import { ToolResultDisplay } from '../components/agent/chat/ToolResultDisplay';
 
 import type { UiSlotDefinition } from '@/types/pluginSlots';
 
+import type { SlotActionV2, SlotContextV2 } from '@agistack/plugin-slots';
+
 export interface PluginRendererProps {
-  slot: UiSlotDefinition;
-  context?: unknown;
+  readonly slot: UiSlotDefinition;
+  readonly context?: SlotContextV2 | undefined;
+  readonly onAction?: (action: SlotActionV2) => void;
 }
 
 export type PluginRendererComponent = ComponentType<PluginRendererProps>;
-
-const renderers = new Map<string, PluginRendererComponent>();
-
-/** Registry key candidates for one slot, most specific first. */
-export function rendererKeys(slot: Pick<UiSlotDefinition, 'id' | 'pluginId' | 'contract'>): string[] {
-  const keys: string[] = [];
-  if (slot.contract) keys.push(slot.contract);
-  keys.push(`${slot.pluginId}/${slot.id}`);
-  return keys;
+export interface PluginRendererRegistryV2 {
+  readonly resolve: (slot: UiSlotDefinition) => PluginRendererComponent | undefined;
 }
 
-export function registerBuiltinRenderer(
-  key: string,
-  component: PluginRendererComponent
-): () => void {
-  renderers.set(key, component);
-  return () => {
-    if (renderers.get(key) === component) renderers.delete(key);
-  };
-}
+const ToolResultRenderer: PluginRendererComponent = ({ context }) => {
+  if (!context || !('kind' in context) || context.kind !== 'tool-result') return null;
+  const { presentation } = context;
+  if (presentation.kind !== 'text') return null;
+  return createElement(ToolResultDisplay, {
+    result: presentation.text,
+    isError: context.status === 'failed',
+  });
+};
 
-export function getBuiltinRenderer(
-  slot: Pick<UiSlotDefinition, 'id' | 'pluginId' | 'contract'>
-): PluginRendererComponent | undefined {
-  for (const key of rendererKeys(slot)) {
-    const component = renderers.get(key);
-    if (component) return component;
-  }
-  return undefined;
-}
-
-/** Test hook: clear all registered renderers. */
-export function resetBuiltinRenderersForTests(): void {
-  renderers.clear();
+/** Compiled modules are immutable; each generation gets its own exact owner projection. */
+export function createPluginRendererRegistryV2(
+  definitions: readonly UiSlotDefinition[],
+  isActive: () => boolean
+): PluginRendererRegistryV2 {
+  const owned = new Map(definitions.map((slot) => [`${slot.pluginId}/${slot.id}`, slot]));
+  return Object.freeze({
+    resolve(slot: UiSlotDefinition): PluginRendererComponent | undefined {
+      if (!isActive() || owned.get(`${slot.pluginId}/${slot.id}`) !== slot) return undefined;
+      return slot.moduleRef === 'builtin:web-slot-tool-result' ? ToolResultRenderer : undefined;
+    },
+  });
 }

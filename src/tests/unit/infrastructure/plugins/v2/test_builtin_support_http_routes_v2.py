@@ -66,9 +66,7 @@ def test_support_rows_preserve_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -76,7 +74,9 @@ def test_support_rows_preserve_route_order_and_openapi() -> None:
     assert claimed.v2_owned_row_ids == ("support", "support-2")
 
 
-async def test_generation_dispatcher_executes_both_support_aliases_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_both_support_aliases_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     services = SimpleNamespace(
         list_tickets=AsyncMock(
             return_value=SupportTicketPageV2(tickets=(), total=0, limit=25, offset=0)

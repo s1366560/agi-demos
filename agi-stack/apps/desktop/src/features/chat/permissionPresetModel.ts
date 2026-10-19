@@ -135,10 +135,19 @@ export function autoApprovalForPermissionRequest(
   preset: PermissionPreset,
   request: Pick<DesktopApprovalRequest, 'kind'> & {
     permission?: Pick<PermissionRequestContext, 'risk_level'> | null;
+    decision?: DesktopApprovalRequest['decision'];
+    native_binding?: unknown;
   },
 ): 'allow' | null {
   if (preset === 'default') return null;
   if (request.kind !== 'permission' || !request.permission) return null;
+  // Device application grants require an explicit local consent scope. A malformed
+  // native binding must not fall back to ordinary runtime tool auto-approval.
+  if (
+    request.decision?.target?.kind === 'computer_app' ||
+    Object.hasOwn(request, 'native_binding')
+  )
+    return null;
   if (preset === 'full') return 'allow';
   return request.permission.risk_level === 'low' ? 'allow' : null;
 }

@@ -23,6 +23,7 @@ from src.infrastructure.agent.tools.todo_tools import make_todo_tools
     "patch,new_draft",
     [
         ({"status": "completed"}, False),
+        ({"status": "cancelled", "result_summary": "User stopped native observation"}, False),
         ({"result_summary": "Verified", "evidence_refs": ["evidence-1"]}, False),
         ({"started_at": "2026-09-14T10:00:00Z", "completed_at": "2026-09-14T10:01:00Z"}, False),
         ({"content": "Revised task"}, True),

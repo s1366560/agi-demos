@@ -17,6 +17,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     verify_api_key_dependency,
 )
+from src.infrastructure.adapters.primary.web.dependencies.feature_operation_endpoint_v2 import (
+    admit_feature_endpoint_v2,
+)
 from src.infrastructure.adapters.primary.web.routers import (
     blackboard,
     cyber_genes,
@@ -38,7 +41,11 @@ from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver imp
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.models import UserProject
+from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
+from src.infrastructure.plugins.v2.feature_operations import (
+    FeatureOperationOwnerV2,
+    builtin_feature_owner_v2,
+)
 from src.infrastructure.workspace_core.client import WorkspaceCoreClientError
 
 logger = logging.getLogger(__name__)
@@ -124,9 +131,26 @@ class WorkspaceCoreProxyRoute(APIRoute):
     ) -> None:
         source_endpoint = endpoint
         super().__init__(path, endpoint, **kwargs)
+        feature_owner = getattr(source_endpoint, "__feature_operation_owner_v2", None)
+        if not isinstance(feature_owner, FeatureOperationOwnerV2):
+            feature_owner = builtin_feature_owner_v2(
+                "builtin-workspace-core-http-routes", self.name
+            )
 
         async def proxy_endpoint(**endpoint_values: Any) -> Response:  # noqa: ANN401
             request = cast(Request, endpoint_values[_PROXY_REQUEST_PARAM])
+            if feature_owner is not None:
+                # The proxy intentionally removes body/DB dependencies to stream uploads.
+                # Admission uses validated path scope and the authenticated credential owner;
+                # X-Agent-Id only controls provenance and never substitutes for user authority.
+                async with async_session_factory() as feature_db:
+                    await admit_feature_endpoint_v2(
+                        request=request,
+                        db=feature_db,
+                        current_user=cast(User, endpoint_values["current_user"]),
+                        owner=feature_owner,
+                        arguments=endpoint_values,
+                    )
             return await _proxy_workspace_request(request, endpoint_values)
 
         proxy_endpoint.__name__ = f"avernet_proxy_{self.name}"

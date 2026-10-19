@@ -28,8 +28,12 @@ from src.domain.model.agent import (
 )
 from src.domain.model.agent.display_content import validate_display_content
 from src.domain.model.agent.execution_backend import execution_backend_from_metadata
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.conversation_access_application_authority_v2 import (
     conversation_access_application_authority_v2,
+)
+from src.infrastructure.adapters.primary.web.dependencies.feature_operation_v2 import (
+    require_feature_operation_v2,
 )
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -41,6 +45,7 @@ from src.infrastructure.adapters.primary.web.websocket.scoped_chat_admission_v2 
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
+    User,
     UserProject,
     UserTenant,
 )
@@ -348,6 +353,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                     )
                     return
 
+                await _require_chat_feature_v2(context, conversation)
                 permission_snapshot = await prepare_chat_permission_snapshot(
                     cast(Any, conversation), permission_mode
                 )
@@ -437,6 +443,25 @@ class SendMessageHandler(WebSocketMessageHandler):
             )
 
 
+async def _require_chat_feature_v2(context: MessageContext, conversation: Conversation) -> None:
+    user = await context.db.scalar(
+        refresh_select_statement(select(User).where(User.id == context.user_id))
+    )
+    if user is None:
+        raise RuntimeV2Error("scope_read_forbidden", "chat user is unavailable")
+    await require_feature_operation_v2(
+        request=context.websocket,
+        db=context.db,
+        current_user=user,
+        feature_ids=("tenant-agent-workspace",),
+        scope=ScopeV2(
+            kind=ScopeKindV2.PROJECT,
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+        ),
+    )
+
+
 class StopSessionHandler(WebSocketMessageHandler):
     """Handle stop_session: Cancel ongoing agent execution."""
 
@@ -474,6 +499,17 @@ class StopSessionHandler(WebSocketMessageHandler):
                     return
 
                 # Keep the bridge alive: the worker publishes the authoritative terminal event.
+                if context.container.redis_client is not None:
+                    from src.infrastructure.agent.native_computer_use.broker import (
+                        NativeComputerBroker,
+                    )
+
+                    await NativeComputerBroker(context.container.redis_client).cancel_conversation(
+                        conversation.id,
+                        user_id=context.user_id,
+                        tenant_id=context.tenant_id,
+                        project_id=conversation.project_id,
+                    )
                 from src.application.services.agent.runtime_cancellation import (
                     cancel_conversation_runtime,
                 )
@@ -1749,7 +1785,9 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
 
                 # Broadcast to ALL sessions subscribed to this conversation
                 await manager.broadcast_agent_stream_event(
-                    conversation_id, ws_event, message_id=execution_message_id,
+                    conversation_id,
+                    ws_event,
+                    message_id=execution_message_id,
                 )
 
     except asyncio.CancelledError:
@@ -1839,7 +1877,10 @@ async def stream_hitl_response_to_websocket(
 
             # This independently authorized recovery bridge owns only its socket.
             await manager.send_agent_stream_event(
-                session_id, conversation_id, ws_event, message_id=message_id,
+                session_id,
+                conversation_id,
+                ws_event,
+                message_id=message_id,
             )
 
             # HTTP HITL responses resume the same stream without creating a WS bridge.

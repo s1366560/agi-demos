@@ -5,6 +5,7 @@ import pytest
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies.plugin_scope_auth_v2 import (
     resolve_plugin_publication_scope_v2,
+    resolve_plugin_read_scope_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation,
@@ -17,6 +18,41 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize("kind", ["tenant", "project"])
+async def test_public_view_member_read_does_not_grant_write(db_session, resources, kind):
+    user, _ = resources
+    tenant_member = UserTenant(
+        id="read-tenant", user_id=user.id, tenant_id="scope-a", role="member"
+    )
+    db_session.add(tenant_member)
+    if kind == "project":
+        db_session.add(
+            UserProject(id="read-project", user_id=user.id, project_id="scope-p", role="viewer")
+        )
+    await db_session.commit()
+    requested = scope(kind)
+    assert (
+        await resolve_plugin_read_scope_v2(db_session, current_user=user, requested_scope=requested)
+        == requested
+    )
+    with pytest.raises(RuntimeV2Error):
+        await resolve_plugin_publication_scope_v2(
+            db_session, current_user=user, requested_scope=requested
+        )
+    await db_session.delete(tenant_member)
+    await db_session.commit()
+    with pytest.raises(RuntimeV2Error):
+        await resolve_plugin_read_scope_v2(db_session, current_user=user, requested_scope=requested)
+
+
+async def test_public_view_rejects_mismatched_project_ancestry(db_session, resources):
+    _, admin = resources
+    with pytest.raises(RuntimeV2Error, match="resource is unavailable"):
+        await resolve_plugin_read_scope_v2(
+            db_session, current_user=admin, requested_scope=scope("project", tenant="scope-b")
+        )
 
 
 @pytest.fixture

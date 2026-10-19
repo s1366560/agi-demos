@@ -149,6 +149,9 @@ export const InputBar = memo<InputBarProps>(
     const fileInputRef = useRef<HTMLInputElement>(null);
     const runInputAttachmentUploadsRef = useRef(new Map<string, Promise<AttachmentResponse>>());
     const contentRef = useRef(content);
+    const [pluginDraft, setPluginDraft] = useState({ content, revision: 0 });
+    if (pluginDraft.content !== content)
+      setPluginDraft({ content, revision: pluginDraft.revision + 1 });
     useEffect(() => {
       contentRef.current = content;
     }, [content]);
@@ -971,6 +974,17 @@ export const InputBar = memo<InputBarProps>(
 
           {/* Toolbar */}
           <InputToolbar
+            draftRevision={`${activeConversationId ?? ''}:${projectId ?? ''}:${String(pluginDraft.revision)}`}
+            onPluginInsertText={(text, revision) => {
+              if (
+                disabled ||
+                isStreaming ||
+                revision !==
+                  `${activeConversationId ?? ''}:${projectId ?? ''}:${String(pluginDraft.revision)}`
+              )
+                return;
+              setContent((current) => (current === pluginDraft.content ? current + text : current));
+            }}
             fileInputRef={fileInputRef}
             attachments={attachments}
             capabilities={capabilities}

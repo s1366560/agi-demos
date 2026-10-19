@@ -4,6 +4,7 @@ artifactName: agi-stack-desktop-${version}-${os}-${arch}.${ext}
 asar: true
 electronUpdaterCompatibility: ">=2.16"
 forceCodeSigning: true
+afterSign: scripts/seal-cua-after-sign.mjs
 directories:
   output: release
   buildResources: build
@@ -18,6 +19,13 @@ extraResources:
     to: sidecar
     filter:
       - agistack-desktop-sidecar*
+      - cua-helper*
+      - Memstack Computer Use.app/**/*
+      - CUA_SHA256SUMS
+      - memstack-cua-cloud-connectors*
+      - CUA_CONNECTORS_SHA256SUMS
+      - locked-use/**/*
+      - cua-plugin/skills/**/*
       - SHA256SUMS
   - from: build/workspace-core
     to: workspace-core
@@ -34,6 +42,7 @@ publish:
   publishAutoUpdate: true
   tagNamePrefix: v
 mac:
+  sign: scripts/sign-cua-macos.mjs
   target:
     - dmg
     - zip
@@ -44,9 +53,18 @@ mac:
   entitlements: electron/resources/entitlements.mac.plist
   entitlementsInherit: electron/resources/entitlements.mac.inherit.plist
   extendInfo:
+    NSAppleEventsUsageDescription: Computer Use can access supported applications only after you authorize Automation access.
+    NSContactsUsageDescription: Computer Use accesses contacts only for an authorized Contacts operation.
+    NSCalendarsFullAccessUsageDescription: Computer Use accesses calendars only for an authorized Calendar operation.
+    NSCalendarsUsageDescription: Computer Use accesses calendars only for an authorized Calendar operation.
     NSMicrophoneUsageDescription: Voice input and voice calls use the microphone only while you are actively interacting with a conversation.
   binaries:
     - Contents/Resources/sidecar/agistack-desktop-sidecar
+    - Contents/Resources/sidecar/memstack-cua-cloud-connectors
+    - Contents/Resources/sidecar/Memstack Computer Use.app/Contents/MacOS/cua-helper
+    - Contents/Resources/sidecar/Memstack Computer Use.app/Contents/Resources/locked-use/memstack-cua-guardian
+    - Contents/Resources/sidecar/Memstack Computer Use.app/Contents/Resources/locked-use/memstack-cua-lock-installer
+    - Contents/Resources/sidecar/Memstack Computer Use.app/Contents/Resources/locked-use/MemStackComputerUseAuthorizationPlugin.bundle/Contents/MacOS/MemStackComputerUseAuthorizationPlugin
     - Contents/Resources/workspace-core/memstack-workspace-core
 win:
   target:
@@ -65,3 +83,49 @@ linux:
     - deb
   category: Development
   icon: electron/resources/icon.png
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+    - libgstreamer1.0-0 (>= 1.22)
+    - libgstreamer-plugins-base1.0-0 (>= 1.22)
+    - gstreamer1.0-plugins-base
+    - gstreamer1.0-plugins-good
+    - gstreamer1.0-pipewire
+    - libxkbcommon0
+    - at-spi2-core
+    - xdotool
+    - x11-utils
+    - pulseaudio-utils
+    - xdg-desktop-portal
+  recommends:
+    - libappindicator3-1
+    - pipewire-pulse
+rpm:
+  depends:
+    - gtk3
+    - libnotify
+    - nss
+    - libXScrnSaver
+    - (libXtst or libXtst6)
+    - xdg-utils
+    - at-spi2-core
+    - (libuuid or libuuid1)
+    - gstreamer1 >= 1.22
+    - gstreamer1-plugins-base
+    - gstreamer1-plugins-good
+    - pipewire-gstreamer
+    - libxkbcommon
+    - xdotool
+    - xdpyinfo
+    - xprop
+    - xwininfo
+    - pulseaudio-utils
+    - xdg-desktop-portal

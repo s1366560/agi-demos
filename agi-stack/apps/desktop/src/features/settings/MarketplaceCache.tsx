@@ -9,21 +9,29 @@ export function MarketplaceCache({ client, canManage, t }: { client: Marketplace
   const [removed, setRemoved] = useState<number | null>(null);
   const [reload, setReload] = useState(0);
   const generation = useRef(0);
+  const pendingCleanup = useRef<AbortController | null>(null);
   useEffect(() => {
     const version = ++generation.current;
     const controller = new AbortController();
     setStats(null); setError(''); setBusy(false); setRemoved(null);
     void client.cache(controller.signal).then((value) => { if (generation.current === version) setStats(value); }).catch((caught: unknown) => { if (!controller.signal.aborted && generation.current === version) setError(String(caught)); });
-    return () => { generation.current++; controller.abort(); };
+    return () => { generation.current++; controller.abort(); pendingCleanup.current?.abort(); };
   }, [client, reload]);
   const cleanup = async () => {
+    if (!canManage || busy) return;
     const version = generation.current;
+    const controller = new AbortController();
+    pendingCleanup.current?.abort();
+    pendingCleanup.current = controller;
     setBusy(true); setError('');
     try {
-      const result = await client.cleanupCache();
-      if (generation.current === version) { setStats(result); setRemoved(result.removed_bytes ?? 0); }
-    } catch (caught) { if (generation.current === version) setError(String(caught)); }
-    finally { if (generation.current === version) setBusy(false); }
+      const result = await client.cleanupCache(undefined, controller.signal);
+      if (generation.current === version && !controller.signal.aborted) { setStats(result); setRemoved(result.removed_bytes ?? 0); }
+    } catch (caught) { if (generation.current === version && !controller.signal.aborted) setError(String(caught)); }
+    finally {
+      if (pendingCleanup.current === controller) pendingCleanup.current = null;
+      if (generation.current === version && !controller.signal.aborted) setBusy(false);
+    }
   };
   return <section aria-label={t('cacheTitle')}>
     <h3>{t('cacheTitle')}</h3><p>{t('cacheHint')}</p>

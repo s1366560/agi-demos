@@ -2069,7 +2069,25 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         ) : null}
       </AppModal>
       {/* I3: plugin nav items mount at the end of the sidebar. */}
-      <PluginSlotOutlet kind="nav_item" />
+      <PluginSlotOutlet
+        kind="nav_item"
+        context={{
+          kind: 'navigation',
+          ...(resolvedTenantId ? { tenantId: resolvedTenantId } : {}),
+          ...(contextualProjectId ? { projectId: contextualProjectId } : {}),
+          destinations: generationNavigationItems.map((item) => ({
+            id: item.id,
+            label: t(item.label),
+          })),
+        }}
+        onAction={(action) => {
+          if (action.type !== 'navigate') return;
+          const destination = generationNavigationItems.find(
+            (item) => item.id === action.destinationId
+          );
+          if (destination) void navigate(destination.path);
+        }}
+      />
     </aside>
   );
 };

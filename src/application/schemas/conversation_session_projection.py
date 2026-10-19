@@ -171,6 +171,10 @@ class SessionPendingHITLResponse(_ProjectionModel):
     created_at: datetime
     expires_at: datetime
     permission: SessionPermissionReviewResponse | None = None
+    decision: dict[str, Any] | None = None
+    native_binding: dict[str, Any] | None = None
+    actions: list[dict[str, str]] | None = None
+    scopes: list[str] | None = None
 
 
 class SessionArtifactRecordResponse(_ProjectionModel):

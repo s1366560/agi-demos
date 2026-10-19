@@ -9,6 +9,7 @@ import logging
 import math
 import warnings
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import aclosing
 from typing import Any, cast, override
 
 from pydantic import BaseModel
@@ -940,6 +941,7 @@ class LiteLLMClient(LLMClient):
         """
         import litellm
 
+        request_recorder = kwargs.pop("_request_recorder_v2", None)
         model = self._get_model_for_size(model_size)
         model_override = kwargs.pop("model", None)
         if isinstance(model_override, str) and model_override.strip():
@@ -968,9 +970,16 @@ class LiteLLMClient(LLMClient):
 
         try:
             async with await rate_limiter.acquire(provider_type):
-                response = await litellm.acompletion(**completion_kwargs)
-                async for chunk in cast("AsyncGenerator[Any, None]", response):
-                    yield chunk
+                from src.infrastructure.plugins.v2.model_request_log import (
+                    recorded_completion_stream_v2,
+                )
+
+                source = recorded_completion_stream_v2(
+                    litellm.acompletion, completion_kwargs, request_recorder,
+                )
+                async with aclosing(source):
+                    async for chunk in source:
+                        yield chunk
             circuit_breaker.record_success()
         except Exception as e:
             if not self._is_client_error(e):

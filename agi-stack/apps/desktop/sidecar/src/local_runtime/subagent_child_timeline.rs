@@ -121,6 +121,7 @@ impl ChildTimelineObserver {
         input: &str,
         result: Option<&str>,
         failed: bool,
+        control: Option<agistack_core::ports::ToolControlOutcome>,
     ) {
         if !self.current(session_id) {
             return;
@@ -146,6 +147,10 @@ impl ChildTimelineObserver {
         if let Some(result) = result {
             payload["tool_output"] = json!(self.redact(tool, result));
         }
+        if let Some(control) = control {
+            payload["control_outcome"] = json!(control.as_str());
+            payload["status"] = json!("cancelled");
+        }
         let item = self.state.timeline_item(
             kind,
             self.conversation_id.clone(),
@@ -160,6 +165,17 @@ impl ChildTimelineObserver {
 
 #[async_trait]
 impl ReActObserver for ChildTimelineObserver {
+    async fn on_tool_control(
+        &self, session: &str, round: u64, tool: &str, input: &str,
+        result: &agistack_core::ports::ToolResult,
+    ) -> CoreResult<agistack_core::agent::ToolControlResolution> {
+        if !self.current(session) {
+            return Err(CoreError::Tool("cua_child_authority_revoked".into()));
+        }
+        self.publish(session, round, tool, input, Some(&result.output_json), false, result.control_outcome);
+        computer_use_v2::local_control::wait(&self.state, &self.conversation_id, session, result).await
+    }
+
     async fn on_tool_call(
         &self,
         session: &str,
@@ -167,7 +183,7 @@ impl ReActObserver for ChildTimelineObserver {
         tool: &str,
         input: &str,
     ) -> CoreResult<()> {
-        self.publish(session, round, tool, input, None, false);
+        self.publish(session, round, tool, input, None, false, None);
         Ok(())
     }
     async fn on_tool_result(
@@ -185,6 +201,7 @@ impl ReActObserver for ChildTimelineObserver {
             input,
             Some(output),
             timeline_presentation::tool_result_is_error(output),
+            None,
         );
         Ok(())
     }
@@ -196,7 +213,7 @@ impl ReActObserver for ChildTimelineObserver {
         input: &str,
         _error: &CoreError,
     ) -> CoreResult<()> {
-        self.publish(session, round, tool, input, None, true);
+        self.publish(session, round, tool, input, None, true, None);
         Ok(())
     }
 }

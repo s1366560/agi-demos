@@ -19,10 +19,11 @@ from src.domain.model.plugins.generated_v2 import (
     ProfileEntryV2,
     ProfileSnapshotV2,
     ScopeKindV2,
+    ScopeV2,
 )
 
 from .protocol import canonical_json_v2, parse_profile_snapshot_v2, profile_snapshot_v2_to_payload
-from .runtime_context import RuntimeV2Error
+from .runtime_context import RuntimeV2Error, scope_contains_v2
 from .runtime_contracts import (
     ModuleCatalogEntryV2,
     entry_order_v2,
@@ -30,19 +31,25 @@ from .runtime_contracts import (
     preflight_entries_v2,
     validate_contract_digests_v2,
 )
+from .scope import scope_key_v2
 
 _BROWSER_PUBLIC_CONFIG_MODULES_V2 = frozenset(
     {
         "builtin://memstack/web/renderer-host",
         "builtin://memstack/web/renderer-contribution-registry",
         "builtin://memstack/web/renderer-contribution",
+        "builtin://memstack/web/renderer-feature",
+        "builtin://memstack/web/renderer-management",
     }
 )
-_PUBLIC_PERMISSIONS_V2 = frozenset({"ui.conversation.renderer", "ui.render"})
+_PUBLIC_PERMISSIONS_V2 = frozenset({"ui.conversation.renderer", "ui.render", "ui.work-panel"})
 
 
-def project_web_public_view_v2(snapshot_payload: object, *, authority_id: str) -> dict[str, Any]:
-    """Return a digest-bound root Web view for an already authenticated opaque scope identity."""
+def project_web_public_view_v2(
+    snapshot_payload: object, *, authority_id: str, authorized_scope: ScopeV2 | None = None
+) -> dict[str, Any]:
+    """Project public configuration after the caller authorizes this exact scope."""
+    scope = authorized_scope or ScopeV2(kind=ScopeKindV2.ROOT)
     if (
         not isinstance(authority_id, str)
         or not authority_id
@@ -69,9 +76,9 @@ def project_web_public_view_v2(snapshot_payload: object, *, authority_id: str) -
             raise RuntimeV2Error(
                 "web_view_module_not_public", "Web module has no public config declaration"
             )
-        if entry.scope.kind is not ScopeKindV2.ROOT:
+        if not scope_contains_v2(entry.scope, scope):
             raise RuntimeV2Error(
-                "web_view_scope_unauthorized", "Non-root Web scope authorization is not implemented"
+                "web_view_scope_unauthorized", "Web entry belongs to an unauthorized scope"
             )
         _attest_public_module(module, catalog, manifest.plugin_id, manifest.version)
         if module.contract.config_schema.get("additionalProperties") is not False:
@@ -104,6 +111,7 @@ def project_web_public_view_v2(snapshot_payload: object, *, authority_id: str) -
         {
             "protocol": "authenticated-web-view-v2",
             "authority": authority_id,
+            "scope": scope_key_v2(scope),
             "source_revision": snapshot.generation,
             "view_digest": view_digest,
         }
@@ -143,6 +151,9 @@ def _public_snapshot(
                 "web_view_entry_metadata_not_public", "Web entry metadata is not declared public"
             )
         entry["entry_id"] = public_ids[entry["entry_id"]]
+        # Authorization and scope containment were checked before projection.
+        # Browser-local ownership is anonymous; only view_id binds the private scope.
+        entry["scope"] = {"kind": "root"}
         if entry["parent_entry_id"] is not None:
             entry["parent_entry_id"] = public_ids[entry["parent_entry_id"]]
     retained = {(entry.plugin_ref, entry.module_ref) for entry in entries.values()}

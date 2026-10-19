@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../../api/client';
+import type { DesktopPluginMarketplaceOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import {
   pluginArchiveBase64,
   type LocalPluginAction,
@@ -26,17 +26,19 @@ type Confirmation = {
 export function LocalPluginSettings({
   config,
   canManage,
+  operations,
 }: {
   config: DesktopRuntimeConfig;
   canManage: boolean;
+  operations: Pick<DesktopPluginMarketplaceOperationsV2, 'localPluginClient'>;
 }) {
   const { t } = useI18n();
   const client = useMemo(
     () =>
       config.mode === 'local' && config.tenantId && config.projectId
-        ? new DesktopApiClient(config).localPlugins()
+        ? operations.localPluginClient(config)
         : null,
-    [config],
+    [config, operations],
   );
   const currentClient = useRef(client);
   currentClient.current = client;

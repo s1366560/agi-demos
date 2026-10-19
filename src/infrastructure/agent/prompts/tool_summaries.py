@@ -35,7 +35,7 @@ TOOL_SUMMARIES: dict[str, str] = {
         "Read the current task list; in workspace mode prefer each item's workspace_task_id when "
         "delegating child tasks."
     ),
-    "todowrite": ("Create, update, or replace tasks in the task list to track work progress."),
+    # Keep todowrite's declared identity and terminal-status guidance intact.
     # --- Memory & Knowledge ---
     "memory_search": (
         "Search the knowledge graph for memories, entities, and relationships "

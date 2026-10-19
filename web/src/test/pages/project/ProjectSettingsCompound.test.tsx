@@ -9,6 +9,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Modal } from 'antd';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const featureEnabled = vi.hoisted(() => vi.fn(() => true));
+vi.mock('@/routes/v2/webFeatureAuthorityV2', () => ({ useWebFeatureEnabledV2: featureEnabled }));
+
 const mockNavigate = vi.hoisted(() => vi.fn());
 const mockApiPost = vi.hoisted(() => vi.fn(() => Promise.resolve({ data: {} })));
 
@@ -114,6 +117,8 @@ vi.mock('../../../services/projectSandboxService', () => ({
 describe('ProjectSettings Compound Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    featureEnabled.mockReturnValue(true);
+    featureEnabled.mockReturnValue(true);
     mockNavigate.mockReset();
     // Reset project mock to default
     mockState.currentProject = mockProject;
@@ -127,6 +132,18 @@ describe('ProjectSettings Compound Component', () => {
   // ============================================================================
   // Import Tests
   // ============================================================================
+
+  it('withdraws memory and graph settings with their feature contribution while preserving basic settings', async () => {
+    const { ProjectSettings } = await import('../../../pages/project/Settings');
+    const { rerender } = render(<ProjectSettings />);
+    expect(document.getElementById('memory')).toBeTruthy();
+    expect(document.getElementById('graph')).toBeTruthy();
+    featureEnabled.mockReturnValue(false);
+    rerender(<ProjectSettings />);
+    expect(document.getElementById('memory')).toBeNull();
+    expect(document.getElementById('graph')).toBeNull();
+    expect(document.getElementById('basic')).toBeTruthy();
+  });
 
   describe('Component Structure', () => {
     it('should export ProjectSettings compound component', async () => {

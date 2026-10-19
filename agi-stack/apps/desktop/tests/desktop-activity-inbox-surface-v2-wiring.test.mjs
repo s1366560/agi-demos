@@ -77,7 +77,7 @@ test('activity inbox is an ordered production artifact after workbench and befor
 
   const workbenchIndex = profile.indexOf('entry_id: builtin-desktop-workbench-surface');
   const activityIndex = profile.indexOf('entry_id: builtin-desktop-activity-inbox-surface');
-  const routesIndex = profile.indexOf('entry_id: builtin-desktop-tenant-creation-routes');
+  const routesIndex = profile.indexOf('entry_id: builtin-desktop-feature-tenant-creation');
   assert.ok(workbenchIndex >= 0);
   assert.ok(activityIndex > workbenchIndex);
   assert.ok(routesIndex > activityIndex);

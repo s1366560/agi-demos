@@ -34,6 +34,7 @@ const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
 const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
 const IAB_TABS_CHANGED_CHANNEL = 'agistack:iab-tabs-changed';
+const COMPUTER_USE_ACTIVITY_CHANNEL = 'agistack:computer-use-activity';
 const UPDATE_STATE_CHANNEL = 'agistack:update-state';
 const UPDATE_CHECK_CHANNEL = 'agistack:update-check';
 const UPDATE_RESTART_TO_APPLY_CHANNEL = 'agistack:update-restart-to-apply';
@@ -79,6 +80,7 @@ const allowedCommands = new Set([
   'browser_bridge_install',
   'browser_bridge_uninstall',
   'browser_bridge_status',
+  'computer_use_manage_v2',
   'request_microphone_access',
   'focus_main_window',
   'window_controls',
@@ -231,6 +233,13 @@ function onCloudSocketEvent(listener: (payload: unknown) => void): () => void {
   return () => ipcRenderer.removeListener(CLOUD_SOCKET_EVENT_CHANNEL, wrappedListener);
 }
 
+function onComputerUseActivity(listener:(payload:unknown)=>void):()=>void {
+  if(typeof listener!=='function')throw new Error('Computer use listener is invalid');
+  const wrapped=(_event:unknown,payload:unknown)=>listener(payload);
+  ipcRenderer.on(COMPUTER_USE_ACTIVITY_CHANNEL,wrapped);
+  return ()=>ipcRenderer.removeListener(COMPUTER_USE_ACTIVITY_CHANNEL,wrapped);
+}
+
 export type IabTabSnapshot = Readonly<{
   tabId: number;
   windowId: number;
@@ -297,6 +306,7 @@ contextBridge.exposeInMainWorld(
       onSidecarRecovered,
       onOAuthSessionChanged,
       onCloudSocketEvent,
+      onComputerUseActivity,
     }),
   }),
 );

@@ -232,6 +232,8 @@ class _ExplodingMessageContext(_MessageContext):
 
 @pytest.fixture
 def successful_chat_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(chat_handler, "_require_chat_feature_v2", AsyncMock())
+
     async def fake_stream_agent_to_websocket_with_fresh_session(**_kwargs: Any) -> None:
         return None
 
@@ -327,6 +329,39 @@ def _assert_error_message_id(context: _MessageContext, message_id: str) -> None:
 def _assert_error_code(context: _MessageContext, code: str) -> None:
     assert context.sent[0]["type"] == "error"
     assert context.sent[0]["data"]["code"] == code
+
+
+async def test_disabled_workspace_rejects_new_turn_before_admission(
+    successful_chat_dependencies: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context = _MessageContext()
+    gate = AsyncMock(side_effect=RuntimeV2Error("feature_disabled", "feature is disabled"))
+    admit = AsyncMock()
+    monkeypatch.setattr(chat_handler, "_require_chat_feature_v2", gate)
+    monkeypatch.setattr(chat_handler, "_admit_client_turn", admit)
+    await SendMessageHandler().handle(context, _message(message_id="disabled-1"))
+    _assert_error_code(context, "feature_disabled")
+    _assert_error_message_id(context, "disabled-1")
+    admit.assert_not_awaited()
+    assert context.connection_manager.tasks == []
+    assert context.connection_manager.subscriptions == []
+
+
+async def test_chat_feature_gate_uses_persisted_conversation_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = SimpleNamespace(id="user-1")
+    db = SimpleNamespace(scalar=AsyncMock(return_value=user))
+    context = SimpleNamespace(db=db, user_id="user-1", websocket=object())
+    gate = AsyncMock()
+    monkeypatch.setattr(chat_handler, "require_feature_operation_v2", gate)
+    await chat_handler._require_chat_feature_v2(
+        context, SimpleNamespace(tenant_id="persisted-tenant", project_id="persisted-project")
+    )
+    assert gate.await_args.kwargs["feature_ids"] == ("tenant-agent-workspace",)
+    assert gate.await_args.kwargs["scope"].tenant_id == "persisted-tenant"
+    assert gate.await_args.kwargs["scope"].project_id == "persisted-project"
+    assert gate.await_args.kwargs["current_user"] is user
 
 
 @pytest.mark.parametrize("message_id", ["desktop-turn-123", None])

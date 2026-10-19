@@ -11,6 +11,7 @@ name = "agistack-desktop-sidecar"
 path = "src/main.rs"
 
 [dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 agistack-automation-schedule = { path = "../../../crates/automation-schedule" }
 aes-gcm = { version = "0.10", features = ["zeroize"] }
 async-trait.workspace = true
@@ -44,6 +45,7 @@ zip = { version = "4.6.1", default-features = false, features = ["deflate"] }
 
 agistack-core = { path = "../../../crates/core" }
 agistack-adapters-browser = { path = "../../../crates/adapters-browser" }
+agistack-adapters-cua = { path = "../../../crates/adapters-cua" }
 agistack-adapters-device = { path = "../../../crates/adapters-device" }
 agistack-adapters-http-llm = { path = "../../../crates/adapters-http-llm" }
 agistack-adapters-local-tools = { path = "../../../crates/adapters-local-tools" }

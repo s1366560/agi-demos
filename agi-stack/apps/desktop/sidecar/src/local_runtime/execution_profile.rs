@@ -258,7 +258,13 @@ impl ToolHost for ProfiledToolHost {
         }
         let mut seen = advertised.iter().cloned().collect::<BTreeSet<_>>();
         for tool in &self.allowed_tools {
-            if !seen.contains(tool) && self.inner.can_dispatch(tool) {
+            // Canonical CUA routes may remain only to return a terminal control
+            // receipt. Preserve their catalog removal; compatibility aliases
+            // from other hosts may still be explicitly advertised.
+            if !seen.contains(tool)
+                && !agistack_adapters_cua::tool_effects().contains_key(tool.as_str())
+                && self.inner.can_dispatch(tool)
+            {
                 seen.insert(tool.clone());
                 advertised.push(tool.clone());
             }
@@ -277,6 +283,12 @@ impl ToolHost for ProfiledToolHost {
             )));
         }
         self.inner.call(tool, input_json).await
+    }
+    async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<agistack_core::ports::ToolResult> {
+        if !self.can_dispatch(tool) {
+            return Err(CoreError::Tool(format!("tool '{tool}' is not allowed by the selected execution profile")));
+        }
+        self.inner.call_with_content(tool, input_json).await
     }
 }
 

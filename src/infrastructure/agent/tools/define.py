@@ -85,6 +85,8 @@ class ToolInfo:
     sandbox_id: str | None = None
     _sandbox_id: str | None = None
     permission_resolver: Callable[[dict[str, Any]], str | None] | None = None
+    # Static declaration: identical inputs may intentionally sample fresh external state.
+    repeatable_observation: bool = False
 
 
 # ---------------------------------------------------------------------------

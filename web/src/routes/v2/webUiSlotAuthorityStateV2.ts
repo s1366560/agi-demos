@@ -1,11 +1,15 @@
 import { createContext, useContext, useMemo } from 'react';
 
+import type { PluginRendererRegistryV2 } from '../../services/pluginRendererRegistry';
 import type { UiSlotDefinition, UiSlotKind } from '../../types/pluginSlots';
 
 export type WebUiSlotAuthorityStatusV2 = 'disabled' | 'loading' | 'ready' | 'unavailable';
 
 export interface WebUiSlotAuthorityStateV2 {
   readonly error?: unknown;
+  readonly generationId?: string;
+  readonly isActive?: () => boolean;
+  readonly renderers?: PluginRendererRegistryV2;
   readonly slotDefinitions: readonly UiSlotDefinition[];
   readonly status: WebUiSlotAuthorityStatusV2;
   readonly uiSlotArtifactIds: readonly string[];
@@ -50,10 +54,15 @@ export function findWebToolResultSlotV2(
   toolName: string
 ): UiSlotDefinition | undefined {
   if (state.status !== 'ready') return undefined;
-  return state.slotDefinitions.find(
-    (slot) =>
-      slot.slot === 'tool_result_renderer' &&
-      (slot.contract === `tool-result:${toolName}` || slot.id === toolName)
+  return (
+    state.slotDefinitions.find(
+      (slot) =>
+        slot.slot === 'tool_result_renderer' &&
+        (slot.contract === `tool-result:${toolName}` || slot.id === toolName)
+    ) ??
+    state.slotDefinitions.find(
+      (slot) => slot.slot === 'tool_result_renderer' && slot.contract === 'tool-result:default'
+    )
   );
 }
 

@@ -1,6 +1,6 @@
 //! Private JSON-lines control protocol between Electron main and the sidecar.
 
-use std::{path::PathBuf, process};
+use std::{path::PathBuf, process, sync::Arc};
 
 use agistack_adapters_browser::protocol::{
     PROTOCOL_MAX as BRIDGE_PROTOCOL_MAX, PROTOCOL_MIN as BRIDGE_PROTOCOL_MIN,
@@ -211,8 +211,47 @@ pub(crate) async fn run() -> Result<(), String> {
         workspace_core,
         plugin_control_plane_v2,
     };
+    let output = Arc::new(tokio::sync::Mutex::new(output));
+    let mut device_calls = task::JoinSet::new();
     while let Some(line) = read_bounded_line(&mut input, MAX_REQUEST_BYTES).await? {
+        while device_calls.try_join_next().is_some() {}
         let response = match serde_json::from_str::<ControlRequest>(&line) {
+            Ok(request) if parallel_cloud_call(&request) => {
+                if device_calls.len() >= 32 {
+                    failure(request.id, "cua_device_busy")
+                } else {
+                    let runtime = state.runtime.clone();
+                    let broker = state.trusted_sessions.clone();
+                    let output = output.clone();
+                    device_calls.spawn(async move {
+                        let id = request.id;
+                        let response =
+                            if request.message_type != "request" || id.is_empty() || id.len() > 128
+                            {
+                                failure(id, "sidecar control request is invalid")
+                            } else {
+                                let input = request
+                                    .args
+                                    .as_ref()
+                                    .and_then(|args| args.get("input"))
+                                    .cloned()
+                                    .expect("checked cloud call input");
+                                match runtime.computer_use_cloud_v2(&broker, input).await {
+                                    Ok(result) => ControlResponse {
+                                        message_type: "response",
+                                        id,
+                                        ok: true,
+                                        result: Some(result),
+                                        error: None,
+                                    },
+                                    Err(error) => failure(id, &error),
+                                }
+                            };
+                        write_json_line(&mut *output.lock().await, &response).await
+                    });
+                    continue;
+                }
+            }
             Ok(request) => execute_request(&state, request).await,
             Err(_) => ControlResponse {
                 message_type: "response",
@@ -222,12 +261,24 @@ pub(crate) async fn run() -> Result<(), String> {
                 error: Some("sidecar control request is invalid".to_string()),
             },
         };
-        write_json_line(&mut output, &response).await?;
+        write_json_line(&mut *output.lock().await, &response).await?;
     }
+    device_calls.shutdown().await;
     state.workspace_core.shutdown().await;
     state.plugin_control_plane_v2.shutdown().await;
     state.runtime.shutdown().await;
     Ok(())
+}
+
+fn parallel_cloud_call(request: &ControlRequest) -> bool {
+    request.command == "computer_use_cloud_v2"
+        && request
+            .args
+            .as_ref()
+            .and_then(|args| args.get("input"))
+            .and_then(|input| input.get("action"))
+            .and_then(Value::as_str)
+            == Some("call")
 }
 
 async fn read_initialize(input: &mut Lines<BufReader<Stdin>>) -> Result<InitializeRequest, String> {
@@ -321,6 +372,26 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
     let result = match request.command.as_str() {
         "local_runtime_status" => {
             serde_json::to_value(state.runtime.status()).map_err(|error| error.to_string())
+        }
+        "computer_use_cloud_v2" => match request.args.as_ref().and_then(|args| args.get("input")) {
+            Some(input) => {
+                state
+                    .runtime
+                    .computer_use_cloud_v2(&state.trusted_sessions, input.clone())
+                    .await
+            }
+            None => Err("cua_cloud_request_required".into()),
+        },
+        "computer_use_manage_v2" => {
+            match request.args.as_ref().and_then(|args| args.get("input")) {
+                Some(input) => {
+                    state
+                        .runtime
+                        .computer_use_manage_v2(&state.trusted_sessions, input.clone())
+                        .await
+                }
+                None => Err("computer-use command input is required".into()),
+            }
         }
         "workspace_core_status" => serde_json::to_value(state.workspace_core.status().await)
             .map_err(|error| error.to_string()),

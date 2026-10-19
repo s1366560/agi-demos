@@ -321,6 +321,20 @@ class RayHITLHandler:
                     is_valid = granted is (action in {"allow", "allow_always"})
             else:
                 is_valid = isinstance(granted, bool)
+            if request.permission_data.native_binding is not None:
+                scope = response_data.get("scope")
+                is_valid = (
+                    is_valid
+                    and (
+                        (
+                            action == "allow"
+                            and granted is True
+                            and scope in (request.permission_data.scopes or [])
+                        )
+                        or (action == "deny" and granted is False and scope == "once")
+                    )
+                    and scope in {"once", "session", "always"}
+                )
         elif request.hitl_type == HITLType.A2UI_ACTION and request.a2ui_data:
             action_name = response_data.get("action_name")
             source_component_id = response_data.get("source_component_id", "")

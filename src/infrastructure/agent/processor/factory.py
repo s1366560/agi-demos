@@ -185,6 +185,7 @@ class ProcessorFactory:
             message_bus=self.message_bus,
             control_channel=self.control_channel,
             run_id=run_id,
+            runtime_context={"allowed_mcp_servers": list(subagent.allowed_mcp_servers)},
             subagent_owner_required=run_id is not None,
             provider_id=model_route.provider_id,
             loop_resolver=_default_loop_resolver(),

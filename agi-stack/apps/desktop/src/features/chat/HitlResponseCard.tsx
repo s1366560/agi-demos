@@ -9,6 +9,9 @@ import {
 import { Button, Flex, Text, TextArea } from '@radix-ui/themes';
 
 import { useI18n } from '../../i18n';
+import { useComputerUseDevice } from '../settings/ComputerUseDeviceProvider';
+import { computerUseConsentScopes } from '../../api/computerUseClientV2';
+import { ComputerUseAppIdentity } from '../settings/ComputerUseTargetPreview';
 import type {
   AgentTimelineItem,
   DesktopApprovalRequest,
@@ -89,19 +92,20 @@ export function HitlResponseCard({
   approvalAuthorityLoading?: boolean;
 }) {
   const { t } = useI18n();
+  const device = useComputerUseDevice();
   const decisionView = hitlDecisionView(item);
   const envVarView = hitlEnvVarView(item);
   const [answer, setAnswer] = useState('');
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [decisionSelections, setDecisionSelections] = useState<string[]>(() =>
-    decisionView.defaultOption ? [decisionView.defaultOption] : [],
+    decisionView.defaultOption ? [decisionView.defaultOption] : []
   );
   const [customDecisionSelected, setCustomDecisionSelected] = useState(
     () =>
       decisionView.selectionMode === 'single' &&
       decisionView.allowCustom &&
       !decisionView.defaultOption &&
-      decisionView.options.length === 0,
+      decisionView.options.length === 0
   );
   const [saveEnvironmentValues, setSaveEnvironmentValues] = useState(false);
   const [denyFeedbackOpen, setDenyFeedbackOpen] = useState(false);
@@ -119,22 +123,30 @@ export function HitlResponseCard({
   const allowCustom =
     hitlType === 'decision'
       ? decisionView.allowCustom
-      : item.allowCustom ?? booleanPayloadField(item, 'allow_custom') ?? options.length === 0;
+      : (item.allowCustom ?? booleanPayloadField(item, 'allow_custom') ?? options.length === 0);
   const question = timelineHitlQuestion(item, t);
   const approvalValidation = approvalRequest ? validateApprovalRequest(approvalRequest) : null;
   const responsePresentation = hitlResponsePresentation(item, hitlType);
-  const parameterPreview =
-    hitlType === 'permission' ? permissionParameterPreview(item) : null;
+  const parameterPreview = hitlType === 'permission' ? permissionParameterPreview(item) : null;
   const browserOrigin =
     hitlType === 'permission' ? browserOriginConsentView(item, approvalRequest) : null;
   const browserCapability =
     hitlType === 'permission' ? browserCapabilityConsentView(item, approvalRequest) : null;
+  const computerUseConsent =
+    hitlType === 'permission' && approvalRequest?.decision?.target.kind === 'computer_app';
+  const computerUseScopes = computerUseConsentScopes(
+    device.snapshot?.pending.find(
+      (pending) => pending.request_id === approvalRequest?.decision?.target.id
+    )
+  );
   const browserConsentTitle = browserOrigin
     ? t('chat.browserOrigin.title', { origin: browserOrigin.origin })
     : browserCapability?.kind === 'browser_full_cdp'
       ? t('chat.browserFullCdp.title', { origin: browserCapability.origin })
       : browserCapability?.kind === 'browser_credential_fill'
-        ? t('chat.browserCredentialFill.title', { origin: browserCapability.origin })
+        ? t('chat.browserCredentialFill.title', {
+            origin: browserCapability.origin,
+          })
         : null;
   const riskLevel =
     approvalRequest?.permission?.risk_level ?? approvalRequest?.decision?.risk.level ?? null;
@@ -159,6 +171,23 @@ export function HitlResponseCard({
     setSubmitError(null);
     try {
       const expectedRevision = approvalRequest?.authority_revision;
+      if (computerUseConsent && device.mode === 'cloud') {
+        if (!device.client) throw new Error('cua_native_unavailable');
+        const id = approvalRequest?.decision?.target.id;
+        if (!id) throw new Error('cua_request_expired');
+        if (responseData.granted === true) {
+          const scope = responseData.scope;
+          if (scope !== 'once' && scope !== 'session' && scope !== 'always')
+            throw new Error('cua_scope_invalid');
+          await device.client.manage({
+            action: 'grant',
+            request_id: id,
+            scope,
+          });
+        } else {
+          await device.client.manage({ action: 'decline', request_id: id });
+        }
+      }
       await onRespond({
         requestId,
         hitlType,
@@ -212,7 +241,11 @@ export function HitlResponseCard({
       {browserOrigin ? (
         <div className="agent-run-meta">
           {browserOrigin.tool ? (
-            <span>{t('chat.browserOrigin.toolRequest', { tool: browserOrigin.tool })}</span>
+            <span>
+              {t('chat.browserOrigin.toolRequest', {
+                tool: browserOrigin.tool,
+              })}
+            </span>
           ) : null}
           {browserOrigin.reason ? <span>{browserOrigin.reason}</span> : null}
         </div>
@@ -221,7 +254,9 @@ export function HitlResponseCard({
         <div className="agent-run-meta">
           {browserCapability.tool ? (
             <span>
-              {t('chat.browserOrigin.toolRequest', { tool: browserCapability.tool })}
+              {t('chat.browserOrigin.toolRequest', {
+                tool: browserCapability.tool,
+              })}
             </span>
           ) : null}
           {browserCapability.reason ? <span>{browserCapability.reason}</span> : null}
@@ -239,7 +274,7 @@ export function HitlResponseCard({
                 ? 'chat.requestExpired'
                 : expiry.state === 'invalid'
                   ? 'chat.invalidExpiry'
-                  : 'chat.status.waitingForInput',
+                  : 'chat.status.waitingForInput'
           )}
         </span>
         {requestId ? <span>{requestId}</span> : <span>{t('chat.missingRequestId')}</span>}
@@ -350,7 +385,10 @@ export function HitlResponseCard({
         <Text size="1" role="status">
           {t('approval.syncing')}
         </Text>
-      ) : !answered && !browserOrigin && !browserCapability && (hitlType === 'permission' || hitlType === 'decision') ? (
+      ) : !answered &&
+        !browserOrigin &&
+        !browserCapability &&
+        (hitlType === 'permission' || hitlType === 'decision') ? (
         <Text size="1" color="red">
           {t('approval.incomplete', {
             fields: 'action, target, data, reason, risk, reversibility, scope, evidence',
@@ -467,7 +505,9 @@ export function HitlResponseCard({
         </>
       ) : null}
 
-      {!answered && hitlType === 'permission' && browserCapability?.kind === 'browser_credential_fill' ? (
+      {!answered &&
+      hitlType === 'permission' &&
+      browserCapability?.kind === 'browser_credential_fill' ? (
         <Flex gap="2" wrap="wrap">
           <Button
             size="1"
@@ -491,7 +531,54 @@ export function HitlResponseCard({
         </Flex>
       ) : null}
 
-      {!answered && hitlType === 'permission' && !browserOrigin && !browserCapability ? (
+      {!answered && computerUseConsent ? (
+        <>
+          <ComputerUseAppIdentity
+            target={
+              device.snapshot?.pending.find(
+                (pending) => pending.request_id === approvalRequest?.decision?.target.id
+              )?.target
+            }
+            icon={
+              device.snapshot?.pending.find(
+                (pending) => pending.request_id === approvalRequest?.decision?.target.id
+              )?.app_icon
+            }
+            client={device.client}
+            fallback={
+              device.snapshot?.pending.find(
+                (pending) => pending.request_id === approvalRequest?.decision?.target.id
+              )?.app
+            }
+          />
+          <Flex gap="2" wrap="wrap">
+            {computerUseScopes.map((scope) => (
+              <Button
+                key={scope}
+                size="1"
+                color="green"
+                disabled={responseDisabled || !requestId || busy || !approvalValidation?.canApprove}
+                onClick={() => void submit({ action: 'allow', granted: true, scope })}
+              >
+                {t(`cua.scope.${scope}`)}
+              </Button>
+            ))}
+            <Button
+              size="1"
+              color="red"
+              disabled={responseDisabled || !requestId || busy}
+              onClick={() => void submit({ action: 'deny', granted: false, scope: 'once' })}
+            >
+              {t('cua.decline')}
+            </Button>
+          </Flex>
+        </>
+      ) : null}
+      {!answered &&
+      hitlType === 'permission' &&
+      !browserOrigin &&
+      !browserCapability &&
+      !computerUseConsent ? (
         <>
           <Flex gap="2" wrap="wrap">
             <Button
@@ -518,7 +605,11 @@ export function HitlResponseCard({
                 )
               }
               onClick={() =>
-                void submit({ action: 'allow_always', granted: true, scope: 'workspace_tool' })
+                void submit({
+                  action: 'allow_always',
+                  granted: true,
+                  scope: 'workspace_tool',
+                })
               }
             >
               {t('chat.allowAlways')}
@@ -642,11 +733,7 @@ export function HitlResponseCard({
             }
             loading={busy}
             onClick={() => {
-              const response = buildEnvVarResponse(
-                envValues,
-                saveEnvironmentValues,
-                envVarView,
-              );
+              const response = buildEnvVarResponse(envValues, saveEnvironmentValues, envVarView);
               if (response) void submit(response);
             }}
           >
@@ -660,7 +747,9 @@ export function HitlResponseCard({
           {decisionView.selectionMode === 'multiple' ? (
             <small>
               {decisionView.maxSelections
-                ? t('chat.selectionLimit', { count: decisionView.maxSelections })
+                ? t('chat.selectionLimit', {
+                    count: decisionView.maxSelections,
+                  })
                 : t('chat.selectOneOrMore')}
             </small>
           ) : null}
@@ -669,7 +758,7 @@ export function HitlResponseCard({
             const selectOption = () => {
               setCustomDecisionSelected(false);
               setDecisionSelections((current) =>
-                toggleDecisionSelection(current, option.value, decisionView),
+                toggleDecisionSelection(current, option.value, decisionView)
               );
             };
             return (
@@ -750,7 +839,7 @@ export function HitlResponseCard({
                 decisionSelections,
                 customDecisionSelected,
                 answer,
-                decisionView,
+                decisionView
               )
             }
             loading={busy}
@@ -759,7 +848,7 @@ export function HitlResponseCard({
                 decisionSelections,
                 customDecisionSelected,
                 answer,
-                decisionView,
+                decisionView
               );
               if (response) void submit(response);
             }}

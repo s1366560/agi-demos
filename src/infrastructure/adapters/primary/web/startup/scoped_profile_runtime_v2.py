@@ -7,6 +7,7 @@ from typing import cast
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.application.services.plugin_instance_service_v2 import PluginInstanceServiceV2
 from src.application.services.scoped_installed_bundle_loader_v2 import ScopedInstalledBundleLoaderV2
 from src.application.services.scoped_profile_initialization_service_v2 import (
     ScopedProfileInitializationServiceV2,
@@ -24,6 +25,7 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_recovery_
 )
 from src.infrastructure.plugins.v2.bundle_archive import VerifiedBundleArchiveV2
 from src.infrastructure.plugins.v2.production_bundle import production_bundle_sources_v2
+from src.infrastructure.plugins.v2.profile_composition_cache import ProfileCompositionCacheV2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.scoped_builtin_runtime import (
@@ -54,6 +56,7 @@ class ScopedProfileRuntimeV2:
         self._coordinator = coordinator
         self._loader = bundle_loader
         self._initializer = initializer
+        self._composition_cache = ProfileCompositionCacheV2()
         self._closed = False
 
     async def prepare_current(
@@ -98,6 +101,25 @@ class ScopedProfileRuntimeV2:
         await self.restore_existing(scope)
         return await self._coordinator.acquire_bound(scope)
 
+    def instances(self, scope: ScopeV2) -> PluginInstanceServiceV2:
+        """Return a manager for a scope already authorized by its HTTP caller."""
+        from src.infrastructure.plugins.v2.agent_turn_requirements_v2 import (
+            AGENT_TURN_REQUIRED_SERVICES_V2,
+        )
+
+        if self._closed:
+            raise RuntimeV2Error("scoped_runtime_closed", "scoped runtime is closed")
+        return PluginInstanceServiceV2(
+            session_factory=self._sessions,
+            initializer=self._initializer,
+            load_bundle=partial(self._loader, scope=scope),
+            scope=scope,
+            composition_cache=self._composition_cache,
+            publish=partial(
+                self.publish_current, scope, required_services=AGENT_TURN_REQUIRED_SERVICES_V2
+            ),
+        )
+
     async def restore_existing(self, scope: ScopeV2) -> None:
         """Recover only historically bound authority after the consumer has authorized scope."""
         if self._closed:
@@ -131,6 +153,7 @@ class ScopedProfileRuntimeV2:
 
     async def close(self) -> None:
         self._closed = True
+        self._composition_cache.clear()
         await self._coordinator.close()
 
 

@@ -55,9 +55,7 @@ def test_background_tasks_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -65,7 +63,9 @@ def test_background_tasks_row_preserves_route_order_and_openapi() -> None:
     assert claimed.v2_owned_row_ids == ("background-tasks",)
 
 
-async def test_generation_dispatcher_executes_background_tasks_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_background_tasks_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     services = SimpleNamespace(
         list_tasks=AsyncMock(
             return_value=BackgroundTaskPageV2(

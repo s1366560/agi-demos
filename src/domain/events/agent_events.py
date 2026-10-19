@@ -274,6 +274,7 @@ class AgentObserveEvent(AgentDomainEvent):
     duration_ms: int | None = None
     call_id: str | None = None
     status: str = "completed"
+    control_outcome: Literal["user_paused", "user_stopped"] | None = None
     tool_execution_id: str | None = None  # New field for act/observe matching
     ui_metadata: dict[str, Any] | None = None  # MCP App UI metadata (resourceUri, etc.)
     display: dict[str, Any] | None = None

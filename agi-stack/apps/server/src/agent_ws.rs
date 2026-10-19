@@ -276,6 +276,8 @@ async fn handle_socket(
     session_id: String,
     mut socket: WebSocket,
 ) {
+    let connection_id = uuid::Uuid::new_v4().to_string();
+    let (device_send, mut device_receive) = tokio::sync::mpsc::channel::<Value>(32);
     let mut subscriptions = ConnectionSubscriptions::default();
     let mut interval = time::interval(Duration::from_millis(250));
     let _ = send_json(
@@ -295,9 +297,22 @@ async fn handle_socket(
                 let Some(Ok(message)) = incoming else {
                     break;
                 };
+                if let Message::Text(text) = &message {
+                    if let Some(result) = crate::computer_use_device_v2::handle_frame(&app, &identity, &connection_id, &device_send, text).await {
+                        match result {
+                            Ok(value) if !value.is_null() => {if send_json(&mut socket,value).await.is_err(){break;}},
+                            Ok(_) => {},
+                            Err(error) => {let _=send_error(&mut socket,&error.to_string()).await;},
+                        }
+                        continue;
+                    }
+                }
                 if !handle_client_message(&app, &identity, &mut socket, &mut subscriptions, message).await {
                     break;
                 }
+            }
+            Some(frame) = device_receive.recv() => {
+                if send_json(&mut socket,frame).await.is_err(){break;}
             }
             _ = interval.tick() => {
                 if flush_event_subscriptions(
@@ -314,6 +329,7 @@ async fn handle_socket(
             }
         }
     }
+    crate::computer_use_device_v2::disconnect(&app, &connection_id);
 }
 
 async fn handle_client_message(
@@ -564,6 +580,36 @@ async fn handle_client_message(
                 let _ = send_error(socket, "Access denied").await;
                 return true;
             }
+            let tenant_id = match app
+                .auth
+                .authorize_project_event_subscription(&identity.user_id, &project_id, None)
+                .await
+            {
+                Ok(Some(tenant_id)) => tenant_id,
+                _ => {
+                    let _ = send_error(socket, "Access denied").await;
+                    return true;
+                }
+            };
+            if let Err(error) = app
+                .feature_operations
+                .admit_project(
+                    &identity.user_id,
+                    &tenant_id,
+                    &project_id,
+                    &["tenant-agent-workspace"],
+                )
+                .await
+            {
+                let _ = send_stop_error(
+                    socket,
+                    "This feature is unavailable in the current scope",
+                    error.code,
+                    &conversation_id,
+                )
+                .await;
+                return true;
+            }
             if !subscriptions.ensure_conversation(conversation_id.clone(), message_id.clone()) {
                 let _ = send_subscription_limit_error(
                     socket,
@@ -582,6 +628,7 @@ async fn handle_client_message(
             let run_conversation_id = conversation_id.clone();
             let run_project_id = project_id.clone();
             let run_message_id = message_id.clone();
+            let run_user_id = identity.user_id.clone();
             let (abort_handle, abort_registration) = AbortHandle::new_pair();
             let run_generation = app
                 .active_agent_runs
@@ -591,8 +638,10 @@ async fn handle_client_message(
                 let result = Abortable::new(
                     run_agent_message(
                         &run_app,
+                        &run_user_id,
                         &run_conversation_id,
                         &run_project_id,
+                        &tenant_id,
                         run_message_id.as_deref(),
                         &message,
                     ),
@@ -637,6 +686,9 @@ async fn handle_client_message(
                 .await;
                 return true;
             }
+            // Cancel native requests even after their observation completed: this
+            // releases the device session while the cloud socket stays connected.
+            crate::computer_use_device_v2::cancel_conversation(app, &identity.user_id, &conversation_id);
             let data = json!({"conversation_id": conversation_id, "cancelled": true});
             if append_event(app, &conversation_id, AgentEventType::Cancelled, data)
                 .await
@@ -855,16 +907,21 @@ async fn handle_hitl_response(
     request: HitlResponsePayload,
     ack_type: &str,
 ) -> Result<(), axum::Error> {
-    match app.hitl.respond(&identity.user_id, request).await {
-        Ok(outcome) => send_json(socket, ws_ack_message(ack_type, &outcome)).await,
+    match app.hitl.respond(&identity.user_id, request.clone()).await {
+        Ok(outcome) => {
+            if let Err(error)=crate::computer_use_device_v2::resume(app,&identity.user_id,&request).await {return send_error(socket,&error.to_string()).await;}
+            send_json(socket, ws_ack_message(ack_type, &outcome)).await
+        },
         Err(err) => send_json(socket, err.websocket_message()).await,
     }
 }
 
 async fn run_agent_message(
     app: &AppState,
+    user_id: &str,
     conversation_id: &str,
     project_id: &str,
+    tenant_id: &str,
     message_id: Option<&str>,
     message: &str,
 ) -> Result<(), String> {
@@ -896,16 +953,59 @@ async fn run_agent_message(
 
     let observer = Arc::new(AgentWsRunObserver {
         app: app.clone(),
+        control_owner: crate::computer_use_device_v2::Owner { user_id:user_id.into(), tenant_id:tenant_id.into(), project_id:project_id.into() },
         conversation_id: conversation_id.to_string(),
         project_id: project_id.to_string(),
         message_id: message_id.map(ToString::to_string),
     });
     let run_session_id = agent_run_session_id(conversation_id, message_id);
-    let state = app
-        .engine
-        .run_observed(&run_session_id, message, Some(project_id), observer)
-        .await
-        .map_err(|e| e.to_string())?;
+    let native = crate::computer_use_device_v2::bind_run(
+        app,
+        user_id,
+        tenant_id,
+        project_id,
+        conversation_id,
+        message_id.unwrap_or(&run_session_id),
+        message,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    let base_engine = match native.as_ref() {
+        Some(bound) => app
+            .engine
+            .as_ref()
+            .clone()
+            .with_tool_host(bound.tools.clone()),
+        None => app.engine.as_ref().clone(),
+    };
+    let engine = crate::agent_boundary_v2::AgentBoundaryFactoryV2::from_app(app)
+        .bind(
+            base_engine,
+            tenant_id,
+            project_id,
+            conversation_id,
+            message_id,
+            &run_session_id,
+        )
+        .map_err(|error| error.to_string())?;
+    let engine=Arc::new(engine);
+    let result = engine
+        .run_observed(&run_session_id, message, Some(project_id), observer.clone())
+        .await;
+    if let Ok(state)=&result {
+        if state.status==SessionStatus::AwaitingInput {
+            if let Some(native)=native {
+                if let Some(event)=crate::computer_use_device_v2::park(app,native,engine,observer,state,conversation_id,message_id).await.map_err(|error|error.to_string())? {
+                    append_event(app,conversation_id,AgentEventType::PermissionAsked,event).await?;
+                }
+                return Ok(());
+            }
+        }
+    }
+    if let Some(native) = native {
+        crate::computer_use_device_v2::finish(app, native, conversation_id).await;
+    }
+    let state = result.map_err(|e| e.to_string())?;
     let Some(event_type) = agent_terminal_event_type(state.status) else {
         return Ok(());
     };
@@ -942,6 +1042,7 @@ fn agent_terminal_event_type(status: SessionStatus) -> Option<AgentEventType> {
 #[derive(Clone)]
 struct AgentWsRunObserver {
     app: AppState,
+    control_owner: crate::computer_use_device_v2::Owner,
     conversation_id: String,
     project_id: String,
     message_id: Option<String>,
@@ -1016,6 +1117,27 @@ impl ReActObserver for AgentWsRunObserver {
         .map_err(agistack_core::ports::CoreError::Event)
     }
 
+    async fn on_tool_control(
+        &self, session_id: &str, round: u64, tool: &str, input_json: &str,
+        result: &agistack_core::ports::ToolResult,
+    ) -> CoreResult<agistack_core::agent::react::ToolControlResolution> {
+        let outcome=result.control_outcome.ok_or_else(||CoreError::Tool("computer_use_control_missing".into()))?;
+        let mut data=tool_event_base(&self.conversation_id,&self.project_id,self.message_id.as_deref(),round,tool);
+        data.insert("tool_input".into(),json_or_string(input_json));
+        data.insert("tool_output".into(),json_or_string(&result.output_json));
+        data.insert("observation".into(),json!(result.output_json));
+        data.insert("status".into(),json!("cancelled"));
+        data.insert("error".into(),Value::Null);
+        data.insert("is_error".into(),json!(false));
+        data.insert("control_outcome".into(),json!(outcome));
+        append_event(&self.app,&self.conversation_id,AgentEventType::Observe,Value::Object(data)).await.map_err(CoreError::Event)?;
+        if outcome==agistack_core::ports::ToolControlOutcome::UserPaused {
+            let generation=result.control_generation.as_deref().ok_or_else(||CoreError::Tool("computer_use_control_generation_missing".into()))?;
+            return self.app.computer_use_devices.wait_for_control(&self.control_owner,session_id,generation).await;
+        }
+        Ok(agistack_core::agent::react::ToolControlResolution::Stopped)
+    }
+
     async fn on_tool_error(
         &self,
         _session_id: &str,
@@ -1072,6 +1194,7 @@ impl ReActObserver for AgentWsRunObserver {
         _round: u64,
         request: &HitlRequest,
     ) -> CoreResult<()> {
+        if request.decision.as_deref().is_some_and(|decision|decision.target.kind=="computer_app") {return Ok(());}
         append_event(
             &self.app,
             &self.conversation_id,
@@ -1194,7 +1317,7 @@ async fn send_subscription_limit_error(
     send_json(socket, message).await
 }
 
-async fn append_event(
+pub(crate) async fn append_event(
     app: &AppState,
     conversation_id: &str,
     event_type: AgentEventType,

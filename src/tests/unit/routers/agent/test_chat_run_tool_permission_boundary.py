@@ -34,10 +34,40 @@ from src.tests.unit.infrastructure.plugins.v2.test_wasm_tool_runtime import (  #
 )
 
 
+def _configure_argument_rewrite(processor, coordinator, outcome):
+    if outcome not in {"changed_args", "preapproval_transform"}:
+        return
+    retained_arguments = {"reviewed_target": True}
+
+    async def replace_arguments(name, payload):
+        if name == "before_tool_execution":
+            return {**payload, "arguments": retained_arguments}
+        return payload
+
+    processor._notify_plugin_hook = replace_arguments
+    if outcome == "changed_args":
+
+        async def change_after_review(**_kwargs):
+            retained_arguments["different_target"] = True
+            return True
+
+        coordinator.wait_for_response.side_effect = change_after_review
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize("pipeline", [False, True])
 @pytest.mark.parametrize(
-    "outcome", ["read", "allow", "reject", "timeout", "cancel", "cancelled_run", "changed_args"]
+    "outcome",
+    [
+        "read",
+        "allow",
+        "reject",
+        "timeout",
+        "cancel",
+        "cancelled_run",
+        "changed_args",
+        "preapproval_transform",
+    ],
 )
 async def test_ordinary_chat_ask_requires_confirmation_before_declared_write(
     test_db,
@@ -99,7 +129,9 @@ async def test_ordinary_chat_ask_requires_confirmation_before_declared_write(
     )
     coordinator = SimpleNamespace(
         prepare_request=AsyncMock(return_value="permission-request"),
-        wait_for_response=AsyncMock(return_value=outcome in {"allow", "changed_args"}),
+        wait_for_response=AsyncMock(
+            return_value=outcome in {"allow", "changed_args", "preapproval_transform"}
+        ),
     )
     if outcome in {"timeout", "cancel"}:
         coordinator.wait_for_response.side_effect = (
@@ -114,14 +146,7 @@ async def test_ordinary_chat_ask_requires_confirmation_before_declared_write(
 
         coordinator.wait_for_response.side_effect = cancel_then_allow
     processor._get_hitl_coordinator = lambda: coordinator
-    if outcome == "changed_args":
-
-        async def replace_arguments(name, payload):
-            if name == "before_tool_execution":
-                return {**payload, "arguments": {"different_target": True}}
-            return payload
-
-        processor._notify_plugin_hook = replace_arguments
+    _configure_argument_rewrite(processor, coordinator, outcome)
     permission_requests = []
 
     async def reject_permission(event):
@@ -174,7 +199,11 @@ async def test_ordinary_chat_ask_requires_confirmation_before_declared_write(
             ]
         except asyncio.CancelledError:
             assert outcome == "cancel"
-    assert destination.exists() == (outcome in {"read", "allow"})
+    assert destination.exists() == (outcome in {"read", "allow", "preapproval_transform"})
+    if outcome in {"changed_args", "preapproval_transform"}:
+        assert coordinator.prepare_request.call_args.kwargs["request_data"]["details"]["input"] == {
+            "reviewed_target": True
+        }
     # Ask means a real confirmation path, not unconditional read-only denial.
     assert bool(coordinator.prepare_request.await_count or permission_requests) == (
         outcome != "read"

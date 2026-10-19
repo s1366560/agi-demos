@@ -1,4 +1,5 @@
 mod llm_tool_contracts;
+mod visual_input_llm;
 mod plan_tool_contract;
 #[cfg(test)]
 mod tool_contract_tests;
@@ -56,6 +57,7 @@ use crate::application_vault::ApplicationCredentialVault;
 #[cfg(test)]
 use agistack_core::model::Entity;
 
+mod agent_continuation_v2;
 mod auth_context;
 mod authority_store;
 mod authorized_tool_host;
@@ -80,8 +82,10 @@ pub(crate) mod browser_bridge;
 mod browser_run_tool_host;
 mod changes;
 mod composer_context;
+mod computer_use_v2;
 mod conversation_llm_route;
 mod conversation_history;
+mod model_request_replay_v2;
 mod message_display;
 mod execution_profile;
 mod execution_selection;
@@ -104,6 +108,8 @@ mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
 mod plugin_marketplace_v3;
 mod local_plugin_routes_v2;
+mod local_plugin_instances_v2;
+mod local_feature_authority_v2;
 mod local_plugin_tool_host_v2;
 mod platform_plugin_route_admission_v2;
 #[cfg(test)]
@@ -122,6 +128,8 @@ mod run_control;
 mod search_projection;
 mod session_projection;
 mod session_store;
+mod agent_boundary_v2;
+mod tool_result_events_v2;
 mod steering;
 mod subagent_control;
 mod subagent_agent_tool_host;
@@ -133,6 +141,7 @@ mod task_session;
 mod terminal_generation_v2_tests;
 mod terminal_pty_v2;
 mod timeline_presentation;
+mod local_tool_control;
 mod tool_authority;
 mod workspace_core_bridge;
 mod workspace_task_run;
@@ -286,7 +295,13 @@ impl LocalRuntimeService {
     pub(crate) async fn shutdown(&self) {
         self.state.stop_automation_worker().await;
         self.state.stop_browser_bridge();
+        self.state.computer_use.shutdown(&self.state).await;
     }
+
+    pub(crate) async fn computer_use_manage_v2(&self, broker: &crate::trusted_session::TrustedSessionBroker, input: Value) -> Result<Value, String> {
+        computer_use_v2::native_operation(&self.state, broker, input).await
+    }
+    pub(crate) async fn computer_use_cloud_v2(&self,broker:&crate::trusted_session::TrustedSessionBroker,input:Value)->Result<Value,String>{computer_use_v2::cloud::operation(&self.state,broker,input).await}
 
     pub(crate) fn install_workspace_core_authority(
         &self,
@@ -591,6 +606,7 @@ impl LocalRuntimeState {
         if !status.is_terminal() {
             return;
         }
+        self.computer_use.stop_run(self, run_id).await;
         if let Some(host) = self.connected_browser_tool_host() {
             host.turn_ended(run_id).await;
         }
@@ -781,7 +797,7 @@ impl PlanModeToolHost {
         PLAN_MODE_TOOL_NAMES.contains(&tool) || tool == SUBMIT_PLAN_TOOL_NAME
     }
     fn accepts_tool(&self, tool: &str) -> bool {
-        Self::is_allowed(tool) || self.dynamic_reads.contains(tool)
+        Self::is_allowed(tool) || self.dynamic_reads.contains(tool) || computer_use_v2::has_read_operation(&*self.inner,tool)
     }
 
     fn submit_plan(&self, input_json: &str) -> CoreResult<String> {
@@ -851,6 +867,8 @@ struct LocalRuntimeState {
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
+    suspended_agent_operations_v2:
+        Mutex<HashMap<String, agent_continuation_v2::SuspendedAgentOperationV2>>,
     subagent_controls: subagent_control::SubagentControls,
     workspace_core_generation: AtomicU64,
     workspace_core_authority: Mutex<Option<Arc<workspace_core_bridge::WorkspaceCoreAuthority>>>,
@@ -863,6 +881,7 @@ struct LocalRuntimeState {
     local_plugin_activation_error: Mutex<Option<String>>,
     automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     browser_bridge: Mutex<Option<browser_bridge::BrowserBridgeRuntime>>,
+    computer_use: computer_use_v2::ComputerUseRuntimeV2,
     browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
     run_once_tool_permissions: RunOnceToolPermissions,
     site_credentials: provider_credentials::SiteCredentialBroker,
@@ -1152,6 +1171,7 @@ impl LocalRuntimeState {
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
             agent_runs: Mutex::new(HashMap::new()),
+            suspended_agent_operations_v2: Mutex::new(HashMap::new()),
             subagent_controls: subagent_control::SubagentControls::default(),
             workspace_core_generation: AtomicU64::new(0),
             workspace_core_authority: Mutex::new(None),
@@ -1162,6 +1182,7 @@ impl LocalRuntimeState {
             local_plugin_activation_error: Mutex::new(None),
             automation_worker: Mutex::new(None),
             browser_bridge: Mutex::new(None),
+            computer_use: computer_use_v2::ComputerUseRuntimeV2::default(),
             browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
             run_once_tool_permissions: Arc::new(Mutex::new(BTreeSet::new())),
             site_credentials,
@@ -1529,6 +1550,7 @@ impl LocalRuntimeState {
             .map_err(|error| error.to_string())?;
         self.session_store
             .clear_checkpoint_authority(conversation_id, expected_run_id)?;
+        self.clear_suspended_operation_v2(conversation_id, expected_run_id);
         Ok(())
     }
 
@@ -1900,7 +1922,7 @@ impl LocalRuntimeState {
         let generation_descriptor = plugin_generation
             .as_ref()
             .map(|generation| generation.descriptor().clone());
-        let _plugin_generation_lease = plugin_generation;
+
         let conversation = match self.session_store.conversation(&conversation_id) {
             Ok(Some(conversation)) => conversation,
             Ok(None) => {
@@ -2052,7 +2074,7 @@ impl LocalRuntimeState {
             message.clone(),
         ));
         let (engine, plugin_metadata) = match self
-            .agent_engine_for_role_with_plugin_metadata(&conversation, authoritative_run.as_ref(), workload_role)
+            .agent_engine_for_role_with_boundary(&conversation, authoritative_run.as_ref(), workload_role, &message_id, plugin_generation.clone())
             .await
         {
             Ok(engine) => engine,
@@ -2147,6 +2169,13 @@ impl LocalRuntimeState {
                 Err(error.to_string())
             }
         };
+        self.retain_suspended_operation_v2(
+            &conversation_id,
+            &message_id,
+            authoritative_run.as_ref().map(|run| run.id.as_str()),
+            run_result.as_ref().ok(),
+            plugin_generation.as_ref(),
+        );
         let hitl_persistence_error = run_result.as_ref().ok().and_then(|state| {
             self.persist_pending_hitl(&conversation_id, authoritative_run_id.as_deref(), state)
                 .err()
@@ -2154,6 +2183,10 @@ impl LocalRuntimeState {
         if let Some(error) = hitl_persistence_error {
             eprintln!("failed to persist local HITL request: {error}");
             run_result = Err(format!("failed to persist HITL request: {error}"));
+            self.clear_suspended_operation_v2(&conversation_id, authoritative_run_id.as_deref());
+        }
+        if run_result.as_ref().map_or(true,|state|matches!(state.status,SessionStatus::Finished|SessionStatus::Failed|SessionStatus::Cancelled)) {
+            self.computer_use.stop_conversation(&self,&conversation_id).await;
         }
         if let (Some(run), Some(expected_revision)) =
             (authoritative_run.as_ref(), authoritative_revision)
@@ -2184,7 +2217,13 @@ impl LocalRuntimeState {
     > {
         #[cfg(test)]
         {
-            Ok(None)
+            // Unit fixtures may omit plugin bootstrapping. Fixtures that publish a
+            // generation must retain it for native WebSocket operation authority.
+            Ok(self
+                .platform_plugin_authority_v2
+                .acquire_generation()
+                .ok()
+                .map(Arc::new))
         }
         #[cfg(not(test))]
         {
@@ -2257,9 +2296,24 @@ impl LocalRuntimeState {
         run: Option<&DesktopRun>,
         workload_role: Option<LlmWorkloadRole>,
     ) -> Result<(ReActEngine, local_plugin_tool_host_v2::PluginTimelineMetadataV2), String> {
+        self.agent_engine_for_role_with_boundary(conversation, run, workload_role,
+            run.map(|run| run.message_id.as_str()).unwrap_or(&conversation.id), None).await
+    }
+
+    async fn agent_engine_for_role_with_boundary(
+        self: &Arc<Self>,
+        conversation: &LocalConversation,
+        run: Option<&DesktopRun>,
+        workload_role: Option<LlmWorkloadRole>,
+        message_id: &str,
+        plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+    ) -> Result<(ReActEngine, local_plugin_tool_host_v2::PluginTimelineMetadataV2), String> {
         #[cfg(test)]
         self.agent_engine_attempts.fetch_add(1, Ordering::SeqCst);
-        let profile = self.execution_profile(conversation)?;
+        let boundary = plugin_generation.map(|generation| agent_boundary_v2::AgentBoundaryV2::new(
+            self, conversation, message_id, run.map(|run| run.id.as_str()).unwrap_or(message_id), generation,
+        )).transpose()?;
+        let mut profile = self.execution_profile(conversation)?;
         let local_tool_host: Arc<dyn ToolHost> = match run.and_then(|run| run.environment.as_ref())
         {
             Some(environment) => {
@@ -2275,6 +2329,9 @@ impl LocalRuntimeState {
         // connected; offline, the model never sees browser tools. The run
         // wrapper injects `_run_id` and enforces origin consent (§4.3).
         let mut tool_hosts = vec![local_tool_host];
+        if let Some(cua_host) = computer_use_v2::tool_host(self, conversation, run) {
+            tool_hosts.push(cua_host);
+        }
         if let Some(browser_host) = self.connected_browser_tool_host() {
             tool_hosts.push(Arc::new(browser_run_tool_host::BrowserRunToolHost::new(
                 browser_host,
@@ -2303,6 +2360,23 @@ impl LocalRuntimeState {
         }
         let mut dynamic_metadata =
             std::collections::BTreeMap::<String, tool_authority::ToolMetadata>::new();
+        for (name, effect) in agistack_adapters_cua::tool_effects() {
+            dynamic_metadata.insert(
+                name.to_string(),
+                tool_authority::ToolMetadata {
+                    name: name.to_string(),
+                    effect: match effect {
+                        agistack_adapters_cua::CuaToolEffect::Read => {
+                            tool_authority::ToolEffect::Read
+                        }
+                        agistack_adapters_cua::CuaToolEffect::Mutate => {
+                            tool_authority::ToolEffect::Mutate
+                        }
+                    },
+                    sensitive_input_fields: Default::default(),
+                },
+            );
+        }
         let mut plugin_metadata = local_plugin_tool_host_v2::PluginTimelineMetadataV2::default();
         let plugin_host = match run {
             Some(run) => local_plugin_tool_host_v2::LocalPluginToolHostV2::new(self, conversation, run).await?,
@@ -2370,6 +2444,9 @@ impl LocalRuntimeState {
         let role = workload_role
             .unwrap_or_else(|| workload_role_for_capability(conversation.capability_mode));
         let base_llm = self.llm_for_role(conversation, role).await?;
+        let vision_llm = self.llm_for_role(conversation, LlmWorkloadRole::Vision).await?;
+        let base_llm: Arc<dyn LlmPort> = Arc::new(visual_input_llm::VisualInputLlm { default: base_llm, vision: vision_llm });
+        let base_llm = boundary.as_ref().map_or_else(|| base_llm.clone(), |boundary| boundary.wrap_llm(base_llm.clone()));
         let max_rounds = policy
             .as_ref()
             .and_then(|policy| {
@@ -2397,13 +2474,14 @@ impl LocalRuntimeState {
             let run = run.ok_or_else(|| {
                 "build mode requires an authoritative run for tool execution".to_string()
             })?;
-            if let Some(subagent_host) = self.subagent_agent_tool_host(
+            if let Some(subagent_host) = self.subagent_agent_tool_host_with_boundary(
                 conversation,
                 run,
                 &profile,
                 &child_base_tool_hosts,
                 Arc::clone(&base_llm),
                 max_rounds,
+                boundary.clone(),
             ).await? {
                 dynamic_metadata.extend(subagent_host.authority_metadata_by_name());
                 profiled_tool_hosts.push(Arc::new(subagent_host));
@@ -2430,7 +2508,8 @@ impl LocalRuntimeState {
             ),
         };
         let llm: Arc<dyn LlmPort> =
-            Arc::new(execution_profile::ProfiledLlm::new(base_llm, &profile));
+            {computer_use_v2::apply_guidance(&mut profile,&*tool_host);
+            Arc::new(execution_profile::ProfiledLlm::new(base_llm, &profile))};
         let plugin_metadata = plugin_metadata.restrict_to(&tool_host.list_tools());
         let marketplace_hooks = plugin_marketplace_v3::hooks::Hooks::capture(
             self, &conversation.tenant_id, &conversation.project_id,
@@ -2438,15 +2517,13 @@ impl LocalRuntimeState {
         marketplace_hooks.run("session_start").await.map_err(|error| error.to_string())?;
         let llm = marketplace_hooks.wrap_llm(llm);
         let tool_host = marketplace_hooks.wrap_tools(tool_host);
-        Ok((
-            ReActEngine::new(llm, tool_host, self.checkpoints.clone(), self.clock.clone())
-                .with_max_rounds(max_rounds)
-                .with_terminal_tools(
-                    (conversation.current_mode == ConversationRunMode::Plan)
-                        .then_some(SUBMIT_PLAN_TOOL_NAME),
-                ),
-            plugin_metadata,
-        ))
+        let engine = ReActEngine::new(llm, tool_host, self.checkpoints.clone(), self.clock.clone())
+            .with_hitl_validation(computer_use_v2::hitl_validation::NativeHitlValidation::capture(
+                self, conversation, run, message_id, None))
+            .with_max_rounds(max_rounds)
+            .with_terminal_tools((conversation.current_mode == ConversationRunMode::Plan).then_some(SUBMIT_PLAN_TOOL_NAME));
+        let engine = if let Some(boundary) = boundary { boundary.wrap_engine(engine) } else { engine };
+        Ok((engine, plugin_metadata))
     }
 
     fn execution_profile(
@@ -2545,6 +2622,7 @@ impl LocalRuntimeState {
             return Err("session is awaiting input without a pending HITL request".to_string());
         };
         validate_pending_hitl_authority(pending)?;
+        computer_use_v2::hitl::validate_creation(self, conversation_id, run_id, &state.session_id, pending)?;
         let request = DesktopHitlRequest {
             id: pending.id.clone(),
             conversation_id: conversation_id.to_string(),
@@ -2623,8 +2701,11 @@ impl LocalRuntimeState {
         control: Arc<LocalRunControl>,
         plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
     ) {
-        let _plugin_generation_lease = plugin_generation;
         let conversation_id = conversation.id.clone();
+        self.clear_suspended_operation_v2(
+            &conversation_id,
+            authoritative_run.as_ref().map(|run| run.id.as_str()),
+        );
         let profile = match self.execution_profile(&conversation) {
             Ok(profile) => profile,
             Err(error) => {
@@ -2644,12 +2725,12 @@ impl LocalRuntimeState {
         let observer = Arc::new(LocalTimelineObserver::new(
             Arc::clone(&self),
             conversation_id.clone(),
-            message_id,
+            message_id.clone(),
             profile,
             goal.clone(),
         ));
         let (engine, plugin_metadata) = match self
-            .agent_engine_for_role_with_plugin_metadata(&conversation, authoritative_run.as_ref(), None)
+            .agent_engine_for_role_with_boundary(&conversation, authoritative_run.as_ref(), None, &message_id, plugin_generation.clone())
             .await
         {
             Ok(engine) => engine,
@@ -2712,6 +2793,13 @@ impl LocalRuntimeState {
                 Err(message)
             }
         };
+        self.retain_suspended_operation_v2(
+            &conversation_id,
+            &message_id,
+            authoritative_run.as_ref().map(|run| run.id.as_str()),
+            run_result.as_ref().ok(),
+            plugin_generation.as_ref(),
+        );
         let hitl_persistence_error = run_result.as_ref().ok().and_then(|state| {
             self.persist_pending_hitl(
                 &conversation_id,
@@ -2723,6 +2811,10 @@ impl LocalRuntimeState {
         if let Some(error) = hitl_persistence_error {
             eprintln!("failed to persist resumed HITL request: {error}");
             run_result = Err(format!("failed to persist resumed HITL request: {error}"));
+            self.clear_suspended_operation_v2(
+                &conversation_id,
+                authoritative_run.as_ref().map(|run| run.id.as_str()),
+            );
         }
         if let Some(run) = authoritative_run {
             let (status, error) = match run_result {
@@ -3238,6 +3330,10 @@ fn local_router_with_generation_admission(
             get(conversation_messages).post(run_conversation_message),
         )
         .route(
+            "/api/v1/agent/conversations/:conversation_id/messages/:message_id/model-requests/:attempt_id",
+            get(model_request_replay_v2::get),
+        )
+        .route(
             "/api/v1/agent/plans/approve-and-start",
             post(approve_plan_and_start),
         )
@@ -3327,6 +3423,8 @@ fn local_router_with_generation_admission(
         .merge(platform_plugin_marketplace_v2::router())
         .merge(plugin_marketplace_v3::router())
         .merge(local_plugin_routes_v2::router())
+        .merge(local_plugin_instances_v2::router())
+        .merge(computer_use_v2::router())
         .merge(knowledge_authority_v2::router())
         .merge(parity_routes::router())
         .fallback(workspace_core_bridge::proxy_workspace_fallback)
@@ -3668,7 +3766,7 @@ async fn require_user_session(
 }
 
 async fn require_active_scope(
-    State(_state): State<Arc<LocalRuntimeState>>,
+    State(state): State<Arc<LocalRuntimeState>>,
     request: axum::extract::Request,
     next: Next,
 ) -> Response {
@@ -3692,6 +3790,12 @@ async fn require_active_scope(
             Json(json!({ "detail": "request is outside the active workspace context" })),
         )
             .into_response();
+    }
+    if let Some(owner) = request.extensions().get::<axum::extract::MatchedPath>()
+        .and_then(|path| local_feature_authority_v2::owner(path.as_str())) {
+        if let Err(code) = local_feature_authority_v2::require_feature(&state, authenticated, owner) {
+            return (StatusCode::FORBIDDEN, Json(json!({"code":code,"detail":"Feature is unavailable in this project"}))).into_response();
+        }
     }
     next.run(request).await
 }
@@ -6471,6 +6575,9 @@ async fn run_conversation_message(
         None => format!("local-message-{}", Uuid::new_v4()),
     };
     let conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
+    local_feature_authority_v2::require_feature(&state, &authenticated,
+        "builtin-desktop-feature-agent-workspace-tenant-agent-workspace")
+        .map_err(|code| (StatusCode::CONFLICT, Json(json!({"code":code,"detail":"Agent workspace is unavailable"}))))?;
     if let Some(project_id) = body.project_id.as_deref() {
         ensure_active_project(&authenticated, project_id)?;
     }
@@ -6610,6 +6717,9 @@ async fn approve_plan_and_start(
     let prepared = if existing_run.is_some() {
         None
     } else {
+        local_feature_authority_v2::require_feature(&state, &authenticated,
+            "builtin-desktop-feature-agent-workspace-tenant-agent-workspace")
+            .map_err(|code| (StatusCode::CONFLICT, Json(json!({"code":code,"detail":"Agent workspace is unavailable"}))))?;
         let kind = body
             .environment
             .as_ref()
@@ -7923,7 +8033,7 @@ async fn respond_to_hitl(
             authority,
             duplicate,
         }) => {
-            let response_authority_revision = state
+            let responded_request = state
                 .session_store
                 .hitl_request(&request.id)
                 .map_err(local_store_error)?
@@ -7935,8 +8045,7 @@ async fn respond_to_hitl(
                             "reason_code": "local_automation_hitl_authority_unavailable",
                         })),
                     )
-                })?
-                .authority_revision;
+                })?;
             if !duplicate {
                 let mut item = state.timeline_item(
                     "hitl_responded",
@@ -7959,18 +8068,10 @@ async fn respond_to_hitl(
                 item["answered"] = json!(true);
                 state.append_timeline(&conversation.id, item);
             }
-            return Ok(Json(json!({
-                "success": true,
-                "status": if duplicate { "responded" } else { "queued" },
-                "request_id": request.id,
-                "conversation_id": conversation.id,
-                "run_id": null,
-                "automation_run_id": authority.run_id,
-                "revision": null,
-                "authority_revision": response_authority_revision,
-                "authority_status": "answered",
-                "duplicate": duplicate,
-            })));
+            let mut receipt = hitl_response_receipt(&responded_request, duplicate);
+            receipt["automation_run_id"] = json!(authority.run_id);
+            receipt["execution_status"] = json!(if duplicate { "responded" } else { "queued" });
+            return Ok(Json(receipt));
         }
         Err(automation_hitl::AutomationHitlResponseError::Checkpoint(reason_code)) => {
             return Err((
@@ -8024,6 +8125,7 @@ async fn respond_to_hitl(
         &body.response_data,
     )?;
     let browser_origin_consent = browser_origin_grant_from_hitl(&request, &body.response_data)?;
+    let computer_use_consent = computer_use_v2::hitl::prepare(&state,&authenticated,&request,&body.response_data).map_err(local_bad_request)?;
     let browser_capability_consent =
         browser_capability_grant_from_hitl(&request, &body.response_data)?;
     let engine = state
@@ -8048,6 +8150,26 @@ async fn respond_to_hitl(
         }
     }
 
+    // A prior cancellation can have persisted its terminal checkpoint before
+    // the desktop run transition is reconciled. Never commit a grant or human
+    // answer against that checkpoint, even while the run row still waits.
+    let pending_matches = match state.checkpoints.load(&conversation.id).await {
+        Ok(checkpoint) => checkpoint.is_some_and(|checkpoint| {
+            checkpoint.status == SessionStatus::AwaitingInput
+                && checkpoint
+                    .pending_hitl
+                    .as_ref()
+                    .is_some_and(|pending| pending.id == request.id)
+        }),
+        Err(error) => {
+            state.release_agent_run_if_control(&conversation.id, &control);
+            return Err(local_store_error(error.to_string()));
+        }
+    };
+    if !pending_matches {
+        state.release_agent_run_if_control(&conversation.id, &control);
+        return Err(hitl_response_commit_error(HitlResponseCommitError::RunNotWaiting));
+    }
     let response_commit = state.session_store.mark_hitl_responded(
         &request.id,
         HitlResponseCommit {
@@ -8064,17 +8186,7 @@ async fn respond_to_hitl(
         Ok(HitlResponseCommitOutcome::Committed(request)) => request,
         Ok(HitlResponseCommitOutcome::Duplicate(request)) => {
             state.release_agent_run(&conversation.id);
-            return Ok(Json(json!({
-                "success": true,
-                "status": "responded",
-                "duplicate": true,
-                "request_id": request.id,
-                "conversation_id": request.conversation_id,
-                "run_id": request.run_id,
-                "revision": request.response_revision,
-                "authority_revision": request.authority_revision,
-                "authority_status": "answered",
-            })));
+            return Ok(Json(hitl_response_receipt(&request, true)));
         }
         Err(error) => {
             state.release_agent_run(&conversation.id);
@@ -8089,6 +8201,12 @@ async fn respond_to_hitl(
             .lock()
             .expect("run once tool permissions")
             .insert((run_id, canonical_tool_name));
+    }
+    if let Some((owner,input))=computer_use_consent {
+        if let Err(error)=computer_use_v2::apply_management(&state,&owner,input).await {
+            state.release_agent_run_if_control(&conversation.id,&control);
+            return Err(local_bad_request(error));
+        }
     }
     // The HITL response is committed; apply the browser-origin consent.
     // Persisted scopes go to the grant table; `once` joins the run-scoped
@@ -8226,24 +8344,22 @@ async fn respond_to_hitl(
         None
     };
 
-    let response = json!({
-        "success": true,
-        "status": "running",
-        "request_id": request.id,
-        "conversation_id": conversation.id,
-        "run_id": authoritative_run.as_ref().map(|run| run.id.clone()),
-        "revision": authoritative_run.as_ref().map(|run| run.revision),
-        "authority_revision": committed_request.authority_revision,
-        "authority_status": "answered",
-        "duplicate": false,
-    });
+    let mut response = hitl_response_receipt(&committed_request, false);
+    response["execution_status"] = json!("running");
+    response["revision"] = json!(authoritative_run.as_ref().map(|run| run.revision));
     let goal = accepted.goal;
     let message_id = authoritative_run
         .as_ref()
         .map(|run| run.message_id.clone())
         .unwrap_or_else(|| format!("local-resume-{}", request.id));
     let run_state = Arc::clone(&state);
-    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+    let (message_id, plugin_generation) = state.continuation_operation_v2(
+        &conversation.id,
+        message_id,
+        authoritative_run.as_ref().map(|run| run.id.as_str()),
+        Some(&request.id),
+        plugin_generation.map(|Extension(generation)| generation),
+    );
     let native_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
         authenticated.clone(),
         plugin_generation.clone(),
@@ -8310,6 +8426,17 @@ async fn wait_for_competing_hitl_response(
     ))
 }
 
+fn hitl_response_receipt(request: &DesktopHitlRequest, duplicate: bool) -> Value {
+    json!({
+        "success":true,"message":"HITL response received","status":"answered",
+        "duplicate":duplicate,"request_id":request.id,"conversation_id":request.conversation_id,
+        "run_id":request.run_id,"revision":request.response_revision,
+        "authority_revision":request.authority_revision,"authority_status":"answered",
+        "created_at":request.created_at,"answered_at":request.responded_at,
+        "expires_at":null,"observed_at":now_iso(),
+    })
+}
+
 fn answered_hitl_outcome(
     request: &DesktopHitlRequest,
     response_data: &Value,
@@ -8331,17 +8458,7 @@ fn answered_hitl_outcome(
     let same_payload = request.response_data.as_ref() == Some(response_data);
     let same_key = request.idempotency_key.as_deref() == Some(idempotency_key);
     if same_payload && same_key {
-        return Ok(Json(json!({
-            "success": true,
-            "status": "responded",
-            "duplicate": true,
-            "request_id": request.id,
-            "conversation_id": request.conversation_id,
-            "run_id": request.run_id,
-            "revision": request.response_revision,
-            "authority_revision": request.authority_revision,
-            "authority_status": "answered",
-        })));
+        return Ok(Json(hitl_response_receipt(request, true)));
     }
     let reason_code = if same_key {
         "hitl_idempotency_conflict"
@@ -8366,6 +8483,13 @@ fn hitl_response_commit_error(error: HitlResponseCommitError) -> (StatusCode, Js
             Json(json!({
                 "detail": "HITL request not found",
                 "reason_code": "hitl_request_not_found",
+            })),
+        ),
+        HitlResponseCommitError::RunNotWaiting => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "run is not awaiting human input",
+                "reason_code": "hitl_run_not_waiting",
             })),
         ),
         HitlResponseCommitError::AuthorityConflict {
@@ -8419,6 +8543,9 @@ fn valid_permission_response(request: &DesktopHitlRequest, response_data: &Value
         return false;
     }
     let scope = object.get("scope").and_then(Value::as_str);
+    if computer_use_v2::hitl::is_permission(request) {
+        return matches!((action,granted,scope),("allow",true,Some("once"|"session"|"always"))|("deny",false,Some("once")));
+    }
     if is_browser_origin_permission(request) {
         // Browser-origin consent: allow with once/site/all scopes; deny maps
         // to a persisted decline decision.
@@ -8871,10 +8998,10 @@ async fn agent_ws(
     plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
-    ws.protocols(["memstack.auth"]).on_upgrade(move |socket| {
-        agent_socket_loop(socket, state, authenticated, plugin_generation)
-    })
+    // A socket may span publications; each new turn admits its own generation.
+    drop(plugin_generation);
+    ws.protocols(["memstack.auth"])
+        .on_upgrade(move |socket| agent_socket_loop(socket, state, authenticated))
 }
 
 fn execution_selection_from_agent_message(
@@ -8900,7 +9027,6 @@ async fn agent_socket_loop(
     socket: WebSocket,
     state: Arc<LocalRuntimeState>,
     authenticated: AuthenticatedContext,
-    plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
 ) {
     let (mut sender, mut receiver) = socket.split();
     let mut events = state.events.subscribe();
@@ -8981,6 +9107,21 @@ async fn agent_socket_loop(
                         }
                         continue;
                     }
+                    if let Err(code) = local_feature_authority_v2::require_feature(&state, &authenticated,
+                        "builtin-desktop-feature-agent-workspace-tenant-agent-workspace") {
+                        let error = json!({"type":"error","code":code,"message":"Agent workspace is unavailable","conversation_id":conversation_id});
+                        if sender.send(Message::Text(error.to_string())).await.is_err() { break; }
+                        continue;
+                    }
+                    let operation_generation = match state.acquire_agent_operation_generation_v2() {
+                        Ok(generation) => generation,
+                        Err(error) => {
+                            let reason = error.reason();
+                            let event = json!({"type":"error","code":reason.code(),"message":reason.message(),"conversation_id":conversation_id});
+                            if sender.send(Message::Text(event.to_string())).await.is_err() { break; }
+                            continue;
+                        }
+                    };
                     let selection = match execution_selection_from_agent_message(&value) {
                         Ok(selection) => selection,
                         Err(message) => {
@@ -9059,15 +9200,14 @@ async fn agent_socket_loop(
                     let run_state = Arc::clone(&state);
                     let native_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
                         authenticated.clone(),
-                        plugin_generation.clone(),
+                        operation_generation.clone(),
                         &conversation,
                         &message_id,
                         None,
                     );
                     let project_id = conversation.project_id;
-                    // The socket owns one lease, and every derived operation clones it so closing
-                    // the socket cannot release the generation while a turn is still running.
-                    let operation_generation = plugin_generation.clone();
+                    // Each new turn pins the active generation; closing the socket
+                    // cannot release a generation still owned by that operation.
                     tokio::spawn(async move {
                         knowledge_authority_v2::agent_access::scope(native_authorization, async move {
                             run_state
@@ -9839,6 +9979,13 @@ impl LocalTimelineObserver {
 
 #[async_trait]
 impl ReActObserver for LocalTimelineObserver {
+    async fn on_tool_control(
+        &self, session: &str, round: u64, tool: &str, input: &str,
+        result: &agistack_core::ports::ToolResult,
+    ) -> CoreResult<agistack_core::agent::ToolControlResolution> {
+        self.observe_control(session, round, tool, input, result).await
+    }
+
     fn on_text_end(&self, _session_id: &str, round: u64) {
         let message_id = format!("local-assistant-{}-{round}", self.message_id);
         let item = self.state.timeline_item(
@@ -9900,6 +10047,15 @@ impl ReActObserver for LocalTimelineObserver {
         item["toolInput"] = json!(redacted_input);
         item["round"] = json!(round);
         item["display"] = timeline_presentation::display(tool);
+        if let Some(extra) = timeline_presentation::computer_use_display(tool, &redacted_input, "") {
+            if let Some(display_object) = item["display"].as_object_mut() {
+                if let Some(extra_object) = extra.as_object() {
+                    for (key, value) in extra_object {
+                        display_object.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
         if let Some(metadata) = timeline_presentation::input_file_metadata(tool, &redacted_input) {
             item["fileMetadata"] = metadata.clone();
             item["payload"]["file_metadata"] = metadata.clone();
@@ -9965,10 +10121,26 @@ impl ReActObserver for LocalTimelineObserver {
         item["isError"] = json!(is_error);
         item["round"] = json!(round);
         item["display"] = timeline_presentation::display(tool);
+        if let Some(extra) =
+            timeline_presentation::computer_use_display(tool, &redacted_input, &redacted_output)
+        {
+            if let Some(display_object) = item["display"].as_object_mut() {
+                if let Some(extra_object) = extra.as_object() {
+                    for (key, value) in extra_object {
+                        display_object.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
         if let Some(metadata) = timeline_presentation::input_file_metadata(tool, &redacted_input) {
             item["fileMetadata"] = metadata.clone();
             item["payload"]["file_metadata"] = metadata.clone();
             item["data"]["file_metadata"] = metadata;
+        }
+        if let Some(computer_metadata) = timeline_presentation::computer_use_metadata(&redacted_output) {
+            item["computerUse"] = computer_metadata.clone();
+            item["payload"]["computer_use"] = computer_metadata.clone();
+            item["data"]["computer_use"] = computer_metadata;
         }
         if let Some(file_metadata) = timeline_presentation::file_metadata(&redacted_output) {
             if let Some(metadata) = item["fileMetadata"].as_object_mut() {
@@ -10830,7 +11002,7 @@ mod tests {
             .collect()
     }
 
-    fn test_decision_context() -> agistack_core::agent::types::DecisionContext {
+    pub(super) fn test_decision_context() -> agistack_core::agent::types::DecisionContext {
         use agistack_core::agent::types::{
             DecisionAction, DecisionContext, DecisionData, DecisionEvidence, DecisionReversibility,
             DecisionReversibilityMode, DecisionRisk, DecisionRiskLevel, DecisionScope,
@@ -14812,7 +14984,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 28);
+        assert_eq!(version, 30);
         let conversation_llm_route_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -14929,13 +15101,19 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 29;")
+                .execute_batch("PRAGMA user_version = 31;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 28"));
+        assert!(error.contains("newer than supported schema version 30"));
+        let connection = rusqlite::Connection::open(&future_path).expect("inspect future store");
+        let version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("future schema version");
+        assert_eq!(version, 31);
+        drop(connection);
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -19283,7 +19461,7 @@ mod tests {
         assert!(!history.contains("must-not-persist"));
     }
 
-    fn seed_controlled_run(
+    pub(super) fn seed_controlled_run(
         state: &Arc<LocalRuntimeState>,
         suffix: &str,
     ) -> (LocalConversation, DesktopRun) {

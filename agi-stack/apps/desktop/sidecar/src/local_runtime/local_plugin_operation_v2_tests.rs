@@ -288,7 +288,11 @@ async fn native_plan_request_advertises_and_executes_signed_plugin(websocket: bo
             *self.0.lock().unwrap() = tools.to_vec();
             if self.1 && round < 2 {
                 let tool = if round == 0 { "skill_list" } else { "skill_loader" };
-                assert!(tools.iter().any(|item| item.name == tool), "unbound Plan must advertise {tool}");
+                assert!(
+                    tools.iter().any(|item| item.name == tool),
+                    "unbound Plan must advertise {tool}; available: {:?}",
+                    tools.iter().map(|item| &item.name).collect::<Vec<_>>()
+                );
                 if round == 1 { assert!(transcript.iter().any(|item| item.content.contains("native-marker-skill"))); }
                 return Ok(AgentAction::CallTool { tool: tool.into(), input_json: if round == 0 { "{}".into() } else { r#"{"skill_id":"native-marker-skill"}"#.into() }});
             }

@@ -89,6 +89,154 @@ async def test_unsubscribed_producer_settles_and_replay_does_not_regress(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("control", ["user_paused", "user_stopped"])
+async def test_native_control_persists_cancelled_output_without_error(producer, test_db, control):
+    import json
+
+    store, cid = producer
+    output = json.dumps({"type": "computer_use_control", "status": control, "retry_allowed": False})
+    await store.append_stream_events(
+        conversation_id=cid,
+        message_id="turn",
+        events=[
+            event("act", 1),
+            event(
+                "observe", 2, status="cancelled", control_outcome=control, result={"output": output}
+            ),
+        ],
+        correlation_id=None,
+    )
+    row = await test_db.get(ToolExecutionRecord, "exact-execution")
+    assert row.status == "cancelled" and row.error is None
+    assert row.tool_output == output
+
+
+@pytest.mark.unit
+async def test_control_marker_cannot_hide_real_error(producer, test_db):
+    store, cid = producer
+    await store.append_stream_events(
+        conversation_id=cid,
+        message_id="turn",
+        events=[
+            event(
+                "observe",
+                1,
+                status="cancelled",
+                control_outcome="user_stopped",
+                error="permission_denied",
+            )
+        ],
+        correlation_id=None,
+    )
+    row = await test_db.get(ToolExecutionRecord, "exact-execution")
+    assert row.status == "failed" and row.error == "permission_denied"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("control", ["user_paused", "user_stopped", None])
+async def test_only_pending_paused_control_can_upgrade_to_real_wait_failure(
+    producer, test_db, control
+):
+    import json
+
+    store, cid = producer
+    output = json.dumps({"type": "computer_use_control", "status": control, "retry_allowed": False})
+    paused = event(
+        "observe", 2, status="cancelled", control_outcome=control, result={"output": output}
+    )
+    failure = event(
+        "observe",
+        3,
+        status="error",
+        control_outcome="user_paused",
+        error="native_control_wait_failed",
+    )
+    for events in (
+        [event("act", 1), paused],
+        [failure],
+        [paused],
+        [event("observe", 4, status="success", result="late")],
+    ):
+        await store.append_stream_events(
+            conversation_id=cid, message_id="turn", events=events, correlation_id=None
+        )
+    test_db.expire_all()
+    row = await test_db.get(ToolExecutionRecord, "exact-execution")
+    assert row.status == ("failed" if control == "user_paused" else "cancelled")
+    if control == "user_paused":
+        assert row.error == "native_control_wait_failed"
+        assert row.completed_at.replace(tzinfo=UTC) == datetime.fromtimestamp(1.000003, UTC)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "output,typed,counter",
+    [
+        ("invalid json", True, 3),
+        ("[]", True, 3),
+        ('{"type":"computer_use_control","status":"user_paused","retry_allowed":0}', True, 3),
+        ('{"type":"computer_use_control","status":"user_paused","retry_allowed":false}', False, 3),
+        ('{"type":"computer_use_control","status":"user_paused","retry_allowed":false}', True, 1),
+    ],
+)
+async def test_untrusted_or_stale_failure_cannot_upgrade_cancelled_record(
+    producer, test_db, output, typed, counter
+):
+    store, cid = producer
+    await store.append_stream_events(
+        conversation_id=cid,
+        message_id="turn",
+        events=[
+            event(
+                "observe",
+                2,
+                status="cancelled",
+                control_outcome="user_paused" if typed else None,
+                result={"output": output},
+            ),
+            event("observe", counter, status="error", control_outcome="user_paused", error="lost"),
+        ],
+        correlation_id=None,
+    )
+    row = await test_db.get(ToolExecutionRecord, "exact-execution")
+    assert row.status == "cancelled"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("field", ["message_id", "call_id", "tool_name"])
+async def test_pause_failure_cannot_reassign_call_identity(producer, test_db, field):
+    store, cid = producer
+    output = '{"type":"computer_use_control","status":"user_paused","retry_allowed":false}'
+    await store.append_stream_events(
+        conversation_id=cid,
+        message_id="turn",
+        events=[
+            event("observe", 2, status="cancelled", control_outcome="user_paused", result=output)
+        ],
+        correlation_id=None,
+    )
+    changes = {} if field == "message_id" else {field: "foreign"}
+    with pytest.raises(ValueError, match="identity"):
+        await store.append_stream_events(
+            conversation_id=cid,
+            message_id="foreign" if field == "message_id" else "turn",
+            events=[
+                event(
+                    "observe",
+                    3,
+                    status="error",
+                    control_outcome="user_paused",
+                    error="lost",
+                    **changes,
+                )
+            ],
+            correlation_id=None,
+        )
+    row = await test_db.get(ToolExecutionRecord, "exact-execution")
+    assert row.status == "cancelled" and row.error is None
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "field,value",
     [("message_id", "other-turn"), ("call_id", "other-call"), ("tool_name", "other-tool")],

@@ -1,3 +1,4 @@
+import type { PluginInstanceClientV2 } from '../api/pluginInstanceClientV2';
 import {
   PLUGIN_MODULE_CATALOG_V2,
   RuntimeV2Error,
@@ -6,6 +7,19 @@ import {
 } from '@agistack/plugin-runtime';
 
 import { DesktopApiClient } from '../api/client';
+import type { LocalPluginClient } from '../api/localPluginClient';
+import type { MarketplaceClient } from '../../../../packages/plugin-marketplace-ui/src/client';
+import { createDesktopLocalPluginClientV2, createDesktopMarketplaceClientV3 } from './desktopMarketplaceClientsV2';
+import {
+  guardLocalPluginCatalogV2,
+  guardLocalPluginManagementV2,
+  guardMarketplaceCatalogV3,
+  guardMarketplaceManagementV3,
+  type DesktopLocalPluginCatalogV2,
+  type DesktopLocalPluginManagementV2,
+  type DesktopMarketplaceCatalogV3,
+  type DesktopMarketplaceManagementV3,
+} from './desktopMarketplaceClientContractV2';
 import type {
   DesktopRuntimeConfig,
   ManagedPlugin,
@@ -36,10 +50,16 @@ export const DESKTOP_PLUGIN_MARKETPLACE_MANAGEMENT_VERSION_V2 = '1.0.0';
 export type DesktopPluginMarketplaceAuthorityKindV2 = 'catalog' | 'management';
 
 export interface DesktopPluginMarketplaceCatalogAuthorityV2 {
+  readonly instances: Pick<PluginInstanceClientV2, 'list'>;
+  readonly marketplaceV3: DesktopMarketplaceCatalogV3;
+  readonly localPlugins: DesktopLocalPluginCatalogV2;
   readonly listMarketplacePlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
 }
 
 export interface DesktopPluginMarketplaceManagementAuthorityV2 {
+  readonly instances: Pick<PluginInstanceClientV2, 'apply'>;
+  readonly marketplaceV3: DesktopMarketplaceManagementV3;
+  readonly localPlugins: DesktopLocalPluginManagementV2;
   readonly installMarketplacePlugin: (
     request: MarketplacePluginInstallRequest,
     signal?: AbortSignal,
@@ -74,6 +94,9 @@ export interface DesktopPluginMarketplaceManagementServiceV2 {
 }
 
 export interface DesktopPluginMarketplaceOperationsV2 {
+  readonly instanceClient: (config: DesktopRuntimeConfig) => PluginInstanceClientV2;
+  readonly marketplaceClient: (config: DesktopRuntimeConfig) => MarketplaceClient;
+  readonly localPluginClient: (config: DesktopRuntimeConfig) => LocalPluginClient;
   readonly listMarketplacePlugins: (
     config: DesktopRuntimeConfig,
     signal?: AbortSignal,
@@ -196,6 +219,15 @@ export function createDesktopPluginMarketplaceOperationsV2(
   resolveActions: () => DesktopRendererGenerationActionsV2 | null,
 ): DesktopPluginMarketplaceOperationsV2 {
   return Object.freeze({
+    instanceClient: (config: DesktopRuntimeConfig): PluginInstanceClientV2 => {
+      const snapshot = cloneDesktopRuntimeConfigV2(config);
+      return Object.freeze({
+        list: (signal?: AbortSignal) => withDesktopPluginMarketplaceCatalogOperationV2(requireGenerationActionsV2('catalog', resolveActions()), snapshot, (authority) => authority.instances.list(signal)),
+        apply: (...args: Parameters<PluginInstanceClientV2['apply']>) => withDesktopPluginMarketplaceManagementOperationV2(requireGenerationActionsV2('management', resolveActions()), snapshot, (authority) => authority.instances.apply(...args)),
+      });
+    },
+    marketplaceClient: (config: DesktopRuntimeConfig) => createDesktopMarketplaceClientV3(config, resolveActions),
+    localPluginClient: (config: DesktopRuntimeConfig) => createDesktopLocalPluginClientV2(config, resolveActions),
     listMarketplacePlugins: (config: DesktopRuntimeConfig, signal?: AbortSignal) => {
       const actions = requireGenerationActionsV2('catalog', resolveActions());
       return withDesktopPluginMarketplaceCatalogOperationV2(
@@ -359,6 +391,11 @@ function createDesktopPluginMarketplaceCatalogAuthorityV2(
 ): DesktopPluginMarketplaceCatalogAuthorityV2 {
   const authority = new DesktopApiClient(cloneDesktopRuntimeConfigV2(config));
   return Object.freeze({
+    instances: authority.pluginInstancesV2(),
+    marketplaceV3: authority.pluginMarketplaceV3(),
+    localPlugins: Object.freeze({
+      list: (...args: Parameters<LocalPluginClient['list']>) => authority.localPlugins().list(...args),
+    }),
     listMarketplacePlugins: (signal?: AbortSignal) =>
       authority.listMarketplacePlugins(signal),
   });
@@ -369,6 +406,13 @@ function createDesktopPluginMarketplaceManagementAuthorityV2(
 ): DesktopPluginMarketplaceManagementAuthorityV2 {
   const authority = new DesktopApiClient(cloneDesktopRuntimeConfigV2(config));
   return Object.freeze({
+    instances: authority.pluginInstancesV2(),
+    marketplaceV3: authority.pluginMarketplaceV3(),
+    localPlugins: Object.freeze({
+      inspect: (...args: Parameters<LocalPluginClient['inspect']>) => authority.localPlugins().inspect(...args),
+      install: (...args: Parameters<LocalPluginClient['install']>) => authority.localPlugins().install(...args),
+      control: (...args: Parameters<LocalPluginClient['control']>) => authority.localPlugins().control(...args),
+    }),
     installMarketplacePlugin: (
       request: MarketplacePluginInstallRequest,
       signal?: AbortSignal,
@@ -396,6 +440,9 @@ function createRevocableCatalogAuthorityV2(
   isOperationActive: () => boolean,
 ): DesktopPluginMarketplaceCatalogAuthorityV2 {
   return Object.freeze({
+    instances: Object.freeze({ list: (...args: Parameters<PluginInstanceClientV2['list']>) => { assertOperationActiveV2('catalog', isOperationActive()); return authority.instances.list(...args); } }),
+    marketplaceV3: guardMarketplaceCatalogV3(authority.marketplaceV3, () => assertOperationActiveV2('catalog', isOperationActive())),
+    localPlugins: guardLocalPluginCatalogV2(authority.localPlugins, () => assertOperationActiveV2('catalog', isOperationActive())),
     listMarketplacePlugins: (signal?: AbortSignal) => {
       assertOperationActiveV2('catalog', isOperationActive());
       return authority.listMarketplacePlugins(signal);
@@ -408,6 +455,9 @@ function createRevocableManagementAuthorityV2(
   isOperationActive: () => boolean,
 ): DesktopPluginMarketplaceManagementAuthorityV2 {
   return Object.freeze({
+    instances: Object.freeze({ apply: (...args: Parameters<PluginInstanceClientV2['apply']>) => { assertOperationActiveV2('management', isOperationActive()); return authority.instances.apply(...args); } }),
+    marketplaceV3: guardMarketplaceManagementV3(authority.marketplaceV3, () => assertOperationActiveV2('management', isOperationActive())),
+    localPlugins: guardLocalPluginManagementV2(authority.localPlugins, () => assertOperationActiveV2('management', isOperationActive())),
     installMarketplacePlugin: (
       request: MarketplacePluginInstallRequest,
       signal?: AbortSignal,
@@ -462,6 +512,8 @@ function requireGenerationActionsV2(
     reasonCode: 'desktop_renderer_generation_actions_unavailable',
   });
 }
+
+export { requireGenerationActionsV2 as requireDesktopMarketplaceGenerationActionsV2 };
 
 function requireDesktopApiClientStrategyV2(
   config: Readonly<Record<string, unknown>>,

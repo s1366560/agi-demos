@@ -185,6 +185,7 @@ import {
 
 export function WorkspaceReviewPanel({
   activeTab,
+  enabledPanelIds,
   socketEvents,
   timelineItems,
   artifacts,
@@ -249,6 +250,7 @@ export function WorkspaceReviewPanel({
   sessionControls,
 }: {
   activeTab: ReviewTab;
+  enabledPanelIds?: readonly string[];
   socketEvents: unknown[];
   timelineItems: AgentTimelineItem[];
   artifacts: WorkspaceArtifact[];
@@ -410,8 +412,12 @@ export function WorkspaceReviewPanel({
     [approvalRequest],
   );
   const configuredCanvasTabs = useMemo(
-    () => sessionCanvasTabs(capabilityMode),
-    [capabilityMode],
+    () => {
+      const tabs = sessionCanvasTabs(capabilityMode);
+      if (!enabledPanelIds) return tabs;
+      return { primary: tabs.primary.filter((tab) => enabledPanelIds.includes(tab.id)), secondary: tabs.secondary.filter((tab) => enabledPanelIds.includes(tab.id)) };
+    },
+    [capabilityMode, enabledPanelIds],
   );
   const chrome = workspaceReviewPanelChrome(Boolean(sessionControls));
   const tabValue = (tab: ReviewTab): string | undefined => {

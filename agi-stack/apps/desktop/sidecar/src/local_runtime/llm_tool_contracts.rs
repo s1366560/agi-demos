@@ -191,9 +191,11 @@ impl LlmPort for AnthropicAgentLlm {
         })
         .to_string();
         let mut answer = agistack_adapters_http_llm::AgentAnswerStream::default();
-        let raw = self.inner.stream_complete(
+        let media = transcript.iter().rev().find(|entry| !entry.media.is_empty()).map(|entry| entry.media.as_slice()).unwrap_or(&[]);
+        let raw = self.inner.complete_with_media_stream(
             "You are a ReAct agent. Respond with ONLY JSON: {\"kind\":\"finish\",\"answer\":string} or {\"kind\":\"call_tool\",\"tool\":string,\"input_json\":string}.",
             user,
+            media,
             |delta| answer.push(delta, on_text),
         ).await?;
         parse_agent_action(&raw)
@@ -230,9 +232,10 @@ impl LlmPort for AnthropicAgentLlm {
         .to_string();
         let raw = self
             .inner
-            .stream_complete(
+            .complete_with_media_stream(
                 "You are a ReAct agent. Respond with ONLY JSON: {\"kind\":\"finish\",\"answer\":string} or {\"kind\":\"call_tool\",\"tool\":string,\"input_json\":string}.",
                 user,
+                transcript.iter().rev().find(|entry| !entry.media.is_empty()).map(|entry| entry.media.as_slice()).unwrap_or(&[]),
                 |_| {},
             )
             .await?;

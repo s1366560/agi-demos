@@ -94,10 +94,10 @@ export function createMarketplaceClient(
   return {
     oauthStatus: (id: string, server: string, signal?: AbortSignal) =>
       transport<MarketplaceOAuthStatus>(`${ROOT}/installations/${encodeURIComponent(id)}/oauth/${encodeURIComponent(server)}/status?${query}`, { ...(signal ? { signal } : {}) }),
-    oauthAction: (id: string, server: string, action: 'start' | 'cancel' | 'disconnect', configuration: { client_id?: string; client_metadata_url?: string } = {}, key = crypto.randomUUID()) =>
-      transport<MarketplaceOAuthStatus>(`${ROOT}/installations/${encodeURIComponent(id)}/oauth/${encodeURIComponent(server)}/${action}`, { method: 'POST', body: { ...configuration, ...scope, idempotency_key: key } }),
+    oauthAction: (id: string, server: string, action: 'start' | 'cancel' | 'disconnect', configuration: { client_id?: string; client_metadata_url?: string } = {}, key = crypto.randomUUID(), signal?: AbortSignal) =>
+      transport<MarketplaceOAuthStatus>(`${ROOT}/installations/${encodeURIComponent(id)}/oauth/${encodeURIComponent(server)}/${action}`, { method: 'POST', body: { ...configuration, ...scope, idempotency_key: key }, ...(signal ? { signal } : {}) }),
     cache: (signal?: AbortSignal) => transport<MarketplaceCache>(`${ROOT}/cache?${query}`, { ...(signal ? { signal } : {}) }),
-    cleanupCache: (key = crypto.randomUUID()) => transport<MarketplaceCache>(`${ROOT}/cache/cleanup`, { method: 'POST', body: { ...scope, idempotency_key: key } }),
+    cleanupCache: (key = crypto.randomUUID(), signal?: AbortSignal) => transport<MarketplaceCache>(`${ROOT}/cache/cleanup`, { method: 'POST', body: { ...scope, idempotency_key: key }, ...(signal ? { signal } : {}) }),
     catalog: (signal?: AbortSignal) =>
       transport<{
         items: PluginDescriptor[];
@@ -114,18 +114,21 @@ export function createMarketplaceClient(
         `${ROOT}/installations?${query}`,
         { ...(signal ? { signal } : {}) },
       ),
-    addSource: (source: Omit<MarketplaceSource, 'id'>) =>
+    addSource: (source: Omit<MarketplaceSource, 'id'>, signal?: AbortSignal) =>
       transport<MarketplaceSource>(`${ROOT}/sources`, {
         method: 'POST',
         body: { ...source, ...scope },
+        ...(signal ? { signal } : {}),
       }),
-    removeSource: (id: string) =>
+    removeSource: (id: string, signal?: AbortSignal) =>
       transport<unknown>(`${ROOT}/sources/${encodeURIComponent(id)}?${query}`, {
         method: 'DELETE',
+        ...(signal ? { signal } : {}),
       }),
-    preflight: (plugin: PluginDescriptor) =>
+    preflight: (plugin: PluginDescriptor, signal?: AbortSignal) =>
       transport<MarketplacePreflight>(`${ROOT}/preflight`, {
         method: 'POST',
+        ...(signal ? { signal } : {}),
         body: {
           ...scope,
           plugin_id: plugin.id,
@@ -133,9 +136,10 @@ export function createMarketplaceClient(
           version: plugin.version,
         },
       }),
-    install: (preflight: MarketplacePreflight, idempotencyKey: string) =>
+    install: (preflight: MarketplacePreflight, idempotencyKey: string, signal?: AbortSignal) =>
       transport<MarketplaceInstallation>(`${ROOT}/installations`, {
         method: 'POST',
+        ...(signal ? { signal } : {}),
         body: {
           ...scope,
           preflight_id: preflight.id,
@@ -148,11 +152,13 @@ export function createMarketplaceClient(
       action: MarketplaceAction,
       payload: Record<string, unknown> = {},
       idempotencyKey: string = crypto.randomUUID(),
+      signal?: AbortSignal,
     ) =>
       transport<MarketplaceInstallation>(
         `${ROOT}/installations/${encodeURIComponent(installation.id)}/${action}`,
         {
           method: 'POST',
+          ...(signal ? { signal } : {}),
           body: { ...payload, ...scope, idempotency_key: idempotencyKey },
         },
       ),

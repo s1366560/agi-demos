@@ -181,6 +181,7 @@ pub(crate) struct ReActAutomationRunExecutor {
     tool_hosts: Option<Arc<dyn AutomationToolHostFactory>>,
     permission_producers: Option<PgAutomationPermissionProducerFactory>,
     execution_contract: Option<CronExecutionContract>,
+    agent_boundary: Option<crate::agent_boundary_v2::AgentBoundaryFactoryV2>,
 }
 
 impl ReActAutomationRunExecutor {
@@ -191,7 +192,13 @@ impl ReActAutomationRunExecutor {
             tool_hosts: None,
             permission_producers: None,
             execution_contract: None,
+            agent_boundary: None,
         }
+    }
+
+    pub(crate) fn with_agent_boundary(mut self, boundary: Option<crate::agent_boundary_v2::AgentBoundaryFactoryV2>) -> Self {
+        self.agent_boundary = boundary;
+        self
     }
 
     pub(crate) fn with_run_persistence_factory(
@@ -255,6 +262,10 @@ impl AutomationRunExecutor for ReActAutomationRunExecutor {
             .clone()
             .with_tool_host(tools)
             .with_checkpoint_store(persistence.checkpoints);
+        if let Some(boundary) = self.agent_boundary.as_ref() {
+            engine = boundary.bind(engine, &lease.context.tenant_id, &lease.context.project_id,
+                &lease.context.conversation_id, None, &lease.context.run_id)?;
+        }
         let producer = self
             .permission_producers
             .as_ref()

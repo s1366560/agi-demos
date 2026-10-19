@@ -26,9 +26,14 @@ use crate::agent::types::{
     AgentAction, CompletedCall, HitlRequest, Role, SessionState, SessionStatus, TranscriptEntry,
 };
 use crate::automation_permission::{self as permission, PermissionSuspensionPort};
-use crate::ports::{CheckpointStore, Clock, CoreError, CoreResult, LlmPort, ToolHost};
+use crate::ports::{CheckpointStore, Clock, CoreError, CoreResult, LlmPort, ToolHost, ToolResult, ToolControlOutcome};
+
+use super::tool_policy::{ToolExecutionPolicy, ToolPolicyContext, ToolPolicyDecision, ToolPolicyResult};
+use super::hitl_validation::{HitlValidationContext, HitlValidationPort};
 
 mod permission_config;
+mod tool_control;
+pub use tool_control::ToolControlResolution;
 
 /// Receives non-mutating observations at ReAct run boundaries.
 ///
@@ -73,6 +78,24 @@ pub trait ReActObserver: Send + Sync {
         _error: &CoreError,
     ) -> CoreResult<()> {
         Ok(())
+    }
+
+    /// Publish an explicit user control outcome. A host may wait for the exact
+    /// native pause generation to resolve and report its exact state. Unsupported
+    /// hosts retain a resumable checkpoint instead of treating Pause as success.
+    async fn on_tool_control(
+        &self,
+        _session_id: &str,
+        _round: u64,
+        _tool: &str,
+        _input_json: &str,
+        result: &ToolResult,
+    ) -> CoreResult<ToolControlResolution> {
+        Ok(if result.control_outcome == Some(ToolControlOutcome::UserPaused) {
+            ToolControlResolution::Pending
+        } else {
+            ToolControlResolution::Stopped
+        })
     }
 
     async fn on_finish(&self, _session_id: &str, _round: u64, _answer: &str) -> CoreResult<()> {
@@ -179,6 +202,8 @@ pub struct ReActEngine {
     /// one, a fired trigger is a deterministic structural stop.
     supervisor: Option<Arc<dyn SupervisorPort>>,
     permission_suspension: Option<Arc<dyn PermissionSuspensionPort>>,
+    tool_policy: Option<Arc<dyn ToolExecutionPolicy>>,
+    hitl_validation: Option<Arc<dyn HitlValidationPort>>,
 }
 
 impl ReActEngine {
@@ -199,7 +224,26 @@ impl ReActEngine {
             terminal_tools: BTreeSet::new(),
             supervisor: None,
             permission_suspension: None,
+            tool_policy: None,
+            hitl_validation: None,
         }
+    }
+
+    /// Pin the trusted plugin policy used before authority and before observations.
+    pub fn with_tool_policy(mut self, policy: Arc<dyn ToolExecutionPolicy>) -> Self {
+        self.tool_policy = Some(policy);
+        self
+    }
+
+    pub fn with_hitl_validation(mut self, port: Arc<dyn HitlValidationPort>) -> Self {
+        self.hitl_validation = Some(port);
+        self
+    }
+
+    /// Wrap the model operation while preserving this engine's runtime ports.
+    pub fn map_llm(mut self, wrap: impl FnOnce(Arc<dyn LlmPort>) -> Arc<dyn LlmPort>) -> Self {
+        self.llm = wrap(self.llm);
+        self
     }
 
     /// Clone this engine's runtime/checkpoint policy with a host-owned tool
@@ -406,7 +450,30 @@ impl ReActEngine {
             if self.apply_control(&mut state, control.as_deref()).await? {
                 continue;
             }
-            let action = action?;
+            let mut action = action?;
+            let mut denied_tool = None;
+            if let (Some(policy), AgentAction::CallTool { tool, input_json }) =
+                (self.tool_policy.as_ref(), &action)
+            {
+                let context = ToolPolicyContext { session_id, round: state.round, tool };
+                let definition = available.iter().find(|definition| definition.name == *tool);
+                let schema = definition.and_then(|definition| definition.input_schema.as_ref());
+                match policy.before_execute(&context, input_json, schema).await? {
+                    ToolPolicyDecision::Allow { input_json } => {
+                        action = AgentAction::CallTool { tool: tool.clone(), input_json };
+                    }
+                    ToolPolicyDecision::Deny { reason } => denied_tool = Some(reason),
+                    ToolPolicyDecision::Cancel { reason } => {
+                        state.push_unique(TranscriptEntry::new(state.round, Role::Observation, reason));
+                        state.status = SessionStatus::Cancelled;
+                        self.checkpoints.save(&state).await?;
+                        break;
+                    }
+                    ToolPolicyDecision::Ask { request } => {
+                        action = AgentAction::RequestHuman { request };
+                    }
+                }
+            }
 
             match action {
                 AgentAction::Finish { answer } => {
@@ -451,38 +518,64 @@ impl ReActEngine {
                     }
 
                     // Reuse completed calls in this round; never repeat their side effects.
-                    let (output, tool_failed) = match state
+                    let (output, tool_failed, media, control_outcome, control_generation) = match state
                         .completed_call(state.round, &tool, &input_json)
-                        .map(|call| (call.output_json.clone(), call.failed))
+                        .map(|call| (call.output_json.clone(), call.failed, call.media.clone(), call.control_outcome, call.control_generation.clone()))
                     {
                         Some(prior) => prior,
                         None => {
-                            let out = match self.tools.call(&tool, &input_json).await {
-                                Ok(output) => (output, false),
-                                Err(error) => {
-                                    if let Some(observer) = observer.as_deref() {
-                                        let _ = observer
-                                            .on_tool_error(
-                                                session_id,
-                                                state.round,
-                                                &tool,
-                                                &input_json,
-                                                &error,
-                                            )
-                                            .await;
-                                    }
-                                    // Let the planner judge recovery from the failure.
-                                    // Persist it too: replay must not repeat calls with
-                                    // unknown side effects. Structural budgets still apply.
-                                    (error.to_string(), true)
-                                }
+                            let raw = if let Some(reason) = denied_tool {
+                                Err(CoreError::Tool(reason))
+                            } else if let Some(policy) = self.tool_policy.as_ref() {
+                                let context = ToolPolicyContext { session_id, round: state.round, tool: &tool };
+                                policy.execute_with_content(&context, self.tools.as_ref(), &input_json).await
+                            } else {
+                                self.tools.call_with_content(&tool, &input_json).await
                             };
+                            let raw = raw.and_then(tool_control::validate);
+                            let control = raw.as_ref().ok().and_then(|result|
+                                result.control_outcome.map(|outcome| (outcome, result.control_generation.clone())));
+                            let raw = match raw {
+                                Ok(output) => ToolPolicyResult {
+                                    output: output.output_json, media: output.media,
+                                    is_error: false, metadata: serde_json::json!({}),
+                                },
+                                Err(error) => ToolPolicyResult {
+                                    output: error.to_string(), is_error: true,
+                                    metadata: serde_json::json!({}),
+                                    media: Vec::new(),
+                                },
+                            };
+                            let result = if let Some(policy) = self.tool_policy.as_ref() {
+                                let context = ToolPolicyContext { session_id, round: state.round, tool: &tool };
+                                // A policy failure must not leak raw output or allow a side effect
+                                // to execute again when the checkpoint is replayed.
+                                policy.transform_result(&context, raw).await.unwrap_or_else(|_| ToolPolicyResult {
+                                    output: "Tool result policy failed; result withheld".into(),
+                                    is_error: true, metadata: serde_json::json!({}),
+                                    media: Vec::new(),
+                                })
+                            } else { raw };
+                            let control = control.filter(|(outcome, generation)| {
+                                !result.is_error && outcome.matches_result(&ToolResult {
+                                    output_json: result.output.clone(), media: result.media.clone(),
+                                    control_outcome: Some(*outcome), control_generation: generation.clone(),
+                                })
+                            });
+                            let (control_outcome, control_generation) = control
+                                .map(|(outcome, generation)| (Some(outcome), generation))
+                                .unwrap_or_default();
+                            let out = (result.output, result.is_error, result.media, control_outcome, control_generation);
                             state.completed_tool_calls.push(CompletedCall {
                                 round: state.round,
                                 tool: tool.clone(),
                                 input_json: input_json.clone(),
                                 output_json: out.0.clone(),
+                                media: out.2.clone(),
+                                metadata: result.metadata,
                                 failed: out.1,
+                                control_outcome: out.3,
+                                control_generation: out.4.clone(),
                             });
                             // Incremental persist (ADR-0005): from here on, a
                             // crash + resume must not run this tool again.
@@ -491,7 +584,29 @@ impl ReActEngine {
                         }
                     };
 
-                    if !tool_failed {
+                    let mut control_resolution = None;
+                    if tool_failed {
+                        if let Some(observer) = observer.as_deref() {
+                            observer.on_tool_error(
+                                session_id, state.round, &tool, &input_json,
+                                &CoreError::ToolObservation(output.clone()),
+                            ).await?;
+                        }
+                    } else if let Some(outcome) = control_outcome {
+                        let result = tool_control::validate(ToolResult {
+                            output_json: output.clone(), media: media.clone(),
+                            control_outcome: Some(outcome), control_generation,
+                        })?;
+                        let resolution = match observer.as_deref() {
+                            Some(observer) => observer.on_tool_control(
+                                session_id, state.round, &tool, &input_json, &result,
+                            ).await?,
+                            None if outcome == ToolControlOutcome::UserPaused => ToolControlResolution::Pending,
+                            None => ToolControlResolution::Stopped,
+                        };
+                        if resolution == ToolControlResolution::Pending { state.status = SessionStatus::Paused; }
+                        control_resolution = Some(resolution);
+                    } else {
                         if let Some(observer) = observer.as_deref() {
                             observer
                                 .on_tool_result(
@@ -505,12 +620,30 @@ impl ReActEngine {
                         }
                     }
 
-                    state.push_unique(TranscriptEntry::new(state.round, Role::Observation, output));
-                    if !tool_failed && self.terminal_tools.contains(&tool) {
+                    state.push_unique(TranscriptEntry::new(state.round, Role::Observation, output).with_media(media));
+                    if let Some(guidance) = control_resolution.and_then(ToolControlResolution::guidance) {
+                        state.push_unique(TranscriptEntry::new(state.round, Role::Observation, guidance));
+                    }
+                    if !tool_failed && control_outcome.is_none() && self.terminal_tools.contains(&tool) {
                         state.status = SessionStatus::Finished;
                     }
                 }
                 AgentAction::RequestHuman { request } => {
+                    // Consumed native pending requests need not remain live on
+                    // replay after their human answer was durably recorded.
+                    if state.hitl_answer(&request.id).is_none() {
+                        if let Some(port) = self.hitl_validation.as_ref() {
+                            let context = HitlValidationContext { session_id, round: state.round };
+                            if let Err(error) = port.validate(&context, &request).await {
+                                let reason: String = error.to_string().chars().take(512).collect();
+                                state.push_unique(TranscriptEntry::new(state.round, Role::Observation,
+                                    format!("human_request_rejected: {reason}. Use a genuine pending request returned by the host; otherwise continue with an available tool.")));
+                                state.round += 1;
+                                self.checkpoints.save(&state).await?;
+                                continue;
+                            }
+                        }
+                    }
                     // The "ask" is recorded once (dedup-safe on replay).
                     state.push_unique(TranscriptEntry::new(
                         state.round,
@@ -650,8 +783,8 @@ impl ReActEngine {
         }
     }
 
-    /// Persist cancellation for a paused or disconnected (still Running in the
-    /// core checkpoint) session without executing another agent round.
+    /// Persist cancellation without another agent round or a synthetic human
+    /// response, including sessions suspended on an unanswered HITL request.
     pub async fn accept_controlled_cancel(&self, session_id: &str) -> CoreResult<SessionState> {
         let mut state = self
             .checkpoints
@@ -659,8 +792,9 @@ impl ReActEngine {
             .await?
             .ok_or(CoreError::NotFound)?;
         match state.status {
-            SessionStatus::Paused | SessionStatus::Running => {
+            SessionStatus::Paused | SessionStatus::Running | SessionStatus::AwaitingInput => {
                 state.status = SessionStatus::Cancelled;
+                state.pending_hitl = None;
                 self.checkpoints.save(&state).await?;
                 Ok(state)
             }
@@ -789,6 +923,11 @@ impl ReActEngine {
             .ok_or(CoreError::NotFound)?;
 
         crate::automation_permission::reject_ordinary_resume(&state)?;
+        if state.status == SessionStatus::Cancelled {
+            return Err(CoreError::Tool(
+                "cancelled sessions do not accept human responses".into(),
+            ));
+        }
         if state.status != SessionStatus::AwaitingInput {
             return Ok(state);
         }

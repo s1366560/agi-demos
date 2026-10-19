@@ -1,0 +1,24 @@
+{
+  "error": "cua_permission_required",
+  "scopes": [
+    "once",
+    "session",
+    "always"
+  ],
+  "request": {
+    "request_id": "cua-consent-00000000-0000-4000-8000-000000000001",
+    "session_id": "cua-cloud-00000000-0000-4000-8000-000000000002",
+    "engine_session_id": "de20c17dfb74cb106476c884dee5d335cac5d0dedec28824919250c53563a93d",
+    "app": "fixture-app",
+    "identity_digest": "fixture-identity",
+    "capability": "observe",
+    "tool_name": "computer_get_app_state",
+    "input_digest": "729a6b64062ecb9eafc3b4f07231acaa2b4092df4270f02331b4d4c8955339cf",
+    "target": {
+      "app_id": "fixture-app",
+      "display_name": "Fixture",
+      "process_id": 10,
+      "identity_digest": "fixture-identity"
+    }
+  }
+}

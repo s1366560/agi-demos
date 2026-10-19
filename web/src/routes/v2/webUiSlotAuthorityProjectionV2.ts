@@ -4,6 +4,8 @@ import {
   type RuntimeGenerationV2,
 } from '@agistack/plugin-runtime';
 
+import { createPluginRendererRegistryV2 } from '../../services/pluginRendererRegistry';
+
 import {
   resolveWebRendererArtifactsV2,
   type WebUiSlotArtifactV2,
@@ -36,7 +38,11 @@ export function projectWebUiSlotAuthorityV2(
     (artifact): artifact is WebUiSlotArtifactV2 => artifact.kind === 'ui-slot'
   );
   const slotDefinitions = uiSlotArtifacts.flatMap((artifact) => artifact.slotDefinitions);
+  const isActive = () => !generation.retired && !generation.disposed;
   return Object.freeze({
+    generationId: `${generation.snapshot.profile_id}:${String(generation.snapshot.generation)}:${generation.snapshot.digest}`,
+    isActive,
+    renderers: createPluginRendererRegistryV2(slotDefinitions, isActive),
     slotDefinitions: Object.freeze(slotDefinitions),
     status: 'ready',
     uiSlotArtifactIds: Object.freeze(uiSlotArtifacts.map((artifact) => artifact.id)),

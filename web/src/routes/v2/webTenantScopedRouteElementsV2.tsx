@@ -73,6 +73,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
   return (
     <>
       <Route
+        handle={{ pluginFeature: 'tenant-overview' }}
         path=":tenantId/overview"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -81,6 +82,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-tasks' }}
         path=":tenantId/tasks"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -89,6 +91,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-workspaces' }}
         path=":tenantId/workspaces"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -97,6 +100,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-workspaces' }}
         path=":tenantId/workspaces/new"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -105,6 +109,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agents' }}
         path=":tenantId/agents"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -113,6 +118,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-workspace' }}
         path=":tenantId/agent-workspace/:conversation?"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -121,6 +127,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-projects' }}
         path=":tenantId/projects"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -129,6 +136,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-projects' }}
         path=":tenantId/projects/new"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -137,6 +145,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-projects' }}
         path=":tenantId/projects/:projectId/edit"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -145,6 +154,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-backend-stores' }}
         path=":tenantId/backend-stores"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -153,6 +163,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-users' }}
         path=":tenantId/users"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -161,6 +172,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-providers' }}
         path=":tenantId/providers"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -169,6 +181,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-profile' }}
         path=":tenantId/profile"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -177,6 +190,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-analytics' }}
         path=":tenantId/analytics"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -185,6 +199,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-events' }}
         path=":tenantId/events"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -193,6 +208,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-webhooks' }}
         path=":tenantId/webhooks"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -201,6 +217,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-billing' }}
         path=":tenantId/billing"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -209,6 +226,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-settings' }}
         path=":tenantId/settings"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -217,6 +235,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-org-settings' }}
         path=":tenantId/org-settings"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -283,6 +302,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         />
       </Route>
       <Route
+        handle={{ pluginFeature: 'tenant-patterns' }}
         path=":tenantId/patterns"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -291,6 +311,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-definitions' }}
         path=":tenantId/subagents"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -299,6 +320,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-definitions' }}
         path=":tenantId/agent-definitions"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -307,6 +329,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-definitions' }}
         path=":tenantId/agent-definitions/:definitionId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -315,6 +338,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-bindings' }}
         path=":tenantId/agent-bindings"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -323,6 +347,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-skills' }}
         path=":tenantId/skills"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -331,6 +356,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-evolution' }}
         path=":tenantId/evolution"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -339,6 +365,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-skills' }}
         path=":tenantId/skills/:skillId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -347,6 +374,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-templates' }}
         path=":tenantId/templates"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -355,6 +383,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-plugins' }}
         path=":tenantId/plugins"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -363,6 +392,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-plugins' }}
         path=":tenantId/plugins/:pluginName"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -371,6 +401,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-mcp-servers' }}
         path=":tenantId/mcp-servers"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -379,6 +410,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-acp' }}
         path=":tenantId/acp"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -387,6 +419,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-pool' }}
         path=":tenantId/pool"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -395,6 +428,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-runtimes' }}
         path=":tenantId/runtimes"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -403,6 +437,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path=":tenantId/instances"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -411,6 +446,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path=":tenantId/instances/create"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -419,6 +455,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path=":tenantId/instances/:instanceId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -476,6 +513,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         />
       </Route>
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path=":tenantId/instances/:instanceId/deploy"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -484,6 +522,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-audit-logs' }}
         path=":tenantId/audit-logs"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -492,6 +531,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-dead-letter-queue' }}
         path=":tenantId/dead-letter-queue"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -500,6 +540,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-trust-policies' }}
         path=":tenantId/trust-policies"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -508,6 +549,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-decision-records' }}
         path=":tenantId/decision-records"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -516,6 +558,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-deploy' }}
         path=":tenantId/deploy"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -524,6 +567,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-deploy' }}
         path=":tenantId/deploy/:deployId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -532,6 +576,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-clusters' }}
         path=":tenantId/clusters"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -540,6 +585,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-clusters' }}
         path=":tenantId/clusters/:clusterId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -548,6 +594,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-genes' }}
         path=":tenantId/genes"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -556,6 +603,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-genes' }}
         path=":tenantId/genes/:geneId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -564,6 +612,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instance-templates' }}
         path=":tenantId/instance-templates"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -572,6 +621,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instance-templates' }}
         path=":tenantId/instance-templates/:templateId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -580,6 +630,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path=":tenantId/instances/:instanceId/evolution"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -588,6 +639,7 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-genes' }}
         path=":tenantId/genes/genomes/:genomeId"
         element={
           <Suspense fallback={<PageLoader />}>

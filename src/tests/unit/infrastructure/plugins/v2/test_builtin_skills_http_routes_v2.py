@@ -104,7 +104,11 @@ def _dependant_signature(dependant: Dependant) -> DependencySignature:
         dependant.use_cache,
         tuple(dependant.own_oauth_scopes or ()),
         tuple(dependant.parent_oauth_scopes or ()),
-        tuple(_dependant_signature(child) for child in dependant.dependencies),
+        tuple(
+            _dependant_signature(child)
+            for child in dependant.dependencies
+            if child.name not in {"_feature_db_v2", "_feature_user_v2"}
+        ),
     )
 
 
@@ -228,9 +232,7 @@ def test_skills_row_preserves_route_order_openapi_and_recursive_dependencies() -
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )

@@ -7,14 +7,7 @@
  * field at the top filters all entries dynamically while typing.
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -42,8 +35,9 @@ import { useMCPAppStore } from '@/stores/mcpAppStore';
 import { commandAPI } from '@/services/commandService';
 import { skillAPI } from '@/services/skillService';
 
-
 import type { ActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
+
+import { useWebFeatureEnabledV2 } from '@/routes/v2/webFeatureAuthorityV2';
 
 import { LlmOverridePopover } from './chat/LlmOverridePopover';
 
@@ -123,6 +117,10 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
   const pluginsLoading = useMCPAppStore((s) => s.loading);
   const fetchApps = useMCPAppStore((s) => s.fetchApps);
 
+  const skillsEnabled = useWebFeatureEnabledV2('tenant-skills', 'command');
+  const agentsEnabled = useWebFeatureEnabledV2('tenant-agent-definitions', 'command');
+  const appsEnabled = useWebFeatureEnabledV2('tenant-mcp-servers', 'command');
+  const commandsEnabled = useWebFeatureEnabledV2('tenant-agent-workspace', 'command');
   const [commands, setCommands] = useState<CommandInfo[]>([]);
   const [skills, setSkills] = useState<SkillResponse[]>([]);
   const [commandsLoading, setCommandsLoading] = useState(false);
@@ -136,8 +134,14 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCommandsLoading(true);
     void Promise.all([
-      commandAPI.list().catch(() => ({ commands: [] as CommandInfo[] })),
-      skillAPI.list({ status: 'active', limit: 50 }).catch(() => ({ skills: [] as SkillResponse[] })),
+      (commandsEnabled
+        ? commandAPI.list()
+        : Promise.resolve({ commands: [] as CommandInfo[] })
+      ).catch(() => ({ commands: [] as CommandInfo[] })),
+      (skillsEnabled
+        ? skillAPI.list({ status: 'active', limit: 50 })
+        : Promise.resolve({ skills: [] as SkillResponse[] })
+      ).catch(() => ({ skills: [] as SkillResponse[] })),
     ]).then(([cmdRes, skillRes]) => {
       if (cancelled) return;
       setCommands(Array.isArray(cmdRes.commands) ? cmdRes.commands : []);
@@ -145,7 +149,7 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
       setCommandsLoading(false);
     });
 
-    if (definitions.length === 0) {
+    if (agentsEnabled && definitions.length === 0) {
       setDefinitionsLoading(true);
       listDefinitions()
         .catch((err: unknown) => {
@@ -156,14 +160,24 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
         });
     }
 
-    if (projectId) {
+    if (appsEnabled && projectId) {
       void fetchApps(projectId);
     }
 
     return () => {
       cancelled = true;
     };
-  }, [isOpen, definitions.length, listDefinitions, fetchApps, projectId]);
+  }, [
+    isOpen,
+    definitions.length,
+    listDefinitions,
+    fetchApps,
+    projectId,
+    skillsEnabled,
+    agentsEnabled,
+    appsEnabled,
+    commandsEnabled,
+  ]);
 
   // Reset transient state on open.
   useEffect(() => {
@@ -277,7 +291,7 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
       });
     }
 
-    const pluginEntries: MenuEntry[] = pluginList.map((app) => ({
+    const pluginEntries: MenuEntry[] = (appsEnabled ? pluginList : []).map((app) => ({
       id: `plugin-${app.id}`,
       section: 'plugins' as const,
       label: app.ui_metadata.title || app.tool_name,
@@ -302,26 +316,27 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
       },
     }));
 
-    const agentEntries: MenuEntry[] = onAgentSelect
-      ? enabledDefinitions.map((agent) => ({
-          id: `agent-${agent.id}`,
-          section: 'agents' as const,
-          label: agent.display_name || agent.name,
-          description:
-            agent.source === 'database'
-              ? t('agent.plusMenu.agentFromDatabase', 'Custom agent')
-              : t('agent.plusMenu.agentBuiltin', 'Built-in agent'),
-          keywords: `agent ${agent.name} ${agent.display_name ?? ''}`,
-          icon: <Bot size={16} />,
-          active: agent.id === activeAgentId,
-          onSelect: () => {
-            onAgentSelect(agent.id);
-          },
-        }))
-      : [];
+    const agentEntries: MenuEntry[] =
+      onAgentSelect && agentsEnabled
+        ? enabledDefinitions.map((agent) => ({
+            id: `agent-${agent.id}`,
+            section: 'agents' as const,
+            label: agent.display_name || agent.name,
+            description:
+              agent.source === 'database'
+                ? t('agent.plusMenu.agentFromDatabase', 'Custom agent')
+                : t('agent.plusMenu.agentBuiltin', 'Built-in agent'),
+            keywords: `agent ${agent.name} ${agent.display_name ?? ''}`,
+            icon: <Bot size={16} />,
+            active: agent.id === activeAgentId,
+            onSelect: () => {
+              onAgentSelect(agent.id);
+            },
+          }))
+        : [];
 
     const commandEntries: MenuEntry[] = [
-      ...commands.map((cmd) => ({
+      ...(commandsEnabled ? commands : []).map((cmd) => ({
         id: `command-${cmd.name}`,
         section: 'commands' as const,
         label: `/${cmd.name}`,
@@ -332,7 +347,7 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
           onSlashSelect({ kind: 'command' as const, data: cmd });
         },
       })),
-      ...skills.map((skill) => ({
+      ...(skillsEnabled ? skills : []).map((skill) => ({
         id: `skill-${skill.id}`,
         section: 'commands' as const,
         label: `/${skill.name}`,
@@ -362,6 +377,10 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
     onAgentSelect,
     enabledDefinitions,
     activeAgentId,
+    skillsEnabled,
+    agentsEnabled,
+    appsEnabled,
+    commandsEnabled,
     commands,
     skills,
     onSlashSelect,
@@ -407,9 +426,7 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         setFocusIndex((prev) =>
-          filteredEntries.length === 0
-            ? 0
-            : Math.min(prev + 1, filteredEntries.length - 1)
+          filteredEntries.length === 0 ? 0 : Math.min(prev + 1, filteredEntries.length - 1)
         );
         return;
       }
@@ -503,8 +520,14 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
                 setFocusIndex(0);
               }}
               onKeyDown={handleSearchKeyDown}
-              placeholder={t('agent.plusMenu.searchPlaceholder', 'Search plugins, agents, commands…')}
-              aria-label={t('agent.plusMenu.searchPlaceholder', 'Search plugins, agents, commands…')}
+              placeholder={t(
+                'agent.plusMenu.searchPlaceholder',
+                'Search plugins, agents, commands…'
+              )}
+              aria-label={t(
+                'agent.plusMenu.searchPlaceholder',
+                'Search plugins, agents, commands…'
+              )}
               data-testid="composer-plus-search"
               className="w-full bg-transparent text-sm text-slate-800 placeholder:text-content-tertiary focus:outline-none dark:text-slate-100"
             />

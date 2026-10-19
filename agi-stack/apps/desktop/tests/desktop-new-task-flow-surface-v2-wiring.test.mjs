@@ -104,7 +104,7 @@ test('new task flow contribution is explicit in the production profile and catal
 
   const rightSidebarIndex = profile.indexOf('entry_id: builtin-desktop-right-sidebar-surface');
   const newTaskFlowIndex = profile.indexOf('entry_id: builtin-desktop-new-task-flow-surface');
-  const routesIndex = profile.indexOf('entry_id: builtin-desktop-tenant-creation-routes');
+  const routesIndex = profile.indexOf('entry_id: builtin-desktop-feature-tenant-creation');
   assert.ok(rightSidebarIndex >= 0);
   assert.ok(newTaskFlowIndex > rightSidebarIndex);
   assert.ok(routesIndex > newTaskFlowIndex);

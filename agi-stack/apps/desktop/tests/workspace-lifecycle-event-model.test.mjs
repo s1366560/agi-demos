@@ -82,6 +82,59 @@ test('deleting the active workspace prunes its hierarchy and clears workspace-ow
   assert.equal(result.dataset.workspaceAgents.status, 'unavailable');
 });
 
+test('deleting the active workspace selects the first remaining unarchived workspace', () => {
+  const current = dataset();
+  const workspaces = [
+    workspace('workspace-1', 'Deleted'),
+    { ...workspace('archived-flag', 'Archived flag'), is_archived: true },
+    { ...workspace('archived-status', 'Archived status'), status: 'archived' },
+    workspace('workspace-2', 'Available'),
+  ];
+  current.workspaces = workspaces;
+  current.workspacesByProject['project-1'] = workspaces;
+
+  const result = applyWorkspaceLifecycleStreamEvent(current, {
+    type: 'workspace_deleted', data: { workspace_id: 'workspace-1' },
+  }, scope);
+
+  assert.equal(result.nextWorkspaceId, 'workspace-2');
+  assert.deepEqual(
+    result.dataset.workspaces.map(({ id }) => id),
+    ['archived-flag', 'archived-status', 'workspace-2'],
+  );
+});
+
+test('deleting the last unarchived workspace leaves the default selection empty', () => {
+  const current = dataset();
+  const workspaces = [
+    workspace('workspace-1', 'Deleted'),
+    { ...workspace('archived', 'Archived'), is_archived: true },
+  ];
+  current.workspaces = workspaces;
+  current.workspacesByProject['project-1'] = workspaces;
+
+  const result = applyWorkspaceLifecycleStreamEvent(current, {
+    type: 'workspace_deleted', data: { workspace_id: 'workspace-1' },
+  }, scope);
+
+  assert.equal(result.nextWorkspaceId, '');
+  assert.equal(result.activeWorkspaceDeleted, true);
+  assert.deepEqual(result.dataset.workspaces.map(({ id }) => id), ['archived']);
+});
+
+test('deleting another workspace preserves an explicit archived selection', () => {
+  const current = dataset();
+  current.workspaces[1].is_archived = true;
+  current.workspacesByProject['project-1'][1].is_archived = true;
+
+  const result = applyWorkspaceLifecycleStreamEvent(current, {
+    type: 'workspace_deleted', data: { workspace_id: 'workspace-1' },
+  }, { ...scope, workspaceId: 'workspace-2' });
+
+  assert.equal(result.nextWorkspaceId, 'workspace-2');
+  assert.equal(result.activeWorkspaceDeleted, false);
+});
+
 test('workspace lifecycle events fail closed for malformed or cross-scope records', () => {
   const current = dataset();
   for (const event of [

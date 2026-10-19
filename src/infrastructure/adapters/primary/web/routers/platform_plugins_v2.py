@@ -36,6 +36,12 @@ from src.infrastructure.adapters.primary.web.dependencies.plugin_desired_source_
 )
 from src.infrastructure.adapters.primary.web.dependencies.plugin_scope_auth_v2 import (
     resolve_plugin_publication_scope_v2,
+    resolve_plugin_read_scope_v2,
+)
+from src.infrastructure.adapters.primary.web.routers.platform_plugin_instances_v2 import (
+    instance_error_v2,
+    instance_runtime_v2,
+    instance_scope_v2,
 )
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     plugin_publication_policy_v2_from_app,
@@ -74,6 +80,7 @@ from src.infrastructure.plugins.v2.protocol import (
     desired_bundle_set_v2_to_payload,
     parse_desired_bundle_set_v2,
     parse_snapshot_apply_receipt_v2,
+    profile_snapshot_v2_to_payload,
     snapshot_apply_receipt_v2_to_payload,
 )
 from src.infrastructure.plugins.v2.route_authority import (
@@ -313,11 +320,35 @@ async def revoke_data_plane_credential_v2(
 @router.get("/web-view", response_model=dict[str, Any])
 async def get_web_public_view_v2(
     response: Response,
+    request: Request,
+    tenant_id: str | None = Query(default=None, min_length=1),
+    project_id: str | None = Query(default=None, min_length=1),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Return only declared public root Web configuration; never a workload receipt identity."""
+    """Return public configuration from the authenticated scope's accepted source."""
     response.headers["Cache-Control"] = "private, no-store"
+    if project_id is not None and tenant_id is None:
+        raise HTTPException(422, detail=_("A tenant is required for project plugin configuration"))
+    if tenant_id is not None:
+        try:
+            scope = await resolve_plugin_read_scope_v2(
+                db,
+                current_user=current_user,
+                requested_scope=instance_scope_v2(tenant_id, project_id),
+            )
+            service = instance_runtime_v2(request).instances(scope)
+            await service.initialize(current_user.id)
+            snapshot = await service.effective_snapshot()
+            # Archive loading and publication await IO: recheck revocable authority.
+            await resolve_plugin_read_scope_v2(db, current_user=current_user, requested_scope=scope)
+            return project_web_public_view_v2(
+                profile_snapshot_v2_to_payload(snapshot),
+                authority_id=current_user.id,
+                authorized_scope=scope,
+            )
+        except (ValueError, RuntimeV2Error) as error:
+            raise instance_error_v2(error) from error
     distribution = await PlatformPluginRepositoryV2(db).latest_requested_distribution()
     if distribution is None:
         raise HTTPException(status_code=404, detail=_("No public Web plugin view is available"))

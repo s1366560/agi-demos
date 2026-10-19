@@ -17,6 +17,63 @@ use agistack_core::ports::{
 use agistack_core::{
     AgentAction, HitlKind, HitlRequest, ReActEngine, Role, SessionStatus, TranscriptEntry,
 };
+use agistack_core::agent::{hitl_validation::{HitlValidationContext, HitlValidationPort}, react::ReActObserver};
+
+struct RequestGate { allow: std::sync::atomic::AtomicBool, calls: AtomicUsize }
+#[async_trait]
+impl HitlValidationPort for RequestGate {
+    async fn validate(&self, _: &HitlValidationContext<'_>, _: &HitlRequest) -> CoreResult<()> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.allow.load(Ordering::SeqCst) { Ok(()) }
+        else { Err(CoreError::Tool("invalid-request-authority".repeat(64))) }
+    }
+}
+struct HumanObserver(AtomicUsize);
+#[async_trait]
+impl ReActObserver for HumanObserver {
+    async fn on_human_request(&self, _: &str, _: u64, _: &HitlRequest) -> CoreResult<()> {
+        self.0.fetch_add(1, Ordering::SeqCst); Ok(())
+    }
+}
+
+#[test]
+fn rejected_human_request_observes_bounded_error_then_executes_next_tool() {
+    let gate = Arc::new(RequestGate { allow: false.into(), calls: AtomicUsize::new(0) });
+    let observer = Arc::new(HumanObserver(AtomicUsize::new(0)));
+    let tools = Arc::new(CountingToolHost { calls: AtomicUsize::new(0) });
+    let engine = ReActEngine::new(Arc::new(ScriptedLlm::new(vec![
+        AgentAction::RequestHuman { request: HitlRequest::new("forged", HitlKind::Permission, "invalid") },
+        AgentAction::CallTool { tool: "work".into(), input_json: "{}".into() },
+        AgentAction::Finish { answer: "recovered".into() },
+    ])), tools.clone(), Arc::new(InMemoryCheckpointStore::new()), Arc::new(FixedClock(0)))
+        .with_hitl_validation(gate.clone());
+    let result = block_on(engine.run_observed("bound", "goal", Some("project"), observer.clone())).unwrap();
+    assert_eq!(result.status, SessionStatus::Finished);
+    assert_eq!(result.answer.as_deref(), Some("recovered"));
+    assert!(result.pending_hitl.is_none());
+    assert_eq!(tools.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(observer.0.load(Ordering::SeqCst), 0);
+    assert_eq!(gate.calls.load(Ordering::SeqCst), 1);
+    let rejected = result.transcript.iter().find(|entry| entry.content.starts_with("human_request_rejected:")).unwrap();
+    assert_eq!(rejected.role, Role::Observation);
+    assert!(rejected.content.len() < 750);
+}
+
+#[test]
+fn already_answered_human_request_replays_without_requiring_consumed_pending_authority() {
+    let gate = Arc::new(RequestGate { allow: true.into(), calls: AtomicUsize::new(0) });
+    let engine = ReActEngine::new(Arc::new(ScriptedLlm::new(vec![
+        AgentAction::RequestHuman { request: HitlRequest::new("real", HitlKind::Permission, "valid") },
+        AgentAction::Finish { answer: "resumed".into() },
+    ])), Arc::new(CountingToolHost { calls: AtomicUsize::new(0) }), Arc::new(InMemoryCheckpointStore::new()), Arc::new(FixedClock(0)))
+        .with_hitl_validation(gate.clone());
+    assert_eq!(block_on(engine.run("resume", "goal", None)).unwrap().status, SessionStatus::AwaitingInput);
+    gate.allow.store(false, Ordering::SeqCst);
+    let result = block_on(engine.resume("resume", "real", "allowed")).unwrap();
+    assert_eq!(result.status, SessionStatus::Finished);
+    assert_eq!(gate.calls.load(Ordering::SeqCst), 1);
+    assert!(!result.transcript.iter().any(|entry| entry.content.starts_with("human_request_rejected:")));
+}
 
 /// A non-deterministic resume stub: it asks for HITL once by call count, then
 /// finishes on every later decision instead of re-emitting the same request.

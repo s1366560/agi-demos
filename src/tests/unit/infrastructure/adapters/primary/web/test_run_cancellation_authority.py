@@ -1,6 +1,7 @@
 """Run cancellation admits only exact versions and retains a durable retry receipt."""
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,6 +13,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation,
     Project,
     Tenant,
+    ToolExecutionRecord,
     User,
     UserProject,
     UserTenant,
@@ -86,6 +88,37 @@ async def test_cancel_pending_receipt_replays_after_delivery_failure_and_termina
     result = await api.cancel_run("r", api.CancelRunRequest(expected_revision=1), user, db)
     assert result.status == "cancelled"
     assert result.run.revision == 2
+    store.set.assert_not_awaited()
+
+
+async def test_authenticated_cancel_retry_repairs_unsettled_tool_record(cancel_fixture):
+    db, user, run, store = cancel_fixture
+    await api.cancel_run("r", api.CancelRunRequest(expected_revision=1), user, db)
+    run.status = "cancelled"
+    run.revision = 2
+    run.completed_at = datetime.now(UTC)
+    record = ToolExecutionRecord(
+        id="interrupted-tool",
+        conversation_id=run.conversation_id,
+        message_id=run.message_id,
+        call_id="interrupted-call",
+        tool_name="computer_get_app_state",
+        tool_input={},
+        status="running",
+        sequence_number=1,
+        started_at=run.created_at,
+    )
+    db.add(record)
+    await db.commit()
+    store.set.reset_mock()
+
+    result = await api.cancel_run("r", api.CancelRunRequest(expected_revision=1), user, db)
+
+    assert result.status == "cancelled"
+    await db.refresh(record)
+    assert record.status == "cancelled"
+    assert record.completed_at is not None
+    assert record.tool_output is None
     store.set.assert_not_awaited()
 
 

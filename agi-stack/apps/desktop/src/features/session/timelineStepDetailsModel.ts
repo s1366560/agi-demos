@@ -1,4 +1,4 @@
-import { timelineToolResultFailed } from '../chat/toolResultStatus';
+import { timelineToolControlStatus, timelineToolResultFailed } from '../chat/toolResultStatus';
 import { exactToolResults } from '../chat/timelineExecutionIdentity';
 import type { AgentTimelineItem } from '../../types';
 
@@ -139,7 +139,7 @@ export function buildTimelineStepDetails(items: readonly AgentTimelineItem[]): T
     status:
       latest && (timelineToolResultFailed(latest) || latest.type === 'error')
         ? 'failed'
-        : (text(display.status) ?? text(latest?.status)),
+        : (latest && timelineToolControlStatus(latest)) || (text(display.status) ?? text(latest?.status)),
     input,
     output,
     diagnostics: [...diagnostics].map(([key, value]) => ({ key, value })),

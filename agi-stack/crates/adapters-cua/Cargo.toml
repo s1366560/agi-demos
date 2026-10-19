@@ -1,0 +1,29 @@
+[package]
+name = "agistack-adapters-cua"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Computer-use client for the desktop sidecar: speaks the fixed JSON-RPC 2.0
+# IPC contract (4-byte LE length framing over a Unix domain socket, version
+# handshake, docs/cua/memstack-computer-use-replication-plan.md section 2) to
+# the cua-helper process, and exposes the desktop automation tool family behind
+# the existing `ToolHost` port. Observation tools are Read; every input-synth
+# tool is Mutate and consumes a permission grant like the other mutating hosts.
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["net", "io-util", "sync", "time", "macros", "rt", "process", "fs"] }
+tracing = "0.1"
+hmac = "0.12"
+sha2 = "0.10"
+getrandom = "0.2"
+url = "2"
+image = { version="0.25", default-features=false, features=["png","jpeg","webp"] }
+jsonschema = { version = "0.33", default-features = false }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "io-util"] }

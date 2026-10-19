@@ -21,7 +21,7 @@ def extract_user_query(messages: list[dict[str, Any]]) -> str | None:
         The user query text, or None if not found
     """
     for msg in reversed(messages):
-        if msg.get("role") == "user":
+        if msg.get("role") == "user" and not msg.get("_native_tool_images"):
             content = msg.get("content", "")
             # Handle multimodal content (list of content parts)
             if isinstance(content, list):
@@ -45,17 +45,43 @@ def extract_user_query(messages: list[dict[str, Any]]) -> str | None:
 _TOOL_CATEGORY_RULES: list[tuple[str, list[str], list[str] | None]] = [
     (
         "search",
-        ["search", "\u641c\u7d22", "\u67e5\u627e", "find", "query", "\u67e5\u8be2", "bing", "google"],
+        [
+            "search",
+            "\u641c\u7d22",
+            "\u67e5\u627e",
+            "find",
+            "query",
+            "\u67e5\u8be2",
+            "bing",
+            "google",
+        ],
         ["web"],
     ),
     (
         "scrape",
-        ["scrape", "\u6293\u53d6", "extract", "\u63d0\u53d6", "fetch", "\u83b7\u53d6", "crawl", "\u722c\u53d6"],
+        [
+            "scrape",
+            "\u6293\u53d6",
+            "extract",
+            "\u63d0\u53d6",
+            "fetch",
+            "\u83b7\u53d6",
+            "crawl",
+            "\u722c\u53d6",
+        ],
         ["web", "page", "\u7f51\u9875", "html", "url"],
     ),
     (
         "memory",
-        ["memory", "\u8bb0\u5fc6", "knowledge", "\u77e5\u8bc6", "recall", "\u56de\u5fc6", "episodic"],
+        [
+            "memory",
+            "\u8bb0\u5fc6",
+            "knowledge",
+            "\u77e5\u8bc6",
+            "recall",
+            "\u56de\u5fc6",
+            "episodic",
+        ],
         None,
     ),
     (
@@ -70,7 +96,16 @@ _TOOL_CATEGORY_RULES: list[tuple[str, list[str], list[str] | None]] = [
     ),
     (
         "code",
-        ["code", "\u4ee3\u7801", "execute", "\u6267\u884c", "run", "\u8fd0\u884c", "python", "script"],
+        [
+            "code",
+            "\u4ee3\u7801",
+            "execute",
+            "\u6267\u884c",
+            "run",
+            "\u8fd0\u884c",
+            "python",
+            "script",
+        ],
         None,
     ),
     (

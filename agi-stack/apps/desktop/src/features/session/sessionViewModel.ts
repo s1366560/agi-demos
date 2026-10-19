@@ -167,6 +167,32 @@ export function authoritativeRunFromConversation(
   return parseAuthoritativeRun(recordValue(conversation.metadata).run);
 }
 
+export function authoritativeRunFromSessionProjection(
+  projection: ConversationSessionProjection | null,
+  scope: {
+    conversationId: string;
+    tenantId: string;
+    projectId: string;
+    workspaceId: string | null;
+  },
+): DesktopRun | null {
+  if (!projection) return null;
+  const { conversation, currentRun } = projection;
+  if (
+    !scope.conversationId ||
+    !scope.tenantId ||
+    !scope.projectId ||
+    conversation.id !== scope.conversationId ||
+    conversation.tenant_id !== scope.tenantId ||
+    conversation.project_id !== scope.projectId ||
+    (conversation.workspace_id || null) !== (scope.workspaceId || null) ||
+    currentRun?.conversation_id !== conversation.id ||
+    currentRun.project_id !== conversation.project_id
+  )
+    return null;
+  return currentRun;
+}
+
 function parseAuthoritativeRun(value: unknown): DesktopRun | null {
   const run = recordValue(value);
   const status = stringValue(run.status);
@@ -226,7 +252,17 @@ export function mergeConversationListWithCurrentRunAuthority(
 }
 
 function isNewerAuthoritativeRun(candidate: DesktopRun, current: DesktopRun): boolean {
-  if (candidate.id === current.id) return candidate.revision > current.revision;
+  if (candidate.id === current.id) {
+    if (candidate.revision !== current.revision) return candidate.revision > current.revision;
+    // The revision tracks execution authority; lifecycle changes retain that revision.
+    const candidateUpdated = Date.parse(candidate.updated_at);
+    const currentUpdated = Date.parse(current.updated_at);
+    return (
+      Number.isFinite(candidateUpdated) &&
+      Number.isFinite(currentUpdated) &&
+      candidateUpdated > currentUpdated
+    );
+  }
   const candidateSource = stringValue(
     recordValue(candidate.authorization_snapshot).source_run_id,
   );

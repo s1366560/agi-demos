@@ -19,7 +19,7 @@ from src.infrastructure.workspace_core.client import WorkspaceCoreClient
 @pytest.mark.unit
 @pytest.mark.parametrize("upstream_status", [200, 403])
 async def test_collaboration_proxy_preserves_revision_and_rejects_untrusted_headers(
-    monkeypatch: pytest.MonkeyPatch, upstream_status: int
+    monkeypatch: pytest.MonkeyPatch, upstream_status: int, isolated_feature_admission: None
 ) -> None:
     path = "/api/v1/tenants/t1/projects/p1/workspaces/w1/collaboration/mutations"
     method = "POST"

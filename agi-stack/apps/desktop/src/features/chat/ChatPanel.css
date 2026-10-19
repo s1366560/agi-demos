@@ -2397,7 +2397,7 @@
   background: var(--desktop-chat-panel-alt);
 }
 
-.artifact-timeline-image > img {
+.artifact-timeline-image img {
   display: block;
   max-width: 100%;
   max-height: 300px;

@@ -10,6 +10,7 @@
 pub mod doom_loop;
 pub mod events;
 pub mod harness;
+pub mod hitl_validation;
 pub mod orchestrator;
 pub mod plan;
 pub mod react;
@@ -28,6 +29,7 @@ pub use orchestrator::{MiniOrchestrator, PlanStore, StepOutcome, StepRunner};
 pub use plan::{Plan, PlanStep, StepStatus};
 pub use react::{
     pending_request, ReActControl, ReActEngine, ReActObserver, RunDirective, SteeringInstruction,
+    ToolControlResolution,
 };
 pub use types::{
     A2uiActionAuthority, A2uiAllowedAction, AgentAction, CompletedCall, DecisionAction,
@@ -35,3 +37,5 @@ pub use types::{
     DecisionReversibilityMode, DecisionRisk, DecisionRiskLevel, DecisionScope, DecisionTarget,
     HitlKind, HitlRequest, HitlResponse, Role, SessionState, SessionStatus, TranscriptEntry,
 };
+
+pub mod tool_policy;

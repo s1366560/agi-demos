@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router-dom';
 
-import { WebRoutePageLoaderV2 } from '../routes/v2/WebRoutePageLoaderV2';
 import { useWebUiSlotAuthorityV2 } from '../routes/v2/webUiSlotAuthorityStateV2';
 
+import { WebPluginBootstrapBoundaryV2 } from './WebPluginBootstrapBoundaryV2';
 import {
   projectWebAuthenticatedShellCompositionV2,
   type WebRendererAuthenticatedShellCompositionV2,
@@ -35,7 +35,7 @@ function WebRendererAuthenticatedShellBoundaryV2({
   composition: Exclude<WebRendererAuthenticatedShellCompositionV2, Readonly<{ status: 'ready' }>>;
 }>) {
   const { t } = useTranslation();
-  if (composition.status === 'loading') return <WebRoutePageLoaderV2 />;
+  if (composition.status === 'loading') return <WebPluginBootstrapBoundaryV2 />;
   return (
     <section
       className="flex min-h-50 flex-col items-center justify-center gap-2 p-6 text-center"

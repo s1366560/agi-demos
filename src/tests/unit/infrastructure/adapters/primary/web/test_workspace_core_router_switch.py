@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -31,6 +32,15 @@ from src.infrastructure.adapters.primary.web.workspace_core_routes import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.workspace_core.client import WorkspaceCoreClient
+
+
+@pytest.fixture(autouse=True)
+def _isolate_proxy_transport_from_feature_admission(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Feature admission through the real proxy class is tested in test_feature_operations_v2.
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.workspace_core_routes.admit_feature_endpoint_v2",
+        AsyncMock(),
+    )
 
 
 def _workspace_routes(app: FastAPI) -> list[APIRoute]:

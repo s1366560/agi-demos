@@ -88,7 +88,7 @@ test('My Work queue is ordered after workbench and before activity inbox', () =>
   const workbenchIndex = profile.indexOf('entry_id: builtin-desktop-workbench-surface');
   const myWorkIndex = profile.indexOf('entry_id: builtin-desktop-my-work-queue-surface');
   const activityIndex = profile.indexOf('entry_id: builtin-desktop-activity-inbox-surface');
-  const routesIndex = profile.indexOf('entry_id: builtin-desktop-tenant-creation-routes');
+  const routesIndex = profile.indexOf('entry_id: builtin-desktop-feature-tenant-creation');
   assert.ok(workbenchIndex >= 0);
   assert.ok(myWorkIndex > workbenchIndex);
   assert.ok(activityIndex > myWorkIndex);

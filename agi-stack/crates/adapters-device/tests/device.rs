@@ -155,6 +155,10 @@ fn ckpt_survives_restart_and_engine_reuses_completed_call() {
         format!("len {LEN_INPUT}"),
     ));
     seeded.completed_tool_calls.push(CompletedCall {
+        control_outcome: None,
+        control_generation: None,
+            media: Vec::new(),
+        metadata: serde_json::json!({}),
         round: 0,
         tool: "len".into(),
         input_json: LEN_INPUT.into(),

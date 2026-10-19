@@ -19,6 +19,7 @@ const compiled = await esbuild.build({
   platform: 'node',
   format: 'cjs',
   packages: 'external',
+  loader: { '.css': 'empty' },
 });
 const module = { exports: {} };
 new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(
@@ -224,6 +225,7 @@ test('actual tool row preview preserves call metadata when the result has only r
     platform: 'node',
     format: 'cjs',
     packages: 'external',
+    loader: { '.css': 'empty' },
   });
   const rowModule = { exports: {} };
   new Function('require', 'module', 'exports', output.outputFiles[0].text)(

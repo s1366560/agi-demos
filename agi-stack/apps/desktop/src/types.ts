@@ -1772,7 +1772,11 @@ export type AgentTimelineItem = {
   toolOutput?: unknown;
   display?: ToolDisplayData;
   fileMetadata?: ToolFileMetadata;
+  /** Computer-use observation metadata (sidecar `computer_use` timeline field). */
+  computerUse?: { app?: string; screenshotUrl?: string; icon?: string };
   isError?: boolean;
+  /** Runtime-owned control outcome; never inferred from tool output or display prose. */
+  controlOutcome?: 'user_paused' | 'user_stopped';
   requestId?: string;
   question?: string;
   options?: unknown[];

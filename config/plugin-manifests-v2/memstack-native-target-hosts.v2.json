@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/rust-server/skill-evolution-worker",
       "entrypoint": "SkillEvolutionWorkerModuleV2::apply",
       "artifact": {
-        "digest": "sha256:a210d108e8b8360a92de4595427be447ab3ce176b199f9869154b7bdb6201f37",
+        "digest": "sha256:adab8c6a304518b348fd1a2cc7db109bef777552551724449dc02a85007cce66",
         "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
       },
       "targets": [
@@ -49,7 +49,7 @@
       "module_ref": "builtin://memstack/rust-server/channel-outbox-worker",
       "entrypoint": "ChannelOutboxWorkerModuleV2::apply",
       "artifact": {
-        "digest": "sha256:a210d108e8b8360a92de4595427be447ab3ce176b199f9869154b7bdb6201f37",
+        "digest": "sha256:adab8c6a304518b348fd1a2cc7db109bef777552551724449dc02a85007cce66",
         "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
       },
       "targets": [
@@ -89,7 +89,7 @@
       "module_ref": "builtin://memstack/rust-server/cron-scheduler-worker",
       "entrypoint": "CronSchedulerWorkerModuleV2::apply",
       "artifact": {
-        "digest": "sha256:a210d108e8b8360a92de4595427be447ab3ce176b199f9869154b7bdb6201f37",
+        "digest": "sha256:adab8c6a304518b348fd1a2cc7db109bef777552551724449dc02a85007cce66",
         "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
       },
       "targets": [
@@ -129,7 +129,7 @@
       "module_ref": "builtin://memstack/rust-server/generation-host",
       "entrypoint": "RustServerHostModuleV2::apply",
       "artifact": {
-        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
+        "digest": "sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": [
@@ -141,12 +141,343 @@
             {
               "service": "service:rust-server.runtime-descriptor",
               "version": "1.0.0"
+            },
+            {
+              "service": "service:tool-execution-policy",
+              "version": "1.0.0"
             }
           ],
           "requires": []
         },
         "events": {
-          "emits": [],
+          "emits": [
+            {
+              "event": "tools.before_execute",
+              "mode": "waterfall",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "arguments",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "allow",
+                          "deny",
+                          "ask",
+                          "cancel"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "arguments",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "allow",
+                          "deny",
+                          "ask",
+                          "cancel"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "event": "tools.result_transform",
+              "mode": "waterfall",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "result",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "result": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "output",
+                      "is_error",
+                      "metadata"
+                    ],
+                    "properties": {
+                      "output": {
+                        "type": "string"
+                      },
+                      "is_error": {
+                        "type": "boolean"
+                      },
+                      "metadata": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "accept",
+                          "block"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "result",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "result": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "output",
+                      "is_error",
+                      "metadata"
+                    ],
+                    "properties": {
+                      "output": {
+                        "type": "string"
+                      },
+                      "is_error": {
+                        "type": "boolean"
+                      },
+                      "metadata": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "accept",
+                          "block"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
           "handles": []
         },
         "config_schema": {
@@ -164,13 +495,13 @@
           }
         }
       },
-      "contract_digest": "sha256:8848f378b02460e0ba80ef8708a65e2f30f789033c7eb3ccf7d25e5460fa6e7e"
+      "contract_digest": "sha256:554137c0be08604aa573418bde8c593934c04ef5aed8b0f0901097b7dd19f2b4"
     },
     {
       "module_ref": "builtin://memstack/rust-server/http-routes",
       "entrypoint": "RustServerHttpRoutesModuleV2::apply",
       "artifact": {
-        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
+        "digest": "sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": [
@@ -216,7 +547,7 @@
       "module_ref": "builtin://memstack/desktop-sidecar/http-routes",
       "entrypoint": "DesktopSidecarHttpRoutesModuleV2::apply",
       "artifact": {
-        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
+        "digest": "sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": [
@@ -262,7 +593,7 @@
       "module_ref": "builtin://memstack/desktop-sidecar/local-capability",
       "entrypoint": "DesktopSidecarHostModuleV2::apply",
       "artifact": {
-        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
+        "digest": "sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": [
@@ -273,6 +604,10 @@
           "provides": [
             {
               "service": "service:desktop-sidecar.local-capability",
+              "version": "1.0.0"
+            },
+            {
+              "service": "service:tool-execution-policy",
               "version": "1.0.0"
             }
           ],
@@ -285,7 +620,334 @@
           ]
         },
         "events": {
-          "emits": [],
+          "emits": [
+            {
+              "event": "tools.before_execute",
+              "mode": "waterfall",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "arguments",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "allow",
+                          "deny",
+                          "ask",
+                          "cancel"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "arguments",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "allow",
+                          "deny",
+                          "ask",
+                          "cancel"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "event": "tools.result_transform",
+              "mode": "waterfall",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "result",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "result": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "output",
+                      "is_error",
+                      "metadata"
+                    ],
+                    "properties": {
+                      "output": {
+                        "type": "string"
+                      },
+                      "is_error": {
+                        "type": "boolean"
+                      },
+                      "metadata": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "accept",
+                          "block"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "result",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "result": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "output",
+                      "is_error",
+                      "metadata"
+                    ],
+                    "properties": {
+                      "output": {
+                        "type": "string"
+                      },
+                      "is_error": {
+                        "type": "boolean"
+                      },
+                      "metadata": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "accept",
+                          "block"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
           "handles": []
         },
         "config_schema": {
@@ -303,7 +965,7 @@
           }
         }
       },
-      "contract_digest": "sha256:b017f9051aba361bfd977d664f9b5ea89a752a64ac6e537422535bd7b24f4c1d"
+      "contract_digest": "sha256:3f7d4e5046256f1821d04cd2c569104febcbc3a6caf5c73d50bfac2d1322926a"
     }
   ],
   "permissions": [],

@@ -1,3 +1,4 @@
+import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Cross2Icon } from '@radix-ui/react-icons';
@@ -40,14 +41,15 @@ export function KeyboardShortcutsPanel({
 }) {
   const { t } = useI18n();
   const dialogRef = useRef<HTMLElement>(null);
-  const groups = shortcutGroups();
+  const authority = useDesktopRendererAuthorityV2();
+  const groups = shortcutGroups().map((group) => ({...group, shortcuts: group.shortcuts.filter((shortcut) => authority.shortcutIds?.includes(shortcut.id))})).filter((group) => group.shortcuts.length > 0);
 
   useEffect(() => {
     dialogRef.current?.focus();
   }, []);
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key === 'Escape') {
+    if (event.key === 'Escape' && authority.shortcutIds?.includes('close-overlay')) {
       event.preventDefault();
       event.stopPropagation();
       onClose();

@@ -1,3 +1,5 @@
+import { projectToolOutputPresentationV2 } from './toolResultOutputPresentationV2';
+import { timelineToolResultStatus } from './toolResultStatus';
 import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
 import { conversationImagePreviewClient } from './structuredImagePreviewOwnerModel';
 import { Fragment, useEffect, useMemo, useState } from 'react';
@@ -9,12 +11,15 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CodeIcon,
+  DesktopIcon,
   ExclamationTriangleIcon,
   FileTextIcon,
   MagnifyingGlassIcon,
   Pencil1Icon,
+  PauseIcon,
   ReloadIcon,
   UpdateIcon,
+  StopIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -57,6 +62,7 @@ import {
 } from './chatTimelineModel';
 import type {
   ToolCallPair,
+  ToolCallPairStatus,
   ToolCallPresentationKind,
 } from './chatTimelineModel';
 import {
@@ -76,6 +82,7 @@ import {
   formatTimelineTime,
   isImportantTimelineItem,
   isTimelineItemInitiallyExpanded,
+  timelineComputerUseScreenshot,
   timelineDetailLineCount,
   timelineFileMetadata,
   timelineHasDetails,
@@ -88,6 +95,8 @@ import {
   timelineSummary,
   timelineTitle,
   timelineToolDisplay,
+  ToolComputerUseScreenshotView,
+  ToolComputerUseAudioView,
   ToolFileMetadataView,
 } from './chatTimelinePresentation';
 import type { TimelineKind } from './chatTimelinePresentation';
@@ -789,7 +798,11 @@ function toolCallPairPreviewText(
   const title = declaredTitle || (presentationKind === 'tool'
     ? pair.call.toolName || pair.result?.toolName || t('chat.toolCall')
     : t(`session.toolKind.${presentationKind}`));
-  if (toolCallPairStatus(pair) === 'failed') {
+  const status = toolCallPairStatus(pair);
+  if (status === 'paused' || status === 'stopped') {
+    return { preview: t(`session.computerControl.${status}`), label: title };
+  }
+  if (status === 'failed') {
     return { preview: timelineSummary(pair.result ?? pair.call, 'tool', t), label: title };
   }
   const summary = resultDisplay?.summary || callDisplay?.summary;
@@ -823,7 +836,7 @@ function ToolCallPairView({ pair, recorded }: {
       onClick={event => inspect(items, event.currentTarget)}>
       <span className="timeline-step-icon" aria-hidden="true"><TimelineToolIcon kind={kind} status={pendingRecorded ? 'complete' : status}/></span>
       <span className="timeline-step-copy">{preview}</span>
-      {status !== 'complete' && <span className="timeline-step-status">{pendingRecorded ? t('session.stepRecorded') : t(`chat.status.${status === 'failed' ? 'error' : status}`)}</span>}
+      {status !== 'complete' && <span className="timeline-step-status">{pendingRecorded ? t('session.stepRecorded') : t(status === 'paused' || status === 'stopped' ? `session.toolStatus.${status}` : `chat.status.${status === 'failed' ? 'error' : status}`)}</span>}
       <ChevronRightIcon className="timeline-step-detail-icon" aria-hidden="true" />
     </button>
   </article>;
@@ -873,18 +886,21 @@ function TimelineToolIcon({
   status,
 }: {
   kind: ToolCallPresentationKind;
-  status: 'preparing' | 'running' | 'complete' | 'failed';
+  status: ToolCallPairStatus;
 }) {
   // Preparing shares the running glyph but does not spin: the arguments are
   // still streaming, so the call has not started executing yet (web parity —
   // the preparing pill pulses instead of spinning).
   if (status === 'running' || status === 'preparing') return <UpdateIcon />;
   if (status === 'failed') return <ExclamationTriangleIcon />;
+  if (status === 'paused') return <PauseIcon />;
+  if (status === 'stopped') return <StopIcon />;
   if (kind === 'search') return <MagnifyingGlassIcon />;
   if (kind === 'read') return <FileTextIcon />;
   if (kind === 'command') return <CaretRightIcon />;
   if (kind === 'edit') return <Pencil1Icon />;
   if (kind === 'check') return <CheckIcon />;
+  if (kind === 'computer_use') return <DesktopIcon />;
   return <CodeIcon />;
 }
 
@@ -912,6 +928,10 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
   const input = pair.call.toolInput;
   const output = pair.result?.toolOutput ?? pair.result?.payload;
   const resultItem = pair.result ?? (pair.call.type === 'observe' ? pair.call : null);
+  const computerScreenshot =
+    resultItem && !resultItem.isError && !resultItem.error
+      ? timelineComputerUseScreenshot(resultItem)
+      : null;
   return (
     <div className="timeline-details">
       {display?.summary ? (
@@ -920,6 +940,8 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
         </Text>
       ) : null}
       {fileMetadata ? <ToolFileMetadataView metadata={fileMetadata} /> : null}
+      {computerScreenshot ? <ToolComputerUseScreenshotView screenshot={computerScreenshot} /> : null}
+      {resultItem ? <ToolComputerUseAudioView item={resultItem} /> : null}
       {display?.details !== undefined ? (
         <TimelinePayloadBlock
           label={t('chat.displayDetails')}
@@ -932,8 +954,9 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
       {resultItem ? (
         <PlatformPluginToolResultSlots
           resultId={resultItem.id}
+          presentation={projectToolOutputPresentationV2({kind:toolCallPresentationKind(pair),output,details:display?.details,summary:display?.summary})}
           toolName={resultItem.toolName ?? pair.call.toolName ?? ''}
-          status={resultItem.isError || resultItem.error ? 'failed' : 'complete'}
+          status={timelineToolResultStatus(resultItem)}
           kind={toolCallPresentationKind(pair)}
         />
       ) : null}
@@ -1273,8 +1296,9 @@ function TimelineItemBody({
         {item.type === 'observe' ? (
           <PlatformPluginToolResultSlots
             resultId={item.id}
+            presentation={projectToolOutputPresentationV2({kind:toolCallPresentationKind({call:item,result:item}),output:item.toolOutput,details:display?.details,summary:display?.summary})}
             toolName={item.toolName ?? ''}
-            status={item.isError || item.error ? 'failed' : 'complete'}
+            status={timelineToolResultStatus(item)}
             kind={toolCallPresentationKind({ call: item, result: null })}
           />
         ) : null}

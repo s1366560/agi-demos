@@ -104,7 +104,9 @@ def test_memories_row_preserves_route_order_and_openapi() -> None:
 
 
 @pytest.mark.unit
-async def test_generation_dispatcher_executes_memories_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_memories_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     access_result = MagicMock()
     access_result.scalar_one_or_none.return_value = object()
     count_result = MagicMock()

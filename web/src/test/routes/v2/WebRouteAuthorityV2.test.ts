@@ -13,11 +13,9 @@ import bootstrapProfile from '../../../../../shared/profiles/memstack-default-bo
 
 async function distributionWithoutDefaultRoutesV2() {
   const snapshot = structuredClone(bootstrapProfile);
-  const routeEntry = snapshot.entries.find(
-    ({ entry_id }) => entry_id === 'builtin-web-default-routes'
-  );
-  if (!routeEntry) throw new Error('web route contribution fixture is missing');
-  routeEntry.enabled = false;
+  for (const entry of snapshot.entries) {
+    if (entry.entry_id.startsWith('builtin-web-feature-')) entry.enabled = false;
+  }
   snapshot.generation += 1;
   const { digest: _digest, ...unsigned } = snapshot;
   snapshot.digest = await digestV2(unsigned);

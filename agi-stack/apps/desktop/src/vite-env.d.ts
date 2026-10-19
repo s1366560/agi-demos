@@ -188,6 +188,7 @@ interface Window {
     events?: {
       onSidecarRecovered?: (listener: () => void) => () => void;
       onOAuthSessionChanged?: (listener: (payload: unknown) => void) => () => void;
+      onComputerUseActivity?: (listener: (payload: unknown) => void) => () => void;
     };
   };
 }

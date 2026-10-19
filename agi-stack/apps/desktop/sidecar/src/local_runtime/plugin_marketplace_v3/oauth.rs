@@ -6,12 +6,156 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 static PENDING: std::sync::LazyLock<
     std::sync::Mutex<BTreeMap<String, tokio::sync::oneshot::Sender<()>>>,
 > = std::sync::LazyLock::new(|| std::sync::Mutex::new(BTreeMap::new()));
-fn cancel(flow: &str) {
+pub(in crate::local_runtime) fn cancel(flow: &str) {
     if let Ok(mut pending) = PENDING.lock() {
         if let Some(sender) = pending.remove(flow) {
             let _ = sender.send(());
         }
     }
+}
+pub(in crate::local_runtime) fn pending(flow: &str) -> bool {
+    PENDING
+        .lock()
+        .is_ok_and(|pending| pending.contains_key(flow))
+}
+
+enum FlowTarget {
+    Marketplace {
+        auth: AuthenticatedContext,
+        id: String,
+        name: String,
+        version: String,
+    },
+    Connector {
+        owner: super::super::computer_use_v2::store::Owner,
+        account_id: String,
+    },
+}
+
+struct Authorization {
+    listener: tokio::net::TcpListener,
+    csrf: String,
+    verifier: zeroize::Zeroizing<String>,
+    flow: String,
+    redirect: String,
+    url: url::Url,
+    expires: i64,
+}
+impl Authorization {
+    fn prepare(
+        listener: tokio::net::TcpListener,
+        metadata: &Value,
+        client: &str,
+        resource: &str,
+        include_resource: bool,
+    ) -> PackageResult<Self> {
+        let random = || -> PackageResult<String> {
+            let mut bytes = [0u8; 32];
+            getrandom::getrandom(&mut bytes).map_err(|_| "oauth_random_unavailable")?;
+            Ok(URL_SAFE_NO_PAD.encode(bytes))
+        };
+        let csrf = random()?;
+        let verifier = zeroize::Zeroizing::new(random()?);
+        let flow = format!("{:x}", Sha256::digest(csrf.as_bytes()));
+        let redirect = format!(
+            "http://127.0.0.1:{}/callback",
+            listener
+                .local_addr()
+                .map_err(|_| "oauth_callback_unavailable")?
+                .port()
+        );
+        let mut url = url::Url::parse(
+            metadata["authorization_endpoint"]
+                .as_str()
+                .ok_or("oauth_endpoint_missing")?,
+        )
+        .map_err(|_| "oauth_url_invalid")?;
+        url.query_pairs_mut().extend_pairs([
+            ("response_type", "code"),
+            ("client_id", client),
+            ("redirect_uri", &redirect),
+            ("state", &csrf),
+            ("code_challenge_method", "S256"),
+            (
+                "code_challenge",
+                &URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes())),
+            ),
+            ("scope", metadata["scope"].as_str().unwrap_or_default()),
+        ]);
+        if include_resource {
+            url.query_pairs_mut().append_pair("resource", resource);
+        }
+        if metadata["_memstack_google_offline"] == true {
+            url.query_pairs_mut()
+                .append_pair("access_type", "offline")
+                .append_pair("prompt", "consent");
+        }
+        Ok(Self {
+            listener,
+            csrf,
+            verifier,
+            flow,
+            redirect,
+            url,
+            expires: chrono::Utc::now().timestamp() + 600,
+        })
+    }
+}
+
+pub(in crate::local_runtime) async fn begin_connector(
+    state: &Arc<LocalRuntimeState>,
+    owner: &super::super::computer_use_v2::store::Owner,
+    account_id: &str,
+    server_id: &str,
+    resource: &str,
+    client: &str,
+    metadata: Value,
+) -> PackageResult<()> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|_| "oauth_callback_unavailable")?;
+    let Authorization {
+        listener,
+        csrf,
+        verifier,
+        flow,
+        redirect,
+        url,
+        expires,
+    } = Authorization::prepare(listener, &metadata, client, resource, false)?;
+    super::super::computer_use_v2::accounts::mark_authorizing(
+        state,
+        owner,
+        account_id,
+        &flow,
+        url.as_str(),
+        expires,
+    )?;
+    let (sender, cancelled) = tokio::sync::oneshot::channel();
+    PENDING
+        .lock()
+        .map_err(|_| "oauth_pending_unavailable")?
+        .insert(flow.clone(), sender);
+    let flow = Flow {
+        state: state.clone(),
+        target: FlowTarget::Connector {
+            owner: owner.clone(),
+            account_id: account_id.into(),
+        },
+        include_resource: false,
+        server_id: server_id.into(),
+        flow,
+        csrf,
+        verifier,
+        redirect,
+        resource: resource.into(),
+        client: client.into(),
+        metadata,
+    };
+    tokio::spawn(async move {
+        callback(listener, flow, cancelled).await;
+    });
+    Ok(())
 }
 struct Pending(String);
 impl Drop for Pending {
@@ -56,12 +200,31 @@ pub(super) fn declared(config: &Value) -> Option<Value> {
     })
 }
 pub(super) fn supported_transport(config: &Value) -> bool {
-    config.get("command").is_none()
-        && config.get("url").and_then(Value::as_str).is_some()
-        && matches!(
-            config["type"].as_str().unwrap_or("http"),
-            "http" | "streamable-http"
-        )
+    first_party_provider(config).is_some()
+        || (config.get("command").is_none()
+            && config.get("url").and_then(Value::as_str).is_some()
+            && matches!(
+                config["type"].as_str().unwrap_or("http"),
+                "http" | "streamable-http"
+            ))
+}
+fn first_party_provider(config: &Value) -> Option<&str> {
+    let command = config.get("command")?.as_str()?;
+    let bundled = super::super::mcp_supervisor::stdio::bundled_cloud_connector_path()?;
+    if !matches!(
+        command,
+        "memstack-cua-cloud-connectors" | "memstack-cua-cloud-connectors.exe"
+    ) && std::path::Path::new(command).canonicalize().ok().as_ref() != Some(&bundled)
+    {
+        return None;
+    }
+    let args = config.get("args")?.as_array()?;
+    if args.len() != 2 || args[0] != "--provider" {
+        return None;
+    }
+    args[1]
+        .as_str()
+        .filter(|provider| matches!(*provider, "google" | "microsoft365"))
 }
 pub(super) fn services(package: &Package) -> Vec<Service> {
     package
@@ -230,10 +393,23 @@ pub(super) async fn action(
         return Err(fail("oauth_authorization_already_pending"));
     }
     let config = &data.installations[i].package.servers[&name];
-    let resource = config["url"]
-        .as_str()
-        .ok_or_else(|| fail("oauth_http_required"))?
-        .to_owned();
+    let first_party = first_party_provider(config);
+    let resource = if first_party.is_some() {
+        state
+            .mcp_supervisor
+            .server(&scope(&auth), &server_id)
+            .map_err(fail)?
+            .ok_or_else(|| fail("oauth_server_missing"))?
+            .command
+            .first()
+            .cloned()
+            .ok_or_else(|| fail("oauth_server_missing"))?
+    } else {
+        config["url"]
+            .as_str()
+            .ok_or_else(|| fail("oauth_http_required"))?
+            .to_owned()
+    };
     let mut declared = declared(config).ok_or_else(|| fail("oauth_service_not_found"))?;
     if let Some(client) = request.client_id {
         declared["client_id"] = json!(client);
@@ -249,7 +425,11 @@ pub(super) async fn action(
         listener.local_addr().map_err(fail)?.port()
     );
     let setup = async {
-        let metadata = super::oauth_http::discover(&resource, &declared).await?;
+        let metadata = if let Some(provider) = first_party {
+            super::super::computer_use_v2::accounts::provider_metadata(provider)?
+        } else {
+            super::oauth_http::discover(&resource, &declared).await?
+        };
         let client = super::oauth_http::registration(&metadata, &declared, &redirect).await?;
         Ok::<_, String>((metadata, client))
     }
@@ -267,34 +447,19 @@ pub(super) async fn action(
             return Ok(Json(result));
         }
     };
-    let random = || -> PackageResult<String> {
-        let mut bytes = [0u8; 32];
-        getrandom::getrandom(&mut bytes).map_err(|_| "oauth_random_unavailable")?;
-        Ok(URL_SAFE_NO_PAD.encode(bytes))
-    };
-    let csrf = random().map_err(fail)?;
-    let verifier = zeroize::Zeroizing::new(random().map_err(fail)?);
-    let flow = format!("{:x}", Sha256::digest(csrf.as_bytes()));
-    let mut url = url::Url::parse(
-        metadata["authorization_endpoint"]
-            .as_str()
-            .unwrap_or_default(),
-    )
-    .map_err(fail)?;
-    url.query_pairs_mut().extend_pairs([
-        ("response_type", "code"),
-        ("client_id", &client),
-        ("redirect_uri", &redirect),
-        ("state", &csrf),
-        ("code_challenge_method", "S256"),
-        (
-            "code_challenge",
-            &URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes())),
-        ),
-        ("resource", &resource),
-        ("scope", metadata["scope"].as_str().unwrap_or_default()),
-    ]);
-    let expires = chrono::Utc::now().timestamp() + 600;
+    let include_resource = first_party.is_none();
+    let authorization =
+        Authorization::prepare(listener, &metadata, &client, &resource, include_resource)
+            .map_err(fail)?;
+    let Authorization {
+        listener,
+        csrf,
+        verifier,
+        flow,
+        redirect,
+        url,
+        expires,
+    } = authorization;
     data.installations[i].oauth_services[s] = Service {
         name: name.clone(),
         status: "authorizing".into(),
@@ -321,11 +486,14 @@ pub(super) async fn action(
             listener,
             Flow {
                 state,
-                auth,
-                id,
-                name,
-                version,
+                target: FlowTarget::Marketplace {
+                    auth,
+                    id,
+                    name,
+                    version,
+                },
                 server_id,
+                include_resource,
                 flow,
                 csrf,
                 verifier,
@@ -342,10 +510,8 @@ pub(super) async fn action(
 }
 struct Flow {
     state: Arc<LocalRuntimeState>,
-    auth: AuthenticatedContext,
-    id: String,
-    name: String,
-    version: String,
+    target: FlowTarget,
+    include_resource: bool,
     server_id: String,
     flow: String,
     csrf: String,
@@ -412,17 +578,40 @@ async fn callback(
     }
 }
 async fn complete(flow: &Flow, code: Option<String>) -> PackageResult<()> {
+    if let FlowTarget::Connector { owner, account_id } = &flow.target {
+        return super::super::computer_use_v2::accounts::complete_oauth(
+            &flow.state,
+            owner,
+            account_id,
+            &flow.flow,
+            &flow.server_id,
+            &flow.client,
+            &flow.resource,
+            &flow.metadata,
+            exchange(flow, code).await,
+        )
+        .await;
+    }
+    let FlowTarget::Marketplace {
+        auth,
+        id,
+        name,
+        version,
+    } = &flow.target
+    else {
+        unreachable!()
+    };
     let _guard = MUTATION.lock().await;
     let root = root(
         &flow.state,
-        &flow.auth.workspace.tenant_id,
-        &flow.auth.workspace.project_id,
+        &auth.workspace.tenant_id,
+        &auth.workspace.project_id,
     )?;
     let mut data = load(&root)?;
-    let (i, s) = index(&data, &flow.id, &flow.name)?;
+    let (i, s) = index(&data, &id, &name)?;
     let service = &mut data.installations[i].oauth_services[s];
     if service.flow != flow.flow
-        || service.user != flow.auth.user.user_id
+        || service.user != auth.user.user_id
         || service.status != "authorizing"
         || service
             .expires_at
@@ -436,29 +625,16 @@ async fn complete(flow: &Flow, code: Option<String>) -> PackageResult<()> {
     service.reason = Some("oauth_callback_interrupted".into());
     save(&root, &data)?;
     let outcome = async {
-        if data.installations[i].version != flow.version
-            || server(&data.installations[i], &flow.name)? != flow.server_id
+        if data.installations[i].version != *version
+            || server(&data.installations[i], &name)? != flow.server_id
         {
             return Err("oauth_installation_changed".into());
         }
-        let tokens = super::oauth_http::post(
-            flow.metadata["token_endpoint"]
-                .as_str()
-                .ok_or("oauth_token_endpoint_missing")?,
-            &[
-                ("grant_type".into(), "authorization_code".into()),
-                ("code".into(), code.ok_or("oauth_authorization_denied")?),
-                ("redirect_uri".into(), flow.redirect.clone()),
-                ("client_id".into(), flow.client.clone()),
-                ("code_verifier".into(), flow.verifier.to_string()),
-                ("resource".into(), flow.resource.clone()),
-            ],
-        )
-        .await?;
+        let tokens = exchange(flow, code).await?;
         flow.state
             .mcp_supervisor
             .oauth_connect(
-                &scope(&flow.auth),
+                &scope(&auth),
                 &flow.server_id,
                 &flow.metadata,
                 &flow.client,
@@ -480,21 +656,21 @@ async fn complete(flow: &Flow, code: Option<String>) -> PackageResult<()> {
             .all(|service| service.status == "connected")
             && resources::missing_credentials(
                 &flow.state,
-                &flow.auth,
+                &auth,
                 &data.installations[i].package,
                 Some(&data.installations[i]),
             )?
             .is_empty()
         {
-            resources::set_enabled(&flow.state, &flow.auth, &mut data.installations[i], true)?;
-            resources::verify(&flow.state, &flow.auth, &data.installations[i]).await?;
-            resources::publish(&flow.state, &flow.auth, &data.installations[i], None)?;
+            resources::set_enabled(&flow.state, &auth, &mut data.installations[i], true)?;
+            resources::verify(&flow.state, &auth, &data.installations[i]).await?;
+            resources::publish(&flow.state, &auth, &data.installations[i], None)?;
         }
         Ok::<_, String>(())
     }
     .await;
     if let Err(reason) = &outcome {
-        let _ = resources::set_enabled(&flow.state, &flow.auth, &mut data.installations[i], false);
+        let _ = resources::set_enabled(&flow.state, &auth, &mut data.installations[i], false);
         data.installations[i].status = "failed".into();
         data.installations[i].error = Some(reason.clone());
         data.installations[i].oauth_services[s].status = "error".into();
@@ -502,6 +678,25 @@ async fn complete(flow: &Flow, code: Option<String>) -> PackageResult<()> {
     }
     save(&root, &data)?;
     outcome
+}
+async fn exchange(flow: &Flow, code: Option<String>) -> PackageResult<Value> {
+    let mut fields = vec![
+        ("grant_type".into(), "authorization_code".into()),
+        ("code".into(), code.ok_or("oauth_authorization_denied")?),
+        ("redirect_uri".into(), flow.redirect.clone()),
+        ("client_id".into(), flow.client.clone()),
+        ("code_verifier".into(), flow.verifier.to_string()),
+    ];
+    if flow.include_resource {
+        fields.push(("resource".into(), flow.resource.clone()));
+    }
+    super::oauth_http::post(
+        flow.metadata["token_endpoint"]
+            .as_str()
+            .ok_or("oauth_token_endpoint_missing")?,
+        &fields,
+    )
+    .await
 }
 pub(super) fn inherit(
     state: &LocalRuntimeState,
@@ -517,7 +712,11 @@ pub(super) fn inherit(
             .get(&name)
             .ok_or("oauth_authorization_required")?;
         let new_config = &new.package.servers[&name];
-        if old_config["url"] != new_config["url"] || declared(old_config) != declared(new_config) {
+        if old_config["url"] != new_config["url"]
+            || old_config["command"] != new_config["command"]
+            || old_config["args"] != new_config["args"]
+            || declared(old_config) != declared(new_config)
+        {
             return Err("oauth_authorization_required".into());
         }
         if !state

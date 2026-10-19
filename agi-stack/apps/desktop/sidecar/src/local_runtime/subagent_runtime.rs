@@ -12,6 +12,19 @@ impl LocalRuntimeState {
         base_llm: Arc<dyn LlmPort>,
         max_rounds: u64,
     ) -> Result<Option<subagent_agent_tool_host::SubagentAgentToolHost>, String> {
+        self.subagent_agent_tool_host_with_boundary(conversation, run, parent_profile, base_tool_hosts, base_llm, max_rounds, None).await
+    }
+
+    pub(super) async fn subagent_agent_tool_host_with_boundary(
+        self: &Arc<Self>,
+        conversation: &LocalConversation,
+        run: &DesktopRun,
+        parent_profile: &execution_profile::ExecutionProfile,
+        base_tool_hosts: &[Arc<dyn ToolHost>],
+        base_llm: Arc<dyn LlmPort>,
+        max_rounds: u64,
+        boundary: Option<Arc<agent_boundary_v2::AgentBoundaryV2>>,
+    ) -> Result<Option<subagent_agent_tool_host::SubagentAgentToolHost>, String> {
         let agent = self
             .session_store
             .managed_resource(
@@ -65,7 +78,7 @@ impl LocalRuntimeState {
                 .get("id")
                 .and_then(Value::as_str)
                 .unwrap_or("<unknown>");
-            let profile = execution_profile::ExecutionProfile::resolve(
+            let mut profile = execution_profile::ExecutionProfile::resolve(
                 &parent_profile.agent.id,
                 &agent,
                 selected_skill.as_ref(),
@@ -161,6 +174,7 @@ impl LocalRuntimeState {
                     run.clone(),
                     child_dynamic_metadata,
                 ));
+            computer_use_v2::apply_guidance(&mut profile,&*child_tool_host);
             let child_llm: Arc<dyn LlmPort> = Arc::new(execution_profile::ProfiledLlm::new(
                 Arc::clone(&base_llm),
                 &profile,
@@ -180,7 +194,10 @@ impl LocalRuntimeState {
                 self.checkpoints.clone(),
                 self.clock.clone(),
             )
+            .with_hitl_validation(computer_use_v2::hitl_validation::NativeHitlValidation::capture(
+                self, conversation, Some(run), &run.message_id, Some(resource_id.to_owned())))
             .with_max_rounds(max_rounds);
+            let engine = if let Some(boundary) = boundary.as_ref() { boundary.wrap_engine(engine) } else { engine };
             targets.push(
                 subagent_agent_tool_host::SubagentToolTarget::new(
                     resource,

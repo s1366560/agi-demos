@@ -13,6 +13,7 @@ export function MarketplaceOAuth({ client, installationId, service, canManage, t
   const [metadataUrl, setMetadataUrl] = useState('');
   const generation = useRef(0);
   const actionGeneration = useRef(0);
+  const pendingAction = useRef<AbortController | null>(null);
   useEffect(() => {
     const version = ++generation.current;
     const action = actionGeneration.current;
@@ -23,7 +24,7 @@ export function MarketplaceOAuth({ client, installationId, service, canManage, t
     }).catch((caught: unknown) => {
       if (!controller.signal.aborted && generation.current === version) setError(String(caught));
     });
-    return () => { generation.current++; controller.abort(); };
+    return () => { generation.current++; controller.abort(); pendingAction.current?.abort(); };
   }, [client, installationId, service.name]);
   useEffect(() => {
     if (state.status !== 'authorizing' || busy) return;
@@ -46,20 +47,27 @@ export function MarketplaceOAuth({ client, installationId, service, canManage, t
     window.open(target.href, '_blank', 'noopener,noreferrer');
   };
   const mutate = async (action: 'start' | 'cancel' | 'disconnect') => {
+    if (!canManage || busy) return;
     const version = generation.current;
+    const controller = new AbortController();
+    pendingAction.current?.abort();
+    pendingAction.current = controller;
     actionGeneration.current++;
     setBusy(true); setError('');
     try {
       const result = await client.oauthAction(installationId, service.name, action, {
         ...(clientId.trim() ? { client_id: clientId.trim() } : {}),
         ...(metadataUrl.trim() ? { client_metadata_url: metadataUrl.trim() } : {}),
-      });
-      if (generation.current !== version) return;
+      }, undefined, controller.signal);
+      if (generation.current !== version || controller.signal.aborted) return;
       setState(result);
       if (action === 'start' && result.authorization_url) open(result.authorization_url);
     } catch (caught) {
-      if (generation.current === version) setError(caught instanceof Error ? caught.message : String(caught));
-    } finally { if (generation.current === version) setBusy(false); }
+      if (generation.current === version && !controller.signal.aborted) setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      if (pendingAction.current === controller) pendingAction.current = null;
+      if (generation.current === version && !controller.signal.aborted) setBusy(false);
+    }
   };
   return <section aria-label={`${t('oauthTitle')}: ${service.name}`}>
     <h4>{t('oauthTitle')} · {service.name}</h4>

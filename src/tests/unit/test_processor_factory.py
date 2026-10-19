@@ -185,6 +185,17 @@ class TestCreateForSubagent:
         loop_resolver.assert_called_once_with()
         runtime_dispatcher.assert_called_once_with()
 
+    def test_native_mcp_server_scope_comes_from_subagent_definition_and_is_detached(
+        self,
+        factory: ProcessorFactory,
+        inherit_subagent: SubAgent,
+        sample_tools: list[ToolDefinition],
+    ) -> None:
+        inherit_subagent.allowed_mcp_servers = ["configured-server"]
+        processor = factory.create_for_subagent(inherit_subagent, sample_tools)
+        inherit_subagent.allowed_mcp_servers.append("later-unrelated-server")
+        assert processor.config.runtime_context["allowed_mcp_servers"] == ["configured-server"]
+
     def test_inherit_model_uses_base_model(
         self,
         factory: ProcessorFactory,

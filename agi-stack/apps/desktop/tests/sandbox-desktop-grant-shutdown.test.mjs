@@ -29,6 +29,9 @@ const { SandboxDesktopGrantRegistry } = load(
 const { RendererDeliveryAdmissionV2 } = load(
   new URL('../electron/main/rendererDeliveryAdmissionV2.ts', import.meta.url),
 );
+const { ComputerUseActivityMonitor } = load(
+  new URL('../electron/main/computerUseActivityMonitor.ts', import.meta.url),
+);
 const source = readFileSync(new URL('../electron/main/index.ts', import.meta.url), 'utf8');
 const ast = ts.createSourceFile('index.ts', source, ts.ScriptTarget.Latest, true);
 function nodes(predicate) {
@@ -71,6 +74,29 @@ async function fixture(trustedDevice) {
     blankGate = deferred(),
     quit = deferred();
   let vault = null;
+  let activityActions;
+  const computerUseActivity = new ComputerUseActivityMonitor({
+    invoke: async () => ({
+      plugin_id: 'memstack-computer-use',
+      device_id: 'fixture-device',
+      helper_available: true,
+      scope: { tenant_id: 'tenant', project_id: 'project' },
+      instance: { installed: true, enabled: true, revision: 1 },
+      grants: [],
+      pending: [],
+      sessions: [],
+    }),
+    emit() {},
+    show() {},
+    surface: {
+      update(_snapshot, actions) {
+        activityActions = actions;
+      },
+      hide() {
+        events.push('cua-clear');
+      },
+    },
+  });
   const supervisor = {
     async invoke(command, args) {
       if (command === 'trusted_session_save') {
@@ -106,6 +132,7 @@ async function fixture(trustedDevice) {
   });
   const bindings = {
     DesktopCloudAuthenticationAuthority,
+    computerUseActivity,
     rendererDeliveryAdmissionV2: new RendererDeliveryAdmissionV2(),
     rendererDeliveryOwnersV2: new Map(),
     supervisor,
@@ -165,6 +192,16 @@ async function fixture(trustedDevice) {
   });
   assert.deepEqual(result, { status: 'authenticated' });
   assert.ok(vault);
+  await computerUseActivity.track(1, {
+    input: {
+      mode: 'cloud',
+      tenant_id: 'tenant',
+      project_id: 'project',
+      credential: 'fixture-activity-credential',
+      operation: { action: 'status' },
+    },
+  });
+  assert.ok(activityActions);
   const request = {
     requestId: 'request-fixture-0000001',
     tenantId: 'tenant',
@@ -193,7 +230,7 @@ async function fixture(trustedDevice) {
     'authorized',
   );
   events.length = 0;
-  return { events, application, clearGate, blankGate, quit, vault: () => vault };
+  return { events, application, activityActions, clearGate, blankGate, quit, vault: () => vault };
 }
 
 test('nonpersistent native login actually clears the captured vault before stopping the supervisor on quit', async () => {
@@ -204,7 +241,10 @@ test('nonpersistent native login actually clears the captured vault before stopp
     },
   });
   assert.equal(f.application.supervisorIsNull(), true);
+  await assert.rejects(f.activityActions.manage({ action: 'stop_all' }), /cua_activity_scope_expired/);
   await tick();
+  assert.equal(f.events[0], 'cua-clear');
+  assert.ok(f.events.indexOf('cua-clear') < f.events.indexOf('frame-blank-start'));
   assert.ok(f.events.includes('frame-blank-start'));
   assert.ok(!f.events.includes('vault-clear-start'));
   assert.ok(!f.events.includes('supervisor-stop'));
@@ -224,7 +264,10 @@ test('nonpersistent native login actually clears the captured vault before stopp
 test('trusted-device persistence is preserved while quit still revokes frame grants before supervisor shutdown', async () => {
   const f = await fixture(true);
   f.application.beforeQuit({ preventDefault() {} });
+  await assert.rejects(f.activityActions.manage({ action: 'stop_all' }), /cua_activity_scope_expired/);
   await tick();
+  assert.equal(f.events[0], 'cua-clear');
+  assert.ok(f.events.indexOf('cua-clear') < f.events.indexOf('frame-blank-start'));
   assert.ok(!f.events.includes('supervisor-stop'));
   f.blankGate.resolve();
   await f.quit.promise;

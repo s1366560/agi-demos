@@ -307,3 +307,88 @@ it('drains an accepted real candidate before starting the replacement identity s
   await lifecycle.replace();
   expect(runtime.getSnapshot()).toBeUndefined();
 });
+
+it('requests only the current tenant and a project that belongs to that tenant', async () => {
+  const originalTenant = useTenantStore.getState();
+  const originalProject = useProjectStore.getState();
+  getDistributionMock.mockResolvedValue(await distribution());
+  useTenantStore.setState({
+    currentTenant: { id: 'scope-tenant' } as typeof originalTenant.currentTenant,
+  });
+  useProjectStore.setState({
+    currentProject: {
+      id: 'foreign-project',
+      tenant_id: 'other-tenant',
+    } as typeof originalProject.currentProject,
+  });
+  activateWebPluginGenerationRootV2();
+  const rendered = renderHook(() => useWebPluginGenerationV2(true));
+  try {
+    await waitFor(() => expect(rendered.result.current.status).toBe('ready'));
+    expect(getDistributionMock.mock.calls.at(-1)?.[1].params).toEqual({
+      tenant_id: 'scope-tenant',
+    });
+    act(() =>
+      useProjectStore.setState({
+        currentProject: {
+          id: 'scope-project',
+          tenant_id: 'scope-tenant',
+        } as typeof originalProject.currentProject,
+      })
+    );
+    await waitFor(() =>
+      expect(getDistributionMock.mock.calls.at(-1)?.[1].params).toEqual({
+        tenant_id: 'scope-tenant',
+        project_id: 'scope-project',
+      })
+    );
+  } finally {
+    rendered.unmount();
+    useTenantStore.setState(originalTenant);
+    useProjectStore.setState(originalProject);
+  }
+});
+
+it('refreshes configuration without dropping readiness and prevents an older poll overwriting it', async () => {
+  vi.useFakeTimers();
+  const { WebPublicViewIdentityV2 } = await import('../../plugins/webPublicViewIdentityV2');
+  const { RendererGenerationStatusStoreV2 } = await import('@agistack/plugin-runtime');
+  const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+  const readiness: boolean[] = [];
+  const lifecycle = new WebPublicViewIdentityV2(
+    runtime,
+    new RendererGenerationStatusStoreV2(),
+    (value) => readiness.push(value),
+    (error) => {
+      throw error;
+    }
+  );
+  const requests: Array<{ signal: AbortSignal; resolve: (value: unknown) => void }> = [];
+  const source = (signal: AbortSignal) =>
+    new Promise<unknown>((resolve) => requests.push({ signal, resolve }));
+  const initial = await distribution();
+  const changed = structuredClone(initial);
+  changed.snapshot.generation += 1;
+  const { digest: _digest, ...unsigned } = changed.snapshot;
+  changed.snapshot.digest = await digestV2(unsigned);
+  changed.view_id = 'updated-config';
+  await lifecycle.replace(source, 1000);
+  requests[0]!.resolve(initial);
+  await vi.waitFor(() => expect(lifecycle.getSnapshot()).toBe(true));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(requests).toHaveLength(2);
+  const refresh = lifecycle.refresh();
+  await vi.waitFor(() => expect(requests).toHaveLength(3));
+  expect(requests[1]!.signal.aborted).toBe(true);
+  expect(lifecycle.getSnapshot()).toBe(true);
+  requests[2]!.resolve(changed);
+  await refresh;
+  const current = runtime.getSnapshot();
+  expect(current?.snapshot.digest).toBe(changed.snapshot.digest);
+  requests[1]!.resolve(initial);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(runtime.getSnapshot()).toBe(current);
+  expect(readiness).toEqual([false, true, true]);
+  await lifecycle.replace();
+});

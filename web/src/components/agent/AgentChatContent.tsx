@@ -1,7 +1,3 @@
-import {
-  getWebOperationAvailabilityV2,
-  subscribeWebOperationAvailabilityV2,
-} from '../../plugins/webOperationAdmissionV2';
 /**
  * AgentChatContent - Agent Chat content with multi-mode layout
  *
@@ -68,6 +64,7 @@ import { agentService } from '@/services/agentService';
 import type { RunInputDelivery } from '@/services/runInputService';
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
+import { openCommandPaletteV2 } from '@/hooks/useCommandPaletteOpen';
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 import { useRunInputAuthority } from '@/hooks/useRunInputAuthority';
 import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
@@ -75,6 +72,11 @@ import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 import { DEFAULT_GENERAL_AGENT_ID } from '@/constants/agent';
 
 import { AppLauncher } from '@/components/mcp-app/AppLauncher';
+
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '../../plugins/webOperationAdmissionV2';
 
 // Import design components
 import { formatDateTime } from '../../utils/date';
@@ -1469,7 +1471,21 @@ ${content}`;
           {chatColumn}
           {statusBarWithLayout}
           {/* I3: plugin conversation renderers mount below the stream. */}
-          <PluginSlotOutlet kind="conversation_renderer" />
+          <PluginSlotOutlet
+            kind="conversation_renderer"
+            context={{
+              kind: 'conversation',
+              conversationId: activeConversationId,
+              ...(projectId ? { projectId } : {}),
+              ...(tenantId ? { tenantId } : {}),
+              messageCount: timeline.length,
+              streaming: isStreaming,
+              commandsLabel: t('commandPalette.title', 'Commands'),
+            }}
+            onAction={(action) => {
+              if (action.type === 'conversation.open-commands') openCommandPaletteV2();
+            }}
+          />
         </main>
       </div>
     );

@@ -74,6 +74,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
   return (
     <>
       <Route
+        handle={{ pluginFeature: 'tenant-overview' }}
         index
         element={
           <Suspense fallback={<PageLoader />}>
@@ -90,6 +91,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-overview' }}
         path="overview"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -100,6 +102,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
 
       {/* Generic routes (use currentTenant from store) */}
       <Route
+        handle={{ pluginFeature: 'tenant-projects' }}
         path="projects"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -108,6 +111,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-projects' }}
         path="projects/new"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -116,6 +120,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-projects' }}
         path="projects/:projectId/edit"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -124,6 +129,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-backend-stores' }}
         path="backend-stores"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -132,6 +138,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-users' }}
         path="users"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -140,6 +147,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-providers' }}
         path="providers"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -148,6 +156,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-profile' }}
         path="profile"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -156,6 +165,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-analytics' }}
         path="analytics"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -164,6 +174,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-events' }}
         path="events"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -172,6 +183,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-webhooks' }}
         path="webhooks"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -180,6 +192,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-billing' }}
         path="billing"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -188,6 +201,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-settings' }}
         path="settings"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -196,6 +210,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-patterns' }}
         path="patterns"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -204,6 +219,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-tasks' }}
         path="tasks"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -212,6 +228,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-workspaces' }}
         path="workspaces"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -220,6 +237,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-workspaces' }}
         path="workspaces/new"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -228,6 +246,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agents' }}
         path="agents"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -236,6 +255,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-workspace' }}
         path="agent-workspace"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -244,6 +264,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-workspace' }}
         path="agent-workspace/:conversation"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -252,6 +273,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-definitions' }}
         path="subagents"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -260,6 +282,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-definitions' }}
         path="agent-definitions"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -268,6 +291,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-definitions' }}
         path="agent-definitions/:definitionId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -276,6 +300,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-agent-bindings' }}
         path="agent-bindings"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -284,6 +309,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-skills' }}
         path="skills"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -292,6 +318,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-evolution' }}
         path="evolution"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -300,6 +327,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-skills' }}
         path="skills/:skillId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -308,6 +336,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-templates' }}
         path="templates"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -316,6 +345,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-plugins' }}
         path="plugins"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -324,6 +354,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-plugins' }}
         path="plugins/:pluginName"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -332,6 +363,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-mcp-servers' }}
         path="mcp-servers"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -340,6 +372,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-acp' }}
         path="acp"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -348,6 +381,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-pool' }}
         path="pool"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -356,6 +390,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-runtimes' }}
         path="runtimes"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -364,6 +399,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path="instances"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -372,6 +408,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path="instances/create"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -380,6 +417,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path="instances/:instanceId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -437,6 +475,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         />
       </Route>
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path="instances/:instanceId/deploy"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -445,6 +484,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-audit-logs' }}
         path="audit-logs"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -453,6 +493,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-dead-letter-queue' }}
         path="dead-letter-queue"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -461,6 +502,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-trust-policies' }}
         path="trust-policies"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -469,6 +511,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-decision-records' }}
         path="decision-records"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -476,7 +519,11 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
           </Suspense>
         }
       />
-      <Route path="org-settings" element={<OrgSettingsLayout />}>
+      <Route
+        handle={{ pluginFeature: 'tenant-org-settings' }}
+        path="org-settings"
+        element={<OrgSettingsLayout />}
+      >
         <Route
           index
           element={
@@ -543,6 +590,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         />
       </Route>
       <Route
+        handle={{ pluginFeature: 'tenant-deploy' }}
         path="deploy"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -551,6 +599,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-deploy' }}
         path="deploy/:deployId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -559,6 +608,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-clusters' }}
         path="clusters"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -567,6 +617,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-clusters' }}
         path="clusters/:clusterId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -575,6 +626,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-genes' }}
         path="genes"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -583,6 +635,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-genes' }}
         path="genes/:geneId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -591,6 +644,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instance-templates' }}
         path="instance-templates"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -599,6 +653,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instance-templates' }}
         path="instance-templates/:templateId"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -607,6 +662,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-instances' }}
         path="instances/:instanceId/evolution"
         element={
           <Suspense fallback={<PageLoader />}>
@@ -615,6 +671,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
+        handle={{ pluginFeature: 'tenant-genes' }}
         path="genes/genomes/:genomeId"
         element={
           <Suspense fallback={<PageLoader />}>

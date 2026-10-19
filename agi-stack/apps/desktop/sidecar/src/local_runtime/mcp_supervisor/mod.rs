@@ -24,7 +24,7 @@ mod marketplace_generations;
 mod oauth;
 pub(super) use marketplace_generations::McpCatalogLease;
 mod remote_common;
-mod stdio;
+pub(in crate::local_runtime) mod stdio;
 mod store;
 mod tool_call_lease;
 mod websocket;
@@ -453,6 +453,13 @@ impl McpSupervisor {
             .into_iter()
             .filter(|server| Self::marketplace_visible(&catalog, &server.id))
             .collect())
+    }
+
+    pub(in crate::local_runtime) fn computer_use_managed_servers(&self,scope:&McpScope)->McpResult<std::collections::BTreeSet<String>> {
+        let db=self.store.session_store.connection().map_err(|_|storage_error())?;
+        let mut query=db.prepare("SELECT id FROM desktop_cua_accounts_v2 WHERE tenant_id=?1 AND project_id=?2").map_err(|_|storage_error())?;
+        let result=query.query_map(rusqlite::params![scope.tenant_id,scope.project_id],|row|row.get::<_,String>(0)).map_err(|_|storage_error())?.collect::<Result<_,_>>().map_err(|_|storage_error());
+        result
     }
 
     pub(super) fn server(

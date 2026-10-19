@@ -180,6 +180,7 @@ async def test_bound_todo_rejects_context_outside_pinned_operation(staged, tool_
         "get_env_var",
         "request_env_var",
         "todo_progress",
+        "todo_cancelled",
         "todo_scope_change",
     ],
 )
@@ -297,13 +298,15 @@ async def test_approved_read_only_run_executes_real_converted_read_tools(  # noq
         }
         definition = memory_definitions["memory_search"]
         arguments = {"query": "approved scope"}
-    if tool_name in {"todo_progress", "todo_scope_change"}:
+    if tool_name in {"todo_progress", "todo_cancelled", "todo_scope_change"}:
         definition = next(
             item
             for item in convert_tools(make_todo_tools(session_factory=sessions))
             if item.name == "todowrite"
         )
         patch = {"status": "completed", "result_summary": "Read-only verification finished"}
+        if tool_name == "todo_cancelled":
+            patch = {"status": "cancelled", "result_summary": "User stopped native observation"}
         if tool_name == "todo_scope_change":
             patch["content"] = "Replace the approved scope"
         arguments = {"action": "update", "todo_id": "current-task", "todos": [patch]}
@@ -381,7 +384,10 @@ async def test_approved_read_only_run_executes_real_converted_read_tools(  # noq
     async with sessions() as db:
         task = await db.get(AgentTaskModel, "current-task")
         assert task.content == "Approved task"
-        assert task.status == ("completed" if tool_name == "todo_progress" else "pending")
+        assert task.status == {
+            "todo_progress": "completed",
+            "todo_cancelled": "cancelled",
+        }.get(tool_name, "pending")
     if tool_name == "skill_loader":
         service.load_skill_content.assert_awaited_once()
     if tool_name == "memory_search":

@@ -1,3 +1,6 @@
+import { PluginInstancesV2 } from './PluginInstancesV2';
+import { ComputerUseSettingsPage } from './ComputerUseSettingsPage';
+import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { PluginMarketplaceV3 } from './PluginMarketplaceV3';
 import { LocalPluginSettings } from './LocalPluginSettings';
 import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
@@ -182,8 +185,11 @@ export function SettingsWindow({
 }: SettingsWindowProps) {
   const { t, locale } = useI18n();
   const shellCopy = settingsShellMessages(locale);
+  const rendererAuthority = useDesktopRendererAuthorityV2();
+  const enabledSections = rendererAuthority.settingsSectionIds ?? [];
   const { resolved: appearance } = useThemePreference();
   const [section, setSection] = useState<SettingsSection>(initialSection);
+  const sectionEnabled = rendererAuthority.status === 'ready' && enabledSections.includes(section);
   const [query, setQuery] = useState('');
   const [resourceQuery, setResourceQuery] = useState('');
   const [resourceItems, setResourceItems] = useState<ManagedResource[]>([]);
@@ -253,7 +259,7 @@ export function SettingsWindow({
   const hasAvailableProjects = auth.projects.some(
     (project) => project.tenant_id === config.tenantId,
   );
-  const isResourceSection = isResource(section);
+  const isResourceSection = sectionEnabled && isResource(section);
   const canManageProviders = providerManagementAllowed(config.mode, auth.user?.roles ?? []);
   const normalizedRoles = new Set(
     (auth.user?.roles ?? []).map((role) => role.trim().toLowerCase()),
@@ -266,7 +272,7 @@ export function SettingsWindow({
   const canManageMarketplacePackages =
     config.mode === 'local' ? canManagePluginControlPlane : auth.user?.is_superuser === true;
   const settingsDialogRef = useModalDialog({
-    active: open,
+    active: open && sectionEnabled,
     initialFocusRef: searchInputRef,
     returnFocusSelector: '.desktop-design-profile',
     onClose,
@@ -371,7 +377,7 @@ export function SettingsWindow({
   const clearResourceSelection = useCallback(() => setSelectedResourceId(null), []);
   const selectSavedResource = useCallback((id: string) => setSelectedResourceId(id), []);
   const pluginManagement = usePluginManagement({
-    active: open,
+    active: open && sectionEnabled,
     config,
     pluginMarketplaceOperationsV2,
     contextKey: resourceContextKey,
@@ -380,10 +386,10 @@ export function SettingsWindow({
     onUninstalled: clearPluginSelection,
   });
   const platformPluginUiSlots = usePlatformPluginUiSlots({
-    active: open && section === 'plugins',
+    active: open && sectionEnabled && section === 'plugins',
   });
   const channelManagement = useChannelConnectionManagement({
-    active: open,
+    active: open && sectionEnabled,
     config,
     contextKey: resourceContextKey,
     canManage: canManagePluginControlPlane,
@@ -391,13 +397,13 @@ export function SettingsWindow({
   });
   const mcpServerManagement = useMCPServerManagement({
     client: projectMcpServersClientV2,
-    active: open && section === 'mcp',
+    active: open && sectionEnabled && section === 'mcp',
     config,
     contextKey: resourceContextKey,
     canManage: canManagePluginControlPlane,
   });
   const skillManagement = useSkillManagement({
-    active: open,
+    active: open && sectionEnabled,
     client: tenantSkillDefinitionsClientV2,
     contextKey: resourceContextKey,
     canCreate: canCreateSkills,
@@ -406,7 +412,7 @@ export function SettingsWindow({
     onDeleted: clearResourceSelection,
   });
   const skillPackageManagement = useSkillPackageManagement({
-    active: open,
+    active: open && sectionEnabled,
     config,
     packagesClient: tenantSkillPackagesClientV2,
     evolutionClient: tenantSkillEvolutionClientV2,
@@ -417,7 +423,7 @@ export function SettingsWindow({
     onSelected: selectSavedResource,
   });
   const agentManagement = useAgentDefinitionManagement({
-    active: open,
+    active: open && sectionEnabled,
     client: tenantAgentDefinitionsClientV2,
     contextKey: resourceContextKey,
     canManage: canManageAgentDefinitions,
@@ -426,7 +432,7 @@ export function SettingsWindow({
     onDeleted: clearResourceSelection,
   });
   const subAgentLibrary = useSubAgentLibraryManagement({
-    active: open,
+    active: open && sectionEnabled,
     config,
     client: tenantSubAgentDefinitionsClientV2,
     contextKey: resourceContextKey,
@@ -435,7 +441,7 @@ export function SettingsWindow({
     onReload: reloadSubAgentResources,
   });
   const subAgentDefinitions = useSubAgentDefinitionManagement({
-    active: open,
+    active: open && sectionEnabled,
     client: tenantSubAgentDefinitionsClientV2,
     contextKey: resourceContextKey,
     canManage: canManageAgentDefinitions,
@@ -550,8 +556,8 @@ export function SettingsWindow({
     [t],
   );
   const filteredSettingSections = useMemo(
-    () => filterSettingsSections(query, settingsSearchCopy),
-    [query, settingsSearchCopy],
+    () => filterSettingsSections(query, settingsSearchCopy).filter((id) => enabledSections.includes(id)),
+    [query, settingsSearchCopy, enabledSections],
   );
   const visibleSections = useMemo(
     () => new Set(filteredSettingSections),
@@ -573,6 +579,14 @@ export function SettingsWindow({
   }, [filteredSettingSections, query, section, visibleSections]);
 
   if (!open) return null;
+
+  if (!sectionEnabled) return createPortal(
+    <div className="settings-backdrop"><section role="dialog" aria-label={t('settings.title')}>
+      <p>{t('settings.featureUnavailable')}</p>
+      {filteredSettingSections.map((id) => <button key={id} onClick={() => setSection(id)}>{t(sectionMeta[id].label)}</button>)}
+      <button onClick={onClose}>{t('common.close')}</button>
+    </section></div>, document.body,
+  );
 
   const toggleResource = async (item: ManagedResource) => {
     if (!isResourceSection) return;
@@ -754,7 +768,13 @@ export function SettingsWindow({
               key={section}
               aria-label={t(sectionMeta[section].label)}
               className={`settings-window-content ${
-                section === 'models' ? 'provider-mode' : isResourceSection ? 'managed-mode' : ''
+                section === 'models'
+                  ? 'provider-mode'
+                  : section === 'plugins'
+                    ? 'plugins-mode'
+                    : isResourceSection
+                      ? 'managed-mode'
+                      : ''
               }`}
             >
               {section === 'account' ? (
@@ -834,10 +854,13 @@ export function SettingsWindow({
                 />
               ) : null}
               {isResourceSection ? (
-                <div className="settings-resource-container">
+                <div className={`settings-resource-container${section === 'plugins' ? ' settings-resource-container--plugins' : ''}`}>
+                  {section === 'plugins' ? <ComputerUseSettingsPage /> : null}
+                  {section === 'plugins' ? <PluginInstancesV2 config={config} operations={pluginMarketplaceOperationsV2} canManage={canManagePluginControlPlane} /> : null}
                   {section === 'plugins' ? (
                     <PluginMarketplaceV3
                       config={config}
+                      operations={pluginMarketplaceOperationsV2}
                       onInstallSignedV2={() => {
                         const installer = document.getElementById('signed-plugin-marketplace');
                         installer?.scrollIntoView({ block: 'start' });
@@ -848,7 +871,7 @@ export function SettingsWindow({
                   ) : null}
                   <div id={section === 'plugins' ? 'signed-plugin-marketplace' : undefined} tabIndex={-1}>
                   {section === 'plugins' && !pluginMarketplaceSettingsAvailable(config.mode) ? (
-                    <LocalPluginSettings config={config} canManage={canManagePluginControlPlane} />
+                    <LocalPluginSettings config={config} operations={pluginMarketplaceOperationsV2} canManage={canManagePluginControlPlane} />
                   ) : (
                     <ManagedResourceWorkspace
                       section={section}

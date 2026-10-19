@@ -85,6 +85,7 @@ function harness() {
             jsxs: (type, props) => ({ type, props }),
           };
         if (name === '../../i18n') return { useI18n: () => ({ t: (key) => key }) };
+        if (name === './MarkdownArtifactImage') return component;
         if (name === '../../plugins/desktopStructuredImagePreviewContractV2')
           return load('../../plugins/desktopStructuredImagePreviewContractV2.ts');
         if (!name.startsWith('.')) return require(name);
@@ -99,6 +100,7 @@ function harness() {
     return module.exports;
   }
   const component = load('MarkdownArtifactImage.tsx');
+  const artifact = load('ArtifactTimelineCard.tsx');
   const guards = load('structuredImagePreviewOwnerModel.ts');
   let props = { src: source, alt: 'Chart' };
   function render(context = contextValue, nextProps = props, commit = true) {
@@ -116,9 +118,87 @@ function harness() {
     unmount();
     for (const slot of slots) if (slot?.effect) slot.cleanup = slot.effect();
   }
-  return { render, unmount, strict, created, revoked, guards };
+  function renderArtifact(item, context) {
+    const findImage = (node) => {
+      if (!node || typeof node !== 'object') return null;
+      if (node.type === component.MarkdownArtifactImage) return node;
+      const children = node.props?.children;
+      for (const child of Array.isArray(children) ? children : [children]) {
+        const image = findImage(child);
+        if (image) return image;
+      }
+      return null;
+    };
+    const image = findImage(artifact.ArtifactTimelineCard({ item }));
+    assert.ok(image, 'Artifact card must use the scoped image loader');
+    return render(context, image.props);
+  }
+  return { render, renderArtifact, unmount, strict, created, revoked, guards };
 }
 const tick = () => new Promise(setImmediate);
+
+test('cloud artifact card converts its localhost object-store URL to a revocable Blob', async () => {
+  const h = harness();
+  const item = {
+    id: 'cloud-image',
+    type: 'artifact_ready',
+    payload: {
+      artifact_id: 'cloud-image',
+      filename: 'fixture.png',
+      mime_type: 'image/png',
+      url: 'http://localhost:9000/artifacts/fixture.png',
+    },
+  };
+  const inputs = [];
+  const client = {
+    owner,
+    async loadImage(input) {
+      inputs.push(input);
+      return new Blob(['fixture'], { type: 'image/png' });
+    },
+  };
+  h.renderArtifact(item, { client, carriers: [item] });
+  await tick();
+  const preview = h.renderArtifact(item);
+  assert.equal(inputs.length, 1);
+  assert.equal(inputs[0].source, item.payload.url);
+  assert.equal(preview.props.children.type, 'img');
+  assert.equal(preview.props.children.props.src, 'blob:preview-0');
+  assert.notEqual(preview.props.children.props.src, item.payload.url);
+  h.unmount();
+  assert.equal(inputs[0].signal.aborted, true);
+  assert.deepEqual(h.revoked, ['blob:preview-0']);
+});
+
+test('artifact card never falls back to a remote img when image authority is unavailable', async () => {
+  const item = {
+    id: 'cloud-image',
+    type: 'artifact_ready',
+    mimeType: 'image/png',
+    url: 'http://localhost:9000/artifacts/fixture.png',
+  };
+  for (const failure of ['missing-client', 'load-rejected', 'owner-conflict']) {
+    const h = harness();
+    let calls = 0;
+    const client = {
+      owner,
+      async loadImage() {
+        calls++;
+        throw new Error('Permission revoked');
+      },
+    };
+    h.renderArtifact(item, {
+      client: failure === 'missing-client' ? null : client,
+      carriers: failure === 'owner-conflict' ? [{ ...item, conversation_id: 'other' }] : [item],
+    });
+    await tick();
+    const preview = h.renderArtifact(item);
+    assert.match(preview.props.className, /is-unavailable/);
+    assert.equal(h.created.length, 0);
+    assert.equal(calls, failure === 'load-rejected' ? 1 : 0);
+    h.unmount();
+  }
+});
 
 test('explicit null client displays unavailable and performs zero loads', () => {
   const h = harness();

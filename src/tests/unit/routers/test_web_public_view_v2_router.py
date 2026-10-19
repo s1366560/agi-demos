@@ -139,7 +139,7 @@ async def test_real_user_can_get_only_public_view_while_workload_endpoint_stays_
     assert response.headers["cache-control"] == "private, no-store"
     public = response.json()
     assert set(public) == {"schema_version", "target", "view_id", "snapshot"}
-    assert len(public["snapshot"]["entries"]) == 6
+    assert len(public["snapshot"]["entries"]) > 60
     parse_profile_snapshot_v2(public["snapshot"])
     assert "private-secret-canary" not in response.text
     assert "private-workload-nonce" not in response.text

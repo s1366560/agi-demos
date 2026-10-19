@@ -8,6 +8,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProjectSettings } from '../../../pages/project/Settings';
 import { render, screen } from '../../utils';
 
+const featureEnabled = vi.hoisted(() => vi.fn(() => true));
+vi.mock('@/routes/v2/webFeatureAuthorityV2', () => ({ useWebFeatureEnabledV2: featureEnabled }));
+
 // Mock useProjectStore
 vi.mock('../../../stores/project', () => ({
   useProjectStore: (selector?: (state: any) => unknown) => {
@@ -62,6 +65,7 @@ vi.mock('../../../services/projectSandboxService', () => ({
 describe('ProjectSettings Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    featureEnabled.mockReturnValue(true);
     // Mock window.confirm
     global.confirm = vi.fn(() => true);
     // Mock window.prompt

@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { useWebFeatureEnabledV2 } from '@/routes/v2/webFeatureAuthorityV2';
 import { formatDateTime } from '@/utils/date';
 
 import { PluginSlotOutlet } from '../../components/plugins/PluginSlotOutlet';
@@ -1018,6 +1019,9 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     setMessage(null);
   }, []);
 
+  const memorySettingsEnabled = useWebFeatureEnabledV2('project-memories', 'settings-page');
+  const graphSettingsEnabled = useWebFeatureEnabledV2('project-graph', 'settings-page');
+
   // No project state
   if (!currentProject) {
     return <NoProject />;
@@ -1025,8 +1029,12 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
 
   const sectionLinks = [
     { href: '#basic', label: t('project.settings.basicTitle'), icon: SlidersHorizontal },
-    { href: '#memory', label: t('project.settings.memoryTitle'), icon: Database },
-    { href: '#graph', label: t('project.settings.graphTitle'), icon: Network },
+    ...(memorySettingsEnabled
+      ? [{ href: '#memory', label: t('project.settings.memoryTitle'), icon: Database }]
+      : []),
+    ...(graphSettingsEnabled
+      ? [{ href: '#graph', label: t('project.settings.graphTitle'), icon: Network }]
+      : []),
     { href: '#advanced', label: t('project.settings.advancedTitle'), icon: Wrench },
     { href: '#sandbox', label: t('project.settings.sandboxSectionTitle'), icon: Server },
     { href: '#danger', label: t('project.settings.dangerTitle'), icon: ShieldAlert },
@@ -1081,29 +1089,53 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
             onIsPublicChange={setIsPublic}
             onSave={handleSaveBasicSettings}
           />
-          <Memory
-            data={{ maxEpisodes, retentionDays, autoRefresh, refreshInterval }}
-            isSaving={savingSection === 'memory'}
-            onMaxEpisodesChange={setMaxEpisodes}
-            onRetentionDaysChange={setRetentionDays}
-            onAutoRefreshChange={setAutoRefresh}
-            onRefreshIntervalChange={setRefreshInterval}
-            onSave={handleSaveMemoryRules}
-          />
-          <Graph
-            data={{ maxNodes, maxEdges, similarityThreshold, communityDetection }}
-            isSaving={savingSection === 'graph'}
-            onMaxNodesChange={setMaxNodes}
-            onMaxEdgesChange={setMaxEdges}
-            onSimilarityThresholdChange={setSimilarityThreshold}
-            onCommunityDetectionChange={setCommunityDetection}
-            onSave={handleSaveGraphConfig}
-          />
+          {memorySettingsEnabled && (
+            <Memory
+              data={{ maxEpisodes, retentionDays, autoRefresh, refreshInterval }}
+              isSaving={savingSection === 'memory'}
+              onMaxEpisodesChange={setMaxEpisodes}
+              onRetentionDaysChange={setRetentionDays}
+              onAutoRefreshChange={setAutoRefresh}
+              onRefreshIntervalChange={setRefreshInterval}
+              onSave={handleSaveMemoryRules}
+            />
+          )}
+          {graphSettingsEnabled && (
+            <Graph
+              data={{ maxNodes, maxEdges, similarityThreshold, communityDetection }}
+              isSaving={savingSection === 'graph'}
+              onMaxNodesChange={setMaxNodes}
+              onMaxEdgesChange={setMaxEdges}
+              onSimilarityThresholdChange={setSimilarityThreshold}
+              onCommunityDetectionChange={setCommunityDetection}
+              onSave={handleSaveGraphConfig}
+            />
+          )}
           <Advanced />
           <Sandbox projectId={currentProject.id} />
           <Danger projectName={currentProject.name} onDelete={handleDeleteProject} />
           {/* I3: plugin settings sections mount after the builtin sections. */}
-          <PluginSlotOutlet kind="settings_page" />
+          <PluginSlotOutlet
+            kind="settings_page"
+            context={{
+              kind: 'settings',
+              tenantId: currentProject.tenant_id,
+              projectId: currentProject.id,
+              sections: sectionLinks.map((section) => ({
+                id: section.href.slice(1),
+                label: section.label,
+              })),
+            }}
+            onAction={(action) => {
+              if (
+                action.type !== 'settings.open' ||
+                !sectionLinks.some((section) => section.href === `#${action.sectionId}`)
+              )
+                return;
+              setActiveSection(action.sectionId);
+              document.getElementById(action.sectionId)?.scrollIntoView({ block: 'start' });
+            }}
+          />
         </div>
       </div>
     </div>

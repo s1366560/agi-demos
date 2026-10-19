@@ -32,6 +32,19 @@ vi.mock('antd', async () => {
 vi.mock('@/components/marketplace/v3/PluginMarketplaceV3', () => ({
   PluginMarketplaceV3: () => null,
 }));
+vi.mock('@/components/plugins/PluginInstancesV2', () => ({
+  PluginInstancesV2: ({
+    projectId,
+    rendererScopeMatches,
+  }: {
+    projectId: string | null;
+    rendererScopeMatches: boolean;
+  }) => (
+    <div data-testid="instance-scope">
+      {projectId ?? 'tenant'}:{String(rendererScopeMatches)}
+    </div>
+  ),
+}));
 
 vi.mock('@/stores/project');
 vi.mock('@/stores/tenant');
@@ -164,6 +177,21 @@ describe('PluginHub', () => {
       defaults: {},
       secret_paths: ['app_secret'],
     });
+  });
+
+  it('configures feature scope separately from the marketplace project selection', async () => {
+    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+    await screen.findByText('Support Channel');
+
+    expect(screen.getByTestId('instance-scope')).toHaveTextContent('tenant:true');
+    fireEvent.change(screen.getByLabelText('plugins.configurationScope'), {
+      target: { value: 'project-1' },
+    });
+    expect(screen.getByTestId('instance-scope')).toHaveTextContent('project-1:false');
+    fireEvent.change(screen.getByLabelText('plugins.configurationScope'), {
+      target: { value: '' },
+    });
+    expect(screen.getByTestId('instance-scope')).toHaveTextContent('tenant:true');
   });
 
   it('loads V2 marketplace packages and generation-backed channel data', async () => {

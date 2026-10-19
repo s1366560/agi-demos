@@ -349,6 +349,7 @@ pub(super) fn desktop_loader(
             desktop_sidecar_host_definition_v2(),
             super::knowledge_authority_v2::definition(app_data_dir, local_acceptance)
                 .expect("the built-in knowledge contract is statically valid"),
+            super::computer_use_v2::definition().expect("the built-in computer-use contract is statically valid"),
         ],
     )
 }
@@ -412,6 +413,10 @@ fn local_bootstrap_snapshot(state: &LocalRuntimeState) -> Result<LocalBootstrapS
         archives,
         activation_error: None,
     })
+}
+
+pub(super) fn local_current_snapshot(state: &LocalRuntimeState) -> Result<ProfileSnapshotV2, String> {
+    local_bootstrap_snapshot(state).map(|candidate| candidate.snapshot)
 }
 
 async fn stage_local_candidate(
@@ -488,10 +493,23 @@ async fn activate_authority_source(
                 reconciler.reset_publication_ordering();
                 return Ok(());
             };
-            let generation = reconciler
+            let generation = match reconciler
                 .stage_snapshot(distribution.snapshot.clone())
                 .await
-                .map_err(|error| error.to_string())?;
+            {
+                Ok(generation) => generation,
+                Err(error) => {
+                    // An application upgrade may invalidate a previously accepted catalog.
+                    // Keep the record for recovery, but only a fresh validated fetch can run.
+                    log_reconcile_failure(&format!("cached cloud snapshot rejected: {error}"));
+                    state.platform_plugin_authority_v2.deactivate().await;
+                    reconciler.restore_publication_ordering(
+                        distribution.envelope.version,
+                        distribution.snapshot.digest,
+                    );
+                    return Ok(());
+                }
+            };
             state
                 .platform_plugin_authority_v2
                 .publish(&distribution, generation)
@@ -626,10 +644,25 @@ async fn activate_authority_source_for_selection(
                 }
                 return Ok(outcome);
             };
-            let generation = reconciler
+            let generation = match reconciler
                 .stage_snapshot(distribution.snapshot.clone())
                 .await
-                .map_err(|error| error.to_string())?;
+            {
+                Ok(generation) => generation,
+                Err(error) => {
+                    log_reconcile_failure(&format!("cached cloud snapshot rejected: {error}"));
+                    let outcome =
+                        deactivate_for_selection(state, selection, expected_selection).await?;
+                    if outcome == SelectionReconcileOutcomeV2::Applied {
+                        reconciler.restore_publication_ordering(
+                            distribution.envelope.version,
+                            distribution.snapshot.digest,
+                        );
+                    }
+                    // Continue the authenticated poll instead of retrying an unusable cache forever.
+                    return Ok(outcome);
+                }
+            };
             let retirement = begin_selected_publication(selection, expected_selection, || {
                 state
                     .platform_plugin_authority_v2
@@ -1203,6 +1236,10 @@ mod tests {
 
     use super::super::session_store::DesktopSessionStore;
     use super::*;
+
+    mod cached_snapshot_recovery_tests {
+        include!("platform_plugin_cached_snapshot_recovery_tests.rs");
+    }
 
     const BOOTSTRAP: &str =
         include_str!("../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");

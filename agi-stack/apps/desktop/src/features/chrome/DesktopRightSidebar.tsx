@@ -1,3 +1,4 @@
+import { useDesktopUiSlotsV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { DropdownMenu } from '@radix-ui/themes';
 import {
@@ -53,6 +54,8 @@ export function DesktopRightSidebar({
 }: DesktopRightSidebarProps) {
   const { t } = useI18n();
   const inspection = useTimelineInspection();
+  const panelDefinitions = useDesktopUiSlotsV2('work_panel');
+  const panelEnabled = (id: string | null) => panelDefinitions.some((definition) => definition.id === id && definition.grantedPermissions.includes(definition.permission));
   const hostRef = useRef<HTMLElement>(null);
   const [focused, setFocused] = useState(false);
   const [availableWidth, setAvailableWidth] = useState(1000);
@@ -122,17 +125,17 @@ export function DesktopRightSidebar({
     reasonKey?: string;
     group: 'work' | 'details';
   }[] = [
-    ...(canvas.kind === 'available' ? getSessionWorkPanelOptions(canvas.input.state) : []),
+    ...(canvas.kind === 'available' ? getSessionWorkPanelOptions(canvas.input.state).filter((option) => panelEnabled(option.id)) : []),
     {
       id: 'browser',
       labelKey: 'rightbar.browser',
-      available: true,
+      available: panelEnabled('browser'),
       group: 'work',
     },
     {
       id: 'run-details',
       labelKey: 'rightbar.runDetails',
-      available: viewModel !== null,
+      available: panelEnabled('run-details') && viewModel !== null,
       reasonKey: 'rightbar.noSession',
       group: 'details',
     },
@@ -140,7 +143,7 @@ export function DesktopRightSidebar({
   const option = options.find((entry) => entry.id === state.active);
   const label = (id: WorkPanelTab) =>
     t(options.find((entry) => entry.id === id)?.labelKey ?? 'rightbar.unavailable');
-  const unavailable = !option?.available;
+  const unavailable = !panelEnabled(state.active) || !option?.available;
   const active = state.active;
   const closeTab = (id: WorkPanelTab) => {
     if (id === 'activity') inspection.dismiss();
@@ -228,7 +231,7 @@ export function DesktopRightSidebar({
                   {t(group === 'work' ? 'rightbar.workContent' : 'rightbar.runDetails')}
                 </DropdownMenu.Label>
                 {options
-                  .filter((entry) => entry.group === group)
+                  .filter((entry) => entry.group === group && panelEnabled(entry.id))
                   .map((entry) => (
                     <DropdownMenu.Item
                       key={entry.id}

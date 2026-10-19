@@ -3,6 +3,11 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
 import { CommandPalette } from '@/components/common/CommandPalette';
 
+const featureEnabled = vi.hoisted(() => vi.fn(() => true));
+vi.mock('@/routes/v2/webFeatureAuthorityV2', () => ({
+  useWebFeatureEnabledV2: featureEnabled,
+  useWebCommandNavigationItemsV2: () => [],
+}));
 const mockNavigate = vi.fn();
 const mockChangeLanguage = vi.fn();
 const mockSetTheme = vi.fn();
@@ -78,6 +83,7 @@ vi.mock('@/stores/theme', () => ({
 
 describe('CommandPalette', () => {
   beforeEach(() => {
+    featureEnabled.mockReturnValue(true);
     document.body.innerHTML = '';
     document.body.style.overflow = '';
     mockNavigate.mockClear();
@@ -122,6 +128,15 @@ describe('CommandPalette', () => {
     // Recent conversations
     expect(screen.getByText('Deploy production fix')).toBeInTheDocument();
     expect(screen.getByText('Refactor auth module')).toBeInTheDocument();
+  });
+
+  it('removes conversation commands immediately when their feature is disabled', () => {
+    const { rerender } = render(<CommandPalette open onClose={() => {}} tenantId="t1" />);
+    expect(screen.getByText('New conversation')).toBeInTheDocument();
+    featureEnabled.mockReturnValue(false);
+    rerender(<CommandPalette open onClose={() => {}} tenantId="t1" />);
+    expect(screen.queryByText('New conversation')).toBeNull();
+    expect(screen.queryByText('Deploy production fix')).toBeNull();
   });
 
   it('filters items by query', () => {

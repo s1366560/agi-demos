@@ -460,7 +460,7 @@
       "module_ref": "builtin://memstack/desktop/plugin-marketplace-catalog-authority",
       "entrypoint": "applyDesktopPluginMarketplaceCatalogAuthorityV2",
       "artifact": {
-        "digest": "sha256:cfa5917423bf08f1f811354b9069f23d13a746c017e8e44687bdf85625c6ed32",
+        "digest": "sha256:ef7a5dd73ac34b0d780940e95f7061b6477e2cdb35be28f46f31628a6f1a07de",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.ts"
       },
       "targets": [
@@ -501,7 +501,7 @@
       "module_ref": "builtin://memstack/desktop/plugin-marketplace-management-authority",
       "entrypoint": "applyDesktopPluginMarketplaceManagementAuthorityV2",
       "artifact": {
-        "digest": "sha256:cfa5917423bf08f1f811354b9069f23d13a746c017e8e44687bdf85625c6ed32",
+        "digest": "sha256:ef7a5dd73ac34b0d780940e95f7061b6477e2cdb35be28f46f31628a6f1a07de",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.ts"
       },
       "targets": [

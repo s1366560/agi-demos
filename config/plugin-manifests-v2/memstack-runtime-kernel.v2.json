@@ -384,6 +384,332 @@
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "null"
               }
+            },
+            {
+              "event": "tools.before_execute",
+              "mode": "waterfall",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "arguments",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "allow",
+                          "deny",
+                          "ask",
+                          "cancel"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "arguments",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "allow",
+                          "deny",
+                          "ask",
+                          "cancel"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "event": "tools.result_transform",
+              "mode": "waterfall",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "result",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "result": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "output",
+                      "is_error",
+                      "metadata"
+                    ],
+                    "properties": {
+                      "output": {
+                        "type": "string"
+                      },
+                      "is_error": {
+                        "type": "boolean"
+                      },
+                      "metadata": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "accept",
+                          "block"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tenant_id",
+                  "project_id",
+                  "session_id",
+                  "operation_id",
+                  "generation_digest",
+                  "tool_name",
+                  "call_id",
+                  "result",
+                  "decision"
+                ],
+                "properties": {
+                  "tenant_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "generation_digest": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "result": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "output",
+                      "is_error",
+                      "metadata"
+                    ],
+                    "properties": {
+                      "output": {
+                        "type": "string"
+                      },
+                      "is_error": {
+                        "type": "boolean"
+                      },
+                      "metadata": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "decision": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "accept",
+                          "block"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "request": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
             }
           ],
           "handles": []
@@ -403,7 +729,7 @@
           }
         }
       },
-      "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
+      "contract_digest": "sha256:2552b79c90f852bb0d710cd2b0fcb28a71786db1ea2502126b7cea724a552963",
       "artifact": {
         "digest": "sha256:29c6f520a989bc58e31f5079a956b5ae3afeaf02daa8deb1cf7d38f384388e13",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
@@ -8020,7 +8346,7 @@
       },
       "contract_digest": "sha256:a86b36ff716fcadb1f9913e34ead253cdfcc9fe5cced9e756adb103126529833",
       "artifact": {
-        "digest": "sha256:25e20fe7c63916d924ab3321173b91c7b9ab4e9b82803ad1be6638bdeb591985",
+        "digest": "sha256:b0bd5dd6a4d40440d00b021df25d1f39a9627a2265e84b0ca1172a96bcd584bf",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_agent_http_routes.py"
       }
     },
@@ -9968,7 +10294,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:4de7eb515350089ca79c7d62354348e83d83e6f8abb3004708ad26c096322666",
+        "digest": "sha256:f837a3379e4922f53171ef6b3747fca557c9676f64f36e8abe48409bfaf3fe86",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_platform_plugins_http_routes.py"
       }
     },

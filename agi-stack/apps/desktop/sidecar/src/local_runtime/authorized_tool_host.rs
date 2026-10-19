@@ -1,4 +1,6 @@
 //! Fail-closed, run-scoped tool execution for the local desktop runtime.
+#[cfg(test)]
+mod connector_tests;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -238,6 +240,7 @@ impl ToolHost for AuthorizedRunToolHost {
             .filter(|tool| {
                 self.metadata(tool).is_some_and(|metadata| {
                     self.allows(tool, metadata.effect)
+                        || super::computer_use_v2::has_read_operation(&*self.inner,tool)
                         || (self.run.permission_profile == DesktopPermissionProfile::ReadOnly
                             && is_workspace_write_tool(tool))
                 })
@@ -246,6 +249,9 @@ impl ToolHost for AuthorizedRunToolHost {
     }
 
     async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
+        if agistack_adapters_cua::tool_effects().contains_key(tool) {
+            return Ok(self.call_with_content(tool,input_json).await?.output_json);
+        }
         let metadata = self
             .metadata(tool)
             .ok_or_else(|| CoreError::Tool(format!("tool '{tool}' has no authority metadata")))?;
@@ -253,6 +259,9 @@ impl ToolHost for AuthorizedRunToolHost {
             return Err(CoreError::Tool(format!(
                 "tool '{tool}' is outside the approved permission profile; request human permission with the exact canonical tool name"
             )));
+        }
+        if agistack_adapters_cua::tool_effects().contains_key(tool) {
+            return Ok(self.call_with_content(tool, input_json).await?.output_json);
         }
         // Browser tools are remote side effects authorized by the
         // origin-consent layer (persisted origin grants + the run-scoped once
@@ -379,6 +388,25 @@ impl ToolHost for AuthorizedRunToolHost {
             }
         }
     }
+    async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<agistack_core::ports::ToolResult> {
+        if !agistack_adapters_cua::tool_effects().contains_key(tool) {
+            return self.call(tool, input_json).await.map(|output_json| agistack_core::ports::ToolResult::text(output_json));
+        }
+        self.metadata(tool).ok_or_else(||CoreError::Tool("computer-use authority metadata is missing".into()))?;
+        self.validate_browser_run()?;
+        let effect=super::computer_use_v2::input_effect(&*self.inner,tool,input_json)?;
+        let resolved=match effect {agistack_adapters_cua::CuaToolEffect::Read=>ToolEffect::Read,agistack_adapters_cua::CuaToolEffect::Mutate=>ToolEffect::Mutate};
+        let profile_allowed=self.allows_without_once(tool,resolved);
+        let once=self.once_permissions.lock().expect("run once tool permissions").remove(&(self.run.id.clone(),tool.to_string()));
+        if !profile_allowed && !once { return Err(CoreError::Tool("computer-use tool is outside the approved permission profile".into())); }
+        let result=super::computer_use_v2::with_effect(effect,self.inner.call_with_content(tool,input_json)).await;
+        let consent_required=result.as_ref().ok().and_then(|result|serde_json::from_str::<Value>(&result.output_json).ok())
+            .is_some_and(|value|value["error"]=="cua_permission_required");
+        if once && consent_required && self.validate_browser_run().is_ok() {
+            self.once_permissions.lock().expect("run once tool permissions").insert((self.run.id.clone(),tool.to_string()));
+        }
+        result
+    }
 }
 
 fn authority_error(error: impl std::fmt::Display) -> CoreError {
@@ -386,6 +414,9 @@ fn authority_error(error: impl std::fmt::Display) -> CoreError {
 }
 
 fn tool_effect(tool: &str) -> Option<ToolEffect> {
+    if let Some(effect)=agistack_adapters_cua::tool_effects().get(tool) {
+        return Some(match effect {agistack_adapters_cua::CuaToolEffect::Read=>ToolEffect::Read,agistack_adapters_cua::CuaToolEffect::Mutate=>ToolEffect::Mutate});
+    }
     if READ_ONLY_TOOLS.contains(&tool) {
         Some(ToolEffect::Read)
     } else if MUTATING_TOOLS.contains(&tool) {
@@ -520,6 +551,11 @@ const READ_ONLY_TOOLS: &[&str] = &[
     "browser_snapshot",
     "browser_screenshot",
     "browser_console_logs",
+    // Computer-use observation: the skyshot output carries AX text plus a
+    // window screenshot; the timeline redaction must see it so the renderer
+    // can show the target app and the skyshot image.
+    "computer_list_apps",
+    "computer_get_app_state",
 ];
 
 const WORKSPACE_WRITE_TOOLS: &[&str] = &[
@@ -568,6 +604,16 @@ const MUTATING_TOOLS: &[&str] = &[
     "browser_mark_tab",
     "browser_cdp_raw",
     "browser_fill_credentials",
+    // Computer-use input synthesis: same grant-consuming tier as the browser
+    // action family; inputs carry only target app / element references.
+    "computer_click",
+    "computer_type_text",
+    "computer_press_key",
+    "computer_scroll",
+    "computer_set_value",
+    "computer_drag",
+    "computer_secondary_action",
+    "computer_paste",
 ];
 
 #[cfg(test)]
@@ -584,7 +630,7 @@ mod tests {
     use agistack_adapters_local_tools::LocalToolHost;
     use uuid::Uuid;
 
-    fn running_host(
+    pub(super) fn running_host(
         profile: DesktopPermissionProfile,
     ) -> Result<
         (

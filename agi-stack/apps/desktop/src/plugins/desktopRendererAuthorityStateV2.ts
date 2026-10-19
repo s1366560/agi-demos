@@ -27,6 +27,9 @@ export interface DesktopRendererAuthorityStateV2 {
   readonly routeArtifactIds: readonly string[];
   readonly routeArtifacts: readonly DesktopRouteArtifactV2[];
   readonly routeIds: readonly string[];
+  readonly settingsSectionIds?: readonly string[];
+  readonly commandIds?: readonly string[];
+  readonly shortcutIds?: readonly string[];
   readonly slotDefinitions: readonly AuthorizedUiSlotDefinitionV2[];
   readonly status: DesktopRendererAuthorityStatusV2;
   readonly uiSlotArtifactIds: readonly string[];
@@ -85,7 +88,7 @@ export function projectDesktopRouteRegistryV2(
       appendRouteDefinitionsV2(
         definitions,
         seenRouteIds,
-        composition.createRouteRegistry(artifact.id),
+        composition.createRouteRegistry(artifact.compositionArtifactId ?? artifact.id),
         artifact.routeIds,
         artifact.id,
       );

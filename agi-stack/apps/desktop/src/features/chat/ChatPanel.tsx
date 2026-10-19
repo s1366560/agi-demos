@@ -1,3 +1,4 @@
+import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { ConversationToolbarItem } from './ConversationToolbar';
 import type { DesktopVoiceSessionOperationsV2 } from '../../plugins/desktopVoiceSessionAuthorityModuleV2';
 import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
@@ -473,6 +474,7 @@ export const ChatPanel = memo(function ChatPanel({
   onOpenSessionCanvasTab,
 }: ChatPanelProps) {
   const { t } = useI18n();
+  const shortcutAuthority = useDesktopRendererAuthorityV2();
   const disabled = Boolean(disabledReason);
   const composerPresentation = chatComposerPresentation(composerVariant);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -957,6 +959,7 @@ export const ChatPanel = memo(function ChatPanel({
   useEffect(() => {
     const handleConversationSearchShortcut = (event: KeyboardEvent) => {
       if (
+        shortcutAuthority.shortcutIds?.includes('conversation-search') &&
         conversationSearchScopeId &&
         (event.metaKey || event.ctrlKey) &&
         event.key.toLowerCase() === 'f'
@@ -968,7 +971,7 @@ export const ChatPanel = memo(function ChatPanel({
     window.addEventListener('keydown', handleConversationSearchShortcut);
     return () =>
       window.removeEventListener('keydown', handleConversationSearchShortcut);
-  }, [conversationSearchScopeId]);
+  }, [conversationSearchScopeId, shortcutAuthority]);
 
   useEffect(() => {
     if (!retryDispatchLockRef.current) return;
@@ -2000,6 +2003,7 @@ const AgentSuggestionChips = memo(function AgentSuggestionChips({
   onSelect: (suggestion: string) => void;
 }) {
   const { t } = useI18n();
+
   return (
     <section
       className="agent-suggestion-list"
@@ -2140,6 +2144,8 @@ function ChatComposer({
   voiceSessionOperations,
 }: ChatComposerProps) {
   const { t } = useI18n();
+  const shortcutAuthority = useDesktopRendererAuthorityV2();
+  const shortcutEnabled = (id: string) => shortcutAuthority.shortcutIds?.includes(id) === true;
   const { showToast } = useToast();
   const [input, setInput] = useState(initialInput);
   const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
@@ -2908,8 +2914,10 @@ function ChatComposer({
               : t('chat.taskComposerPlaceholder'))
           }
           onKeyDown={(event) => {
+            if (event.key === 'Enter' && event.shiftKey && !shortcutEnabled('composer-newline')) { event.preventDefault(); return; }
             if (
               event.key === 'Enter' &&
+              shortcutEnabled(event.metaKey || event.ctrlKey ? 'composer-modifier-send' : 'composer-send') &&
               !event.shiftKey &&
               !event.nativeEvent.isComposing &&
               canSubmit &&
@@ -3234,6 +3242,7 @@ const ComposeAheadQueue = memo(function ComposeAheadQueue({
   scope: string | null;
 }) {
   const { t } = useI18n();
+
   const dragPromptIdRef = useRef<string | null>(null);
   if (!scope) return null;
   return (

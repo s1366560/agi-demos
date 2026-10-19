@@ -396,7 +396,9 @@ test('notification preference i18n keys exist in both dictionaries', () => {
 
 
 test('settings window applies the saved light and dark appearance to its own Radix theme', () => {
-  const { SettingsWindow } = require('/tmp/agistack-desktop-test-dist/src/features/settings/SettingsWindow.js');
+  const { DesktopRendererAuthorityContextV2 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererAuthorityStateV2.js');
+  const { SettingsWindow: SettingsWindowView } = require('/tmp/agistack-desktop-test-dist/src/features/settings/SettingsWindow.js');
+  const SettingsWindow = (props) => React.createElement(DesktopRendererAuthorityContextV2.Provider, { value: { status: 'ready', settingsSectionIds: ['appearance'] } }, React.createElement(SettingsWindowView, props));
   const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
   const reactDom = require('react-dom');
   const createPortal = reactDom.createPortal;

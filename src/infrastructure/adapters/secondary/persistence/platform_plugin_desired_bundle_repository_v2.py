@@ -119,6 +119,42 @@ class PlatformPluginDesiredBundleSetRepositoryV2:
         model = await self._current_model(canonical_scope, for_update=False)
         return None if model is None else self._record(model)
 
+    async def list_initialized_scopes(self) -> tuple[ScopeV2, ...]:
+        """Enumerate existing owners for explicitly authorized maintenance only."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(
+                    PlatformPluginV2DesiredBundleSetModel.scope_kind,
+                    PlatformPluginV2DesiredBundleSetModel.tenant_id,
+                    PlatformPluginV2DesiredBundleSetModel.project_id,
+                    PlatformPluginV2DesiredBundleSetModel.session_id,
+                ).distinct()
+            )
+        )
+        scopes = [
+            self._validated_scope(
+                ScopeV2(
+                    kind=ScopeKindV2(kind),
+                    tenant_id=tenant,
+                    project_id=project,
+                    session_id=session,
+                )
+            )
+            for kind, tenant, project, session in result.all()
+        ]
+        return tuple(
+            sorted(
+                scopes,
+                key=lambda scope: (
+                    sum(
+                        value is not None
+                        for value in (scope.tenant_id, scope.project_id, scope.session_id)
+                    ),
+                    scope_key_v2(scope),
+                ),
+            )
+        )
+
     async def list_history(
         self,
         scope: ScopeV2,

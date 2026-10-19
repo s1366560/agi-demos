@@ -201,12 +201,11 @@ test('timeline renders the structured card as a first-class row instead of raw p
   );
 });
 
-test('artifact card exposes safe download and lazy image failure affordances', () => {
+test('artifact card exposes safe download and uses the scoped Blob image preview', () => {
   assert.match(componentSource, /download=\{card\.filename\}/);
   assert.match(componentSource, /rel="noopener noreferrer"/);
-  assert.match(componentSource, /loading="lazy"/);
-  assert.match(componentSource, /onError=/);
-  assert.match(componentSource, /artifact-timeline-preview-failed/);
+  assert.match(componentSource, /<MarkdownArtifactImage\s+src=\{card\.previewUrl\}/);
+  assert.doesNotMatch(componentSource, /<img\b|\bfetch\(/);
   assert.doesNotMatch(componentSource, /refreshArtifact|refreshUrl|openCanvas|Canvas/);
 });
 

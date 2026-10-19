@@ -31,6 +31,15 @@ pub(crate) enum WorkspaceAuthorityError {
 
 #[async_trait]
 pub(crate) trait WorkspaceAuthority: Send + Sync {
+    async fn read_agent_policy(
+        &self,
+        _user_id: &str,
+        _tenant_id: &str,
+        _project_id: &str,
+        _workspace_id: &str,
+    ) -> Result<serde_json::Value, WorkspaceAuthorityError> {
+        Err(WorkspaceAuthorityError::Unavailable)
+    }
     async fn authorize(
         &self,
         user_id: &str,
@@ -78,6 +87,59 @@ impl CoreWorkspaceAuthority {
 
 #[async_trait]
 impl WorkspaceAuthority for CoreWorkspaceAuthority {
+    async fn read_agent_policy(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+    ) -> Result<serde_json::Value, WorkspaceAuthorityError> {
+        if ![user_id, tenant_id, project_id, workspace_id]
+            .into_iter()
+            .all(valid_identifier)
+        {
+            return Err(WorkspaceAuthorityError::Unavailable);
+        }
+        let mut url =
+            url::Url::parse(&self.base_url).map_err(|_| WorkspaceAuthorityError::Unavailable)?;
+        url.path_segments_mut()
+            .map_err(|_| WorkspaceAuthorityError::Unavailable)?
+            .pop_if_empty()
+            .extend([
+                "api",
+                "v1",
+                "tenants",
+                tenant_id,
+                "projects",
+                project_id,
+                "workspaces",
+                workspace_id,
+                "agent-policy",
+            ]);
+        let response = self
+            .client
+            .get(url)
+            .bearer_auth(&self.service_token)
+            .header("X-MemStack-User-ID", user_id)
+            .header("X-MemStack-Tenant-ID", tenant_id)
+            .header("X-MemStack-Project-ID", project_id)
+            .header("X-MemStack-Workspace-ID", workspace_id)
+            .send()
+            .await
+            .map_err(|_| WorkspaceAuthorityError::Unavailable)?
+            .error_for_status()
+            .map_err(|_| WorkspaceAuthorityError::Unavailable)?
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|_| WorkspaceAuthorityError::Unavailable)?;
+        if response["tenant_id"] != tenant_id
+            || response["project_id"] != project_id
+            || response["workspace_id"] != workspace_id
+        {
+            return Err(WorkspaceAuthorityError::Unavailable);
+        }
+        Ok(response)
+    }
     async fn authorize(
         &self,
         user_id: &str,

@@ -74,6 +74,14 @@ if [[ -n "$app_dir" ]]; then
   codesign --verify --deep --strict "$app_dir"
   codesign --verify --strict "$sidecar_bin"
   codesign --verify --strict "$workspace_core_bin"
+  node "$ROOT/scripts/cua-packaging.mjs" "$app_dir/Contents/Resources/sidecar"
+else
+  cua_resources="$(find "$BUNDLE_ROOT" -type d -path '*/resources/sidecar' -print -quit)"
+  test -n "$cua_resources" || {
+    echo "desktop bundle has no unpacked CUA resources" >&2
+    exit 1
+  }
+  node "$ROOT/scripts/cua-packaging.mjs" "$cua_resources"
 fi
 
 echo "DESKTOP_BUNDLE_SMOKE_OK bundle_root=$BUNDLE_ROOT"

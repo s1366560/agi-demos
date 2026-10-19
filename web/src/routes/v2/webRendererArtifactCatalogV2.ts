@@ -11,6 +11,7 @@ import {
 import { deriveTopNavigationItems } from '../../config/navigation';
 
 import { createDefaultBusinessRouteElementsV2 } from './webDefaultBusinessRouteElementsV2';
+import { WEB_FEATURE_IDS_V2, createWebFeatureArtifactsV2 } from './webFeatureCompositionV2';
 
 import type {
   DerivedNavigationItem,
@@ -37,18 +38,35 @@ const AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = 
   }),
 ]);
 
+export interface WebFeatureAuxiliaryArtifactV2 {
+  readonly id: string;
+  readonly kind: 'command' | 'settings-page';
+  readonly featureId: string;
+}
+
+const OWNER_SLOT_KINDS_V2 = {
+  navigation: 'nav_item',
+  settings: 'settings_page',
+  conversation: 'conversation_renderer',
+  composer: 'composer_action',
+  canvas: 'mcp_canvas',
+  'tool-result': 'tool_result_renderer',
+} as const;
+
 interface WebRendererArtifactBaseV2 {
   readonly id: string;
   readonly kind: RendererContributionKindV2;
 }
 
 export interface WebRouteArtifactV2 extends WebRendererArtifactBaseV2 {
+  readonly featureId?: string;
   readonly createRouteElements: () => ReactNode;
   readonly kind: 'route';
   readonly routeKeys: readonly string[];
 }
 
 export interface WebNavigationArtifactV2 extends WebRendererArtifactBaseV2 {
+  readonly featureId?: string;
   readonly createTopNavigationItems: (
     context: TopNavigationContext,
     runtimeContext?: NavigationRuntimeContext
@@ -64,9 +82,39 @@ export interface WebUiSlotArtifactV2 extends WebRendererArtifactBaseV2 {
 export type WebRendererArtifactV2 =
   | WebRouteArtifactV2
   | WebNavigationArtifactV2
-  | WebUiSlotArtifactV2;
+  | WebUiSlotArtifactV2
+  | WebFeatureAuxiliaryArtifactV2;
 
 const WEB_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, WebRendererArtifactV2>([
+  ...WEB_FEATURE_IDS_V2.map((featureId): [string, WebRendererArtifactV2] => {
+    const id = `web.commands.${featureId}.v1`;
+    return [id, Object.freeze({ id, kind: 'command', featureId })];
+  }),
+  ...['project-memories', 'project-graph'].map((featureId): [string, WebRendererArtifactV2] => {
+    const id = `web.settings.${featureId}.v1`;
+    return [id, Object.freeze({ id, kind: 'settings-page', featureId })];
+  }),
+  ...Object.entries(OWNER_SLOT_KINDS_V2).map(([name, slot]): [string, WebRendererArtifactV2] => {
+    const id = `web.ui-slots.${name}.v1`;
+    return [
+      id,
+      defineWebUiSlotArtifactV2(id, [
+        {
+          id: name,
+          pluginId: `builtin-${name}`,
+          slot,
+          contract: name === 'tool-result' ? 'tool-result:default' : `ui-builtin:${name}`,
+          moduleRef: `builtin:web-slot-${name}`,
+          permission: `ui.${name}`,
+          sandbox: true,
+        },
+      ]),
+    ];
+  }),
+  ...createWebFeatureArtifactsV2().map((artifact): [string, WebRendererArtifactV2] => [
+    artifact.id,
+    artifact,
+  ]),
   [
     WEB_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
     defineWebUiSlotArtifactV2(

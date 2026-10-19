@@ -12,29 +12,39 @@ import inspect
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
+from src.infrastructure.agent.processor.goal_judgment import (
+    GOAL_COMPLETION_JUDGE_TOOL_V2,
+    NATIVE_CONTROL_HANDOFF_GUIDANCE,
+    GoalCheckResult,
+    GoalJudgmentAuditSinkV2,
+    GoalJudgmentAuditV2,
+    _GoalJudgmentV2,
+    _object_list,
+    build_goal_check_context,
+    extract_goal_judgment_tool_call_v2,
+    goal_completion_judgment_tool_v2,
+    log_goal_judgment_audit,
+    parse_goal_judgment,
+)
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo
-from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.agent.tools.result import ToolControlOutcome, ToolResult
 from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_CONTRACT,
     WORKSPACE_ROLE_WORKER,
     WORKSPACE_SESSION_ROLE_KEY,
 )
-from src.infrastructure.logging_redaction import redact_sensitive_log_text
 from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 if TYPE_CHECKING:
     from ..core.message import Message
 
 logger = logging.getLogger(__name__)
-audit_logger = logging.getLogger("agent_decision_audit")
 
-GOAL_COMPLETION_JUDGE_TOOL_V2 = "submit_goal_completion_judgment_v2"
 SUGGESTION_TIMEOUT_SECONDS = 5.0
 
 
@@ -42,44 +52,11 @@ class TaskStateUnavailableError(RuntimeError):
     """Raised when persisted task state cannot be verified for final gating."""
 
 
-@dataclass
-class GoalCheckResult:
-    """Result of goal completion evaluation."""
-
-    achieved: bool
-    should_stop: bool = False
-    reason: str = ""
-    source: str = "unknown"
-    pending_tasks: int = 0
-
-
-@dataclass(frozen=True, kw_only=True)
-class GoalJudgmentAuditV2:
-    """Complete audit envelope for one structured goal-completion judgment."""
-
-    agent_id: str
-    tool_name: str
-    input_json: Mapping[str, Any]
-    output_json: Mapping[str, Any]
-    rationale: str
-    latency_ms: int
-
-
-@dataclass(frozen=True, kw_only=True)
-class _GoalJudgmentV2:
-    achieved: bool
-    rationale: str
-
-
-type GoalJudgmentAuditSinkV2 = Callable[[GoalJudgmentAuditV2], None | Awaitable[None]]
-
-
 class GoalEvaluator:
     """Evaluates whether the agent's current goal is complete.
 
-    Mostly stateless -- the only mutable dependency injected per-step is
-    ``current_message`` (the assistant's latest output).  Everything else
-    is provided at construction time.
+    The processor supplies the latest assistant evidence and trusted native
+    control state, resetting the latter at the start of each run.
 
     Parameters
     ----------
@@ -101,7 +78,8 @@ class GoalEvaluator:
         self._tools = tools
         self._current_message: Message | None = None
         self._runtime_context = dict(runtime_context or {})
-        self._audit_sink = audit_sink or _log_goal_judgment_audit
+        self._audit_sink = audit_sink or log_goal_judgment_audit
+        self._native_control_outcome: ToolControlOutcome | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -114,6 +92,10 @@ class GoalEvaluator:
     def has_task_reader(self) -> bool:
         """Whether persisted task state can be queried via todoread."""
         return self._tools.get("todoread") is not None
+
+    def set_native_control_outcome(self, outcome: ToolControlOutcome | None) -> None:
+        """Bind trusted native control evidence to the current run, or reset it."""
+        self._native_control_outcome = outcome if isinstance(outcome, ToolControlOutcome) else None
 
     async def evaluate_goal_completion(
         self,
@@ -137,16 +119,40 @@ class GoalEvaluator:
                     source="tasks",
                 )
             if tasks:
-                task_result = self._evaluate_task_goal(tasks)
-                if task_result.achieved or task_result.should_stop:
-                    return task_result
-                reconciled_result = await self._evaluate_pending_task_goal_with_llm(
+                return await self._evaluate_loaded_task_goal(tasks, messages)
+        return await self._evaluate_llm_goal(messages)
+
+    async def _evaluate_loaded_task_goal(
+        self,
+        tasks: list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+    ) -> GoalCheckResult:
+        task_result = self._evaluate_task_goal(tasks)
+        if self._native_control_outcome is ToolControlOutcome.USER_STOPPED:
+            failed_count = self._summarize_task_counts(tasks)["failed"]
+            if failed_count:
+                return GoalCheckResult(
+                    achieved=False,
+                    should_stop=True,
+                    reason=f"{failed_count} task(s) failed",
+                    source="tasks",
+                )
+            return await self._evaluate_llm_goal(
+                messages,
+                context_summary=self._build_pending_task_goal_check_context(
                     tasks,
                     task_result,
                     messages,
-                )
-                return reconciled_result if reconciled_result is not None else task_result
-        return await self._evaluate_llm_goal(messages)
+                ),
+            )
+        if task_result.achieved or task_result.should_stop:
+            return task_result
+        reconciled_result = await self._evaluate_pending_task_goal_with_llm(
+            tasks,
+            task_result,
+            messages,
+        )
+        return reconciled_result if reconciled_result is not None else task_result
 
     async def evaluate_task_completion_gate(self, session_id: str) -> GoalCheckResult | None:
         """Evaluate only persisted task state for a final completion gate."""
@@ -615,12 +621,17 @@ class GoalEvaluator:
             source="llm_task_reconciliation",
         )
 
-    async def _evaluate_llm_goal(self, messages: list[dict[str, Any]]) -> GoalCheckResult:
+    async def _evaluate_llm_goal(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        context_summary: str | None = None,
+    ) -> GoalCheckResult:
         """Evaluate completion through one required structured Agent tool call."""
         if self._llm_client is None:
             return self._goal_judge_unavailable_result()
 
-        context_summary = self._build_goal_check_context(messages)
+        context_summary = context_summary or self._build_goal_check_context(messages)
         if not context_summary:
             return self._goal_judge_unavailable_result()
 
@@ -629,8 +640,9 @@ class GoalEvaluator:
             return self._goal_judge_unavailable_result()
         return GoalCheckResult(
             achieved=judgment.achieved,
+            control_handoff=judgment.control_handoff,
             reason=judgment.rationale,
-            source="llm_self_check",
+            source="native_control_handoff" if judgment.control_handoff else "llm_self_check",
         )
 
     @staticmethod
@@ -644,7 +656,10 @@ class GoalEvaluator:
 
     async def _call_goal_check_llm(self, context_summary: str) -> _GoalJudgmentV2 | None:
         """Require and audit one structured goal-completion judgment tool call."""
+        allow_handoff = self._native_control_outcome is ToolControlOutcome.USER_STOPPED
         input_json = {"context_summary": context_summary}
+        if allow_handoff:
+            input_json["native_control_outcome"] = ToolControlOutcome.USER_STOPPED.value
         started_at = time.perf_counter()
         # Retry only this structured judge; never ask the main Agent to repair it.
         max_tokens = 192
@@ -665,6 +680,7 @@ class GoalEvaluator:
                                 f"{GOAL_COMPLETION_JUDGE_TOOL_V2} exactly once. "
                                 "Use goal_achieved=true only when the user objective is fully "
                                 "satisfied. Do not return a prose or JSON verdict outside the tool call."
+                                + (NATIVE_CONTROL_HANDOFF_GUIDANCE if allow_handoff else "")
                             ),
                         },
                         {
@@ -672,7 +688,7 @@ class GoalEvaluator:
                             "content": json.dumps(input_json, ensure_ascii=False, sort_keys=True),
                         },
                     ],
-                    tools=[_goal_completion_judgment_tool_v2()],
+                    tools=[goal_completion_judgment_tool_v2(allow_handoff=allow_handoff)],
                     tool_choice={
                         "type": "function",
                         "function": {"name": GOAL_COMPLETION_JUDGE_TOOL_V2},
@@ -696,7 +712,7 @@ class GoalEvaluator:
             # one larger, bounded retry; the structured verdict remains mandatory.
             if response.get("finish_reason") == "length":
                 max_tokens = 4096
-            output_json = _extract_goal_judgment_tool_call_v2(response)
+            output_json = extract_goal_judgment_tool_call_v2(response)
             if output_json is None:
                 logger.warning(
                     "[GoalEvaluator] Structured goal judgment omitted the required tool call "
@@ -709,38 +725,25 @@ class GoalEvaluator:
                     len(_object_list(response.get("tool_calls"))),
                 )
                 continue
-            if set(output_json) != {"goal_achieved", "rationale"}:
+            judgment = parse_goal_judgment(output_json, allow_handoff=allow_handoff)
+            if judgment is None:
                 logger.warning(
                     "[GoalEvaluator] Structured goal judgment returned invalid arguments"
                 )
                 continue
-            achieved = output_json.get("goal_achieved")
-            rationale = output_json.get("rationale")
-            if (
-                not isinstance(achieved, bool)
-                or not isinstance(rationale, str)
-                or not rationale.strip()
-            ):
-                logger.warning(
-                    "[GoalEvaluator] Structured goal judgment returned invalid arguments"
-                )
-                continue
-            normalized_output = {
-                "goal_achieved": achieved,
-                "rationale": rationale.strip(),
-            }
+            normalized_output = {**output_json, "rationale": judgment.rationale}
             audit = GoalJudgmentAuditV2(
                 agent_id=self._goal_judge_agent_id(),
                 tool_name=GOAL_COMPLETION_JUDGE_TOOL_V2,
                 input_json=input_json,
                 output_json=normalized_output,
-                rationale=rationale.strip(),
+                rationale=judgment.rationale,
                 latency_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
             )
             audit_result = self._audit_sink(audit)
             if inspect.isawaitable(audit_result):
                 await audit_result
-            return _GoalJudgmentV2(achieved=achieved, rationale=rationale.strip())
+            return judgment
         return None
 
     def _goal_judge_agent_id(self) -> str:
@@ -787,119 +790,8 @@ class GoalEvaluator:
         return "\n".join(lines)
 
     def _build_goal_check_context(self, messages: list[dict[str, Any]]) -> str:
-        """Build a compact context summary for the structured goal judge."""
-        summary_lines: list[str] = []
-        if self._runtime_context.get("effective_mode") == "plan":
-            summary_lines.append(
-                "Plan mode is active. Judge whether the requested planning and analysis "
-                "are complete and ready for user approval. Execution tasks remain pending "
-                "until approval; do not require their execution or completed statuses."
-            )
-        recent_messages = messages[-8:] if len(messages) > 8 else messages
-        for msg in recent_messages:
-            role = str(msg.get("role", "unknown"))
-            content = msg.get("content", "")
-
-            if isinstance(content, list):
-                text_chunks = []
-                for part in content:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        text_chunks.append(str(part.get("text", "")))
-                content_text = " ".join(chunk for chunk in text_chunks if chunk).strip()
-            elif isinstance(content, str):
-                content_text = content.strip()
-            else:
-                content_text = str(content).strip() if content else ""
-
-            if content_text:
-                summary_lines.append(f"{role}: {content_text[:400]}")
-
-        if self._current_message:
-            latest_text = self._current_message.get_full_text().strip()
-            if latest_text:
-                summary_lines.append(f"assistant_latest: {latest_text[:400]}")
-
-        return "\n".join(summary_lines)
-
-
-def _goal_completion_judgment_tool_v2() -> dict[str, Any]:
-    return {
-        "type": "function",
-        "function": {
-            "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
-            "description": "Submit one auditable judgment of whether the user goal is complete.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "goal_achieved": {"type": "boolean"},
-                    "rationale": {"type": "string", "minLength": 1},
-                },
-                "required": ["goal_achieved", "rationale"],
-                "additionalProperties": False,
-            },
-        },
-    }
-
-
-def _extract_goal_judgment_tool_call_v2(
-    response: Mapping[str, object],
-) -> dict[str, Any] | None:
-    tool_calls = _object_list(response.get("tool_calls"))
-    if not tool_calls:
-        choices = _object_list(response.get("choices"))
-        choice = _object_mapping(choices[0]) if choices else None
-        message = _object_mapping(choice.get("message")) if choice else None
-        tool_calls = _object_list(message.get("tool_calls")) if message else []
-    if len(tool_calls) != 1:
-        return None
-    call = _object_mapping(tool_calls[0])
-    function = _object_mapping(call.get("function")) if call else None
-    if (
-        call is None
-        or call.get("type") != "function"
-        or function is None
-        or function.get("name") != GOAL_COMPLETION_JUDGE_TOOL_V2
-    ):
-        return None
-    arguments = function.get("arguments")
-    mapping = _object_mapping(arguments)
-    if mapping is None and isinstance(arguments, str):
-        try:
-            mapping = _object_mapping(json.loads(arguments))
-        except json.JSONDecodeError:
-            mapping = None
-    if mapping is None:
-        return None
-    return dict(mapping) or None
-
-
-def _object_list(value: object) -> list[object]:
-    return list(value) if isinstance(value, list) else []
-
-
-def _object_mapping(value: object) -> Mapping[str, object] | None:
-    if not isinstance(value, dict):
-        return None
-    if not all(isinstance(key, str) for key in value):
-        return None
-    return value
-
-
-def _log_goal_judgment_audit(audit: GoalJudgmentAuditV2) -> None:
-    audit_logger.info(
-        "Goal completion judgment completed",
-        extra={
-            "agent_id": audit.agent_id,
-            "tool_name": audit.tool_name,
-            "input": _redacted_audit_json(audit.input_json),
-            "output": _redacted_audit_json(audit.output_json),
-            "rationale": redact_sensitive_log_text(audit.rationale),
-            "latency_ms": audit.latency_ms,
-        },
-    )
-
-
-def _redacted_audit_json(value: Mapping[str, Any]) -> str:
-    return redact_sensitive_log_text(
-        json.dumps(dict(value), ensure_ascii=False, sort_keys=True, default=str)
-    )
+        return build_goal_check_context(
+            messages,
+            latest_text=self._current_message.get_full_text() if self._current_message else "",
+            plan_mode=self._runtime_context.get("effective_mode") == "plan",
+        )

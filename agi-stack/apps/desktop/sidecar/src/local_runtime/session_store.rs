@@ -33,7 +33,7 @@ use super::{
     ConversationRunMode, LlmRouteTarget, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 28;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 30;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
@@ -119,6 +119,7 @@ pub(super) enum HitlResponseCommitOutcome {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum HitlResponseCommitError {
     NotFound,
+    RunNotWaiting,
     AuthorityConflict {
         expected_revision: u64,
         authority_revision: u64,
@@ -758,6 +759,7 @@ impl DesktopSessionStore {
         super::execution_selection::initialize_schema(&connection)?;
         super::search_projection::initialize_schema(&connection)?;
         crate::local_plugin_installations_v2::initialize(&connection)?;
+        super::computer_use_v2::migrate_schema(&connection)?;
         connection
             .pragma_update(None, "user_version", DESKTOP_SESSION_SCHEMA_VERSION)
             .map_err(|error| error.to_string())?;
@@ -1111,7 +1113,21 @@ impl DesktopSessionStore {
                      ORDER BY created_at DESC, id DESC",
                 )
                 .map_err(|error| error.to_string())?;
-            typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))?
+            let requests: Vec<DesktopHitlRequest> = typed_rows(
+                statement.query_map([conversation_id], |row| row.get::<_, String>(0)),
+            )?;
+            // Keep unanswered requests as history, without offering an action
+            // after their authoritative run has ended.
+            requests
+                .into_iter()
+                .filter(|request| {
+                    request.run_id.as_ref().is_none_or(|run_id| {
+                        run_history
+                            .iter()
+                            .any(|run| &run.id == run_id && !run.status.is_terminal())
+                    })
+                })
+                .collect()
         };
         let artifact_versions: Vec<DesktopArtifactVersion> = {
             let mut statement = transaction
@@ -3634,6 +3650,19 @@ impl DesktopSessionStore {
             return Err(HitlResponseCommitError::AlreadyAnswered {
                 authority_revision: request.authority_revision,
             });
+        }
+        if let Some(run_id) = request.run_id.as_deref() {
+            let run = query_run(&transaction, run_id)
+                .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
+            if !run.is_some_and(|run| {
+                run.conversation_id == request.conversation_id
+                    && matches!(
+                        run.status,
+                        DesktopRunStatus::NeedsInput | DesktopRunStatus::NeedsApproval
+                    )
+            }) {
+                return Err(HitlResponseCommitError::RunNotWaiting);
+            }
         }
         if response.expected_authority_revision != request.authority_revision {
             return Err(HitlResponseCommitError::AuthorityConflict {

@@ -15,10 +15,11 @@ import {
 import { validateWebRendererContributionsV2 } from '../routes/v2/webRendererArtifactCatalogV2';
 import { kernelHttpClient } from '../services/client/kernelHttpClient';
 import { useAuthStore } from '../stores/auth';
-import { useTenantStore } from '../stores/tenant';
 import { useProjectStore } from '../stores/project';
-import { WebOperationAdmissionV2, installWebOperationAdmissionV2 } from './webOperationAdmissionV2';
+import { useTenantStore } from '../stores/tenant';
 import { logger } from '../utils/logger';
+
+import { WebOperationAdmissionV2, installWebOperationAdmissionV2 } from './webOperationAdmissionV2';
 import { WebPublicViewIdentityV2 } from './webPublicViewIdentityV2';
 
 const POLL_INTERVAL_MS = 30_000;
@@ -38,18 +39,27 @@ const identityLifecycle = new WebPublicViewIdentityV2(
   webRendererRuntimeV2,
   webRendererStatusStoreV2,
   (ready) => operationAdmission?.setEnabled(ready),
-  (error) => logger.error('Failed to close plugin generation', error)
+  (error) => {
+    logger.error('Failed to close plugin generation', error);
+  }
 );
 
 function refreshIdentity(): void {
+  const tenantId = useTenantStore.getState().currentTenant?.id;
+  const project = useProjectStore.getState().currentProject;
+  const projectId = project && project.tenant_id === tenantId ? project.id : undefined;
   void identityLifecycle.replace(
     hostEnabled && useAuthStore.getState().isAuthenticated
-      ? fetchWebPluginDistributionV2
+      ? (signal) => fetchWebPluginDistributionV2(signal, tenantId, projectId)
       : undefined
   );
 }
 
 export type WebPluginDistributionSourceV2 = (signal: AbortSignal) => Promise<unknown | null>;
+
+export function refreshWebPluginGenerationV2(): Promise<void> {
+  return identityLifecycle.refresh();
+}
 
 export function activateWebPluginGenerationRootV2(): void {
   webRendererLeaseStoreV2.activateRoot();
@@ -160,6 +170,16 @@ export function useRendererGenerationLeaseV2(
   return snapshot.generation;
 }
 
-async function fetchWebPluginDistributionV2(signal: AbortSignal): Promise<unknown | null> {
-  return kernelHttpClient.get<unknown>('/platform-plugins/v2/web-view', { signal });
+export async function fetchWebPluginDistributionV2(
+  signal: AbortSignal,
+  tenantId?: string,
+  projectId?: string
+): Promise<unknown | null> {
+  return kernelHttpClient.get('/platform-plugins/v2/web-view', {
+    signal,
+    params: {
+      ...(tenantId ? { tenant_id: tenantId } : {}),
+      ...(tenantId && projectId ? { project_id: projectId } : {}),
+    },
+  });
 }

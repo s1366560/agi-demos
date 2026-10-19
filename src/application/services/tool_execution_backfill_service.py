@@ -214,15 +214,11 @@ class ToolExecutionBackfillService:
         return any(
             (
                 bool(not existing.tool_input and draft.tool_input),
-                bool(
-                    draft.started_at
-                    and draft.started_at < existing.started_at
-                ),
+                bool(draft.started_at and draft.started_at < existing.started_at),
                 bool(
                     draft.completed_at
                     and (
-                        existing.completed_at is None
-                        or draft.completed_at > existing.completed_at
+                        existing.completed_at is None or draft.completed_at > existing.completed_at
                     )
                 ),
                 draft.duration_ms is not None and existing.duration_ms is None,
@@ -304,8 +300,15 @@ def _apply_event_to_draft(
         draft.error = _sanitize_text(str(payload.get("error") or "Tool execution failed"))
         return
 
-    draft.status = ToolExecutionStatus.SUCCESS.value
-    draft.tool_output = _serialize_tool_result(payload.get("result"))
+    draft.status = (
+        ToolExecutionStatus.CANCELLED.value
+        if payload.get("control_outcome") in ("user_paused", "user_stopped")
+        else ToolExecutionStatus.SUCCESS.value
+    )
+    result = payload.get("result")
+    if draft.status == ToolExecutionStatus.CANCELLED.value and isinstance(result, dict):
+        result = result.get("output", result)
+    draft.tool_output = _serialize_tool_result(result)
     draft.error = None
 
 
@@ -354,7 +357,11 @@ def _serialize_tool_result(result: object) -> str:
 
 def _is_failed_tool_observation(event_data: Mapping[str, Any]) -> bool:
     status = str(event_data.get("status") or "").lower()
-    return bool(event_data.get("error")) or status in {"error", "failed", "failure"}
+    return bool(event_data.get("error") or event_data.get("is_error")) or status in {
+        "error",
+        "failed",
+        "failure",
+    }
 
 
 def _sanitize_text(value: str) -> str:

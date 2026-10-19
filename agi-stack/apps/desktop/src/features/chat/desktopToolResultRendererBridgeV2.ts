@@ -1,6 +1,9 @@
-import type { ToolCallPresentationKind } from './chatTimelineModel';
+import type { ToolResultPresentationV2 } from "@agistack/plugin-slots";
+import { projectToolResultPresentationV2 } from "./toolResultPresentationV2";
+import type { ToolCallPresentationKind } from "./chatTimelineModel";
+import type { ToolResultStatus } from "./toolResultStatus";
 
-export type DesktopToolResultRendererStatusV2 = 'complete' | 'failed';
+export type DesktopToolResultRendererStatusV2 = ToolResultStatus;
 
 export interface DesktopToolResultRendererPayloadV2 {
   readonly schemaVersion: 1;
@@ -11,6 +14,17 @@ export interface DesktopToolResultRendererPayloadV2 {
   readonly resultLabel: string;
   readonly kindLabel: string;
   readonly statusLabel: string;
+  readonly presentation?: ToolResultPresentationV2;
+  readonly computerUsePreview?: Readonly<{
+    artifactId: string;
+    mimeType: string;
+    bytes: Uint8Array;
+  }>;
+  readonly computerUseAppIcon?: Readonly<{
+    artifactId: string;
+    mimeType: string;
+    bytes: Uint8Array;
+  }>;
 }
 
 export interface CreateDesktopToolResultRendererPayloadV2 {
@@ -21,28 +35,29 @@ export interface CreateDesktopToolResultRendererPayloadV2 {
   readonly resultLabel: string;
   readonly kindLabel: string;
   readonly statusLabel: string;
+  readonly presentation?: ToolResultPresentationV2;
 }
 
 type SlotHostMessageV2 =
-  | Readonly<{ type: 'slot:init'; slotId: string; payload?: unknown }>
+  | Readonly<{ type: "slot:init"; slotId: string; payload?: unknown }>
   | Readonly<{
-      type: 'slot:event';
+      type: "slot:event";
       slotId: string;
       name: string;
       data?: unknown;
     }>
-  | Readonly<{ type: 'slot:dispose'; slotId: string }>;
+  | Readonly<{ type: "slot:dispose"; slotId: string }>;
 
 type SlotGuestMessageV2 =
-  | Readonly<{ type: 'slot:ready'; slotId: string }>
-  | Readonly<{ type: 'slot:resize'; slotId: string; height: number }>
+  | Readonly<{ type: "slot:ready"; slotId: string }>
+  | Readonly<{ type: "slot:resize"; slotId: string; height: number }>
   | Readonly<{
-      type: 'slot:action';
+      type: "slot:action";
       slotId: string;
       name: string;
       data?: unknown;
     }>
-  | Readonly<{ type: 'slot:error'; slotId: string; message: string }>;
+  | Readonly<{ type: "slot:error"; slotId: string; message: string }>;
 
 type SlotProtocolMessageV2 = SlotHostMessageV2 | SlotGuestMessageV2;
 
@@ -74,28 +89,29 @@ export interface DesktopToolResultRendererBridgeOptionsV2 {
   readonly slotId: string;
 }
 
-const MAX_FRAME_HEIGHT_V2 = 160;
+const MAX_FRAME_HEIGHT_V2 = 640;
 const TOOL_RESULT_KINDS_V2 = new Set<ToolCallPresentationKind>([
-  'search',
-  'read',
-  'command',
-  'edit',
-  'check',
-  'tool',
+  "search",
+  "read",
+  "command",
+  "edit",
+  "check",
+  "computer_use",
+  "tool",
 ]);
 
 export function createDesktopToolResultRendererPayloadV2(
   input: CreateDesktopToolResultRendererPayloadV2,
 ): DesktopToolResultRendererPayloadV2 {
-  const resultId = requiredTextV2(input.resultId, 'result_id');
-  const resultLabel = requiredTextV2(input.resultLabel, 'result_label');
-  const kindLabel = requiredTextV2(input.kindLabel, 'kind_label');
-  const statusLabel = requiredTextV2(input.statusLabel, 'status_label');
+  const resultId = requiredTextV2(input.resultId, "result_id");
+  const resultLabel = requiredTextV2(input.resultLabel, "result_label");
+  const kindLabel = requiredTextV2(input.kindLabel, "kind_label");
+  const statusLabel = requiredTextV2(input.statusLabel, "status_label");
   if (!TOOL_RESULT_KINDS_V2.has(input.kind)) {
-    throw new Error('desktop_tool_result_renderer_kind_invalid');
+    throw new Error("desktop_tool_result_renderer_kind_invalid");
   }
-  if (input.status !== 'complete' && input.status !== 'failed') {
-    throw new Error('desktop_tool_result_renderer_status_invalid');
+  if (!["complete", "failed", "paused", "stopped"].includes(input.status)) {
+    throw new Error("desktop_tool_result_renderer_status_invalid");
   }
   return Object.freeze({
     schemaVersion: 1,
@@ -106,6 +122,11 @@ export function createDesktopToolResultRendererPayloadV2(
     resultLabel,
     kindLabel,
     statusLabel,
+    ...(input.presentation
+      ? {
+          presentation: projectToolResultPresentationV2(input.presentation, ""),
+        }
+      : {}),
   });
 }
 
@@ -114,32 +135,43 @@ export class DesktopToolResultRendererBridgeV2 {
   private payload: DesktopToolResultRendererPayloadV2;
   private ready = false;
 
-  constructor(private readonly options: DesktopToolResultRendererBridgeOptionsV2) {
+  constructor(
+    private readonly options: DesktopToolResultRendererBridgeOptionsV2,
+  ) {
     this.payload = options.payload;
   }
 
   handleMessage(event: DesktopToolResultRendererMessageEventV2): boolean {
-    if (this.disposed || event.source !== this.options.frameWindow || event.origin !== 'null') {
+    if (
+      this.disposed ||
+      event.source !== this.options.frameWindow ||
+      event.origin !== "null"
+    ) {
       return false;
     }
     const message = this.options.protocol.decode(event.data);
-    if (message === null || !this.options.protocol.isGuestForSlot(message, this.options.slotId)) {
+    if (
+      message === null ||
+      !this.options.protocol.isGuestForSlot(message, this.options.slotId)
+    ) {
       return false;
     }
     switch (message.type) {
-      case 'slot:ready':
+      case "slot:ready":
         this.activate();
         return true;
-      case 'slot:resize':
+      case "slot:resize":
         if (Number.isFinite(message.height) && message.height > 0) {
-          this.options.onResize(Math.min(Math.round(message.height), MAX_FRAME_HEIGHT_V2));
+          this.options.onResize(
+            Math.min(Math.round(message.height), MAX_FRAME_HEIGHT_V2),
+          );
         }
         return true;
-      case 'slot:action':
-        this.options.onError('desktop_tool_result_renderer_action_rejected');
+      case "slot:action":
+        this.options.onError("desktop_tool_result_renderer_action_rejected");
         return true;
-      case 'slot:error':
-        this.options.onError('desktop_tool_result_renderer_guest_error');
+      case "slot:error":
+        this.options.onError("desktop_tool_result_renderer_guest_error");
         return true;
     }
   }
@@ -148,7 +180,7 @@ export class DesktopToolResultRendererBridgeV2 {
     if (this.disposed || this.ready) return;
     this.ready = true;
     this.post({
-      type: 'slot:init',
+      type: "slot:init",
       slotId: this.options.slotId,
       payload: this.payload,
     });
@@ -159,9 +191,9 @@ export class DesktopToolResultRendererBridgeV2 {
     this.payload = payload;
     if (!this.ready) return;
     this.post({
-      type: 'slot:event',
+      type: "slot:event",
       slotId: this.options.slotId,
-      name: 'tool-result',
+      name: "tool-result",
       data: payload,
     });
   }
@@ -169,14 +201,17 @@ export class DesktopToolResultRendererBridgeV2 {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.post({ type: 'slot:dispose', slotId: this.options.slotId });
+    this.post({ type: "slot:dispose", slotId: this.options.slotId });
   }
 
   private post(message: SlotHostMessageV2): void {
     try {
-      this.options.frameWindow.postMessage(this.options.protocol.encode(message), '*');
+      this.options.frameWindow.postMessage(
+        this.options.protocol.encode(message),
+        "*",
+      );
     } catch {
-      this.options.onError('desktop_tool_result_renderer_transport_error');
+      this.options.onError("desktop_tool_result_renderer_transport_error");
     }
   }
 }

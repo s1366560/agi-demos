@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use super::{ContextV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeV2Error};
+use super::tool_policy::{TrustedToolPolicyV2, TOOL_EXECUTION_POLICY_SERVICE_V2};
 
 pub const RUST_SERVER_HOST_MODULE_REF_V2: &str = "builtin://memstack/rust-server/generation-host";
 pub const RUST_SERVER_HTTP_ROUTES_MODULE_REF_V2: &str =
@@ -27,11 +28,11 @@ pub const RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2: &str = "memstack-ru
 pub const RUST_SERVER_HTTP_ROUTE_STRATEGY_V2: &str = "axum-host-router";
 
 const RUST_SERVER_HOST_CONTRACT_DIGEST_V2: &str =
-    "sha256:8848f378b02460e0ba80ef8708a65e2f30f789033c7eb3ccf7d25e5460fa6e7e";
+    "sha256:554137c0be08604aa573418bde8c593934c04ef5aed8b0f0901097b7dd19f2b4";
 const RUST_SERVER_HTTP_ROUTES_CONTRACT_DIGEST_V2: &str =
     "sha256:75443a63ac79d996d7bcba1a2015ab84320702e0157897cbd62970669a79d2b2";
 const DESKTOP_SIDECAR_HOST_CONTRACT_DIGEST_V2: &str =
-    "sha256:b017f9051aba361bfd977d664f9b5ea89a752a64ac6e537422535bd7b24f4c1d";
+    "sha256:3f7d4e5046256f1821d04cd2c569104febcbc3a6caf5c73d50bfac2d1322926a";
 const DESKTOP_SIDECAR_HTTP_ROUTES_CONTRACT_DIGEST_V2: &str =
     "sha256:aca3c6333f9094d591c3be9313b7e95be51385485b551a36281cd221e440ea5d";
 
@@ -71,6 +72,10 @@ impl PluginModuleRuntimeV2 for RustServerHostModuleV2 {
                 target: "rust-server".to_owned(),
                 strategy,
             },
+        )?;
+        context.provide(
+            TOOL_EXECUTION_POLICY_SERVICE_V2,
+            TrustedToolPolicyV2::new(context.clone()),
         )?;
         Ok(())
     }
@@ -165,6 +170,10 @@ impl PluginModuleRuntimeV2 for DesktopSidecarHostModuleV2 {
                 target: "desktop-sidecar".to_owned(),
                 strategy,
             },
+        )?;
+        context.provide(
+            TOOL_EXECUTION_POLICY_SERVICE_V2,
+            TrustedToolPolicyV2::new(context.clone()),
         )?;
         Ok(())
     }

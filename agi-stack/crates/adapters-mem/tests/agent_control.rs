@@ -7,8 +7,8 @@ use agistack_adapters_mem::{FixedClock, InMemoryCheckpointStore, ScriptedLlm};
 use agistack_core::agent::react::ReActObserver;
 use agistack_core::ports::{CheckpointStore, CoreResult, LlmPort, MemoryDraft, ToolHost};
 use agistack_core::{
-    AgentAction, Episode, ReActControl, ReActEngine, Role, RunDirective, SessionState,
-    SessionStatus, SteeringInstruction, TranscriptEntry,
+    AgentAction, Episode, HitlKind, HitlRequest, ReActControl, ReActEngine, Role, RunDirective,
+    SessionState, SessionStatus, SteeringInstruction, TranscriptEntry,
 };
 use async_trait::async_trait;
 use futures::executor::block_on;
@@ -176,6 +176,100 @@ fn cancel_persists_a_terminal_checkpoint_before_any_new_round() {
         .expect("load checkpoint")
         .expect("checkpoint exists");
     assert_eq!(stored.status, SessionStatus::Cancelled);
+}
+
+#[test]
+fn cancel_awaiting_human_input_discards_pending_without_approving_or_repeating_work() {
+    let checkpoints = Arc::new(InMemoryCheckpointStore::new());
+    let tools = Arc::new(CountingToolHost {
+        calls: AtomicUsize::new(0),
+    });
+    let engine = ReActEngine::new(
+        Arc::new(ScriptedLlm::new(vec![
+            AgentAction::CallTool {
+                tool: "work".into(),
+                input_json: "{}".into(),
+            },
+            AgentAction::RequestHuman {
+                request: HitlRequest::new(
+                    "pending-approval",
+                    HitlKind::Permission,
+                    "Approve work?",
+                ),
+            },
+            AgentAction::Finish {
+                answer: "must not finish after cancellation".into(),
+            },
+        ])),
+        tools.clone(),
+        checkpoints.clone(),
+        Arc::new(FixedClock(0)),
+    );
+    let awaiting = block_on(engine.run("cancel-awaiting", "work", Some("project"))).unwrap();
+    assert_eq!(awaiting.status, SessionStatus::AwaitingInput);
+    assert_eq!(
+        awaiting.pending_hitl.as_ref().unwrap().id,
+        "pending-approval"
+    );
+    assert_eq!(tools.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(awaiting.completed_tool_calls.len(), 1);
+
+    let cancelled = block_on(engine.accept_controlled_cancel("cancel-awaiting")).unwrap();
+    assert_eq!(cancelled.status, SessionStatus::Cancelled);
+    assert!(cancelled.pending_hitl.is_none());
+    assert_eq!(
+        cancelled.completed_tool_calls,
+        awaiting.completed_tool_calls
+    );
+    assert_eq!(cancelled.transcript, awaiting.transcript);
+    assert!(cancelled.hitl_responses.is_empty());
+    assert!(cancelled.answer.is_none());
+    assert!(
+        block_on(engine.accept_human_response("cancel-awaiting", "pending-approval", "allow"))
+            .is_err()
+    );
+    assert!(block_on(engine.resume("cancel-awaiting", "pending-approval", "allow")).is_err());
+    assert!(block_on(engine.accept_controlled_resume("cancel-awaiting")).is_err());
+    assert_eq!(tools.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        block_on(checkpoints.load("cancel-awaiting"))
+            .unwrap()
+            .unwrap(),
+        cancelled
+    );
+    assert_eq!(
+        block_on(engine.accept_controlled_cancel("cancel-awaiting")).unwrap(),
+        cancelled
+    );
+}
+
+#[test]
+fn controlled_cancel_cannot_rewrite_finished_or_failed_checkpoints() {
+    let checkpoints = Arc::new(InMemoryCheckpointStore::new());
+    let engine = ReActEngine::new(
+        Arc::new(ScriptedLlm::new(vec![])),
+        Arc::new(CountingToolHost {
+            calls: AtomicUsize::new(0),
+        }),
+        checkpoints.clone(),
+        Arc::new(FixedClock(0)),
+    );
+    for status in [SessionStatus::Finished, SessionStatus::Failed] {
+        let mut state = SessionState::new("already-terminal", "work", Some("project"));
+        state.status = status;
+        state.answer = Some("existing terminal result".into());
+        block_on(checkpoints.save(&state)).unwrap();
+        assert!(
+            block_on(engine.accept_controlled_cancel("already-terminal")).is_err(),
+            "{status:?}"
+        );
+        assert_eq!(
+            block_on(checkpoints.load("already-terminal"))
+                .unwrap()
+                .unwrap(),
+            state
+        );
+    }
 }
 
 #[test]

@@ -1,3 +1,4 @@
+import { useDesktopUiSlotsV2 } from './desktopRendererAuthorityStateV2';
 import type { ComponentProps } from 'react';
 
 import { WorkspaceReviewPanel } from '../features/session/WorkspaceReviewPanel';
@@ -55,8 +56,12 @@ export function DesktopSessionCanvasSurfaceV2({
   controls,
   input,
 }: DesktopSessionCanvasSurfacePropsV2) {
+  const panels = useDesktopUiSlotsV2('work_panel');
+  const enabledPanelIds = panels.filter((panel) => panel.grantedPermissions.includes(panel.permission)).map((panel) => panel.id);
+  if (!enabledPanelIds.includes(input.state.activeTab)) return null;
   return (
     <WorkspaceReviewPanel
+      enabledPanelIds={enabledPanelIds}
       {...input.state}
       {...input.meta}
       {...input.actions}

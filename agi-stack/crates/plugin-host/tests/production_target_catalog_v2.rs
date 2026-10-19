@@ -50,6 +50,13 @@ fn refresh_snapshot_digest(snapshot: &mut Value) {
 fn mutated_bootstrap_snapshot(mutate: impl FnOnce(&mut Value)) -> ProfileSnapshotV2 {
     let mut snapshot: Value =
         serde_json::from_str(BOOTSTRAP).expect("bootstrap profile must parse");
+    // These tests isolate the host/routes contract. The native CUA implementation
+    // belongs to the sidecar and is validated by that application's tests.
+    for entry in snapshot["entries"].as_array_mut().expect("profile entries") {
+        if entry["module_ref"] == "builtin://memstack/computer-use/native" {
+            entry["enabled"] = json!(false);
+        }
+    }
     mutate(&mut snapshot);
     refresh_snapshot_digest(&mut snapshot);
     parse_profile_snapshot_v2(&snapshot.to_string()).expect("mutated profile must parse")
@@ -170,19 +177,29 @@ fn generated_rust_server_catalog_activates_the_production_host_module() {
 }
 
 #[test]
-fn generated_desktop_sidecar_catalog_activates_the_local_capability_module() {
+fn generated_desktop_sidecar_catalog_requires_the_native_computer_use_module() {
     block_on(async {
         let snapshot = parse_profile_snapshot_v2(BOOTSTRAP).expect("bootstrap profile must parse");
-        let generation = LoaderV2::for_target(
-            DataPlaneTargetV2::DesktopSidecar,
-            [
-                desktop_sidecar_host_definition_v2(),
-                desktop_sidecar_http_routes_definition_v2(),
-            ],
+        let error = stage_error(
+            desktop_loader_with(desktop_sidecar_http_routes_definition_v2()),
+            snapshot,
         )
-        .stage(snapshot)
-        .await
-        .expect("desktop sidecar target must activate");
+        .await;
+        assert_eq!(
+            error,
+            RuntimeV2Error::MissingModuleDefinition("builtin://memstack/computer-use/native".into())
+        );
+    });
+}
+
+#[test]
+fn desktop_host_catalog_activates_the_local_capability_module() {
+    block_on(async {
+        let snapshot = mutated_bootstrap_snapshot(|_| {});
+        let generation = desktop_loader_with(desktop_sidecar_http_routes_definition_v2())
+            .stage(snapshot)
+            .await
+            .expect("desktop host and route modules must activate");
 
         let descriptor = generation
             .resolve::<TargetHostDescriptorV2>(DESKTOP_SIDECAR_HOST_SERVICE_V2, &root_scope(), None)
@@ -246,7 +263,7 @@ fn desktop_host_rejects_an_inject_without_a_provider_entry() {
 #[test]
 fn desktop_host_rejects_a_route_provider_with_the_wrong_concrete_type() {
     block_on(async {
-        let snapshot = parse_profile_snapshot_v2(BOOTSTRAP).expect("bootstrap profile must parse");
+        let snapshot = mutated_bootstrap_snapshot(|_| {});
         let routes = desktop_routes_definition(&snapshot, Arc::new(WrongTypeDesktopHttpRoutes));
         let error = stage_error(desktop_loader_with(routes), snapshot).await;
 
@@ -257,7 +274,7 @@ fn desktop_host_rejects_a_route_provider_with_the_wrong_concrete_type() {
 #[test]
 fn desktop_host_rejects_an_unknown_route_contribution_id() {
     block_on(async {
-        let snapshot = parse_profile_snapshot_v2(BOOTSTRAP).expect("bootstrap profile must parse");
+        let snapshot = mutated_bootstrap_snapshot(|_| {});
         let routes = desktop_routes_definition(
             &snapshot,
             Arc::new(CustomDesktopHttpRoutes {
@@ -279,7 +296,7 @@ fn desktop_host_rejects_an_unknown_route_contribution_id() {
 #[test]
 fn desktop_host_rejects_an_incompatible_route_strategy() {
     block_on(async {
-        let snapshot = parse_profile_snapshot_v2(BOOTSTRAP).expect("bootstrap profile must parse");
+        let snapshot = mutated_bootstrap_snapshot(|_| {});
         let routes = desktop_routes_definition(
             &snapshot,
             Arc::new(CustomDesktopHttpRoutes {

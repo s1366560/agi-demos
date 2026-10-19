@@ -9,10 +9,11 @@
 //! port names a concrete runtime.
 
 pub mod legacy_memory;
+pub use crate::tool_control::ToolControlOutcome;
 pub use crate::tool_definition::ToolDefinition;
 use async_trait::async_trait;
 
-use crate::agent::types::{AgentAction, SessionState, TranscriptEntry};
+use crate::agent::types::{AgentAction, MediaAttachment, SessionState, TranscriptEntry};
 use crate::model::{
     Entity, Episode, GraphEntity, GraphExport, GraphStats, GraphStatsScope, Memory, Relationship,
     Subgraph,
@@ -35,6 +36,12 @@ pub enum CoreError {
     Storage(String),
     #[error("tool error: {0}")]
     Tool(String),
+    /// A native helper acknowledged interruption; the owning host verifies user intent.
+    #[error("native control interrupted")]
+    NativeControlInterrupted,
+    /// Already formatted, policy-approved failure text delivered to observers.
+    #[error("{0}")]
+    ToolObservation(String),
     #[error("vector index error: {0}")]
     Vector(String),
     #[error("graph store error: {0}")]
@@ -137,6 +144,11 @@ pub trait LlmPort: Send + Sync {
         transcript: &[TranscriptEntry],
         tools: &[ToolDefinition],
     ) -> CoreResult<AgentAction> {
+        if transcript.iter().any(|entry| !entry.media.is_empty()) {
+            return Err(CoreError::Llm(
+                "vision_unsupported: model adapter does not support image observations".into(),
+            ));
+        }
         let goal = crate::tool_definition::prompt_with_tool_definitions(goal, tools)?;
         let names = tools
             .iter()
@@ -199,6 +211,26 @@ pub trait VectorIndexPort: Send + Sync {
     async fn remove(&self, project_id: &str, id: &str) -> CoreResult<()>;
 }
 
+/// Structured host result. Only this explicit channel can attach model-visible media.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolResult {
+    pub output_json: String,
+    pub media: Vec<MediaAttachment>,
+    pub control_outcome: Option<ToolControlOutcome>,
+    pub control_generation: Option<String>,
+}
+
+impl ToolResult {
+    pub fn text(output_json: impl Into<String>) -> Self {
+        Self {
+            output_json: output_json.into(),
+            media: Vec::new(),
+            control_outcome: None,
+            control_generation: None,
+        }
+    }
+}
+
 /// Hexagonal port for **executing tools** — both trusted built-ins and sandboxed
 /// third-party/MCP capabilities. The agent loop only sees this surface; whether a
 /// call lands on a native `dyn Trait` or a WASM sandbox is the host's concern
@@ -238,6 +270,11 @@ pub trait ToolHost: Send + Sync {
     }
     /// Invoke a tool with a JSON input, returning a JSON output.
     async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String>;
+
+    /// Existing text hosts remain text-only. Never infer attachments from output JSON.
+    async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<ToolResult> {
+        self.call(tool, input_json).await.map(ToolResult::text)
+    }
 }
 
 /// Persistence for agent [`SessionState`] — the checkpoint store behind crash

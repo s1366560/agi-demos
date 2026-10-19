@@ -38,6 +38,7 @@ impl ToolHost for PlanModeToolHost {
     }
 
     async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
+        if agistack_adapters_cua::tool_effects().contains_key(tool) {return self.call_with_content(tool,input_json).await.map(|result|result.output_json);}
         if !self.accepts_tool(tool) {
             return Err(CoreError::Tool(format!(
                 "tool '{tool}' is blocked while the conversation is in plan mode"
@@ -47,5 +48,15 @@ impl ToolHost for PlanModeToolHost {
             return self.submit_plan(input_json);
         }
         self.inner.call(tool, input_json).await
+    }
+    async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<agistack_core::ports::ToolResult> {
+        if !self.accepts_tool(tool) { return Err(CoreError::Tool(format!("tool '{tool}' is blocked while the conversation is in plan mode"))); }
+        if tool == SUBMIT_PLAN_TOOL_NAME { return self.submit_plan(input_json).map(|output_json| agistack_core::ports::ToolResult::text(output_json)); }
+        if agistack_adapters_cua::tool_effects().contains_key(tool) {
+            let effect=computer_use_v2::input_effect(&*self.inner,tool,input_json)?;
+            if effect!=agistack_adapters_cua::CuaToolEffect::Read {return Err(CoreError::Tool("cua_operation_blocked_in_plan_mode".into()));}
+            return computer_use_v2::with_effect(effect,self.inner.call_with_content(tool,input_json)).await;
+        }
+        self.inner.call_with_content(tool, input_json).await
     }
 }

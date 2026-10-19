@@ -115,13 +115,19 @@ def _dependant_signature(dependant: Dependant) -> DependencySignature:
         dependant.use_cache,
         tuple(dependant.own_oauth_scopes or ()),
         tuple(dependant.parent_oauth_scopes or ()),
-        tuple(_dependant_signature(child) for child in dependant.dependencies),
+        tuple(
+            _dependant_signature(child)
+            for child in dependant.dependencies
+            if child.name not in {"_feature_db_v2", "_feature_user_v2"}
+        ),
     )
 
 
 def _walk_dependencies(dependant: Dependant) -> tuple[Dependant, ...]:
     dependencies: list[Dependant] = []
     for child in dependant.dependencies:
+        if child.name in {"_feature_db_v2", "_feature_user_v2"}:
+            continue
         dependencies.append(child)
         dependencies.extend(_walk_dependencies(child))
     return tuple(dependencies)
@@ -140,6 +146,7 @@ def _dependency_counter(app: FastAPI, *, recursive: bool) -> Counter[str]:
         calls.extend(
             getattr(dependency.call, "__name__", repr(dependency.call))
             for dependency in dependencies
+            if dependency.name not in {"_feature_db_v2", "_feature_user_v2"}
         )
     return Counter(calls)
 
@@ -236,7 +243,7 @@ def test_genes_row_is_a_complete_explicit_v2_contribution() -> None:
         assert definition.summary == legacy_route.summary
         assert definition.deprecated == legacy_route.deprecated
         assert definition.include_in_schema == legacy_route.include_in_schema
-        assert claimed_route.endpoint is legacy_route.endpoint
+        assert inspect.unwrap(claimed_route.endpoint) is legacy_route.endpoint
         assert claimed_route.response_model == legacy_route.response_model
         assert claimed_route.status_code == legacy_route.status_code
         assert claimed_route.tags == legacy_route.tags

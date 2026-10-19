@@ -144,7 +144,7 @@ test('relaxed preset auto-approves only low-risk permission requests', () => {
   );
 });
 
-test('full preset auto-approves every permission request regardless of risk', () => {
+test('full preset auto-approves ordinary tool permission requests regardless of risk', () => {
   assert.equal(autoApprovalForPermissionRequest('full', permissionRequest()), 'allow');
   assert.equal(
     autoApprovalForPermissionRequest(
@@ -157,6 +157,51 @@ test('full preset auto-approves every permission request regardless of risk', ()
     autoApprovalForPermissionRequest('full', permissionRequest({ kind: 'clarification' })),
     null,
   );
+});
+
+test('application consent always requires explicit local approval even with full access', () => {
+  for (const preset of ['default', 'relaxed', 'full']) {
+    for (const target of [
+      { kind: 'computer_app', id: 'native-pending' },
+      { kind: 'computer_app' },
+    ]) {
+      const request = permissionRequest({ decision: { target } });
+      assert.equal(autoApprovalForPermissionRequest(preset, request), null);
+      assert.equal(autoApprovalSubmission(request, preset), null);
+    }
+  }
+});
+
+test('native binding presence blocks auto-approval even when malformed or missing a decision', () => {
+  for (const native_binding of [
+    { native_request_id: 'native-pending' },
+    {},
+    null,
+    undefined,
+    [],
+    'malformed',
+  ]) {
+    for (const preset of ['relaxed', 'full']) {
+      const request = permissionRequest({ native_binding });
+      assert.equal(autoApprovalForPermissionRequest(preset, request), null);
+      assert.equal(autoApprovalSubmission(request, preset), null);
+    }
+  }
+});
+
+test('ordinary computer tool invocations retain runtime auto-approval', () => {
+  const request = permissionRequest({
+    permission: {
+      tool_name: 'computer_click',
+      risk_level: 'low',
+      description: 'A computer_app tool action with an existing application grant',
+    },
+    decision: { target: { kind: 'tool', id: 'computer_click' } },
+  });
+  for (const preset of ['relaxed', 'full']) {
+    assert.equal(autoApprovalForPermissionRequest(preset, request), 'allow');
+    assert.equal(autoApprovalSubmission(request, preset).responseData.granted, true);
+  }
 });
 
 test('auto-approval response data stays inside the permission respond contract', () => {

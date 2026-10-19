@@ -108,7 +108,7 @@ test('sidebar contribution occupies the reserved order 99 shell seam', () => {
 
   const toolResultIndex = profile.indexOf('entry_id: builtin-desktop-tool-result-renderer');
   const sidebarIndex = profile.indexOf('entry_id: builtin-desktop-sidebar-surface');
-  const routesIndex = profile.indexOf('entry_id: builtin-desktop-tenant-creation-routes');
+  const routesIndex = profile.indexOf('entry_id: builtin-desktop-feature-tenant-creation');
   assert.ok(toolResultIndex >= 0);
   assert.ok(sidebarIndex > toolResultIndex);
   assert.ok(routesIndex > sidebarIndex);

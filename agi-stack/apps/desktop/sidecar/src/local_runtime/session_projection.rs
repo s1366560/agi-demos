@@ -186,6 +186,7 @@ fn run_actions(run: Option<&DesktopRun>) -> Vec<&'static str> {
     match run.map(|run| run.status) {
         Some(DesktopRunStatus::Running) => vec!["pause", "cancel"],
         Some(DesktopRunStatus::Paused) => vec!["resume", "cancel"],
+        Some(DesktopRunStatus::NeedsInput | DesktopRunStatus::NeedsApproval) => vec!["cancel"],
         Some(DesktopRunStatus::Disconnected | DesktopRunStatus::Interrupted) => {
             vec!["reconnect", "fork", "cancel"]
         }

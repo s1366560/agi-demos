@@ -98,6 +98,14 @@ _EXPECTED_ROUTES: tuple[ExpectedRoute, ...] = (
     ("GET", "/conversations/{conversation_id}/execution-status", "get_execution_status"),
     ("POST", "/conversations/{conversation_id}/resume", "resume_execution"),
     ("GET", "/conversations/{conversation_id}/workflow-status", "get_workflow_status"),
+    (
+        "GET",
+        "/conversations/{conversation_id}/messages/{message_id}/model-requests/{attempt_id}",
+        "get_model_request_v2",
+    ),
+    ("GET", "/device/status", "device_status"),
+    ("POST", "/device/requests/{request_id}/claim", "claim_device_request"),
+    ("POST", "/device/requests/{request_id}/resume-authority", "resume_device_authority"),
     ("POST", "/templates", "create_template"),
     ("GET", "/templates", "list_templates"),
     ("GET", "/templates/{template_id}", "get_template"),
@@ -181,7 +189,11 @@ def _dependant_signature(dependant: Dependant) -> DependencySignature:
         dependant.use_cache,
         tuple(dependant.own_oauth_scopes or ()),
         tuple(dependant.parent_oauth_scopes or ()),
-        tuple(_dependant_signature(child) for child in dependant.dependencies),
+        tuple(
+            _dependant_signature(child)
+            for child in dependant.dependencies
+            if child.name not in {"_feature_db_v2", "_feature_user_v2"}
+        ),
     )
 
 
@@ -201,6 +213,7 @@ def _immediate_dependency_ids(app: FastAPI) -> list[str]:
         for route in app.router.routes
         if isinstance(route, APIRoute)
         for dependency in route.dependant.dependencies
+        if dependency.name not in {"_feature_db_v2", "_feature_user_v2"}
     ]
 
 
@@ -284,7 +297,7 @@ def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:
     definitions = subject.agent_route_definitions_v2()
     legacy = _legacy_route_map()
 
-    assert len(definitions) == 101
+    assert len(definitions) == 105
     assert tuple(_route_signature(definition) for definition in definitions) == _EXPECTED_ROUTES
     assert len(legacy) == len(definitions)
     for definition in definitions:
@@ -296,9 +309,9 @@ def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:
         assert definition.deprecated == route.deprecated
     assert Counter(definition.methods[0] for definition in definitions) == {
         "DELETE": 7,
-        "GET": 56,
+        "GET": 58,
         "PATCH": 7,
-        "POST": 26,
+        "POST": 28,
         "PUT": 5,
     }
     assert {definition.owner_entry_id for definition in definitions} == {
@@ -312,7 +325,7 @@ def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:
         f"{_PREFIX}/conversations/{{conversation_id}}/generate-title"
     ]
     assert Counter(definition.tags for definition in definitions) == {
-        ("agent",): 97,
+        ("agent",): 101,
         ("agent", "plan"): 4,
     }
     source = inspect.getsource(subject)
@@ -362,13 +375,13 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         "src.infrastructure.adapters.primary.web.agent_workflow_status_http_application_authority_v2.agent_workflow_status_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2.agent_execution_query_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.routers.agent.binding_router.agent_binding_http_application_authority_dependency_v2": 6,
-        "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 94,
+        "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 98,
         "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user_tenant": 29,
         "src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2.project_access_create_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2.project_access_query_http_application_authority_dependency_v2": 9,
         "src.infrastructure.adapters.primary.web.routers.agent.definitions_router._get_selected_definition_tenant_id": 6,
         "src.infrastructure.adapters.primary.web.workflow_pattern_application_authority_v2.workflow_pattern_application_authority_dependency_v2": 5,
-        "src.infrastructure.adapters.secondary.persistence.database.get_db": 48,
+        "src.infrastructure.adapters.secondary.persistence.database.get_db": 52,
     }
     assert claimed.v2_owned_row_ids == ("agent",)
 

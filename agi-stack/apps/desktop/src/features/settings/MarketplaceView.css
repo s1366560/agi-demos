@@ -34,7 +34,7 @@
 .marketplace-v3 input,
 .marketplace-v3 select {
   font: inherit;
-  border: 1px solid var(--border-color, #cbd5e1);
+  border: 1px solid var(--desktop-border);
   border-radius: 7px;
   padding: 8px 12px;
   color: inherit;
@@ -48,12 +48,12 @@
   cursor: not-allowed;
 }
 .marketplace-v3 button[aria-pressed="true"] {
-  color: #fff;
-  background: #2563eb;
-  border-color: #2563eb;
+  color: var(--desktop-on-accent);
+  background: var(--desktop-accent);
+  border-color: var(--desktop-accent);
 }
 .marketplace-v3 :focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--desktop-accent);
   outline-offset: 3px;
 }
 .marketplace-filters {
@@ -79,7 +79,7 @@
 .marketplace-grid article,
 .marketplace-review,
 .marketplace-v3 form {
-  border: 1px solid var(--border-color, #cbd5e1);
+  border: 1px solid var(--desktop-border);
   border-radius: 12px;
   padding: 20px;
 }
@@ -98,7 +98,7 @@
   margin: 12px 0 18px;
 }
 .marketplace-badges span {
-  background: rgba(37, 99, 235, 0.1);
+  background: var(--desktop-panel-raised);
   color: inherit;
   padding: 3px 8px;
   border-radius: 5px;
@@ -121,7 +121,7 @@
   height: 18px;
 }
 .marketplace-review {
-  border-left: 3px solid #2563eb;
+  border-left: 3px solid var(--desktop-accent);
   display: grid;
   gap: 10px;
 }
@@ -143,5 +143,5 @@
   overflow-wrap: anywhere;
 }
 .marketplace-error {
-  color: #c2410c;
+  color: var(--desktop-red);
 }

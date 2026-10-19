@@ -32,6 +32,8 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
         (definition.path, definition.methods, definition.name, definition.response_model)
         for definition in definitions
     ) == (
+        (f"{v2}/instances", ("GET",), "get_plugin_instances_v2", dict[str, Any]),
+        (f"{v2}/instances/apply", ("POST",), "apply_plugin_instances_v2", dict[str, Any]),
         (
             f"{v2}/profile-sources",
             ("POST",),
@@ -136,15 +138,17 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
         ),
     )
     assert (
-        tuple(definition.tags for definition in definitions[:15])
-        == (("Platform Plugins", "Platform Plugins V2"),) * 15
+        tuple(definition.tags for definition in definitions[:-2])
+        == (("Platform Plugins", "Platform Plugins V2"),) * (len(definitions) - 2)
     )
-    assert tuple(definition.tags for definition in definitions[15:]) == (
+    assert tuple(definition.tags for definition in definitions[-2:]) == (
         ("Platform Plugins",),
         ("Platform Plugins",),
     )
     assert all(definition.include_in_schema is False for definition in definitions[-2:])
-    assert tuple(definition.status_code for definition in definitions[:15]) == (
+    assert tuple(definition.status_code for definition in definitions[:-2]) == (
+        None,
+        None,
         None,
         None,
         None,

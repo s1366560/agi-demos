@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityLogIcon,
   ArchiveIcon,
@@ -8,13 +8,10 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
-import type {
-  AgentTimelineItem,
-  HitlType,
-  ToolDisplayData,
-  ToolFileMetadata,
-} from '../../types';
+import type { AgentTimelineItem, HitlType, ToolDisplayData, ToolFileMetadata } from '../../types';
 import { agentLifecyclePresentation } from './agentLifecyclePresentationModel';
+import { useComputerUseDevice } from '../settings/ComputerUseDeviceProvider';
+import { ComputerUseAudio } from '../settings/ComputerUseAudio';
 
 export type TimelineKind = 'user' | 'agent' | 'runtime' | 'tool' | 'artifact';
 
@@ -42,10 +39,7 @@ export function timelineHitlRequestId(item: AgentTimelineItem): string {
   return stringPayloadField(item, 'request_id') ?? '';
 }
 
-export function timelineHitlQuestion(
-  item: AgentTimelineItem,
-  t: (key: string) => string,
-): string {
+export function timelineHitlQuestion(item: AgentTimelineItem, t: (key: string) => string): string {
   if (item.question) return item.question;
   return (
     stringPayloadField(item, 'question') ??
@@ -59,7 +53,7 @@ export function timelineHitlQuestion(
 }
 
 export function timelineHitlOptions(
-  item: AgentTimelineItem,
+  item: AgentTimelineItem
 ): Array<{ value: string; label: string; description?: string }> {
   const payload = isRecord(item.payload) ? item.payload : {};
   const source = Array.isArray(item.options)
@@ -83,7 +77,7 @@ export function timelineHitlOptions(
 }
 
 export function timelineHitlFields(
-  item: AgentTimelineItem,
+  item: AgentTimelineItem
 ): Array<{ name: string; label: string; required: boolean }> {
   const payload = isRecord(item.payload) ? item.payload : {};
   const source = Array.isArray(item.fields)
@@ -132,6 +126,158 @@ export function timelineFileMetadata(item: AgentTimelineItem): ToolFileMetadata 
   const output = isRecord(item.toolOutput) ? item.toolOutput : null;
   const metadata = output?.fileMetadata ?? output?.file_metadata;
   return isRecord(metadata) ? (metadata as ToolFileMetadata) : null;
+}
+
+export type ComputerUseScreenshot = {
+  app: string;
+  dataUrl: string;
+  artifactId?: string;
+  /** Target app icon (PNG data URL) overlaid on the preview, appshot-style. */
+  icon: string;
+};
+
+/** Persisted images use owner-scoped artifact IDs; legacy previews remain readable. */
+export function timelineComputerUseScreenshot(
+  item: AgentTimelineItem
+): ComputerUseScreenshot | null {
+  const output =
+    typeof item.toolOutput === 'string'
+      ? parseJsonRecord(item.toolOutput)
+      : isRecord(item.toolOutput)
+        ? item.toolOutput
+        : null;
+  const screenshot = output && isRecord(output.screenshot) ? output.screenshot : null;
+  const dataUrl =
+    screenshot &&
+    typeof screenshot.data_url === 'string' &&
+    /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/u.test(screenshot.data_url) &&
+    screenshot.data_url.length <= 12 * 1024 * 1024
+      ? screenshot.data_url
+      : null;
+  const artifactId =
+    screenshot &&
+    typeof screenshot.artifact_id === 'string' &&
+    /^cua-image-[0-9a-f-]+$/u.test(screenshot.artifact_id)
+      ? screenshot.artifact_id
+      : undefined;
+  if (!dataUrl && !artifactId) return null;
+  const metadata = isRecord(item.computerUse) ? item.computerUse : null;
+  const app = metadata && typeof metadata.app === 'string' ? metadata.app : '';
+  const icon =
+    metadata && typeof metadata.icon === 'string' && metadata.icon.startsWith('data:image/')
+      ? metadata.icon
+      : '';
+  return {
+    app,
+    dataUrl: dataUrl ?? '',
+    icon,
+    ...(artifactId ? { artifactId } : {}),
+  };
+}
+
+export function ToolComputerUseAudioView({ item }: { item: AgentTimelineItem }) {
+  const { t } = useI18n();
+  const { client } = useComputerUseDevice();
+  const output =
+    typeof item.toolOutput === 'string'
+      ? parseJsonRecord(item.toolOutput)
+      : isRecord(item.toolOutput)
+        ? item.toolOutput
+        : null;
+  const artifacts =
+    output && Array.isArray(output.artifacts)
+      ? output.artifacts.filter(
+          (artifact): artifact is Record<string, unknown> =>
+            isRecord(artifact) &&
+            artifact.mime_type === 'audio/wav' &&
+            typeof artifact.artifact_id === 'string' &&
+            /^cua-audio-[0-9a-f-]+$/u.test(artifact.artifact_id)
+        )
+      : [];
+  return (
+    <>
+      {artifacts.map((artifact) => (
+        <ComputerUseAudio
+          key={artifact.artifact_id as string}
+          client={client}
+          artifactId={artifact.artifact_id as string}
+          label={t(
+            artifact.source === 'microphone'
+              ? 'cua.capability.microphone'
+              : artifact.source === 'mixed'
+                ? 'cua.capability.audio_mixed'
+                : 'cua.capability.system_audio'
+          )}
+        />
+      ))}
+    </>
+  );
+}
+
+export function ToolComputerUseScreenshotView({
+  screenshot,
+}: {
+  screenshot: ComputerUseScreenshot;
+}) {
+  const { t } = useI18n();
+  const { client } = useComputerUseDevice();
+  const [preview, setPreview] = useState<{ id: string; url: string } | null>(null);
+  useEffect(() => {
+    setPreview(null);
+    if (!screenshot.artifactId || !client) return;
+    const controller = new AbortController();
+    const id = screenshot.artifactId;
+    void client
+      .preview(id, controller.signal)
+      .then((url) => {
+        if (!controller.signal.aborted) setPreview({ id, url });
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [client, screenshot.artifactId]);
+  const imageUrl =
+    screenshot.dataUrl || (preview?.id === screenshot.artifactId ? preview?.url : '');
+  const label = screenshot.app || t('chat.computerScreenshot');
+  return (
+    <div className="tool-computer-screenshot">
+      <div className="tool-computer-screenshot-head">
+        {screenshot.icon ? (
+          <img
+            className="tool-computer-screenshot-appicon"
+            src={screenshot.icon}
+            alt=""
+            aria-hidden="true"
+          />
+        ) : null}
+        <span>{label}</span>
+        <em>{t('chat.computerScreenshot')}</em>
+      </div>
+      <div className="tool-computer-screenshot-frame">
+        {imageUrl ? (
+          <img src={imageUrl} alt={label} loading="lazy" />
+        ) : (
+          <span role="status">{t('cua.loading')}</span>
+        )}
+        {screenshot.icon ? (
+          <img
+            className="tool-computer-screenshot-overlay"
+            src={screenshot.icon}
+            alt=""
+            aria-hidden="true"
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function parseJsonRecord(text: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 export function timelineTitle(item: AgentTimelineItem, t: (key: string) => string): string {
@@ -263,14 +409,10 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       : t('chat.contextStatus');
   }
   if (lifecycle?.family === 'mcpApp') {
-    return item.type === 'mcp_app_registered'
-      ? t('chat.mcpAppRegistered')
-      : t('chat.mcpAppResult');
+    return item.type === 'mcp_app_registered' ? t('chat.mcpAppRegistered') : t('chat.mcpAppResult');
   }
   if (lifecycle?.family === 'memory') {
-    return item.type === 'memory_recalled'
-      ? t('chat.memoryRecalled')
-      : t('chat.memoryCaptured');
+    return item.type === 'memory_recalled' ? t('chat.memoryRecalled') : t('chat.memoryCaptured');
   }
   if (lifecycle?.family === 'sandbox') return t('chat.sandboxEvent');
   if (lifecycle?.family === 'desktop') return t('chat.desktopEvent');
@@ -302,7 +444,13 @@ export function timelineIcon(kind: TimelineKind, item: AgentTimelineItem): React
 }
 
 export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
-  if (item.isError || item.error || item.type === 'error' || agentLifecyclePresentation(item)?.isError) return true;
+  if (
+    item.isError ||
+    item.error ||
+    item.type === 'error' ||
+    agentLifecyclePresentation(item)?.isError
+  )
+    return true;
   const kind = timelineKind(item);
   if (kind === 'user' || kind === 'agent') return true;
   if (timelineHitlType(item)) return true;
@@ -344,7 +492,7 @@ export function timelineHasDetails(item: AgentTimelineItem, kind: TimelineKind):
 export function timelineSummary(
   item: AgentTimelineItem,
   kind: TimelineKind,
-  t: (key: string, values?: Record<string, string | number>) => string,
+  t: (key: string, values?: Record<string, string | number>) => string
 ): string {
   const lifecycle = agentLifecyclePresentation(item);
   if (item.localLlmUnconfigured) return t('chat.localLlmUnconfigured');
@@ -358,15 +506,19 @@ export function timelineSummary(
   if (lifecycle) {
     const progress = lifecycle.progress
       ? lifecycle.progress.current === undefined
-        ? t(`chat.${lifecycle.progress.unit}Count`, { count: lifecycle.progress.total })
+        ? t(`chat.${lifecycle.progress.unit}Count`, {
+            count: lifecycle.progress.total,
+          })
         : t(`chat.${lifecycle.progress.unit}Progress`, {
             current: lifecycle.progress.current,
             total: lifecycle.progress.total,
           })
       : '';
-    return compactTimelineValue(
-      [lifecycle.subject, progress, lifecycle.detail].filter(Boolean).join(' · '),
-    ) || timelineTitle(item, t);
+    return (
+      compactTimelineValue(
+        [lifecycle.subject, progress, lifecycle.detail].filter(Boolean).join(' · ')
+      ) || timelineTitle(item, t)
+    );
   }
   if (timelineHitlType(item)) return timelineHitlQuestion(item, t);
   if (kind === 'artifact') return item.filename || item.artifactId || item.type;
@@ -395,7 +547,11 @@ export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
       return { kind: 'ok', label: 'chat.status.result', localized: true };
     }
     if (lifecycle.state === 'attention') {
-      return { kind: 'waiting', label: 'chat.status.needsAttention', localized: true };
+      return {
+        kind: 'waiting',
+        label: 'chat.status.needsAttention',
+        localized: true,
+      };
     }
     if (lifecycle.state === 'sent') {
       return { kind: 'ok', label: 'chat.status.sent', localized: true };
@@ -407,7 +563,11 @@ export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
       return { kind: 'waiting', label: 'chat.status.blocked', localized: true };
     }
     if (lifecycle.state === 'scheduled') {
-      return { kind: 'waiting', label: 'chat.status.scheduled', localized: true };
+      return {
+        kind: 'waiting',
+        label: 'chat.status.scheduled',
+        localized: true,
+      };
     }
     if (lifecycle.state === 'ready') {
       return { kind: 'ok', label: 'chat.status.ready', localized: true };
@@ -539,7 +699,11 @@ export function ToolFileMetadataView({ metadata }: { metadata: ToolFileMetadata 
       </div>
       {metadata.diffStat ? (
         <div className="tool-file-diffstat">
-          <span>{t('chat.fileCount', { count: metadata.diffStat.filesChanged ?? 0 })}</span>
+          <span>
+            {t('chat.fileCount', {
+              count: metadata.diffStat.filesChanged ?? 0,
+            })}
+          </span>
           <span>+{metadata.diffStat.additions ?? 0}</span>
           <span>-{metadata.diffStat.deletions ?? 0}</span>
         </div>
@@ -591,7 +755,7 @@ function firstString(record: Record<string, unknown>, keys: string[]): string | 
 
 function timelineFileMetadataSummary(
   metadata: ToolFileMetadata | null,
-  t: (key: string, values?: Record<string, string | number>) => string,
+  t: (key: string, values?: Record<string, string | number>) => string
 ): string {
   if (!metadata) return '';
   const paths = Array.isArray(metadata.paths) ? metadata.paths : [];
@@ -611,12 +775,12 @@ function timelineFileMetadataSummary(
 
 function filePathMetaLabel(
   path: NonNullable<ToolFileMetadata['paths']>[number],
-  t: (key: string, values?: Record<string, string | number>) => string,
+  t: (key: string, values?: Record<string, string | number>) => string
 ): string {
   const parts: string[] = [];
   if (typeof path.lineStart === 'number' && typeof path.lineEnd === 'number') {
     parts.push(
-      path.lineStart === path.lineEnd ? `L${path.lineStart}` : `L${path.lineStart}-${path.lineEnd}`,
+      path.lineStart === path.lineEnd ? `L${path.lineStart}` : `L${path.lineStart}-${path.lineEnd}`
     );
   } else if (typeof path.lineCount === 'number') {
     parts.push(t('chat.lineCount', { count: path.lineCount }));

@@ -3,7 +3,7 @@ pub(in crate::local_runtime) mod cache;
 mod hook_audit;
 pub(super) mod hooks;
 mod jobs;
-mod oauth;
+pub(in crate::local_runtime) mod oauth;
 pub(in crate::local_runtime) mod oauth_http;
 mod recovery;
 pub(super) use recovery::recover;

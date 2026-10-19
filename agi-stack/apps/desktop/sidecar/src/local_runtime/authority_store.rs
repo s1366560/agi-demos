@@ -153,7 +153,10 @@ impl DesktopRunStatus {
                         | Self::Disconnected
                         | Self::Cancelled
                 )
-                | (Self::NeedsInput | Self::NeedsApproval, Self::Running)
+                | (
+                    Self::NeedsInput | Self::NeedsApproval,
+                    Self::Running | Self::Cancelled
+                )
                 | (
                     Self::Paused | Self::Disconnected | Self::Interrupted,
                     Self::Cancelled

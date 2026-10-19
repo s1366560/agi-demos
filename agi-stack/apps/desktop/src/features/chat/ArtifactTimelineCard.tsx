@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import {
   ArchiveIcon,
   CheckCircledIcon,
@@ -15,6 +14,7 @@ import {
 
 import { useI18n } from '../../i18n';
 import type { AgentTimelineItem } from '../../types';
+import { MarkdownArtifactImage } from './MarkdownArtifactImage';
 import {
   artifactTimelineCard,
   formatArtifactTimelineSize,
@@ -34,11 +34,6 @@ function ArtifactIcon({ kind }: { kind: ArtifactTimelineIconKind }) {
 export function ArtifactTimelineCard({ item }: { item: AgentTimelineItem }) {
   const { t } = useI18n();
   const card = artifactTimelineCard(item);
-  const [previewFailed, setPreviewFailed] = useState(false);
-
-  useEffect(() => {
-    setPreviewFailed(false);
-  }, [card.previewUrl]);
 
   return (
     <article
@@ -67,20 +62,12 @@ export function ArtifactTimelineCard({ item }: { item: AgentTimelineItem }) {
         </span>
       </header>
 
-      {card.previewUrl && !previewFailed ? (
+      {card.previewUrl ? (
         <div className="artifact-timeline-image">
-          <img
+          <MarkdownArtifactImage
             src={card.previewUrl}
             alt={card.filename}
-            loading="lazy"
-            onError={() => setPreviewFailed(true)}
           />
-        </div>
-      ) : null}
-      {card.previewUrl && previewFailed ? (
-        <div className="artifact-timeline-preview-failed" role="status">
-          <CrossCircledIcon aria-hidden="true" />
-          <span>{t('chat.artifactImageLoadFailed')}</span>
         </div>
       ) : null}
 

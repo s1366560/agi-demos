@@ -514,6 +514,15 @@
   flex: 1 1 auto;
   min-height: 0;
 }
+.settings-resource-container--plugins {
+  display: grid;
+  height: auto;
+  gap: 20px;
+  padding: 20px;
+}
+.settings-resource-container--plugins > :first-child {
+  min-height: auto;
+}
 .platform-plugin-ui-slots {
   flex: 0 0 auto;
   max-height: 40%;

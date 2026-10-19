@@ -46,6 +46,9 @@ const MAX_CONVERSATION_LIMIT: i64 = 500;
 const DEFAULT_TIMELINE_LIMIT: i64 = 50;
 const MAX_TIMELINE_LIMIT: i64 = 500;
 
+#[path = "model_request_replay_v2.rs"]
+mod model_request_replay_v2;
+
 const TIMELINE_EXCLUDED_EVENT_TYPES: &[&str] = &[
     "status",
     "start",
@@ -152,6 +155,16 @@ pub(crate) trait AgentConversationApiService: Send + Sync {
         conversation_id: &str,
         query: ConversationMessagesQuery,
     ) -> Result<ConversationMessagesResponse, AgentConversationsApiError>;
+
+    async fn authorize_model_request_replay(
+        &self, user_id: &str, conversation_id: &str, project_id: &str,
+    ) -> Result<(), AgentConversationsApiError> {
+        self.get_messages(user_id, conversation_id, ConversationMessagesQuery {
+            project_id: project_id.into(), limit: Some(1), from_time_us: None,
+            from_counter: None, before_time_us: None, before_counter: None,
+        }).await?;
+        Ok(())
+    }
 
     async fn get_session_projection(
         &self,
@@ -928,6 +941,16 @@ impl AgentConversationApiService for DevAgentConversationService {
         Ok(conversation.clone())
     }
 
+    async fn authorize_model_request_replay(
+        &self, user_id: &str, conversation_id: &str, project_id: &str,
+    ) -> Result<(), AgentConversationsApiError> {
+        match self.authorize_message_send(user_id, conversation_id, project_id).await? {
+            ConversationSocketAccess::Allowed => Ok(()),
+            ConversationSocketAccess::Denied => Err(AgentConversationsApiError::forbidden("Access denied to this conversation")),
+            ConversationSocketAccess::NotFound => Err(AgentConversationsApiError::not_found("Conversation not found")),
+        }
+    }
+
     async fn get_messages(
         &self,
         _user_id: &str,
@@ -1044,6 +1067,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/agent/conversations/:conversation_id/messages",
             get(get_conversation_messages),
+        )
+        .route(
+            "/api/v1/agent/conversations/:conversation_id/messages/:message_id/model-requests/:attempt_id",
+            get(model_request_replay_v2::get),
         )
 }
 

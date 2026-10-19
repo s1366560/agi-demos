@@ -6,7 +6,9 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 require.extensions['.css'] = () => {};
 const React = require('react');
-const { renderToStaticMarkup } = require('react-dom/server');
+const { renderToStaticMarkup: renderMarkup } = require('react-dom/server');
+const { DesktopRendererAuthorityContextV2 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererAuthorityStateV2.js');
+const renderToStaticMarkup = (element) => renderMarkup(React.createElement(DesktopRendererAuthorityContextV2.Provider, { value: { status: 'ready', shortcutIds: KEYBOARD_SHORTCUTS.map((item) => item.id) } }, element));
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   KEYBOARD_SHORTCUTS,

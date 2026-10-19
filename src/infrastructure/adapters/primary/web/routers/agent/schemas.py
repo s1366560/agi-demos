@@ -429,6 +429,10 @@ class HITLRequestResponse(BaseModel):
     expires_at: str | None = None
     status: str
     authority_revision: int = Field(ge=1)
+    decision: dict[str, Any] | None = None
+    native_binding: dict[str, Any] | None = None
+    actions: list[dict[str, str]] | None = None
+    scopes: list[str] | None = None
 
 
 class PendingHITLResponse(BaseModel):

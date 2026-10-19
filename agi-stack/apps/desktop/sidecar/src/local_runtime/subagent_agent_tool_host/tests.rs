@@ -599,10 +599,14 @@ async fn cancelled_checkpoint_reports_completed_calls_without_claiming_success()
     state.status = SessionStatus::Cancelled;
     state.completed_tool_calls = (0..7)
         .map(|round| CompletedCall {
+            control_outcome: None,
+            control_generation: None,
+        metadata: serde_json::json!({}),
             round,
             tool: "read".into(),
             input_json: "private-input".into(),
             output_json: "private-output".into(),
+            media: vec![],
             failed: round == 6,
         })
         .collect();

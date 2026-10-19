@@ -63,9 +63,7 @@ def test_graph_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -73,7 +71,9 @@ def test_graph_row_preserves_route_order_and_openapi() -> None:
     assert claimed.v2_owned_row_ids == ("graph",)
 
 
-async def test_generation_dispatcher_executes_graph_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_graph_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     graph_store = SimpleNamespace(
         get_entity_types=AsyncMock(return_value=[{"entity_type": "Person", "count": 2}])
     )

@@ -110,7 +110,7 @@ test('right sidebar contribution is declared after the left sidebar and before r
 
   const sidebarIndex = profile.indexOf('entry_id: builtin-desktop-sidebar-surface');
   const rightSidebarIndex = profile.indexOf('entry_id: builtin-desktop-right-sidebar-surface');
-  const routesIndex = profile.indexOf('entry_id: builtin-desktop-tenant-creation-routes');
+  const routesIndex = profile.indexOf('entry_id: builtin-desktop-feature-tenant-creation');
   assert.ok(sidebarIndex >= 0);
   assert.ok(rightSidebarIndex > sidebarIndex);
   assert.ok(routesIndex > rightSidebarIndex);

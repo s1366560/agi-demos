@@ -55,9 +55,7 @@ def test_reflection_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -65,7 +63,9 @@ def test_reflection_row_preserves_route_order_and_openapi() -> None:
     assert claimed.v2_owned_row_ids == ("reflection",)
 
 
-async def test_generation_dispatcher_executes_reflection_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_reflection_v2_before_static_fallback(
+    isolated_feature_admission,
+) -> None:
     membership = SimpleNamespace(contains=AsyncMock(return_value=True))
     playbooks = SimpleNamespace(find_by_project=AsyncMock(return_value=[]))
     authority = SimpleNamespace(

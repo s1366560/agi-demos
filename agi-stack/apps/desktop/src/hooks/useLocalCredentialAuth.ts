@@ -372,7 +372,7 @@ export function useLocalCredentialAuth(
       mustChangePassword: false,
       error: null,
     });
-    await refreshRuntime(tokenConfig, [selectedProject]);
+    await refreshRuntime(tokenConfig, [selectedProject], user.user_id);
     return authAttemptRevisionRef.current === authAttemptRevision;
   };
 

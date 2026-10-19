@@ -1,3 +1,4 @@
+import { registerDesktopFeatureArtifactsV2 } from './desktopRendererFeatureCatalogV2';
 import { AGENT_WORKSPACE_ROUTE_ID } from '../features/agent-workspace/agentWorkspaceRouteModule';
 import {
   CANONICAL_DESKTOP_NAVIGATION_METADATA,
@@ -61,7 +62,7 @@ import {
 import { PROFILE_ROUTE_ID } from '../features/settings-routes/profileRoutePresentationModel';
 import type { UiSlotDefinition } from './uiSlotRegistry';
 
-type DesktopRendererContributionKindV2 = 'route' | 'navigation' | 'ui-slot';
+type DesktopRendererContributionKindV2 = 'route' | 'navigation' | 'ui-slot' | 'settings-page' | 'command';
 
 interface DesktopRendererContributionV2 {
   readonly id: string;
@@ -588,6 +589,7 @@ interface DesktopRendererArtifactBaseV2 {
 
 export interface DesktopRouteArtifactV2 extends DesktopRendererArtifactBaseV2 {
   readonly kind: 'route';
+  readonly compositionArtifactId?: string;
   readonly routeIds: readonly string[];
 }
 
@@ -605,7 +607,20 @@ export interface DesktopUiSlotArtifactV2 extends DesktopRendererArtifactBaseV2 {
 export type DesktopRendererArtifactV2 =
   | DesktopRouteArtifactV2
   | DesktopNavigationArtifactV2
-  | DesktopUiSlotArtifactV2;
+  | DesktopUiSlotArtifactV2
+  | DesktopSettingsPageArtifactV2
+  | DesktopCommandArtifactV2;
+
+export interface DesktopSettingsPageArtifactV2 extends DesktopRendererArtifactBaseV2 {
+  readonly kind: 'settings-page';
+  readonly sectionIds: readonly string[];
+}
+
+export interface DesktopCommandArtifactV2 extends DesktopRendererArtifactBaseV2 {
+  readonly kind: 'command';
+  readonly commandIds: readonly string[];
+  readonly shortcutIds: readonly string[];
+}
 
 export class DesktopRendererArtifactErrorV2 extends Error {
   constructor(
@@ -964,6 +979,10 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
   ],
 ]);
 
+export const DESKTOP_RENDERER_FEATURES_V2 = registerDesktopFeatureArtifactsV2(
+  DESKTOP_RENDERER_ARTIFACT_CATALOG_V2,
+);
+
 export function defineDesktopRouteArtifactV2(
   id: string,
   routeIds: readonly string[],
@@ -1027,6 +1046,8 @@ export function resolveDesktopRendererArtifactsV2(
   const navigationOwners = new Map<string, string>();
   const uiSlotArtifactOwners = new Map<string, string>();
   const uiSlotOwners = new Map<string, string>();
+  const settingsOwners = new Map<string, string>();
+  const commandOwners = new Map<string, string>();
   const ordered = [...contributions].sort(
     (left, right) =>
       left.order - right.order ||
@@ -1049,13 +1070,20 @@ export function resolveDesktopRendererArtifactsV2(
         validateRouteOwnershipV2(routeOwners, artifact.routeIds, contribution);
       } else if (artifact.kind === 'navigation') {
         validateRouteOwnershipV2(navigationOwners, artifact.routeIds, contribution);
-      } else {
+      } else if (artifact.kind === 'ui-slot') {
         validateUiSlotArtifactOwnershipV2(
           uiSlotArtifactOwners,
           uiSlotOwners,
           artifact,
           contribution,
         );
+      } else if (artifact.kind === 'settings-page') {
+        validateRouteOwnershipV2(settingsOwners, artifact.sectionIds, contribution);
+      } else {
+        validateRouteOwnershipV2(commandOwners, [
+          ...artifact.commandIds.map((id) => `command:${id}`),
+          ...artifact.shortcutIds.map((id) => `shortcut:${id}`),
+        ], contribution);
       }
       artifacts.push(artifact);
     }

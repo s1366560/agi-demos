@@ -1,0 +1,62 @@
+{
+  "schema_version": 2,
+  "plugin_id": "memstack-computer-use",
+  "version": "2.0.0",
+  "runtime": "rust-native",
+  "trust": "builtin",
+  "modules": [
+    {
+      "module_ref": "builtin://memstack/computer-use/native",
+      "entrypoint": "ComputerUseModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:e049ead01f944c99291cbd3a0da63e8869c48ee52e68ab5f245e0fc403c44c97",
+        "source": "repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/computer_use_v2/module.rs"
+      },
+      "targets": [
+        "desktop-sidecar"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-sidecar.computer-use",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy",
+            "default_enabled"
+          ],
+          "properties": {
+            "strategy": {
+              "type": "string",
+              "const": "managed-native-device"
+            },
+            "default_enabled": {
+              "type": "boolean",
+              "const": false
+            }
+          },
+          "x-memstack-management": {
+            "editable": true,
+            "public_config": true,
+            "lifecycle": "managed_native"
+          }
+        }
+      },
+      "contract_digest": "sha256:2c3fd967e227902c32b57ad6b47f3a0154f93be63eec57ee8c8353bacfdcf68c"
+    }
+  ],
+  "permissions": [],
+  "quotas": {}
+}

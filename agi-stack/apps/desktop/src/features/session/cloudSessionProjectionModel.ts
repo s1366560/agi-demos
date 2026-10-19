@@ -6,7 +6,7 @@ import type {
   DesktopRun,
   DesktopRunStatus,
   PermissionRequestContext,
-} from '../../types';
+} from "../../types";
 import type {
   CloudEvidenceSummary,
   CloudToolExecutionRecord,
@@ -21,24 +21,35 @@ import type {
   SessionProjectionPlan,
   SessionProjectionScope,
   SessionProjectionTask,
-} from './sessionProjectionTypes';
+} from "./sessionProjectionTypes";
+import { decodeDecisionContext } from "./sessionDecisionContextDecoder";
 
 export function decodeCloudConversationSessionProjection(
   root: Record<string, unknown>,
   expectedScope: string | SessionProjectionScope,
 ): ConversationSessionProjection | null {
   const scope =
-    typeof expectedScope === 'string' ? { conversationId: expectedScope } : expectedScope;
-  if (root.projection_kind !== 'workspace_session') return null;
+    typeof expectedScope === "string"
+      ? { conversationId: expectedScope }
+      : expectedScope;
+  if (root.projection_kind !== "workspace_session") return null;
 
   const snapshotRevision = nonEmptyString(root.snapshot_revision);
   const updatedAt = nonEmptyString(root.updated_at);
   const conversation = readCloudConversation(root.conversation, scope);
-  if (!snapshotRevision || snapshotRevision.length > 256 || !updatedAt || !conversation) return null;
+  if (
+    !snapshotRevision ||
+    snapshotRevision.length > 256 ||
+    !updatedAt ||
+    !conversation
+  )
+    return null;
 
   const execution = recordValue(root.execution);
   const attemptHistory = execution
-    ? readArray(execution.attempt_history, (value) => readCloudAttempt(value, scope, conversation))
+    ? readArray(execution.attempt_history, (value) =>
+        readCloudAttempt(value, scope, conversation),
+      )
     : null;
   const runHistory = execution
     ? readArray(execution.run_history, (value) => readCloudRun(value, scope))
@@ -62,21 +73,26 @@ export function decodeCloudConversationSessionProjection(
   }
   if ((currentAttempt === null) !== (attemptHistory.length === 0)) return null;
   if ((currentRun === null) !== (runHistory.length === 0)) return null;
-  if (currentAttempt && !sameJson(currentAttempt, attemptHistory[0])) return null;
+  if (currentAttempt && !sameJson(currentAttempt, attemptHistory[0]))
+    return null;
   if (currentRun && !sameJson(currentRun, runHistory[0])) return null;
   if (!hasUniqueIds(attemptHistory) || !hasUniqueIds(runHistory)) return null;
 
-  const planHistory = readArray(root.plan_history, (value) => readCloudAgentPlan(value, scope));
+  const planHistory = readArray(root.plan_history, (value) =>
+    readCloudAgentPlan(value, scope),
+  );
   const currentPlan = readNullable(root.current_plan, (value) =>
     readCloudAgentPlan(value, scope),
   );
-  if (!planHistory || currentPlan === undefined || !hasUniqueIds(planHistory)) return null;
+  if (!planHistory || currentPlan === undefined || !hasUniqueIds(planHistory))
+    return null;
   if ((currentPlan === null) !== (planHistory.length === 0)) return null;
   if (currentPlan && !sameJson(currentPlan, planHistory[0])) return null;
   const planIds = new Set(planHistory.map((plan) => plan.id));
   if (
     runHistory.some(
-      (run) => run.plan_version_id !== null && !planIds.has(run.plan_version_id),
+      (run) =>
+        run.plan_version_id !== null && !planIds.has(run.plan_version_id),
     )
   ) {
     return null;
@@ -87,33 +103,59 @@ export function decodeCloudConversationSessionProjection(
   if (
     !authorityId ||
     (currentAttempt
-      ? authorityKind !== 'workspace_attempt' || authorityId !== currentAttempt.id
-      : authorityKind !== 'conversation_record' || authorityId !== conversation.id)
+      ? authorityKind !== "workspace_attempt" ||
+        authorityId !== currentAttempt.id
+      : authorityKind !== "conversation_record" ||
+        authorityId !== conversation.id)
   ) {
     return null;
   }
 
-  const tasks = readArray(root.conversation_tasks, (value) => readCloudTask(value, scope));
+  const tasks = readArray(root.conversation_tasks, (value) =>
+    readCloudTask(value, scope),
+  );
   if (!tasks || !hasUniqueIds(tasks)) return null;
-  const workspacePlanContext = readNullable(root.workspace_plan_context, (value) =>
-    readCloudWorkspacePlanContext(value, conversation),
+  const workspacePlanContext = readNullable(
+    root.workspace_plan_context,
+    (value) => readCloudWorkspacePlanContext(value, conversation),
   );
   if (workspacePlanContext === undefined) return null;
 
-  const pendingHitl = readArray(root.pending_hitl, (value) => readCloudHitl(value, scope));
+  const pendingHitl = readArray(root.pending_hitl, (value) =>
+    readCloudHitl(value, scope),
+  );
   if (!pendingHitl || !hasUniqueIds(pendingHitl)) return null;
   const artifactRecordIds = readCloudArtifactRecordIds(root.artifact_records);
-  const activityAuthority = readCloudToolExecutionRecords(root.tool_execution_records);
+  const activityAuthority = readCloudToolExecutionRecords(
+    root.tool_execution_records,
+  );
   const cloudEvidenceSummary = readCloudEvidenceSummary(root.evidence_summary);
-  const capabilities = readCloudCapabilities(root.capabilities, pendingHitl, Boolean(
-    currentPlan?.status === 'draft' && currentPlan.tasks.length > 0 &&
-    conversation.current_mode === 'plan' && !currentAttempt &&
-    (!currentRun || !['queued', 'running'].includes(currentRun.status))
-  ), Boolean(currentRun && !currentAttempt && ['queued', 'running'].includes(currentRun.status)));
-  if (!artifactRecordIds || !activityAuthority || !cloudEvidenceSummary || !capabilities) {
+  const capabilities = readCloudCapabilities(
+    root.capabilities,
+    pendingHitl,
+    Boolean(
+      currentPlan?.status === "draft" &&
+      currentPlan.tasks.length > 0 &&
+      conversation.current_mode === "plan" &&
+      !currentAttempt &&
+      (!currentRun || !["queued", "running"].includes(currentRun.status)),
+    ),
+    Boolean(
+      currentRun &&
+      !currentAttempt &&
+      ["queued", "running"].includes(currentRun.status),
+    ),
+  );
+  if (
+    !artifactRecordIds ||
+    !activityAuthority ||
+    !cloudEvidenceSummary ||
+    !capabilities
+  ) {
     return null;
   }
-  if (cloudEvidenceSummary.artifactRecordCount !== artifactRecordIds.length) return null;
+  if (cloudEvidenceSummary.artifactRecordCount !== artifactRecordIds.length)
+    return null;
   const candidateArtifactRefCount = attemptHistory.reduce(
     (total, attempt) => total + attempt.candidateArtifactRefs.length,
     0,
@@ -123,11 +165,13 @@ export function decodeCloudConversationSessionProjection(
     0,
   );
   const visibleFailedToolCount = activityAuthority.items.filter(
-    (record) => record.status === 'failed',
+    (record) => record.status === "failed",
   ).length;
   if (
-    cloudEvidenceSummary.candidateArtifactRefCount !== candidateArtifactRefCount ||
-    cloudEvidenceSummary.candidateVerificationRefCount !== candidateVerificationRefCount ||
+    cloudEvidenceSummary.candidateArtifactRefCount !==
+      candidateArtifactRefCount ||
+    cloudEvidenceSummary.candidateVerificationRefCount !==
+      candidateVerificationRefCount ||
     cloudEvidenceSummary.toolExecutionRecordCount !== activityAuthority.total ||
     cloudEvidenceSummary.failedToolExecutionCount < visibleFailedToolCount ||
     cloudEvidenceSummary.failedToolExecutionCount > activityAuthority.total ||
@@ -137,30 +181,31 @@ export function decodeCloudConversationSessionProjection(
     return null;
   }
 
-  const executionAuthority: ConversationSessionProjection['executionAuthority'] = currentAttempt
-    ? ({
-        kind: 'workspace_attempt',
-        currentRun,
-        runHistory,
-        currentAttempt,
-        attemptHistory,
-      })
-    : ({
-        kind: 'conversation_record',
-        currentRun,
-        runHistory,
-        currentAttempt: null,
-        attemptHistory: [],
-      });
-  const planAuthority: ConversationSessionProjection['planAuthority'] = {
-    kind: 'agent_task_list',
+  const executionAuthority: ConversationSessionProjection["executionAuthority"] =
+    currentAttempt
+      ? {
+          kind: "workspace_attempt",
+          currentRun,
+          runHistory,
+          currentAttempt,
+          attemptHistory,
+        }
+      : {
+          kind: "conversation_record",
+          currentRun,
+          runHistory,
+          currentAttempt: null,
+          attemptHistory: [],
+        };
+  const planAuthority: ConversationSessionProjection["planAuthority"] = {
+    kind: "agent_task_list",
     currentPlan,
     planHistory,
     tasks,
     workspacePlanContext,
   };
-  const hitlAuthority: ConversationSessionProjection['hitlAuthority'] = {
-    kind: 'cloud_hitl',
+  const hitlAuthority: ConversationSessionProjection["hitlAuthority"] = {
+    kind: "cloud_hitl",
     pending: pendingHitl,
   };
 
@@ -170,7 +215,7 @@ export function decodeCloudConversationSessionProjection(
     executionAuthority,
     planAuthority,
     hitlAuthority,
-    artifactAuthority: { kind: 'unavailable', versions: [], deliveries: [] },
+    artifactAuthority: { kind: "unavailable", versions: [], deliveries: [] },
     activityAuthority,
     cloudEvidenceSummary,
     currentRun,
@@ -199,35 +244,39 @@ export function decodeCloudConversationSessionProjection(
 }
 
 const executionStageValues = new Set<SessionExecutionStage>([
-  'understand',
-  'implement',
-  'verify',
-  'review',
+  "understand",
+  "implement",
+  "verify",
+  "review",
 ]);
 
 // The stage is server-derived and advisory: unknown or absent values degrade
 // to null (no stepper) instead of failing the whole projection decode.
 function readExecutionStage(value: unknown): SessionExecutionStage | null {
-  return typeof value === 'string' && executionStageValues.has(value as SessionExecutionStage)
+  return typeof value === "string" &&
+    executionStageValues.has(value as SessionExecutionStage)
     ? (value as SessionExecutionStage)
     : null;
 }
 
 const cloudRunStatuses = new Set<DesktopRunStatus>([
-  'queued',
-  'running',
-  'needs_input',
-  'needs_approval',
-  'paused',
-  'ready_review',
-  'completed',
-  'failed',
-  'disconnected',
-  'interrupted',
-  'cancelled',
+  "queued",
+  "running",
+  "needs_input",
+  "needs_approval",
+  "paused",
+  "ready_review",
+  "completed",
+  "failed",
+  "disconnected",
+  "interrupted",
+  "cancelled",
 ]);
 
-function readCloudRun(value: unknown, scope: SessionProjectionScope): DesktopRun | null {
+function readCloudRun(
+  value: unknown,
+  scope: SessionProjectionScope,
+): DesktopRun | null {
   const run = recordValue(value);
   const status = run ? nonEmptyString(run.status) : null;
   const environment = run
@@ -241,22 +290,22 @@ function readCloudRun(value: unknown, scope: SessionProjectionScope): DesktopRun
     !(run.plan_version_id === null || nonEmptyString(run.plan_version_id)) ||
     !nonEmptyString(run.idempotency_key) ||
     !nonEmptyString(run.message_id) ||
-    typeof run.request_message !== 'string' ||
+    typeof run.request_message !== "string" ||
     !status ||
     !cloudRunStatuses.has(status as DesktopRunStatus) ||
     !positiveInteger(run.revision) ||
     !nonEmptyString(run.created_at) ||
     !nonEmptyString(run.updated_at) ||
-    !Object.hasOwn(run, 'started_at') ||
-    !Object.hasOwn(run, 'completed_at') ||
-    !Object.hasOwn(run, 'last_heartbeat_at') ||
-    !Object.hasOwn(run, 'error') ||
+    !Object.hasOwn(run, "started_at") ||
+    !Object.hasOwn(run, "completed_at") ||
+    !Object.hasOwn(run, "last_heartbeat_at") ||
+    !Object.hasOwn(run, "error") ||
     !optionalString(run.started_at) ||
     !optionalString(run.completed_at) ||
     !optionalString(run.last_heartbeat_at) ||
     !optionalString(run.error) ||
     environment === undefined ||
-    !['read_only', 'workspace_write', 'full_access'].includes(
+    !["read_only", "workspace_write", "full_access"].includes(
       String(run.permission_profile),
     )
   ) {
@@ -296,12 +345,15 @@ function readCloudRun(value: unknown, scope: SessionProjectionScope): DesktopRun
     last_heartbeat_at: (run.last_heartbeat_at as string | null) ?? null,
     error: (run.error as string | null) ?? null,
     environment,
-    permission_profile: run.permission_profile as DesktopRun['permission_profile'],
+    permission_profile:
+      run.permission_profile as DesktopRun["permission_profile"],
     authorization_snapshot: expectedAuthorizationSnapshot,
   };
 }
 
-function readCloudRunEnvironment(value: unknown): DesktopExecutionEnvironment | null {
+function readCloudRunEnvironment(
+  value: unknown,
+): DesktopExecutionEnvironment | null {
   const environment = recordValue(value);
   const id = nonEmptyString(environment?.id);
   const kind = nonEmptyString(environment?.kind);
@@ -311,13 +363,13 @@ function readCloudRunEnvironment(value: unknown): DesktopExecutionEnvironment | 
     !environment ||
     !id ||
     !kind ||
-    !['local', 'worktree'].includes(kind) ||
+    !["local", "worktree"].includes(kind) ||
     !label ||
-    environment.workspace_path !== '/workspace' ||
-    !Object.hasOwn(environment, 'repository_root') ||
-    !Object.hasOwn(environment, 'branch') ||
-    !Object.hasOwn(environment, 'base_commit') ||
-    !Object.hasOwn(environment, 'source_run_id') ||
+    environment.workspace_path !== "/workspace" ||
+    !Object.hasOwn(environment, "repository_root") ||
+    !Object.hasOwn(environment, "branch") ||
+    !Object.hasOwn(environment, "base_commit") ||
+    !Object.hasOwn(environment, "source_run_id") ||
     !optionalString(environment.repository_root) ||
     !optionalString(environment.branch) ||
     !optionalString(environment.base_commit) ||
@@ -328,9 +380,9 @@ function readCloudRunEnvironment(value: unknown): DesktopExecutionEnvironment | 
   }
   return {
     id,
-    kind: kind as DesktopExecutionEnvironment['kind'],
+    kind: kind as DesktopExecutionEnvironment["kind"],
     label,
-    workspace_path: '/workspace',
+    workspace_path: "/workspace",
     repository_root: (environment.repository_root as string | null) ?? null,
     branch: (environment.branch as string | null) ?? null,
     base_commit: (environment.base_commit as string | null) ?? null,
@@ -357,29 +409,33 @@ function readCloudConversation(
     !projectId ||
     !tenantId ||
     !userId ||
-    typeof conversation.title !== 'string' ||
-    typeof conversation.status !== 'string' ||
+    typeof conversation.title !== "string" ||
+    typeof conversation.status !== "string" ||
     !nonNegativeInteger(conversation.message_count) ||
     !createdAt ||
-    !Object.hasOwn(conversation, 'updated_at') ||
+    !Object.hasOwn(conversation, "updated_at") ||
     !optionalString(conversation.updated_at) ||
-    !Object.hasOwn(conversation, 'summary') ||
+    !Object.hasOwn(conversation, "summary") ||
     !optionalString(conversation.summary) ||
-    !['plan', 'build', 'explore'].includes(currentMode ?? '') ||
-    (capabilityMode !== null && capabilityMode !== 'work' && capabilityMode !== 'code') ||
-    !Object.hasOwn(conversation, 'conversation_mode') ||
+    !["plan", "build", "explore"].includes(currentMode ?? "") ||
+    (capabilityMode !== null &&
+      capabilityMode !== "work" &&
+      capabilityMode !== "code") ||
+    !Object.hasOwn(conversation, "conversation_mode") ||
     !optionalString(conversation.conversation_mode) ||
-    !Object.hasOwn(conversation, 'workspace_id') ||
+    !Object.hasOwn(conversation, "workspace_id") ||
     !optionalString(conversation.workspace_id) ||
-    !Object.hasOwn(conversation, 'linked_workspace_task_id') ||
+    !Object.hasOwn(conversation, "linked_workspace_task_id") ||
     !optionalString(conversation.linked_workspace_task_id) ||
-    !Object.hasOwn(conversation, 'workspace_name') ||
+    !Object.hasOwn(conversation, "workspace_name") ||
     !optionalString(conversation.workspace_name) ||
     !Array.isArray(conversation.participant_agents) ||
-    !conversation.participant_agents.every((participant) => nonEmptyString(participant)) ||
-    !Object.hasOwn(conversation, 'coordinator_agent_id') ||
+    !conversation.participant_agents.every((participant) =>
+      nonEmptyString(participant),
+    ) ||
+    !Object.hasOwn(conversation, "coordinator_agent_id") ||
     !optionalString(conversation.coordinator_agent_id) ||
-    !Object.hasOwn(conversation, 'focused_agent_id') ||
+    !Object.hasOwn(conversation, "focused_agent_id") ||
     !optionalString(conversation.focused_agent_id)
   ) {
     return null;
@@ -387,7 +443,7 @@ function readCloudConversation(
   if (scope.projectId && projectId !== scope.projectId) return null;
   if (scope.tenantId && tenantId !== scope.tenantId) return null;
   if (
-    Object.hasOwn(scope, 'workspaceId') &&
+    Object.hasOwn(scope, "workspaceId") &&
     (conversation.workspace_id ?? null) !== scope.workspaceId
   ) {
     return null;
@@ -405,17 +461,21 @@ function readCloudConversation(
     summary: (conversation.summary as string | null) ?? null,
     agent_config: {
       capability_mode:
-        capabilityMode === 'work' || capabilityMode === 'code' ? capabilityMode : 'unavailable',
+        capabilityMode === "work" || capabilityMode === "code"
+          ? capabilityMode
+          : "unavailable",
     },
     metadata: {},
-    conversation_mode: (conversation.conversation_mode as string | null) ?? null,
+    conversation_mode:
+      (conversation.conversation_mode as string | null) ?? null,
     current_mode: currentMode as AgentRuntimeMode,
     workspace_id: (conversation.workspace_id as string | null) ?? null,
     linked_workspace_task_id:
       (conversation.linked_workspace_task_id as string | null) ?? null,
     workspace_name: (conversation.workspace_name as string | null) ?? null,
     participant_agents: [...(conversation.participant_agents as string[])],
-    coordinator_agent_id: (conversation.coordinator_agent_id as string | null) ?? null,
+    coordinator_agent_id:
+      (conversation.coordinator_agent_id as string | null) ?? null,
     focused_agent_id: (conversation.focused_agent_id as string | null) ?? null,
   };
 }
@@ -446,21 +506,21 @@ function readCloudAttempt(
     !nonNegativeInteger(attempt.attempt_number) ||
     !status ||
     !createdAt ||
-    !Object.hasOwn(attempt, 'worker_agent_id') ||
+    !Object.hasOwn(attempt, "worker_agent_id") ||
     !optionalString(attempt.worker_agent_id) ||
-    !Object.hasOwn(attempt, 'leader_agent_id') ||
+    !Object.hasOwn(attempt, "leader_agent_id") ||
     !optionalString(attempt.leader_agent_id) ||
-    !Object.hasOwn(attempt, 'candidate_summary') ||
+    !Object.hasOwn(attempt, "candidate_summary") ||
     !optionalString(attempt.candidate_summary) ||
     !stringArray(attempt.candidate_artifact_refs) ||
     !stringArray(attempt.candidate_verification_refs) ||
-    !Object.hasOwn(attempt, 'leader_feedback') ||
+    !Object.hasOwn(attempt, "leader_feedback") ||
     !optionalString(attempt.leader_feedback) ||
-    !Object.hasOwn(attempt, 'adjudication_reason') ||
+    !Object.hasOwn(attempt, "adjudication_reason") ||
     !optionalString(attempt.adjudication_reason) ||
-    !Object.hasOwn(attempt, 'updated_at') ||
+    !Object.hasOwn(attempt, "updated_at") ||
     !optionalString(attempt.updated_at) ||
-    !Object.hasOwn(attempt, 'completed_at') ||
+    !Object.hasOwn(attempt, "completed_at") ||
     !optionalString(attempt.completed_at)
   ) {
     return null;
@@ -477,7 +537,9 @@ function readCloudAttempt(
     leaderAgentId: (attempt.leader_agent_id as string | null) ?? null,
     candidateSummary: (attempt.candidate_summary as string | null) ?? null,
     candidateArtifactRefs: [...(attempt.candidate_artifact_refs as string[])],
-    candidateVerificationRefs: [...(attempt.candidate_verification_refs as string[])],
+    candidateVerificationRefs: [
+      ...(attempt.candidate_verification_refs as string[]),
+    ],
     leaderFeedback: (attempt.leader_feedback as string | null) ?? null,
     adjudicationReason: (attempt.adjudication_reason as string | null) ?? null,
     createdAt,
@@ -486,7 +548,10 @@ function readCloudAttempt(
   };
 }
 
-function readCloudTask(value: unknown, scope: SessionProjectionScope): SessionProjectionTask | null {
+function readCloudTask(
+  value: unknown,
+  scope: SessionProjectionScope,
+): SessionProjectionTask | null {
   const task = recordValue(value);
   if (!task) return null;
   const id = nonEmptyString(task.id);
@@ -503,7 +568,7 @@ function readCloudTask(value: unknown, scope: SessionProjectionScope): SessionPr
     !priority ||
     !nonNegativeInteger(task.order_index) ||
     !createdAt ||
-    !Object.hasOwn(task, 'updated_at') ||
+    !Object.hasOwn(task, "updated_at") ||
     !optionalString(task.updated_at)
   ) {
     return null;
@@ -529,20 +594,21 @@ function readCloudAgentPlan(
   const id = nonEmptyString(plan.id);
   const status = nonEmptyString(plan.status);
   const createdAt = nonEmptyString(plan.created_at);
-  const approvedAt = plan.approved_at === null ? null : nonEmptyString(plan.approved_at);
+  const approvedAt =
+    plan.approved_at === null ? null : nonEmptyString(plan.approved_at);
   const tasks = readArray(plan.tasks, (task) => readCloudTask(task, scope));
   if (
     !id ||
     plan.conversation_id !== scope.conversationId ||
     !positiveInteger(plan.version) ||
     !status ||
-    !['draft', 'approved'].includes(status) ||
+    !["draft", "approved"].includes(status) ||
     !tasks ||
     !hasUniqueIds(tasks) ||
     !createdAt ||
     (plan.approved_at !== null && !approvedAt) ||
-    (status === 'draft' && approvedAt !== null) ||
-    (status === 'approved' && approvedAt === null)
+    (status === "draft" && approvedAt !== null) ||
+    (status === "approved" && approvedAt === null)
   ) {
     return null;
   }
@@ -550,7 +616,7 @@ function readCloudAgentPlan(
     id,
     conversation_id: scope.conversationId,
     version: plan.version as number,
-    status: status as SessionProjectionPlan['status'],
+    status: status as SessionProjectionPlan["status"],
     tasks,
     created_at: createdAt,
     approved_at: approvedAt,
@@ -569,7 +635,11 @@ function readCloudWorkspacePlanContext(
   const status = nonEmptyString(plan.status);
   const createdAt = nonEmptyString(plan.created_at);
   const linkedNodes = readArray(plan.linked_nodes, (node) =>
-    readCloudWorkspacePlanNode(node, id, conversation.linked_workspace_task_id ?? null),
+    readCloudWorkspacePlanNode(
+      node,
+      id,
+      conversation.linked_workspace_task_id ?? null,
+    ),
   );
   if (
     !id ||
@@ -578,7 +648,7 @@ function readCloudWorkspacePlanContext(
     !goalId ||
     !status ||
     !createdAt ||
-    !Object.hasOwn(plan, 'updated_at') ||
+    !Object.hasOwn(plan, "updated_at") ||
     !optionalString(plan.updated_at) ||
     !linkedNodes ||
     !hasUniqueIds(linkedNodes)
@@ -617,18 +687,18 @@ function readCloudWorkspacePlanNode(
     workspaceTaskId !== linkedTaskId ||
     !kind ||
     !title ||
-    typeof node.description !== 'string' ||
+    typeof node.description !== "string" ||
     !intent ||
     !execution ||
     !progress ||
-    !Object.hasOwn(node, 'assignee_agent_id') ||
+    !Object.hasOwn(node, "assignee_agent_id") ||
     !optionalString(node.assignee_agent_id) ||
-    !Object.hasOwn(node, 'current_attempt_id') ||
+    !Object.hasOwn(node, "current_attempt_id") ||
     !optionalString(node.current_attempt_id) ||
     !createdAt ||
-    !Object.hasOwn(node, 'updated_at') ||
+    !Object.hasOwn(node, "updated_at") ||
     !optionalString(node.updated_at) ||
-    !Object.hasOwn(node, 'completed_at') ||
+    !Object.hasOwn(node, "completed_at") ||
     !optionalString(node.completed_at)
   ) {
     return null;
@@ -661,23 +731,37 @@ function readCloudHitl(
   const kind = nonEmptyString(request.request_type);
   const prompt = nonEmptyString(request.question);
   const createdAt = nonEmptyString(request.created_at);
-  const expiresAt = request.expires_at === null ? null : nonEmptyString(request.expires_at);
+  const expiresAt =
+    request.expires_at === null ? null : nonEmptyString(request.expires_at);
   const authorityRevision = request.authority_revision;
   const permission =
-    kind === 'permission' ? readCloudPermissionRequest(request.permission) : null;
+    kind === "permission"
+      ? readCloudPermissionRequest(request.permission)
+      : null;
+  const decision =
+    request.decision === undefined || request.decision === null
+      ? null
+      : decodeDecisionContext(request.decision);
   if (
     !id ||
     request.conversation_id !== scope.conversationId ||
     !kind ||
-    !['clarification', 'decision', 'env_var', 'permission', 'a2ui_action'].includes(kind) ||
+    ![
+      "clarification",
+      "decision",
+      "env_var",
+      "permission",
+      "a2ui_action",
+    ].includes(kind) ||
     !prompt ||
-    request.status !== 'pending' ||
+    request.status !== "pending" ||
     !nonNegativeInteger(authorityRevision) ||
     authorityRevision === 0 ||
     !createdAt ||
     (request.expires_at !== null && !expiresAt) ||
-    !Object.hasOwn(request, 'message_id') ||
-    !optionalString(request.message_id)
+    !Object.hasOwn(request, "message_id") ||
+    !optionalString(request.message_id) ||
+    (request.decision !== undefined && request.decision !== null && !decision)
   ) {
     return null;
   }
@@ -685,19 +769,22 @@ function readCloudHitl(
     id,
     conversation_id: scope.conversationId,
     run_id: null,
-    kind: kind as DesktopApprovalRequest['kind'],
+    kind: kind as DesktopApprovalRequest["kind"],
     prompt,
-    status: 'pending',
+    status: "pending",
     authority_revision: authorityRevision as number,
     created_at: createdAt,
     responded_at: null,
     message_id: (request.message_id as string | null) ?? null,
     expires_at: expiresAt,
     ...(permission ? { permission } : {}),
+    ...(decision ? { decision } : {}),
   };
 }
 
-function readCloudPermissionRequest(value: unknown): PermissionRequestContext | null {
+function readCloudPermissionRequest(
+  value: unknown,
+): PermissionRequestContext | null {
   const permission = recordValue(value);
   if (!permission) return null;
   const toolName = nonEmptyString(permission.tool_name);
@@ -709,15 +796,15 @@ function readCloudPermissionRequest(value: unknown): PermissionRequestContext | 
     !action ||
     !description ||
     !riskLevel ||
-    !['low', 'medium', 'high'].includes(riskLevel) ||
-    typeof permission.allow_remember !== 'boolean'
+    !["low", "medium", "high"].includes(riskLevel) ||
+    typeof permission.allow_remember !== "boolean"
   ) {
     return null;
   }
   return {
     tool_name: toolName,
     action,
-    risk_level: riskLevel as PermissionRequestContext['risk_level'],
+    risk_level: riskLevel as PermissionRequestContext["risk_level"],
     description,
     allow_remember: permission.allow_remember,
   };
@@ -734,8 +821,13 @@ function readCloudArtifactRecordIds(value: unknown): string[] | null {
   return new Set(ids).size === ids.length ? ids : null;
 }
 
-function readCloudToolExecutionRecords(value: unknown):
-  | ({ kind: 'cloud_tool_records'; invocations: [] } & CloudToolExecutionRecords)
+function readCloudToolExecutionRecords(
+  value: unknown,
+):
+  | ({
+      kind: "cloud_tool_records";
+      invocations: [];
+    } & CloudToolExecutionRecords)
   | null {
   const page = recordValue(value);
   const items = page
@@ -747,13 +839,13 @@ function readCloudToolExecutionRecords(value: unknown):
     !hasUniqueIds(items) ||
     !nonNegativeInteger(page.total) ||
     (page.total as number) < items.length ||
-    typeof page.truncated !== 'boolean' ||
-    page.truncated !== ((page.total as number) > items.length)
+    typeof page.truncated !== "boolean" ||
+    page.truncated !== (page.total as number) > items.length
   ) {
     return null;
   }
   return {
-    kind: 'cloud_tool_records',
+    kind: "cloud_tool_records",
     invocations: [],
     items,
     total: page.total as number,
@@ -761,7 +853,9 @@ function readCloudToolExecutionRecords(value: unknown):
   };
 }
 
-function readCloudToolExecutionRecord(value: unknown): CloudToolExecutionRecord | null {
+function readCloudToolExecutionRecord(
+  value: unknown,
+): CloudToolExecutionRecord | null {
   const record = recordValue(value);
   if (!record) return null;
   const id = nonEmptyString(record.id);
@@ -777,11 +871,11 @@ function readCloudToolExecutionRecord(value: unknown): CloudToolExecutionRecord 
     !toolName ||
     !status ||
     !startedAt ||
-    !Object.hasOwn(record, 'error') ||
+    !Object.hasOwn(record, "error") ||
     !optionalString(record.error) ||
     !optionalNonNegativeInteger(record.step_number) ||
     !nonNegativeInteger(record.sequence_number) ||
-    !Object.hasOwn(record, 'completed_at') ||
+    !Object.hasOwn(record, "completed_at") ||
     !optionalString(record.completed_at) ||
     !optionalNonNegativeInteger(record.duration_ms)
   ) {
@@ -806,16 +900,17 @@ function readCloudEvidenceSummary(value: unknown): CloudEvidenceSummary | null {
   const summary = recordValue(value);
   if (!summary) return null;
   const keys = [
-    'candidate_artifact_ref_count',
-    'candidate_verification_ref_count',
-    'artifact_record_count',
-    'tool_execution_record_count',
-    'failed_tool_execution_count',
+    "candidate_artifact_ref_count",
+    "candidate_verification_ref_count",
+    "artifact_record_count",
+    "tool_execution_record_count",
+    "failed_tool_execution_count",
   ] as const;
   if (keys.some((key) => !nonNegativeInteger(summary[key]))) return null;
   return {
     candidateArtifactRefCount: summary.candidate_artifact_ref_count as number,
-    candidateVerificationRefCount: summary.candidate_verification_ref_count as number,
+    candidateVerificationRefCount:
+      summary.candidate_verification_ref_count as number,
     artifactRecordCount: summary.artifact_record_count as number,
     toolExecutionRecordCount: summary.tool_execution_record_count as number,
     failedToolExecutionCount: summary.failed_tool_execution_count as number,
@@ -831,37 +926,50 @@ function readCloudCapabilities(
   const capabilities = recordValue(value);
   if (!capabilities) return null;
   const booleanKeys = [
-    'can_send_message',
-    'can_respond_to_hitl',
-    'can_approve_plan',
-    'can_control_execution',
-    'can_review_artifacts',
-    'can_deliver_artifacts',
+    "can_send_message",
+    "can_respond_to_hitl",
+    "can_approve_plan",
+    "can_control_execution",
+    "can_review_artifacts",
+    "can_deliver_artifacts",
   ] as const;
-  if (booleanKeys.some((key) => typeof capabilities[key] !== 'boolean')) return null;
+  if (booleanKeys.some((key) => typeof capabilities[key] !== "boolean"))
+    return null;
   const allowed = readEnumArray(
     capabilities.allowed_actions,
-    new Set<SessionAllowedAction>(['send_message', 'respond_to_hitl', 'approve_plan_and_start', 'cancel']),
+    new Set<SessionAllowedAction>([
+      "send_message",
+      "respond_to_hitl",
+      "approve_plan_and_start",
+      "cancel",
+    ]),
   );
   if (!allowed) return null;
   const environmentKinds =
     capabilities.environment_kinds === undefined
       ? []
-      : readEnumArray(capabilities.environment_kinds, new Set(['local', 'worktree'] as const));
+      : readEnumArray(
+          capabilities.environment_kinds,
+          new Set(["local", "worktree"] as const),
+        );
   if (!environmentKinds) return null;
   const expected = [
-    ...(capabilities.can_send_message ? (['send_message'] as const) : []),
-    ...(capabilities.can_respond_to_hitl ? (['respond_to_hitl'] as const) : []),
-    ...(capabilities.can_approve_plan ? (['approve_plan_and_start'] as const) : []),
-    ...(capabilities.can_control_execution ? (['cancel'] as const) : []),
+    ...(capabilities.can_send_message ? (["send_message"] as const) : []),
+    ...(capabilities.can_respond_to_hitl ? (["respond_to_hitl"] as const) : []),
+    ...(capabilities.can_approve_plan
+      ? (["approve_plan_and_start"] as const)
+      : []),
+    ...(capabilities.can_control_execution ? (["cancel"] as const) : []),
   ];
   if (
-    (capabilities.can_approve_plan && (!canApproveDraft || pendingHitl.length > 0)) ||
-    (capabilities.can_control_execution && (!canCancelRun || pendingHitl.length > 0)) ||
+    (capabilities.can_approve_plan &&
+      (!canApproveDraft || pendingHitl.length > 0)) ||
+    (capabilities.can_control_execution &&
+      (!canCancelRun || pendingHitl.length > 0)) ||
     capabilities.can_review_artifacts ||
     capabilities.can_deliver_artifacts ||
     (pendingHitl.length > 0 && capabilities.can_send_message) ||
-    capabilities.can_respond_to_hitl !== (pendingHitl.length > 0) ||
+    capabilities.can_respond_to_hitl !== pendingHitl.length > 0 ||
     !sameStringSets(allowed, expected)
   ) {
     return null;
@@ -875,12 +983,15 @@ function readCloudCapabilities(
     canQueueNext: false,
     canReviewArtifacts: false,
     canDeliverArtifacts: false,
-    runActions: capabilities.can_control_execution ? ['cancel'] : [],
+    runActions: capabilities.can_control_execution ? ["cancel"] : [],
     allowedActions: allowed,
   };
 }
 
-function readArray<T>(value: unknown, reader: (item: unknown) => T | null): T[] | null {
+function readArray<T>(
+  value: unknown,
+  reader: (item: unknown) => T | null,
+): T[] | null {
   if (!Array.isArray(value)) return null;
   const result: T[] = [];
   for (const item of value) {
@@ -899,10 +1010,17 @@ function readNullable<T>(
   return reader(value) ?? undefined;
 }
 
-function readEnumArray<T extends string>(value: unknown, allowed: Set<T>): T[] | null {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) return null;
+function readEnumArray<T extends string>(
+  value: unknown,
+  allowed: Set<T>,
+): T[] | null {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string"))
+    return null;
   const result = value as T[];
-  if (new Set(result).size !== result.length || result.some((item) => !allowed.has(item))) {
+  if (
+    new Set(result).size !== result.length ||
+    result.some((item) => !allowed.has(item))
+  ) {
     return null;
   }
   return [...result];
@@ -912,12 +1030,23 @@ function hasUniqueIds(values: Array<{ id: string }>): boolean {
   return new Set(values.map((value) => value.id)).size === values.length;
 }
 
-function sameStrings(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+function sameStrings(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
-function sameStringSets(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value) => right.includes(value));
+function sameStringSets(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length && left.every((value) => right.includes(value))
+  );
 }
 
 function sameJson(left: unknown, right: unknown): boolean {
@@ -942,17 +1071,17 @@ function sameJson(left: unknown, right: unknown): boolean {
 }
 
 function recordValue(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
+  return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 }
 
 function nonEmptyString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function optionalString(value: unknown): boolean {
-  return value === undefined || value === null || typeof value === 'string';
+  return value === undefined || value === null || typeof value === "string";
 }
 
 function optionalNonNegativeInteger(value: unknown): boolean {
@@ -960,11 +1089,13 @@ function optionalNonNegativeInteger(value: unknown): boolean {
 }
 
 function stringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => nonEmptyString(item) !== null);
+  return (
+    Array.isArray(value) && value.every((item) => nonEmptyString(item) !== null)
+  );
 }
 
 function nonNegativeInteger(value: unknown): boolean {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function positiveInteger(value: unknown): boolean {

@@ -1000,6 +1000,87 @@
   font-style: normal;
 }
 
+.tool-computer-screenshot {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px;
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.14);
+  border-radius: 6px;
+  background: rgba(var(--desktop-slate-rgb), 0.045);
+}
+
+.tool-computer-screenshot-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.tool-computer-screenshot-appicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex: none;
+}
+
+.tool-computer-screenshot-head > span {
+  color: var(--desktop-text-soft);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-computer-screenshot-head em {
+  font-style: normal;
+  margin-left: auto;
+}
+
+/* Appshot frame: window preview with the target app's icon overlaid at the
+   top-left corner (reference: appshotAppIconFadeIn). */
+.tool-computer-screenshot-frame {
+  position: relative;
+  min-width: 0;
+}
+
+.tool-computer-screenshot-frame > img:first-child {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: rgba(var(--desktop-slate-rgb), 0.06);
+}
+
+.tool-computer-screenshot-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(var(--desktop-black-rgb), 0.35);
+  animation: tool-computer-appshot-icon-in 240ms ease-out;
+}
+
+@keyframes tool-computer-appshot-icon-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+
+
 .tool-file-list,
 .tool-file-matches {
   display: grid;

@@ -33,10 +33,19 @@ function setup() {
   return { runtime, reconciler: new WebPublicViewReconcilerV2(runtime) };
 }
 describe('Web public view', () => {
-  it('applies six real Web entries as a baseline without workload ACK', async () => {
+  it('applies the real Web feature entries as a baseline without workload ACK', async () => {
     const { runtime, reconciler } = setup();
     const payload = await view();
-    expect(payload.snapshot.entries).toHaveLength(6);
+    expect(
+      payload.snapshot.entries.some(
+        ({ entry_id }) => entry_id === 'builtin-web-feature-project-graph'
+      )
+    ).toBe(true);
+    expect(
+      payload.snapshot.entries.some(
+        ({ entry_id }) => entry_id === 'builtin-web-feature-ui-composer'
+      )
+    ).toBe(true);
     const workloadApply = vi.spyOn(runtime, 'apply');
     expect(await reconciler.apply(payload)).toBeUndefined();
     expect(runtime.getSnapshot()?.snapshot.digest).toBe(payload.snapshot.digest);

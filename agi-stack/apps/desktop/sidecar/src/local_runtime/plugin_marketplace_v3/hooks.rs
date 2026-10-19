@@ -261,6 +261,11 @@ impl ToolHost for HookTools {
         self.hooks.run("after_tool_execute").await?;
         Ok(result)
     }
+    async fn call_with_content(&self, name: &str, input: &str) -> CoreResult<agistack_core::ports::ToolResult> {
+        let result = self.inner.call_with_content(name, input).await?;
+        self.hooks.run("after_tool_execute").await?;
+        Ok(result)
+    }
 }
 
 #[cfg(test)]

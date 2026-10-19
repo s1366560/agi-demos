@@ -1,3 +1,4 @@
+import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Cross2Icon, MagnifyingGlassIcon } from '@radix-ui/react-icons';
 
@@ -27,6 +28,8 @@ export function ShortcutSettingsPage({
   platform?: ShortcutPlatform;
 }) {
   const { t } = useI18n();
+  const shortcutAuthority = useDesktopRendererAuthorityV2();
+  const shortcutEnabled = (id: string) => shortcutAuthority.shortcutIds?.includes(id) === true;
   const [query, setQuery] = useState('');
   const [combo, setCombo] = useState<string | null>(null);
   const groups = useMemo(
@@ -36,8 +39,8 @@ export function ShortcutSettingsPage({
         combo,
         platform,
         resolveLabel: (definition) => t(definition.labelKey),
-      }),
-    [combo, platform, query, t],
+      }).map((group) => ({ ...group, shortcuts: group.shortcuts.filter((shortcut) => shortcutEnabled(shortcut.id)) })).filter((group) => group.shortcuts.length > 0),
+    [shortcutAuthority, combo, platform, query, t],
   );
 
   const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {

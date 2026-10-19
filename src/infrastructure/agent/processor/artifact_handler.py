@@ -286,6 +286,30 @@ class ArtifactHandler:
         """Update langfuse context (set per-process call)."""
         self._langfuse_context = ctx
 
+    async def persist_tool_attachments(
+        self, attachments: list[Any], *, tool_name: str, tool_execution_id: str | None
+    ) -> tuple[list[Any], list[dict[str, Any]]]:
+        from src.infrastructure.agent.native_computer_use.image_messages import (
+            persist_tool_attachments,
+        )
+
+        return await persist_tool_attachments(
+            self._artifact_service,
+            attachments,
+            scope=self._langfuse_context or {},
+            tool_name=tool_name,
+            tool_execution_id=tool_execution_id,
+        )
+
+    async def hydrate_model_images(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        from src.infrastructure.agent.native_computer_use.image_messages import (
+            hydrate_image_messages,
+        )
+
+        return await hydrate_image_messages(
+            messages, self._artifact_service, self._langfuse_context or {}
+        )
+
     # ------------------------------------------------------------------
     # Sanitization
     # ------------------------------------------------------------------

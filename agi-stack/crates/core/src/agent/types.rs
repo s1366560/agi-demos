@@ -381,6 +381,16 @@ pub enum Role {
     Answer,
 }
 
+/// An image artifact explicitly supplied by a trusted host, never extracted from tool text.
+/// The host validates artifact ownership before crossing this boundary. Providers
+/// load its bytes only when constructing a multimodal HTTP request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaAttachment {
+    pub artifact_path: String,
+    pub mime_type: String,
+}
+
 /// One line of the ReAct transcript, tagged with the round it belongs to so the
 /// loop can be replayed deterministically after a crash.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -388,6 +398,8 @@ pub struct TranscriptEntry {
     pub round: u64,
     pub role: Role,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<MediaAttachment>,
 }
 
 impl TranscriptEntry {
@@ -396,7 +408,13 @@ impl TranscriptEntry {
             round,
             role,
             content: content.into(),
+            media: Vec::new(),
         }
+    }
+
+    pub fn with_media(mut self, media: Vec<MediaAttachment>) -> Self {
+        self.media = media;
+        self
     }
 }
 
@@ -409,12 +427,21 @@ pub struct CompletedCall {
     pub tool: String,
     pub input_json: String,
     pub output_json: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<MediaAttachment>,
+    /// Accepted policy metadata, persisted with the transformed output.
+    #[serde(default)]
+    pub metadata: serde_json::Value,
     /// True when `output_json` records a tool **failure** observation instead
     /// of a successful result. The engine feeds failures back to the planner
     /// (Agent-First recovery) instead of aborting the run, and replay must not
     /// treat the call as a successful — possibly terminal — result.
     #[serde(default)]
     pub failed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control_outcome: Option<crate::ports::ToolControlOutcome>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control_generation: Option<String>,
 }
 
 /// Lifecycle of an agent session.

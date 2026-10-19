@@ -1,3 +1,4 @@
+import { createPluginInstanceClientV2, type PluginInstanceClientV2 } from './pluginInstanceClientV2';
 import { createMarketplaceClient, type MarketplaceClient } from '../../../../packages/plugin-marketplace-ui/src/client';
 import { validMessageDisplayContent } from '../features/chat/messageDisplayModel';
 import { createLocalPluginClient, type LocalPluginClient } from './localPluginClient';
@@ -1890,6 +1891,25 @@ export class DesktopApiClient {
   private workspaceRoot(suffix: string): string {
     const workspaceId = requireValue(this.config.workspaceId, 'workspace id');
     return `/api/v1/workspaces/${encodeURIComponent(workspaceId)}${suffix}`;
+  }
+
+  localRendererViewV2(signal?: AbortSignal): Promise<unknown> {
+    if (this.config.mode !== 'local' || !this.config.tenantId) throw new Error('local_renderer_scope_unavailable');
+    const scope = new URLSearchParams({ tenant_id: this.config.tenantId });
+    if (this.config.projectId) scope.set('project_id', this.config.projectId);
+    return this.request(`/api/v1/local-plugins/v2/renderer-view?${scope}`, { signal });
+  }
+
+  localRendererReceiptV2(snapshotDigest: string, status: 'ack' | 'nack', errorCode?: string, signal?: AbortSignal): Promise<unknown> {
+    if (this.config.mode !== 'local' || !this.config.tenantId) throw new Error('local_renderer_scope_unavailable');
+    return this.request('/api/v1/local-plugins/v2/renderer-receipt', { method: 'POST', signal, body: {
+      tenant_id: this.config.tenantId, project_id: this.config.projectId || null,
+      snapshot_digest: snapshotDigest, status, ...(errorCode ? { error_code: errorCode } : {}),
+    } });
+  }
+
+  pluginInstancesV2(): PluginInstanceClientV2 {
+    return createPluginInstanceClientV2(this.config, (path, options) => this.request<unknown>(path, options));
   }
 
   pluginMarketplaceV3(): MarketplaceClient {

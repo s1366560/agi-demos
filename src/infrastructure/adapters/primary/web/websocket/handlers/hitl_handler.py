@@ -675,8 +675,13 @@ class PermissionRespondHandler(WebSocketMessageHandler):
         """Handle permission response."""
         request_id = message.get("request_id")
         granted = message.get("granted")
+        scope = message.get("scope", "once")
 
-        if not request_id or granted is None:
+        if (
+            not request_id
+            or not isinstance(granted, bool)
+            or scope not in {"once", "session", "always"}
+        ):
             await context.send_error("Missing required fields: request_id, granted")
             return
 
@@ -686,7 +691,7 @@ class PermissionRespondHandler(WebSocketMessageHandler):
                 context=context,
                 request_id=request_id,
                 hitl_type="permission",
-                response_data={"granted": granted, "action": action},
+                response_data={"granted": granted, "action": action, "scope": scope},
                 ack_type="permission_response_ack",
             )
         except Exception as e:

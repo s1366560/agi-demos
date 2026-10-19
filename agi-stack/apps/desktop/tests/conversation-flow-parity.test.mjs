@@ -14,6 +14,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const { ToastProvider } = require('/tmp/agistack-desktop-test-dist/src/features/feedback/ToastCenter.js');
 const { CodeBlockFrame } = require('/tmp/agistack-desktop-test-dist/src/features/chat/HighlightedCode.js');
+const { toolCallPairStatus } = require('/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js');
 
 const readSource = (path) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
@@ -67,9 +68,11 @@ test('preparing status flows from the stream-merge model into the timeline row',
   // The model owns the signal: act_delta merges set argsStreaming, the
   // canonical act clears it, and pair status surfaces "preparing".
   assert.match(chatTimelineModelSource, /argsStreaming: kind === 'delta'/);
-  assert.match(
-    chatTimelineModelSource,
-    /export type ToolCallPairStatus = 'preparing' \| 'running' \| 'complete' \| 'failed'/,
+  const call = { id: 'streaming-call', type: 'act', metadata: { argsStreaming: true } };
+  assert.equal(toolCallPairStatus({ call, result: null }), 'preparing');
+  assert.equal(
+    toolCallPairStatus({ call: { ...call, metadata: { argsStreaming: false } }, result: null }),
+    'running',
   );
   assert.match(chatTimelineModelSource, /if \(toolCallArgumentsStreaming\(pair\.call\)\) return 'preparing'/);
 

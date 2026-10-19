@@ -229,6 +229,13 @@ async fn signed_plugin_plan_and_build_hitl_responses_use_fresh_operation_authori
             )
             .await;
             assert_eq!(status, StatusCode::OK, "{body}");
+            assert_eq!(body["status"], "answered");
+            assert_eq!(body["authority_status"], "answered");
+            assert_eq!(body["authority_revision"], pending.authority_revision + 1);
+            for key in ["message", "created_at", "answered_at", "observed_at"] {
+                assert!(!body[key].as_str().unwrap().is_empty(), "{key}: {body}");
+            }
+            assert!(body["expires_at"].is_null());
             wait_continuation(&state, &conversation.id, &llm).await;
             assert_eq!(
                 llm.saw_marker.load(Ordering::SeqCst),
@@ -240,6 +247,8 @@ async fn signed_plugin_plan_and_build_hitl_responses_use_fresh_operation_authori
                 request(&state, "POST", "/api/v1/agent/hitl/respond", command).await;
             assert_eq!(status, StatusCode::OK, "{body}");
             assert_eq!(body["duplicate"], true);
+            assert_eq!(body["status"], "answered");
+            assert!(!body["answered_at"].as_str().unwrap().is_empty());
         }
     }
 }

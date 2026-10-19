@@ -102,7 +102,9 @@ def test_retrieval_stores_row_preserves_route_order_and_openapi() -> None:
 
 
 @pytest.mark.unit
-async def test_generation_dispatcher_executes_retrieval_stores_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_retrieval_stores_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     store_types = [{"type": "pgvector"}]
     retrieval_service = SimpleNamespace(list_store_types=MagicMock(return_value=store_types))
     backend_store = SimpleNamespace(services=SimpleNamespace(retrieval_service=retrieval_service))

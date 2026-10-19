@@ -124,7 +124,9 @@ def test_tenants_row_preserves_route_order_and_openapi() -> None:
 
 
 @pytest.mark.unit
-async def test_generation_dispatcher_executes_tenants_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_tenants_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     rows = MagicMock()
     rows.scalars.return_value.all.return_value = []
     db = SimpleNamespace(execute=AsyncMock(return_value=rows))

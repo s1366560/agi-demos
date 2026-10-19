@@ -102,7 +102,8 @@ async fn rejects_wrong_model_shape_index_dimensions_and_zero_vectors() {
         ),
         (
             response(json!([1e100])),
-            VerifiedEmbeddingError::InvalidVector,
+            // Values outside f32's range are rejected while decoding the response.
+            VerifiedEmbeddingError::InvalidResponse,
         ),
     ];
     for (body, expected) in cases {

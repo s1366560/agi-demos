@@ -1,4 +1,4 @@
-import { timelineToolResultFailed } from '../chat/toolResultStatus';
+import { timelineToolResultStatus } from '../chat/toolResultStatus';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Cross2Icon } from '@radix-ui/react-icons';
 import { useI18n } from '../../i18n';
@@ -9,12 +9,14 @@ import {
   serializeRawTimelineDetail,
 } from './timelineStepDetailsModel';
 import { PlatformPluginToolResultSlots } from '../chat/PlatformPluginToolResultSlots';
+import { projectToolOutputPresentationV2 } from '../chat/toolResultOutputPresentationV2';
 import {
   ToolFileMetadataView,
   timelineFileMetadata,
   timelineSummary,
   timelineKind,
   timelineTitle,
+  timelineToolDisplay,
 } from '../chat/chatTimelinePresentation';
 import { toolCallPresentationKind } from '../chat/chatTimelineModel';
 import './TimelineStepDetails.css';
@@ -42,6 +44,7 @@ export function TimelineStepDetails({
   const resultItem = [...items]
     .reverse()
     .find((item) => item.type === 'observe' || item.type === 'tool_result');
+  const resultDisplay = resultItem ? timelineToolDisplay(resultItem) : null;
   const fileMetadata = [...items].reverse().map(timelineFileMetadata).find(Boolean);
   const statusLabels: Record<string, string> = {
     running: 'session.toolStatus.running',
@@ -50,6 +53,8 @@ export function TimelineStepDetails({
     completed: 'session.toolStatus.complete',
     failed: 'session.toolStatus.failed',
     error: 'session.toolStatus.failed',
+    paused: 'session.toolStatus.paused',
+    stopped: 'session.toolStatus.stopped',
   };
   const identity = items[0]?.id;
   useEffect(() => {
@@ -81,7 +86,9 @@ export function TimelineStepDetails({
   };
   const latest = items.at(-1);
   const overviewSummary =
-    model.status === 'failed' && latest
+    model.status === 'paused' || model.status === 'stopped'
+      ? t(`session.computerControl.${model.status}`)
+      : model.status === 'failed' && latest
       ? timelineSummary({ ...latest, isError: true }, timelineKind(latest), t)
       : (model.summary ?? t('timelineDetails.noSummary'));
   const payloads = activeTab === 'input' ? model.input : model.output;
@@ -198,8 +205,14 @@ export function TimelineStepDetails({
             {activeTab === 'output' && resultItem ? (
               <PlatformPluginToolResultSlots
                 resultId={resultItem.id}
+                presentation={projectToolOutputPresentationV2({
+                  kind: toolCallPresentationKind({call: items[0], result: resultItem}),
+                  output: resultItem.toolOutput ?? resultItem.payload,
+                  details: resultDisplay?.details,
+                  summary: resultDisplay?.summary,
+                })}
                 toolName={resultItem.toolName ?? items[0]?.toolName ?? ''}
-                status={timelineToolResultFailed(resultItem) ? 'failed' : 'complete'}
+                status={timelineToolResultStatus(resultItem)}
                 kind={toolCallPresentationKind({
                   call: items[0],
                   result: resultItem,

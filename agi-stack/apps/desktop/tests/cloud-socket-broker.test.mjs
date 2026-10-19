@@ -3,7 +3,8 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const compiledModule = '/tmp/agistack-desktop-test-dist/electron/main/cloudSocketBroker.js';
+const compiledModule =
+  '/tmp/agistack-desktop-test-dist/apps/desktop/electron/main/cloudSocketBroker.js';
 
 const policy = Object.freeze({
   kind: 'voice',
@@ -88,7 +89,10 @@ test('main socket broker validates both directions and closes on secret reflecti
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(socket.closeCalls.at(-1).code, 1008);
-  assert.equal(events.some((event) => event.type === 'error'), true);
+  assert.equal(
+    events.some((event) => event.type === 'error'),
+    true
+  );
   assert.equal(JSON.stringify(events).includes('vault-only-cloud-secret'), false);
 });
 
@@ -112,7 +116,7 @@ test('main socket broker binds send and cleanup to the renderer owner', async ()
       socketId: 'cloud-socket-broker-0003',
       frame: { binary: false, text: '{}' },
     }),
-    /cloud socket is unavailable/u,
+    /cloud socket is unavailable/u
   );
   assert.equal(broker.cancelOwner(11), 1);
   assert.equal(socket.closeCalls.at(-1).code, 1001);
@@ -170,7 +174,295 @@ test('renderer failure cleanup code closes and releases the native connection', 
     request: { kind: 'voice', url: policy.url, scope: policy.scope },
   });
   socket.open('memstack.auth');
-  await broker.close(17, { socketId: 'cloud-socket-broker-0099', code: 3008, reason: 'bridge_failure' });
+  await broker.close(17, {
+    socketId: 'cloud-socket-broker-0099',
+    code: 3008,
+    reason: 'bridge_failure',
+  });
   assert.equal(socket.closeCalls.at(-1).code, 3008);
   assert.equal(broker.activeCount, 0);
+});
+
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+async function pausedAgentConnection(t, respond) {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 0 });
+  const { DesktopCloudSocketBroker } = require(compiledModule);
+  const agentPolicy = {
+    ...policy,
+    kind: "agent",
+    limits: { ...policy.limits, idle_timeout_ms: 75_000 },
+  };
+  const socket = fakeSocket(agentPolicy.url, agentPolicy.protocols);
+  const events = [];
+  const nativeClosed = [];
+  let sendNative;
+  const send = socket.send.bind(socket);
+  socket.send = (data) => {
+    send(data);
+    if (respond && JSON.parse(data).type === "heartbeat") {
+      socket.message(JSON.stringify({ type: "pong" }));
+    }
+  };
+  const broker = new DesktopCloudSocketBroker({
+    authorize: async () => agentPolicy,
+    createSocket: () => socket,
+    emit: (_owner, event) => events.push(event),
+    computerUse: {
+      async opened(_id, _scope, send) {
+        sendNative = send;
+      },
+      receive: () => false,
+      closed: (id) => nativeClosed.push(id),
+    },
+  });
+  const socketId = "cloud-paused-agent-001";
+  await broker.open(21, {
+    socketId,
+    request: { kind: "agent", url: agentPolicy.url, scope: agentPolicy.scope },
+  });
+  socket.open("memstack.auth");
+  await tick();
+  await sendNative({
+    type: "computer_use_result",
+    request_id: "paused-request",
+    output_json:
+      '{"type":"computer_use_control","status":"user_paused","retry_allowed":false}',
+    is_error: false,
+    media: [],
+    control_outcome: "user_paused",
+    control_generation: "pause-generation",
+  });
+  t.after(() => broker.cancelAll());
+  return { broker, socket, socketId, events, nativeClosed };
+}
+
+test("main keeps a paused native agent connection alive while the renderer sends no frames", async (t) => {
+  const { broker, socket, nativeClosed } = await pausedAgentConnection(t, true);
+  for (let step = 0; step < 12; step++) {
+    t.mock.timers.tick(20_000);
+    await tick();
+    assert.equal(broker.activeCount, 1);
+  }
+  assert.equal(
+    socket.sent.filter((data) => JSON.parse(data).type === "heartbeat").length,
+    12,
+  );
+  assert.deepEqual(nativeClosed, []);
+  assert.deepEqual(socket.closeCalls, []);
+  assert.equal(
+    socket.sent.filter(
+      (data) => JSON.parse(data).type === "computer_use_result",
+    ).length,
+    1,
+    "keepalive must never replay the paused tool result",
+  );
+});
+
+test("outbound heartbeats cannot keep an unresponsive paused agent connection alive", async (t) => {
+  const { broker, socket, events, nativeClosed, socketId } =
+    await pausedAgentConnection(t, false);
+  for (let step = 0; step < 3; step++) {
+    t.mock.timers.tick(20_000);
+    await tick();
+  }
+  assert.equal(broker.activeCount, 0);
+  assert.deepEqual(nativeClosed, [socketId]);
+  assert.equal(events.at(-1).type, "close");
+  assert.equal(events.at(-1).code, 4001);
+  assert.equal(events.at(-1).reason, "cloud_socket_idle_timeout");
+  const sent = socket.sent.length;
+  t.mock.timers.tick(120_000);
+  await tick();
+  assert.equal(socket.sent.length, sent);
+});
+
+test("owner cancellation stops native keepalive even when late pong frames arrive", async (t) => {
+  const { broker, socket, nativeClosed, socketId } =
+    await pausedAgentConnection(t, true);
+  t.mock.timers.tick(20_000);
+  await tick();
+  assert.equal(broker.cancelOwner(21), 1);
+  socket.message(JSON.stringify({ type: "pong" }));
+  const sent = socket.sent.length;
+  t.mock.timers.tick(120_000);
+  await tick();
+  assert.equal(socket.sent.length, sent);
+  assert.deepEqual(nativeClosed, [socketId]);
+  assert.equal(socket.closeCalls.at(-1).code, 1001);
+});
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+test('actual renderer receives Open before immediate server frames while native discovery is pending', async () => {
+  const { DesktopCloudSocketBroker } = require(compiledModule);
+  const {
+    createCloudSocketBridge,
+  } = require('/tmp/agistack-desktop-test-dist/apps/desktop/src/api/cloudSocketBridge.js');
+  const discovery = deferred();
+  const socket = fakeSocket(policy.url, policy.protocols);
+  const order = [];
+  let receive;
+  const broker = new DesktopCloudSocketBroker({
+    authorize: async () => ({ ...policy, kind: 'agent' }),
+    createSocket: () => socket,
+    emit: (_owner, event) => {
+      order.push(event.type);
+      receive?.(event);
+    },
+    computerUse: {
+      async opened(_id, _scope, send) {
+        await discovery.promise;
+        await send({
+          type: 'computer_use_device',
+          device_id: 'fixture-device',
+          tool_definitions: [],
+        });
+      },
+      receive: () => false,
+      closed() {},
+    },
+  });
+  const renderer = createCloudSocketBridge(
+    { kind: 'agent', url: policy.url, scope: policy.scope },
+    {
+      subscribe(callback) {
+        receive = callback;
+        return () => {
+          receive = undefined;
+        };
+      },
+      open: (input) => broker.open(31, input),
+      send: (input) => broker.send(31, input),
+      close: (input) => broker.close(31, input),
+    },
+    { socketId: 'cloud-native-order-0001' }
+  );
+  const messages = [];
+  renderer.onmessage = (event) => messages.push(event.data);
+  renderer.onopen = () => renderer.send('{"type":"send_message"}');
+  await tick();
+  socket.open('memstack.auth');
+  socket.message('{"type":"connected"}');
+  socket.message('{"type":"ready"}');
+  await tick();
+  assert.equal(renderer.readyState, 0);
+  assert.deepEqual(order, []);
+  discovery.resolve();
+  await tick();
+  assert.equal(renderer.readyState, 1);
+  assert.deepEqual(order, ['open', 'message', 'message']);
+  assert.deepEqual(messages, ['{"type":"connected"}', '{"type":"ready"}']);
+  assert.deepEqual(
+    socket.sent.map((value) => JSON.parse(value).type),
+    ['computer_use_device', 'send_message']
+  );
+  assert.deepEqual(socket.closeCalls, []);
+  renderer.close();
+});
+
+test('failed optional discovery still opens ordinary chat before queued messages', async () => {
+  const { DesktopCloudSocketBroker } = require(compiledModule);
+  const discovery = deferred();
+  const socket = fakeSocket(policy.url, policy.protocols);
+  const events = [];
+  const broker = new DesktopCloudSocketBroker({
+    authorize: async () => ({ ...policy, kind: 'agent' }),
+    createSocket: () => socket,
+    emit: (_owner, event) => events.push(event.type),
+    computerUse: {
+      opened: () => discovery.promise,
+      receive: () => false,
+      closed() {},
+    },
+  });
+  await broker.open(32, {
+    socketId: 'cloud-native-fail-0001',
+    request: { kind: 'agent', url: policy.url, scope: policy.scope },
+  });
+  socket.open('memstack.auth');
+  socket.message('{"type":"connected"}');
+  discovery.reject(new Error('native unavailable'));
+  await tick();
+  assert.deepEqual(events, ['open', 'message']);
+  broker.cancelOwner(32);
+});
+
+test('closing during discovery discards queued frames and suppresses late Open', async () => {
+  const { DesktopCloudSocketBroker } = require(compiledModule);
+  const discovery = deferred();
+  const socket = fakeSocket(policy.url, policy.protocols);
+  const events = [];
+  let closed = 0;
+  const broker = new DesktopCloudSocketBroker({
+    authorize: async () => ({ ...policy, kind: 'agent' }),
+    createSocket: () => socket,
+    emit: (_owner, event) => events.push(event.type),
+    computerUse: {
+      opened: () => discovery.promise,
+      receive: () => false,
+      closed() {
+        closed++;
+      },
+    },
+  });
+  await broker.open(33, {
+    socketId: 'cloud-native-close-0001',
+    request: { kind: 'agent', url: policy.url, scope: policy.scope },
+  });
+  socket.open('memstack.auth');
+  socket.message('{"type":"connected"}');
+  await tick();
+  broker.cancelOwner(33);
+  discovery.resolve();
+  await tick();
+  assert.deepEqual(events, ['close']);
+  assert.equal(closed, 1);
+  assert.equal(broker.activeCount, 0);
+});
+
+test('frames buffered during discovery retain frame and aggregate limits', async () => {
+  const { DesktopCloudSocketBroker } = require(compiledModule);
+  for (const payloads of [['{"a":"x"}'], ['{"a":1}', '{"a":2}', '{"a":3}']]) {
+    const discovery = deferred();
+    const socket = fakeSocket(policy.url, policy.protocols);
+    const events = [];
+    const broker = new DesktopCloudSocketBroker({
+      authorize: async () => ({
+        ...policy,
+        kind: 'agent',
+        limits: {
+          ...policy.limits,
+          max_frame_bytes: 8,
+          max_aggregate_bytes: 16,
+        },
+      }),
+      createSocket: () => socket,
+      emit: (_owner, event) => events.push(event.type),
+      computerUse: {
+        opened: () => discovery.promise,
+        receive: () => false,
+        closed() {},
+      },
+    });
+    await broker.open(34, {
+      socketId: 'cloud-native-limit-0001',
+      request: { kind: 'agent', url: policy.url, scope: policy.scope },
+    });
+    socket.open('memstack.auth');
+    for (const payload of payloads) socket.message(payload);
+    assert.equal(socket.closeCalls.at(-1).code, 1009);
+    assert.equal(broker.activeCount, 0);
+    discovery.resolve();
+    await tick();
+    assert.deepEqual(events, ['error', 'close']);
+  }
 });

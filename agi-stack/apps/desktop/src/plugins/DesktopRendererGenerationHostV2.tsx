@@ -43,8 +43,9 @@ export function useDesktopRendererGenerationHostV2(
   config: DesktopRuntimeConfig,
   enabled: boolean,
   composition: DesktopRendererCompositionPortV2,
+  accountId?: string,
 ): DesktopRendererGenerationContextValueV2 {
-  const generationState = useDesktopPluginGenerationV2(config, enabled);
+  const generationState = useDesktopPluginGenerationV2(config, enabled, accountId);
   const generation = generationState.generation;
   const generationDigest = generation?.snapshot.digest;
   const generationError = generationState.error;

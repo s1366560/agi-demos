@@ -64,9 +64,8 @@ class ChatRunToolPermissionV2:
     sessions: async_sessionmaker[AsyncSession]
     child_run_id: str | None = None
 
-    async def decision(
-        self, permission: str | None, tool_name: str, arguments: dict[str, Any]
-    ) -> Decision:
+    async def revalidate_current_authority(self, permission: str | None) -> None:
+        """Revalidate scope, policy and sender ceilings without reusing an invocation grant."""
         operation = current_operation_context_v2()
         if operation is not self.operation or _identity(operation) != self.identity:
             raise _denied()
@@ -101,6 +100,11 @@ class ChatRunToolPermissionV2:
             or latest.permission_profile != row.permission_profile
         ):
             raise _denied()
+
+    async def decision(
+        self, permission: str | None, tool_name: str, arguments: dict[str, Any]
+    ) -> Decision:
+        await self.revalidate_current_authority(permission)
         if permission in _READ:
             return "allow"
         if permission not in _MUTATION:
@@ -121,7 +125,7 @@ class ChatRunToolPermissionV2:
             and not approved.consumed
             and approved.identity
             == (
-                operation,
+                self.operation,
                 self.run_id,
                 tool_name,
                 _arguments(arguments),
@@ -310,3 +314,25 @@ def claim_chat_tool_invocation_v2(
     ):
         raise _denied()
     approved.consumed = True
+
+
+def current_claimed_chat_tool_invocation_v2(
+    tool_name: str, arguments: dict[str, Any]
+) -> ChatRunToolPermissionV2 | None:
+    """Read an already-consumed exact-call receipt without consuming it again.
+
+    The processor claims human approval at the actual invocation boundary. A
+    downstream native bridge needs that receipt, while calling ``decision``
+    again in ASK mode would correctly demand a new human approval. Run state,
+    revision and membership must still be revalidated when admitting the call.
+    """
+    guard = current_chat_run_guard_v2()
+    approved = _approval.get()
+    if (
+        guard is None
+        or approved is None
+        or not approved.consumed
+        or approved.identity != (guard.operation, guard.run_id, tool_name, _arguments(arguments))
+    ):
+        return None
+    return guard

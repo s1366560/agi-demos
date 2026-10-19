@@ -24,6 +24,7 @@ mod answer_stream;
 mod anthropic;
 mod embedding;
 mod endpoint;
+mod media;
 mod openai;
 mod rerank;
 mod structured;
@@ -33,3 +34,8 @@ pub use anthropic::AnthropicLlm;
 pub use embedding::{HttpEmbedding, VerifiedEmbedding, VerifiedEmbeddingError};
 pub use openai::HttpLlm;
 pub use rerank::HttpRerank;
+
+mod request_log;
+pub use request_log::with_model_request_log;
+mod logged_llm;
+pub use logged_llm::RequestLoggedLlm;

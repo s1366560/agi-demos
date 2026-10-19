@@ -18,6 +18,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
+from .feature_operations import FeatureOperationOwnerV2, builtin_feature_owner_v2
 from .openapi import build_openapi_schema_v2
 from .runtime import RuntimeV2Error
 
@@ -57,6 +58,7 @@ class RouteDefinitionV2:
     generate_unique_id_function: Callable[[APIRoute], str] | None = None
     include_in_schema: bool = True
     replaces_builtin_row_id: str | None = None
+    feature_owner: FeatureOperationOwnerV2 | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -301,7 +303,7 @@ def _validate_routes(routes: tuple[RouteContributionV2, ...]) -> None:
             seen.add(key)
 
 
-def install_route_definitions_v2(  # noqa: C901
+def install_route_definitions_v2(  # noqa: C901, PLR0912
     app: FastAPI,
     definitions: Sequence[RouteContributionV2],
 ) -> None:
@@ -342,9 +344,19 @@ def install_route_definitions_v2(  # noqa: C901
             response_options["route_class_override"] = route.route_class_override
         if route.generate_unique_id_function is not None:
             response_options["generate_unique_id_function"] = route.generate_unique_id_function
+        endpoint = route.endpoint
+        feature_owner = route.feature_owner or builtin_feature_owner_v2(
+            route.owner_entry_id, route.name
+        )
+        if feature_owner is not None:
+            from src.infrastructure.adapters.primary.web.dependencies.feature_operation_endpoint_v2 import (
+                guard_feature_endpoint_v2,
+            )
+
+            endpoint = guard_feature_endpoint_v2(endpoint, feature_owner)
         app.router.add_api_route(
             route.path,
-            route.endpoint,
+            endpoint,
             methods=list(route.methods),
             name=route.name,
             dependencies=list(route.dependencies),

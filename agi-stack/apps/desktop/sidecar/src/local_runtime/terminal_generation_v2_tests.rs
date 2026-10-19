@@ -2,9 +2,8 @@
 use std::{sync::Arc, time::Duration};
 
 use agistack_plugin_host::{
-    desktop_sidecar_host_definition_v2, desktop_sidecar_http_routes_definition_v2,
-    parse_profile_snapshot_v2, DataPlaneTargetV2, LoaderV2, RuntimeGenerationV2, RuntimeV2Error,
-    ScopeKindV2, ScopeV2, TargetHostDescriptorV2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
+    parse_profile_snapshot_v2, RuntimeGenerationV2, RuntimeV2Error, ScopeKindV2, ScopeV2,
+    TargetHostDescriptorV2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
@@ -31,12 +30,9 @@ async fn publish(state: &LocalRuntimeState, number: u64) -> Arc<RuntimeGeneratio
     snapshot.profile_id = format!("terminal-upgrade-{number}");
     snapshot.generation = number;
     snapshot.digest = format!("sha256:terminal-upgrade-{number}");
-    let generation = LoaderV2::for_target(
-        DataPlaneTargetV2::DesktopSidecar,
-        [
-            desktop_sidecar_http_routes_definition_v2(),
-            desktop_sidecar_host_definition_v2(),
-        ],
+    let generation = super::platform_plugin_sync_v2::desktop_loader(
+        state.app_data_dir.clone(),
+        state.local_knowledge_acceptance.clone(),
     )
     .stage(snapshot.clone())
     .await

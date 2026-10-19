@@ -63,9 +63,7 @@ def test_enhanced_search_rows_preserve_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -77,7 +75,9 @@ def test_enhanced_search_rows_preserve_route_order_and_openapi() -> None:
 
 
 @pytest.mark.unit
-async def test_generation_dispatcher_executes_enhanced_search_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_enhanced_search_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     user = object()
     health_probe = AsyncMock(return_value=True)
     search_application = SimpleNamespace(

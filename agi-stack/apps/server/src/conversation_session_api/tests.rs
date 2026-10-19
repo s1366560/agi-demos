@@ -48,6 +48,8 @@ fn schema_v2_projection_uses_persisted_authority_and_capabilities() {
         created_at: timestamp(25),
     };
     let hitl = SessionPendingHitlResponse {
+        authority_revision:1,
+        decision:None,
         id: "hitl-1".to_string(),
         conversation_id: "conversation-1".to_string(),
         message_id: Some("message-1".to_string()),
@@ -222,6 +224,8 @@ fn schema_v2_projection_uses_persisted_authority_and_capabilities() {
 #[test]
 fn read_only_projection_never_grants_mutation_capabilities() {
     let hitl = SessionPendingHitlResponse {
+        authority_revision:1,
+        decision:None,
         id: "hitl-read-only".to_string(),
         conversation_id: "conversation-1".to_string(),
         message_id: None,
@@ -270,6 +274,8 @@ fn read_only_projection_never_grants_mutation_capabilities() {
 #[test]
 fn pending_hitl_without_expiry_serializes_null_expiration() {
     let response = SessionPendingHitlResponse {
+        authority_revision:1,
+        decision:None,
         id: "hitl-no-expiry".to_string(),
         conversation_id: "conversation-1".to_string(),
         message_id: None,

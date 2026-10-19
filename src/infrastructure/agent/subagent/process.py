@@ -383,6 +383,7 @@ class SubAgentProcess:
             max_steps=self._subagent.max_iterations,
             llm_client=self._llm_client,
             provider_options=_provider_opts,
+            runtime_context={"allowed_mcp_servers": list(self._subagent.allowed_mcp_servers)},
         )
         return SessionProcessor(
             config=config,

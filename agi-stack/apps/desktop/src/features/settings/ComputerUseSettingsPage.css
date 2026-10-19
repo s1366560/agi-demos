@@ -1,0 +1,187 @@
+.computer-use-settings {
+  margin-bottom: 16px;
+}
+.computer-use-recording {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+}
+.computer-use-recording time,
+.computer-use-recording code {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.computer-use-recording .tool-computer-audio {
+  flex-basis: 100%;
+}
+.computer-use-recording audio {
+  max-width: 100%;
+}
+.computer-use-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.computer-use-settings fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+}
+.computer-use-settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.computer-use-settings li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 0;
+}
+.computer-use-activity {
+  position: fixed;
+  z-index: 40;
+  right: 20px;
+  top: 54px;
+  max-width: min(560px, calc(100vw - 40px));
+  border: 1px solid var(--desktop-border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--desktop-text);
+  background: var(--desktop-panel-raised);
+  max-height: calc(100vh - 90px);
+  overflow: auto;
+  width: min(340px, calc(100vw - 40px));
+  box-shadow: 0 4px 16px rgba(var(--desktop-black-rgb), 0.16);
+}
+.computer-use-activity button {
+  color: var(--desktop-text);
+  background: var(--desktop-panel-2);
+  border: 1px solid var(--desktop-border-strong);
+  border-radius: 5px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.computer-use-activity button:focus-visible {
+  outline: 2px solid var(--desktop-muted);
+  outline-offset: 2px;
+}
+.computer-use-activity button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.computer-use-activity > button {
+  margin-left: 12px;
+}
+.computer-use-activity > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.computer-use-session-activity {
+  margin-top: 8px;
+  border-top: 1px solid var(--desktop-border);
+  padding-top: 8px;
+}
+.computer-use-target-preview {
+  margin: 12px 0;
+  max-width: 520px;
+}
+.computer-use-app-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.computer-use-app-identity > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.computer-use-app-identity strong,
+.computer-use-app-identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.computer-use-app-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex: none;
+  border-radius: 7px;
+}
+.computer-use-placeholder-icon {
+  stroke: var(--desktop-muted);
+  fill: none;
+  stroke-width: 1.5;
+}
+.computer-use-window-preview {
+  position: relative;
+  margin-top: 8px;
+  border: 1px solid var(--desktop-border-strong);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--desktop-panel-2);
+}
+.computer-use-window-preview > img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  display: block;
+}
+.computer-use-window-preview > .computer-use-preview-app-badge {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: var(--desktop-panel-raised);
+  padding: 3px;
+  box-shadow: 0 2px 8px #0003;
+}
+.computer-use-window-preview > p {
+  font-size: 12px;
+  padding: 16px;
+  margin: 0;
+  color: var(--desktop-muted);
+}
+.computer-use-target-preview figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--desktop-muted);
+}
+.computer-use-target-preview figcaption code {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.computer-use-phase {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 5px;
+  background: var(--desktop-panel-2);
+  color: var(--desktop-text);
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.computer-use-error-code {
+  font-size: 11px;
+  color: var(--desktop-red);
+}

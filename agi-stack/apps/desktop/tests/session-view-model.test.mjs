@@ -3,7 +3,9 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
 const {
+  authoritativeRunFromSessionProjection,
   authoritativeRunFromSocketEvent,
   authoritativeRunsFromSocketEvents,
   buildSessionDetailViewModel,
@@ -16,6 +18,12 @@ const {
   sessionStatusPresentation,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/session/sessionViewModel.js'
+);
+const { buildWorkspaceOverviewModel } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceOverviewModel.js'
+);
+const { conversationTreeStatusValue, conversationTreeStatusPresentation } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js'
 );
 
 function conversation(overrides = {}) {
@@ -147,6 +155,49 @@ function projection(overrides = {}) {
     ...overrides,
   };
 }
+
+test('waiting runs render an enabled formal Stop without offering Resume', () => {
+  const React = require('react');
+  const jsx = require('react/jsx-runtime');
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
+  const { SessionWorkspace } = require('/tmp/agistack-desktop-test-dist/src/features/session/SessionWorkspace.js');
+  const originals = { jsx: jsx.jsx, jsxs: jsx.jsxs };
+  const buttons = [];
+  const intercept = (delegate) => (type, props, ...rest) => {
+    if (type === 'button') buttons.push(props);
+    return delegate(type, props, ...rest);
+  };
+  try {
+    jsx.jsx = intercept(originals.jsx);
+    jsx.jsxs = intercept(originals.jsxs);
+    for (const status of ['needs_input', 'needs_approval']) {
+      const authority = projection();
+      authority.currentRun.status = status;
+      authority.capabilities.runActions = ['cancel'];
+      authority.capabilities.allowedActions = ['cancel'];
+      const view = build({ projection: authority });
+      const actions = [];
+      buttons.length = 0;
+      const html = renderToStaticMarkup(React.createElement(I18nProvider, null,
+        React.createElement(SessionWorkspace, {
+          viewModel: view, thread: null, onOpenCanvas() {}, runActionPending: null,
+          liveConnected: false, liveError: null,
+          onRunAction: (action) => actions.push(action),
+        })));
+      assert.deepEqual(view.runActions, ['cancel']);
+      assert.doesNotMatch(html, /Resume|Reattach/u);
+      const stop = buttons.find((button) => React.Children.toArray(button.children).includes('Stop'));
+      assert.ok(stop, status);
+      assert.equal(stop.disabled, false);
+      stop.onClick();
+      assert.deepEqual(actions, ['cancel']);
+    }
+  } finally {
+    jsx.jsx = originals.jsx;
+    jsx.jsxs = originals.jsxs;
+  }
+});
 
 test('loaded tool activity pairs events without changing authority evidence', () => {
   const items = [
@@ -426,6 +477,24 @@ test('session view model keeps a blank title blank so the shell can localize the
   assert.equal(view.title, '');
 });
 
+test('native user control outcomes do not rewrite the authoritative parent run status', () => {
+  for (const status of ['running', 'completed', 'failed']) {
+    for (const controlOutcome of ['user_paused', 'user_stopped']) {
+      const view = build({
+        projection: projection({ currentRun: { ...projection().currentRun, status } }),
+        timeline: {
+          conversationId: 'conversation-1', items: [{
+            id: 'control', type: 'observe', toolName: 'computer_click',
+            controlOutcome, isError: false, eventTimeUs: 1, eventCounter: 1,
+          }], loading: false, error: null,
+        },
+      });
+      assert.equal(view.status, status);
+      assert.equal(view.observedFailedToolActivityCount, 0);
+    }
+  }
+});
+
 test('authoritative run socket events update run metadata without changing conversation lifecycle', () => {
   const event = {
     type: 'run_status',
@@ -500,6 +569,156 @@ test('conversation list refresh preserves a newer current run without overwritin
   assert.equal(merged.status, 'active');
   assert.equal(merged.metadata.run.status, 'needs_approval');
   assert.equal(merged.metadata.run.revision, 5);
+});
+
+test('same-authority lifecycle updates settle sidebar and recent sessions without a revision bump', () => {
+  const queuedRun = {
+    ...projection().currentRun,
+    status: 'queued',
+    revision: 1,
+    updated_at: '2026-10-15T10:49:26.963687Z',
+  };
+  const queued = conversation({ metadata: { run: queuedRun } });
+  const runningRun = {
+    ...queuedRun,
+    status: 'running',
+    updated_at: '2026-10-15T10:49:32.543628Z',
+  };
+  const running = conversationWithAuthoritativeRun(queued, runningRun);
+  assert.equal(conversationTreeStatusValue(running), 'running');
+
+  for (const status of ['failed', 'cancelled', 'completed']) {
+    const terminalRun = {
+      ...runningRun,
+      status,
+      updated_at: '2026-10-15T10:52:00.140641Z',
+    };
+    const settled = conversationWithAuthoritativeRun(running, terminalRun);
+    const [refreshed] = mergeConversationListWithCurrentRunAuthority([queued], [settled]);
+    assert.equal(refreshed.status, 'active');
+    assert.equal(refreshed.metadata.run.revision, 1);
+    assert.equal(conversationTreeStatusValue(refreshed), status);
+    assert.equal(
+      conversationTreeStatusPresentation(conversationTreeStatusValue(refreshed)).labelKey,
+      `workspaceTree.${status}`,
+    );
+    const overview = buildWorkspaceOverviewModel({
+      workspace: null,
+      project: null,
+      conversations: [refreshed],
+      plan: null,
+      sandboxStatus: null,
+      members: { status: 'unavailable', items: [], error: null },
+      agents: { status: 'unavailable', items: [], error: null },
+    });
+    assert.equal(overview.sessionCounts.running, 0);
+    assert.equal(overview.recentSessions[0].status, status);
+    for (const stale of [queuedRun, runningRun, terminalRun]) {
+      assert.equal(conversationWithAuthoritativeRun(settled, stale), settled);
+    }
+    const events = [queuedRun, runningRun, terminalRun, runningRun].map((payload) => ({
+      type: 'run_status',
+      payload,
+    }));
+    assert.deepEqual(authoritativeRunsFromSocketEvents(events), [terminalRun]);
+  }
+});
+
+test('equal-revision updates require a strictly later valid timestamp', () => {
+  const run = projection().currentRun;
+  const current = conversation({ metadata: { run } });
+  for (const updated_at of [run.updated_at, '2026-07-13T00:00:00Z', 'invalid', undefined]) {
+    assert.equal(
+      conversationWithAuthoritativeRun(current, { ...run, status: 'failed', updated_at }),
+      current,
+    );
+  }
+  assert.equal(
+    conversationWithAuthoritativeRun(current, {
+      ...run,
+      status: 'failed',
+      revision: run.revision - 1,
+      updated_at: '2026-07-14T00:00:00Z',
+    }),
+    current,
+  );
+});
+
+test('settled session projection corrects workspace running count after asynchronous cancellation', () => {
+  const initial = projection();
+  const running = conversation({ metadata: { run: initial.currentRun } });
+  const input = {
+    workspace: null,
+    project: null,
+    conversations: [running],
+    plan: null,
+    sandboxStatus: null,
+    members: { status: 'unavailable', items: [], error: null },
+    agents: { status: 'unavailable', items: [], error: null },
+  };
+  assert.equal(buildWorkspaceOverviewModel(input).sessionCounts.running, 1);
+  const settled = projection({
+    currentRun: { ...initial.currentRun, status: 'cancelled', revision: 5 },
+  });
+  const run = authoritativeRunFromSessionProjection(settled, {
+    conversationId: running.id,
+    tenantId: running.tenant_id,
+    projectId: running.project_id,
+    workspaceId: null,
+  });
+  assert.ok(run);
+  const updated = conversationWithAuthoritativeRun(running, run);
+  const [refreshed] = mergeConversationListWithCurrentRunAuthority([running], [updated]);
+  const overview = buildWorkspaceOverviewModel({ ...input, conversations: [refreshed] });
+  assert.equal(overview.sessionCounts.running, 0);
+  assert.equal(overview.recentSessions[0].status, 'cancelled');
+  assert.equal(refreshed.status, 'active');
+  assert.equal(conversationWithAuthoritativeRun(refreshed, initial.currentRun), refreshed);
+});
+
+test('session projection run rejects stale owners and cannot overwrite a newer run', () => {
+  const snapshot = projection();
+  const scope = {
+    conversationId: 'conversation-1',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: null,
+  };
+  for (const key of ['conversationId', 'tenantId', 'projectId', 'workspaceId']) {
+    assert.equal(
+      authoritativeRunFromSessionProjection(snapshot, { ...scope, [key]: 'other' }),
+      null,
+    );
+  }
+  assert.equal(authoritativeRunFromSessionProjection(null, scope), null);
+  assert.equal(
+    authoritativeRunFromSessionProjection(projection({ currentRun: null }), scope),
+    null,
+  );
+  for (const key of ['conversation_id', 'project_id']) {
+    assert.equal(
+      authoritativeRunFromSessionProjection(
+        projection({
+          currentRun: { ...snapshot.currentRun, [key]: 'other' },
+        }),
+        scope,
+      ),
+      null,
+    );
+  }
+  const newer = conversation({
+    metadata: {
+      run: {
+        ...snapshot.currentRun,
+        id: 'run-2',
+        revision: 1,
+        created_at: '2026-07-14T00:00:00Z',
+        updated_at: '2026-07-14T00:00:00Z',
+      },
+    },
+  });
+  const older = authoritativeRunFromSessionProjection(snapshot, scope);
+  assert.equal(conversationWithAuthoritativeRun(newer, older), newer);
 });
 
 test('authoritative run parsing preserves attention, control, recovery, and review states', () => {

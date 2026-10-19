@@ -118,6 +118,8 @@ fn test_state() -> AppState {
     let hitl: SharedHitlResponses = Arc::new(DevHitlResponseService::new(Arc::clone(&events)));
 
     AppState {
+        agent_generation: Default::default(),
+        feature_operations: Default::default(),
         memory,
         engine: Arc::new(ReActEngine::new(
             llm,
@@ -130,6 +132,7 @@ fn test_state() -> AppState {
         event_counter: Arc::new(AtomicU64::new(0)),
         ws_messages: Default::default(),
         active_agent_runs: Default::default(),
+        computer_use_devices: Default::default(),
         registry: registry.clone(),
         plugins: Arc::new(PluginHost::new(registry.clone())),
         control: Arc::new(Mutex::new(ControlPlane::new())),

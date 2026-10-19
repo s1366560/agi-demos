@@ -78,6 +78,7 @@ function load(name) {
     if (id.endsWith('.css')) return {};
     if (id === './workPanelState') return load('workPanelState');
     if (id === '../../i18n') return { useI18n: () => ({ t: (key) => key }) };
+    if (id.endsWith('/desktopRendererAuthorityStateV2')) return { useDesktopUiSlotsV2: () => ['plan', 'checks', 'changes', 'browser', 'run-details'].map((id) => ({ id, permission: 'ui.work-panel', grantedPermissions: ['ui.work-panel'] })) };
     if (id.endsWith('/ResizeHandle')) return { ResizeHandle: () => React.createElement('div', { role: 'separator' }) };
     if (id.endsWith('/TimelineInspectionContext')) return { useTimelineInspection: () => ({ dismiss() {} }) };
     if (id.endsWith('/sessionWorkPanelOptions')) return { getSessionWorkPanelOptions: (state) => state.options };

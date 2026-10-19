@@ -237,7 +237,7 @@ describe('web renderer artifact catalog v2', () => {
     await runtime.apply(distribution(initial, 1));
     const lastGood = runtime.getSnapshot();
     const invalid = structuredClone(initial);
-    const route = invalid.entries.find(({ entry_id }) => entry_id === 'builtin-web-default-routes');
+    const route = invalid.entries.find(({ entry_id }) => entry_id === 'builtin-web-feature-core');
     if (!route) throw new Error('web route contribution fixture is missing');
     route.config.payload = { schema_version: 1, artifact_refs: ['web.routes.missing.v1'] };
     invalid.generation += 1;
@@ -264,7 +264,7 @@ describe('web renderer artifact catalog v2', () => {
     await runtime.apply(distribution(initial, 1));
     const lastGood = runtime.getSnapshot();
     const invalid = structuredClone(initial);
-    const route = invalid.entries.find(({ entry_id }) => entry_id === 'builtin-web-default-routes');
+    const route = invalid.entries.find(({ entry_id }) => entry_id === 'builtin-web-feature-core');
     if (!route) throw new Error('web route contribution fixture is missing');
     invalid.entries.push({
       ...route,

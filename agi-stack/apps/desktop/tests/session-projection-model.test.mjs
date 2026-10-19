@@ -157,6 +157,23 @@ test('desktop session projection accepts a null workspace display name', () => {
   assert.equal(projection?.capabilities.canQueueNext, true);
 });
 
+test('unanswered approval and input runs expose only the formal stop action', () => {
+  for (const status of ['needs_approval', 'needs_input']) {
+    const payload = validProjection();
+    payload.current_run.status = status;
+    payload.capabilities.can_steer_now = false;
+    payload.capabilities.can_queue_next = false;
+    payload.capabilities.run_actions = ['cancel'];
+    payload.capabilities.allowed_actions = ['cancel'];
+    const decoded = decodeSignedProjection(payload);
+    assert.ok(decoded, status);
+    assert.deepEqual(decoded.capabilities.runActions, ['cancel']);
+    payload.capabilities.run_actions.push('resume');
+    payload.capabilities.allowed_actions.push('resume');
+    assert.equal(decodeSignedProjection(payload), null, 'stop does not grant resume authority');
+  }
+});
+
 function validCloudProjection() {
   const attempt = {
     id: 'attempt-2',
@@ -374,6 +391,18 @@ function validDecisionContext() {
     ],
   };
 }
+test('cloud permission preserves the validated native target and rejects malformed decision context', () => {
+  const payload=validCloudProjection();
+  payload.pending_hitl[0].request_type='permission';
+  const decision=validDecisionContext();decision.target={kind:'computer_app',id:'cua-consent-abcd'};
+  payload.pending_hitl[0].decision=decision;
+  const projection=decodeConversationSessionProjection(payload,'conversation-1');
+  assert.deepEqual(projection?.pendingHitl[0]?.decision,decision);
+  for(const field of ['risk','target']) {
+    const malformed=structuredClone(payload);delete malformed.pending_hitl[0].decision[field];
+    assert.equal(decodeConversationSessionProjection(malformed,'conversation-1'),null);
+  }
+});
 
 function pendingHitlRequest(overrides = {}) {
   return {

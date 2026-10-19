@@ -37,6 +37,7 @@ struct McpAgentTool {
     tool_name: String,
     definition: ToolDefinition,
     metadata: ToolMetadata,
+    computer_use_capability: bool,
 }
 
 /// Snapshot of the active project-scoped MCP tool catalog for one agent run.
@@ -68,12 +69,14 @@ impl McpAgentToolHost {
         let apps = supervisor
             .apps_pinned(&catalog_lease, &scope)
             .map_err(|error| error.to_string())?;
+        let computer_use_accounts=supervisor.computer_use_managed_servers(&scope).map_err(|error|error.to_string())?;
         for server in servers.into_iter().filter(|server| {
             server.enabled
                 && server.runtime_status == "healthy"
                 && valid_mcp_identifier(&server.id)
                 && valid_mcp_identifier(&server.name)
                 && server_allowed(allowed_servers, &server.id, &server.name)
+                && !computer_use_accounts.contains(&server.id)
         }) {
             for definition in &server.discovered_tools {
                 let Some(tool_name) = definition.get("name").and_then(Value::as_str) else {
@@ -99,6 +102,7 @@ impl McpAgentToolHost {
                 tools.insert(
                     exposed_name.clone(),
                     McpAgentTool {
+                        computer_use_capability:super::computer_use_v2::declared_connector_tool(&server,tool_name),
                         server_id: server.id.clone(),
                         server_name: server.name.clone(),
                         tool_name: tool_name.to_string(),
@@ -256,6 +260,11 @@ impl ToolHost for McpAgentToolHost {
         let definition = self
             .tool_by_exposed_name(tool)
             .ok_or_else(|| CoreError::Tool(format!("unknown MCP agent tool: {tool}")))?;
+        if definition.computer_use_capability {
+            if let Some((state,conversation,_))=&self.app_events {
+                super::computer_use_v2::denials::ensure_mcp_run(state,conversation,&self.run_id)?;
+            }
+        }
         let arguments: Value = serde_json::from_str(input_json)
             .map_err(|error| CoreError::Tool(format!("invalid MCP tool input: {error}")))?;
         if !arguments.is_object() {
@@ -335,7 +344,7 @@ async fn publish_app_result(
                 None,
                 payload,
             );
-            state.append_timeline(conversation_id, item);
+            super::tool_result_events_v2::append(state, conversation_id, item);
         }
         Ok(None) => {}
         Err(reason) => {
@@ -353,7 +362,7 @@ async fn publish_app_result(
                     "error": reason,
                 }),
             );
-            state.append_timeline(conversation_id, item);
+            super::tool_result_events_v2::append(state, conversation_id, item);
         }
     }
 }
@@ -515,6 +524,7 @@ mod tests {
         let tools = BTreeMap::from([(
             canonical.clone(),
             McpAgentTool {
+                computer_use_capability:false,
                 server_id: server_id.to_string(),
                 server_name: server_name.to_string(),
                 tool_name: tool_name.to_string(),
@@ -551,6 +561,7 @@ mod tests {
         let tools = BTreeMap::from([(
             exposed_name.clone(),
             McpAgentTool {
+                computer_use_capability:false,
                 server_id: "server-a".to_string(),
                 server_name: "Same".to_string(),
                 tool_name: "tool-a".to_string(),

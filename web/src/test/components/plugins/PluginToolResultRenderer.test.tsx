@@ -1,80 +1,59 @@
-import type { ReactNode } from 'react';
-
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
-
+import { describe, expect, it } from 'vitest';
 import { PluginToolResultRenderer } from '@/components/plugins/PluginToolResultRenderer';
-import {
-  registerBuiltinRenderer,
-  resetBuiltinRenderersForTests,
-} from '@/services/pluginRendererRegistry';
-import {
-  WebUiSlotAuthorityContextV2,
-  type WebUiSlotAuthorityStateV2,
-} from '@/routes/v2/webUiSlotAuthorityStateV2';
+import { createPluginRendererRegistryV2 } from '@/services/pluginRendererRegistry';
+import { WebUiSlotAuthorityContextV2 } from '@/routes/v2/webUiSlotAuthorityStateV2';
 
-const toolResultSlot = Object.freeze({
-  pluginId: 'acme',
+const slot = Object.freeze({
+  pluginId: 'core',
   slot: 'tool_result_renderer' as const,
-  id: 'memory_card',
-  contract: 'tool-result:memory_search',
-  moduleRef: 'builtin:memory-card',
+  id: 'result',
+  contract: 'tool-result:default',
+  moduleRef: 'builtin:web-slot-tool-result',
   permission: 'ui.tools',
   sandbox: true,
 });
-
-function renderWithSlots(ui: ReactNode, slots = [toolResultSlot]) {
-  const state: WebUiSlotAuthorityStateV2 = {
-    slotDefinitions: slots,
-    status: 'ready',
-    uiSlotArtifactIds: ['test.ui-slots.v1'],
-  };
-  return render(
-    <WebUiSlotAuthorityContextV2.Provider value={state}>{ui}</WebUiSlotAuthorityContextV2.Provider>
-  );
-}
+const card = (
+  <PluginToolResultRenderer
+    toolName="memory_search"
+    result="Memory result body"
+    fallback={<div>default-card</div>}
+  />
+);
 
 describe('PluginToolResultRenderer', () => {
-  beforeEach(() => {
-    resetBuiltinRenderersForTests();
-  });
-
-  it('renders the fallback when no slot matches the tool', () => {
-    renderWithSlots(
-      <PluginToolResultRenderer
-        toolName="memory_search"
-        result={{ ok: 1 }}
-        fallback={<div>default-card</div>}
-      />,
-      []
-    );
+  it('renders the original fallback without a matching contribution', () => {
+    render(card);
     expect(screen.getByText('default-card')).toBeTruthy();
   });
-
-  it('renders the keyed renderer matching tool-result:<tool>', () => {
-    registerBuiltinRenderer('tool-result:memory_search', () => <div>memory-plugin-card</div>);
-
-    renderWithSlots(
-      <PluginToolResultRenderer
-        toolName="memory_search"
-        result={{ ok: 1 }}
-        fallback={<div>default-card</div>}
-      />
+  it('renders the real folded Markdown result through its generation registry', () => {
+    render(
+      <WebUiSlotAuthorityContextV2.Provider
+        value={{
+          slotDefinitions: [slot],
+          status: 'ready',
+          uiSlotArtifactIds: ['test'],
+          renderers: createPluginRendererRegistryV2([slot], () => true),
+        }}
+      >
+        {card}
+      </WebUiSlotAuthorityContextV2.Provider>
     );
-    expect(screen.getByText('memory-plugin-card')).toBeTruthy();
+    expect(screen.getByText('Memory result body')).toBeTruthy();
     expect(screen.queryByText('default-card')).toBeNull();
   });
-
-  it('falls back to the sandbox host for non-keyed matching slots', () => {
-    renderWithSlots(
-      <PluginToolResultRenderer
-        toolName="memory_search"
-        result={{ ok: 1 }}
-        fallback={<div>default-card</div>}
-      />
+  it('preserves the result if a selected module is unavailable', () => {
+    render(
+      <WebUiSlotAuthorityContextV2.Provider
+        value={{
+          slotDefinitions: [{ ...slot, moduleRef: 'builtin:missing' }],
+          status: 'ready',
+          uiSlotArtifactIds: ['test'],
+        }}
+      >
+        {card}
+      </WebUiSlotAuthorityContextV2.Provider>
     );
-    const frame = screen.getByTestId('plugin-slot-memory_card');
-    expect(frame.tagName).toBe('IFRAME');
-    expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(screen.getByText('default-card')).toBeTruthy();
   });
 });

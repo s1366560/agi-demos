@@ -43,6 +43,10 @@ const localSigningHook = readFileSync(
   new URL('../scripts/sign-local-macos.mjs', import.meta.url),
   'utf8',
 );
+const localCuaSigningHook = readFileSync(
+  new URL('../scripts/sign-local-cua-macos.mjs', import.meta.url),
+  'utf8',
+);
 const releaseVerification = readFileSync(
   new URL('../scripts/verify-release-artifacts.mjs', import.meta.url),
   'utf8',
@@ -171,7 +175,9 @@ test('packaging stages an integrity digest and enables signed auto-updates', () 
   assert.match(localBuilderConfig, /forceCodeSigning:\s*false/u);
   assert.match(localBuilderConfig, /identity:\s*null/u);
   assert.match(localBuilderConfig, /publish:\s*null/u);
-  assert.match(localBuilderConfig, /afterPack:\s*scripts\/sign-local-macos\.mjs/u);
+  assert.match(localBuilderConfig, /afterPack:\s*scripts\/sign-local-cua-macos\.mjs/u);
+  assert.match(localCuaSigningHook, /await signLocalMacos\(context\)/u);
+  assert.match(localCuaSigningHook, /await sealCuaMacApp\(appPath, '-', \{ timestamp: false \}\)/u);
   assert.match(localSigningHook, /--sign',\s*'-'/u);
   assert.match(localSigningHook, /entitlements\.mac\.local\.plist/u);
   assert.match(localSigningHook, /--verify/u);

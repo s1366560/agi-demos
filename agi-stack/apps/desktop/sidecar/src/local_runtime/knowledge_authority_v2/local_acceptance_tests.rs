@@ -192,6 +192,7 @@ async fn acceptance_profile_without_host_qualification_is_rejected_before_storag
         [
             desktop_sidecar_http_routes_definition_v2(),
             desktop_sidecar_host_definition_v2(),
+            crate::local_runtime::computer_use_v2::definition().unwrap(),
             definition(Some(directories.data.clone()), None).unwrap(),
         ],
     );
@@ -240,6 +241,7 @@ async fn host_qualification_cannot_authorize_an_alternate_snapshot_digest() {
         [
             desktop_sidecar_http_routes_definition_v2(),
             desktop_sidecar_host_definition_v2(),
+            crate::local_runtime::computer_use_v2::definition().unwrap(),
             definition(
                 Some(directories.data.clone()),
                 Some(directories.qualification()),
@@ -363,6 +365,7 @@ async fn sync_profile_requires_matching_host_purpose_before_storage() {
             [
                 desktop_sidecar_http_routes_definition_v2(),
                 desktop_sidecar_host_definition_v2(),
+                crate::local_runtime::computer_use_v2::definition().unwrap(),
                 definition(Some(directories.data.clone()), qualification).unwrap(),
             ],
         );
@@ -377,6 +380,7 @@ async fn sync_profile_requires_matching_host_purpose_before_storage() {
         [
             desktop_sidecar_http_routes_definition_v2(),
             desktop_sidecar_host_definition_v2(),
+            crate::local_runtime::computer_use_v2::definition().unwrap(),
             definition(
                 Some(directories.data.clone()),
                 Some(directories.sync_qualification()),

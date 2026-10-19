@@ -7,6 +7,7 @@
 export type UiSlotKind =
   | 'nav_item'
   | 'settings_page'
+  | 'work_panel'
   | 'conversation_renderer'
   | 'conversation_surface'
   | 'tool_result_renderer'

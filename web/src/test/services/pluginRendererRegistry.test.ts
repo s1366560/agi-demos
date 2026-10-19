@@ -1,34 +1,28 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { createPluginRendererRegistryV2 } from '@/services/pluginRendererRegistry';
 
-import {
-  getBuiltinRenderer,
-  registerBuiltinRenderer,
-  rendererKeys,
-  resetBuiltinRenderersForTests,
-} from '@/services/pluginRendererRegistry';
+const slot = Object.freeze({
+  id: 'result',
+  pluginId: 'core',
+  contract: 'tool-result:default',
+  slot: 'tool_result_renderer' as const,
+  moduleRef: 'builtin:web-slot-tool-result',
+  permission: 'ui.tools',
+  sandbox: true,
+});
 
-const slot = { id: 'card', pluginId: 'acme', contract: 'tool-result:card' };
-
-describe('pluginRendererRegistry', () => {
-  beforeEach(() => resetBuiltinRenderersForTests());
-
-  it('resolves by contract id first, then plugin/slot key', () => {
-    expect(rendererKeys(slot)).toEqual(['tool-result:card', 'acme/card']);
-    expect(rendererKeys({ ...slot, contract: '' })).toEqual(['acme/card']);
+describe('generation-owned renderer registry', () => {
+  it('resolves only the exact definitions in its own generation', () => {
+    let active = true;
+    const registry = createPluginRendererRegistryV2([slot], () => active);
+    expect(registry.resolve(slot)).toBeTypeOf('function');
+    expect(registry.resolve({ ...slot })).toBeUndefined();
+    expect(createPluginRendererRegistryV2([], () => true).resolve(slot)).toBeUndefined();
+    active = false;
+    expect(registry.resolve(slot)).toBeUndefined();
   });
-
-  it('registers, resolves, and disposes renderers', () => {
-    const A = () => null;
-    const B = () => null;
-    const disposeA = registerBuiltinRenderer('tool-result:card', A);
-    registerBuiltinRenderer('acme/card', B);
-
-    expect(getBuiltinRenderer(slot)).toBe(A);
-    disposeA();
-    expect(getBuiltinRenderer(slot)).toBe(B);
-  });
-
-  it('returns undefined for unknown slots', () => {
-    expect(getBuiltinRenderer({ id: 'x', pluginId: 'y', contract: '' })).toBeUndefined();
+  it('does not resolve arbitrary compiled-module claims', () => {
+    const other = { ...slot, moduleRef: 'builtin:external-result' };
+    expect(createPluginRendererRegistryV2([other], () => true).resolve(other)).toBeUndefined();
   });
 });

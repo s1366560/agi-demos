@@ -37,19 +37,21 @@ pub(crate) fn build_pg_cron_scheduler(
     registry: HotPlugRegistry,
     config: CronSchedulerConfig,
     provenance: CronRuntimeProvenanceV2,
+    boundary: Option<crate::agent_boundary_v2::AgentBoundaryFactoryV2>,
 ) -> SharedCronScheduler {
     let ownership = Arc::new(PgCronSchedulerOwnerRepository::new(pool.clone()));
     let lease_store: Arc<dyn CronSchedulerLeaseStore> = ownership.clone();
     let ownership_store: Arc<dyn CronSchedulerOwnershipStore> = ownership;
     let clock: Arc<dyn CronWorkerClock> = Arc::new(UtcCronWorkerClock);
 
-    let driver = Arc::new(PgCronSchedulerDriver::new(
+    let driver = Arc::new(PgCronSchedulerDriver::new_with_boundary(
         pool,
         engine,
         registry,
         config.clone(),
         ownership_store,
         Arc::clone(&clock),
+        boundary,
     ));
     let dependencies = CronRuntimeDependenciesV2::postgres(provenance, driver.capabilities());
     Arc::new(CronScheduler::with_dependencies(
@@ -83,9 +85,22 @@ impl PgCronSchedulerDriver {
         ownership_store: Arc<dyn CronSchedulerOwnershipStore>,
         clock: Arc<dyn CronWorkerClock>,
     ) -> Self {
+        Self::new_with_boundary(pool, engine, registry, config, ownership_store, clock, None)
+    }
+
+    fn new_with_boundary(
+        pool: PgPool,
+        engine: Arc<ReActEngine>,
+        registry: HotPlugRegistry,
+        config: CronSchedulerConfig,
+        ownership_store: Arc<dyn CronSchedulerOwnershipStore>,
+        clock: Arc<dyn CronWorkerClock>,
+        boundary: Option<crate::agent_boundary_v2::AgentBoundaryFactoryV2>,
+    ) -> Self {
         let runtime_repository = Arc::new(PgCronAutomationRuntimeRepository::new(pool.clone()));
         let executor = Arc::new(
             ReActAutomationRunExecutor::new(engine)
+                .with_agent_boundary(boundary)
                 .with_run_persistence_factory(Arc::new(PgAutomationRunPersistenceFactory::new(
                     pool.clone(),
                 )))

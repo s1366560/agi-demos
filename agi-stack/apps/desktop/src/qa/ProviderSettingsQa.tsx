@@ -14,6 +14,7 @@ import { managedPluginFromMarketplaceEntry } from '../api/pluginMarketplaceModel
 import { I18nProvider } from '../i18n';
 import { ThemePreferenceProvider } from '../theme';
 import type { DesktopPluginMarketplaceOperationsV2 } from '../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import { qaMarketplaceClientsV2 } from './marketplaceClientsV2';
 import type {
   AuthState,
   AgentWsEvent,
@@ -353,6 +354,7 @@ let plugins: MarketplacePluginCatalogEntry[] = [
   },
 ];
 const qaPluginMarketplaceOperationsV2 = Object.freeze<DesktopPluginMarketplaceOperationsV2>({
+  ...qaMarketplaceClientsV2,
   listMarketplacePlugins: async (config, signal) => {
     signal?.throwIfAborted();
     if (config.tenantId !== QA_TENANT_ID) {

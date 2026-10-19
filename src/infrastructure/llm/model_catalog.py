@@ -180,10 +180,11 @@ class ModelCatalogService(ModelCatalogPort):
 
         Inspects ``ModelMetadata.capabilities`` for ``ModelCapability.VISION``
         (case-insensitive) and ``ModelMetadata.modalities`` for ``"image"``.
+        Resolves the same provider-prefixed transport names as other capability
+        lookups, with an exact catalog entry taking precedence over the bare name.
         Returns ``False`` for unknown models.
         """
-        self._ensure_loaded()
-        meta = self._models.get(model_name)
+        meta = self.get_model_fuzzy(model_name)
         if meta is None:
             return False
         if any(c.lower() == "vision" for c in meta.capabilities):

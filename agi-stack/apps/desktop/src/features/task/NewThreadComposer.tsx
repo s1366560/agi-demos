@@ -1,3 +1,4 @@
+import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { useCallback, useMemo, useState } from 'react';
 import { ArrowRightIcon, CubeIcon } from '@radix-ui/react-icons';
 
@@ -74,6 +75,8 @@ export function NewThreadComposer({
   onManageModels,
 }: NewThreadComposerProps) {
   const { t } = useI18n();
+  const shortcutAuthority = useDesktopRendererAuthorityV2();
+  const shortcutEnabled = (id: string) => shortcutAuthority.shortcutIds?.includes(id) === true;
   const [prompt, setPrompt] = useState('');
   const [modelSelection, setModelSelection] = useState({ workspaceId: '', value: '' });
   const [reasoningSelection, setReasoningSelection] = useState<{
@@ -237,7 +240,7 @@ export function NewThreadComposer({
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') send();
+              if (shortcutEnabled('composer-modifier-send') && (event.metaKey || event.ctrlKey) && event.key === 'Enter') send();
             }}
             placeholder={t(
               mode === 'work' ? 'task.workPromptPlaceholder' : 'task.codePromptPlaceholder',

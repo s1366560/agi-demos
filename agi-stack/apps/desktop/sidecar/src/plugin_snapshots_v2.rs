@@ -1,5 +1,6 @@
 //! Durable protocol-v2 plugin distribution state.
 
+use agistack_plugin_host::protocol_v2::{DesiredBundleSetV2, ProfileSourceV2};
 use agistack_plugin_host::{
     parse_control_plane_distribution_v2, ApplyStatusV2, ControlPlaneDistributionV2,
     SnapshotApplyReceiptV2,
@@ -19,6 +20,15 @@ pub(crate) struct PluginSnapshotStateV2 {
     pub(crate) requested: Option<ControlPlaneDistributionV2>,
     pub(crate) receipt: Option<SnapshotApplyReceiptV2>,
     pub(crate) last_good: Option<ControlPlaneDistributionV2>,
+    pub(crate) configuration: Option<LocalProfileConfigurationV2>,
+}
+
+/// Local profile editing uses the same revisioned source and desired protocol as the server.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LocalProfileConfigurationV2 {
+    pub(crate) source: ProfileSourceV2,
+    pub(crate) desired: DesiredBundleSetV2,
 }
 
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
@@ -50,6 +60,8 @@ struct PersistedStateV2 {
     requested: Option<Value>,
     receipt: Option<SnapshotApplyReceiptV2>,
     last_good: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    configuration: Option<LocalProfileConfigurationV2>,
 }
 
 pub(crate) fn initialize_schema(connection: &Connection) -> Result<(), PluginSnapshotStoreV2Error> {
@@ -133,9 +145,41 @@ pub(crate) fn record_requested(
         authority_fingerprint: Some(authority_fingerprint.to_owned()),
         requested: Some(distribution.clone()),
         receipt: None,
+        configuration: existing
+            .as_ref()
+            .and_then(|item| item.configuration.clone()),
         last_good: existing.and_then(|item| item.last_good),
     };
     write_state(connection, &state)
+}
+
+/// Save one complete candidate and its requested publication in the existing authority row.
+/// The caller holds the application connection lock and rechecks management permission.
+pub(crate) fn record_configuration(
+    connection: &Connection,
+    authority_fingerprint: &str,
+    expected_revision: u64,
+    configuration: LocalProfileConfigurationV2,
+    requested: ControlPlaneDistributionV2,
+) -> Result<(), PluginSnapshotStoreV2Error> {
+    let existing = read_state(connection, authority_fingerprint)?;
+    let revision = existing
+        .as_ref()
+        .and_then(|state| state.configuration.as_ref())
+        .map_or(1, |config| config.desired.revision);
+    if revision != expected_revision || configuration.desired.revision != revision + 1 {
+        return Err(PluginSnapshotStoreV2Error::StaleReceipt);
+    }
+    write_state(
+        connection,
+        &PluginSnapshotStateV2 {
+            authority_fingerprint: Some(authority_fingerprint.to_owned()),
+            requested: Some(requested),
+            receipt: None,
+            last_good: existing.and_then(|state| state.last_good),
+            configuration: Some(configuration),
+        },
+    )
 }
 
 pub(crate) fn record_receipt(
@@ -231,6 +275,7 @@ fn parse_state(raw: &str) -> Result<PluginSnapshotStateV2, PluginSnapshotStoreV2
             requested: None,
             receipt: None,
             last_good: None,
+            configuration: None,
         });
     };
     validate_authority_fingerprint(authority_fingerprint).map_err(|_| {
@@ -241,6 +286,7 @@ fn parse_state(raw: &str) -> Result<PluginSnapshotStateV2, PluginSnapshotStoreV2
         requested: persisted.requested.map(parse_distribution).transpose()?,
         receipt: persisted.receipt,
         last_good: persisted.last_good.map(parse_distribution).transpose()?,
+        configuration: persisted.configuration,
     })
 }
 
@@ -261,6 +307,7 @@ fn write_state(
     validate_authority_fingerprint(authority_fingerprint)?;
     let raw = serde_json::to_string(&PersistedStateV2 {
         schema_version: SCHEMA_VERSION,
+        configuration: state.configuration.clone(),
         authority_fingerprint: Some(authority_fingerprint.to_owned()),
         requested: state
             .requested
@@ -597,6 +644,7 @@ mod tests {
         let requested = distribution(11, "legacy-nonce-11");
         let persisted = PersistedStateV2 {
             schema_version: SCHEMA_VERSION,
+            configuration: None,
             authority_fingerprint: Some(AUTHORITY_A.to_owned()),
             requested: Some(serde_json::to_value(&requested).expect("requested value")),
             receipt: Some(receipt(&requested, ApplyStatusV2::Ack)),

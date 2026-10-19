@@ -39,6 +39,7 @@ mod agent_commands_api;
 mod agent_conversations_api;
 mod agent_events_api;
 mod agent_ws;
+mod computer_use_device_v2;
 mod artifacts_api;
 mod attachments_api;
 mod audit_api;
@@ -77,6 +78,12 @@ mod llm_providers_api;
 mod maintenance_api;
 mod notifications_api;
 mod plugin_generation_v2;
+mod feature_configuration_v2;
+mod feature_operation_http_v2;
+mod feature_operation_owners_v2;
+mod feature_operation_repository_v2;
+mod feature_operation_v2;
+mod agent_boundary_v2;
 mod prod_api;
 mod retrieval_stores_api;
 mod sandbox_api;
@@ -208,6 +215,8 @@ use crate::workspace_authority::{CoreWorkspaceAuthority, SharedWorkspaceAuthorit
 pub(crate) struct AppState {
     pub(crate) memory: Arc<MemoryService>,
     pub(crate) engine: Arc<ReActEngine>,
+    pub(crate) agent_generation: RustServerGenerationAdmissionV2,
+    pub(crate) feature_operations: feature_operation_v2::FeatureOperationAdmissionV2,
     pub(crate) events: Arc<dyn EventStream>,
     pub(crate) agent_event_writer: Option<PgAgentExecutionEventRepository>,
     pub(crate) event_counter: Arc<AtomicU64>,
@@ -216,6 +225,7 @@ pub(crate) struct AppState {
     /// per subscriber per flush). See [`crate::agent_ws::subscriptions`].
     pub(crate) ws_messages: agent_ws::subscriptions::WsMessageCache,
     pub(crate) active_agent_runs: agent_ws::ActiveAgentRuns,
+    pub(crate) computer_use_devices: computer_use_device_v2::Broker,
     registry: HotPlugRegistry,
     plugins: Arc<PluginHost>,
     control: Arc<Mutex<ControlPlane>>,
@@ -440,10 +450,11 @@ async fn start_plugin_runtime_v2(
         )?
         .as_ref()
         .clone();
-    let manager = Arc::new(GenerationManagerV2::new());
+    let admission = state.map(|state| state.agent_generation.clone()).unwrap_or_default();
+    let manager = admission.shared_manager();
     manager.publish(generation).await;
     let mut runtime = RustServerPluginRuntimeV2 {
-        admission: RustServerGenerationAdmissionV2::new(manager.clone()),
+        admission,
         route_contribution,
         workers: None,
     };
@@ -1170,6 +1181,10 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
     let reconciler = Arc::new(Mutex::new(DataPlaneReconciler::new(registry.clone())));
 
     Ok(AppState {
+        agent_generation: Default::default(),
+        feature_operations: feature_operation_v2::FeatureOperationAdmissionV2::from_pool(
+            workspace_plan_pool.clone(),
+        ),
         memory,
         engine,
         events,
@@ -1177,6 +1192,7 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         event_counter: Arc::new(AtomicU64::new(0)),
         ws_messages: Default::default(),
         active_agent_runs: Default::default(),
+        computer_use_devices: computer_use_device_v2::build(workspace_plan_pool.clone(), Arc::clone(&workspace_authority), Arc::clone(&object_store)),
         registry,
         plugins,
         control,

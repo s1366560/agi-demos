@@ -19,6 +19,7 @@ import {
   DesktopPluginMarketplaceAuthorityUnavailableErrorV2,
   type DesktopPluginMarketplaceOperationsV2,
 } from '../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import { qaMarketplaceClientsV2 } from './marketplaceClientsV2';
 import type {
   AuthState,
   DesktopRuntimeConfig,
@@ -121,6 +122,7 @@ const initialConfig: DesktopRuntimeConfig = {
 
 const noProjectPluginMarketplaceOperationsV2 =
   Object.freeze<DesktopPluginMarketplaceOperationsV2>({
+    ...qaMarketplaceClientsV2,
     listMarketplacePlugins: async () => [],
     projectMarketplacePlugins: async (_config, _signal, project) => project([]),
     installMarketplacePlugin: async () => {

@@ -64,9 +64,7 @@ def test_cron_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -74,7 +72,9 @@ def test_cron_row_preserves_route_order_and_openapi() -> None:
     assert claimed.v2_owned_row_ids == ("cron",)
 
 
-async def test_generation_dispatcher_executes_cron_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_cron_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     services = SimpleNamespace(require_project_access=AsyncMock())
 
     async def cron_application_override() -> object:

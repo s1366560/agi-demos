@@ -3,7 +3,7 @@ import type { AgentTimelineItem, DesktopRunStatus, ToolDisplayData } from '../..
 import { exactToolResults, timelineExecutionScope } from '../chat/timelineExecutionIdentity';
 import { pairToolCallItems, toolCallPairStatus } from '../chat/chatTimelineModel';
 
-export type SessionToolGroupStatus = 'running' | 'complete' | 'failed' | 'stopped';
+export type SessionToolGroupStatus = 'running' | 'complete' | 'failed' | 'paused' | 'stopped';
 
 export type SessionNarrativeNode =
   | {
@@ -233,8 +233,9 @@ export function sessionToolGroupStatus(items: AgentTimelineItem[]): SessionToolG
   const pairs = pairToolCallItems(items.filter((item) => item.type === 'act' || item.type === 'observe'));
   if (!pairs.length) return status === 'completed' ? 'complete' : 'running';
   if (pairs.some((pair) => toolCallPairStatus(pair) === 'failed')) return 'failed';
-  return pairs.some((pair) => ['running', 'preparing'].includes(toolCallPairStatus(pair)))
-    ? 'running' : 'complete';
+  const pairStatuses = pairs.map(toolCallPairStatus);
+  if (pairStatuses.some((status) => status === 'running' || status === 'preparing')) return 'running';
+  return pairStatuses.findLast((status) => status === 'paused' || status === 'stopped') ?? 'complete';
 }
 
 function timelineDisplay(item: AgentTimelineItem): ToolDisplayData | null {

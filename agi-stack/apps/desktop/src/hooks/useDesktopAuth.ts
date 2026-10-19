@@ -84,6 +84,7 @@ export type DesktopAuthParams = {
   refreshRuntime: (
     nextConfig?: DesktopRuntimeConfig,
     projectOverride?: ProjectSummary[],
+    authenticatedUserId?: string,
   ) => Promise<boolean>;
   applySectionSideEffects: (section: WorkbenchSection) => void;
 };

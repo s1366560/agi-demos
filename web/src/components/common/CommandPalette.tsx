@@ -27,7 +27,10 @@ import { MessageSquarePlus, Moon, Sun, Languages, ArrowRight, type LucideIcon } 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useThemeStore } from '@/stores/theme';
 
-import { useWebTopNavigationItemsV2 } from '@/routes/v2/webNavigationAuthorityStateV2';
+import {
+  useWebCommandNavigationItemsV2,
+  useWebFeatureEnabledV2,
+} from '@/routes/v2/webFeatureAuthorityV2';
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDateOnly } from '@/utils/date';
 
@@ -77,7 +80,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const conversations = useConversationsStore((s) => s.conversations);
   const computedTheme = useThemeStore((s) => s.computedTheme);
   const setTheme = useThemeStore((s) => s.setTheme);
-  const navigationItems = useWebTopNavigationItemsV2('tenant', { tenantId, projectId });
+  const agentWorkspaceEnabled = useWebFeatureEnabledV2('tenant-agent-workspace', 'command');
+  const navigationItems = useWebCommandNavigationItemsV2('tenant', { tenantId, projectId });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -173,7 +177,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         },
       },
     ];
-    items.push(...actions);
+    items.push(
+      ...actions.filter(
+        (action) => action.id !== 'action-new-conversation' || agentWorkspaceEnabled
+      )
+    );
 
     // Navigation group
     for (const nav of navigationItems) {
@@ -191,7 +199,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     }
 
     // Recent conversations group
-    const recentConvs = conversations.slice(0, 8);
+    const recentConvs = agentWorkspaceEnabled ? conversations.slice(0, 8) : [];
     for (const conv of recentConvs) {
       items.push({
         id: `conv-${conv.id}`,
@@ -222,6 +230,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     navigate,
     close,
     navigationItems,
+    agentWorkspaceEnabled,
     conversations,
     computedTheme,
     setTheme,

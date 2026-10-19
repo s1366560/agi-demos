@@ -29,6 +29,10 @@ pub(super) struct RunRevisionBody {
     expected_revision: u64,
 }
 
+#[cfg(test)]
+#[path = "run_control_waiting_tests.rs"]
+mod waiting_input_tests;
+
 pub(super) async fn pause_run(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
@@ -221,7 +225,13 @@ pub(super) async fn resume_run(
     });
     let goal = accepted.goal;
     let runtime = Arc::clone(&state);
-    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+    let (message_id, plugin_generation) = state.continuation_operation_v2(
+        &conversation.id,
+        message_id,
+        Some(&running.id),
+        None,
+        plugin_generation.map(|Extension(generation)| generation),
+    );
     let native_authorization = super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
         authenticated.clone(),
         plugin_generation.clone(),
@@ -680,6 +690,7 @@ pub(super) async fn cancel_run(
             )
         })?;
         control.request_cancel();
+        state.computer_use.stop_run(&state, &run.id).await;
         return Ok(Json(json!({
             "accepted": true,
             "status": "cancel_requested",
@@ -688,7 +699,11 @@ pub(super) async fn cancel_run(
     }
     if !matches!(
         run.status,
-        DesktopRunStatus::Paused | DesktopRunStatus::Disconnected | DesktopRunStatus::Interrupted
+        DesktopRunStatus::Paused
+            | DesktopRunStatus::Disconnected
+            | DesktopRunStatus::Interrupted
+            | DesktopRunStatus::NeedsInput
+            | DesktopRunStatus::NeedsApproval
     ) {
         return Err((
             StatusCode::CONFLICT,
@@ -723,6 +738,7 @@ pub(super) async fn cancel_run(
         state.release_agent_run_if_control(&run.conversation_id, &control);
         let cancelled = cancelled.map_err(local_store_error)?;
         state.publish_run_status(&cancelled);
+        state.clear_suspended_operation_v2(&cancelled.conversation_id, Some(&cancelled.id));
         state
             .browser_run_cleanup(&cancelled.id, cancelled.status)
             .await;
@@ -756,6 +772,22 @@ pub(super) async fn cancel_run(
         state.release_agent_run_if_control(&conversation.id, &control);
         return Err(error);
     }
+    // A human response may have won the claim after the initial request read.
+    // Do not cancel its checkpoint using an earlier authority revision.
+    let current = match state.session_store.run(&run.id) {
+        Ok(Some(current)) => current,
+        result => {
+            state.release_agent_run_if_control(&conversation.id, &control);
+            return Err(local_store_error(match result {
+                Err(error) => error,
+                _ => "run not found".to_string(),
+            }));
+        }
+    };
+    if let Err(error) = ensure_run_revision(&current, body.expected_revision) {
+        state.release_agent_run_if_control(&conversation.id, &control);
+        return Err(error);
+    }
     if let Err(error) = engine.accept_controlled_cancel(&conversation.id).await {
         state.release_agent_run_if_control(&conversation.id, &control);
         return Err((
@@ -773,6 +805,7 @@ pub(super) async fn cancel_run(
     state.release_agent_run_if_control(&conversation.id, &control);
     let cancelled = cancelled.map_err(local_store_error)?;
     state.publish_run_status(&cancelled);
+    state.clear_suspended_operation_v2(&cancelled.conversation_id, Some(&cancelled.id));
     state
         .browser_run_cleanup(&cancelled.id, cancelled.status)
         .await;

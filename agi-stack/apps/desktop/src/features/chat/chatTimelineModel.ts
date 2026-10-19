@@ -1,4 +1,4 @@
-import { timelineToolResultFailed } from './toolResultStatus';
+import { timelineToolResultFailed, timelineToolResultStatus, type ToolResultStatus } from './toolResultStatus';
 import { exactToolResults } from './timelineExecutionIdentity';
 import { userMessageForDisplay } from './messageDisplayModel';
 import type { AgentTimelineItem } from '../../types';
@@ -26,7 +26,7 @@ export type ToolActivityRow =
   | { kind: 'thought'; item: AgentTimelineItem }
   | { kind: 'tool_call'; pair: ToolCallPair };
 
-export type ToolCallPairStatus = 'preparing' | 'running' | 'complete' | 'failed';
+export type ToolCallPairStatus = 'preparing' | 'running' | ToolResultStatus;
 
 export type ToolCallPresentationKind =
   | 'search'
@@ -34,6 +34,7 @@ export type ToolCallPresentationKind =
   | 'command'
   | 'edit'
   | 'check'
+  | 'computer_use'
   | 'tool';
 
 export type ToolCallDiffStat = {
@@ -1385,10 +1386,10 @@ export function toolActivityRows(items: AgentTimelineItem[]): ToolActivityRow[] 
 
 export function toolCallPairStatus(pair: ToolCallPair): ToolCallPairStatus {
   if (pair.result) {
-    return timelineToolResultFailed(pair.result) ? 'failed' : 'complete';
+    return timelineToolResultStatus(pair.result);
   }
   if (timelineToolResultFailed(pair.call)) return 'failed';
-  if (pair.call.type === 'observe') return 'complete';
+  if (pair.call.type === 'observe') return timelineToolResultStatus(pair.call);
   // Web conversation parity (audit 1.7): a call whose arguments are still
   // streaming (only act_delta chunks so far) is "preparing", not yet running.
   if (toolCallArgumentsStreaming(pair.call)) return 'preparing';
@@ -1504,7 +1505,8 @@ export function toolCallPresentationKind(pair: ToolCallPair): ToolCallPresentati
       kind === 'read' ||
       kind === 'command' ||
       kind === 'edit' ||
-      kind === 'check'
+      kind === 'check' ||
+      kind === 'computer_use'
     ) {
       return kind;
     }

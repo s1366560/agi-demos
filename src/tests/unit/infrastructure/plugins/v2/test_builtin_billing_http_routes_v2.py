@@ -87,7 +87,9 @@ def test_billing_row_preserves_route_order_and_openapi() -> None:
 
 
 @pytest.mark.unit
-async def test_generation_dispatcher_executes_billing_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_billing_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     user = SimpleNamespace(id="user-1")
     db = object()
     calls: list[tuple[object, ...]] = []

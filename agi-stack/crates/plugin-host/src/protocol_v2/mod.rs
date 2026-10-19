@@ -1,6 +1,7 @@
 //! Strict v2 wire protocol and executor-neutral generation runtime.
 
 mod context;
+mod configuration;
 mod contract_runtime;
 mod distribution;
 mod generated;
@@ -12,12 +13,15 @@ pub mod signed_archive;
 #[cfg(all(feature = "external-wasm-v2", not(target_arch = "wasm32")))]
 pub mod wasm_runtime;
 mod target_modules;
+pub mod tool_policy;
+pub mod tool_policy_adapter;
 
 use std::collections::{BTreeMap, BTreeSet};
 
 pub use distribution::{
     parse_control_plane_distribution_v2, ControlPlaneDistributionV2, PluginGenerationDescriptorV2,
 };
+pub use configuration::validate_snapshot_target_v2;
 pub use generated::*;
 pub use generated_catalog::{PLUGIN_MODULE_CATALOG_DIGEST_V2, PLUGIN_MODULE_CATALOG_V2_JSON};
 pub use reconciler::{PluginSnapshotReconcilerV2, PreparedSnapshotApplyV2, SnapshotPreparationV2};

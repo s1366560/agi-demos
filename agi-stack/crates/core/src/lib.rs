@@ -57,3 +57,7 @@ pub use ports::{
 };
 pub use service::MemoryService;
 pub use sync::{reconcile, Replica, SyncRecord, VersionVector};
+
+pub mod model_request;
+
+pub mod tool_control;

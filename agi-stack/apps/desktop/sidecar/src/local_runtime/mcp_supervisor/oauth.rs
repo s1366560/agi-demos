@@ -22,6 +22,11 @@ struct Grant {
     access_token: String,
     expires_at: i64,
     headers: BTreeMap<String, String>,
+    #[serde(default = "default_send_resource")]
+    send_resource: bool,
+}
+fn default_send_resource() -> bool {
+    true
 }
 impl McpSupervisor {
     fn oauth_grant(
@@ -86,6 +91,7 @@ impl McpSupervisor {
             access_token: access.into(),
             expires_at: chrono::Utc::now().timestamp() + expires,
             headers: BTreeMap::new(),
+            send_resource: metadata["_memstack_send_resource"] != false,
         };
         let key = format!("mcp-oauth-grant:{}", uuid::Uuid::new_v4());
         {
@@ -102,6 +108,7 @@ impl McpSupervisor {
         grant: &mut Grant,
     ) -> McpResult<()> {
         let server = self.server(scope, id)?.ok_or_else(server_not_found)?;
+        let first_party_stdio = super::stdio::trusted_cloud_connector(&server);
         if server.command.first().map(String::as_str) != Some(grant.resource.as_str()) {
             return Err(unavailable());
         }
@@ -110,8 +117,17 @@ impl McpSupervisor {
             transport: server.transport,
             command: server.command.clone(),
             cwd: server.cwd.clone(),
-            kind: McpCredentialKind::Header,
-            name: "Authorization".into(),
+            kind: if first_party_stdio {
+                McpCredentialKind::Env
+            } else {
+                McpCredentialKind::Header
+            },
+            name: if first_party_stdio {
+                super::stdio::CUA_OAUTH_TOKEN_REF
+            } else {
+                "Authorization"
+            }
+            .into(),
             mutation_idempotency_key: None,
         };
         self.provision_credential(
@@ -126,11 +142,11 @@ impl McpSupervisor {
             server.transport,
             &server.command,
             server.cwd.as_deref(),
-            McpCredentialKind::Header,
-            "Authorization",
+            provision.kind,
+            &provision.name,
         )?;
         let mut refs = server.vault_env_refs;
-        refs.insert("Authorization".into(), reference.clone());
+        refs.insert(provision.name, reference.clone());
         self.update_server(
             scope,
             id,
@@ -191,16 +207,15 @@ impl McpSupervisor {
                 "Reconnect the expired MCP OAuth grant",
             )
         })?;
-        let response = oauth_http::post(
-            &grant.token_endpoint,
-            &[
-                ("grant_type".into(), "refresh_token".into()),
-                ("refresh_token".into(), refresh.clone()),
-                ("client_id".into(), grant.client_id.clone()),
-                ("resource".into(), grant.resource.clone()),
-            ],
-        )
-        .await;
+        let mut fields = vec![
+            ("grant_type".into(), "refresh_token".into()),
+            ("refresh_token".into(), refresh.clone()),
+            ("client_id".into(), grant.client_id.clone()),
+        ];
+        if grant.send_resource {
+            fields.push(("resource".into(), grant.resource.clone()));
+        }
+        let response = oauth_http::post(&grant.token_endpoint, &fields).await;
         let tokens = match response {
             Ok(tokens) => tokens,
             Err(reason) => {

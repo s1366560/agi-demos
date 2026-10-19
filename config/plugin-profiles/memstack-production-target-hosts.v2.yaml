@@ -118,6 +118,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-computer-use-factory
+      parent_entry_id: builtin-desktop-sidecar-local-capability
+      plugin_ref: memstack-computer-use
+      module_ref: builtin://memstack/computer-use/native
+      enabled: true
+      config:
+        strategy: managed-native-device
+        default_enabled: false
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-web-renderer-host
       parent_entry_id: null
       plugin_ref: memstack-renderer-target-hosts
@@ -159,69 +174,6 @@ profile:
           schema_version: 1
           artifact_refs:
             - web.ui-slots.authenticated-shell-surface.v1
-      inject:
-        registry: service:web.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-web-default-routes
-      parent_entry_id: builtin-web-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/web/renderer-contribution
-      enabled: true
-      config:
-        id: web.default-business-routes
-        kind: route
-        order: 100
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - web.routes.default-business.v1
-      inject:
-        registry: service:web.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-web-default-navigation
-      parent_entry_id: builtin-web-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/web/renderer-contribution
-      enabled: true
-      config:
-        id: web.default-navigation
-        kind: navigation
-        order: 200
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - web.navigation.default.v1
-      inject:
-        registry: service:web.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-web-default-ui-slots
-      parent_entry_id: builtin-web-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/web/renderer-contribution
-      enabled: true
-      config:
-        id: web.default-ui-slots
-        kind: ui-slot
-        order: 300
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - web.ui-slots.default.v1
       inject:
         registry: service:web.renderer-contribution-registry
       isolate: {}
@@ -2054,489 +2006,6 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
-    - entry_id: builtin-desktop-tenant-creation-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.tenant-creation-routes
-        kind: route
-        order: 100
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.tenant-creation.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-auxiliary-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.auxiliary-routes
-        kind: route
-        order: 110
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.auxiliary.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-knowledge-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-knowledge-routes
-        kind: route
-        order: 120
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.project-knowledge.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-agent-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-agent-routes
-        kind: route
-        order: 130
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.project-agent.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-administration-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-administration-routes
-        kind: route
-        order: 140
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.project-administration.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-runtime-infrastructure-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.runtime-infrastructure-routes
-        kind: route
-        order: 150
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.runtime-infrastructure.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-workspace-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-workspace-routes
-        kind: route
-        order: 160
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.project-workspace.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-discovery-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-discovery-routes
-        kind: route
-        order: 170
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.project-discovery.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-tenant-core-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.tenant-core-routes
-        kind: route
-        order: 180
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.tenant-core.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-tenant-agent-building-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.tenant-agent-building-routes
-        kind: route
-        order: 190
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.tenant-agent-building.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-tenant-extensions-integrations-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.tenant-extensions-integrations-routes
-        kind: route
-        order: 195
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.tenant-extensions-integrations.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-tenant-governance-routes
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.tenant-governance-routes
-        kind: route
-        order: 197
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.routes.tenant-governance.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-auxiliary-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.auxiliary-navigation
-        kind: navigation
-        order: 210
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.auxiliary.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-knowledge-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-knowledge-navigation
-        kind: navigation
-        order: 220
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.project-knowledge.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-agent-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-agent-navigation
-        kind: navigation
-        order: 230
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.project-agent.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-administration-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-administration-navigation
-        kind: navigation
-        order: 240
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.project-administration.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-runtime-infrastructure-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.runtime-infrastructure-navigation
-        kind: navigation
-        order: 250
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.runtime-infrastructure.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-workspace-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-workspace-navigation
-        kind: navigation
-        order: 260
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.project-workspace.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-project-discovery-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.project-discovery-navigation
-        kind: navigation
-        order: 270
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.project-discovery.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-tenant-core-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.tenant-core-navigation
-        kind: navigation
-        order: 280
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.tenant-core.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-tenant-agent-building-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.tenant-agent-building-navigation
-        kind: navigation
-        order: 290
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.tenant-agent-building.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-tenant-extensions-integrations-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.tenant-extensions-integrations-navigation
-        kind: navigation
-        order: 295
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.tenant-extensions-integrations.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-tenant-governance-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.tenant-governance-navigation
-        kind: navigation
-        order: 297
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.tenant-governance.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
     - entry_id: builtin-desktop-default-ui-slots
       parent_entry_id: builtin-desktop-renderer-contribution-registry
       plugin_ref: memstack-renderer-contributions
@@ -2552,6 +2021,5143 @@ profile:
             - desktop.ui-slots.default.v1
       inject:
         registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-creation
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-creation
+        order: 100
+        contributions:
+        - id: desktop.feature.tenant-creation.0
+          kind: route
+          order: 100
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-creation.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-support
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-support
+        order: 101
+        contributions:
+        - id: desktop.feature.project-support.0
+          kind: route
+          order: 101
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-support.v1
+        - id: desktop.feature.project-support.1
+          kind: navigation
+          order: 101
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-support.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-backend-stores
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.backend-stores
+        order: 102
+        contributions:
+        - id: desktop.feature.backend-stores.0
+          kind: route
+          order: 102
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.backend-stores.v1
+        - id: desktop.feature.backend-stores.1
+          kind: navigation
+          order: 102
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.backend-stores.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-playbooks
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-playbooks
+        order: 103
+        contributions:
+        - id: desktop.feature.project-playbooks.0
+          kind: route
+          order: 103
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-playbooks.v1
+        - id: desktop.feature.project-playbooks.1
+          kind: navigation
+          order: 103
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-playbooks.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-user-profile
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.user-profile
+        order: 104
+        contributions:
+        - id: desktop.feature.user-profile.0
+          kind: route
+          order: 104
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.user-profile.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-team
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-team
+        order: 105
+        contributions:
+        - id: desktop.feature.project-project-team.0
+          kind: route
+          order: 105
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-team.v1
+        - id: desktop.feature.project-project-team.1
+          kind: navigation
+          order: 105
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-team.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-memories
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-memories
+        order: 106
+        contributions:
+        - id: desktop.feature.project-project-memories.0
+          kind: route
+          order: 106
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-memories.v1
+        - id: desktop.feature.project-project-memories.1
+          kind: navigation
+          order: 106
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-memories.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-entities
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-entities
+        order: 107
+        contributions:
+        - id: desktop.feature.project-project-entities.0
+          kind: route
+          order: 107
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-entities.v1
+        - id: desktop.feature.project-project-entities.1
+          kind: navigation
+          order: 107
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-entities.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-communities
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-communities
+        order: 108
+        contributions:
+        - id: desktop.feature.project-project-communities.0
+          kind: route
+          order: 108
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-communities.v1
+        - id: desktop.feature.project-project-communities.1
+          kind: navigation
+          order: 108
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-communities.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-graph
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-graph
+        order: 109
+        contributions:
+        - id: desktop.feature.project-project-graph.0
+          kind: route
+          order: 109
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-graph.v1
+        - id: desktop.feature.project-project-graph.1
+          kind: navigation
+          order: 109
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-graph.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-agent-dashboard
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-agent-dashboard
+        order: 110
+        contributions:
+        - id: desktop.feature.project-agent-dashboard.0
+          kind: route
+          order: 110
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-agent-dashboard.v1
+        - id: desktop.feature.project-agent-dashboard.1
+          kind: navigation
+          order: 110
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-agent-dashboard.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-agent-logs
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-agent-logs
+        order: 111
+        contributions:
+        - id: desktop.feature.project-agent-logs.0
+          kind: route
+          order: 111
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-agent-logs.v1
+        - id: desktop.feature.project-agent-logs.1
+          kind: navigation
+          order: 111
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-agent-logs.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-agent-patterns
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-agent-patterns
+        order: 112
+        contributions:
+        - id: desktop.feature.project-agent-patterns.0
+          kind: route
+          order: 112
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-agent-patterns.v1
+        - id: desktop.feature.project-agent-patterns.1
+          kind: navigation
+          order: 112
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-agent-patterns.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-schema
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-schema
+        order: 113
+        contributions:
+        - id: desktop.feature.project-project-schema.0
+          kind: route
+          order: 113
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-schema.v1
+        - id: desktop.feature.project-project-schema.1
+          kind: navigation
+          order: 113
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-schema.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-channels
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-channels
+        order: 114
+        contributions:
+        - id: desktop.feature.project-project-channels.0
+          kind: route
+          order: 114
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-channels.v1
+        - id: desktop.feature.project-project-channels.1
+          kind: navigation
+          order: 114
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-channels.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-maintenance
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-maintenance
+        order: 115
+        contributions:
+        - id: desktop.feature.project-project-maintenance.0
+          kind: route
+          order: 115
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-maintenance.v1
+        - id: desktop.feature.project-project-maintenance.1
+          kind: navigation
+          order: 115
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-maintenance.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-cron-jobs
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-cron-jobs
+        order: 116
+        contributions:
+        - id: desktop.feature.project-project-cron-jobs.0
+          kind: route
+          order: 116
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-cron-jobs.v1
+        - id: desktop.feature.project-project-cron-jobs.1
+          kind: navigation
+          order: 116
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-cron-jobs.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-settings
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-settings
+        order: 117
+        contributions:
+        - id: desktop.feature.project-project-settings.0
+          kind: route
+          order: 117
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-settings.v1
+        - id: desktop.feature.project-project-settings.1
+          kind: navigation
+          order: 117
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-settings.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-runtimes
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-runtimes
+        order: 118
+        contributions:
+        - id: desktop.feature.tenant-tenant-runtimes.0
+          kind: route
+          order: 118
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-runtimes.v1
+        - id: desktop.feature.tenant-tenant-runtimes.1
+          kind: navigation
+          order: 118
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-runtimes.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-pool
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-pool
+        order: 119
+        contributions:
+        - id: desktop.feature.tenant-tenant-pool.0
+          kind: route
+          order: 119
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-pool.v1
+        - id: desktop.feature.tenant-tenant-pool.1
+          kind: navigation
+          order: 119
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-pool.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-instances
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-instances
+        order: 120
+        contributions:
+        - id: desktop.feature.tenant-tenant-instances.0
+          kind: route
+          order: 120
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-instances.v1
+        - id: desktop.feature.tenant-tenant-instances.1
+          kind: navigation
+          order: 120
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-instances.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-clusters
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-clusters
+        order: 121
+        contributions:
+        - id: desktop.feature.tenant-tenant-clusters.0
+          kind: route
+          order: 121
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-clusters.v1
+        - id: desktop.feature.tenant-tenant-clusters.1
+          kind: navigation
+          order: 121
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-clusters.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-deploy
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-deploy
+        order: 122
+        contributions:
+        - id: desktop.feature.tenant-tenant-deploy.0
+          kind: route
+          order: 122
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-deploy.v1
+        - id: desktop.feature.tenant-tenant-deploy.1
+          kind: navigation
+          order: 122
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-deploy.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-instance-templates
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-instance-templates
+        order: 123
+        contributions:
+        - id: desktop.feature.tenant-tenant-instance-templates.0
+          kind: route
+          order: 123
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-instance-templates.v1
+        - id: desktop.feature.tenant-tenant-instance-templates.1
+          kind: navigation
+          order: 123
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-instance-templates.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-genes
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-genes
+        order: 124
+        contributions:
+        - id: desktop.feature.tenant-tenant-genes.0
+          kind: route
+          order: 124
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-genes.v1
+        - id: desktop.feature.tenant-tenant-genes.1
+          kind: navigation
+          order: 124
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-genes.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-overview
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-overview
+        order: 125
+        contributions:
+        - id: desktop.feature.project-project-overview.0
+          kind: route
+          order: 125
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-overview.v1
+        - id: desktop.feature.project-project-overview.1
+          kind: navigation
+          order: 125
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-overview.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-workspaces
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-workspaces
+        order: 126
+        contributions:
+        - id: desktop.feature.project-project-workspaces.0
+          kind: route
+          order: 126
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-workspaces.v1
+        - id: desktop.feature.project-project-workspaces.1
+          kind: navigation
+          order: 126
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-workspaces.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-blackboard-dynamic-project-blackboard
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-blackboard-dynamic-project-blackboard
+        order: 127
+        contributions:
+        - id: desktop.feature.project-blackboard-dynamic-project-blackboard.0
+          kind: route
+          order: 127
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-blackboard-dynamic-project-blackboard.v1
+        - id: desktop.feature.project-blackboard-dynamic-project-blackboard.1
+          kind: navigation
+          order: 127
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-blackboard-dynamic-project-blackboard.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-project-project-search
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.project-project-search
+        order: 128
+        contributions:
+        - id: desktop.feature.project-project-search.0
+          kind: route
+          order: 128
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.project-project-search.v1
+        - id: desktop.feature.project-project-search.1
+          kind: navigation
+          order: 128
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.project-project-search.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-agent-workspace-tenant-agent-workspace
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.agent-workspace-tenant-agent-workspace
+        order: 129
+        contributions:
+        - id: desktop.feature.agent-workspace-tenant-agent-workspace.0
+          kind: route
+          order: 129
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.agent-workspace-tenant-agent-workspace.v1
+        - id: desktop.feature.agent-workspace-tenant-agent-workspace.1
+          kind: navigation
+          order: 129
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.agent-workspace-tenant-agent-workspace.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-overview
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-overview
+        order: 130
+        contributions:
+        - id: desktop.feature.tenant-tenant-overview.0
+          kind: route
+          order: 130
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-overview.v1
+        - id: desktop.feature.tenant-tenant-overview.1
+          kind: navigation
+          order: 130
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-overview.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-projects
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-projects
+        order: 131
+        contributions:
+        - id: desktop.feature.tenant-tenant-projects.0
+          kind: route
+          order: 131
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-projects.v1
+        - id: desktop.feature.tenant-tenant-projects.1
+          kind: navigation
+          order: 131
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-projects.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-workspaces
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-workspaces
+        order: 132
+        contributions:
+        - id: desktop.feature.tenant-tenant-workspaces.0
+          kind: route
+          order: 132
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-workspaces.v1
+        - id: desktop.feature.tenant-tenant-workspaces.1
+          kind: navigation
+          order: 132
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-workspaces.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-tasks
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-tasks
+        order: 133
+        contributions:
+        - id: desktop.feature.tenant-tenant-tasks.0
+          kind: route
+          order: 133
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-tasks.v1
+        - id: desktop.feature.tenant-tenant-tasks.1
+          kind: navigation
+          order: 133
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-tasks.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-analytics
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-analytics
+        order: 134
+        contributions:
+        - id: desktop.feature.tenant-tenant-analytics.0
+          kind: route
+          order: 134
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-analytics.v1
+        - id: desktop.feature.tenant-tenant-analytics.1
+          kind: navigation
+          order: 134
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-analytics.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-agent-configuration
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-agent-configuration
+        order: 135
+        contributions:
+        - id: desktop.feature.tenant-tenant-agent-configuration.0
+          kind: route
+          order: 135
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-agent-configuration.v1
+        - id: desktop.feature.tenant-tenant-agent-configuration.1
+          kind: navigation
+          order: 135
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-agent-configuration.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-agent-definitions
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-agent-definitions
+        order: 136
+        contributions:
+        - id: desktop.feature.tenant-tenant-agent-definitions.0
+          kind: route
+          order: 136
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-agent-definitions.v1
+        - id: desktop.feature.tenant-tenant-agent-definitions.1
+          kind: navigation
+          order: 136
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-agent-definitions.v1
+        - id: desktop.settings.agents.0
+          kind: settings-page
+          order: 164
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.agents.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-agent-bindings
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-agent-bindings
+        order: 137
+        contributions:
+        - id: desktop.feature.tenant-tenant-agent-bindings.0
+          kind: route
+          order: 137
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-agent-bindings.v1
+        - id: desktop.feature.tenant-tenant-agent-bindings.1
+          kind: navigation
+          order: 137
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-agent-bindings.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-skills
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-skills
+        order: 138
+        contributions:
+        - id: desktop.feature.tenant-tenant-skills.0
+          kind: route
+          order: 138
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-skills.v1
+        - id: desktop.feature.tenant-tenant-skills.1
+          kind: navigation
+          order: 138
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-skills.v1
+        - id: desktop.settings.skills.0
+          kind: settings-page
+          order: 167
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.skills.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-evolution
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-evolution
+        order: 139
+        contributions:
+        - id: desktop.feature.tenant-tenant-evolution.0
+          kind: route
+          order: 139
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-evolution.v1
+        - id: desktop.feature.tenant-tenant-evolution.1
+          kind: navigation
+          order: 139
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-evolution.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-patterns
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-patterns
+        order: 140
+        contributions:
+        - id: desktop.feature.tenant-tenant-patterns.0
+          kind: route
+          order: 140
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-patterns.v1
+        - id: desktop.feature.tenant-tenant-patterns.1
+          kind: navigation
+          order: 140
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-patterns.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-plugins
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-management
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-plugins
+        order: 141
+        contributions:
+        - id: desktop.feature.tenant-tenant-plugins.0
+          kind: route
+          order: 141
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-plugins.v1
+        - id: desktop.feature.tenant-tenant-plugins.1
+          kind: navigation
+          order: 141
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-plugins.v1
+        - id: desktop.settings.plugins.0
+          kind: settings-page
+          order: 168
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.plugins.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-mcp-servers
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-mcp-servers
+        order: 142
+        contributions:
+        - id: desktop.feature.tenant-tenant-mcp-servers.0
+          kind: route
+          order: 142
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-mcp-servers.v1
+        - id: desktop.feature.tenant-tenant-mcp-servers.1
+          kind: navigation
+          order: 142
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-mcp-servers.v1
+        - id: desktop.settings.mcp.0
+          kind: settings-page
+          order: 166
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.mcp.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-acp
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-acp
+        order: 143
+        contributions:
+        - id: desktop.feature.tenant-tenant-acp.0
+          kind: route
+          order: 143
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-acp.v1
+        - id: desktop.feature.tenant-tenant-acp.1
+          kind: navigation
+          order: 143
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-acp.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-templates
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-templates
+        order: 144
+        contributions:
+        - id: desktop.feature.tenant-tenant-templates.0
+          kind: route
+          order: 144
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-templates.v1
+        - id: desktop.feature.tenant-tenant-templates.1
+          kind: navigation
+          order: 144
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-templates.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-providers
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-providers
+        order: 145
+        contributions:
+        - id: desktop.feature.tenant-tenant-providers.0
+          kind: route
+          order: 145
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-providers.v1
+        - id: desktop.feature.tenant-tenant-providers.1
+          kind: navigation
+          order: 145
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-providers.v1
+        - id: desktop.settings.models.0
+          kind: settings-page
+          order: 163
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.models.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-webhooks
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-webhooks
+        order: 146
+        contributions:
+        - id: desktop.feature.tenant-tenant-webhooks.0
+          kind: route
+          order: 146
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-webhooks.v1
+        - id: desktop.feature.tenant-tenant-webhooks.1
+          kind: navigation
+          order: 146
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-webhooks.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-users
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-users
+        order: 147
+        contributions:
+        - id: desktop.feature.tenant-tenant-users.0
+          kind: route
+          order: 147
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-users.v1
+        - id: desktop.feature.tenant-tenant-users.1
+          kind: navigation
+          order: 147
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-users.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-audit-logs
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-audit-logs
+        order: 148
+        contributions:
+        - id: desktop.feature.tenant-tenant-audit-logs.0
+          kind: route
+          order: 148
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-audit-logs.v1
+        - id: desktop.feature.tenant-tenant-audit-logs.1
+          kind: navigation
+          order: 148
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-audit-logs.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-events
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-events
+        order: 149
+        contributions:
+        - id: desktop.feature.tenant-tenant-events.0
+          kind: route
+          order: 149
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-events.v1
+        - id: desktop.feature.tenant-tenant-events.1
+          kind: navigation
+          order: 149
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-events.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-dead-letter-queue
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-dead-letter-queue
+        order: 150
+        contributions:
+        - id: desktop.feature.tenant-tenant-dead-letter-queue.0
+          kind: route
+          order: 150
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-dead-letter-queue.v1
+        - id: desktop.feature.tenant-tenant-dead-letter-queue.1
+          kind: navigation
+          order: 150
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-dead-letter-queue.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-trust-policies
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-trust-policies
+        order: 151
+        contributions:
+        - id: desktop.feature.tenant-tenant-trust-policies.0
+          kind: route
+          order: 151
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-trust-policies.v1
+        - id: desktop.feature.tenant-tenant-trust-policies.1
+          kind: navigation
+          order: 151
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-trust-policies.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-decision-records
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-decision-records
+        order: 152
+        contributions:
+        - id: desktop.feature.tenant-tenant-decision-records.0
+          kind: route
+          order: 152
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-decision-records.v1
+        - id: desktop.feature.tenant-tenant-decision-records.1
+          kind: navigation
+          order: 152
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-decision-records.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-billing
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-billing
+        order: 153
+        contributions:
+        - id: desktop.feature.tenant-tenant-billing.0
+          kind: route
+          order: 153
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-billing.v1
+        - id: desktop.feature.tenant-tenant-billing.1
+          kind: navigation
+          order: 153
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-billing.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-org-settings
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-org-settings
+        order: 154
+        contributions:
+        - id: desktop.feature.tenant-tenant-org-settings.0
+          kind: route
+          order: 154
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-org-settings.v1
+        - id: desktop.feature.tenant-tenant-org-settings.1
+          kind: navigation
+          order: 154
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-org-settings.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-feature-tenant-tenant-settings
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.feature.tenant-tenant-settings
+        order: 155
+        contributions:
+        - id: desktop.feature.tenant-tenant-settings.0
+          kind: route
+          order: 155
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.routes.feature.tenant-tenant-settings.v1
+        - id: desktop.feature.tenant-tenant-settings.1
+          kind: navigation
+          order: 155
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.navigation.feature.tenant-tenant-settings.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-account
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.account
+        order: 156
+        contributions:
+        - id: desktop.settings.account.0
+          kind: settings-page
+          order: 156
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.account.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-workspace
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.workspace
+        order: 157
+        contributions:
+        - id: desktop.settings.workspace.0
+          kind: settings-page
+          order: 157
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.workspace.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-general
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.general
+        order: 158
+        contributions:
+        - id: desktop.settings.general.0
+          kind: settings-page
+          order: 158
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.general.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-appearance
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.appearance
+        order: 159
+        contributions:
+        - id: desktop.settings.appearance.0
+          kind: settings-page
+          order: 159
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.appearance.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-notifications
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.notifications
+        order: 160
+        contributions:
+        - id: desktop.settings.notifications.0
+          kind: settings-page
+          order: 160
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.notifications.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-shortcuts
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.shortcuts
+        order: 161
+        contributions:
+        - id: desktop.settings.shortcuts.0
+          kind: settings-page
+          order: 161
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.shortcuts.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-updates
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.updates
+        order: 162
+        contributions:
+        - id: desktop.settings.updates.0
+          kind: settings-page
+          order: 162
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.updates.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-subagents
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.subagents
+        order: 165
+        contributions:
+        - id: desktop.settings.subagents.0
+          kind: settings-page
+          order: 165
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.subagents.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-browser
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.browser
+        order: 169
+        contributions:
+        - id: desktop.settings.browser.0
+          kind: settings-page
+          order: 169
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.browser.v1
+        - id: desktop.command.browser-integration-settings.0
+          kind: command
+          order: 175
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.commands.browser-integration-settings.v1
+        - id: desktop.panel.browser.0
+          kind: ui-slot
+          order: 198
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.browser.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-settings-connection
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.settings.connection
+        order: 170
+        contributions:
+        - id: desktop.settings.connection.0
+          kind: settings-page
+          order: 170
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.settings.connection.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-command-home
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.command.home
+        order: 171
+        contributions:
+        - id: desktop.command.home.0
+          kind: command
+          order: 171
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.commands.home.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-command-my-work
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.command.my-work
+        order: 172
+        contributions:
+        - id: desktop.command.my-work.0
+          kind: command
+          order: 172
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.commands.my-work.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-command-activity
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.command.activity
+        order: 173
+        contributions:
+        - id: desktop.command.activity.0
+          kind: command
+          order: 173
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.commands.activity.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-command-settings
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.command.settings
+        order: 174
+        contributions:
+        - id: desktop.command.settings.0
+          kind: command
+          order: 174
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.commands.settings.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-command-sign-in
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.command.sign-in
+        order: 176
+        contributions:
+        - id: desktop.command.sign-in.0
+          kind: command
+          order: 176
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.commands.sign-in.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-command-refresh-runtime
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.command.refresh-runtime
+        order: 177
+        contributions:
+        - id: desktop.command.refresh-runtime.0
+          kind: command
+          order: 177
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.commands.refresh-runtime.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-command-keyboard-shortcuts
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.command.keyboard-shortcuts
+        order: 178
+        contributions:
+        - id: desktop.command.keyboard-shortcuts.0
+          kind: command
+          order: 178
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.commands.keyboard-shortcuts.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-command-palette
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.command-palette
+        order: 179
+        contributions:
+        - id: desktop.shortcut.command-palette.0
+          kind: command
+          order: 179
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.command-palette.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-activity-inbox
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.activity-inbox
+        order: 180
+        contributions:
+        - id: desktop.shortcut.activity-inbox.0
+          kind: command
+          order: 180
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.activity-inbox.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-quick-open-palette
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.quick-open-palette
+        order: 181
+        contributions:
+        - id: desktop.shortcut.quick-open-palette.0
+          kind: command
+          order: 181
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.quick-open-palette.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-palette-move
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.palette-move
+        order: 182
+        contributions:
+        - id: desktop.shortcut.palette-move.0
+          kind: command
+          order: 182
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.palette-move.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-palette-jump
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.palette-jump
+        order: 183
+        contributions:
+        - id: desktop.shortcut.palette-jump.0
+          kind: command
+          order: 183
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.palette-jump.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-palette-run
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.palette-run
+        order: 184
+        contributions:
+        - id: desktop.shortcut.palette-run.0
+          kind: command
+          order: 184
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.palette-run.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-conversation-search
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.conversation-search
+        order: 185
+        contributions:
+        - id: desktop.shortcut.conversation-search.0
+          kind: command
+          order: 185
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.conversation-search.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-composer-send
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.composer-send
+        order: 186
+        contributions:
+        - id: desktop.shortcut.composer-send.0
+          kind: command
+          order: 186
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.composer-send.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-composer-modifier-send
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.composer-modifier-send
+        order: 187
+        contributions:
+        - id: desktop.shortcut.composer-modifier-send.0
+          kind: command
+          order: 187
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.composer-modifier-send.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-composer-newline
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.composer-newline
+        order: 188
+        contributions:
+        - id: desktop.shortcut.composer-newline.0
+          kind: command
+          order: 188
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.composer-newline.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-show-shortcuts
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.show-shortcuts
+        order: 189
+        contributions:
+        - id: desktop.shortcut.show-shortcuts.0
+          kind: command
+          order: 189
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.show-shortcuts.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-shortcut-close-overlay
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.shortcut.close-overlay
+        order: 190
+        contributions:
+        - id: desktop.shortcut.close-overlay.0
+          kind: command
+          order: 190
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.shortcuts.close-overlay.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-plan
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.plan
+        order: 191
+        contributions:
+        - id: desktop.panel.plan.0
+          kind: ui-slot
+          order: 191
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.plan.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-changes
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.changes
+        order: 192
+        contributions:
+        - id: desktop.panel.changes.0
+          kind: ui-slot
+          order: 192
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.changes.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-artifacts
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.artifacts
+        order: 193
+        contributions:
+        - id: desktop.panel.artifacts.0
+          kind: ui-slot
+          order: 193
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.artifacts.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-terminal
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.terminal
+        order: 194
+        contributions:
+        - id: desktop.panel.terminal.0
+          kind: ui-slot
+          order: 194
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.terminal.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-checks
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.checks
+        order: 195
+        contributions:
+        - id: desktop.panel.checks.0
+          kind: ui-slot
+          order: 195
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.checks.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-verification
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.verification
+        order: 196
+        contributions:
+        - id: desktop.panel.verification.0
+          kind: ui-slot
+          order: 196
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.verification.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-sources
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.sources
+        order: 197
+        contributions:
+        - id: desktop.panel.sources.0
+          kind: ui-slot
+          order: 197
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.sources.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-run-details
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.run-details
+        order: 199
+        contributions:
+        - id: desktop.panel.run-details.0
+          kind: ui-slot
+          order: 199
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.run-details.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-apps
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.apps
+        order: 200
+        contributions:
+        - id: desktop.panel.apps.0
+          kind: ui-slot
+          order: 200
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.apps.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-overview
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.overview
+        order: 201
+        contributions:
+        - id: desktop.panel.overview.0
+          kind: ui-slot
+          order: 201
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.overview.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-activity
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.activity
+        order: 202
+        contributions:
+        - id: desktop.panel.activity.0
+          kind: ui-slot
+          order: 202
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.activity.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-agents
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.agents
+        order: 203
+        contributions:
+        - id: desktop.panel.agents.0
+          kind: ui-slot
+          order: 203
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.agents.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-graph
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.graph
+        order: 204
+        contributions:
+        - id: desktop.panel.graph.0
+          kind: ui-slot
+          order: 204
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.graph.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-insights
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.insights
+        order: 205
+        contributions:
+        - id: desktop.panel.insights.0
+          kind: ui-slot
+          order: 205
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.insights.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-context
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.context
+        order: 206
+        contributions:
+        - id: desktop.panel.context.0
+          kind: ui-slot
+          order: 206
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.context.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-panel-runtime
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-feature
+      enabled: true
+      config:
+        id: desktop.panel.runtime
+        order: 207
+        contributions:
+        - id: desktop.panel.runtime.0
+          kind: ui-slot
+          order: 207
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - desktop.ui-slots.panel.runtime.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+      - ui.work-panel
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-core
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-contribution
+      enabled: true
+      config:
+        id: web.feature.core.0
+        kind: route
+        order: 100
+        payload:
+          schema_version: 1
+          artifact_refs:
+          - web.routes.core.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-agent-dashboard
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-agent-dashboard
+        order: 101
+        contributions:
+        - id: web.feature.project-agent-dashboard.0
+          kind: route
+          order: 101
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-agent-dashboard.v1
+        - id: web.feature.project-agent-dashboard.1
+          kind: navigation
+          order: 101
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-agent-dashboard.v1
+        - id: web.feature.project-agent-dashboard.2
+          kind: command
+          order: 101
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-agent-dashboard.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-agent-logs
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-agent-logs
+        order: 102
+        contributions:
+        - id: web.feature.project-agent-logs.0
+          kind: route
+          order: 102
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-agent-logs.v1
+        - id: web.feature.project-agent-logs.1
+          kind: navigation
+          order: 102
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-agent-logs.v1
+        - id: web.feature.project-agent-logs.2
+          kind: command
+          order: 102
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-agent-logs.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-agent-patterns
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-agent-patterns
+        order: 103
+        contributions:
+        - id: web.feature.project-agent-patterns.0
+          kind: route
+          order: 103
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-agent-patterns.v1
+        - id: web.feature.project-agent-patterns.1
+          kind: navigation
+          order: 103
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-agent-patterns.v1
+        - id: web.feature.project-agent-patterns.2
+          kind: command
+          order: 103
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-agent-patterns.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-blackboard
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-blackboard
+        order: 104
+        contributions:
+        - id: web.feature.project-blackboard.0
+          kind: route
+          order: 104
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-blackboard.v1
+        - id: web.feature.project-blackboard.1
+          kind: navigation
+          order: 104
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-blackboard.v1
+        - id: web.feature.project-blackboard.2
+          kind: command
+          order: 104
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-blackboard.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-channels
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-channels
+        order: 105
+        contributions:
+        - id: web.feature.project-channels.0
+          kind: route
+          order: 105
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-channels.v1
+        - id: web.feature.project-channels.1
+          kind: navigation
+          order: 105
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-channels.v1
+        - id: web.feature.project-channels.2
+          kind: command
+          order: 105
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-channels.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-communities
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-communities
+        order: 106
+        contributions:
+        - id: web.feature.project-communities.0
+          kind: route
+          order: 106
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-communities.v1
+        - id: web.feature.project-communities.1
+          kind: navigation
+          order: 106
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-communities.v1
+        - id: web.feature.project-communities.2
+          kind: command
+          order: 106
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-communities.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-cron-jobs
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-cron-jobs
+        order: 107
+        contributions:
+        - id: web.feature.project-cron-jobs.0
+          kind: route
+          order: 107
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-cron-jobs.v1
+        - id: web.feature.project-cron-jobs.1
+          kind: navigation
+          order: 107
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-cron-jobs.v1
+        - id: web.feature.project-cron-jobs.2
+          kind: command
+          order: 107
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-cron-jobs.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-entities
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-entities
+        order: 108
+        contributions:
+        - id: web.feature.project-entities.0
+          kind: route
+          order: 108
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-entities.v1
+        - id: web.feature.project-entities.1
+          kind: navigation
+          order: 108
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-entities.v1
+        - id: web.feature.project-entities.2
+          kind: command
+          order: 108
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-entities.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-graph
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-graph
+        order: 109
+        contributions:
+        - id: web.feature.project-graph.0
+          kind: route
+          order: 109
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-graph.v1
+        - id: web.feature.project-graph.1
+          kind: navigation
+          order: 109
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-graph.v1
+        - id: web.feature.project-graph.2
+          kind: command
+          order: 109
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-graph.v1
+        - id: web.feature.project-graph.3
+          kind: settings-page
+          order: 109
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.settings.project-graph.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-maintenance
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-maintenance
+        order: 110
+        contributions:
+        - id: web.feature.project-maintenance.0
+          kind: route
+          order: 110
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-maintenance.v1
+        - id: web.feature.project-maintenance.1
+          kind: navigation
+          order: 110
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-maintenance.v1
+        - id: web.feature.project-maintenance.2
+          kind: command
+          order: 110
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-maintenance.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-memories
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-memories
+        order: 111
+        contributions:
+        - id: web.feature.project-memories.0
+          kind: route
+          order: 111
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-memories.v1
+        - id: web.feature.project-memories.1
+          kind: navigation
+          order: 111
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-memories.v1
+        - id: web.feature.project-memories.2
+          kind: command
+          order: 111
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-memories.v1
+        - id: web.feature.project-memories.3
+          kind: settings-page
+          order: 111
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.settings.project-memories.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-overview
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-overview
+        order: 112
+        contributions:
+        - id: web.feature.project-overview.0
+          kind: route
+          order: 112
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-overview.v1
+        - id: web.feature.project-overview.1
+          kind: navigation
+          order: 112
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-overview.v1
+        - id: web.feature.project-overview.2
+          kind: command
+          order: 112
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-overview.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-playbooks
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-playbooks
+        order: 113
+        contributions:
+        - id: web.feature.project-playbooks.0
+          kind: route
+          order: 113
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-playbooks.v1
+        - id: web.feature.project-playbooks.1
+          kind: navigation
+          order: 113
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-playbooks.v1
+        - id: web.feature.project-playbooks.2
+          kind: command
+          order: 113
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-playbooks.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-schema
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-schema
+        order: 114
+        contributions:
+        - id: web.feature.project-schema.0
+          kind: route
+          order: 114
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-schema.v1
+        - id: web.feature.project-schema.1
+          kind: navigation
+          order: 114
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-schema.v1
+        - id: web.feature.project-schema.2
+          kind: command
+          order: 114
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-schema.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-search
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-search
+        order: 115
+        contributions:
+        - id: web.feature.project-search.0
+          kind: route
+          order: 115
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-search.v1
+        - id: web.feature.project-search.1
+          kind: navigation
+          order: 115
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-search.v1
+        - id: web.feature.project-search.2
+          kind: command
+          order: 115
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-search.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-settings
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-settings
+        order: 116
+        contributions:
+        - id: web.feature.project-settings.0
+          kind: route
+          order: 116
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-settings.v1
+        - id: web.feature.project-settings.1
+          kind: navigation
+          order: 116
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-settings.v1
+        - id: web.feature.project-settings.2
+          kind: command
+          order: 116
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-settings.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-support
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-support
+        order: 117
+        contributions:
+        - id: web.feature.project-support.0
+          kind: route
+          order: 117
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-support.v1
+        - id: web.feature.project-support.1
+          kind: navigation
+          order: 117
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-support.v1
+        - id: web.feature.project-support.2
+          kind: command
+          order: 117
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-support.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-team
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-team
+        order: 118
+        contributions:
+        - id: web.feature.project-team.0
+          kind: route
+          order: 118
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-team.v1
+        - id: web.feature.project-team.1
+          kind: navigation
+          order: 118
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-team.v1
+        - id: web.feature.project-team.2
+          kind: command
+          order: 118
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-team.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-project-workspaces
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.project-workspaces
+        order: 119
+        contributions:
+        - id: web.feature.project-workspaces.0
+          kind: route
+          order: 119
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.project-workspaces.v1
+        - id: web.feature.project-workspaces.1
+          kind: navigation
+          order: 119
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.project-workspaces.v1
+        - id: web.feature.project-workspaces.2
+          kind: command
+          order: 119
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.project-workspaces.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-acp
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-acp
+        order: 120
+        contributions:
+        - id: web.feature.tenant-acp.0
+          kind: route
+          order: 120
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-acp.v1
+        - id: web.feature.tenant-acp.1
+          kind: navigation
+          order: 120
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-acp.v1
+        - id: web.feature.tenant-acp.2
+          kind: command
+          order: 120
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-acp.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-agent-bindings
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-agent-bindings
+        order: 121
+        contributions:
+        - id: web.feature.tenant-agent-bindings.0
+          kind: route
+          order: 121
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-agent-bindings.v1
+        - id: web.feature.tenant-agent-bindings.1
+          kind: navigation
+          order: 121
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-agent-bindings.v1
+        - id: web.feature.tenant-agent-bindings.2
+          kind: command
+          order: 121
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-agent-bindings.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-agent-definitions
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-agent-definitions
+        order: 122
+        contributions:
+        - id: web.feature.tenant-agent-definitions.0
+          kind: route
+          order: 122
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-agent-definitions.v1
+        - id: web.feature.tenant-agent-definitions.1
+          kind: navigation
+          order: 122
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-agent-definitions.v1
+        - id: web.feature.tenant-agent-definitions.2
+          kind: command
+          order: 122
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-agent-definitions.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-agent-workspace
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-agent-workspace
+        order: 123
+        contributions:
+        - id: web.feature.tenant-agent-workspace.0
+          kind: route
+          order: 123
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-agent-workspace.v1
+        - id: web.feature.tenant-agent-workspace.1
+          kind: navigation
+          order: 123
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-agent-workspace.v1
+        - id: web.feature.tenant-agent-workspace.2
+          kind: command
+          order: 123
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-agent-workspace.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-agents
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-agents
+        order: 124
+        contributions:
+        - id: web.feature.tenant-agents.0
+          kind: route
+          order: 124
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-agents.v1
+        - id: web.feature.tenant-agents.1
+          kind: navigation
+          order: 124
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-agents.v1
+        - id: web.feature.tenant-agents.2
+          kind: command
+          order: 124
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-agents.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-analytics
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-analytics
+        order: 125
+        contributions:
+        - id: web.feature.tenant-analytics.0
+          kind: route
+          order: 125
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-analytics.v1
+        - id: web.feature.tenant-analytics.1
+          kind: navigation
+          order: 125
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-analytics.v1
+        - id: web.feature.tenant-analytics.2
+          kind: command
+          order: 125
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-analytics.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-audit-logs
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-audit-logs
+        order: 126
+        contributions:
+        - id: web.feature.tenant-audit-logs.0
+          kind: route
+          order: 126
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-audit-logs.v1
+        - id: web.feature.tenant-audit-logs.1
+          kind: navigation
+          order: 126
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-audit-logs.v1
+        - id: web.feature.tenant-audit-logs.2
+          kind: command
+          order: 126
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-audit-logs.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-backend-stores
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-backend-stores
+        order: 127
+        contributions:
+        - id: web.feature.tenant-backend-stores.0
+          kind: route
+          order: 127
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-backend-stores.v1
+        - id: web.feature.tenant-backend-stores.1
+          kind: navigation
+          order: 127
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-backend-stores.v1
+        - id: web.feature.tenant-backend-stores.2
+          kind: command
+          order: 127
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-backend-stores.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-billing
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-billing
+        order: 128
+        contributions:
+        - id: web.feature.tenant-billing.0
+          kind: route
+          order: 128
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-billing.v1
+        - id: web.feature.tenant-billing.1
+          kind: navigation
+          order: 128
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-billing.v1
+        - id: web.feature.tenant-billing.2
+          kind: command
+          order: 128
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-billing.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-clusters
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-clusters
+        order: 129
+        contributions:
+        - id: web.feature.tenant-clusters.0
+          kind: route
+          order: 129
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-clusters.v1
+        - id: web.feature.tenant-clusters.1
+          kind: navigation
+          order: 129
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-clusters.v1
+        - id: web.feature.tenant-clusters.2
+          kind: command
+          order: 129
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-clusters.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-dead-letter-queue
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-dead-letter-queue
+        order: 130
+        contributions:
+        - id: web.feature.tenant-dead-letter-queue.0
+          kind: route
+          order: 130
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-dead-letter-queue.v1
+        - id: web.feature.tenant-dead-letter-queue.1
+          kind: navigation
+          order: 130
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-dead-letter-queue.v1
+        - id: web.feature.tenant-dead-letter-queue.2
+          kind: command
+          order: 130
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-dead-letter-queue.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-decision-records
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-decision-records
+        order: 131
+        contributions:
+        - id: web.feature.tenant-decision-records.0
+          kind: route
+          order: 131
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-decision-records.v1
+        - id: web.feature.tenant-decision-records.1
+          kind: navigation
+          order: 131
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-decision-records.v1
+        - id: web.feature.tenant-decision-records.2
+          kind: command
+          order: 131
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-decision-records.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-deploy
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-deploy
+        order: 132
+        contributions:
+        - id: web.feature.tenant-deploy.0
+          kind: route
+          order: 132
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-deploy.v1
+        - id: web.feature.tenant-deploy.1
+          kind: navigation
+          order: 132
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-deploy.v1
+        - id: web.feature.tenant-deploy.2
+          kind: command
+          order: 132
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-deploy.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-events
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-events
+        order: 133
+        contributions:
+        - id: web.feature.tenant-events.0
+          kind: route
+          order: 133
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-events.v1
+        - id: web.feature.tenant-events.1
+          kind: navigation
+          order: 133
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-events.v1
+        - id: web.feature.tenant-events.2
+          kind: command
+          order: 133
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-events.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-evolution
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-evolution
+        order: 134
+        contributions:
+        - id: web.feature.tenant-evolution.0
+          kind: route
+          order: 134
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-evolution.v1
+        - id: web.feature.tenant-evolution.1
+          kind: navigation
+          order: 134
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-evolution.v1
+        - id: web.feature.tenant-evolution.2
+          kind: command
+          order: 134
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-evolution.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-genes
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-genes
+        order: 135
+        contributions:
+        - id: web.feature.tenant-genes.0
+          kind: route
+          order: 135
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-genes.v1
+        - id: web.feature.tenant-genes.1
+          kind: navigation
+          order: 135
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-genes.v1
+        - id: web.feature.tenant-genes.2
+          kind: command
+          order: 135
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-genes.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-instance-templates
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-instance-templates
+        order: 136
+        contributions:
+        - id: web.feature.tenant-instance-templates.0
+          kind: route
+          order: 136
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-instance-templates.v1
+        - id: web.feature.tenant-instance-templates.1
+          kind: navigation
+          order: 136
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-instance-templates.v1
+        - id: web.feature.tenant-instance-templates.2
+          kind: command
+          order: 136
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-instance-templates.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-instances
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-instances
+        order: 137
+        contributions:
+        - id: web.feature.tenant-instances.0
+          kind: route
+          order: 137
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-instances.v1
+        - id: web.feature.tenant-instances.1
+          kind: navigation
+          order: 137
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-instances.v1
+        - id: web.feature.tenant-instances.2
+          kind: command
+          order: 137
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-instances.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-mcp-servers
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-mcp-servers
+        order: 138
+        contributions:
+        - id: web.feature.tenant-mcp-servers.0
+          kind: route
+          order: 138
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-mcp-servers.v1
+        - id: web.feature.tenant-mcp-servers.1
+          kind: navigation
+          order: 138
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-mcp-servers.v1
+        - id: web.feature.tenant-mcp-servers.2
+          kind: command
+          order: 138
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-mcp-servers.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-org-settings
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-org-settings
+        order: 139
+        contributions:
+        - id: web.feature.tenant-org-settings.0
+          kind: route
+          order: 139
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-org-settings.v1
+        - id: web.feature.tenant-org-settings.1
+          kind: navigation
+          order: 139
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-org-settings.v1
+        - id: web.feature.tenant-org-settings.2
+          kind: command
+          order: 139
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-org-settings.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-overview
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-overview
+        order: 140
+        contributions:
+        - id: web.feature.tenant-overview.0
+          kind: route
+          order: 140
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-overview.v1
+        - id: web.feature.tenant-overview.1
+          kind: navigation
+          order: 140
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-overview.v1
+        - id: web.feature.tenant-overview.2
+          kind: command
+          order: 140
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-overview.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-patterns
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-patterns
+        order: 141
+        contributions:
+        - id: web.feature.tenant-patterns.0
+          kind: route
+          order: 141
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-patterns.v1
+        - id: web.feature.tenant-patterns.1
+          kind: navigation
+          order: 141
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-patterns.v1
+        - id: web.feature.tenant-patterns.2
+          kind: command
+          order: 141
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-patterns.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-plugins
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-management
+      enabled: true
+      config:
+        id: web.feature.tenant-plugins
+        order: 142
+        contributions:
+        - id: web.feature.tenant-plugins.0
+          kind: route
+          order: 142
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-plugins.v1
+        - id: web.feature.tenant-plugins.1
+          kind: navigation
+          order: 142
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-plugins.v1
+        - id: web.feature.tenant-plugins.2
+          kind: command
+          order: 142
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-plugins.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-pool
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-pool
+        order: 143
+        contributions:
+        - id: web.feature.tenant-pool.0
+          kind: route
+          order: 143
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-pool.v1
+        - id: web.feature.tenant-pool.1
+          kind: navigation
+          order: 143
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-pool.v1
+        - id: web.feature.tenant-pool.2
+          kind: command
+          order: 143
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-pool.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-profile
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-profile
+        order: 144
+        contributions:
+        - id: web.feature.tenant-profile.0
+          kind: route
+          order: 144
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-profile.v1
+        - id: web.feature.tenant-profile.1
+          kind: navigation
+          order: 144
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-profile.v1
+        - id: web.feature.tenant-profile.2
+          kind: command
+          order: 144
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-profile.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-projects
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-projects
+        order: 145
+        contributions:
+        - id: web.feature.tenant-projects.0
+          kind: route
+          order: 145
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-projects.v1
+        - id: web.feature.tenant-projects.1
+          kind: navigation
+          order: 145
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-projects.v1
+        - id: web.feature.tenant-projects.2
+          kind: command
+          order: 145
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-projects.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-providers
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-providers
+        order: 146
+        contributions:
+        - id: web.feature.tenant-providers.0
+          kind: route
+          order: 146
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-providers.v1
+        - id: web.feature.tenant-providers.1
+          kind: navigation
+          order: 146
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-providers.v1
+        - id: web.feature.tenant-providers.2
+          kind: command
+          order: 146
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-providers.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-runtimes
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-runtimes
+        order: 147
+        contributions:
+        - id: web.feature.tenant-runtimes.0
+          kind: route
+          order: 147
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-runtimes.v1
+        - id: web.feature.tenant-runtimes.1
+          kind: navigation
+          order: 147
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-runtimes.v1
+        - id: web.feature.tenant-runtimes.2
+          kind: command
+          order: 147
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-runtimes.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-settings
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-settings
+        order: 148
+        contributions:
+        - id: web.feature.tenant-settings.0
+          kind: route
+          order: 148
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-settings.v1
+        - id: web.feature.tenant-settings.1
+          kind: navigation
+          order: 148
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-settings.v1
+        - id: web.feature.tenant-settings.2
+          kind: command
+          order: 148
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-settings.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-skills
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-skills
+        order: 149
+        contributions:
+        - id: web.feature.tenant-skills.0
+          kind: route
+          order: 149
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-skills.v1
+        - id: web.feature.tenant-skills.1
+          kind: navigation
+          order: 149
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-skills.v1
+        - id: web.feature.tenant-skills.2
+          kind: command
+          order: 149
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-skills.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-tasks
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-tasks
+        order: 150
+        contributions:
+        - id: web.feature.tenant-tasks.0
+          kind: route
+          order: 150
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-tasks.v1
+        - id: web.feature.tenant-tasks.1
+          kind: navigation
+          order: 150
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-tasks.v1
+        - id: web.feature.tenant-tasks.2
+          kind: command
+          order: 150
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-tasks.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-templates
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-templates
+        order: 151
+        contributions:
+        - id: web.feature.tenant-templates.0
+          kind: route
+          order: 151
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-templates.v1
+        - id: web.feature.tenant-templates.1
+          kind: navigation
+          order: 151
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-templates.v1
+        - id: web.feature.tenant-templates.2
+          kind: command
+          order: 151
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-templates.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-trust-policies
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-trust-policies
+        order: 152
+        contributions:
+        - id: web.feature.tenant-trust-policies.0
+          kind: route
+          order: 152
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-trust-policies.v1
+        - id: web.feature.tenant-trust-policies.1
+          kind: navigation
+          order: 152
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-trust-policies.v1
+        - id: web.feature.tenant-trust-policies.2
+          kind: command
+          order: 152
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-trust-policies.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-users
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-users
+        order: 153
+        contributions:
+        - id: web.feature.tenant-users.0
+          kind: route
+          order: 153
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-users.v1
+        - id: web.feature.tenant-users.1
+          kind: navigation
+          order: 153
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-users.v1
+        - id: web.feature.tenant-users.2
+          kind: command
+          order: 153
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-users.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-webhooks
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-webhooks
+        order: 154
+        contributions:
+        - id: web.feature.tenant-webhooks.0
+          kind: route
+          order: 154
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-webhooks.v1
+        - id: web.feature.tenant-webhooks.1
+          kind: navigation
+          order: 154
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-webhooks.v1
+        - id: web.feature.tenant-webhooks.2
+          kind: command
+          order: 154
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-webhooks.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-tenant-workspaces
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.tenant-workspaces
+        order: 155
+        contributions:
+        - id: web.feature.tenant-workspaces.0
+          kind: route
+          order: 155
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.routes.tenant-workspaces.v1
+        - id: web.feature.tenant-workspaces.1
+          kind: navigation
+          order: 155
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.navigation.tenant-workspaces.v1
+        - id: web.feature.tenant-workspaces.2
+          kind: command
+          order: 155
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.commands.tenant-workspaces.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-ui-navigation
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.ui-navigation
+        order: 156
+        contributions:
+        - id: web.feature.ui-navigation.0
+          kind: ui-slot
+          order: 156
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.ui-slots.navigation.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-ui-settings
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.ui-settings
+        order: 157
+        contributions:
+        - id: web.feature.ui-settings.0
+          kind: ui-slot
+          order: 157
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.ui-slots.settings.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-ui-conversation
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.ui-conversation
+        order: 158
+        contributions:
+        - id: web.feature.ui-conversation.0
+          kind: ui-slot
+          order: 158
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.ui-slots.conversation.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-ui-composer
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.ui-composer
+        order: 159
+        contributions:
+        - id: web.feature.ui-composer.0
+          kind: ui-slot
+          order: 159
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.ui-slots.composer.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-ui-canvas
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.ui-canvas
+        order: 160
+        contributions:
+        - id: web.feature.ui-canvas.0
+          kind: ui-slot
+          order: 160
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.ui-slots.canvas.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-feature-ui-tool-result
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-feature
+      enabled: true
+      config:
+        id: web.feature.ui-tool-result
+        order: 161
+        contributions:
+        - id: web.feature.ui-tool-result.0
+          kind: ui-slot
+          order: 161
+          payload:
+            schema_version: 1
+            artifact_refs:
+            - web.ui-slots.tool-result.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
       isolate: {}
       scope:
         kind: root

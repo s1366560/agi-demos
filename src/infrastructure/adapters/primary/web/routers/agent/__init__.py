@@ -10,12 +10,14 @@ from . import (
     agent_graph_router,
     binding_router,
     commands,
+    computer_use_device,
     config,
     conversations,
     definitions_router,
     events,
     hitl,
     messages,
+    model_requests_v2,
     participants,
     patterns,
     plans,
@@ -83,6 +85,8 @@ router.include_router(patterns.router)
 router.include_router(config.router)
 router.include_router(hitl.router, prefix="/hitl")
 router.include_router(events.router)
+router.include_router(model_requests_v2.router)
+router.include_router(computer_use_device.router)
 router.include_router(templates.router)
 router.include_router(plans.router)
 router.include_router(plans.approval_router)

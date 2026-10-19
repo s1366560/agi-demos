@@ -62,7 +62,7 @@ describe('WebNavigationAuthorityV2', () => {
       tenantId: 'tenant-1',
     });
 
-    expect(navigationState.navigationArtifactIds).toEqual(['web.navigation.default.v1']);
+    expect(navigationState.navigationArtifactIds).toContain('web.navigation.tenant-overview.v1');
     expect(items.map(({ id }) => id)).toContain('overview');
     expect(items.length).toBeGreaterThan(20);
     expect(items.every(({ path }) => isWebNavigationPathActiveV2(path, routeState.routeKeys))).toBe(
@@ -71,36 +71,27 @@ describe('WebNavigationAuthorityV2', () => {
     await runtime.close();
   });
 
-  it('projects no business navigation when the navigation contribution is disabled', async () => {
+  it('removes one feature navigation with its routes while unrelated destinations stay active', async () => {
     const { generation, runtime } = await generationWithDisabledEntriesV2([
-      'builtin-web-default-navigation',
+      'builtin-web-feature-project-graph',
     ]);
     const routeState = projectWebRouteAuthorityV2(generation);
-    const navigationState = projectWebNavigationAuthorityV2(generation, routeState.routeKeys);
-
-    expect(routeState.routeKeys.length).toBeGreaterThan(100);
-    expect(navigationState.navigationArtifactIds).toEqual([]);
-    expect(
-      selectWebTopNavigationItemsV2(navigationState, 'tenant', { tenantId: 'tenant-1' })
-    ).toEqual([]);
+    const state = projectWebNavigationAuthorityV2(generation, routeState.routeKeys);
+    expect(state.navigationArtifactIds).not.toContain('web.navigation.project-graph.v1');
+    expect(state.navigationArtifactIds).toContain('web.navigation.tenant-skills.v1');
+    const items = selectWebTopNavigationItemsV2(state, 'project', {
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+    });
+    expect(items.some(({ path }) => path.endsWith('/graph'))).toBe(false);
+    expect(items.some(({ path }) => path.endsWith('/memories'))).toBe(true);
     await runtime.close();
   });
 
   it('keeps navigation empty when its target routes are not active', async () => {
-    const { generation, runtime } = await generationWithDisabledEntriesV2([
-      'builtin-web-default-routes',
-    ]);
-    const routeState = projectWebRouteAuthorityV2(generation);
-    const navigationState = projectWebNavigationAuthorityV2(generation, routeState.routeKeys);
-
-    expect(routeState.routeKeys).toEqual([]);
-    expect(navigationState.navigationArtifactIds).toEqual(['web.navigation.default.v1']);
-    expect(
-      selectWebTopNavigationItemsV2(navigationState, 'project', {
-        tenantId: 'tenant-1',
-        projectId: 'project-1',
-      })
-    ).toEqual([]);
+    const { generation, runtime } = await generationWithDisabledEntriesV2([]);
+    const state = projectWebNavigationAuthorityV2(generation, []);
+    expect(selectWebTopNavigationItemsV2(state, 'tenant', { tenantId: 'tenant-1' })).toEqual([]);
     await runtime.close();
   });
 

@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { DesktopApiClient } from '../api/client';
 
 import {
   DesktopRendererDeliveryReconcilerV2,
@@ -34,6 +35,7 @@ const desktopRendererDistributionReconcilerV2 = new DesktopRendererDeliveryRecon
     await window.__MEMSTACK_DESKTOP__?.core?.invoke?.('platform_plugin_renderer_owner_retire_v2');
   }
 );
+export const DESKTOP_PLUGIN_CONFIGURATION_CHANGED_V2 = 'memstack:plugin-configuration-changed-v2';
 let pendingClose: ReturnType<typeof setTimeout> | null = null;
 
 export function activateDesktopPluginGenerationRootV2(): void {
@@ -50,9 +52,17 @@ export function acquireDesktopPluginGenerationLeaseV2(
 }
 
 export function useDesktopPluginGenerationV2(
-  _config: DesktopRuntimeConfig,
-  enabled: boolean
+  config: DesktopRuntimeConfig,
+  enabled: boolean,
+  accountId?: string
 ): RendererPluginGenerationStateV2 {
+  const owner = useMemo(() => Object.freeze({ config: { ...config }, accountId }), [
+    config.mode, config.apiBaseUrl, config.apiKey, config.localApiToken,
+    config.tenantId, config.projectId, accountId,
+  ]);
+  const currentOwner = useRef(owner);
+  currentOwner.current = owner;
+  const [readyOwner, setReadyOwner] = useState<typeof owner | null>(null);
   const snapshot = useSyncExternalStore(
     desktopRendererLeaseStoreV2.subscribe,
     desktopRendererLeaseStoreV2.getSnapshot,
@@ -64,13 +74,14 @@ export function useDesktopPluginGenerationV2(
     desktopRendererStatusStoreV2.getSnapshot
   );
   useLayoutEffect(() => {
+    if (readyOwner !== owner) return;
     void desktopRendererLeaseStoreV2.commit(snapshot).catch((error: unknown) => {
       desktopRendererStatusStoreV2.fail(
         error,
         desktopRendererRuntimeV2.getSnapshot() !== undefined
       );
     });
-  }, [snapshot]);
+  }, [snapshot, readyOwner, owner]);
 
   useEffect(() => {
     if (pendingClose !== null) {
@@ -82,35 +93,93 @@ export function useDesktopPluginGenerationV2(
       return;
     }
 
-    const stop = startDesktopPluginGenerationPollingV2(
-      desktopRendererRuntimeV2,
-      desktopRendererStatusStoreV2
-    );
+    let stopped = false;
+    let stopPolling: (() => void) | undefined;
+    const start = () => {
+      stopPolling?.();
+      stopPolling = startDesktopPluginGenerationPollingV2(
+        desktopRendererRuntimeV2, desktopRendererStatusStoreV2, owner.config,
+        () => !stopped && currentOwner.current === owner,
+        () => { if (!stopped && currentOwner.current === owner) setReadyOwner(owner); },
+      );
+    };
+    // Retire the old owner before staging a new scope. Rendering is already blocked
+    // synchronously by readyOwner, including while an old network request drains.
+    void desktopRendererDistributionReconcilerV2.close().then(() => {
+      if (!stopped && currentOwner.current === owner) start();
+    }).catch((error: unknown) => {
+      if (!stopped) desktopRendererStatusStoreV2.fail(error, false);
+    });
+    const refresh = () => { if (!stopped && currentOwner.current === owner) start(); };
+    window.addEventListener(DESKTOP_PLUGIN_CONFIGURATION_CHANGED_V2, refresh);
     return () => {
-      stop();
+      stopped = true;
+      stopPolling?.();
+      window.removeEventListener(DESKTOP_PLUGIN_CONFIGURATION_CHANGED_V2, refresh);
       scheduleClose();
     };
-  }, [enabled]);
+  }, [enabled, owner]);
 
-  const state = projectRendererPluginGenerationStateV2(enabled, snapshot.generation, status);
+  const state = projectRendererPluginGenerationStateV2(enabled, readyOwner === owner ? snapshot.generation : undefined, status);
+  if (enabled && readyOwner !== owner && status.status !== 'error') return Object.freeze({ status: 'loading', generation: undefined, error: undefined });
   return state;
 }
 
 function startDesktopPluginGenerationPollingV2(
   runtime: RendererPluginRuntimeV2,
-  statusStore: RendererGenerationStatusStoreV2
+  statusStore: RendererGenerationStatusStoreV2,
+  config: DesktopRuntimeConfig,
+  isCurrent: () => boolean,
+  onReady: () => void,
 ): () => void {
+  let sourceSignal: AbortSignal | undefined;
   return startRendererGenerationPollingV2({
     runtime,
-    source: fetchDesktopPluginDistributionV2,
-    apply: (payload) => desktopRendererDistributionReconcilerV2.apply(payload),
+    source: async (signal) => {
+      sourceSignal = signal;
+      const payload = await fetchDesktopPluginDistributionV2(signal, config);
+      signal.throwIfAborted();
+      if (!isCurrent()) throw new Error('desktop_renderer_owner_changed');
+      return payload;
+    },
+    apply: async (payload) => {
+      if (!isCurrent()) throw new Error('desktop_renderer_owner_changed');
+      const localDigest = localSnapshotDigestV2(payload);
+      let receipt;
+      try {
+        receipt = await desktopRendererDistributionReconcilerV2.apply(payload);
+      } catch (error) {
+        if (isCurrent() && !sourceSignal?.aborted && config.mode === 'local' && config.tenantId && localDigest) {
+          const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'renderer_generation_apply_failed';
+          await new DesktopApiClient(config).localRendererReceiptV2(localDigest, 'nack', code, sourceSignal).catch(() => undefined);
+        }
+        throw error;
+      }
+      if (!isCurrent() || sourceSignal?.aborted) return receipt;
+      onReady();
+      if (config.mode === 'local' && config.tenantId && localDigest) {
+        await new DesktopApiClient(config).localRendererReceiptV2(localDigest, 'ack', undefined, sourceSignal);
+      }
+      return receipt;
+    },
     statusStore,
     pollIntervalMs: POLL_INTERVAL_MS,
   });
 }
 
-async function fetchDesktopPluginDistributionV2(signal: AbortSignal): Promise<unknown | null> {
+function localSnapshotDigestV2(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || !('source' in payload) || payload.source !== 'local' || !('snapshot' in payload)) return null;
+  const snapshot = payload.snapshot;
+  return snapshot && typeof snapshot === 'object' && 'digest' in snapshot && typeof snapshot.digest === 'string' ? snapshot.digest : null;
+}
+
+export async function fetchDesktopPluginDistributionV2(signal: AbortSignal, config: DesktopRuntimeConfig): Promise<unknown | null> {
   signal.throwIfAborted();
+  if (config.mode === 'local' && config.tenantId) {
+    const view = await new DesktopApiClient(config).localRendererViewV2(signal);
+    signal.throwIfAborted();
+    return view;
+  }
   const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
   if (invoke === undefined) {
     throw new Error('desktop_renderer_distribution_ipc_unavailable');

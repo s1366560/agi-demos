@@ -64,9 +64,7 @@ def test_schema_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -74,7 +72,9 @@ def test_schema_row_preserves_route_order_and_openapi() -> None:
     assert claimed.v2_owned_row_ids == ("schema",)
 
 
-async def test_generation_dispatcher_executes_schema_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_schema_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     services = SimpleNamespace(list_entity_types=AsyncMock(return_value=[]))
     authority = SimpleNamespace(services=services)
 

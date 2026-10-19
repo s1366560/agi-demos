@@ -49,6 +49,7 @@ function compileFunction(source, bindings, name) {
   if (bindings.sandboxDesktopGrants) {
     bindings = {
       ...bindings,
+      computerUseActivity: bindings.computerUseActivity ?? null,
       rendererDeliveryAdmissionV2: new RendererDeliveryAdmissionV2(),
       rendererDeliveryOwnersV2: new Map(),
     };
@@ -294,6 +295,7 @@ test('password/OAuth vault replacement and logout callbacks await revocation bef
       const gate = deferred(),
         events = [];
       const callback = expression(property.initializer, {
+        computerUseActivity: { clear: () => events.push('cua-clear') },
         sandboxDesktopGrants: {
           withAuthorityTransition: async (operation) => {
             events.push('revoke');
@@ -309,23 +311,28 @@ test('password/OAuth vault replacement and logout callbacks await revocation bef
       });
       const pending = callback({ opaque: true });
       await new Promise(setImmediate);
-      assert.deepEqual(events, ['revoke']);
+      assert.deepEqual(events, ['cua-clear', 'revoke']);
       gate.resolve();
       await pending;
       assert.deepEqual(events, [
+        'cua-clear',
         'revoke',
         key === 'saveTrustedSession' ? 'trusted_session_save' : 'trusted_session_clear',
       ]);
       const primary = new Error('revoke failed');
+      const failedEvents = [];
       const blocked = expression(property.initializer, {
+        computerUseActivity: { clear: () => failedEvents.push('cua-clear') },
         sandboxDesktopGrants: {
           withAuthorityTransition: async (operation) => {
+            failedEvents.push('revoke-failed');
             throw primary;
           },
         },
         applicationSupervisor: { invoke: () => assert.fail('mutation after failed revoke') },
       });
       await assert.rejects(blocked({}), (error) => error === primary);
+      assert.deepEqual(failedEvents, ['cua-clear', 'revoke-failed']);
     }
   }
 });
@@ -344,6 +351,7 @@ test('actual sidecar default branch revokes before local-session replacement cle
       `async function invoke(command,args){${clause.statements.map((node) => node.getText()).join('\n')}}`,
       {
         SIDECAR_COMMANDS: new Set(commands),
+        computerUseActivity: { clear: () => events.push('cua-clear') },
         cloudAuthenticationAuthority: {
           cancelPendingAuthentication: async () => {
             events.push('auth_cancel');
@@ -366,15 +374,16 @@ test('actual sidecar default branch revokes before local-session replacement cle
     );
     const pending = invoke(command, {});
     await new Promise(setImmediate);
-    assert.deepEqual(events, ['auth_cancel', 'revoke']);
+    assert.deepEqual(events, ['auth_cancel', 'cua-clear', 'revoke']);
     gate.resolve();
     await pending;
-    assert.deepEqual(events, ['auth_cancel', 'revoke', command, 'auth_cancel']);
+    assert.deepEqual(events, ['auth_cancel', 'cua-clear', 'revoke', command, 'auth_cancel']);
   }
 });
 test('main cloud-request path injects its real revoke callback and releases the IPC request lease', async () => {
   const events = [];
   const callback = commandCase('cloud_request', {
+    computerUseActivity: { clear: () => events.push('cua-clear') },
     authorizedCloudRequestOwner: () => 7,
     sidecarSupervisor: { invoke() {} },
     net: { fetch() {} },
@@ -400,7 +409,7 @@ test('main cloud-request path injects its real revoke callback and releases the 
   assert.deepEqual(await callback({}, { requestId: 'opaque', request: request() }), {
     status: 200,
   });
-  assert.deepEqual(events, ['revoke', 'execute', 'release']);
+  assert.deepEqual(events, ['cua-clear', 'revoke', 'execute', 'release']);
 });
 
 test('actual request broker and registry keep new grants blocked through blanking and pending POST response', async () => {
@@ -486,6 +495,7 @@ test('actual local runtime exit retires pending cloud login before and after the
   );
   const response = deferred();
   const saved = [];
+  const events = [];
   const cloudAuthenticationAuthority = new DesktopCloudAuthenticationAuthority({
     now: () => 1700000000000,
     randomId: () => 'device_attempt_12345678',
@@ -506,13 +516,20 @@ test('actual local runtime exit retires pending cloud login before and after the
     `async function invoke(command,args){${clause.statements.map((node) => node.getText()).join('\n')}}`,
     {
       SIDECAR_COMMANDS: new Set(['local_trusted_session_clear']),
+      computerUseActivity: { clear: () => events.push('cua-clear') },
       cloudAuthenticationAuthority,
-      sandboxDesktopGrants: { withAuthorityTransition: async (operation) => operation() },
-      sidecarSupervisor: { invoke: async () => {} },
+      sandboxDesktopGrants: {
+        withAuthorityTransition: async (operation) => {
+          events.push('revoke');
+          return operation();
+        },
+      },
+      sidecarSupervisor: { invoke: async (command) => events.push(command) },
     },
     'invoke',
   );
   await invoke('local_trusted_session_clear', {});
+  assert.deepEqual(events, ['cua-clear', 'revoke', 'local_trusted_session_clear']);
   response.resolve(
     new Response(
       JSON.stringify({

@@ -661,8 +661,14 @@ def _build_observe(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     item: dict[str, Any] = {
         "toolName": data.get("tool_name", ""),
         "toolOutput": data.get("observation", ""),
-        "isError": data.get("is_error", False),
+        "isError": bool(data.get("is_error") or data.get("error")),
     }
+    if (
+        data.get("control_outcome") in ("user_paused", "user_stopped")
+        and not data.get("error")
+        and not data.get("is_error")
+    ):
+        item["controlOutcome"] = data["control_outcome"]
     _copy_tool_display_fields(item, data)
     execution_id = _extract_tool_execution_id(data)
     if execution_id:

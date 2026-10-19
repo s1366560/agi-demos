@@ -1,4 +1,5 @@
 import { TimelineInspectionProvider } from './features/session/TimelineInspectionContext';
+import { ComputerUseDeviceProvider, ComputerUseActivity } from './features/settings/ComputerUseDeviceProvider';
 import { DESKTOP_NAVIGATION_METADATA } from './features/navigation/desktopCanonicalNavigationCatalog';
 import { waitForDesktopWorkspaceCoreReadyV2 } from './hooks/desktopWorkspaceCoreReadinessV2';
 import { useDesktopModalBackgroundV2 } from './hooks/useDesktopModalBackgroundV2';
@@ -384,6 +385,7 @@ import {
   terminalSessionMatchesRun,
 } from './features/session/sessionTerminalModel';
 import {
+  authoritativeRunFromSessionProjection,
   authoritativeRunsFromSocketEvents,
   buildSessionDetailViewModel,
   conversationWithAuthoritativeRun,
@@ -522,6 +524,7 @@ import {
   UNBOUND_CONVERSATIONS_KEY,
   beginWorkspaceConversationRequest,
   isCurrentWorkspaceConversationRequest,
+  isWorkspaceDefaultSelectionEligible,
   projectConversationLoadTargets,
   removeConversationFromWorkspaceRows,
   reconcileExpandedWorkspaceIds,
@@ -534,6 +537,10 @@ import {
   supersedeWorkspaceConversationRequests,
   workspaceTreeRefreshFailed,
 } from './features/workspace/workspaceTreeModel';
+import {
+  readWorkspaceSelectionPreference,
+  writeWorkspaceSelectionPreference,
+} from './features/workspace/workspaceSelectionPreference';
 import { socketEventWindowSince, socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
 import { useTerminalProxy } from './hooks/useTerminalProxy';
 import { useI18n } from './i18n';
@@ -1621,6 +1628,20 @@ export function App() {
   const commitRuntimeConfig = useCallback(
     (nextConfig: DesktopRuntimeConfig) => {
       const previousConfig = configRef.current;
+      const selectedWorkspace = datasetRef.current.workspacesByProject[nextConfig.projectId]?.find(
+        (workspace) => workspace.id === nextConfig.workspaceId &&
+          (!workspace.tenant_id || workspace.tenant_id === nextConfig.tenantId),
+      );
+      if (
+        isSameDesktopProjectRequestScope(previousConfig, nextConfig) &&
+        isIdentityAuthenticated(authRef.current) &&
+        selectedWorkspace &&
+        isWorkspaceDefaultSelectionEligible(selectedWorkspace)
+      ) {
+        writeWorkspaceSelectionPreference(
+          nextConfig, authRef.current.user?.user_id, selectedWorkspace.id,
+        );
+      }
       if (!isSameDesktopProjectRequestScope(previousConfig, nextConfig)) {
         runtimeRefreshRequestRef.current += 1;
         activeRuntimeConversationRequestsRef.current = new Map();
@@ -1843,6 +1864,7 @@ export function App() {
     config,
     identityAuthenticated,
     desktopRendererCompositionV2,
+    auth.user?.user_id,
   );
   const desktopProjectSandboxSurfaceClientV2 = useMemo(
     () => createDesktopProjectSandboxSurfaceClientV2(desktopProjectSandboxSurfaceOperationsV2, config),
@@ -1885,6 +1907,8 @@ export function App() {
     navigationRegistry: desktopCanonicalNavigationRegistry,
     routeRegistry: desktopProductionRouteRegistry,
   } = desktopRendererGenerationV2.state;
+  const currentRendererAuthorityV2 = useRef(desktopRendererAuthorityV2);
+  currentRendererAuthorityV2.current = desktopRendererAuthorityV2;
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () => desktopWorkbenchCapabilityClientProviderV2.publish({
       config,
@@ -2226,11 +2250,14 @@ export function App() {
       projection: null,
       error: null,
     });
-    void desktopSessionProjectionOperationsV2.getConversationSession({
-      config: requestConfig,
-      conversation: scopedConversation,
-      signal: controller.signal,
-    })
+    void Promise.resolve()
+      .then(() =>
+        desktopSessionProjectionOperationsV2.getConversationSession({
+          config: requestConfig,
+          conversation: scopedConversation,
+          signal: controller.signal,
+        }),
+      )
       .then((payload) => {
         if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
         // A schema_version 1 snapshot_revision is the canonical digest of the payload,
@@ -2570,11 +2597,15 @@ export function App() {
           requestId: timelineRequestRef.current,
           scopeEpoch: configScopeEpochRef.current,
         });
-      setConversationTimeline({
-        ...emptyConversationTimeline,
-        conversationId: conversation.id,
-        loading: true,
-      });
+      setConversationTimeline((current) =>
+        current.conversationId === conversation.id && current.items.length > 0
+          ? { ...current, loading: false, loadingEarlier: false, error: null }
+          : {
+              ...emptyConversationTimeline,
+              conversationId: conversation.id,
+              loading: true,
+            },
+      );
       try {
         const timelineInput = {
           config: {
@@ -2642,8 +2673,9 @@ export function App() {
         setConversationTimeline((current) =>
           requestIsCurrent() && current.conversationId === conversation.id
             ? {
-                ...emptyConversationTimeline,
-                conversationId: conversation.id,
+                ...current,
+                loading: false,
+                loadingEarlier: false,
                 error: formatConnectionError(caught, requestConfig.apiBaseUrl),
               }
             : current,
@@ -2912,13 +2944,14 @@ export function App() {
       if (
         (event.metaKey || event.ctrlKey) &&
         event.altKey &&
-        (key === 'u' || event.code === 'KeyU')
+        (key === 'u' || event.code === 'KeyU') &&
+        (desktopRendererAuthorityV2.shortcutIds ?? []).includes('activity-inbox')
       ) {
         event.preventDefault();
         switchSectionRef.current('activity');
         return;
       }
-      if ((event.metaKey || event.ctrlKey) && key === 'k') {
+      if ((desktopRendererAuthorityV2.shortcutIds ?? []).includes('command-palette') && (event.metaKey || event.ctrlKey) && key === 'k') {
         if (activeSectionRef.current === 'board') {
           const search = document.querySelector<HTMLInputElement>('input[name="my-work-search"]');
           if (search) {
@@ -2934,6 +2967,7 @@ export function App() {
       if (
         (event.metaKey || event.ctrlKey) &&
         event.key === '/' &&
+        (desktopRendererAuthorityV2.shortcutIds ?? []).includes('show-shortcuts') &&
         !commandPaletteOpen &&
         !loginModalOpen &&
         !newTaskOpen &&
@@ -2945,6 +2979,7 @@ export function App() {
       }
       if (
         event.key === '/' &&
+        (desktopRendererAuthorityV2.shortcutIds ?? []).includes('quick-open-palette') &&
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
@@ -2957,19 +2992,19 @@ export function App() {
         openCommandPalette();
         return;
       }
-      if (event.key === 'Escape' && commandPaletteOpen) {
+      if (event.key === 'Escape' && (desktopRendererAuthorityV2.shortcutIds ?? []).includes('close-overlay') && commandPaletteOpen) {
         event.preventDefault();
         closeCommandPalette(true);
       }
-      if (event.key === 'Escape' && shortcutsDialogOpen) {
+      if (event.key === 'Escape' && (desktopRendererAuthorityV2.shortcutIds ?? []).includes('close-overlay') && shortcutsDialogOpen) {
         event.preventDefault();
         setShortcutsDialogOpen(false);
       }
-      if (event.key === 'Escape' && sessionMenuOpen) {
+      if (event.key === 'Escape' && (desktopRendererAuthorityV2.shortcutIds ?? []).includes('close-overlay') && sessionMenuOpen) {
         event.preventDefault();
         setSessionMenuOpen(false);
       }
-      if (event.key === 'Escape' && runActionsMenuOpen) {
+      if (event.key === 'Escape' && (desktopRendererAuthorityV2.shortcutIds ?? []).includes('close-overlay') && runActionsMenuOpen) {
         event.preventDefault();
         setRunActionsMenuOpen(false);
         runActionsButtonRef.current?.focus();
@@ -2982,6 +3017,7 @@ export function App() {
   }, [
     closeCommandPalette,
     commandPaletteOpen,
+    desktopRendererAuthorityV2,
     loginModalOpen,
     newTaskOpen,
     openCommandPalette,
@@ -3407,12 +3443,22 @@ export function App() {
   };
 
   const refreshRuntime = useCallback(
-    async (nextConfig: DesktopRuntimeConfig = config, projectOverride?: ProjectSummary[]) => {
+    async (
+      nextConfig: DesktopRuntimeConfig = config,
+      projectOverride?: ProjectSummary[],
+      authenticatedUserId?: string,
+    ) => {
       const refreshRequestGeneration = runtimeRefreshRequestRef.current + 1;
       runtimeRefreshRequestRef.current = refreshRequestGeneration;
+      const expectedAuthRevision = authAttemptRevisionRef.current;
+      // Hydration supplies the verified actor before React has committed setAuth.
+      const selectionUserId = authenticatedUserId ?? (
+        isIdentityAuthenticated(authRef.current) ? authRef.current.user?.user_id : undefined
+      );
       const expectedContextRevision = contextRevisionRef.current;
       const expectedScopeEpoch = configScopeEpochRef.current;
       const contextIsCurrent = () =>
+        expectedAuthRevision === authAttemptRevisionRef.current &&
         isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
         expectedScopeEpoch === configScopeEpochRef.current &&
         refreshRequestGeneration === runtimeRefreshRequestRef.current;
@@ -3538,6 +3584,10 @@ export function App() {
           resolvedProjectId,
           projectWorkspaces,
           agentConversationSessionRef.current?.conversation ?? null,
+          readWorkspaceSelectionPreference(
+            { ...runtimeConfig, tenantId: resolvedProject.tenant_id, projectId: resolvedProjectId },
+            selectionUserId,
+          ),
         );
         const nextExpandedWorkspaceIds = reconcileExpandedWorkspaceIds(
           expandedWorkspaceIdsRef.current,
@@ -3747,6 +3797,11 @@ export function App() {
           authority: workspaceAutonomyAttentions,
         });
         commitRuntimeConfig(resolvedConfig);
+        if (projectWorkspaces.some((workspace) =>
+          workspace.id === workspaceId && isWorkspaceDefaultSelectionEligible(workspace)
+        )) {
+          writeWorkspaceSelectionPreference(resolvedConfig, selectionUserId, workspaceId);
+        }
         if (
           localConversationStatusRequest &&
           isCurrentLocalConversationStatusRequest(
@@ -5519,6 +5574,22 @@ export function App() {
       return changed ? { ...current, conversationsByWorkspace } : current;
     });
   }, []);
+  useEffect(() => {
+    const run = authoritativeRunFromSessionProjection(sessionProjection, {
+      conversationId: scopedConversationId,
+      tenantId: config.tenantId,
+      projectId: config.projectId,
+      workspaceId: config.workspaceId || null,
+    });
+    if (run) applyAuthoritativeRun(run);
+  }, [
+    applyAuthoritativeRun,
+    config.tenantId,
+    config.projectId,
+    config.workspaceId,
+    scopedConversationId,
+    sessionProjection,
+  ]);
   const approveSessionPlan = useCallback(
     async (plan: SessionProjectionPlan, selection: SessionPlanApprovalSelection) => {
       const requestConfig = configRef.current;
@@ -7060,10 +7131,16 @@ export function App() {
   );
   const authorizedCommandItems = commandItems.filter(
     (item) =>
-      item.kind !== 'route' ||
-      (item.routeId !== undefined &&
-        isDesktopNavigationRouteEnabledV2(desktopRendererAuthorityV2, item.routeId)),
-  );
+      item.kind === 'route'
+        ? (item.routeId !== undefined && isDesktopNavigationRouteEnabledV2(desktopRendererAuthorityV2, item.routeId))
+        : (desktopRendererAuthorityV2.commandIds ?? []).includes(item.id),
+  ).map((item) => ({ ...item, onSelect: () => {
+    const authority = currentRendererAuthorityV2.current;
+    const allowed = authority.status === 'ready' && (item.kind === 'route'
+      ? Boolean(item.routeId && isDesktopNavigationRouteEnabledV2(authority, item.routeId))
+      : authority.commandIds?.includes(item.id) === true);
+    if (allowed) item.onSelect();
+  } }));
   const normalizedCommandQuery = commandQuery.trim().toLocaleLowerCase(locale);
   const filteredCommandItems = normalizedCommandQuery
     ? authorizedCommandItems.filter((item) =>
@@ -7949,9 +8026,13 @@ export function App() {
       >
         <TimelineInspectionProvider sessionKey={selectedConversationId ?? ''} onOpen={() => openRightCanvasPanel('activity')}
           isOpen={rightSidebarOpen && activeRightPanel === 'activity'}>
+          <ComputerUseDeviceProvider config={config}>
+          <ComputerUseActivity conversationId={selectedConversationId}
+            runId={currentArtifactRun?.id ?? sessionDetailViewModel?.runId ?? null} />
           <DesktopRendererAuthenticatedShellV2
             viewModel={desktopAuthenticatedShellViewModelV2}
           />
+          </ComputerUseDeviceProvider>
         </TimelineInspectionProvider>
       </NativeMemoriesRouteProvider>
     </DesktopRendererGenerationProviderV2>

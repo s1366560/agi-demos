@@ -83,6 +83,8 @@ async fn publish_generation(
         [
             desktop_sidecar_http_routes_definition_v2(),
             desktop_sidecar_host_definition_v2(),
+            super::computer_use_v2::definition()
+                .expect("the built-in computer-use contract is statically valid"),
         ],
     )
     .stage(snapshot.clone())
@@ -320,4 +322,121 @@ async fn derived_agent_operation_retains_and_records_the_request_generation() {
     );
     assert_eq!(lease.descriptor().generation, 51);
     drop(lease);
+}
+
+#[tokio::test]
+async fn hitl_continuation_keeps_original_generation_and_message_after_publication() {
+    let credential = "hitl-generation-secret";
+    let state = test_state(credential);
+    let conversation_id = "hitl-generation-conversation";
+    seed_plan_conversation(&state, conversation_id);
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let endpoint = Router::new().route(
+        "/v1/chat/completions",
+        axum::routing::post({
+            let calls = calls.clone();
+            move |Json(body): Json<Value>| {
+                let index = calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async move {
+                    let action = if index == 0 {
+                        json!({"kind":"request_human","request":{"id":"generation-hitl","kind":"clarification","prompt":"Which input?"}})
+                    } else {
+                        json!({"kind":"finish","answer":"resumed on original generation"})
+                    };
+                    if body["stream"] == true {
+                        (
+                            [("content-type", "text/event-stream")],
+                            format!("data: {}\n\ndata: [DONE]\n\n", json!({"choices":[{"delta":{"content":action.to_string()}}]})),
+                        ).into_response()
+                    } else {
+                        Json(json!({"choices":[{"message":{"content":action.to_string()}}]})).into_response()
+                    }
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, endpoint).await.unwrap() });
+    *state.test_llm_override.lock().unwrap() = Some(Arc::new(
+        agistack_adapters_http_llm::HttpLlm::new(format!("http://{address}/v1"), "test-model"),
+    ));
+    publish_generation(&state, "hitl-old", 61, "sha256:hitl-old").await;
+    let lease = Arc::new(
+        state
+            .platform_plugin_authority_v2
+            .acquire_generation()
+            .unwrap(),
+    );
+    state
+        .clone()
+        .run_agent_message_on_generation(
+            conversation_id.into(),
+            "local-project".into(),
+            "Clarify then finish".into(),
+            "original-message".into(),
+            None,
+            None,
+            lease,
+        )
+        .await;
+    let pending = state
+        .session_store
+        .hitl_request("generation-hitl")
+        .unwrap()
+        .unwrap();
+    assert_eq!(state.suspended_agent_operations_v2.lock().unwrap().len(), 1);
+    publish_generation(&state, "hitl-new", 62, "sha256:hitl-new").await;
+    // Unrelated request/run identities cannot acquire the held operation.
+    let (_, unrelated) = state.continuation_operation_v2(
+        conversation_id,
+        "unrelated-message".into(),
+        None,
+        Some("unrelated-hitl"),
+        None,
+    );
+    assert!(unrelated.is_none());
+    let response = local_router_with_generation_required(state.clone()).oneshot(
+        Request::builder()
+            .method("POST").uri("/api/v1/agent/hitl/respond")
+            .header("authorization", format!("Bearer {credential}"))
+            .header("x-agistack-launch", credential)
+            .header("content-type", "application/json")
+            .body(Body::from(json!({"request_id":pending.id,"hitl_type":"clarification","response_data":{"answer":"Use saved input"},"expected_revision":pending.authority_revision,"idempotency_key":"same-operation-answer"}).to_string())).unwrap(),
+    ).await.unwrap();
+    let status = response.status();
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(status, StatusCode::OK, "{body}");
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            if !state
+                .agent_runs
+                .lock()
+                .unwrap()
+                .contains_key(conversation_id)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let timeline = state.session_store.timeline(conversation_id, 100).unwrap();
+    let attempts: Vec<_> = timeline
+        .iter()
+        .filter(|event| event["type"] == "model_request_prepared")
+        .collect();
+    assert_eq!(attempts.len(), 2, "{timeline:?}");
+    for attempt in attempts {
+        assert_eq!(attempt["message_id"], "original-message");
+        assert_eq!(attempt["data"]["generation_digest"], "sha256:hitl-old");
+    }
+    assert!(state
+        .suspended_agent_operations_v2
+        .lock()
+        .unwrap()
+        .is_empty());
+    server.abort();
 }

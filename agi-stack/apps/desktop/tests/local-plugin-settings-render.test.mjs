@@ -9,12 +9,13 @@ const {
   LocalPluginSettings,
 } = require('/tmp/agistack-desktop-test-dist/src/features/settings/LocalPluginSettings.js');
 const { I18nContext } = require('/tmp/agistack-desktop-test-dist/src/i18nContext.js');
+const operations = { localPluginClient: () => ({}) };
 function render(config, canManage = true) {
   return renderToStaticMarkup(
     React.createElement(
       I18nContext.Provider,
       { value: { locale: 'en', setLocale() {}, t: (key) => key } },
-      React.createElement(LocalPluginSettings, { config, canManage }),
+      React.createElement(LocalPluginSettings, { config, canManage, operations }),
     ),
   );
 }

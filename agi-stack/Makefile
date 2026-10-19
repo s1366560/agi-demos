@@ -53,7 +53,7 @@ endif
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-icons run-desktop run-desktop-electron desktop-grants desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
+.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-icons desktop-cua-helper run-desktop run-desktop-electron desktop-grants desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -124,7 +124,10 @@ desktop-icons: ## 桌面:验证已跟踪的 electron-builder 图标和 macOS ent
 	test -s $(DESKTOP_ENTITLEMENTS_DIR)/entitlements.mac.plist
 	test -s $(DESKTOP_ENTITLEMENTS_DIR)/entitlements.mac.inherit.plist
 
-run-desktop: desktop-deps ## 启动 Electron 原生客户端与 Rust sidecar
+desktop-cua-helper: ## 桌面:构建平台 computer-use 助手和云连接器并暂存到 sidecar 旁
+	MEMSTACK_CUA_CARGO="$(CARGO)" node $(DESKTOP_APP_DIR)/scripts/build-cua-helper.mjs --debug
+
+run-desktop: desktop-deps desktop-cua-helper ## 启动 Electron 原生客户端与 Rust sidecar
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
 	$(CARGO) build -p agistack-desktop-sidecar
 	cd $(DESKTOP_APP_DIR) && $(PNPM) exec install-electron --no

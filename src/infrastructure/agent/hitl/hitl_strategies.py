@@ -447,6 +447,11 @@ class PermissionStrategy(HITLTypeStrategy):
             allow_remember=request_data.get("allow_remember", True),
             default_action=default_action,
             context=sanitize_hitl_context(request_data.get("context", {})),
+            decision=request_data.get("decision"),
+            authority_revision=request_data.get("authority_revision"),
+            native_binding=request_data.get("native_binding"),
+            scopes=request_data.get("scopes"),
+            actions=request_data.get("actions"),
         )
 
     def extract_response_value(self, response_data: object) -> Any:

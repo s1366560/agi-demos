@@ -68,6 +68,10 @@ async fn setup(f: &Fixture) -> (AutomationRunLease, Command) {
     state
         .completed_tool_calls
         .push(agistack_core::agent::types::CompletedCall {
+            control_outcome: None,
+            control_generation: None,
+            media: Vec::new(),
+        metadata: serde_json::json!({}),
             round: 1,
             tool: "pure".into(),
             input_json: "{}".into(),

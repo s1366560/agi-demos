@@ -90,7 +90,7 @@ class ToolPipeline:
     # Public API
     # ------------------------------------------------------------------
 
-    async def execute(
+    async def execute(  # noqa: PLR0911 - each rejected stage exits without executing later stages
         self,
         tool: ToolInfoProtocol,
         args: dict[str, Any],
@@ -115,6 +115,11 @@ class ToolPipeline:
         from src.infrastructure.agent.tools.hooks import HookDecision
         from src.infrastructure.agent.tools.result import ToolEvent
         from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        invalid_arguments = self._argument_error(tool, args)
+        if invalid_arguments is not None:
+            yield ToolEvent.completed(tool.name, invalid_arguments)
+            return
 
         try:
             from src.application.services.chat_run_tool_permission_v2 import (
@@ -150,6 +155,10 @@ class ToolPipeline:
             return
 
         effective_args = deepcopy(hook_result.args if hook_result.args is not None else args)
+        invalid_arguments = self._argument_error(tool, effective_args)
+        if invalid_arguments is not None:
+            yield ToolEvent.completed(tool.name, invalid_arguments)
+            return
         hook_approved = False
         if hook_result.decision == HookDecision.ASK:
             response: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
@@ -174,7 +183,9 @@ class ToolPipeline:
                 return
 
         # Step 2 ---- Doom loop check -------------------------------------
-        if self._doom_detector.should_intervene(tool.name, effective_args):
+        if getattr(
+            tool, "repeatable_observation", False
+        ) is not True and self._doom_detector.should_intervene(tool.name, effective_args):
             logger.warning("Doom loop detected for tool=%s", tool.name)
             yield ToolEvent.doom_loop(tool.name)
             return
@@ -207,6 +218,32 @@ class ToolPipeline:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _argument_error(tool: ToolInfoProtocol, args: dict[str, Any]) -> ToolResult | None:
+        """Validate declared arguments before deriving their required permission."""
+        from jsonschema import Draft202012Validator
+        from jsonschema.exceptions import ValidationError
+
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        parameters = getattr(tool, "parameters", None)
+        if not isinstance(parameters, dict):
+            return None
+        try:
+            Draft202012Validator(parameters).validate(args)
+        except ValidationError as error:
+            return ToolResult(
+                output=json.dumps(
+                    {
+                        "error": "invalid_tool_arguments",
+                        "message": error.message,
+                        "argument_path": list(error.absolute_path),
+                    }
+                ),
+                is_error=True,
+            )
+        return None
 
     async def _execute_and_finalize(
         self,
@@ -315,7 +352,7 @@ class ToolPipeline:
 
     def _maybe_truncate(self, result: ToolResult, tool_name: str) -> ToolResult:
         """Truncate output if result is not an error and has content."""
-        if result.is_error or not result.output:
+        if result.is_error or not result.output or result.control_outcome is not None:
             return result
 
         original_metadata = dict(result.metadata)

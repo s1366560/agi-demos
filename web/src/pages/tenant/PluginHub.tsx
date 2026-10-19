@@ -26,6 +26,7 @@ import { buildMarketplaceInstallRequest } from '@/utils/pluginMarketplaceInstall
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { InstallPluginPackageModal } from '@/components/marketplace/InstallPluginPackageModal';
 import { PluginMarketplaceV3 } from '@/components/marketplace/v3/PluginMarketplaceV3';
+import { PluginInstancesV2 } from '@/components/plugins/PluginInstancesV2';
 
 import { ChannelConfigSection } from './ChannelConfigSection';
 import { PluginMarketplaceSection } from './PluginMarketplaceSection';
@@ -65,11 +66,13 @@ export const PluginHub: React.FC = () => {
 
   const {
     projects,
+    currentProject,
     isLoading: projectLoading,
     listProjects,
   } = useProjectStore(
     useShallow((state) => ({
       projects: state.projects,
+      currentProject: state.currentProject,
       isLoading: state.isLoading,
       listProjects: state.listProjects,
     }))
@@ -85,6 +88,7 @@ export const PluginHub: React.FC = () => {
     typeof watchedChannelType === 'string' ? watchedChannelType : undefined;
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [instanceProjectId, setInstanceProjectId] = useState<string | null>(null);
   const [packages, setPackages] = useState<MarketplacePackageCatalogEntry[]>([]);
   const [channelPluginCatalog, setChannelPluginCatalog] = useState<ChannelPluginCatalogItem[]>([]);
   const [channelConfigs, setChannelConfigs] = useState<ChannelConfig[]>([]);
@@ -134,6 +138,7 @@ export const PluginHub: React.FC = () => {
     setSchemaLoading(false);
     setConfigModalVisible(false);
     setEditingConfig(null);
+    setInstanceProjectId(null);
     form.resetFields();
   }, [form, tenantId]);
 
@@ -629,6 +634,37 @@ export const PluginHub: React.FC = () => {
           </Space>
         </div>
       </section>
+
+      {tenantId ? (
+        <section className="space-y-3">
+          <label className="flex items-center gap-3">
+            {t('plugins.configurationScope')}
+            <select
+              value={instanceProjectId ?? ''}
+              onChange={(event) => {
+                setInstanceProjectId(event.target.value || null);
+              }}
+            >
+              <option value="">{t('plugins.tenantScope')}</option>
+              {tenantProjects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <PluginInstancesV2
+            tenantId={tenantId}
+            projectId={instanceProjectId}
+            rendererScopeMatches={
+              tenantId === currentTenant?.id &&
+              instanceProjectId ===
+                (currentProject?.tenant_id === tenantId ? currentProject.id : null)
+            }
+            canManage={Boolean(currentUser)}
+          />
+        </section>
+      ) : null}
 
       {tenantId ? (
         <PluginMarketplaceV3

@@ -18,6 +18,11 @@ from .agent_events import (
     TOOLS_AFTER_EXECUTE_EVENT_V2,
 )
 from .runtime import OperationContextV2, RuntimeV2Error
+from .tool_execution_policy import (
+    TOOLS_BEFORE_EXECUTE_EVENT_V2,
+    TOOLS_RESULT_TRANSFORM_EVENT_V2,
+    dispatch_tool_policy_v2,
+)
 
 AGENT_RUNTIME_DISPATCHER_SERVICE_V2 = "service:agent-runtime-dispatcher"
 
@@ -47,6 +52,8 @@ _V2_EVENT_BY_PROCESSOR_HOOK = MappingProxyType(
         "on_session_start": AGENT_SESSION_START_EVENT_V2,
         "before_response": AGENT_BEFORE_REQUEST_EVENT_V2,
         "after_tool_execution": TOOLS_AFTER_EXECUTE_EVENT_V2,
+        "before_tool_execution": TOOLS_BEFORE_EXECUTE_EVENT_V2,
+        "transform_tool_result": TOOLS_RESULT_TRANSFORM_EVENT_V2,
         "before_prompt_build": AGENT_BEFORE_PROMPT_BUILD_EVENT_V2,
         "on_context_overflow": AGENT_CONTEXT_OVERFLOW_EVENT_V2,
         "after_turn_complete": AGENT_AFTER_TURN_COMPLETE_EVENT_V2,
@@ -72,6 +79,13 @@ class PinnedAgentRuntimeDispatcherV2:
         from .boundary import current_operation_context_v2
 
         operation = current_operation_context_v2()
+        if event in {TOOLS_BEFORE_EXECUTE_EVENT_V2, TOOLS_RESULT_TRANSFORM_EVENT_V2}:
+            resolved = await dispatch_tool_policy_v2(
+                operation,
+                event=event,
+                payload=effective_payload,
+            )
+            return AgentRuntimeDispatchResultV2(payload=resolved)
         event_payload = _build_event_payload_v2(
             operation,
             event=event,

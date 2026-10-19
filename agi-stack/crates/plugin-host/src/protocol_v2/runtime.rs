@@ -370,6 +370,14 @@ impl LoaderV2 {
                 if !module.targets.contains(&self.target) {
                     continue;
                 }
+                if module.contract.events.handles.iter().any(|event| matches!(
+                    event.event.as_str(), "tools.before_execute" | "tools.result_transform"
+                )) && (manifest.trust != super::TrustKindV2::Builtin
+                    || !module.module_ref.starts_with("builtin://")) {
+                    return Err(RuntimeV2Error::Module(
+                        "tool execution policies require trusted bundled modules".into(),
+                    ));
+                }
                 validate_runtime_contract(
                     &module.module_ref,
                     &module.contract,

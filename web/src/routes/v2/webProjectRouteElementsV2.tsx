@@ -39,6 +39,7 @@ export function createProjectRouteElementsV2(): ReactNode {
     <>
       <Route path=":tenantId/project/:projectId">
         <Route
+          handle={{ pluginFeature: 'project-overview' }}
           index
           element={
             <Suspense fallback={<PageLoader />}>
@@ -47,6 +48,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-memories' }}
           path="memories"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -55,6 +57,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-memories' }}
           path="memories/new"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -63,6 +66,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-memories' }}
           path="memory/:memoryId"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -71,6 +75,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-graph' }}
           path="graph"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -79,6 +84,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-entities' }}
           path="entities"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -87,6 +93,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-communities' }}
           path="communities"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -95,6 +102,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-search' }}
           path="advanced-search"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -102,8 +110,13 @@ export function createProjectRouteElementsV2(): ReactNode {
             </Suspense>
           }
         />
-        <Route path="search" element={<Navigate to="advanced-search" replace />} />
         <Route
+          handle={{ pluginFeature: 'project-search' }}
+          path="search"
+          element={<Navigate to="advanced-search" replace />}
+        />
+        <Route
+          handle={{ pluginFeature: 'project-maintenance' }}
           path="maintenance"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -112,6 +125,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-cron-jobs' }}
           path="cron-jobs"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -119,7 +133,11 @@ export function createProjectRouteElementsV2(): ReactNode {
             </Suspense>
           }
         />
-        <Route path="schema" element={<SchemaLayout />}>
+        <Route
+          handle={{ pluginFeature: 'project-schema' }}
+          path="schema"
+          element={<SchemaLayout />}
+        >
           <Route
             index
             element={
@@ -153,8 +171,13 @@ export function createProjectRouteElementsV2(): ReactNode {
             }
           />
         </Route>
-        <Route path="channels" element={<ProjectChannelsRedirect />} />
         <Route
+          handle={{ pluginFeature: 'project-channels' }}
+          path="channels"
+          element={<ProjectChannelsRedirect />}
+        />
+        <Route
+          handle={{ pluginFeature: 'project-team' }}
           path="team"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -163,6 +186,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-settings' }}
           path="settings"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -171,6 +195,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-support' }}
           path="support"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -179,6 +204,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-blackboard' }}
           path="blackboard"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -187,6 +213,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-playbooks' }}
           path="playbooks"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -195,6 +222,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-workspaces' }}
           path="workspaces"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -203,6 +231,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-workspaces' }}
           path="workspaces/new"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -211,6 +240,7 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
+          handle={{ pluginFeature: 'project-workspaces' }}
           path="workspaces/:workspaceId"
           element={
             <Suspense fallback={<PageLoader />}>
@@ -220,6 +250,7 @@ export function createProjectRouteElementsV2(): ReactNode {
         />
         <Route path="agent">
           <Route
+            handle={{ pluginFeature: 'project-agent-dashboard' }}
             index
             element={
               <Suspense fallback={<PageLoader />}>
@@ -228,6 +259,7 @@ export function createProjectRouteElementsV2(): ReactNode {
             }
           />
           <Route
+            handle={{ pluginFeature: 'project-agent-logs' }}
             path="logs"
             element={
               <Suspense fallback={<PageLoader />}>
@@ -236,6 +268,7 @@ export function createProjectRouteElementsV2(): ReactNode {
             }
           />
           <Route
+            handle={{ pluginFeature: 'project-agent-patterns' }}
             path="patterns"
             element={
               <Suspense fallback={<PageLoader />}>
@@ -248,6 +281,7 @@ export function createProjectRouteElementsV2(): ReactNode {
 
       {/* Legacy tenant workspace/conversation routes must stay after known tenant pages. */}
       <Route
+        handle={{ pluginFeature: 'tenant-agent-workspace' }}
         path=":tenantId/:conversation"
         element={
           <Suspense fallback={<PageLoader />}>

@@ -1,3 +1,4 @@
+import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
@@ -25,6 +26,8 @@ export function CommandPalette({
   onClose: (restoreFocus?: boolean) => void;
 }) {
   const { t } = useI18n();
+  const shortcutAuthority = useDesktopRendererAuthorityV2();
+  const shortcutEnabled = (id: string) => shortcutAuthority.shortcutIds?.includes(id) === true;
   const paletteRef = useRef<HTMLElement>(null);
   const groupedItems = useMemo(() => groupCommandPaletteItems(items), [items]);
   const enabledItems = useMemo(
@@ -128,23 +131,23 @@ export function CommandPalette({
             aria-activedescendant={activeOptionId}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'ArrowDown') {
+              if (event.key === 'ArrowDown' && shortcutEnabled('palette-move')) {
                 event.preventDefault();
                 moveActiveItem(1);
               }
-              if (event.key === 'ArrowUp') {
+              if (event.key === 'ArrowUp' && shortcutEnabled('palette-move')) {
                 event.preventDefault();
                 moveActiveItem(-1);
               }
-              if (event.key === 'Home' && enabledItems[0]) {
+              if (event.key === 'Home' && shortcutEnabled('palette-jump') && enabledItems[0]) {
                 event.preventDefault();
                 setActiveItemId(enabledItems[0].id);
               }
-              if (event.key === 'End' && enabledItems[enabledItems.length - 1]) {
+              if (event.key === 'End' && shortcutEnabled('palette-jump') && enabledItems[enabledItems.length - 1]) {
                 event.preventDefault();
                 setActiveItemId(enabledItems[enabledItems.length - 1].id);
               }
-              if (event.key === 'Enter' && activeItem) {
+              if (event.key === 'Enter' && shortcutEnabled('palette-run') && activeItem) {
                 event.preventDefault();
                 runItem(activeItem);
               }

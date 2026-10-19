@@ -61,6 +61,7 @@ from src.domain.events.agent_events import (
     SubAgentKilledEvent,
     SubAgentSteeredEvent,
 )
+from src.infrastructure.agent.tools.result import ToolControlOutcome
 from src.infrastructure.plugins.marketplace_hooks import MarketplaceHookError
 from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
@@ -112,6 +113,7 @@ from .message_utils import (
     extract_user_query,
     sanitize_tool_call_messages,
 )
+from .native_control import NativeControlWaitError
 from .run_context import RunContext, set_current_run_context
 
 logger = logging.getLogger(__name__)
@@ -297,6 +299,7 @@ class ToolDefinition:
     aliases: tuple[str, ...] = ()  # Alternate names accepted by canonicalization
     _tool_instance: Any = field(default=None, repr=False)  # Original tool object
     permission_resolver: Callable[[dict[str, Any]], str | None] | None = None
+    repeatable_observation: bool = False  # Host-declared fresh external state sampling
 
     def to_openai_format(self) -> dict[str, Any]:
         """Convert to OpenAI tool format."""
@@ -458,6 +461,7 @@ class SessionProcessor:
         self._abort_event: asyncio.Event | None = None
         self._saw_task_events = False
         self._pending_completion_status: str | None = None
+        self._native_control_stopped = False
         self._artifact_count = 0
 
         # Task tracking for timeline integration
@@ -505,6 +509,7 @@ class SessionProcessor:
         self._permission_asked_event: ProcessorEvent | None = None
         self._last_sse_result: Any = None
         self._last_raw_result: Any = None
+        self._tool_attachments: dict[str, list[Any]] = {}
         self._last_output_str: str = ""
 
         # Extracted subsystems
@@ -1470,6 +1475,8 @@ class SessionProcessor:
         self._abort_event = run_ctx.abort_signal or asyncio.Event()
         self._step_count = 0
         self._no_progress_steps = 0
+        self._goal_evaluator.set_native_control_outcome(None)
+        self._native_control_stopped = False
         self._session_instructions = []
         self._response_instructions = []
         self._tool_reminder_issued_for_streak = False
@@ -1487,13 +1494,45 @@ class SessionProcessor:
         # Every selected loop, including builtin ReAct, executes through the
         # same generation-owned implementation contract.
         self._loop_selection = self._resolve_agent_loop()
-        async for loop_event in self._dispatch_external_loop(
-            self._loop_selection,
-            session_id,
-            messages,
-            run_ctx,
-        ):
-            yield loop_event
+        terminal_failure = False
+        try:
+            async for loop_event in self._dispatch_external_loop(
+                self._loop_selection,
+                session_id,
+                messages,
+                run_ctx,
+            ):
+                yield loop_event
+        except GeneratorExit:
+            raise
+        except BaseException:
+            terminal_failure = True
+            raise
+        finally:
+            from src.infrastructure.agent.tools.native_computer_use import (
+                cancel_native_computer_run,
+            )
+
+            suspended = (
+                self._state
+                in {
+                    ProcessorState.WAITING_PERMISSION,
+                    ProcessorState.WAITING_CLARIFICATION,
+                    ProcessorState.WAITING_DECISION,
+                    ProcessorState.WAITING_ENV_VAR,
+                    ProcessorState.WAITING_A2UI_ACTION,
+                }
+                and not self._abort_event.is_set()
+                and not terminal_failure
+            )
+            if not suspended:
+                cleanup = asyncio.create_task(cancel_native_computer_run(session_id))
+                try:
+                    await asyncio.wait_for(asyncio.shield(cleanup), timeout=5)
+                except (Exception, asyncio.CancelledError) as error:
+                    logger.warning("Native device run cleanup incomplete: %s", type(error).__name__)
+            self._tool_attachments.clear()
+            self._last_raw_result = None
 
     async def _run_native_loop(  # noqa: PLR0912, PLR0915
         self,
@@ -2000,7 +2039,7 @@ class SessionProcessor:
             )
         )
 
-    async def _evaluate_no_tool_result(  # noqa: PLR0911, PLR0912
+    async def _evaluate_no_tool_result(  # noqa: PLR0911, PLR0912, PLR0915
         self, session_id: str, messages: list[dict[str, Any]]
     ) -> AsyncIterator[ProcessorEvent]:
         """Evaluate goal completion when no tools were called.
@@ -2023,6 +2062,12 @@ class SessionProcessor:
             return
 
         goal_check = await self._goal_evaluator.evaluate_goal_completion(session_id, messages)
+        if getattr(goal_check, "control_handoff", False) is True:
+            self._no_progress_steps = 0
+            self._reset_tool_usage_reminder_streak()
+            self._pending_completion_status = "user_control:stopped"
+            self._last_process_result = ProcessorResult.COMPLETE
+            return
         if goal_check.achieved:
             self._no_progress_steps = 0
             self._reset_tool_usage_reminder_streak()
@@ -2113,7 +2158,7 @@ class SessionProcessor:
             return []
         model_messages = [cast(dict[str, Any], self._current_message.to_llm_format())]
         for part in self._current_message.get_tool_parts():
-            if part.status == ToolState.COMPLETED:
+            if part.status in (ToolState.COMPLETED, ToolState.CANCELLED):
                 model_messages.append(
                     {
                         "role": "tool",
@@ -2129,6 +2174,12 @@ class SessionProcessor:
                         "content": f"Error: {part.error}",
                     }
                 )
+        from src.infrastructure.agent.native_computer_use.image_messages import tool_image_message
+
+        for part in self._current_message.get_tool_parts():
+            references = part.metadata.get("native_artifact_images")
+            if part.status == ToolState.COMPLETED and isinstance(references, list) and references:
+                model_messages.append(tool_image_message(part.call_id, references))
         return model_messages
 
     @staticmethod
@@ -2151,6 +2202,7 @@ class SessionProcessor:
     ) -> AsyncIterator[ProcessorEvent]:
         """Emit final completion or compact events."""
         if result == ProcessorResult.COMPLETE:
+            control_handoff = self._pending_completion_status == "user_control:stopped"
             replan_dispatched = (
                 self._is_workspace_task_ledger_only_turn()
                 and self._pending_completion_status == "goal_achieved:workspace_replan_dispatched"
@@ -2163,6 +2215,7 @@ class SessionProcessor:
                 and self.config.runtime_context.get("effective_mode") != "plan"
                 and not replan_dispatched
                 and not task_reconciled_completion
+                and not control_handoff
                 and not self._goal_evaluator.has_task_reader()
             ):
                 self._pending_completion_status = None
@@ -2174,7 +2227,7 @@ class SessionProcessor:
                 self._state = ProcessorState.ERROR
                 self._last_process_result = ProcessorResult.STOP
                 return
-            if not replan_dispatched and not task_reconciled_completion:
+            if not replan_dispatched and not task_reconciled_completion and not control_handoff:
                 task_gate = await self._goal_evaluator.evaluate_task_completion_gate(session_id)
                 if task_gate is not None and not task_gate.achieved:
                     self._pending_completion_status = None
@@ -2197,6 +2250,10 @@ class SessionProcessor:
                 yield suggestions_event
             trace_url = self._build_trace_url(session_id)
             execution_summary = await self._build_execution_summary(session_id)
+            if control_handoff:
+                execution_summary["completion_reason"] = "user_control_handoff"
+                execution_summary["goal_achieved"] = False
+                execution_summary["control_outcome"] = "user_stopped"
             yield AgentCompleteEvent(
                 trace_url=trace_url,
                 execution_summary=execution_summary,
@@ -2499,7 +2556,11 @@ class SessionProcessor:
         tool_instance = getattr(tool_def, "_tool_instance", None)
         langfuse_context = self._langfuse_context or {}
         runtime_context = ToolContext(
-            session_id=langfuse_context.get("session_id", ""),
+            session_id=(
+                langfuse_context.get("conversation_id")
+                or self.config.session_id
+                or langfuse_context.get("session_id", "")
+            ),
             message_id="linked-file-artifact",
             call_id=f"linked-file-{uuid.uuid4().hex[:8]}",
             agent_name=langfuse_context.get("agent_name", "main"),
@@ -2515,12 +2576,32 @@ class SessionProcessor:
 
         result: Any = None
         try:
+            from jsonschema import Draft202012Validator
+
             from src.application.services.approved_run_tool_permission_v2 import (
                 require_approved_run_tool_permission_v2,
             )
 
+            policy = await self._notify_plugin_hook(
+                "before_tool_execution",
+                {
+                    "tool_name": tool_name,
+                    "arguments": arguments,
+                    "call_id": runtime_context.call_id,
+                    "session_id": runtime_context.session_id,
+                    **self._runtime_hook_context_fields(),
+                },
+            )
+            arguments = policy.get("arguments", arguments)
+            decision = policy.get("decision", {"kind": "allow"})
+            if decision["kind"] != "allow":
+                if decision["kind"] == "cancel" and self._abort_event is not None:
+                    self._abort_event.set()
+                return None
+            Draft202012Validator(tool_def.parameters).validate(arguments)
             await require_approved_run_tool_permission_v2(
-                resolve_tool_permission_v2(tool_def, arguments), required=self.config.approved_run_required,
+                resolve_tool_permission_v2(tool_def, arguments),
+                required=self.config.approved_run_required,
                 required_run_id=self.config.run_id if self.config.approved_run_required else None,
             )
             await self._require_run_tool_permission_v2(tool_def, tool_name, arguments)
@@ -2539,11 +2620,24 @@ class SessionProcessor:
             )
 
         output: Any = result
+        failed = result is None
         if isinstance(result, ToolResult):
-            output = None if result.is_error else result.metadata or result.output
+            output = result.metadata or result.output
+            failed = result.is_error
         elif isinstance(result, dict):
-            output = None if result.get("is_error") or result.get("isError") else result
-        return output
+            failed = bool(result.get("is_error") or result.get("isError"))
+        text = output if isinstance(output, str) else json.dumps(output, default=str)
+        accepted, metadata, failed, blocked = await self._apply_tool_result_policy(
+            tool_name,
+            runtime_context.call_id,
+            runtime_context.session_id,
+            text,
+            output,
+            failed,
+        )
+        if blocked or failed:
+            return None
+        return metadata or accepted
 
     async def _emit_command_result(
         self,
@@ -2576,28 +2670,15 @@ class SessionProcessor:
                 async for event in self._emit_text_end_with_linked_artifacts(err_msg):
                     yield event
             else:
-                yield AgentActEvent(tool_name=tool_name, tool_input=result.args)
-                try:
-                    from src.application.services.approved_run_tool_permission_v2 import (
-                        require_approved_run_tool_permission_v2,
-                    )
-
-                    await require_approved_run_tool_permission_v2(
-                        resolve_tool_permission_v2(tool_def, result.args), required=self.config.approved_run_required,
-                        required_run_id=self.config.run_id if self.config.approved_run_required else None,
-                    )
-                    await self._require_run_tool_permission_v2(tool_def, tool_name, result.args)
-                    raw = await tool_def.execute(result.args)
-                    output = str(raw) if raw is not None else ""
-                    yield AgentObserveEvent(
-                        tool_name=tool_name,
-                        result=output,
-                    )
-                except Exception as exc:
-                    yield AgentObserveEvent(
-                        tool_name=tool_name,
-                        error=str(exc),
-                    )
+                async for event in self._execute_synthetic_tool_call(
+                    session_id=(self._langfuse_context or {}).get("conversation_id")
+                    or self.config.session_id
+                    or "",
+                    tool_name=tool_name,
+                    arguments=result.args,
+                    call_id_prefix="command",
+                ):
+                    yield event
         elif isinstance(result, SkillTriggerResult):
             yield AgentStatusEvent(status=f"Triggering skill: {result.skill_id}")
 
@@ -2766,6 +2847,7 @@ class SessionProcessor:
                     step_messages.append(runtime_guidance)
                     reminder_injected = self._TOOL_USAGE_REMINDER in runtime_guidance["content"]
                 step_messages = sanitize_tool_call_messages(step_messages)
+                step_messages = await self._artifact_handler.hydrate_model_images(step_messages)
 
                 # Build step-specific langfuse context
                 step_langfuse_context = None
@@ -2783,6 +2865,17 @@ class SessionProcessor:
                     child_run_id=self._run_id if self.config.subagent_owner_required else None
                 )
                 logger.debug(f"[Processor] Calling llm_stream.generate(), step={self._step_count}")
+                from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+                    PinnedAgentRuntimeDispatcherV2,
+                )
+                from src.infrastructure.plugins.v2.model_request_log import (
+                    current_model_request_recorder_v2,
+                )
+
+                if isinstance(self._plugin_event_dispatcher, PinnedAgentRuntimeDispatcherV2):
+                    llm_stream.request_recorder = current_model_request_recorder_v2(
+                        message_id=self._current_message.id,
+                    )
                 model_events = llm_stream.generate(
                     step_messages, langfuse_context=step_langfuse_context
                 )
@@ -3126,11 +3219,16 @@ class SessionProcessor:
                     cid: str = "",
                     tname: str = "",
                     args: dict[str, Any] | None = None,
-                ) -> tuple[str, list[ProcessorEvent]]:
+                ) -> tuple[str, list[ProcessorEvent], NativeControlWaitError | None]:
                     events: list[ProcessorEvent] = []
-                    async for ev in self._execute_tool(sid, cid, tname, args or {}):
-                        events.append(ev)
-                    return cid, events
+                    try:
+                        async for ev in self._execute_tool(sid, cid, tname, args or {}):
+                            events.append(ev)
+                    except NativeControlWaitError as exc:
+                        # Preserve both the pause and its failed wait observation
+                        # before the outer loop terminates this run.
+                        return cid, events, exc
+                    return cid, events, None
 
                 tasks = [
                     _run_tool(
@@ -3143,6 +3241,7 @@ class SessionProcessor:
                 ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
+                control_failure = None
                 for result in results:
                     if isinstance(result, MarketplaceHookError):
                         raise result
@@ -3153,9 +3252,13 @@ class SessionProcessor:
                             code="TOOL_EXECUTION_ERROR",
                         )
                         continue
-                    cid, events = result
+                    cid, events, control_error = result
                     for ev in events:
                         yield ev
+                    if control_error is not None:
+                        control_failure = control_error
+                if control_failure is not None:
+                    raise control_failure
         for model_message in self._current_step_model_messages()[1:]:
             yield self._model_message_committed_event(model_message)
 
@@ -3310,8 +3413,11 @@ class SessionProcessor:
         tool_name: str,
         arguments: dict[str, Any],
         tool_part: ToolPart,
+        tool_def: ToolDefinition,
     ) -> AsyncIterator[ProcessorEvent] | None:
         """Check doom-loop detector; return error iterator or ``None`` to proceed."""
+        if tool_def.repeatable_observation is True:
+            return None
         if not self.doom_loop_detector.should_intervene(tool_name, arguments):
             return None
 
@@ -3367,6 +3473,7 @@ class SessionProcessor:
         _hitl_map: dict[str, str] = {
             "ask_clarification": "_handle_clarification_tool",
             "request_decision": "_handle_decision_tool",
+            "request_permission": "_handle_native_permission_tool",
             "request_env_var": "_handle_env_var_tool",
             "canvas_create_interactive": "_handle_a2ui_action_tool",
         }
@@ -3432,8 +3539,7 @@ class SessionProcessor:
     ) -> AsyncIterator[ProcessorEvent]:
         """Publish the persisted request before waiting for the human response."""
         self._state = ProcessorState.WAITING_PERMISSION
-        permission = tool_def.permission
-        assert permission is not None
+        permission = tool_def.permission or "tool_policy"
         error: str | None = None
         try:
             coordinator = self._get_hitl_coordinator()
@@ -3473,7 +3579,9 @@ class SessionProcessor:
             tool_part.error = error
             tool_part.end_time = time.time()
             yield AgentObserveEvent(
-                tool_name=tool_name, error=error, call_id=call_id,
+                tool_name=tool_name,
+                error=error,
+                call_id=call_id,
                 tool_execution_id=tool_part.tool_execution_id,
             )
 
@@ -3661,9 +3769,14 @@ class SessionProcessor:
         return None
 
     async def _require_run_tool_permission_v2(
-        self, tool_def: "ToolDefinition", tool_name: str, arguments: dict[str, Any],
+        self,
+        tool_def: "ToolDefinition",
+        tool_name: str,
+        arguments: dict[str, Any],
     ) -> None:
         """Revalidate the exact invocation after any hook or human response."""
+        from jsonschema import Draft202012Validator
+
         from src.application.services.approved_run_tool_permission_v2 import (
             require_approved_run_tool_permission_v2,
         )
@@ -3673,6 +3786,7 @@ class SessionProcessor:
         )
         from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
+        Draft202012Validator(tool_def.parameters).validate(arguments)
         permission = resolve_tool_permission_v2(tool_def, arguments)
         if self.config.chat_run_required and self.config.approved_run_required:
             raise RuntimeV2Error("run_tool_authority_conflict", "Agent run authority is ambiguous")
@@ -3684,14 +3798,96 @@ class SessionProcessor:
             )
         if self.config.approved_run_required:
             return
-        if await decision_for_current_chat_tool_v2(
-            permission, tool_name, arguments,
-            required=self.config.chat_run_required,
-        ) != "allow":
+        if (
+            await decision_for_current_chat_tool_v2(
+                permission,
+                tool_name,
+                arguments,
+                required=self.config.chat_run_required,
+            )
+            != "allow"
+        ):
             raise RuntimeV2Error("chat_tool_permission_denied", "Chat tool approval is not valid")
         claim_chat_tool_invocation_v2(
-            tool_name, arguments, permission=permission,
+            tool_name,
+            arguments,
+            permission=permission,
         )
+
+    async def _apply_tool_result_policy(
+        self,
+        tool_name: str,
+        call_id: str,
+        session_id: str,
+        output: str,
+        metadata: Any,
+        is_error: bool,
+    ) -> tuple[str, Any, bool, bool]:
+        """Transform the canonical result before any observation is published."""
+        envelope = {
+            "output": output,
+            "metadata": metadata if isinstance(metadata, dict) else {},
+            "is_error": is_error,
+        }
+        try:
+            policy = await self._notify_plugin_hook(
+                "transform_tool_result",
+                {
+                    "tool_name": tool_name,
+                    "call_id": call_id,
+                    "session_id": session_id,
+                    "result": envelope,
+                    **self._runtime_hook_context_fields(),
+                },
+            )
+        except Exception:
+            logger.error("Tool result policy failed for %s", tool_name)
+            return "Tool result withheld because policy validation failed", {}, True, True
+        decision = policy.get("decision", {"kind": "accept"})
+        if decision["kind"] == "block":
+            return decision.get("reason") or "Tool result blocked by policy", {}, True, True
+        result = policy.get("result", envelope)
+        return result["output"], result["metadata"], result["is_error"], False
+
+    @staticmethod
+    def _native_control_outcome(result: Any) -> ToolControlOutcome | None:
+        from src.infrastructure.agent.processor.native_control import trusted_control
+
+        return trusted_control(result)
+
+    async def _wait_native_control(self, result: Any, control: ToolControlOutcome | None) -> None:
+        from src.infrastructure.agent.processor.native_control import await_native_control
+
+        if control is None:
+            return
+        outcome = await await_native_control(result, self._abort_event)
+        if outcome is not None:
+            self._native_control_stopped = True
+            self._goal_evaluator.set_native_control_outcome(outcome)
+            await self.add_runtime_guidance(
+                "The user explicitly stopped native Computer Use for this run. "
+                "This stops the native session only; it does not revoke the running conversation's "
+                "task-progress permissions. All normal scope and permission checks still apply. "
+                "Do not retry or route around this local stop. Other independently authorized "
+                "work may continue; report incomplete local work without claiming completion. "
+                "Use structured todoread/todowrite calls to inspect and update the task ledger: "
+                "mark remaining work that requires this stopped native session as cancelled, "
+                "not completed or failed solely because of the stop. Preserve genuine failed tasks "
+                "and continue other requested, independently authorized work. "
+                "Decide task scope from the actual task context; do not cancel unrelated work. "
+                "Use the exact task IDs returned by todoread and follow the todowrite argument "
+                "schema. Correct invalid_tool_arguments using its validation feedback; do not "
+                "treat malformed arguments as revoked authorization. Read the ledger back before "
+                "claiming that task statuses were saved."
+            )
+        elif not self._native_control_stopped:
+            await self.add_runtime_guidance(
+                "The user explicitly resumed native Computer Use. The interrupted call may have partial effects. "
+                "Call computer_list_windows again and use a current window_id from that result; "
+                "the native session may have been recreated while paused and old window IDs may be invalid. "
+                "Obtain a fresh observation of that window before choosing any new action; "
+                "never replay the old action. Resuming control does not restart audio recording."
+            )
 
     async def _invoke_and_emit_observe(  # noqa: PLR0912, PLR0915
         self,
@@ -3717,7 +3913,8 @@ class SessionProcessor:
         )
 
         await require_approved_run_tool_permission_v2(
-            resolve_tool_permission_v2(tool_def, arguments), required=self.config.approved_run_required,
+            resolve_tool_permission_v2(tool_def, arguments),
+            required=self.config.approved_run_required,
             required_run_id=self.config.run_id if self.config.approved_run_required else None,
         )
         # Inject per-request context for tools on the non-pipeline path.
@@ -3749,7 +3946,11 @@ class SessionProcessor:
                 tenant_id=_lctx.get("tenant_id", ""),
                 user_id=_lctx.get("user_id", ""),
                 api_auth_token=self.config.api_auth_token,
-                runtime_context=dict(self.config.runtime_context),
+                runtime_context={
+                    **self.config.runtime_context,
+                    "run_id": self._run_id,
+                    "round": max(1, self._step_count),
+                },
             )
 
         await self._require_run_tool_permission_v2(tool_def, tool_name, arguments)
@@ -3768,7 +3969,7 @@ class SessionProcessor:
                 assert _runtime_ctx is not None  # guaranteed by the if/elif above
                 result = await _tool_inst.execute(_runtime_ctx, **arguments)
             except Exception as e:
-                result = f"Error executing tool {tool_name}: {e!s}"
+                result = ToolResult(output=str(e), is_error=True)
         elif _has_runtime_ctx:
             # Legacy class-based tool with set_runtime_context
             assert _tool_inst is not None  # guaranteed by _has_runtime_ctx guard
@@ -3780,17 +3981,21 @@ class SessionProcessor:
                 _lctx.get("user_id", ""),
                 _lctx.get("project_id", ""),
             )
-            result = await tool_def.execute(**arguments)
+            try:
+                result = await tool_def.execute(**arguments)
+            except Exception as error:
+                result = ToolResult(output=str(error), is_error=True)
         else:
-            result = await tool_def.execute(**arguments)
+            try:
+                result = await tool_def.execute(**arguments)
+            except Exception as error:
+                result = ToolResult(output=str(error), is_error=True)
         end_time = time.time()
 
         # Consume pending events from ToolContext (@tool_define tools).
         # Without this, events emitted via ctx.emit() (e.g. canvas_updated)
         # are lost when _runtime_ctx goes out of scope.
-        if _runtime_ctx is not None:
-            for _pending_evt in _runtime_ctx.consume_pending_events():
-                yield _pending_evt
+        # Pending context events are held until the result policy has accepted it.
 
         # Classify result format
         if isinstance(result, ToolResult):
@@ -3827,7 +4032,34 @@ class SessionProcessor:
 
         # Execution completion does not imply a successful tool result.
         failed = isinstance(result, ToolResult) and result.is_error
-        tool_part.status = ToolState.ERROR if failed else ToolState.COMPLETED
+        original_policy_result = (
+            output_str,
+            sse_result if isinstance(sse_result, dict) else {},
+            failed,
+        )
+        output_str, result_metadata, failed, blocked = await self._apply_tool_result_policy(
+            tool_name,
+            call_id,
+            session_id,
+            output_str,
+            sse_result,
+            failed,
+        )
+        result_replaced = blocked or (output_str, result_metadata, failed) != original_policy_result
+        if result_replaced:
+            result = ToolResult(output=output_str, metadata=result_metadata, is_error=failed)
+            sse_result = result_metadata or output_str
+        if _runtime_ctx is not None:
+            pending_events = _runtime_ctx.consume_pending_events()
+            if not result_replaced:
+                for pending_event in pending_events:
+                    yield pending_event
+        if result_replaced:
+            _consume_tool_pending_events(tool_def)
+        control = self._native_control_outcome(result)
+        tool_part.status = (
+            ToolState.ERROR if failed else ToolState.CANCELLED if control else ToolState.COMPLETED
+        )
         tool_part.output = self._artifact_handler.sanitize_tool_output(output_str)
         tool_part.error = tool_part.output if failed else None
         tool_part.end_time = end_time
@@ -3845,6 +4077,7 @@ class SessionProcessor:
                     _app_id_fb,
                 )
 
+        has_ui = has_ui and not result_replaced
         _observe_ui_meta: dict[str, Any] | None = None
         _hydrated_ui_meta: dict[str, Any] = {}
         if tool_instance and has_ui:
@@ -3884,7 +4117,9 @@ class SessionProcessor:
             ui_metadata=_observe_ui_meta,
             display=tool_display,
             file_metadata=file_metadata,
+            control_outcome=control.value if control else None,
         )
+        await self._wait_native_control(result, control)
 
         if tool_instance and has_ui:
             ui_meta = _hydrated_ui_meta or getattr(tool_instance, "ui_metadata", None) or {}
@@ -3949,6 +4184,9 @@ class SessionProcessor:
             raw_for_artifacts = result
         self._last_sse_result = sse_result
         self._last_raw_result = raw_for_artifacts
+        self._tool_attachments[call_id] = (
+            result.attachments if isinstance(result, ToolResult) else []
+        )
         self._last_output_str = output_str
 
     async def _emit_tool_side_effects(  # noqa: PLR0912, PLR0915
@@ -3962,6 +4200,27 @@ class SessionProcessor:
         result = self._last_raw_result
         _ = self._last_sse_result  # needed by downstream; alias kept for clarity
         output_str = self._last_output_str
+
+        attachments = self._tool_attachments.pop(tool_part.call_id, [])
+        if attachments:
+            try:
+                (
+                    attachment_events,
+                    references,
+                ) = await self._artifact_handler.persist_tool_attachments(
+                    attachments,
+                    tool_name=tool_name,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+                if references:
+                    tool_part.metadata["native_artifact_images"] = references
+                for artifact_event in attachment_events:
+                    self._artifact_count += 1
+                    yield artifact_event
+            except Exception as error:
+                tool_part.status = ToolState.ERROR
+                tool_part.error = "computer_use_artifact_unavailable"
+                logger.error("Tool attachment persistence failed: %s", type(error).__name__)
 
         # Artifacts
         try:
@@ -4334,7 +4593,11 @@ class SessionProcessor:
             tenant_id=(self._langfuse_context or {}).get("tenant_id", ""),
             user_id=(self._langfuse_context or {}).get("user_id", ""),
             api_auth_token=self.config.api_auth_token,
-            runtime_context=dict(self.config.runtime_context),
+            runtime_context={
+                **self.config.runtime_context,
+                "run_id": self._run_id,
+                "round": max(1, self._step_count),
+            },
         )
 
         owner_run_id = self._run_id if self.config.subagent_owner_required else None
@@ -4353,16 +4616,21 @@ class SessionProcessor:
 
             def __init__(self, td: ToolDefinition, context: ToolContext) -> None:
                 self.name = td.name
+                self.parameters = td.parameters
                 self.permission = td.permission
                 self.permission_resolver = td.permission_resolver
+                self.repeatable_observation = td.repeatable_observation
                 self.claims_chat_invocation_v2 = True
                 self._td = td
                 self._ctx = context
 
             async def execute(self, **kwargs: Any) -> Any:
                 """Delegate to underlying tool with appropriate context."""
+                from jsonschema import Draft202012Validator
+
                 from src.infrastructure.agent.tools.define import ToolInfo
 
+                Draft202012Validator(self._td.parameters).validate(kwargs)
                 await fence_subagent_owner_v2(child_run_id=owner_run_id)
                 await require_run_permission(self._td, self.name, kwargs)
                 tool_instance = getattr(self._td, "_tool_instance", None)
@@ -4382,6 +4650,7 @@ class SessionProcessor:
         adapter = _ToolAdapter(tool_def, ctx)
         start_time = time.time()
 
+        pending_pipeline_events: list[Any] = []
         async for event in self._tool_pipeline.execute(adapter, arguments, ctx):
             if event.type == "started":
                 self._state = ProcessorState.ACTING
@@ -4401,7 +4670,41 @@ class SessionProcessor:
 
                 # A completed pipeline event can carry a failed ToolResult.
                 failed = tool_result is not None and tool_result.is_error
-                tool_part.status = ToolState.ERROR if failed else ToolState.COMPLETED
+                original_policy_result = (
+                    output_str,
+                    sse_result if isinstance(sse_result, dict) else {},
+                    failed,
+                )
+                output_str, result_metadata, failed, blocked = await self._apply_tool_result_policy(
+                    tool_name,
+                    call_id,
+                    session_id,
+                    output_str,
+                    sse_result,
+                    failed,
+                )
+                result_replaced = (
+                    blocked or (output_str, result_metadata, failed) != original_policy_result
+                )
+                if result_replaced:
+                    raw_result = ToolResult(
+                        output=output_str,
+                        metadata=result_metadata,
+                        is_error=failed,
+                    )
+                    sse_result = result_metadata or output_str
+                if not result_replaced:
+                    for pending_event in pending_pipeline_events:
+                        yield pending_event
+                pending_pipeline_events.clear()
+                control = self._native_control_outcome(raw_result)
+                tool_part.status = (
+                    ToolState.ERROR
+                    if failed
+                    else ToolState.CANCELLED
+                    if control
+                    else ToolState.COMPLETED
+                )
                 tool_part.output = self._artifact_handler.sanitize_tool_output(output_str)
                 tool_part.error = tool_part.output if failed else None
                 tool_part.end_time = end_time
@@ -4414,6 +4717,7 @@ class SessionProcessor:
                     if _app_id_fb:
                         has_ui = True
 
+                has_ui = has_ui and not result_replaced
                 _observe_ui_meta: dict[str, Any] | None = None
                 _hydrated_ui_meta: dict[str, Any] = {}
                 if tool_instance and has_ui:
@@ -4456,7 +4760,9 @@ class SessionProcessor:
                     ui_metadata=_observe_ui_meta,
                     display=tool_display,
                     file_metadata=file_metadata,
+                    control_outcome=control.value if control else None,
                 )
+                await self._wait_native_control(raw_result, control)
 
                 # Emit AgentMCPAppResultEvent if tool has UI
                 if tool_instance and has_ui:
@@ -4513,6 +4819,9 @@ class SessionProcessor:
                     raw_for_artifacts = raw_result
                 self._last_sse_result = sse_result
                 self._last_raw_result = raw_for_artifacts
+                self._tool_attachments[call_id] = (
+                    raw_result.attachments if isinstance(raw_result, ToolResult) else []
+                )
                 self._last_output_str = output_str
 
             elif event.type == "denied":
@@ -4580,13 +4889,20 @@ class SessionProcessor:
                     tool_part.status = ToolState.ERROR
                     tool_part.error = "Tool review authority is unavailable"
                     yield AgentObserveEvent(
-                        tool_name=tool_name, error=tool_part.error, call_id=call_id,
+                        tool_name=tool_name,
+                        error=tool_part.error,
+                        call_id=call_id,
                         tool_execution_id=tool_part.tool_execution_id,
                     )
                     return
                 try:
                     async for approval_event in self._ask_tool_permission(
-                        session_id, call_id, tool_name, reviewed_args, tool_part, tool_def,
+                        session_id,
+                        call_id,
+                        tool_name,
+                        reviewed_args,
+                        tool_part,
+                        tool_def,
                     ):
                         yield approval_event
                     if not response.done():
@@ -4617,12 +4933,12 @@ class SessionProcessor:
                         # Todowrite events need conversion via
                         # _emit_todowrite_events.
                         async for tw_ev in self._emit_todowrite_events([legacy_evt]):
-                            yield tw_ev
+                            pending_pipeline_events.append(tw_ev)
                     else:
                         # Other legacy events (subagent, plugin, etc.)
                         # pass through as-is — they are already
                         # ProcessorEvent-compatible.
-                        yield legacy_evt
+                        pending_pipeline_events.append(legacy_evt)
 
     # ── _execute_tool orchestrator ────────────────────────────────────
 
@@ -4666,7 +4982,45 @@ class SessionProcessor:
         from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
         tool_part, tool_def = resolved
+        cleaned = self._parse_and_fix_arguments(
+            tool_name,
+            arguments,
+            tool_part,
+            call_id,
+            session_id,
+        )
+        if cleaned is None:
+            for event in self.__arg_parse_errors:
+                yield event
+            return
+        policy = await self._notify_plugin_hook(
+            "before_tool_execution",
+            {
+                "tool_name": tool_name,
+                "arguments": cleaned,
+                "call_id": call_id,
+                "session_id": session_id,
+                **self._runtime_hook_context_fields(),
+            },
+        )
+        arguments = policy.get("arguments", cleaned)
+        decision = policy.get("decision", {"kind": "allow"})
+        policy_kind = decision["kind"]
         try:
+            from jsonschema import Draft202012Validator
+            from jsonschema.exceptions import ValidationError
+
+            try:
+                Draft202012Validator(tool_def.parameters).validate(arguments)
+            except ValidationError as error:
+                raise RuntimeV2Error("invalid_tool_arguments", error.message) from error
+            if policy_kind in {"deny", "cancel"}:
+                if policy_kind == "cancel" and self._abort_event is not None:
+                    self._abort_event.set()
+                raise RuntimeV2Error(
+                    "tool_policy_" + policy_kind,
+                    decision.get("reason") or "Tool execution stopped by policy",
+                )
             await require_approved_run_tool_permission_v2(
                 resolve_tool_permission_v2(tool_def, arguments),
                 required_run_id=self.config.run_id if self.config.approved_run_required else None,
@@ -4677,8 +5031,11 @@ class SessionProcessor:
             tool_part.error = str(permission_error)
             tool_part.end_time = time.time()
             yield AgentObserveEvent(
-                tool_name=tool_name, call_id=call_id, error=tool_part.error,
-                status=ToolState.ERROR.value, tool_execution_id=tool_part.tool_execution_id,
+                tool_name=tool_name,
+                call_id=call_id,
+                error=tool_part.error,
+                status=ToolState.ERROR.value,
+                tool_execution_id=tool_part.tool_execution_id,
             )
             return
 
@@ -4691,8 +5048,10 @@ class SessionProcessor:
 
         try:
             chat_decision = await decision_for_current_chat_tool_v2(
-                resolve_tool_permission_v2(tool_def, arguments), tool_name, arguments,
-            required=self.config.chat_run_required,
+                resolve_tool_permission_v2(tool_def, arguments),
+                tool_name,
+                arguments,
+                required=self.config.chat_run_required,
             )
         except RuntimeV2Error:
             chat_decision = "deny"
@@ -4701,24 +5060,47 @@ class SessionProcessor:
             tool_part.error = "Chat run does not authorize this tool operation"
             tool_part.end_time = time.time()
             yield AgentObserveEvent(
-                tool_name=tool_name, call_id=call_id, error=tool_part.error,
-                status=ToolState.ERROR.value, tool_execution_id=tool_part.tool_execution_id,
+                tool_name=tool_name,
+                call_id=call_id,
+                error=tool_part.error,
+                status=ToolState.ERROR.value,
+                tool_execution_id=tool_part.tool_execution_id,
             )
             return
-        if chat_decision == "ask":
+        if chat_decision == "ask" or policy_kind == "ask":
+            from copy import deepcopy
+
+            reviewed_arguments = deepcopy(arguments)
             try:
                 async for event in self._ask_tool_permission(
-                    session_id, call_id, tool_name, arguments, tool_part, tool_def,
+                    session_id,
+                    call_id,
+                    tool_name,
+                    deepcopy(reviewed_arguments),
+                    tool_part,
+                    tool_def,
                 ):
                     yield event
                 if tool_part.status == ToolState.ERROR:
+                    return
+                if arguments != reviewed_arguments:
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = "Tool arguments changed after human approval"
+                    yield AgentObserveEvent(
+                        tool_name=tool_name,
+                        call_id=call_id,
+                        error=tool_part.error,
+                        status=ToolState.ERROR.value,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
                     return
             finally:
                 await self._flush_tool_part_hitl_completions(tool_part)
 
         approval_context = (
             approved_chat_tool_call_v2(tool_name, arguments)
-            if chat_decision == "ask" else nullcontext()
+            if chat_decision == "ask"
+            else nullcontext()
         )
         with approval_context:
             # 1b. Error-based doom loop intervention (consecutive tool errors)
@@ -4738,14 +5120,14 @@ class SessionProcessor:
                         "recent_errors": error_summary,
                     },
                 )
-                tool_part = self._pending_tool_calls.get(call_id)
-                if tool_part:
-                    tool_part.status = ToolState.ERROR
-                    tool_part.error = (
+                error_tool_part = self._pending_tool_calls.get(call_id)
+                if error_tool_part:
+                    error_tool_part.status = ToolState.ERROR
+                    error_tool_part.error = (
                         f"Stopped: {self.doom_loop_detector.consecutive_error_count}"
                         f" consecutive tool errors detected"
                     )
-                    tool_part.end_time = time.time()
+                    error_tool_part.end_time = time.time()
                 yield AgentObserveEvent(
                     tool_name=tool_name,
                     error=(
@@ -4754,8 +5136,8 @@ class SessionProcessor:
                         f" Please verify tool names and try a different approach."
                     ),
                     call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id if tool_part else None,
-                    display=self._tool_display_from_part(tool_part) if tool_part else None,
+                    tool_execution_id=error_tool_part.tool_execution_id if error_tool_part else None,
+                    display=self._tool_display_from_part(error_tool_part) if error_tool_part else None,
                 )
                 self._state = ProcessorState.OBSERVING
                 return
@@ -4770,6 +5152,7 @@ class SessionProcessor:
                 tool_name,
                 arguments,
                 tool_part,
+                tool_def,
             )
             if doom_result is not None:
                 async for ev in doom_result:
@@ -4792,7 +5175,43 @@ class SessionProcessor:
                         arguments,
                         tool_part,
                     ):
+                        if isinstance(ev, AgentObserveEvent):
+                            (
+                                output,
+                                metadata,
+                                failed,
+                                blocked,
+                            ) = await self._apply_tool_result_policy(
+                                tool_name,
+                                call_id,
+                                session_id,
+                                tool_part.output or tool_part.error or "",
+                                ev.result,
+                                bool(ev.error),
+                            )
+                            tool_part.output = self._artifact_handler.sanitize_tool_output(output)
+                            tool_part.error = output if failed else None
+                            tool_part.status = ToolState.ERROR if failed else ToolState.COMPLETED
+                            ev = ev.model_copy(
+                                update={
+                                    "result": metadata or output,
+                                    "error": tool_part.error,
+                                    "status": tool_part.status.value,
+                                    "ui_metadata": None if blocked else ev.ui_metadata,
+                                }
+                            )
                         yield ev
+                    await self._notify_plugin_hook(
+                        "after_tool_execution",
+                        {
+                            "tool_name": tool_name,
+                            "call_id": call_id,
+                            "session_id": session_id,
+                            "result": tool_part.output,
+                            "error": tool_part.error,
+                            **self._runtime_hook_context_fields(),
+                        },
+                    )
                 finally:
                     await self._flush_tool_part_hitl_completions(tool_part)
                 return
@@ -4814,18 +5233,6 @@ class SessionProcessor:
                     return
                 arguments = cleaned
 
-                before_tool_payload = await self._notify_plugin_hook(
-                    "before_tool_execution",
-                    {
-                        "tool_name": tool_name,
-                        "arguments": arguments,
-                        "call_id": call_id,
-                        "session_id": session_id,
-                        **self._runtime_hook_context_fields(),
-                    },
-                )
-                if isinstance(before_tool_payload.get("arguments"), dict):
-                    arguments = cast(dict[str, Any], before_tool_payload["arguments"])
                 try:
                     # 6. Pipeline execution (doom loop + permission + invoke)
                     async for ev in self._execute_tool_via_pipeline(
@@ -4863,7 +5270,7 @@ class SessionProcessor:
                     ):
                         yield ev
                     # Reset error tracker on successful pipeline execution
-                    if tool_part.status == ToolState.COMPLETED:
+                    if tool_part.status in (ToolState.COMPLETED, ToolState.CANCELLED):
                         self.doom_loop_detector.reset_errors()
 
                 except MarketplaceHookError:
@@ -4880,6 +5287,12 @@ class SessionProcessor:
                     yield AgentObserveEvent(
                         tool_name=tool_name,
                         error=str(e),
+                        status=ToolState.ERROR.value,
+                        control_outcome=(
+                            ToolControlOutcome.USER_PAUSED.value
+                            if isinstance(e, NativeControlWaitError)
+                            else None
+                        ),
                         duration_ms=(
                             int((time.time() - tool_part.start_time) * 1000)
                             if tool_part.start_time
@@ -4889,6 +5302,8 @@ class SessionProcessor:
                         tool_execution_id=tool_part.tool_execution_id,
                         display=self._tool_display_from_part(tool_part),
                     )
+                    if isinstance(e, NativeControlWaitError):
+                        raise
                 finally:
                     await self._flush_tool_part_hitl_completions(tool_part)
 
@@ -4933,18 +5348,6 @@ class SessionProcessor:
             arguments = cleaned
 
             # 6. Invoke tool + emit observe
-            before_tool_payload = await self._notify_plugin_hook(
-                "before_tool_execution",
-                {
-                    "tool_name": tool_name,
-                    "arguments": arguments,
-                    "call_id": call_id,
-                    "session_id": session_id,
-                    **self._runtime_hook_context_fields(),
-                },
-            )
-            if isinstance(before_tool_payload.get("arguments"), dict):
-                arguments = cast(dict[str, Any], before_tool_payload["arguments"])
             try:
                 async for ev in self._invoke_and_emit_observe(
                     tool_name,
@@ -4991,6 +5394,12 @@ class SessionProcessor:
                 yield AgentObserveEvent(
                     tool_name=tool_name,
                     error=str(e),
+                    status=ToolState.ERROR.value,
+                    control_outcome=(
+                        ToolControlOutcome.USER_PAUSED.value
+                        if isinstance(e, NativeControlWaitError)
+                        else None
+                    ),
                     duration_ms=int((time.time() - tool_part.start_time) * 1000)
                     if tool_part.start_time
                     else None,
@@ -4998,11 +5407,13 @@ class SessionProcessor:
                     tool_execution_id=tool_part.tool_execution_id,
                     display=self._tool_display_from_part(tool_part),
                 )
+                if isinstance(e, NativeControlWaitError):
+                    raise
             finally:
                 await self._flush_tool_part_hitl_completions(tool_part)
 
             # Reset error tracker on successful non-pipeline execution
-            if tool_part.status == ToolState.COMPLETED:
+            if tool_part.status in (ToolState.COMPLETED, ToolState.CANCELLED):
                 self.doom_loop_detector.reset_errors()
             self._state = ProcessorState.OBSERVING
 
@@ -5045,6 +5456,44 @@ class SessionProcessor:
             tool_name=tool_name,
             arguments=arguments,
             tool_part=tool_part,
+        ):
+            yield event
+        self._state = ProcessorState.OBSERVING
+
+    async def _handle_native_permission_tool(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        from src.infrastructure.agent.native_computer_use.permission import handle_native_permission
+        from src.infrastructure.agent.tools.context import ToolContext
+
+        context = self._langfuse_context or {}
+        ctx = ToolContext(
+            session_id=session_id,
+            message_id=call_id,
+            call_id=call_id,
+            agent_name=context.get("agent_name", "main"),
+            conversation_id=context.get("conversation_id") or session_id,
+            user_id=context.get("user_id", ""),
+            tenant_id=context.get("tenant_id", ""),
+            project_id=context.get("project_id", ""),
+            abort_signal=self._abort_event or asyncio.Event(),
+            runtime_context={
+                **self.config.runtime_context,
+                "run_id": self._run_id,
+                "round": max(1, self._step_count),
+            },
+        )
+        self._state = ProcessorState.WAITING_PERMISSION
+        async for event in handle_native_permission(
+            self._get_hitl_coordinator(),
+            ctx,
+            arguments.get("decision"),
+            tool_part,
         ):
             yield event
         self._state = ProcessorState.OBSERVING

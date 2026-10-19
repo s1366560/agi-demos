@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.schemas.conversation_session_projection import SessionPlanRunResponse
 from src.application.services.agent.run_cancellation_signal import RunCancellationIdentity
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.secondary.persistence.agent_run_tool_settlement import (
+    settle_cancelled_run_tools,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
@@ -73,6 +76,8 @@ async def cancel_run(
         isinstance(receipt, dict) and receipt.get("expected_revision") == body.expected_revision
     )
     if run.status == "cancelled" and same_request and run.revision == body.expected_revision + 1:
+        await settle_cancelled_run_tools(db, run=run)
+        await db.commit()
         return _response(run)
     if run.status not in {"queued", "running"} or run.revision != body.expected_revision:
         raise HTTPException(status_code=409, detail=_("Run authority changed; refresh and retry"))
@@ -145,6 +150,11 @@ async def cancel_run(
                 identity.key,
                 identity.payload(),
                 ex=86400,
+            )
+            from src.infrastructure.agent.native_computer_use.broker import NativeComputerBroker
+
+            await NativeComputerBroker(current_agent_worker_redis_client_v2()).cancel_run(
+                run.id, user_id=current_user.id, tenant_id=run.tenant_id, project_id=run.project_id
             )
         if not stored:
             raise RuntimeError("Cancellation signal was not stored")

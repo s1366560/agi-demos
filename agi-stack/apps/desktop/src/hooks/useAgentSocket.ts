@@ -912,7 +912,9 @@ export function useAgentSocket(
           },
         );
         stopConnectionTimers();
-        if (config.mode === "cloud") {
+        // The native bridge owns its heartbeat and response deadline in main,
+        // where renderer suspension cannot terminate an otherwise healthy device wait.
+        if (config.mode === "cloud" && !cloudSocketTransport) {
           heartbeatTimer = setInterval(() => {
             if (socket.readyState === CLOUD_SOCKET_OPEN) {
               socket.send(JSON.stringify({ type: "heartbeat" }));

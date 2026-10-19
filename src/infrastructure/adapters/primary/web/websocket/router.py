@@ -245,6 +245,9 @@ async def agent_websocket_endpoint(
     except Exception as e:
         logger.error(f"[WS] Error for session {session_id[:8]}...: {e}", exc_info=True)
     finally:
+        from src.infrastructure.agent.native_computer_use.websocket import close_device_connection
+
+        await close_device_connection(websocket.scope)
         await manager.disconnect(session_id)
 
 

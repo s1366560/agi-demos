@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Any, Literal, cast
+from functools import cache
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,6 +56,89 @@ from src.infrastructure.agent.hitl.utils import (
     sanitize_hitl_text,
     sanitize_permission_description,
 )
+
+if TYPE_CHECKING:
+    from jsonschema import Draft202012Validator
+
+
+@cache
+def _native_decision_validator() -> Draft202012Validator:
+    from src.infrastructure.agent.native_computer_use.permission import DECISION_SCHEMA
+    from src.infrastructure.agent.native_computer_use.schema import validator
+
+    return validator(DECISION_SCHEMA)
+
+
+def _native_permission_metadata(
+    metadata: dict[str, Any], conversation: ConversationAuthority, user_id: str
+) -> dict[str, Any] | None:
+    """Expose only the persisted, scoped native consent contract, never tool output text."""
+    from src.infrastructure.agent.native_computer_use.contracts import TOOL_NAMES
+
+    decision = metadata.get("decision")
+    binding = metadata.get("native_binding")
+    scopes = metadata.get("scopes")
+    actions = metadata.get("actions")
+    if (
+        not isinstance(binding, dict)
+        or not isinstance(decision, dict)
+        or not _native_decision_validator().is_valid(decision)
+    ):
+        return None
+    scope = {
+        "user_id": user_id,
+        "tenant_id": conversation.tenant_id,
+        "project_id": conversation.project_id,
+        "conversation_id": conversation.id,
+    }
+    binding_fields = (
+        *scope,
+        "run_id",
+        "session_id",
+        "device_id",
+        "app",
+        "identity_digest",
+        "capability",
+        "tool_name",
+        "input_digest",
+        "cloud_request_id",
+        "native_request_id",
+        "native_session_id",
+    )
+    revision = binding.get("authorization_revision")
+    if (
+        any(binding.get(key) != value for key, value in scope.items())
+        or any(not isinstance(binding.get(key), str) or not binding[key] for key in binding_fields)
+        or binding.get("tool_name") not in TOOL_NAMES
+        or decision["target"]["id"] != binding.get("native_request_id")
+        or not isinstance(revision, int)
+        or isinstance(revision, bool)
+        or revision < 1
+        or not isinstance(scopes, list)
+        or not scopes
+        or any(value not in ("once", "session", "always") for value in scopes)
+        or not isinstance(actions, list)
+        or len(actions) != 2
+        or any(
+            not isinstance(action, dict)
+            or set(action) != {"id", "label"}
+            or action.get("id") not in ("allow", "deny")
+            or not isinstance(action.get("label"), str)
+            or not action["label"].strip()
+            for action in actions
+        )
+        or {action["id"] for action in actions} != {"allow", "deny"}
+    ):
+        return None
+    return {
+        "decision": deepcopy(decision),
+        "native_binding": {
+            **{key: binding[key] for key in binding_fields},
+            "authorization_revision": revision,
+        },
+        "scopes": list(scopes),
+        "actions": deepcopy(actions),
+    }
 
 
 class SqlConversationSessionProjectionReader:
@@ -376,6 +461,18 @@ class SqlConversationSessionProjectionReader:
             if prompt is None:
                 continue
             context = sanitize_env_var_context(record.context) if kind == "env_var" else {}
+            metadata: dict[str, Any] = {"hitl_type": kind}
+            stored = record.request_metadata
+            if kind == "permission" and isinstance(stored, dict):
+                decision = stored.get("decision")
+                target = decision.get("target") if isinstance(decision, dict) else None
+                if "native_binding" in stored or (
+                    isinstance(target, dict) and target.get("kind") == "computer_app"
+                ):
+                    native = _native_permission_metadata(stored, conversation, user_id)
+                    if native is None:
+                        continue
+                    metadata.update(native)
             items.append(
                 PendingHITLAuthority(
                     id=record.id,
@@ -385,7 +482,7 @@ class SqlConversationSessionProjectionReader:
                     question=prompt,
                     options=self._safe_options(record.options),
                     context=context,
-                    metadata={"hitl_type": kind},
+                    metadata=metadata,
                     authority_revision=HITL_PENDING_AUTHORITY_REVISION,
                     created_at=record.created_at,
                     expires_at=record.expires_at,

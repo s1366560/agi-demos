@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 
+import { DesktopApiClient } from '../../../../agi-stack/apps/desktop/src/api/client';
 import { initialDesktopRuntimeConfig } from '../../../../agi-stack/apps/desktop/src/features/auth/loginRuntimeModel';
 import {
   acquireDesktopPluginGenerationLeaseV2,
@@ -23,10 +24,15 @@ it('admits a real workspace service lease only after the complete native baselin
   const pendingDistribution = new Promise<unknown>((resolve) => {
     deliver = resolve;
   });
+  const view = vi
+    .spyOn(DesktopApiClient.prototype, 'localRendererViewV2')
+    .mockReturnValue(pendingDistribution);
+  const receipt = vi
+    .spyOn(DesktopApiClient.prototype, 'localRendererReceiptV2')
+    .mockResolvedValue(undefined);
   const invoke = vi.fn((command: string) => {
     if (command === 'platform_plugin_renderer_owner_retire_v2') return Promise.resolve();
-    expect(command).toBe('platform_plugin_renderer_delivery_current_v2');
-    return pendingDistribution;
+    throw new Error(`unexpected_desktop_command:${command}`);
   });
   const originalBridge = Object.getOwnPropertyDescriptor(window, '__MEMSTACK_DESKTOP__');
   Object.defineProperty(window, '__MEMSTACK_DESKTOP__', {
@@ -46,8 +52,9 @@ it('admits a real workspace service lease only after the complete native baselin
   try {
     expect(hook.result.current.status).toBe('empty');
     expect(invoke).not.toHaveBeenCalled();
+    expect(view).not.toHaveBeenCalled();
     hook.rerender({ enabled: true });
-    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(view).toHaveBeenCalledTimes(1));
     expect(hook.result.current.status).toBe('loading');
     await expect(
       acquireDesktopRendererServiceOperationLeaseV2(
@@ -65,6 +72,12 @@ it('admits a real workspace service lease only after the complete native baselin
       deliver({ source: 'local', snapshot: structuredClone(bootstrapProfile) });
     });
     await waitFor(() => expect(hook.result.current.status).toBe('ready'));
+    expect(receipt).toHaveBeenCalledWith(
+      bootstrapProfile.digest,
+      'ack',
+      undefined,
+      expect.any(AbortSignal)
+    );
     const generation = hook.result.current.generation;
     expect(generation?.snapshot.digest).toBe(bootstrapProfile.digest);
     expect(generation?.snapshot.entries).toHaveLength(bootstrapProfile.entries.length);
@@ -99,5 +112,7 @@ it('admits a real workspace service lease only after the complete native baselin
     });
     if (originalBridge) Object.defineProperty(window, '__MEMSTACK_DESKTOP__', originalBridge);
     else Reflect.deleteProperty(window, '__MEMSTACK_DESKTOP__');
+    view.mockRestore();
+    receipt.mockRestore();
   }
 });

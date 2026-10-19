@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.protocol import canonical_json_v2, parse_profile_snapshot_v2
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 from src.infrastructure.plugins.v2.web_public_view import project_web_public_view_v2
@@ -40,13 +41,67 @@ def host_module(payload):
     )
 
 
-def test_real_bootstrap_projects_all_six_web_entries_and_validates_its_own_digest():
+def scoped_override(scope_kind, *, suffix="canary"):
+    payload = source()
+    scope = ScopeV2(
+        kind=ScopeKindV2(scope_kind),
+        tenant_id=f"private-tenant-{suffix}",
+        project_id=f"private-project-{suffix}" if scope_kind == "project" else None,
+    )
+    entry = next(
+        entry
+        for entry in payload["entries"]
+        if entry["entry_id"] == "builtin-web-feature-tenant-providers"
+    )
+    entry["scope"] = {"kind": scope_kind, "tenant_id": scope.tenant_id}
+    if scope.project_id is not None:
+        entry["scope"]["project_id"] = scope.project_id
+    entry["enabled"] = False
+    return resign(payload), scope
+
+
+@pytest.mark.parametrize("scope_kind", ["tenant", "project"])
+def test_scoped_override_is_anonymous_after_authorization_and_keeps_scope_bound_identity(
+    scope_kind,
+):
+    payload, scope = scoped_override(scope_kind)
+    original = json.dumps(payload, sort_keys=True)
+    view = project_web_public_view_v2(
+        payload, authority_id="private-user-canary", authorized_scope=scope
+    )
+    snapshot = parse_profile_snapshot_v2(view["snapshot"])
+    assert all(entry.scope == ScopeV2(kind=ScopeKindV2.ROOT) for entry in snapshot.entries)
+    assert "private-" not in json.dumps(view)
+    assert not next(
+        entry
+        for entry in snapshot.entries
+        if entry.config.get("id") == "web.feature.tenant-providers"
+    ).enabled
+    assert original == json.dumps(payload, sort_keys=True)
+
+    other_payload, other_scope = scoped_override(scope_kind, suffix="other")
+    other = project_web_public_view_v2(
+        other_payload, authority_id="private-user-canary", authorized_scope=other_scope
+    )
+    assert other["snapshot"] == view["snapshot"]
+    assert other["view_id"] != view["view_id"]
+    with pytest.raises(RuntimeV2Error) as caught:
+        project_web_public_view_v2(
+            payload, authority_id="private-user-canary", authorized_scope=other_scope
+        )
+    assert caught.value.code == "web_view_scope_unauthorized"
+
+
+def test_real_bootstrap_projects_feature_entries_and_validates_its_own_digest():
     original = source()
     view = project_web_public_view_v2(original, authority_id="authenticated-scope")
     assert set(view) == {"schema_version", "target", "view_id", "snapshot"}
     snapshot = parse_profile_snapshot_v2(view["snapshot"])
     assert snapshot.profile_id == "web-public-view-v2"
-    assert len(snapshot.entries) == 6
+    assert len(snapshot.entries) > 60
+    assert any(
+        entry.config.get("id") == "web.feature.project-memories" for entry in snapshot.entries
+    )
     assert snapshot.digest != original["digest"]
     assert all(entry.scope.kind.value == "root" for entry in snapshot.entries)
     assert all(
@@ -56,7 +111,7 @@ def test_real_bootstrap_projects_all_six_web_entries_and_validates_its_own_diges
     )
     assert (
         len({module.module_ref for manifest in snapshot.manifests for module in manifest.modules})
-        == 3
+        == 5
     )
     assert original == source()
 

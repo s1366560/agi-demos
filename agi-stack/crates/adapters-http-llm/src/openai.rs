@@ -3,7 +3,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use agistack_core::agent::types::{AgentAction, Role, TranscriptEntry};
+use agistack_core::agent::types::{AgentAction, MediaAttachment, Role, TranscriptEntry};
 use agistack_core::model::{Episode, Memory};
 use agistack_core::ports::{CoreError, CoreResult, LlmPort, MemoryDraft, RelationshipDraft};
 
@@ -76,7 +76,7 @@ impl AgentActionWire {
 #[derive(Serialize)]
 struct ChatMessage {
     role: &'static str,
-    content: String,
+    content: serde_json::Value,
 }
 
 #[derive(Serialize)]
@@ -156,6 +156,7 @@ No prose, no code fences.";
 /// LLM adapter: extraction + ReAct `decide` over an HTTP chat-completions API.
 pub struct HttpLlm {
     ep: Endpoint,
+    vision_supported: bool,
 }
 
 impl HttpLlm {
@@ -163,6 +164,7 @@ impl HttpLlm {
     pub fn new(base_url: impl Into<String>, model: impl Into<String>) -> Self {
         Self {
             ep: Endpoint::new(base_url, model),
+            vision_supported: true,
         }
     }
 
@@ -172,22 +174,56 @@ impl HttpLlm {
         self
     }
 
+    /// Explicit provider capability metadata; never infer vision support from a model name.
+    pub fn with_vision_support(mut self, supported: bool) -> Self {
+        self.vision_supported = supported;
+        self
+    }
+
+    async fn user_content(
+        &self,
+        user: String,
+        media: &[MediaAttachment],
+    ) -> CoreResult<serde_json::Value> {
+        if media.is_empty() {
+            return Ok(json!(user));
+        }
+        if !self.vision_supported {
+            return Err(CoreError::Llm(
+                "vision_unsupported: configured model does not accept image observations".into(),
+            ));
+        }
+        let mut content = vec![json!({"type":"text","text":user})];
+        content.extend(crate::media::image_blocks(media, false).await?);
+        Ok(json!(content))
+    }
+
     async fn chat(&self, system: &str, user: String) -> CoreResult<String> {
+        self.chat_with_media(system, user, &[]).await
+    }
+
+    async fn chat_with_media(
+        &self,
+        system: &str,
+        user: String,
+        media: &[MediaAttachment],
+    ) -> CoreResult<String> {
         let body = ChatRequest {
             model: self.ep.model.clone(),
             messages: vec![
                 ChatMessage {
                     role: "system",
-                    content: system.to_string(),
+                    content: json!(system),
                 },
                 ChatMessage {
                     role: "user",
-                    content: user,
+                    content: self.user_content(user, media).await?,
                 },
             ],
             temperature: None,
             stream: None,
         };
+        crate::request_log::record_request("openai.chat_completions", &body, async {
         let resp: ChatResponse = self
             .ep
             .post_json("/chat/completions", &body, CoreError::Llm)
@@ -197,12 +233,26 @@ impl HttpLlm {
             .next()
             .map(|c| c.message.content)
             .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))
+        }).await
     }
 
     async fn chat_stream<F>(
         &self,
         system: &str,
         user: String,
+        on_delta: F,
+    ) -> CoreResult<String>
+    where
+        F: FnMut(&str),
+    {
+        self.chat_with_media_stream(system, user, &[], on_delta).await
+    }
+
+    async fn chat_with_media_stream<F>(
+        &self,
+        system: &str,
+        user: String,
+        media: &[MediaAttachment],
         mut on_delta: F,
     ) -> CoreResult<String>
     where
@@ -213,16 +263,17 @@ impl HttpLlm {
             messages: vec![
                 ChatMessage {
                     role: "system",
-                    content: system.to_string(),
+                    content: json!(system),
                 },
                 ChatMessage {
                     role: "user",
-                    content: user,
+                    content: self.user_content(user, media).await?,
                 },
             ],
             temperature: None,
             stream: Some(true),
         };
+        crate::request_log::record_request("openai.chat_completions", &body, async {
         let url = format!("{}/chat/completions", self.ep.base_url);
         let mut req = self.ep.client.post(&url).json(&body);
         if let Some(key) = &self.ep.api_key {
@@ -287,6 +338,7 @@ impl HttpLlm {
         }
 
         Ok(content)
+        }).await
     }
 
     /// Raw single-turn completion: returns the model's message content
@@ -294,6 +346,29 @@ impl HttpLlm {
     /// or [`Self::decide`], which parse cleaned JSON.
     pub async fn complete(&self, system: &str, user: impl Into<String>) -> CoreResult<String> {
         self.chat(system, user.into()).await
+    }
+
+    /// Attach only host-provided image artifacts; text is never interpreted as a file reference.
+    pub async fn complete_with_media(
+        &self,
+        system: &str,
+        user: impl Into<String>,
+        media: &[MediaAttachment],
+    ) -> CoreResult<String> {
+        self.chat_with_media(system, user.into(), media).await
+    }
+
+    pub async fn complete_with_media_stream<F>(
+        &self,
+        system: &str,
+        user: impl Into<String>,
+        media: &[MediaAttachment],
+        on_delta: F,
+    ) -> CoreResult<String>
+    where
+        F: FnMut(&str),
+    {
+        self.chat_with_media_stream(system, user.into(), media, on_delta).await
     }
 
     /// Stream a raw single-turn completion from an OpenAI-/LiteLLM-compatible
@@ -439,15 +514,21 @@ impl HttpLlm {
             }
         }
         let mut emitted_answer = false;
+        let media = transcript
+            .iter()
+            .rev()
+            .find(|entry| !entry.media.is_empty())
+            .map(|entry| entry.media.clone())
+            .unwrap_or_default();
         let content = if let Some(on_text) = on_text {
             let mut decoder = crate::AgentAnswerStream::new();
-            self.chat_stream(DECIDE_SYSTEM, user.clone(), |delta| {
+            self.chat_with_media_stream(DECIDE_SYSTEM, user.clone(), &media, |delta| {
                 decoder.push(delta, on_text);
                 emitted_answer = decoder.has_emitted();
             })
             .await?
         } else {
-            self.chat(DECIDE_SYSTEM, user.clone()).await?
+            self.chat_with_media(DECIDE_SYSTEM, user.clone(), &media).await?
         };
         let first_wire = serde_json::from_str::<AgentActionWire>(clean_structured(&content));
         let repair_guidance = match first_wire.as_ref() {
@@ -462,7 +543,7 @@ impl HttpLlm {
                 ));
             }
             user.push_str(guidance);
-            let repaired = self.chat(DECIDE_SYSTEM, user).await?;
+            let repaired = self.chat_with_media(DECIDE_SYSTEM, user, &media).await?;
             let wire: AgentActionWire = serde_json::from_str(clean_structured(&repaired))
                 .map_err(|e| CoreError::Llm(format!("bad repaired action json: {e}")))?;
             if wire.has_incomplete_human_decision() {

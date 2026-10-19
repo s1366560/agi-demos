@@ -347,6 +347,20 @@ async def get_or_create_tools(
         async with _tools_cache_lock:
             _tools_cache[cache_key] = dict(tools)
 
+    # Connected devices belong to a user, while the base cache belongs to a project.
+    from src.infrastructure.agent.native_computer_use.broker import NativeComputerBroker
+    from src.infrastructure.agent.tools.native_computer_use import create_native_computer_tools
+
+    user_id = kwargs.get("user_id")
+    if isinstance(user_id, str) and user_id:
+        tools.update(
+            await create_native_computer_tools(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                user_id=user_id,
+                broker=NativeComputerBroker(redis_client),
+            )
+        )
     return tools
 
 

@@ -9,6 +9,7 @@ pub(super) enum TimelineToolKind {
     Command,
     Edit,
     Check,
+    ComputerUse,
     Tool,
 }
 
@@ -20,6 +21,7 @@ impl TimelineToolKind {
             Self::Command => "command",
             Self::Edit => "edit",
             Self::Check => "check",
+            Self::ComputerUse => "computer_use",
             Self::Tool => "tool",
         }
     }
@@ -36,6 +38,8 @@ pub(super) fn tool_kind(tool: &str) -> TimelineToolKind {
         TimelineToolKind::Edit
     } else if CHECK_TOOLS.contains(&tool) {
         TimelineToolKind::Check
+    } else if agistack_adapters_cua::tool_names().contains(&tool) {
+        TimelineToolKind::ComputerUse
     } else {
         TimelineToolKind::Tool
     }
@@ -191,6 +195,65 @@ const COMMAND_TOOLS: &[&str] = &[
     "deps_install",
 ];
 
+/// Desktop computer-use family (adapters-cua). Rendered with its own
+/// presentation kind and, for `computer_get_app_state`, a screenshot block.
+
+
+/// Computer-use row extras: the target app is the row title and a result
+/// summary counts serialized AX elements. `redacted_output` may be empty for
+/// `act` rows (call-side), in which case only the title is produced. When the
+/// redacted input is unparseable (e.g. `[UNAVAILABLE]`), the title falls back
+/// to the humanized tool name so the row never renders as a bare kind label.
+pub(super) fn computer_use_display(
+    tool: &str,
+    redacted_input: &str,
+    redacted_output: &str,
+) -> Option<Value> {
+    if !agistack_adapters_cua::tool_names().contains(&tool) {
+        return None;
+    }
+    let mut display = serde_json::Map::new();
+    if let Ok(input) = serde_json::from_str::<Value>(redacted_input) {
+        if let Some(app) = input.get("app").and_then(Value::as_str) {
+            display.insert("title".into(), json!(app));
+        }
+    }
+    if display.is_empty() {
+        let short = tool.strip_prefix("computer_").unwrap_or(tool);
+        display.insert("title".into(), json!(short.replace('_', " ")));
+    }
+    if let Ok(output) = serde_json::from_str::<Value>(redacted_output) {
+        if let Some(text) = output.get("text").and_then(Value::as_str) {
+            let elements = text
+                .lines()
+                .filter(|line| line.trim_start().starts_with('['))
+                .count();
+            display.insert("summary".into(), json!(format!("{elements} elements")));
+        }
+    }
+    Some(Value::Object(display))
+}
+
+/// Structured computer-use observation metadata for the renderer: target app,
+/// its icon (small PNG data URL for the appshot overlay), and the screenshot
+/// file URL. The base64 image stays in `toolOutput` only (same convention as
+/// `browser_screenshot`), never in the compact metadata.
+pub(super) fn computer_use_metadata(output_json: &str) -> Option<Value> {
+    let value = serde_json::from_str::<Value>(output_json).ok()?;
+    let app = value.get("app").and_then(Value::as_str)?;
+    let screenshot_url = value
+        .get("screenshot")
+        .and_then(|screenshot| screenshot.get("url"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let icon = value
+        .get("icon")
+        .and_then(Value::as_str)
+        .filter(|icon| icon.starts_with("data:image/"))
+        .unwrap_or("");
+    Some(json!({ "app": app, "screenshotUrl": screenshot_url, "icon": icon }))
+}
+
 const EDIT_TOOLS: &[&str] = &[
     "write",
     "edit",
@@ -211,6 +274,40 @@ const CHECK_TOOLS: &[&str] = &["run_tests", "analyze_coverage"];
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn computer_use_display_titles_target_app_and_counts_elements() {
+        let display = computer_use_display(
+            "computer_get_app_state",
+            r#"{"app":"Finder","disable_diff":true}"#,
+            r##"{"app":"Finder","text":"# app\n[0] window\n[1] button","screenshot":null}"##,
+        )
+        .expect("display extras");
+        assert_eq!(display["title"], json!("Finder"));
+        assert_eq!(display["summary"], json!("2 elements"));
+
+        // Redacted-away input ([UNAVAILABLE]) must still produce a title.
+        let fallback = computer_use_display("computer_list_apps", "[UNAVAILABLE]", "")
+            .expect("fallback extras");
+        assert_eq!(fallback["title"], json!("list apps"));
+        assert!(fallback.get("summary").is_none());
+    }
+
+    #[test]
+    fn computer_use_metadata_requires_structured_output() {
+        assert_eq!(
+            computer_use_metadata(
+                r#"{"app":"Finder","icon":"data:image/png;base64,AAA","screenshot":{"url":"file:///x.jpg"}}"#
+            ),
+            Some(json!({
+                "app":"Finder",
+                "screenshotUrl":"file:///x.jpg",
+                "icon":"data:image/png;base64,AAA",
+            }))
+        );
+        assert_eq!(computer_use_metadata("[UNAVAILABLE]"), None);
+        assert_eq!(computer_use_metadata(r#"{"ok":true}"#), None);
+    }
 
     #[test]
     fn input_file_paths_follow_declared_first_party_schema() {

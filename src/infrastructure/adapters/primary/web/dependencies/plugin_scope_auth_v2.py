@@ -17,6 +17,49 @@ from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.scope import validate_scope_v2
 
 
+async def resolve_plugin_read_scope_v2(
+    db: AsyncSession, *, current_user: User, requested_scope: ScopeV2
+) -> ScopeV2:
+    """Authorize a public view using current persisted ancestry and memberships."""
+    scope = validate_scope_v2(requested_scope)
+    if scope.kind is ScopeKindV2.ROOT:
+        return scope
+    if scope.kind not in (ScopeKindV2.TENANT, ScopeKindV2.PROJECT):
+        raise RuntimeV2Error("scope_read_forbidden", "scope view is unavailable")
+    tenant = await db.scalar(
+        refresh_select_statement(select(Tenant).where(Tenant.id == scope.tenant_id))
+    )
+    if tenant is None:
+        raise RuntimeV2Error("scope_resource_unavailable", "scope resource is unavailable")
+    member = await db.scalar(
+        refresh_select_statement(
+            select(UserTenant.id).where(
+                UserTenant.user_id == current_user.id,
+                UserTenant.tenant_id == tenant.id,
+            )
+        )
+    )
+    if member is None and not current_user.is_superuser:
+        raise RuntimeV2Error("scope_read_forbidden", "scope view is unavailable")
+    if scope.kind is ScopeKindV2.PROJECT:
+        project = await db.scalar(
+            refresh_select_statement(select(Project).where(Project.id == scope.project_id))
+        )
+        if project is None or project.tenant_id != tenant.id:
+            raise RuntimeV2Error("scope_resource_unavailable", "scope resource is unavailable")
+        member = await db.scalar(
+            refresh_select_statement(
+                select(UserProject.id).where(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project.id,
+                )
+            )
+        )
+        if member is None:
+            raise RuntimeV2Error("scope_read_forbidden", "scope view is unavailable")
+    return scope
+
+
 async def resolve_plugin_publication_scope_v2(
     db: AsyncSession, *, current_user: User, requested_scope: ScopeV2
 ) -> ScopeV2:

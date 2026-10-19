@@ -160,6 +160,21 @@ def get_message_router() -> MessageRouter:
         )
 
         _message_router = MessageRouter()
+        from src.infrastructure.adapters.primary.web.websocket.handlers.computer_use_handler import (
+            ComputerUseHandler,
+        )
+
+        _message_router.register_all(
+            [
+                ComputerUseHandler(kind)
+                for kind in (
+                    "computer_use_device",
+                    "computer_use_result",
+                    "computer_use_media",
+                    "computer_use_control_state",
+                )
+            ]
+        )
         _message_router.register_all(
             [
                 # Chat

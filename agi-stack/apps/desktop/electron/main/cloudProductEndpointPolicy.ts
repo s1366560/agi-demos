@@ -5,6 +5,7 @@ import { authorizeCloudCapabilityProbeEndpoint } from './cloudCapabilityProbeEnd
 import { authorizeWorkspaceCollaborationMutation } from './cloudWorkspaceCollaborationMutationPolicy';
 import { authorizeCloudMemoryEndpoint } from './cloudMemoryEndpointPolicy';
 import { authorizeCloudSettingsResourceEndpoint } from './cloudSettingsResourceEndpointPolicy';
+import { authorizeCloudPluginSettingsEndpoint } from './cloudPluginSettingsEndpointPolicy';
 
 export type CloudProductRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -210,6 +211,9 @@ export function authorizeCloudProductEndpoint(
 
   const settingsResource = authorizeCloudSettingsResourceEndpoint(request, target);
   if (settingsResource) return settingsResource;
+
+  const pluginSettings = authorizeCloudPluginSettingsEndpoint(request, target);
+  if (pluginSettings) return pluginSettings;
 
   if (segments[3] === 'plugin-marketplace') {
     if (

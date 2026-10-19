@@ -47,6 +47,27 @@ const cases = [
   },
 ];
 
+function contributionCount(
+  entries: readonly {
+    enabled: boolean;
+    module_ref: string;
+    config: Readonly<Record<string, unknown>>;
+  }[]
+) {
+  return entries
+    .filter((entry) => entry.enabled)
+    .reduce(
+      (count, entry) =>
+        count +
+        (entry.module_ref.endsWith('/renderer-contribution')
+          ? 1
+          : Array.isArray(entry.config.contributions)
+            ? entry.config.contributions.length
+            : 0),
+      0
+    );
+}
+
 type RendererCase = (typeof cases)[number];
 
 async function snapshotFor(item: RendererCase, generation = 501, empty = false) {
@@ -108,6 +129,7 @@ for (const item of cases) {
                   target:
                     capturedInvalid && fault === 'registry-target' ? 'wrong-renderer' : item.target,
                   register: registry.register.bind(registry),
+                  registerAll: registry.registerAll.bind(registry),
                   list: () =>
                     capturedInvalid && fault === 'contribution'
                       ? [
@@ -157,6 +179,7 @@ for (const item of cases) {
                   Object.freeze({
                     target: item.target,
                     register: registry.register.bind(registry),
+                    registerAll: registry.registerAll.bind(registry),
                     list: registry.list.bind(registry),
                   })
                 );
@@ -173,9 +196,7 @@ for (const item of cases) {
       const generation = await loader.stage(snapshot);
       expect(finalValidator).toHaveBeenCalledTimes(1);
       const contributions = finalValidator.mock.calls[0]![0] as unknown[];
-      const expected = snapshot.entries.filter(
-        (entry) => entry.enabled && entry.module_ref.endsWith('/renderer-contribution')
-      ).length;
+      const expected = contributionCount(snapshot.entries);
       expect(expected).toBeGreaterThan(0);
       expect(contributions).toHaveLength(expected);
       expect(generation.fibers.every((fiber) => fiber.phase === 'active')).toBe(true);
@@ -186,11 +207,7 @@ for (const item of cases) {
       const snapshot = await snapshotFor(item);
       const failure = new Error('final renderer contribution set rejected');
       const validate = vi.fn((contributions: readonly unknown[]) => {
-        expect(contributions).toHaveLength(
-          snapshot.entries.filter(
-            (entry) => entry.enabled && entry.module_ref.endsWith('/renderer-contribution')
-          ).length
-        );
+        expect(contributions).toHaveLength(contributionCount(snapshot.entries));
         throw failure;
       });
       const runtime = new RendererPluginRuntimeV2(item.target, item.definitions, validate);

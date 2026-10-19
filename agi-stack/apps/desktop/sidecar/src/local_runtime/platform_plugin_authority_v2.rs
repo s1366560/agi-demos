@@ -222,6 +222,26 @@ impl fmt::Debug for ActivePlatformPluginGenerationLeaseV2 {
 }
 
 impl ActivePlatformPluginGenerationLeaseV2 {
+    pub(super) fn resolve_service<T: std::any::Any + Send + Sync>(&self, service: &str, version: &str, scope: &ScopeV2, isolation: Option<&str>) -> Result<Arc<T>, agistack_plugin_host::RuntimeV2Error> {
+        self.runtime_generation.resolve_versioned(service, version, scope, isolation)
+    }
+    pub(super) fn request_contributors(&self, scope: &ScopeV2) -> serde_json::Value {
+        agistack_plugin_host::protocol_v2::tool_policy::request_contributors_v2(
+            &self.runtime_generation.snapshot,
+            &agistack_plugin_host::DataPlaneTargetV2::DesktopSidecar,
+            scope,
+        )
+    }
+
+    pub(super) fn tool_policy(
+        &self, scope: &ScopeV2,
+    ) -> Result<Arc<agistack_plugin_host::protocol_v2::tool_policy::TrustedToolPolicyV2>, agistack_plugin_host::RuntimeV2Error> {
+        self.runtime_generation.resolve_versioned(
+            agistack_plugin_host::protocol_v2::tool_policy::TOOL_EXECUTION_POLICY_SERVICE_V2,
+            "1.0.0", scope, None,
+        )
+    }
+
     pub(super) fn knowledge_authority(
         &self,
         scope: &ScopeV2,
@@ -646,6 +666,7 @@ mod tests {
                 [
                     desktop_sidecar_http_routes_definition_v2(),
                     desktop_sidecar_host_definition_v2(),
+                    crate::local_runtime::computer_use_v2::definition().unwrap(),
                 ],
             ),
             authority.manager(),
@@ -719,6 +740,7 @@ mod tests {
                 [
                     desktop_sidecar_http_routes_definition_v2(),
                     desktop_sidecar_host_definition_v2(),
+                    crate::local_runtime::computer_use_v2::definition().unwrap(),
                 ],
             ),
             authority.manager(),
@@ -761,6 +783,7 @@ mod tests {
                 [
                     desktop_sidecar_http_routes_definition_v2(),
                     desktop_sidecar_host_definition_v2(),
+                    crate::local_runtime::computer_use_v2::definition().unwrap(),
                 ],
             ),
             authority.manager(),

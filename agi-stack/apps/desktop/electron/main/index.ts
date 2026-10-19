@@ -1,4 +1,7 @@
 import { RendererDeliveryAdmissionV2 } from './rendererDeliveryAdmissionV2';
+import { createComputerUseCloudDeviceBridge } from './computerUseCloudDeviceBridge';
+import { ComputerUseActivityMonitor } from './computerUseActivityMonitor';
+import { createComputerUseActivityTray } from './computerUseActivityTray';
 import { desktopRendererDeliveryUnavailableV2 } from '../../src/plugins/desktopRendererDeliveryStatusV2';
 import {
   app,
@@ -108,6 +111,7 @@ const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
 const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
 const IAB_TABS_CHANGED_CHANNEL = 'agistack:iab-tabs-changed';
+const COMPUTER_USE_ACTIVITY_CHANNEL = 'agistack:computer-use-activity';
 const UPDATE_STATE_CHANNEL = 'agistack:update-state';
 const UPDATE_CHECK_CHANNEL = 'agistack:update-check';
 const UPDATE_RESTART_TO_APPLY_CHANNEL = 'agistack:update-restart-to-apply';
@@ -126,6 +130,7 @@ const SIDECAR_COMMANDS = new Set([
   'browser_bridge_install',
   'browser_bridge_uninstall',
   'browser_bridge_status',
+  'computer_use_manage_v2',
 ]);
 const captureAuthorizationGate = new DisplayCaptureAuthorizationGate();
 const cloudRequestExecutions = new CloudRequestExecutionRegistry({ timeoutMs: 30_000 });
@@ -161,6 +166,7 @@ let automaticUpdates: AutomaticUpdateController | null = null;
 let unsubscribeUpdateState: (() => void) | null = null;
 let iabPool: IabViewPool | null = null;
 let iabBackend: IabBackend | null = null;
+let computerUseActivity: ComputerUseActivityMonitor | null = null;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -635,6 +641,13 @@ async function executeDesktopCommand(
     return executeIabCommand(command, args);
   }
   switch (command) {
+    case 'computer_use_manage_v2': {
+      void authorizedCloudRequestOwner(event);
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      return computerUseActivity
+        ? computerUseActivity.track(event.sender.id,args)
+        : sidecarSupervisor.invoke(command,args);
+    }
     case 'frontend_ready':
       return undefined;
     case 'get_desktop_capabilities':
@@ -1171,6 +1184,7 @@ async function createMainWindow(): Promise<void> {
     }
   });
   window.on('closed', () => {
+    computerUseActivity?.clear(cloudRequestOwnerId);
     void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
     void sandboxDesktopGrants?.revokeOwner(cloudRequestOwnerId).catch(() => {
       console.warn('Sandbox desktop owner cleanup failed');
@@ -1196,6 +1210,7 @@ async function createMainWindow(): Promise<void> {
 }
 
 async function withDesktopAuthorityTransitionV2<T>(operation: () => Promise<T>): Promise<T> {
+  computerUseActivity?.clear();
   const grants = sandboxDesktopGrants;
   if (!grants) throw new Error('sandbox desktop grants unavailable');
   return rendererDeliveryAdmissionV2.transition(
@@ -1311,7 +1326,14 @@ async function bootstrapApplication(): Promise<void> {
     blankFrame: (ownerId, frameId) =>
       blankSandboxDesktopGrantFrame(resolveSandboxDesktopOwner, ownerId, frameId),
   });
+  computerUseActivity = new ComputerUseActivityMonitor({
+    invoke:(args)=>applicationSupervisor.invoke('computer_use_manage_v2',args),
+    emit:(ownerId,snapshot,mode)=>{const contents=mainWindow?.webContents;if(contents&&!contents.isDestroyed()&&contents.id===ownerId)contents.send(COMPUTER_USE_ACTIVITY_CHANNEL,{mode,snapshot});},
+    show:()=>{if(mainWindow?.isMinimized())mainWindow.restore();mainWindow?.show();mainWindow?.focus();},
+    surface:createComputerUseActivityTray(),
+  });
   cloudSocketBroker = new DesktopCloudSocketBroker({
+    computerUse:createComputerUseCloudDeviceBridge((command,args)=>applicationSupervisor.invoke(command,args)),
     authorize: (input) =>
       authorizeVaultBoundCloudSocket(input, {
         loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
@@ -1413,6 +1435,7 @@ if (!hasSingleInstanceLock) {
     if (process.platform !== 'darwin') app.quit();
   });
   app.on('before-quit', (event) => {
+    computerUseActivity?.clear();computerUseActivity=null;
     const grantsClosed = sandboxDesktopGrants?.revokeAll().catch(() => {
       console.warn('Sandbox desktop shutdown cleanup failed');
     });

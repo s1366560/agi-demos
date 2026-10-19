@@ -25,6 +25,7 @@ const {
   isWorkspaceConversationSelected,
   isCurrentWorkspaceConversationRequest,
   isWorkspaceOverviewSelected,
+  isWorkspaceDefaultSelectionEligible,
   projectConversationLoadTargets,
   removeConversationFromWorkspaceRows,
   reconcileExpandedWorkspaceIds,
@@ -80,6 +81,123 @@ test('runtime workspace resolution preserves only an active same-project unbound
       workspace_id: 'workspace-2',
     }),
     'workspace-1',
+  );
+});
+
+test('runtime workspace fallback skips archived workspaces in the authoritative order', () => {
+  const workspaces = [
+    { id: 'archived-flag', is_archived: true },
+    { id: 'archived-status', status: 'archived' },
+    { id: 'workspace-active', is_archived: false, status: 'active' },
+    { id: 'workspace-other' },
+  ];
+
+  for (const requestedId of ['', 'missing']) {
+    assert.equal(
+      resolveRuntimeWorkspaceId(requestedId, 'project-1', workspaces, null),
+      'workspace-active',
+    );
+  }
+  assert.equal(
+    resolveRuntimeWorkspaceId('', 'project-1', workspaces.slice(0, 2), null),
+    '',
+  );
+  assert.equal(resolveRuntimeWorkspaceId('', 'project-1', [], null), '');
+});
+
+test('explicit archived workspace selection still opens its history', () => {
+  const workspaces = [
+    { id: 'workspace-active' },
+    { id: 'archived-flag', is_archived: true },
+    { id: 'archived-status', status: 'archived' },
+  ];
+
+  for (const workspaceId of ['archived-flag', 'archived-status']) {
+    assert.equal(
+      resolveRuntimeWorkspaceId(workspaceId, 'project-1', workspaces, null),
+      workspaceId,
+    );
+  }
+});
+
+test('workspace default eligibility excludes either authoritative archive field', () => {
+  assert.equal(isWorkspaceDefaultSelectionEligible({}), true);
+  assert.equal(isWorkspaceDefaultSelectionEligible({ status: 'inactive' }), true);
+  assert.equal(isWorkspaceDefaultSelectionEligible({ is_archived: false }), true);
+  assert.equal(
+    isWorkspaceDefaultSelectionEligible({ is_archived: true, status: 'active' }),
+    false,
+  );
+  assert.equal(
+    isWorkspaceDefaultSelectionEligible({ is_archived: false, status: 'archived' }),
+    false,
+  );
+  assert.equal(isWorkspaceDefaultSelectionEligible({ status: ' ARCHIVED ' }), false);
+});
+
+test('runtime workspace resolution restores only eligible persisted preferences', () => {
+  const workspaces = [
+    { id: 'archived-flag', is_archived: true },
+    { id: 'archived-status', status: 'archived' },
+    { id: 'workspace-first' },
+    { id: 'workspace-saved' },
+  ];
+
+  assert.equal(
+    resolveRuntimeWorkspaceId('', 'project-1', workspaces, null, 'workspace-saved'),
+    'workspace-saved',
+  );
+  for (const preference of ['archived-flag', 'archived-status', 'removed', null]) {
+    assert.equal(
+      resolveRuntimeWorkspaceId('', 'project-1', workspaces, null, preference),
+      'workspace-first',
+    );
+  }
+  assert.equal(resolveRuntimeWorkspaceId('', 'project-1', [], null, 'removed'), '');
+});
+
+test('explicit current selection and unbound sessions take priority over persisted preference', () => {
+  const workspaces = [
+    { id: 'archived', is_archived: true },
+    { id: 'workspace-first' },
+    { id: 'workspace-saved' },
+  ];
+
+  assert.equal(
+    resolveRuntimeWorkspaceId('archived', 'project-1', workspaces, null, 'workspace-saved'),
+    'archived',
+  );
+  assert.equal(
+    resolveRuntimeWorkspaceId('', 'project-1', workspaces, {
+      project_id: 'project-1',
+      workspace_id: null,
+    }, 'workspace-saved'),
+    '',
+  );
+  assert.equal(
+    resolveRuntimeWorkspaceId('', 'project-1', workspaces, {
+      project_id: 'other-project',
+      workspace_id: null,
+    }, 'workspace-saved'),
+    'workspace-saved',
+  );
+  assert.equal(
+    resolveRuntimeWorkspaceId('missing', 'project-1', workspaces, null, 'workspace-saved'),
+    'workspace-first',
+  );
+});
+
+test('an intentionally saved unbound selection remains distinct from an absent preference', () => {
+  const workspaces = [{ id: 'workspace-first' }];
+
+  assert.equal(resolveRuntimeWorkspaceId('', 'project-1', workspaces, null, ''), '');
+  assert.equal(
+    resolveRuntimeWorkspaceId('', 'project-1', workspaces, null, null),
+    'workspace-first',
+  );
+  assert.equal(
+    resolveRuntimeWorkspaceId('missing', 'project-1', workspaces, null, ''),
+    'workspace-first',
   );
 });
 

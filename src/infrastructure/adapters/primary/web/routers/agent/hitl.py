@@ -94,7 +94,35 @@ async def _user_has_project_access(
     return project_membership.scalar_one_or_none() is not None
 
 
-def _validate_hitl_response_shape(*, hitl_type: str, response_data: dict[str, Any]) -> None:
+def _permission_response_allowed(
+    action: str,
+    granted: bool,
+    scope: str,
+    request_data: dict[str, Any] | None,
+) -> bool:
+    if request_data is not None and isinstance(request_data.get("native_binding"), dict):
+        offered = request_data.get("scopes")
+        return (
+            isinstance(offered, list)
+            and action == "allow"
+            and granted is True
+            and scope in offered
+            and scope in {"once", "session", "always"}
+        ) or (action == "deny" and granted is False and scope == "once")
+    expected = {
+        "allow": (True, "once"),
+        "allow_always": (True, "workspace_tool"),
+        "deny": (False, "once"),
+    }
+    return action in expected and (granted, scope) == expected[action]
+
+
+def _validate_hitl_response_shape(
+    *,
+    hitl_type: str,
+    response_data: dict[str, Any],
+    request_data: dict[str, Any] | None = None,
+) -> None:
     """Reject malformed HITL ingress payloads before validation/publish."""
     has_cancelled = response_data.get("cancelled") is True
     has_timeout = response_data.get("timeout") is True
@@ -109,12 +137,13 @@ def _validate_hitl_response_shape(*, hitl_type: str, response_data: dict[str, An
         action = response_data.get("action")
         granted = response_data.get("granted")
         scope = response_data.get("scope")
-        expected = {
-            "allow": (True, "once"),
-            "allow_always": (True, "workspace_tool"),
-            "deny": (False, "once"),
-        }
-        if action not in expected or (granted, scope) != expected[action]:
+        if (
+            not isinstance(action, str)
+            or not isinstance(granted, bool)
+            or not isinstance(scope, str)
+        ):
+            raise HTTPException(status_code=400, detail=_("Invalid permission response"))
+        if not _permission_response_allowed(action, granted, scope, request_data):
             raise HTTPException(
                 status_code=400,
                 detail=_("Invalid permission response"),
@@ -406,14 +435,33 @@ def _validate_and_summarize_hitl_response(
             detail=_("HITL type does not match request"),
         )
 
+    request_data = build_hitl_request_data_from_record(hitl_request)
+    binding = request_data.get("native_binding")
+    if isinstance(binding, dict):
+        decision = request_data.get("decision")
+        target = decision.get("target") if isinstance(decision, dict) else None
+        if (
+            not isinstance(target, dict)
+            or target != {"kind": "computer_app", "id": binding.get("native_request_id")}
+            or any(
+                binding.get(key) != expected
+                for key, expected in {
+                    "tenant_id": tenant_id,
+                    "project_id": hitl_request.project_id,
+                    "conversation_id": hitl_request.conversation_id,
+                }.items()
+            )
+        ):
+            raise HTTPException(status_code=400, detail=_("Native permission scope changed"))
     _validate_hitl_response_shape(
         hitl_type=stored_hitl_type,
         response_data=request.response_data,
+        request_data=request_data,
     )
 
     is_valid, _validation_error = validate_hitl_response(
         hitl_type=HITLType(stored_hitl_type),
-        request_data=build_hitl_request_data_from_record(hitl_request),
+        request_data=request_data,
         response_data=request.response_data,
         conversation_id=hitl_request.conversation_id,
         tenant_id=hitl_request.tenant_id,
@@ -501,6 +549,7 @@ async def get_pending_hitl_requests(
                 options=r.options,
                 context=r.context,
                 metadata=r.metadata,
+                **_native_pending_fields(r.metadata or {}),
                 status=r.status.value,
                 authority_revision=hitl_authority_revision(r.status),
                 created_at=r.created_at.isoformat() if r.created_at else "",
@@ -521,6 +570,17 @@ async def get_pending_hitl_requests(
         raise HTTPException(
             status_code=500, detail=_("Failed to get pending HITL requests")
         ) from exc
+
+
+def _native_pending_fields(metadata: dict[str, Any]) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    for name in ("decision", "native_binding"):
+        if isinstance(metadata.get(name), dict):
+            fields[name] = metadata[name]
+    for name in ("actions", "scopes"):
+        if isinstance(metadata.get(name), list):
+            fields[name] = metadata[name]
+    return fields
 
 
 @router.get("/projects/{project_id}/pending", response_model=PendingHITLResponse)
@@ -566,6 +626,7 @@ async def get_project_pending_hitl_requests(
                 options=r.options,
                 context=r.context,
                 metadata=r.metadata,
+                **_native_pending_fields(r.metadata or {}),
                 status=r.status.value,
                 authority_revision=hitl_authority_revision(r.status),
                 created_at=r.created_at.isoformat() if r.created_at else "",

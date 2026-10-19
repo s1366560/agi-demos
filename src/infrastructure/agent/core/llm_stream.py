@@ -21,14 +21,15 @@ import logging
 import os
 import time
 import uuid
-from collections.abc import AsyncIterator, Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+from contextlib import aclosing, contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
+    from src.infrastructure.plugins.v2.model_request_log import ModelRequestRecorderV2
 
 
 # Import sampling utilities from llm package
@@ -426,7 +427,12 @@ class LLMStream:
                 # Execute tool...
     """
 
-    def __init__(self, config: StreamConfig, llm_client: LLMClient | None = None) -> None:
+    def __init__(
+        self,
+        config: StreamConfig,
+        llm_client: LLMClient | None = None,
+        request_recorder: ModelRequestRecorderV2 | None = None,
+    ) -> None:
         """
         Initialize LLM stream.
 
@@ -438,6 +444,7 @@ class LLMStream:
         """
         self.config = config
         self._llm_client = llm_client
+        self.request_recorder = request_recorder
 
         # Accumulated state during streaming
         self._text_buffer: str = ""
@@ -500,16 +507,31 @@ class LLMStream:
 
         start_time = time.time()
 
+        if any(
+            isinstance(message.get("content"), list)
+            and any(
+                isinstance(part, dict) and part.get("type") == "image_url"
+                for part in message["content"]
+            )
+            for message in messages
+        ):
+            langfuse_context = {
+                **(langfuse_context or {}),
+                "extra": {
+                    **(langfuse_context or {}).get("extra", {}),
+                    "mask_input": True,
+                },
+            }
+
         try:
             # Use injected client if available (preferred path with full resilience)
-            if self._llm_client:
-                async for event in self._generate_with_client(
-                    messages, request_id, langfuse_context
-                ):
-                    yield event
-            else:
-                # Fallback: direct litellm calls with basic rate limiting
-                async for event in self._generate_direct(messages, request_id, langfuse_context):
+            source = (
+                self._generate_with_client(messages, request_id, langfuse_context)
+                if self._llm_client
+                else self._generate_direct(messages, request_id, langfuse_context)
+            )
+            async with aclosing(source):
+                async for event in source:
                     yield event
 
             elapsed = time.time() - start_time
@@ -524,7 +546,7 @@ class LLMStream:
         messages: list[dict[str, Any]],
         request_id: str,
         langfuse_context: dict[str, Any] | None = None,
-    ) -> AsyncIterator[StreamEvent]:
+    ) -> AsyncGenerator[StreamEvent, None]:
         """
         Generate using injected LiteLLMClient (has circuit breaker + rate limiter).
 
@@ -578,18 +600,22 @@ class LLMStream:
         if self.config.provider_options.get("__use_max_completion_tokens", False):
             extra_kwargs["max_completion_tokens"] = effective_max_tokens
 
+        if self.request_recorder is not None:
+            extra_kwargs["_request_recorder_v2"] = self.request_recorder
+
         try:
             # Use client's generate_stream (has circuit breaker + rate limiter)
             with _detached_otel_context():
-                async for chunk in self._llm_client.generate_stream(  # type: ignore[union-attr]
+                source = self._llm_client.generate_stream(  # type: ignore[union-attr]
                     messages=messages,  # type: ignore[arg-type]
                     max_tokens=effective_max_tokens,
                     langfuse_context=client_langfuse_context,
                     **extra_kwargs,
-                ):
-                    # Process raw LiteLLM chunk
-                    async for event in self._process_chunk(chunk):
-                        yield event
+                )
+                async with aclosing(source):
+                    async for chunk in source:
+                        async for event in self._process_chunk(chunk):
+                            yield event
 
             # Finalize any pending state
             async for event in self._finalize():
@@ -606,7 +632,7 @@ class LLMStream:
         messages: list[dict[str, Any]],
         request_id: str,
         langfuse_context: dict[str, Any] | None = None,
-    ) -> AsyncIterator[StreamEvent]:
+    ) -> AsyncGenerator[StreamEvent, None]:
         """
         Generate using direct litellm calls with basic rate limiting.
 
@@ -666,13 +692,19 @@ class LLMStream:
             async with await rate_limiter.acquire(provider_type):
                 # Call LiteLLM streaming (now that we have a slot)
                 with _detached_otel_context():
-                    response = await litellm.acompletion(**kwargs)
-                    stream_response = cast("litellm.CustomStreamWrapper", response)
+                    from src.infrastructure.plugins.v2.model_request_log import (
+                        recorded_completion_stream_v2,
+                    )
 
-                    async for chunk in stream_response:
-                        # Process each chunk and yield events
-                        async for event in self._process_chunk(chunk):
-                            yield event
+                    source = recorded_completion_stream_v2(
+                        litellm.acompletion,
+                        kwargs,
+                        self.request_recorder,
+                    )
+                    async with aclosing(source):
+                        async for chunk in source:
+                            async for event in self._process_chunk(chunk):
+                                yield event
 
                 # Finalize any pending state
                 async for event in self._finalize():

@@ -1,5 +1,5 @@
 extends: electron-builder.yml
-afterPack: scripts/sign-local-macos.mjs
+afterPack: scripts/sign-local-cua-macos.mjs
 forceCodeSigning: false
 publish: null
 mac:

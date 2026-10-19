@@ -58,7 +58,13 @@ pub(crate) struct RustServerGenerationAdmissionV2 {
     inner: Arc<AdmissionInnerV2>,
 }
 
+impl Default for RustServerGenerationAdmissionV2 {
+    fn default() -> Self { Self::new(Arc::new(GenerationManagerV2::new())) }
+}
+
 impl RustServerGenerationAdmissionV2 {
+    pub(crate) fn shared_manager(&self) -> Arc<GenerationManagerV2> { self.inner.manager.clone() }
+
     #[must_use]
     pub(crate) fn new(manager: Arc<GenerationManagerV2>) -> Self {
         Self {
@@ -117,6 +123,11 @@ impl RustServerGenerationAdmissionV2 {
         }
     }
 
+    pub(crate) fn admit_operation(&self) -> Result<Arc<RustServerOperationGenerationV2>, String> {
+        let (descriptor, guard) = self.admit().map_err(|error| error.message.to_owned())?;
+        Ok(Arc::new(RustServerOperationGenerationV2 { descriptor, guard }))
+    }
+
     fn admit(
         &self,
     ) -> Result<
@@ -158,6 +169,7 @@ impl RustServerGenerationAdmissionV2 {
     }
 
     fn spawn_release_owner(&self, lease: GenerationLeaseV2) -> GenerationReleaseGuardV2 {
+        let runtime_generation = lease.generation().expect("validated generation lease").clone();
         let (release_tx, release_rx) = oneshot::channel();
         let inner = Arc::clone(&self.inner);
         tokio::spawn(async move {
@@ -181,6 +193,7 @@ impl RustServerGenerationAdmissionV2 {
             }
         });
         GenerationReleaseGuardV2 {
+            runtime_generation,
             release_tx: Some(release_tx),
         }
     }
@@ -264,12 +277,36 @@ async fn require_generation_v2(
         Err(error) => return error.into_response(),
     };
     request.extensions_mut().insert(descriptor);
+    request.extensions_mut().insert(admission);
     let response = next.run(request).await;
     let (parts, body) = response.into_parts();
     Response::from_parts(parts, Body::new(GenerationLeaseBodyV2::new(body, guard)))
 }
 
+pub(crate) struct RustServerOperationGenerationV2 {
+    pub(crate) descriptor: RustServerRequestGenerationV2,
+    guard: GenerationReleaseGuardV2,
+}
+
+impl RustServerOperationGenerationV2 {
+    pub(crate) fn request_contributors(&self, scope: &ScopeV2) -> serde_json::Value {
+        agistack_plugin_host::protocol_v2::tool_policy::request_contributors_v2(
+            &self.guard.runtime_generation.snapshot,
+            &agistack_plugin_host::DataPlaneTargetV2::RustServer,
+            scope,
+        )
+    }
+    pub(crate) fn tool_policy(&self, scope: &ScopeV2, operation_id: &str) -> Result<Arc<dyn agistack_core::agent::tool_policy::ToolExecutionPolicy>, String> {
+        use agistack_plugin_host::protocol_v2::{tool_policy::{TrustedToolPolicyV2, TOOL_EXECUTION_POLICY_SERVICE_V2}, tool_policy_adapter::GenerationToolExecutionPolicyV2};
+        let service = self.guard.runtime_generation.resolve_versioned::<TrustedToolPolicyV2>(
+            TOOL_EXECUTION_POLICY_SERVICE_V2, "1.0.0", scope, None,
+        ).map_err(|error| error.to_string())?;
+        Ok(Arc::new(GenerationToolExecutionPolicyV2::new(service, scope.clone(), operation_id.into(), self.descriptor.digest.clone())))
+    }
+}
+
 struct GenerationReleaseGuardV2 {
+    runtime_generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
     release_tx: Option<oneshot::Sender<()>>,
 }
 

@@ -270,9 +270,14 @@ class PermissionRequestData:
     allow_remember: bool = True
     default_action: PermissionAction | None = None
     context: dict[str, Any] = field(default_factory=dict)
+    decision: dict[str, Any] | None = None
+    authority_revision: int | None = None
+    native_binding: dict[str, Any] | None = None
+    scopes: list[str] | None = None
+    actions: list[dict[str, str]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "tool_name": self.tool_name,
             "action": self.action,
             "risk_level": self.risk_level.value,
@@ -282,6 +287,11 @@ class PermissionRequestData:
             "default_action": self.default_action.value if self.default_action else None,
             "context": self.context,
         }
+        for key in ("decision", "authority_revision", "native_binding", "scopes", "actions"):
+            value = getattr(self, key)
+            if value is not None:
+                result[key] = value
+        return result
 
 
 @dataclass
@@ -650,11 +660,28 @@ def create_permission_request(
             allow_remember=kwargs.get("allow_remember", True),
             default_action=kwargs.get("default_action"),
             context=kwargs.get("context", {}),
+            decision=kwargs.get("decision"),
+            authority_revision=kwargs.get("authority_revision"),
+            native_binding=kwargs.get("native_binding"),
+            scopes=kwargs.get("scopes"),
+            actions=kwargs.get("actions"),
         ),
         **{
             k: v
             for k, v in kwargs.items()
-            if k not in ("context", "details", "description", "allow_remember", "default_action")
+            if k
+            not in (
+                "context",
+                "details",
+                "description",
+                "allow_remember",
+                "default_action",
+                "decision",
+                "authority_revision",
+                "native_binding",
+                "scopes",
+                "actions",
+            )
         },
     )
 

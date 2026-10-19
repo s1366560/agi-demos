@@ -177,6 +177,7 @@ pub(crate) fn worker_definitions_v2(state: Option<&AppState>) -> Vec<PluginDefin
                 Arc::clone(&state.engine),
                 state.registry.clone(),
                 state.cron_runtime_provenance,
+                crate::agent_boundary_v2::AgentBoundaryFactoryV2::from_app(state),
             )
         })
     });
@@ -192,13 +193,14 @@ pub(crate) fn worker_definitions_v2(state: Option<&AppState>) -> Vec<PluginDefin
                 .and_then(|worker| worker.clone().spawn_if_enabled())
         }),
         Arc::new(move || match &cron_infrastructure {
-            Some((pool, engine, registry, provenance)) => {
+            Some((pool, engine, registry, provenance, boundary)) => {
                 let scheduler = build_pg_cron_scheduler(
                     pool.clone(),
                     Arc::clone(engine),
                     registry.clone(),
                     CronSchedulerConfig::from_env(),
                     *provenance,
+                    Some(boundary.clone()),
                 );
                 CronWorkerResourceV2 {
                     readiness: scheduler.readiness(),

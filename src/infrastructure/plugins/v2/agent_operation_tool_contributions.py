@@ -357,7 +357,7 @@ def _operation_tool_set_v2(
     lease: _OperationToolLeaseV2,
 ) -> ToolSetV2:
     normalized_definitions = tuple(definitions)
-    tools: dict[str, _OperationToolAdapterV2] = {}
+    tools: dict[str, Any] = {}
     leased_definitions: list[ToolDefinition] = []
     for definition in normalized_definitions:
         normalized_name = definition.name.strip()
@@ -372,6 +372,25 @@ def _operation_tool_set_v2(
                 f"operation tool definition {normalized_name} is duplicated",
             )
         adapter = _OperationToolAdapterV2(definition=definition, lease=lease)
+        from dataclasses import replace
+
+        from src.infrastructure.agent.core.tool_converter import convert_tools
+        from src.infrastructure.agent.tools.define import ToolInfo
+
+        if isinstance(definition._tool_instance, ToolInfo):
+            original = definition._tool_instance
+
+            def bind_execute(info: ToolInfo) -> Callable[..., Awaitable[Any]]:
+                async def execute(*args: object, **kwargs: object) -> object:
+                    lease.ensure_active()
+                    return await info.execute(*args, **kwargs)
+
+                return execute
+
+            leased_info = replace(original, execute=bind_execute(original))
+            tools[normalized_name] = leased_info
+            leased_definitions.extend(convert_tools({normalized_name: leased_info}))
+            continue
         tools[normalized_name] = adapter
         leased_definitions.append(
             ToolDefinition(

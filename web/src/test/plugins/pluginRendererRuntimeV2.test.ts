@@ -18,15 +18,23 @@ import generatedBootstrapProfile from '../../../../shared/profiles/memstack-defa
 
 // This suite exercises shared renderer host/contribution definitions, not Desktop application
 // services. Keep the real generated profile entries for those definitions and re-sign the fixture.
-const sharedDesktopModules = new Set(createDesktopRendererDefinitionsV2().map(definition => definition.moduleRef));
-const applicationDesktopModules = new Set(PLUGIN_MODULE_CATALOG_V2.modules
-  .filter(module => module.targets.includes('desktop-renderer') && !sharedDesktopModules.has(module.module_ref))
-  .map(module => module.module_ref));
+const sharedDesktopModules = new Set(
+  createDesktopRendererDefinitionsV2().map((definition) => definition.moduleRef)
+);
+const applicationDesktopModules = new Set(
+  PLUGIN_MODULE_CATALOG_V2.modules
+    .filter(
+      (module) =>
+        module.targets.includes('desktop-renderer') && !sharedDesktopModules.has(module.module_ref)
+    )
+    .map((module) => module.module_ref)
+);
 const bootstrapProfile = structuredClone(generatedBootstrapProfile);
-bootstrapProfile.entries = bootstrapProfile.entries.filter(entry => !applicationDesktopModules.has(entry.module_ref));
+bootstrapProfile.entries = bootstrapProfile.entries.filter(
+  (entry) => !applicationDesktopModules.has(entry.module_ref)
+);
 const { digest: _fixtureDigest, ...fixtureUnsigned } = bootstrapProfile;
 bootstrapProfile.digest = await digestV2(fixtureUnsigned);
-
 
 function distribution(snapshot: typeof bootstrapProfile) {
   return {
@@ -322,821 +330,116 @@ describe('RendererPluginRuntimeV2', () => {
         kind: 'root',
       });
 
-    expect(registry?.list().map(({ id, kind }) => [id, kind])).toEqual([
-      ['web.authenticated-shell-surface', 'ui-slot'],
-      ['web.default-business-routes', 'route'],
-      ['web.default-navigation', 'navigation'],
-      ['web.default-ui-slots', 'ui-slot'],
-    ]);
+    const kinds = new Set(registry?.list().map(({ kind }) => kind));
+    expect(kinds).toEqual(new Set(['route', 'navigation', 'ui-slot', 'command', 'settings-page']));
+    expect(registry?.list().some(({ id }) => id === 'web.feature.project-graph.0')).toBe(true);
+    expect(registry?.list().some(({ id }) => id === 'web.authenticated-shell-surface')).toBe(true);
     await runtime.close();
   });
 
   it('lets the desktop target catalog nack an unknown artifact and retain last-good', async () => {
-    const knownArtifactRefs = new Set([
-      'desktop.ui-slots.authenticated-shell-surface.v2',
-      'desktop.ui-slots.settings-window-surface.v1',
-      'desktop.ui-slots.keyboard-shortcuts-surface.v1',
-      'desktop.ui-slots.status-bar-surface.v1',
-      'desktop.ui-slots.command-palette-surface.v1',
-      'desktop.ui-slots.session-canvas-surface.v1',
-      'desktop.ui-slots.workspace-create-surface.v1',
-      'desktop.ui-slots.workspace-settings-surface.v1',
-      'desktop.ui-slots.titlebar-surface.v1',
-      'desktop.ui-slots.workbench-tab-bar-surface.v1',
-      'desktop.ui-slots.workbench-surface.v2',
-      'desktop.ui-slots.session-workspace-surface.v1',
-      'desktop.ui-slots.workspace-collaboration-surface.v1',
-      'desktop.ui-slots.new-thread-composer-surface.v1',
-      'desktop.ui-slots.my-work-queue-surface.v1',
-      'desktop.ui-slots.activity-inbox-surface.v1',
-      'desktop.ui-slots.conversation-surface.v1',
-      'desktop.ui-slots.conversation-renderer.v1',
-      'desktop.ui-slots.tool-result-renderer.v1',
-      'desktop.ui-slots.sidebar-surface.v1',
-      'desktop.ui-slots.right-sidebar-surface.v1',
-      'desktop.ui-slots.new-task-flow-surface.v1',
-      'desktop.routes.tenant-creation.v1',
-      'desktop.routes.auxiliary.v1',
-      'desktop.routes.project-knowledge.v1',
-      'desktop.routes.project-agent.v1',
-      'desktop.routes.project-administration.v1',
-      'desktop.routes.runtime-infrastructure.v1',
-      'desktop.routes.project-workspace.v1',
-      'desktop.routes.project-discovery.v1',
-      'desktop.routes.tenant-core.v1',
-      'desktop.routes.tenant-agent-building.v1',
-      'desktop.routes.tenant-extensions-integrations.v1',
-      'desktop.routes.tenant-governance.v1',
-      'desktop.navigation.auxiliary.v1',
-      'desktop.navigation.project-knowledge.v1',
-      'desktop.navigation.project-agent.v1',
-      'desktop.navigation.project-administration.v1',
-      'desktop.navigation.runtime-infrastructure.v1',
-      'desktop.navigation.project-workspace.v1',
-      'desktop.navigation.project-discovery.v1',
-      'desktop.navigation.tenant-core.v1',
-      'desktop.navigation.tenant-agent-building.v1',
-      'desktop.navigation.tenant-extensions-integrations.v1',
-      'desktop.navigation.tenant-governance.v1',
-      'desktop.ui-slots.default.v1',
-    ]);
+    const knownArtifactRefs = new Set(
+      bootstrapProfile.entries.flatMap((entry) => {
+        const config = entry.config as Record<string, unknown>;
+        const contributions = Array.isArray(config.contributions)
+          ? config.contributions
+          : [{ payload: config.payload }];
+        return contributions.flatMap((item) =>
+          Array.isArray(item.payload?.artifact_refs) ? item.payload.artifact_refs : []
+        );
+      })
+    );
     const runtime = new RendererPluginRuntimeV2(
       'desktop-renderer',
       createDesktopRendererDefinitionsV2((candidate) => {
         for (const contribution of candidate) {
           const refs = contribution.payload.artifact_refs;
-          if (!Array.isArray(refs) || refs.some((ref) => !knownArtifactRefs.has(String(ref)))) {
+          if (!Array.isArray(refs) || refs.some((ref) => !knownArtifactRefs.has(ref)))
             throw new Error(`desktop_renderer_artifact_unknown:${contribution.id}`);
-          }
         }
       })
     );
     await runtime.bootstrap(bootstrapProfile);
     const lastGood = runtime.getSnapshot();
-    const registry = lastGood?.resolve<RendererContributionRegistryV2>(
-      DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
-      { kind: 'root' }
-    );
-    expect(registry?.list().map(({ id, kind }) => [id, kind])).toEqual([
-      ['desktop.authenticated-shell-surface', 'ui-slot'],
-      ['desktop.settings-window-surface', 'ui-slot'],
-      ['desktop.keyboard-shortcuts-surface', 'ui-slot'],
-      ['desktop.status-bar-surface', 'ui-slot'],
-      ['desktop.command-palette-surface', 'ui-slot'],
-      ['desktop.session-canvas-surface', 'ui-slot'],
-      ['desktop.workspace-create-surface', 'ui-slot'],
-      ['desktop.workspace-settings-surface', 'ui-slot'],
-      ['desktop.titlebar-surface', 'ui-slot'],
-      ['desktop.workbench-tab-bar-surface', 'ui-slot'],
-      ['desktop.workbench-surface', 'ui-slot'],
-      ['desktop.session-workspace-surface', 'ui-slot'],
-      ['desktop.workspace-collaboration-surface', 'ui-slot'],
-      ['desktop.new-thread-composer-surface', 'ui-slot'],
-      ['desktop.my-work-queue-surface', 'ui-slot'],
-      ['desktop.activity-inbox-surface', 'ui-slot'],
-      ['desktop.conversation-surface', 'ui-slot'],
-      ['desktop.conversation-renderer', 'ui-slot'],
-      ['desktop.tool-result-renderer', 'ui-slot'],
-      ['desktop.sidebar-surface', 'ui-slot'],
-      ['desktop.tenant-creation-routes', 'route'],
-      ['desktop.right-sidebar-surface', 'ui-slot'],
-      ['desktop.new-task-flow-surface', 'ui-slot'],
-      ['desktop.auxiliary-routes', 'route'],
-      ['desktop.project-knowledge-routes', 'route'],
-      ['desktop.project-agent-routes', 'route'],
-      ['desktop.project-administration-routes', 'route'],
-      ['desktop.runtime-infrastructure-routes', 'route'],
-      ['desktop.project-workspace-routes', 'route'],
-      ['desktop.project-discovery-routes', 'route'],
-      ['desktop.tenant-core-routes', 'route'],
-      ['desktop.tenant-agent-building-routes', 'route'],
-      ['desktop.tenant-extensions-integrations-routes', 'route'],
-      ['desktop.tenant-governance-routes', 'route'],
-      ['desktop.auxiliary-navigation', 'navigation'],
-      ['desktop.project-knowledge-navigation', 'navigation'],
-      ['desktop.project-agent-navigation', 'navigation'],
-      ['desktop.project-administration-navigation', 'navigation'],
-      ['desktop.runtime-infrastructure-navigation', 'navigation'],
-      ['desktop.project-workspace-navigation', 'navigation'],
-      ['desktop.project-discovery-navigation', 'navigation'],
-      ['desktop.tenant-core-navigation', 'navigation'],
-      ['desktop.tenant-agent-building-navigation', 'navigation'],
-      ['desktop.tenant-extensions-integrations-navigation', 'navigation'],
-      ['desktop.tenant-governance-navigation', 'navigation'],
-      ['desktop.default-ui-slots', 'ui-slot'],
-    ]);
-
     const invalid = structuredClone(bootstrapProfile);
     const routeEntry = invalid.entries.find(
-      ({ entry_id }) => entry_id === 'builtin-desktop-tenant-creation-routes'
+      ({ entry_id }) => entry_id === 'builtin-desktop-feature-tenant-creation'
     );
     if (!routeEntry) throw new Error('desktop route contribution fixture is missing');
-    routeEntry.config.payload = {
-      artifact_refs: ['desktop.routes.unknown.v1'],
-      schema_version: 1,
-    };
+    const config = routeEntry.config as Record<string, unknown>;
+    const contributions = config.contributions as {
+      payload: { artifact_refs: string[]; schema_version: number };
+    }[];
+    contributions[0].payload = { artifact_refs: ['desktop.routes.unknown.v1'], schema_version: 1 };
     invalid.generation += 1;
     const { digest: _digest, ...unsigned } = invalid;
     invalid.digest = await digestV2(unsigned);
-    const nextDistribution = distribution(invalid);
+    const next = distribution(invalid);
     const receipt = await runtime.apply({
-      ...nextDistribution,
-      envelope: {
-        ...nextDistribution.envelope,
-        nonce: 'desktop-renderer-unknown-artifact-v2',
-        version: 2,
-      },
+      ...next,
+      envelope: { ...next.envelope, nonce: 'desktop-renderer-unknown-artifact-v2', version: 2 },
     });
-
-    expect(receipt).toMatchObject({
-      status: 'nack',
-      error_code: 'generation_apply_failed',
-    });
+    expect(receipt).toMatchObject({ status: 'nack', error_code: 'generation_apply_failed' });
     expect(receipt.error_message).toContain('desktop_renderer_artifact_unknown');
     expect(runtime.getSnapshot()).toBe(lastGood);
     await runtime.close();
   });
 
-  it('removes auxiliary desktop routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const auxiliaryEntryIds = new Set([
-      'builtin-desktop-auxiliary-routes',
-      'builtin-desktop-auxiliary-navigation',
-    ]);
-    const auxiliaryEntries = candidate.entries.filter(({ entry_id }) =>
-      auxiliaryEntryIds.has(entry_id)
-    );
-    if (auxiliaryEntries.length !== auxiliaryEntryIds.size) {
-      throw new Error('desktop auxiliary contribution fixtures are missing');
-    }
-    for (const entry of auxiliaryEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-
-    expect(receipt.status).toBe('ack');
-    expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.authenticated-shell-surface',
-      'desktop.settings-window-surface',
-      'desktop.keyboard-shortcuts-surface',
-      'desktop.status-bar-surface',
-      'desktop.command-palette-surface',
-      'desktop.session-canvas-surface',
-      'desktop.workspace-create-surface',
-      'desktop.workspace-settings-surface',
-      'desktop.titlebar-surface',
-      'desktop.workbench-tab-bar-surface',
-      'desktop.workbench-surface',
-      'desktop.session-workspace-surface',
-      'desktop.workspace-collaboration-surface',
-      'desktop.new-thread-composer-surface',
-      'desktop.my-work-queue-surface',
-      'desktop.activity-inbox-surface',
-      'desktop.conversation-surface',
-      'desktop.conversation-renderer',
-      'desktop.tool-result-renderer',
-      'desktop.sidebar-surface',
-      'desktop.tenant-creation-routes',
-      'desktop.right-sidebar-surface',
-      'desktop.new-task-flow-surface',
-      'desktop.project-knowledge-routes',
-      'desktop.project-agent-routes',
-      'desktop.project-administration-routes',
-      'desktop.runtime-infrastructure-routes',
-      'desktop.project-workspace-routes',
-      'desktop.project-discovery-routes',
-      'desktop.tenant-core-routes',
-      'desktop.tenant-agent-building-routes',
-      'desktop.tenant-extensions-integrations-routes',
-      'desktop.tenant-governance-routes',
-      'desktop.project-knowledge-navigation',
-      'desktop.project-agent-navigation',
-      'desktop.project-administration-navigation',
-      'desktop.runtime-infrastructure-navigation',
-      'desktop.project-workspace-navigation',
-      'desktop.project-discovery-navigation',
-      'desktop.tenant-core-navigation',
-      'desktop.tenant-agent-building-navigation',
-      'desktop.tenant-extensions-integrations-navigation',
-      'desktop.tenant-governance-navigation',
-      'desktop.default-ui-slots',
-    ]);
-    await runtime.close();
-  });
-
-  it('removes project knowledge routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const projectKnowledgeEntryIds = new Set([
-      'builtin-desktop-project-knowledge-routes',
-      'builtin-desktop-project-knowledge-navigation',
-    ]);
-    const projectKnowledgeEntries = candidate.entries.filter(({ entry_id }) =>
-      projectKnowledgeEntryIds.has(entry_id)
-    );
-    if (projectKnowledgeEntries.length !== projectKnowledgeEntryIds.size) {
-      throw new Error('desktop project knowledge contribution fixtures are missing');
-    }
-    for (const entry of projectKnowledgeEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-
-    expect(receipt.status).toBe('ack');
-    expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.authenticated-shell-surface',
-      'desktop.settings-window-surface',
-      'desktop.keyboard-shortcuts-surface',
-      'desktop.status-bar-surface',
-      'desktop.command-palette-surface',
-      'desktop.session-canvas-surface',
-      'desktop.workspace-create-surface',
-      'desktop.workspace-settings-surface',
-      'desktop.titlebar-surface',
-      'desktop.workbench-tab-bar-surface',
-      'desktop.workbench-surface',
-      'desktop.session-workspace-surface',
-      'desktop.workspace-collaboration-surface',
-      'desktop.new-thread-composer-surface',
-      'desktop.my-work-queue-surface',
-      'desktop.activity-inbox-surface',
-      'desktop.conversation-surface',
-      'desktop.conversation-renderer',
-      'desktop.tool-result-renderer',
-      'desktop.sidebar-surface',
-      'desktop.tenant-creation-routes',
-      'desktop.right-sidebar-surface',
-      'desktop.new-task-flow-surface',
-      'desktop.auxiliary-routes',
-      'desktop.project-agent-routes',
-      'desktop.project-administration-routes',
-      'desktop.runtime-infrastructure-routes',
-      'desktop.project-workspace-routes',
-      'desktop.project-discovery-routes',
-      'desktop.tenant-core-routes',
-      'desktop.tenant-agent-building-routes',
-      'desktop.tenant-extensions-integrations-routes',
-      'desktop.tenant-governance-routes',
-      'desktop.auxiliary-navigation',
-      'desktop.project-agent-navigation',
-      'desktop.project-administration-navigation',
-      'desktop.runtime-infrastructure-navigation',
-      'desktop.project-workspace-navigation',
-      'desktop.project-discovery-navigation',
-      'desktop.tenant-core-navigation',
-      'desktop.tenant-agent-building-navigation',
-      'desktop.tenant-extensions-integrations-navigation',
-      'desktop.tenant-governance-navigation',
-      'desktop.default-ui-slots',
-    ]);
-    await runtime.close();
-  });
-
-  it('removes project agent routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const projectAgentEntryIds = new Set([
-      'builtin-desktop-project-agent-routes',
-      'builtin-desktop-project-agent-navigation',
-    ]);
-    const projectAgentEntries = candidate.entries.filter(({ entry_id }) =>
-      projectAgentEntryIds.has(entry_id)
-    );
-    if (projectAgentEntries.length !== projectAgentEntryIds.size) {
-      throw new Error('desktop project agent contribution fixtures are missing');
-    }
-    for (const entry of projectAgentEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-
-    expect(receipt.status).toBe('ack');
-    expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.authenticated-shell-surface',
-      'desktop.settings-window-surface',
-      'desktop.keyboard-shortcuts-surface',
-      'desktop.status-bar-surface',
-      'desktop.command-palette-surface',
-      'desktop.session-canvas-surface',
-      'desktop.workspace-create-surface',
-      'desktop.workspace-settings-surface',
-      'desktop.titlebar-surface',
-      'desktop.workbench-tab-bar-surface',
-      'desktop.workbench-surface',
-      'desktop.session-workspace-surface',
-      'desktop.workspace-collaboration-surface',
-      'desktop.new-thread-composer-surface',
-      'desktop.my-work-queue-surface',
-      'desktop.activity-inbox-surface',
-      'desktop.conversation-surface',
-      'desktop.conversation-renderer',
-      'desktop.tool-result-renderer',
-      'desktop.sidebar-surface',
-      'desktop.tenant-creation-routes',
-      'desktop.right-sidebar-surface',
-      'desktop.new-task-flow-surface',
-      'desktop.auxiliary-routes',
-      'desktop.project-knowledge-routes',
-      'desktop.project-administration-routes',
-      'desktop.runtime-infrastructure-routes',
-      'desktop.project-workspace-routes',
-      'desktop.project-discovery-routes',
-      'desktop.tenant-core-routes',
-      'desktop.tenant-agent-building-routes',
-      'desktop.tenant-extensions-integrations-routes',
-      'desktop.tenant-governance-routes',
-      'desktop.auxiliary-navigation',
-      'desktop.project-knowledge-navigation',
-      'desktop.project-administration-navigation',
-      'desktop.runtime-infrastructure-navigation',
-      'desktop.project-workspace-navigation',
-      'desktop.project-discovery-navigation',
-      'desktop.tenant-core-navigation',
-      'desktop.tenant-agent-building-navigation',
-      'desktop.tenant-extensions-integrations-navigation',
-      'desktop.tenant-governance-navigation',
-      'desktop.default-ui-slots',
-    ]);
-    await runtime.close();
-  });
-
-  it('removes project administration routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const projectAdministrationEntryIds = new Set([
-      'builtin-desktop-project-administration-routes',
-      'builtin-desktop-project-administration-navigation',
-    ]);
-    const projectAdministrationEntries = candidate.entries.filter(({ entry_id }) =>
-      projectAdministrationEntryIds.has(entry_id)
-    );
-    if (projectAdministrationEntries.length !== projectAdministrationEntryIds.size) {
-      throw new Error('desktop project administration contribution fixtures are missing');
-    }
-    for (const entry of projectAdministrationEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-
-    expect(receipt.status).toBe('ack');
-    expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.authenticated-shell-surface',
-      'desktop.settings-window-surface',
-      'desktop.keyboard-shortcuts-surface',
-      'desktop.status-bar-surface',
-      'desktop.command-palette-surface',
-      'desktop.session-canvas-surface',
-      'desktop.workspace-create-surface',
-      'desktop.workspace-settings-surface',
-      'desktop.titlebar-surface',
-      'desktop.workbench-tab-bar-surface',
-      'desktop.workbench-surface',
-      'desktop.session-workspace-surface',
-      'desktop.workspace-collaboration-surface',
-      'desktop.new-thread-composer-surface',
-      'desktop.my-work-queue-surface',
-      'desktop.activity-inbox-surface',
-      'desktop.conversation-surface',
-      'desktop.conversation-renderer',
-      'desktop.tool-result-renderer',
-      'desktop.sidebar-surface',
-      'desktop.tenant-creation-routes',
-      'desktop.right-sidebar-surface',
-      'desktop.new-task-flow-surface',
-      'desktop.auxiliary-routes',
-      'desktop.project-knowledge-routes',
-      'desktop.project-agent-routes',
-      'desktop.runtime-infrastructure-routes',
-      'desktop.project-workspace-routes',
-      'desktop.project-discovery-routes',
-      'desktop.tenant-core-routes',
-      'desktop.tenant-agent-building-routes',
-      'desktop.tenant-extensions-integrations-routes',
-      'desktop.tenant-governance-routes',
-      'desktop.auxiliary-navigation',
-      'desktop.project-knowledge-navigation',
-      'desktop.project-agent-navigation',
-      'desktop.runtime-infrastructure-navigation',
-      'desktop.project-workspace-navigation',
-      'desktop.project-discovery-navigation',
-      'desktop.tenant-core-navigation',
-      'desktop.tenant-agent-building-navigation',
-      'desktop.tenant-extensions-integrations-navigation',
-      'desktop.tenant-governance-navigation',
-      'desktop.default-ui-slots',
-    ]);
-    await runtime.close();
-  });
-
-  it('removes runtime infrastructure routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const runtimeInfrastructureEntryIds = new Set([
-      'builtin-desktop-runtime-infrastructure-routes',
-      'builtin-desktop-runtime-infrastructure-navigation',
-    ]);
-    const runtimeInfrastructureEntries = candidate.entries.filter(({ entry_id }) =>
-      runtimeInfrastructureEntryIds.has(entry_id)
-    );
-    if (runtimeInfrastructureEntries.length !== runtimeInfrastructureEntryIds.size) {
-      throw new Error('desktop runtime infrastructure contribution fixtures are missing');
-    }
-    for (const entry of runtimeInfrastructureEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-
-    expect(receipt.status).toBe('ack');
-    expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.authenticated-shell-surface',
-      'desktop.settings-window-surface',
-      'desktop.keyboard-shortcuts-surface',
-      'desktop.status-bar-surface',
-      'desktop.command-palette-surface',
-      'desktop.session-canvas-surface',
-      'desktop.workspace-create-surface',
-      'desktop.workspace-settings-surface',
-      'desktop.titlebar-surface',
-      'desktop.workbench-tab-bar-surface',
-      'desktop.workbench-surface',
-      'desktop.session-workspace-surface',
-      'desktop.workspace-collaboration-surface',
-      'desktop.new-thread-composer-surface',
-      'desktop.my-work-queue-surface',
-      'desktop.activity-inbox-surface',
-      'desktop.conversation-surface',
-      'desktop.conversation-renderer',
-      'desktop.tool-result-renderer',
-      'desktop.sidebar-surface',
-      'desktop.tenant-creation-routes',
-      'desktop.right-sidebar-surface',
-      'desktop.new-task-flow-surface',
-      'desktop.auxiliary-routes',
-      'desktop.project-knowledge-routes',
-      'desktop.project-agent-routes',
-      'desktop.project-administration-routes',
-      'desktop.project-workspace-routes',
-      'desktop.project-discovery-routes',
-      'desktop.tenant-core-routes',
-      'desktop.tenant-agent-building-routes',
-      'desktop.tenant-extensions-integrations-routes',
-      'desktop.tenant-governance-routes',
-      'desktop.auxiliary-navigation',
-      'desktop.project-knowledge-navigation',
-      'desktop.project-agent-navigation',
-      'desktop.project-administration-navigation',
-      'desktop.project-workspace-navigation',
-      'desktop.project-discovery-navigation',
-      'desktop.tenant-core-navigation',
-      'desktop.tenant-agent-building-navigation',
-      'desktop.tenant-extensions-integrations-navigation',
-      'desktop.tenant-governance-navigation',
-      'desktop.default-ui-slots',
-    ]);
-    await runtime.close();
-  });
-
-  it('removes project workspace routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const projectWorkspaceEntryIds = new Set([
-      'builtin-desktop-project-workspace-routes',
-      'builtin-desktop-project-workspace-navigation',
-    ]);
-    const projectWorkspaceEntries = candidate.entries.filter(({ entry_id }) =>
-      projectWorkspaceEntryIds.has(entry_id)
-    );
-    if (projectWorkspaceEntries.length !== projectWorkspaceEntryIds.size) {
-      throw new Error('desktop project workspace contribution fixtures are missing');
-    }
-    for (const entry of projectWorkspaceEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-
-    expect(receipt.status).toBe('ack');
-    expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.authenticated-shell-surface',
-      'desktop.settings-window-surface',
-      'desktop.keyboard-shortcuts-surface',
-      'desktop.status-bar-surface',
-      'desktop.command-palette-surface',
-      'desktop.session-canvas-surface',
-      'desktop.workspace-create-surface',
-      'desktop.workspace-settings-surface',
-      'desktop.titlebar-surface',
-      'desktop.workbench-tab-bar-surface',
-      'desktop.workbench-surface',
-      'desktop.session-workspace-surface',
-      'desktop.workspace-collaboration-surface',
-      'desktop.new-thread-composer-surface',
-      'desktop.my-work-queue-surface',
-      'desktop.activity-inbox-surface',
-      'desktop.conversation-surface',
-      'desktop.conversation-renderer',
-      'desktop.tool-result-renderer',
-      'desktop.sidebar-surface',
-      'desktop.tenant-creation-routes',
-      'desktop.right-sidebar-surface',
-      'desktop.new-task-flow-surface',
-      'desktop.auxiliary-routes',
-      'desktop.project-knowledge-routes',
-      'desktop.project-agent-routes',
-      'desktop.project-administration-routes',
-      'desktop.runtime-infrastructure-routes',
-      'desktop.project-discovery-routes',
-      'desktop.tenant-core-routes',
-      'desktop.tenant-agent-building-routes',
-      'desktop.tenant-extensions-integrations-routes',
-      'desktop.tenant-governance-routes',
-      'desktop.auxiliary-navigation',
-      'desktop.project-knowledge-navigation',
-      'desktop.project-agent-navigation',
-      'desktop.project-administration-navigation',
-      'desktop.runtime-infrastructure-navigation',
-      'desktop.project-discovery-navigation',
-      'desktop.tenant-core-navigation',
-      'desktop.tenant-agent-building-navigation',
-      'desktop.tenant-extensions-integrations-navigation',
-      'desktop.tenant-governance-navigation',
-      'desktop.default-ui-slots',
-    ]);
-    await runtime.close();
-  });
-
-  it('removes project discovery routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const projectDiscoveryEntryIds = new Set([
-      'builtin-desktop-project-discovery-routes',
-      'builtin-desktop-project-discovery-navigation',
-    ]);
-    const projectDiscoveryEntries = candidate.entries.filter(({ entry_id }) =>
-      projectDiscoveryEntryIds.has(entry_id)
-    );
-    if (projectDiscoveryEntries.length !== projectDiscoveryEntryIds.size) {
-      throw new Error('desktop project discovery contribution fixtures are missing');
-    }
-    for (const entry of projectDiscoveryEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-    const contributionIds = registry?.list().map(({ id }) => id);
-
-    expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(44);
-    expect(contributionIds).not.toContain('desktop.project-discovery-routes');
-    expect(contributionIds).not.toContain('desktop.project-discovery-navigation');
-    await runtime.close();
-  });
-
-  it('removes tenant core routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const tenantCoreEntryIds = new Set([
-      'builtin-desktop-tenant-core-routes',
-      'builtin-desktop-tenant-core-navigation',
-    ]);
-    const tenantCoreEntries = candidate.entries.filter(({ entry_id }) =>
-      tenantCoreEntryIds.has(entry_id)
-    );
-    if (tenantCoreEntries.length !== tenantCoreEntryIds.size) {
-      throw new Error('desktop tenant core contribution fixtures are missing');
-    }
-    for (const entry of tenantCoreEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-    const contributionIds = registry?.list().map(({ id }) => id);
-
-    expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(44);
-    expect(contributionIds).not.toContain('desktop.tenant-core-routes');
-    expect(contributionIds).not.toContain('desktop.tenant-core-navigation');
-    await runtime.close();
-  });
-
-  it('removes tenant agent building routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const tenantAgentBuildingEntryIds = new Set([
-      'builtin-desktop-tenant-agent-building-routes',
-      'builtin-desktop-tenant-agent-building-navigation',
-    ]);
-    const tenantAgentBuildingEntries = candidate.entries.filter(({ entry_id }) =>
-      tenantAgentBuildingEntryIds.has(entry_id)
-    );
-    if (tenantAgentBuildingEntries.length !== tenantAgentBuildingEntryIds.size) {
-      throw new Error('desktop tenant agent building contribution fixtures are missing');
-    }
-    for (const entry of tenantAgentBuildingEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-    const contributionIds = registry?.list().map(({ id }) => id);
-
-    expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(44);
-    expect(contributionIds).not.toContain('desktop.tenant-agent-building-routes');
-    expect(contributionIds).not.toContain('desktop.tenant-agent-building-navigation');
-    await runtime.close();
-  });
-
-  it('removes tenant extensions and integrations through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const tenantExtensionsIntegrationsEntryIds = new Set([
-      'builtin-desktop-tenant-extensions-integrations-routes',
-      'builtin-desktop-tenant-extensions-integrations-navigation',
-    ]);
-    const tenantExtensionsIntegrationsEntries = candidate.entries.filter(({ entry_id }) =>
-      tenantExtensionsIntegrationsEntryIds.has(entry_id)
-    );
-    if (tenantExtensionsIntegrationsEntries.length !== tenantExtensionsIntegrationsEntryIds.size) {
-      throw new Error(
-        'desktop tenant extensions and integrations contribution fixtures are missing'
+  it.each([
+    'project-support',
+    'project-project-memories',
+    'project-agent-dashboard',
+    'project-project-settings',
+    'tenant-tenant-runtimes',
+    'project-project-workspaces',
+    'project-project-search',
+    'tenant-tenant-overview',
+    'tenant-tenant-agent-definitions',
+    'tenant-tenant-plugins',
+    'tenant-tenant-audit-logs',
+  ])(
+    'removes desktop feature %s with its navigation while retaining unrelated contributions',
+    async (routeId) => {
+      const runtime = new RendererPluginRuntimeV2(
+        'desktop-renderer',
+        createDesktopRendererDefinitionsV2()
       );
+      try {
+        await runtime.bootstrap(bootstrapProfile);
+        const before = runtime
+          .getSnapshot()!
+          .resolve<RendererContributionRegistryV2>(
+            DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
+            { kind: 'root' }
+          )
+          .list();
+        const candidate = structuredClone(bootstrapProfile);
+        const entry = candidate.entries.find(
+          ({ entry_id }) => entry_id === `builtin-desktop-feature-${routeId}`
+        );
+        if (!entry) throw new Error(`desktop feature fixture missing: ${routeId}`);
+        const owned = before.filter((item) => item.sourceEntryId === entry.entry_id);
+        expect(owned.some((item) => item.kind === 'route')).toBe(true);
+        expect(owned.some((item) => item.kind === 'navigation')).toBe(true);
+        entry.enabled = false;
+        candidate.generation += 1;
+        const { digest: _digest, ...unsigned } = candidate;
+        candidate.digest = await digestV2(unsigned);
+        const receipt = await runtime.apply(distribution(candidate));
+        expect(receipt.status).toBe('ack');
+        const after = runtime
+          .getSnapshot()!
+          .resolve<RendererContributionRegistryV2>(
+            DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
+            { kind: 'root' }
+          )
+          .list();
+        expect(after).toEqual(before.filter((item) => item.sourceEntryId !== entry.entry_id));
+      } finally {
+        await runtime.close();
+      }
     }
-    for (const entry of tenantExtensionsIntegrationsEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-    const contributionIds = registry?.list().map(({ id }) => id);
-
-    expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(44);
-    expect(contributionIds).not.toContain('desktop.tenant-extensions-integrations-routes');
-    expect(contributionIds).not.toContain('desktop.tenant-extensions-integrations-navigation');
-    await runtime.close();
-  });
-
-  it('removes tenant governance routes and navigation through independent profile effects', async () => {
-    const runtime = new RendererPluginRuntimeV2(
-      'desktop-renderer',
-      createDesktopRendererDefinitionsV2()
-    );
-    await runtime.bootstrap(bootstrapProfile);
-    const candidate = structuredClone(bootstrapProfile);
-    const tenantGovernanceEntryIds = new Set([
-      'builtin-desktop-tenant-governance-routes',
-      'builtin-desktop-tenant-governance-navigation',
-    ]);
-    const tenantGovernanceEntries = candidate.entries.filter(({ entry_id }) =>
-      tenantGovernanceEntryIds.has(entry_id)
-    );
-    if (tenantGovernanceEntries.length !== tenantGovernanceEntryIds.size) {
-      throw new Error('desktop tenant governance contribution fixtures are missing');
-    }
-    for (const entry of tenantGovernanceEntries) entry.enabled = false;
-    candidate.generation += 1;
-    const { digest: _digest, ...unsigned } = candidate;
-    candidate.digest = await digestV2(unsigned);
-
-    const receipt = await runtime.apply(distribution(candidate));
-    const registry = runtime
-      .getSnapshot()
-      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
-        kind: 'root',
-      });
-    const contributionIds = registry?.list().map(({ id }) => id);
-
-    expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(44);
-    expect(contributionIds).not.toContain('desktop.tenant-governance-routes');
-    expect(contributionIds).not.toContain('desktop.tenant-governance-navigation');
-    await runtime.close();
-  });
+  );
 
   it('removes a registered contribution through its idempotent disposer', () => {
     const registry = new RendererContributionRegistryV2('web');
@@ -1238,7 +541,7 @@ describe('RendererPluginRuntimeV2', () => {
     const lastGood = runtime.getSnapshot();
     const duplicate = structuredClone(bootstrapProfile);
     const source = duplicate.entries.find(
-      ({ entry_id }) => entry_id === 'builtin-web-default-navigation'
+      ({ entry_id }) => entry_id === 'builtin-web-feature-core'
     );
     if (!source) throw new Error('web navigation contribution fixture is missing');
     duplicate.entries.push({
@@ -1263,7 +566,7 @@ describe('RendererPluginRuntimeV2', () => {
       error_code: 'generation_apply_failed',
     });
     expect(receipt.error_message).toContain(
-      'renderer_contribution_conflict:navigation:web.default-navigation'
+      'renderer_contribution_conflict:route:web.feature.core.0'
     );
     expect(runtime.getSnapshot()).toBe(lastGood);
     await runtime.close();

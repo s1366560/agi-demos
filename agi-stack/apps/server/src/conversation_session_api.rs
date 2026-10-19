@@ -395,6 +395,9 @@ pub(super) struct SessionPendingHitlResponse {
     pub(super) status: &'static str,
     pub(super) created_at: DateTime<Utc>,
     pub(super) expires_at: Option<DateTime<Utc>>,
+    pub(super) authority_revision: u64,
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub(super) decision: Option<agistack_core::agent::types::DecisionContext>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

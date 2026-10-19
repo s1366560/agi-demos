@@ -300,6 +300,8 @@ export function timelineItemFromSocketEvent(
       data.is_error === true || data.isError === true ||
       payload.is_error === true || payload.isError === true ||
       structuredToolResultFailed(item.toolOutput) || Boolean(item.error);
+    if (data.control_outcome === 'user_paused' || data.control_outcome === 'user_stopped')
+      item.controlOutcome = data.control_outcome;
   } else if (type === 'error') {
     item.content = socketErrorDetail(payload) ?? 'Agent run failed.';
     item.error = item.content;

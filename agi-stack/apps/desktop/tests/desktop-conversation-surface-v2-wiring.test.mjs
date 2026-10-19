@@ -100,7 +100,7 @@ test('conversation contribution is ordered after activity and before production 
 
   const activityIndex = profile.indexOf('entry_id: builtin-desktop-activity-inbox-surface');
   const conversationIndex = profile.indexOf('entry_id: builtin-desktop-conversation-surface');
-  const routesIndex = profile.indexOf('entry_id: builtin-desktop-tenant-creation-routes');
+  const routesIndex = profile.indexOf('entry_id: builtin-desktop-feature-tenant-creation');
   assert.ok(activityIndex >= 0);
   assert.ok(conversationIndex > activityIndex);
   assert.ok(routesIndex > conversationIndex);

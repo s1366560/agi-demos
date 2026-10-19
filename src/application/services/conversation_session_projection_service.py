@@ -503,6 +503,18 @@ class ConversationSessionProjectionService:
             created_at=source.created_at,
             expires_at=source.expires_at,
             permission=source.permission,
+            decision=source.metadata.get("decision")
+            if isinstance(source.metadata.get("decision"), dict)
+            else None,
+            native_binding=source.metadata.get("native_binding")
+            if isinstance(source.metadata.get("native_binding"), dict)
+            else None,
+            actions=source.metadata.get("actions")
+            if isinstance(source.metadata.get("actions"), list)
+            else None,
+            scopes=source.metadata.get("scopes")
+            if isinstance(source.metadata.get("scopes"), list)
+            else None,
         )
 
     @staticmethod

@@ -2306,7 +2306,23 @@ export const CanvasPanel = memo<{
           <CanvasEmptyState />
         )}
         {/* I3: plugin mcp_canvas slots reuse the canvas event channel. */}
-        <PluginSlotOutlet kind="mcp_canvas" />
+        <PluginSlotOutlet
+          kind="mcp_canvas"
+          context={{
+            kind: 'canvas',
+            ...(projectId ? { projectId } : {}),
+            ...(tenantId ? { tenantId } : {}),
+            activeTabId,
+            tabs: allTabs.map((tab) => ({ id: tab.id, label: tab.title })),
+          }}
+          onAction={(action) => {
+            if (
+              action.type === 'canvas.select-tab' &&
+              useCanvasStore.getState().tabs.some((tab) => tab.id === action.tabId)
+            )
+              useCanvasStore.getState().setActiveTab(action.tabId);
+          }}
+        />
       </div>
     </div>
   );

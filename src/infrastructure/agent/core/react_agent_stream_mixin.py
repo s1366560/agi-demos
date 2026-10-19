@@ -1920,7 +1920,9 @@ class StreamMixin:
             and current_approved_run_guard_v2() is None
             and current_chat_run_guard_v2() is None
         ):
-            raise RuntimeV2Error("run_tool_authority_missing", "Agent turn requires canonical authority")
+            raise RuntimeV2Error(
+                "run_tool_authority_missing", "Agent turn requires canonical authority"
+            )
         await prepare_approved_run_guard_v2(operation, canonical_run_id)
         await prepare_chat_run_guard_v2(operation, canonical_run_id)
         operation_catalog = bind_operation_tool_set_catalog_v2(operation)
@@ -1996,6 +1998,25 @@ class StreamMixin:
                 catalog=operation_catalog,
                 source_id=OPERATION_SUBAGENT_TOOL_SOURCE_V2,
                 definitions=subagent_definitions,
+            )
+
+        from src.infrastructure.agent.core.tool_converter import convert_tools
+        from src.infrastructure.agent.tools.native_computer_use import create_native_computer_tools
+
+        native_tools = await create_native_computer_tools(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            user_id=user_id,
+        )
+        if native_tools:
+            await contribute_operation_tool_definitions_v2(
+                operation=operation,
+                catalog=operation_catalog,
+                source_id="operation-native-computer-use-tools",
+                definitions=convert_tools(native_tools),
+            )
+            selection_context = _pin_selection_context_tools_v2(
+                selection_context, ("request_permission",)
             )
 
         # Phase 6d: Resolve and finalize one immutable model-visible ToolSet.
@@ -2103,6 +2124,12 @@ class StreamMixin:
             tool_set=turn_tool_set,
         )
 
+        from src.infrastructure.agent.tools.native_computer_use import native_computer_guidance
+
+        native_guidance = native_computer_guidance(set(turn_tool_set.tools))
+        if native_guidance:
+            system_prompt += "\n\n" + native_guidance
+
         # Phase 9: Context building
         async for event in self._stream_build_context(
             system_prompt=system_prompt,
@@ -2156,6 +2183,7 @@ class StreamMixin:
             **dict(config.runtime_context),
             "selected_agent_id": selected_agent.id,
             "selected_agent_name": selected_agent.name,
+            "allowed_mcp_servers": list(selected_agent.allowed_mcp_servers),
             "allowed_skills": list(selected_agent.allowed_skills)
             if selected_agent.allowed_skills
             else [],

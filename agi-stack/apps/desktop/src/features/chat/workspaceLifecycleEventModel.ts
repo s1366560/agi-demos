@@ -1,4 +1,5 @@
 import type { RuntimeDataset, WorkspaceSummary } from '../../types';
+import { isWorkspaceDefaultSelectionEligible } from '../workspace/workspaceTreeModel';
 
 export type WorkspaceLifecycleScope = {
   tenantId: string;
@@ -88,7 +89,7 @@ export function applyWorkspaceLifecycleStreamEvent(
     dataset: nextDataset,
     activeWorkspaceDeleted,
     nextWorkspaceId: activeWorkspaceDeleted
-      ? remainingProjectWorkspaces[0]?.id ?? ''
+      ? remainingProjectWorkspaces.find(isWorkspaceDefaultSelectionEligible)?.id ?? ''
       : scope.workspaceId,
   };
 }

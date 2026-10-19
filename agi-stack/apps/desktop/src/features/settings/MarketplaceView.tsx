@@ -67,6 +67,7 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
   const generation = useRef(0);
   const working = useRef(false);
   const reading = useRef<AbortController | null>(null);
+  const writing = useRef<AbortController | null>(null);
   const [sourceErrors, setSourceErrors] = useState<
     Array<{ source_id: string; error: string }>
   >([]);
@@ -118,31 +119,36 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
     });
     return () => {
       reading.current?.abort();
+      writing.current?.abort();
       generation.current += 1;
     };
   }, [client]);
   async function perform<T>(
-    work: () => Promise<T>,
+    work: (signal: AbortSignal) => Promise<T>,
     success?: (value: T) => void,
     changed = true,
   ) {
     if (working.current) return;
     const token = generation.current;
+    const controller = new AbortController();
+    writing.current?.abort();
+    writing.current = controller;
     working.current = true;
     setBusy(true);
     setError('');
     setNotice(false);
     try {
-      const value = await work();
-      if (token !== generation.current) return;
+      const value = await work(controller.signal);
+      if (token !== generation.current || controller.signal.aborted) return;
       success?.(value);
       if (changed) await refresh();
       if (token === generation.current) setNotice(changed);
     } catch (caught) {
-      if (token === generation.current)
+      if (token === generation.current && !controller.signal.aborted)
         setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      if (token === generation.current) {
+      if (writing.current === controller) writing.current = null;
+      if (token === generation.current && !controller.signal.aborted) {
         working.current = false;
         setBusy(false);
       }
@@ -154,7 +160,7 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
   ) {
     setApproved(false);
     void perform(
-      () => client.preflight(plugin),
+      (signal) => client.preflight(plugin, signal),
       (preflight) => {
         setReview({
           preflight,
@@ -324,10 +330,11 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
                     type="button"
                     disabled={busy || !canManage}
                     onClick={() =>
-                      void perform(() =>
+                      void perform((signal) =>
                         client.action(
                           item,
                           item.status === 'enabled' ? 'disable' : 'enable',
+                          {}, undefined, signal,
                         ),
                       )
                     }
@@ -351,7 +358,7 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
                     type="button"
                     disabled={busy || !canManage}
                     onClick={() =>
-                      void perform(() => client.action(item, 'verify'))
+                      void perform((signal) => client.action(item, 'verify', {}, undefined, signal))
                     }
                   >
                     {t('verify')}
@@ -406,7 +413,7 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
                     type="button"
                     disabled={busy || !canManage}
                     onClick={() =>
-                      void perform(() => client.removeSource(item.id))
+                      void perform((signal) => client.removeSource(item.id, signal))
                     }
                   >
                     {t('remove')}
@@ -419,7 +426,7 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
             onSubmit={(event) => {
               event.preventDefault();
               void perform(
-                () => client.addSource(source),
+                (signal) => client.addSource(source, signal),
                 () =>
                   setSource({
                     name: '',
@@ -580,7 +587,7 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
               }
               onClick={() =>
                 void perform(
-                  () =>
+                  (signal) =>
                     review.installation
                       ? client.action(
                           review.installation,
@@ -590,8 +597,9 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
                             approved_permissions: review.preflight.permissions,
                           },
                           review.key,
+                          signal,
                         )
-                      : client.install(review.preflight, review.key),
+                      : client.install(review.preflight, review.key, signal),
                   () => {
                     setReview(null);
                     setTab('installed');
@@ -620,7 +628,7 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
           canManage={canManage}
           onSave={(credentials) =>
             perform(
-              () => client.action(configure, 'configure', { credentials }),
+              (signal) => client.action(configure, 'configure', { credentials }, undefined, signal),
               () => setConfigure(null),
             )
           }
@@ -636,7 +644,7 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
             disabled={busy || !canManage}
             onClick={() =>
               void perform(
-                () => client.action(removal, 'uninstall'),
+                (signal) => client.action(removal, 'uninstall', {}, undefined, signal),
                 () => setRemoval(null),
               )
             }

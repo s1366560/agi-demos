@@ -9,10 +9,12 @@
       "module_ref": "builtin://memstack/web/renderer-contribution-registry",
       "entrypoint": "applyWebRendererContributionRegistryV2",
       "artifact": {
-        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
+        "digest": "sha256:5fa606599a36aafaac45d7d9b6ee22818c8feb5f0a5718ecf4298fa74a6d11dd",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
-      "targets": ["web"],
+      "targets": [
+        "web"
+      ],
       "contract": {
         "services": {
           "provides": [
@@ -23,14 +25,22 @@
           ],
           "requires": []
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["target"],
+          "required": [
+            "target"
+          ],
           "properties": {
-            "target": { "const": "web", "type": "string" }
+            "target": {
+              "const": "web",
+              "type": "string"
+            }
           }
         }
       },
@@ -40,10 +50,12 @@
       "module_ref": "builtin://memstack/web/renderer-contribution",
       "entrypoint": "applyWebRendererContributionV2",
       "artifact": {
-        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
+        "digest": "sha256:5fa606599a36aafaac45d7d9b6ee22818c8feb5f0a5718ecf4298fa74a6d11dd",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
-      "targets": ["web"],
+      "targets": [
+        "web"
+      ],
       "contract": {
         "services": {
           "provides": [],
@@ -55,41 +67,75 @@
             }
           ]
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "kind", "order", "payload"],
+          "required": [
+            "id",
+            "kind",
+            "order",
+            "payload"
+          ],
           "properties": {
-            "id": { "minLength": 1, "maxLength": 128, "type": "string" },
-            "kind": { "enum": ["route", "navigation", "ui-slot"], "type": "string" },
-            "order": { "type": "integer" },
+            "id": {
+              "minLength": 1,
+              "maxLength": 128,
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "route",
+                "navigation",
+                "ui-slot",
+                "settings-page",
+                "command"
+              ],
+              "type": "string"
+            },
+            "order": {
+              "type": "integer"
+            },
             "payload": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["schema_version", "artifact_refs"],
+              "required": [
+                "schema_version",
+                "artifact_refs"
+              ],
               "properties": {
-                "schema_version": { "const": 1, "type": "integer" },
+                "schema_version": {
+                  "const": 1,
+                  "type": "integer"
+                },
                 "artifact_refs": {
                   "type": "array",
-                  "items": { "minLength": 1, "type": "string" }
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
                 }
               }
             }
           }
         }
       },
-      "contract_digest": "sha256:a1adf76747c59abd6fc897622f8a0fc318f26a52d5cfa3c5659fcf79d936fbd7"
+      "contract_digest": "sha256:8cdc508f4bd396ada8769333d730c22adb7d76d8c2829ed3be090e225604ab42"
     },
     {
       "module_ref": "builtin://memstack/desktop/renderer-contribution-registry",
       "entrypoint": "applyDesktopRendererContributionRegistryV2",
       "artifact": {
-        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
+        "digest": "sha256:5fa606599a36aafaac45d7d9b6ee22818c8feb5f0a5718ecf4298fa74a6d11dd",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
-      "targets": ["desktop-renderer"],
+      "targets": [
+        "desktop-renderer"
+      ],
       "contract": {
         "services": {
           "provides": [
@@ -100,14 +146,22 @@
           ],
           "requires": []
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["target"],
+          "required": [
+            "target"
+          ],
           "properties": {
-            "target": { "const": "desktop-renderer", "type": "string" }
+            "target": {
+              "const": "desktop-renderer",
+              "type": "string"
+            }
           }
         }
       },
@@ -117,10 +171,12 @@
       "module_ref": "builtin://memstack/desktop/renderer-contribution",
       "entrypoint": "applyDesktopRendererContributionV2",
       "artifact": {
-        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
+        "digest": "sha256:5fa606599a36aafaac45d7d9b6ee22818c8feb5f0a5718ecf4298fa74a6d11dd",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
-      "targets": ["desktop-renderer"],
+      "targets": [
+        "desktop-renderer"
+      ],
       "contract": {
         "services": {
           "provides": [],
@@ -132,34 +188,502 @@
             }
           ]
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "kind", "order", "payload"],
+          "required": [
+            "id",
+            "kind",
+            "order",
+            "payload"
+          ],
           "properties": {
-            "id": { "minLength": 1, "maxLength": 128, "type": "string" },
-            "kind": { "enum": ["route", "navigation", "ui-slot"], "type": "string" },
-            "order": { "type": "integer" },
+            "id": {
+              "minLength": 1,
+              "maxLength": 128,
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "route",
+                "navigation",
+                "ui-slot",
+                "settings-page",
+                "command"
+              ],
+              "type": "string"
+            },
+            "order": {
+              "type": "integer"
+            },
             "payload": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["schema_version", "artifact_refs"],
+              "required": [
+                "schema_version",
+                "artifact_refs"
+              ],
               "properties": {
-                "schema_version": { "const": 1, "type": "integer" },
+                "schema_version": {
+                  "const": 1,
+                  "type": "integer"
+                },
                 "artifact_refs": {
                   "type": "array",
-                  "items": { "minLength": 1, "type": "string" }
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
                 }
               }
             }
           }
         }
       },
-      "contract_digest": "sha256:ee51655e1a4136786327a1a62480ce42455c37250a23e89c4c744ec07229724e"
+      "contract_digest": "sha256:6121dd6d4838d8adb190900147921136a8ee4e48e2d14688a0df67be0ce1f451"
+    },
+    {
+      "module_ref": "builtin://memstack/web/renderer-feature",
+      "entrypoint": "applyRendererFeatureV2",
+      "artifact": {
+        "digest": "sha256:5fa606599a36aafaac45d7d9b6ee22818c8feb5f0a5718ecf4298fa74a6d11dd",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
+      },
+      "targets": [
+        "web"
+      ],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "registry",
+              "service": "service:web.renderer-contribution-registry",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "order",
+            "contributions"
+          ],
+          "x-memstack-management": {
+            "editable": true,
+            "public_config": true
+          },
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "order": {
+              "type": "integer"
+            },
+            "contributions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "order",
+                  "payload"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "route",
+                      "navigation",
+                      "ui-slot",
+                      "settings-page",
+                      "command"
+                    ],
+                    "type": "string"
+                  },
+                  "order": {
+                    "type": "integer"
+                  },
+                  "payload": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "schema_version",
+                      "artifact_refs"
+                    ],
+                    "properties": {
+                      "schema_version": {
+                        "const": 1,
+                        "type": "integer"
+                      },
+                      "artifact_refs": {
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:b6c9417ce3213545d8ab4d9c5c1932d85a047c3378b0d3cee58df6d56e0f94f9"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/renderer-feature",
+      "entrypoint": "applyRendererFeatureV2",
+      "artifact": {
+        "digest": "sha256:5fa606599a36aafaac45d7d9b6ee22818c8feb5f0a5718ecf4298fa74a6d11dd",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "registry",
+              "service": "service:desktop-renderer.renderer-contribution-registry",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "order",
+            "contributions"
+          ],
+          "x-memstack-management": {
+            "editable": true,
+            "public_config": true
+          },
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "order": {
+              "type": "integer"
+            },
+            "contributions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "order",
+                  "payload"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "route",
+                      "navigation",
+                      "ui-slot",
+                      "settings-page",
+                      "command"
+                    ],
+                    "type": "string"
+                  },
+                  "order": {
+                    "type": "integer"
+                  },
+                  "payload": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "schema_version",
+                      "artifact_refs"
+                    ],
+                    "properties": {
+                      "schema_version": {
+                        "const": 1,
+                        "type": "integer"
+                      },
+                      "artifact_refs": {
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:430c1414be547b3db0634762654367e8e5f404a1da9b3c8ae232cdc228d49ebb"
+    },
+    {
+      "module_ref": "builtin://memstack/web/renderer-management",
+      "entrypoint": "applyRendererFeatureV2",
+      "artifact": {
+        "digest": "sha256:5fa606599a36aafaac45d7d9b6ee22818c8feb5f0a5718ecf4298fa74a6d11dd",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
+      },
+      "targets": [
+        "web"
+      ],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "registry",
+              "service": "service:web.renderer-contribution-registry",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "order",
+            "contributions"
+          ],
+          "x-memstack-management": {
+            "editable": false,
+            "public_config": true
+          },
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "order": {
+              "type": "integer"
+            },
+            "contributions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "order",
+                  "payload"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "route",
+                      "navigation",
+                      "ui-slot",
+                      "settings-page",
+                      "command"
+                    ],
+                    "type": "string"
+                  },
+                  "order": {
+                    "type": "integer"
+                  },
+                  "payload": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "schema_version",
+                      "artifact_refs"
+                    ],
+                    "properties": {
+                      "schema_version": {
+                        "const": 1,
+                        "type": "integer"
+                      },
+                      "artifact_refs": {
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:f2e8ab8714cc096f63195af9e2de3bba9f9761d37d2d5dd82d7a7597e4213f58"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/renderer-management",
+      "entrypoint": "applyRendererFeatureV2",
+      "artifact": {
+        "digest": "sha256:5fa606599a36aafaac45d7d9b6ee22818c8feb5f0a5718ecf4298fa74a6d11dd",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "registry",
+              "service": "service:desktop-renderer.renderer-contribution-registry",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "order",
+            "contributions"
+          ],
+          "x-memstack-management": {
+            "editable": false,
+            "public_config": true
+          },
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "order": {
+              "type": "integer"
+            },
+            "contributions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "order",
+                  "payload"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "route",
+                      "navigation",
+                      "ui-slot",
+                      "settings-page",
+                      "command"
+                    ],
+                    "type": "string"
+                  },
+                  "order": {
+                    "type": "integer"
+                  },
+                  "payload": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "schema_version",
+                      "artifact_refs"
+                    ],
+                    "properties": {
+                      "schema_version": {
+                        "const": 1,
+                        "type": "integer"
+                      },
+                      "artifact_refs": {
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:c1f83ad2a67a4df259c943827991535473390f838800631a099d8ef436c0581e"
     }
   ],
-  "permissions": ["ui.conversation.renderer", "ui.render"],
+  "permissions": [
+    "ui.conversation.renderer",
+    "ui.render",
+    "ui.work-panel"
+  ],
   "quotas": {}
 }

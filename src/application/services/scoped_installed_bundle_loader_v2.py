@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from copy import deepcopy
+from dataclasses import replace
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -18,8 +20,14 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_governanc
     PlatformPluginGovernanceRepository,
 )
 from src.infrastructure.plugins.package_registry import OciPluginArtifactClient, normalize_registry
-from src.infrastructure.plugins.v2.bundle_archive import VerifiedBundleArchiveV2
-from src.infrastructure.plugins.v2.production_bundle import ProductionBundleSourcesV2
+from src.infrastructure.plugins.v2.bundle_archive import (
+    VerifiedBundleArchiveV2,
+    parse_bundle_archive_v2,
+)
+from src.infrastructure.plugins.v2.production_bundle import (
+    PRODUCTION_BASE_BUNDLE_SOURCE_V2,
+    ProductionBundleSourcesV2,
+)
 
 from .installed_verified_bundle_loader_v2 import InstalledVerifiedBundleLoaderV2
 
@@ -44,10 +52,13 @@ class ScopedInstalledBundleLoaderV2:
             normalize_registry(registry) for registry in allowed_registries
         )
         self._http_client_factory = http_client_factory or _create_http_client
+        self._production_archive: VerifiedBundleArchiveV2 | None = None
 
     async def __call__(
         self, reference: BundleReferenceV2, *, scope: ScopeV2 = ScopeV2(kind=ScopeKindV2.ROOT)
     ) -> VerifiedBundleArchiveV2:
+        if reference.source == PRODUCTION_BASE_BUNDLE_SOURCE_V2:
+            return self._load_production(reference)
         # A total deadline also bounds slow streams that never hit an idle timeout.
         async with asyncio.timeout(60):
             async with self._session_factory() as session:
@@ -61,6 +72,32 @@ class ScopedInstalledBundleLoaderV2:
                         scope=scope,
                     )
                     return await loader.load(reference)
+
+    def _load_production(self, reference: BundleReferenceV2) -> VerifiedBundleArchiveV2:
+        # The deployment owns these immutable bytes. Third-party bundles always
+        # follow the fresh governance/permission checks above, including revocation.
+        sources = self._production_sources
+        InstalledVerifiedBundleLoaderV2._validate_reference(reference, sources.bundle)
+        archive = self._production_archive
+        if archive is None:
+            archive = parse_bundle_archive_v2(
+                sources.bundle_archive,
+                source=reference.source,
+                approved_permissions=frozenset(
+                    permission
+                    for manifest in sources.bundle.manifests
+                    for permission in manifest.permissions
+                ),
+                require_signature=False,
+                require_provenance=True,
+            )
+            InstalledVerifiedBundleLoaderV2._validate_reference(reference, archive.manifest)
+            self._production_archive = archive
+        InstalledVerifiedBundleLoaderV2._validate_reference(reference, archive.manifest)
+        # Artifact bytes and their mapping are immutable; manifest configs are not.
+        result = replace(archive, manifest=deepcopy(archive.manifest))
+        object.__setattr__(result, "_signed_verification", archive._signed_verification)
+        return result
 
 
 def _create_http_client() -> httpx.AsyncClient:

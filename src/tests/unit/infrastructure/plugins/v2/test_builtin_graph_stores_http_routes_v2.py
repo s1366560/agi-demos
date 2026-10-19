@@ -98,7 +98,9 @@ def test_graph_stores_row_preserves_route_order_and_openapi() -> None:
 
 
 @pytest.mark.unit
-async def test_generation_dispatcher_executes_graph_stores_v2_before_static_fallback() -> None:
+async def test_generation_dispatcher_executes_graph_stores_v2_before_static_fallback(
+    isolated_feature_admission: None,
+) -> None:
     store_types = [{"type": "neo4j"}]
     graph_service = SimpleNamespace(list_store_types=MagicMock(return_value=store_types))
     backend_store = SimpleNamespace(services=SimpleNamespace(graph_service=graph_service))

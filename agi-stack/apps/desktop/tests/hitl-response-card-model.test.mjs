@@ -399,7 +399,7 @@ test('browser capability cards wire once/site consent without an all-sites scope
     /browserCredentialFillAllowResponseData\(\)/,
     /browserCapability\?\.kind === 'browser_full_cdp'/,
     /browserCapability\?\.kind === 'browser_credential_fill'/,
-    /hitlType === 'permission' && !browserOrigin && !browserCapability/,
+    /hitlType === 'permission'\s*&&\s*!browserOrigin\s*&&\s*!browserCapability\s*&&\s*!computerUseConsent/,
   ]) {
     assert.match(cardSource, contract);
   }
@@ -461,7 +461,7 @@ test('browser origin card renders four consent actions with an elevated-risk fla
     /browserOriginAllowResponseData\('site'\)/,
     /browserOriginAllowResponseData\('all'\)/,
     /permissionDenialResponseData\(\)/,
-    /hitlType === 'permission' && !browserOrigin/,
+    /hitlType === 'permission'\s*&&\s*!browserOrigin\s*&&\s*!browserCapability\s*&&\s*!computerUseConsent/,
     /chat\.browserOrigin\.allowAllWarning/,
   ]) {
     assert.match(cardSource, contract);

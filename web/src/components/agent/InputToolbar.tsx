@@ -51,6 +51,8 @@ export interface InputToolbarProps {
   activeAgentId?: string | undefined;
   /** Slash command / skill selection from the + menu */
   onSlashSelect: (item: SlashItem) => void;
+  draftRevision?: string;
+  onPluginInsertText?: (text: string, revision: string) => void;
   /** Char count for the input */
   charCount: number;
   /** Whether send button should be enabled */
@@ -81,6 +83,8 @@ export const InputToolbar = memo<InputToolbarProps>(
     onAgentSelect,
     activeAgentId,
     onSlashSelect,
+    draftRevision = 'unavailable',
+    onPluginInsertText,
     charCount,
     canSend,
     handleSend,
@@ -213,7 +217,23 @@ export const InputToolbar = memo<InputToolbarProps>(
             </LazyButton>
           )}
           {/* I3: plugin composer actions mount after the send control. */}
-          <PluginSlotOutlet kind="composer_action" />
+          <PluginSlotOutlet
+            kind="composer_action"
+            context={{
+              kind: 'composer',
+              conversationId: activeConversationId,
+              ...(projectId ? { projectId } : {}),
+              draftRevision,
+              locked: disabled || isStreaming,
+              templatesLabel: t('agent.plusMenu.templates', 'Templates'),
+            }}
+            onAction={(action) => {
+              if (disabled || isStreaming) return;
+              if (action.type === 'composer.open-templates') setTemplateLibraryVisible(true);
+              if (action.type === 'composer.insert-text' && action.draftRevision === draftRevision)
+                onPluginInsertText?.(action.text, action.draftRevision);
+            }}
+          />
         </div>
       </div>
     );

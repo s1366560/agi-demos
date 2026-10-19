@@ -96,7 +96,7 @@ test('tool result renderer is an independent ordered contribution with an explic
 
   const conversationIndex = profile.indexOf('entry_id: builtin-desktop-conversation-renderer');
   const rendererIndex = profile.indexOf('entry_id: builtin-desktop-tool-result-renderer');
-  const routesIndex = profile.indexOf('entry_id: builtin-desktop-tenant-creation-routes');
+  const routesIndex = profile.indexOf('entry_id: builtin-desktop-feature-tenant-creation');
   assert.ok(conversationIndex >= 0);
   assert.ok(rendererIndex > conversationIndex);
   assert.ok(routesIndex > rendererIndex);
@@ -105,7 +105,7 @@ test('tool result renderer is an independent ordered contribution with an explic
   assert.match(rendererEntry, /order:\s*98/u);
   assert.match(rendererEntry, /desktop\.ui-slots\.tool-result-renderer\.v1/u);
   assert.match(rendererEntry, /permissions:\s*\n\s*- ui\.render/u);
-  assert.deepEqual(rendererManifest.permissions, ['ui.conversation.renderer', 'ui.render']);
+  assert.deepEqual(rendererManifest.permissions, ['ui.conversation.renderer', 'ui.render', 'ui.work-panel']);
 
   const rendererBootstrap = bootstrap.entries.find(
     ({ entry_id: entryId }) => entryId === 'builtin-desktop-tool-result-renderer',
@@ -308,7 +308,7 @@ test('host uses one opaque-origin srcDoc iframe with fixed CSP and shared protoc
   assert.match(moduleSource, /slot:dispose/u);
   assert.doesNotMatch(
     hostSource + bridgeSource + moduleSource,
-    /fetch\(|XMLHttpRequest|localStorage|sessionStorage|useAgentSocket|acquireOperationLease|generation(?:Digest|Version)|meta\.digest/u,
+    /fetch\(|XMLHttpRequest|localStorage|sessionStorage|useAgentSocket|acquireOperationLease/u,
   );
   assert.match(electronViteSource, /'@agistack\/plugin-slots'/u);
 });

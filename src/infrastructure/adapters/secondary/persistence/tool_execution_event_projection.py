@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.dialects.postgresql import insert
@@ -18,17 +18,64 @@ from src.infrastructure.adapters.secondary.persistence.models import ToolExecuti
 
 def _observation_status(data: Mapping[str, Any]) -> str:
     status = data.get("status")
+    if data.get("control_outcome") and (data.get("error") or data.get("is_error")):
+        return ToolExecutionStatus.FAILED.value
     if status in {
         ToolExecutionStatus.PERMISSION_DENIED.value,
         ToolExecutionStatus.CANCELLED.value,
         ToolExecutionStatus.TIMEOUT.value,
     }:
         return str(status)
-    if data.get("error") or status in {"error", "failed", "failure"}:
+    if data.get("error") or data.get("is_error") or status in {"error", "failed", "failure"}:
         return ToolExecutionStatus.FAILED.value
     if status in {None, "success", "completed"}:
         return ToolExecutionStatus.SUCCESS.value
     raise ValueError("tool observation has an unknown terminal status")
+
+
+async def _pending_pause_output(
+    session: AsyncSession,
+    *,
+    record_id: str,
+    conversation_id: str,
+    message_id: str,
+    call_id: str,
+    tool_name: str,
+) -> str | None:
+    """Only a producer-recorded typed pause can await a later failure."""
+    table = ToolExecutionRecord
+    output = (
+        await session.execute(
+            refresh_select_statement(
+                select(table.tool_output).where(
+                    table.id == record_id,
+                    table.conversation_id == conversation_id,
+                    table.message_id == message_id,
+                    table.call_id == call_id,
+                    table.tool_name == tool_name,
+                    table.status == ToolExecutionStatus.CANCELLED.value,
+                    table.error.is_(None),
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if not isinstance(output, str):
+        return None
+    try:
+        payload = json.loads(output)
+    except ValueError:
+        return None
+    if (
+        payload
+        == {
+            "type": "computer_use_control",
+            "status": "user_paused",
+            "retry_allowed": False,
+        }
+        and payload.get("retry_allowed") is False
+    ):
+        return output
+    return None
 
 
 async def apply_tool_execution_event_projection(
@@ -48,7 +95,7 @@ async def apply_tool_execution_event_projection(
     # Legacy events without execution identity remain in the log, without invented records.
     if not all(isinstance(value, str) and value for value in identity):
         return
-    record_id, call_id, tool_name = identity
+    record_id, call_id, tool_name = cast(list[str], identity)
     at = datetime.fromtimestamp(event_time_us / 1_000_000, UTC)
     tool_input = event_data.get("tool_input")
     values: dict[str, Any] = {
@@ -66,6 +113,11 @@ async def apply_tool_execution_event_projection(
     if event_type == "observe":
         status = _observation_status(event_data)
         result = event_data.get("result")
+        controlled = status == ToolExecutionStatus.CANCELLED.value and event_data.get(
+            "control_outcome"
+        ) in ("user_paused", "user_stopped")
+        if controlled and isinstance(result, Mapping):
+            result = result.get("output", result)
         try:
             duration = (
                 int(event_data["duration_ms"])
@@ -79,12 +131,12 @@ async def apply_tool_execution_event_projection(
             "completed_at": at,
             "duration_ms": duration,
             "error": str(event_data.get("error") or "Tool execution failed")
-            if status != ToolExecutionStatus.SUCCESS.value
+            if status != ToolExecutionStatus.SUCCESS.value and not controlled
             else None,
             "tool_output": (
                 result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
             )
-            if status == ToolExecutionStatus.SUCCESS.value and result is not None
+            if (status == ToolExecutionStatus.SUCCESS.value or controlled) and result is not None
             else None,
         }
         values.update(update_values)
@@ -95,6 +147,32 @@ async def apply_tool_execution_event_projection(
             "started_at": at,
         }
     table = ToolExecutionRecord
+    terminal_transition = table.status == ToolExecutionStatus.RUNNING.value
+    if (
+        event_type == "observe"
+        and values["status"] == ToolExecutionStatus.FAILED.value
+        and event_data.get("control_outcome") == "user_paused"
+    ):
+        paused_output = await _pending_pause_output(
+            session,
+            record_id=record_id,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            call_id=call_id,
+            tool_name=tool_name,
+        )
+        if paused_output is not None:
+            # Match the exact prior state again in the atomic update. Replayed
+            # pause/success events cannot overwrite this real authority failure.
+            terminal_transition = or_(
+                terminal_transition,
+                and_(
+                    table.status == ToolExecutionStatus.CANCELLED.value,
+                    table.tool_output == paused_output,
+                    table.error.is_(None),
+                    table.completed_at <= at,
+                ),
+            )
     await session.execute(
         insert(table)
         .values(**values)
@@ -106,7 +184,7 @@ async def apply_tool_execution_event_projection(
                 table.message_id == message_id,
                 table.call_id == call_id,
                 table.tool_name == tool_name,
-                table.status == ToolExecutionStatus.RUNNING.value
+                terminal_transition
                 if event_type == "observe"
                 else or_(
                     table.started_at > at,
@@ -119,9 +197,9 @@ async def apply_tool_execution_event_projection(
     actual = (
         await session.execute(
             refresh_select_statement(
-                select(table.conversation_id, table.message_id, table.call_id, table.tool_name).where(
-                    table.id == record_id
-                )
+                select(
+                    table.conversation_id, table.message_id, table.call_id, table.tool_name
+                ).where(table.id == record_id)
             )
         )
     ).one()

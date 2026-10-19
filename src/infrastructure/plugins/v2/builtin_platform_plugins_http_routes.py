@@ -14,6 +14,10 @@ from src.application.schemas.platform_plugins import (
     PlatformPluginPublicationReadinessResponseV2,
     PlatformPluginRouteAuthorityReadinessResponseV2,
 )
+from src.infrastructure.adapters.primary.web.routers.platform_plugin_instances_v2 import (
+    apply_plugin_instances_v2,
+    get_plugin_instances_v2,
+)
 from src.infrastructure.adapters.primary.web.routers.platform_plugin_profile_sources_v2 import (
     post_profile_source_v2,
 )
@@ -94,6 +98,22 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
         ],
         ...,
     ] = (
+        (
+            f"{v2}/instances",
+            ("GET",),
+            get_plugin_instances_v2,
+            "get_plugin_instances_v2",
+            dict[str, Any],
+            _PROTOCOL_V2_TAGS_V2,
+        ),
+        (
+            f"{v2}/instances/apply",
+            ("POST",),
+            apply_plugin_instances_v2,
+            "apply_plugin_instances_v2",
+            dict[str, Any],
+            _PROTOCOL_V2_TAGS_V2,
+        ),
         (
             f"{v2}/profile-sources",
             ("POST",),

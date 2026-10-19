@@ -337,7 +337,7 @@ fn bootstrap_platform_plugin_distribution_v2() -> agistack_plugin_host::ControlP
 
 fn disposal_tracking_desktop_reconciler_v2(
     disposals: Arc<AtomicUsize>,
-    manager: Arc<agistack_plugin_host::GenerationManagerV2>,
+    state: &LocalRuntimeState,
 ) -> agistack_plugin_host::PluginSnapshotReconcilerV2 {
     let mut definition = agistack_plugin_host::desktop_sidecar_host_definition_v2();
     definition.module = Arc::new(DisposalTrackingPluginModuleV2 {
@@ -350,9 +350,16 @@ fn disposal_tracking_desktop_reconciler_v2(
             [
                 agistack_plugin_host::desktop_sidecar_http_routes_definition_v2(),
                 definition,
+                crate::local_runtime::knowledge_authority_v2::definition(
+                    state.app_data_dir.clone(),
+                    state.local_knowledge_acceptance.clone(),
+                )
+                .expect("the built-in knowledge contract is statically valid"),
+                crate::local_runtime::computer_use_v2::definition()
+                    .expect("the built-in computer-use contract is statically valid"),
             ],
         ),
-        manager,
+        state.platform_plugin_authority_v2.manager(),
     )
 }
 
@@ -1951,10 +1958,7 @@ async fn task_session_plugin_context_pins_generation_until_core_operation_finish
 
     let distribution = bootstrap_platform_plugin_distribution_v2();
     let disposals = Arc::new(AtomicUsize::new(0));
-    let reconciler = disposal_tracking_desktop_reconciler_v2(
-        Arc::clone(&disposals),
-        state.platform_plugin_authority_v2.manager(),
-    );
+    let reconciler = disposal_tracking_desktop_reconciler_v2(Arc::clone(&disposals), &state);
     let generation = reconciler
         .stage_snapshot(distribution.snapshot.clone())
         .await

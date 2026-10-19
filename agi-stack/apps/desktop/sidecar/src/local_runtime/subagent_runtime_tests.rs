@@ -735,12 +735,9 @@ async fn composer_plugin_context_consumes_the_request_pinned_runtime_generation(
     )
     .expect("distribution must parse");
     let reconciler = agistack_plugin_host::PluginSnapshotReconcilerV2::new_with_manager(
-        agistack_plugin_host::LoaderV2::for_target(
-            agistack_plugin_host::DataPlaneTargetV2::DesktopSidecar,
-            [
-                agistack_plugin_host::desktop_sidecar_http_routes_definition_v2(),
-                agistack_plugin_host::desktop_sidecar_host_definition_v2(),
-            ],
+        crate::local_runtime::platform_plugin_sync_v2::desktop_loader(
+            state.app_data_dir.clone(),
+            state.local_knowledge_acceptance.clone(),
         ),
         state.platform_plugin_authority_v2.manager(),
     );

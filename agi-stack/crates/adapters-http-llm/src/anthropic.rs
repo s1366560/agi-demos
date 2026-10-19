@@ -2,12 +2,14 @@ use futures_util::StreamExt;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 
+use agistack_core::agent::types::MediaAttachment;
 use agistack_core::ports::{CoreError, CoreResult};
+use serde_json::json;
 
 #[derive(Serialize)]
 struct AnthropicMessage {
     role: &'static str,
-    content: String,
+    content: serde_json::Value,
 }
 
 #[derive(Serialize)]
@@ -58,6 +60,7 @@ pub struct AnthropicLlm {
     model: String,
     version: String,
     max_tokens: u32,
+    vision_supported: bool,
 }
 
 impl AnthropicLlm {
@@ -70,6 +73,7 @@ impl AnthropicLlm {
             model: model.into(),
             version: "2023-06-01".to_string(),
             max_tokens: 1024,
+            vision_supported: true,
         }
     }
 
@@ -91,6 +95,11 @@ impl AnthropicLlm {
         self
     }
 
+    pub fn with_vision_support(mut self, supported: bool) -> Self {
+        self.vision_supported = supported;
+        self
+    }
+
     /// Stream a raw single-turn completion from Anthropic Messages SSE.
     ///
     /// `on_delta` is invoked for every `content_block_delta` / `text_delta` text
@@ -100,22 +109,49 @@ impl AnthropicLlm {
         &self,
         system: &str,
         user: impl Into<String>,
+        on_delta: F,
+    ) -> CoreResult<String>
+    where
+        F: FnMut(&str),
+    {
+        self.complete_with_media_stream(system, user, &[], on_delta).await
+    }
+
+    /// Preserve native Messages image blocks and the existing SSE text contract.
+    pub async fn complete_with_media_stream<F>(
+        &self,
+        system: &str,
+        user: impl Into<String>,
+        media: &[MediaAttachment],
         mut on_delta: F,
     ) -> CoreResult<String>
     where
         F: FnMut(&str),
     {
+        let content = if media.is_empty() {
+            json!(user.into())
+        } else {
+            if !self.vision_supported {
+                return Err(CoreError::Llm(
+                    "vision_unsupported: configured model does not accept image observations".into(),
+                ));
+            }
+            let mut blocks = vec![json!({"type":"text","text":user.into()})];
+            blocks.extend(crate::media::image_blocks(media, true).await?);
+            json!(blocks)
+        };
         let body = AnthropicMessagesRequest {
             model: self.model.clone(),
             system: system.to_string(),
             messages: vec![AnthropicMessage {
                 role: "user",
-                content: user.into(),
+                content,
             }],
             max_tokens: self.max_tokens,
             temperature: 0.0,
             stream: true,
         };
+        crate::request_log::record_request("anthropic.messages", &body, async {
         let url = format!("{}/messages", self.base_url);
         let mut headers = HeaderMap::new();
         let version = HeaderValue::from_str(&self.version)
@@ -163,6 +199,7 @@ impl AnthropicLlm {
         }
 
         Ok(content)
+        }).await
     }
 }
 

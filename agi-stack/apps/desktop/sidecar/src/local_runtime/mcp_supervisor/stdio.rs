@@ -80,17 +80,39 @@ impl StdioRuntime {
         };
         self.child = Some(child);
 
+        let mut initialize_params = json!({"protocolVersion":MCP_PROTOCOL_VERSION,"capabilities":{},"clientInfo":{"name":"agistack-desktop","version":env!("CARGO_PKG_VERSION")}});
+        if trusted_cloud_connector(server) {
+            if let Some(reference) = server.vault_env_refs.get(CUA_OAUTH_TOKEN_REF) {
+                let expected = credential_reference(
+                    &McpScope {
+                        tenant_id: server.tenant_id.clone(),
+                        project_id: server.project_id.clone(),
+                    },
+                    &server.name,
+                    server.transport,
+                    &server.command,
+                    server.cwd.as_deref(),
+                    McpCredentialKind::Env,
+                    CUA_OAUTH_TOKEN_REF,
+                )?;
+                if !credential_reference_is_scoped(&expected, reference) {
+                    return Err(McpSupervisorError::new(
+                        "local_mcp_remote_credential_scope_invalid",
+                        "Connector credential belongs to another target",
+                    ));
+                }
+                let token = credential_vault
+                    .ok_or_else(vault_unavailable)?
+                    .get(reference)
+                    .map_err(|_| vault_unavailable())?
+                    .ok_or_else(vault_unavailable)?;
+                initialize_params["_meta"] = json!({"memstack":{"oauth_access_token":token.strip_prefix("Bearer ").unwrap_or(&token)}});
+            }
+        }
         let initialize = self
             .request_inner(
                 "initialize",
-                json!({
-                    "protocolVersion": MCP_PROTOCOL_VERSION,
-                    "capabilities": {},
-                    "clientInfo": {
-                        "name": "agistack-desktop",
-                        "version": env!("CARGO_PKG_VERSION"),
-                    },
-                }),
+                initialize_params,
                 limits.initialize_timeout,
                 limits,
             )
@@ -300,6 +322,15 @@ fn spawn_child(
         .stderr(Stdio::null())
         .kill_on_drop(true);
     for (name, reference) in &server.vault_env_refs {
+        if name == CUA_OAUTH_TOKEN_REF {
+            if !trusted_cloud_connector(server) {
+                return Err(McpSupervisorError::new(
+                    "local_mcp_credential_target_invalid",
+                    "Reserved connector credential requires the bundled connector executable",
+                ));
+            }
+            continue;
+        }
         let expected = credential_reference(
             &McpScope {
                 tenant_id: server.tenant_id.clone(),
@@ -355,6 +386,30 @@ fn resolve_cwd(workspace_root: &Path, requested: Option<&str>) -> McpResult<Path
         ));
     }
     Ok(resolved)
+}
+
+pub(super) const CUA_OAUTH_TOKEN_REF: &str = "MEMSTACK_CUA_OAUTH_ACCESS_TOKEN";
+pub(in crate::local_runtime) fn trusted_cloud_connector(server: &McpServerDefinition) -> bool {
+    if server.transport != super::McpTransport::Stdio {
+        return false;
+    }
+    let Some(declared) = server.command.first().map(PathBuf::from) else {
+        return false;
+    };
+    bundled_cloud_connector_path()
+        .is_some_and(|expected| declared.canonicalize().ok().as_ref() == Some(&expected))
+}
+
+pub(in crate::local_runtime) fn bundled_cloud_connector_path() -> Option<PathBuf> {
+    let parent = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    parent
+        .join(if cfg!(windows) {
+            "memstack-cua-cloud-connectors.exe"
+        } else {
+            "memstack-cua-cloud-connectors"
+        })
+        .canonicalize()
+        .ok()
 }
 
 async fn read_response(
