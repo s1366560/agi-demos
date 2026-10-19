@@ -1540,7 +1540,7 @@ async def _discover_tools_for_servers_parallel(
 
     # Preserve server positions: callers bind each result to the corresponding
     # running server. Dropping a failed result would change another tool's owner.
-    successful_results = []
+    successful_results: list[list[dict[str, Any]]] = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             logger.warning(

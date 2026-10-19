@@ -67,7 +67,9 @@ export function InteractiveTerminal({
       if (connectedRef.current) inputRef.current(data);
     });
     let lastSize = '';
+    let frame: number | null = null;
     const fitAndNotify = () => {
+      frame = null;
       if (!container.isConnected) return;
       fit.fit();
       const size = `${terminal.cols}x${terminal.rows}`;
@@ -75,12 +77,17 @@ export function InteractiveTerminal({
       lastSize = size;
       resizeRef.current(terminal.cols, terminal.rows);
     };
-    const resizeObserver = new ResizeObserver(fitAndNotify);
+    // Fitting changes xterm's layout. Defer it beyond ResizeObserver delivery and
+    // merge notifications from the same frame instead of synchronously resizing.
+    const scheduleFit = () => {
+      if (frame === null) frame = requestAnimationFrame(fitAndNotify);
+    };
+    const resizeObserver = new ResizeObserver(scheduleFit);
     resizeObserver.observe(container);
-    const frame = requestAnimationFrame(fitAndNotify);
+    scheduleFit();
 
     return () => {
-      cancelAnimationFrame(frame);
+      if (frame !== null) cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       inputSubscription.dispose();
       terminal.dispose();
@@ -104,11 +111,12 @@ export function InteractiveTerminal({
 
   return (
     <div
-      ref={containerRef}
       className="desktop-interactive-terminal"
       role="application"
       aria-label={ariaLabel}
       data-connected={connected}
-    />
+    >
+      <div ref={containerRef} className="desktop-interactive-terminal-host" />
+    </div>
   );
 }

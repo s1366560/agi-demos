@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -263,22 +264,37 @@ class TestTodoWriteTool:
     async def test_workspace_write_fails_closed_without_legacy_repository(
         self,
         action: str,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        bound_tool = make_todo_tools(session_factory=lambda: _DummySession())["todowrite"]
+        repo = MagicMock(side_effect=AssertionError("retired authority must not use SQL todos"))
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository."
+            "SqlAgentTaskRepository",
+            repo,
+        )
+        session = _DummySession()
+        commit = AsyncMock()
+        monkeypatch.setattr(session, "commit", commit)
+        bound_tool = make_todo_tools(session_factory=lambda: session)["todowrite"]
+        ctx = _make_ctx(
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "workspace-1",
+                "root_goal_task_id": "root-1",
+            }
+        )
 
         with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
             await bound_tool.execute(
-                _make_ctx(
-                    runtime_context={
-                        "task_authority": "workspace",
-                        "workspace_id": "workspace-1",
-                        "root_goal_task_id": "root-1",
-                    }
-                ),
+                ctx,
                 action=action,
                 todo_id="workspace-task-1" if action == "update" else None,
                 todos=[{"content": "Core-owned task"}],
             )
+
+        repo.assert_not_called()
+        commit.assert_not_awaited()
+        assert ctx.consume_pending_events() == []
 
     @pytest.mark.parametrize("action", ["replace", "add"])
     async def test_worker_scope_blocks_structural_workspace_writes_before_storage(

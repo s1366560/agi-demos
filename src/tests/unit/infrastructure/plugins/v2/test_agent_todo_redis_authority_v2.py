@@ -1,17 +1,24 @@
-"""Pinned Redis authority coverage for workspace Todo event publication."""
+"""Retired Workspace Todo paths stay closed while pinned generations reload."""
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.agent.tools.todo_tools import _publish_workspace_task_events_v2
+from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.agent.tools.todo_tools import make_todo_tools
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    current_agent_worker_redis_client_v2,
+)
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.workspace_core.legacy_runtime import LegacyWorkspaceRuntimeRetiredError
 
 pytestmark = pytest.mark.unit
 
@@ -39,8 +46,10 @@ class _TrackedRedisClient:
         self.close_calls += 1
 
 
-async def test_todo_event_publication_uses_exact_operation_redis_during_reload(
+@pytest.mark.parametrize("tool_name", ["todoread", "todowrite"])
+async def test_retired_workspace_todos_cannot_publish_during_reload(
     monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
 ) -> None:
     first_client = _TrackedRedisClient("first")
     second_client = _TrackedRedisClient("second")
@@ -60,37 +69,62 @@ async def test_todo_event_publication_uses_exact_operation_redis_during_reload(
     )
     assert first.accepted is True
 
-    observed_clients: list[object] = []
+    session = AsyncMock()
 
-    class Publisher:
-        def __init__(self, redis_client: object) -> None:
-            observed_clients.append(redis_client)
+    @asynccontextmanager
+    async def session_factory() -> AsyncIterator[AsyncMock]:
+        second = await host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=702,
+            version=702,
+        )
+        assert second.accepted is True
+        assert first_client.close_calls == 0
+        assert current_agent_worker_redis_client_v2() is first_client
+        yield session
 
-        async def publish_pending_events(self, events: object) -> None:
-            assert tuple(events) == ()
-            second = await host.bootstrap(
-                profile_path=_PROFILE_PATH,
-                manifest_paths=(_MANIFEST_PATH,),
-                generation=702,
-                version=702,
-            )
-            assert second.accepted is True
-            assert first_client.close_calls == 0
-
+    publisher = MagicMock(side_effect=AssertionError("retired Todo paths cannot publish"))
     monkeypatch.setattr(
         "src.application.services.workspace_task_event_publisher.WorkspaceTaskEventPublisher",
-        Publisher,
+        publisher,
+    )
+    tool = make_todo_tools(session_factory=session_factory)[tool_name]
+    ctx = ToolContext(
+        session_id="todo-session",
+        conversation_id="todo-session",
+        message_id="message-1",
+        call_id="call-1",
+        agent_name="test-agent",
+        tenant_id="todo-tenant",
+        project_id="todo-project",
+        runtime_context={
+            "task_authority": "workspace",
+            "workspace_id": "workspace-1",
+            "root_goal_task_id": "root-1",
+        },
     )
 
     try:
         async with pin_operation_context_v2(
             host,
-            operation_id="todo-event-publication",
-            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+            operation_id="retired-workspace-todo",
+            scope=ScopeV2(
+                kind=ScopeKindV2.SESSION,
+                tenant_id="todo-tenant",
+                project_id="todo-project",
+                session_id="todo-session",
+            ),
         ):
-            await _publish_workspace_task_events_v2(())
+            with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Workspace authority"):
+                if tool_name == "todoread":
+                    await tool.execute(ctx)
+                else:
+                    await tool.execute(ctx, action="replace", todos=[{"content": "retired"}])
 
-        assert observed_clients == [first_client]
+        publisher.assert_not_called()
+        assert session.mock_calls == []
+        assert ctx.consume_pending_events() == []
         assert first_client.close_calls == 1
         assert second_client.close_calls == 0
     finally:

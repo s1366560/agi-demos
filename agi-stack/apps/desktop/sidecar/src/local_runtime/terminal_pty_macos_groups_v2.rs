@@ -5,75 +5,242 @@
 //! The caller retains its unreaped session leader throughout this operation,
 //! preventing reuse of the owned session id, and closes all PTY master handles.
 
-use std::{collections::BTreeSet, io, mem, thread, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io, mem, thread,
+    time::{Duration, Instant},
+};
 
+const TERMINAL_EXIT_GRACE: Duration = Duration::from_millis(200);
+
+/// Verify the initial members before closing the terminal requests EOF/hangup.
+/// Give the shell a bounded opportunity to release its history lock before forced cleanup.
+/// Process inspection never reaps the retained leader; foreground and migrated
+/// groups remain owned until every live member has exited or has been killed.
+/// With valid owned group/session identities, both Ok and Err return only after
+/// cleanup is confirmed. Err preserves failures observed before recovery; repeated
+/// inspection/signalling failures keep this call and its owner alive. Confirmed
+/// foreign sessions are excluded without signalling them.
+pub(super) fn finish_owned_groups(
+    groups: impl IntoIterator<Item = i32>,
+    session: i32,
+    release_terminal: impl FnOnce(),
+) -> io::Result<()> {
+    let mut groups = OwnedProcessGroups::new(groups, session, TERMINAL_EXIT_GRACE)?;
+    let mut release_terminal = Some(release_terminal);
+    finish_with_retries(|| {
+        if release_terminal.is_some() {
+            // A complete inspection must precede hangup: unverified members could
+            // otherwise move, fork and exit while an earlier read error is pending.
+            // This inspection never signals, even if the owner was descheduled.
+            groups.sweep(&mut |_, _| {}, false)?;
+            release_terminal
+                .take()
+                .expect("terminal release is pending")();
+            groups.graceful_deadline = Instant::now() + TERMINAL_EXIT_GRACE;
+        }
+        groups.poll(&mut |_, _| {})
+    })
+}
+
+fn finish_with_retries(mut poll: impl FnMut() -> io::Result<bool>) -> io::Result<()> {
+    let mut failures = BTreeSet::new();
+    loop {
+        match poll() {
+            Ok(true) => {
+                return if failures.is_empty() {
+                    Ok(())
+                } else {
+                    Err(io::Error::other(
+                        failures.into_iter().collect::<Vec<_>>().join("; "),
+                    ))
+                };
+            }
+            Ok(false) => {}
+            Err(error) => {
+                if failures.insert(error.to_string()) {
+                    tracing::error!(%error, "owned PTY group cleanup is still pending");
+                }
+            }
+        }
+        // An inspection or signal failure is not proof that the owned resources
+        // have exited. Keep their state and the unreaped leader until verified.
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[cfg(test)]
 pub(super) fn terminate_owned_group(group: i32, session: i32) -> io::Result<()> {
     terminate_owned_group_after_snapshot(group, session, |_, _| {})
 }
 
+#[cfg(test)]
 fn terminate_owned_group_after_snapshot(
     group: i32,
     session: i32,
+    after_snapshot: impl FnMut(i32, &[i32]),
+) -> io::Result<()> {
+    terminate_owned_groups_after_snapshot([group], session, Duration::ZERO, after_snapshot)
+}
+
+#[cfg(test)]
+fn terminate_owned_groups_after_snapshot(
+    groups: impl IntoIterator<Item = i32>,
+    session: i32,
+    grace: Duration,
     mut after_snapshot: impl FnMut(i32, &[i32]),
 ) -> io::Result<()> {
-    if group <= 1 || session <= 1 {
-        return Err(io::Error::other("invalid owned PTY process group/session"));
-    }
-    let mut owned_groups = BTreeSet::from([group]);
+    let mut groups = OwnedProcessGroups::new(groups, session, grace)?;
     loop {
+        if groups.poll(&mut after_snapshot)? {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+struct OwnedProcessGroups {
+    groups: BTreeSet<i32>,
+    known_members: BTreeSet<i32>,
+    verified_members: BTreeMap<i32, MemberIdentity>,
+    session: i32,
+    graceful_deadline: Instant,
+}
+
+#[derive(PartialEq, Eq)]
+struct MemberIdentity {
+    started_seconds: u64,
+    started_microseconds: u64,
+    user: u32,
+}
+
+impl MemberIdentity {
+    fn from_info(info: &libc::proc_bsdinfo) -> Self {
+        Self {
+            started_seconds: info.pbi_start_tvsec,
+            started_microseconds: info.pbi_start_tvusec,
+            user: info.pbi_uid,
+        }
+    }
+}
+
+impl OwnedProcessGroups {
+    fn new(
+        groups: impl IntoIterator<Item = i32>,
+        session: i32,
+        grace: Duration,
+    ) -> io::Result<Self> {
+        let groups = groups.into_iter().collect::<BTreeSet<_>>();
+        if groups.is_empty() || groups.iter().any(|group| *group <= 1) || session <= 1 {
+            return Err(io::Error::other("invalid owned PTY process group/session"));
+        }
+        Ok(Self {
+            groups,
+            known_members: BTreeSet::new(),
+            verified_members: BTreeMap::new(),
+            session,
+            graceful_deadline: Instant::now() + grace,
+        })
+    }
+
+    fn poll(&mut self, after_snapshot: &mut impl FnMut(i32, &[i32])) -> io::Result<bool> {
+        self.sweep(after_snapshot, Instant::now() >= self.graceful_deadline)
+    }
+
+    fn sweep(
+        &mut self,
+        after_snapshot: &mut impl FnMut(i32, &[i32]),
+        force_exit: bool,
+    ) -> io::Result<bool> {
         let mut active = false;
-        for group in owned_groups.clone() {
+        let previous_groups = self.groups.clone();
+        for group in self.groups.clone() {
             let members = group_members(group)?;
             after_snapshot(group, &members);
-            for pid in members {
-                let Some(info) = process_info(pid)? else {
-                    continue;
-                };
-                if info.pbi_status == libc::SZOMB {
+            self.known_members.extend(members);
+        }
+        let mut remaining_members = BTreeSet::new();
+        for pid in self.known_members.clone() {
+            let Some(info) = process_info(pid)? else {
+                self.verified_members.remove(&pid);
+                continue;
+            };
+            let identity = MemberIdentity::from_info(&info);
+            if info.pbi_status == libc::SZOMB {
+                // Darwin getsid rejects zombies. Only a member verified while live,
+                // with the same birth time and user, can extend our tracked groups.
+                if self.verified_members.get(&pid) == Some(&identity) {
+                    self.groups.insert(member_group(&info)?);
+                }
+                self.verified_members.remove(&pid);
+                continue;
+            }
+            // Revalidate each numeric PID immediately before signalling. The retained
+            // session leader prevents this session identity from being recycled.
+            // SAFETY: getsid/geteuid take no pointers and only inspect process state.
+            let actual_session = unsafe { libc::getsid(pid) };
+            if actual_session == -1 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::ESRCH) {
+                    // A verified member may have become a zombie between the BSD
+                    // info and getsid calls. Inspect it again before releasing it.
+                    if self.verified_members.get(&pid) == Some(&identity) {
+                        remaining_members.insert(pid);
+                        active = true;
+                    }
                     continue;
                 }
-                // Revalidate each numeric PID immediately before signalling. The retained
-                // session leader prevents this session identity from being recycled.
-                // SAFETY: getsid/geteuid take no pointers and only inspect process state.
-                let actual_session = unsafe { libc::getsid(pid) };
-                if actual_session == -1 {
-                    let error = io::Error::last_os_error();
-                    if error.raw_os_error() == Some(libc::ESRCH) {
-                        continue;
-                    }
+                return Err(error);
+            }
+            if actual_session != self.session {
+                // An inspected foreign identity is a reused PID/group, not an
+                // unconfirmed owned process. Never signal it or wait for its exit.
+                self.known_members.remove(&pid);
+                self.verified_members.remove(&pid);
+                if let Ok(group) = i32::try_from(info.pbi_pgid) {
+                    self.groups.remove(&group);
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "PTY group member is outside the owned session",
+                ));
+            }
+            if info.pbi_uid != unsafe { libc::geteuid() } {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "owned PTY group member has a different user",
+                ));
+            }
+            // Job control can move a snapshotted member into a new group before
+            // inspection. Follow that group only after verifying the retained session
+            // and user, so cleanup also covers children forked after the migration.
+            self.verified_members.insert(pid, identity);
+            self.groups.insert(member_group(&info)?);
+            remaining_members.insert(pid);
+            active = true;
+            if !force_exit {
+                continue;
+            }
+            // SAFETY: the positive PID was validated against the retained session.
+            if unsafe { libc::kill(pid, libc::SIGKILL) } == -1 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::ESRCH) {
                     return Err(error);
-                }
-                if actual_session != session || info.pbi_uid != unsafe { libc::geteuid() } {
-                    return Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "PTY group member is outside the owned user/session",
-                    ));
-                }
-                // Job control can move a snapshotted member into a new group before
-                // inspection. Follow that group only after verifying the retained session
-                // and user, so cleanup also covers children forked after the migration.
-                let current_group = i32::try_from(info.pbi_pgid)
-                    .ok()
-                    .filter(|group| *group > 1)
-                    .ok_or_else(|| io::Error::other("owned PTY member has an invalid group"))?;
-                owned_groups.insert(current_group);
-                active = true;
-                // SAFETY: the positive PID was validated against the retained session.
-                if unsafe { libc::kill(pid, libc::SIGKILL) } == -1 {
-                    let error = io::Error::last_os_error();
-                    if error.raw_os_error() != Some(libc::ESRCH) {
-                        return Err(error);
-                    }
                 }
             }
         }
-        if !active {
-            return Ok(());
-        }
+        self.known_members = remaining_members;
         // Enumerate again after exit so children forked during the snapshot are also
         // covered. Never report completion while an owned live member remains.
-        thread::sleep(Duration::from_millis(5));
+        Ok(!active && self.groups == previous_groups)
     }
+}
+
+fn member_group(info: &libc::proc_bsdinfo) -> io::Result<i32> {
+    i32::try_from(info.pbi_pgid)
+        .ok()
+        .filter(|group| *group > 1)
+        .ok_or_else(|| io::Error::other("owned PTY member has an invalid group"))
 }
 
 fn group_members(group: i32) -> io::Result<Vec<i32>> {
@@ -115,8 +282,11 @@ fn libproc_call(call: impl FnOnce() -> i32) -> io::Result<usize> {
 
 fn process_info(pid: i32) -> io::Result<Option<libc::proc_bsdinfo>> {
     process_info_with(|buffer, bytes| {
+        // XNU PROC_PIDTBSDINFO arg=1 includes retained zombies. Their birth time
+        // and pgid remain readable even though getsid returns ESRCH after exit.
+        // https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c#L2046-L2051
         // SAFETY: the caller owns the complete initialized output buffer.
-        unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, buffer, bytes) }
+        unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 1, buffer, bytes) }
     })
 }
 
@@ -241,3 +411,7 @@ mod migration_tests;
 #[cfg(test)]
 #[path = "terminal_pty_macos_libproc_tests.rs"]
 mod libproc_tests;
+
+#[cfg(test)]
+#[path = "terminal_pty_macos_grace_migration_tests.rs"]
+mod grace_migration_tests;

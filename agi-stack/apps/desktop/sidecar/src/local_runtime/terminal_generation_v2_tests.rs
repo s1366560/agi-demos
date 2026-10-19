@@ -221,11 +221,13 @@ async fn terminal_probe(socket: &mut ClientSocket) {
         let mut output = String::new();
         loop {
             let value = next_json(socket).await;
-            if value["type"] == "output" {
-                output.push_str(value["data"].as_str().expect("output string"));
-                if output.contains("__CORDIS_GENERATION_OK__") {
-                    break;
-                }
+            assert_eq!(
+                value["type"], "output",
+                "terminal errors must fail the execution probe immediately",
+            );
+            output.push_str(value["data"].as_str().expect("output string"));
+            if output.contains("__CORDIS_GENERATION_OK__") {
+                break;
             }
         }
     })

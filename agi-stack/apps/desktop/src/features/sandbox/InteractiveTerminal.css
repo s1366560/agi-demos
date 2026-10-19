@@ -1,10 +1,16 @@
 .desktop-interactive-terminal {
-  min-height: 300px;
+  height: 300px;
+  min-width: 0;
   overflow: hidden;
   padding: 10px 8px;
   border: 1px solid var(--desktop-border-8);
   border-radius: 8px;
   background: var(--desktop-surface-8);
+}
+
+.desktop-interactive-terminal-host {
+  height: 100%;
+  min-width: 0;
 }
 
 .desktop-interactive-terminal .xterm {

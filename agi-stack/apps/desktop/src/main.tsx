@@ -71,6 +71,14 @@ function reportFrontendReady() {
 }
 
 window.addEventListener('error', (event) => {
+  // The ResizeObserver protocol reports deferred delivery without an exception.
+  // Keep the browser diagnostic visible; only application failures replace the UI.
+  if (
+    event.error == null &&
+    event.message === 'ResizeObserver loop completed with undelivered notifications.'
+  ) {
+    return;
+  }
   showFatalError(event.error ?? event.message);
 });
 
@@ -96,7 +104,7 @@ try {
           </ToastProvider>
         </ThemePreferenceProvider>
       </I18nProvider>
-    </React.StrictMode>,
+    </React.StrictMode>
   );
   if (import.meta.hot) {
     import.meta.hot.dispose(() => {

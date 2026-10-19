@@ -15,7 +15,6 @@ import time
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 from src.infrastructure.agent.processor.goal_judgment import (
     GOAL_COMPLETION_JUDGE_TOOL_V2,
     NATIVE_CONTROL_HANDOFF_GUIDANCE,
@@ -274,83 +273,7 @@ class GoalEvaluator:
             )
             return marker_result
 
-        task_repo = legacy_workspace_runtime_retired("goal evaluator Workspace task read")
-        task = await task_repo.find_by_id(root_goal_task_id)
-        child_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
-
-        if task is None or task.workspace_id != workspace_id:
-            return GoalCheckResult(
-                achieved=False,
-                should_stop=True,
-                reason="Workspace root goal task not found",
-                source="workspace_tasks",
-            )
-
-        remediation_status = task.metadata.get("remediation_status")
-        remediation_summary = str(task.metadata.get("remediation_summary", "")).strip()
-        invalid_children = [
-            child
-            for child in child_tasks
-            if child.archived_at is None
-            and child.metadata.get("task_role") == "execution_task"
-            and child.status in {WorkspaceTaskStatus.DONE, WorkspaceTaskStatus.BLOCKED}
-            and (
-                not isinstance(child.metadata.get("current_attempt_id"), str)
-                or not child.metadata.get("current_attempt_id")
-                or not isinstance(child.metadata.get("last_leader_adjudication_status"), str)
-                or not child.metadata.get("last_leader_adjudication_status")
-            )
-        ]
-
-        result: GoalCheckResult
-        if invalid_children:
-            result = GoalCheckResult(
-                achieved=False,
-                should_stop=True,
-                reason="Workspace execution tasks are missing attempt/adjudication evidence",
-                source="workspace_tasks",
-            )
-        elif remediation_status == "replan_required":
-            result = GoalCheckResult(
-                achieved=False,
-                should_stop=True,
-                reason=remediation_summary or "Workspace root goal requires replanning",
-                source="workspace_tasks",
-            )
-        elif task.status.value != "done":
-            if remediation_status == "ready_for_completion":
-                result = GoalCheckResult(
-                    achieved=False,
-                    should_stop=False,
-                    reason=(
-                        remediation_summary
-                        or "Workspace root goal is ready for completion evidence"
-                    ),
-                    source="workspace_tasks",
-                )
-            else:
-                result = GoalCheckResult(
-                    achieved=False,
-                    should_stop=False,
-                    reason="Workspace root goal task is not complete",
-                    source="workspace_tasks",
-                )
-        elif "goal_evidence" not in task.metadata:
-            result = GoalCheckResult(
-                achieved=False,
-                should_stop=True,
-                reason="Workspace root goal task is missing goal_evidence",
-                source="workspace_tasks",
-            )
-        else:
-            result = GoalCheckResult(
-                achieved=True,
-                should_stop=False,
-                reason="Workspace root goal task completed with on-ledger evidence",
-                source="workspace_tasks",
-            )
-
-        return result
+        legacy_workspace_runtime_retired("goal evaluator Workspace task read")
 
     async def _load_session_tasks(
         self, session_id: str, *, strict: bool = False

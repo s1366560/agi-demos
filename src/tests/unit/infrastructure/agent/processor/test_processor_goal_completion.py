@@ -436,9 +436,11 @@ class TestProcessorGoalCompletion:
     @pytest.mark.asyncio
     async def test_workspace_authority_uses_root_goal_task_instead_of_todoread(self) -> None:
         """Workspace root goal reads are retired to Avernet Core and fail closed."""
+        todoread = AsyncMock()
+        llm_client = AsyncMock()
         evaluator = GoalEvaluator(
-            llm_client=None,
-            tools={},
+            llm_client=llm_client,
+            tools={"todoread": todoread},
             runtime_context={
                 "task_authority": "workspace",
                 "workspace_id": "ws-1",
@@ -451,6 +453,12 @@ class TestProcessorGoalCompletion:
                 session_id="session-1",
                 messages=[{"role": "user", "content": "finish task"}],
             )
+
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="retired"):
+            await evaluator.evaluate_task_completion_gate(session_id="session-1")
+
+        assert todoread.mock_calls == []
+        assert llm_client.mock_calls == []
 
     async def test_workspace_contract_role_skips_root_goal_task_lookup(self) -> None:
         evaluator = GoalEvaluator(

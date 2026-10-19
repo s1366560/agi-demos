@@ -78,6 +78,12 @@ impl WasmtimeTool {
     /// on a timer (the test below trips it deterministically without a timer).
     fn quota_config() -> Config {
         let mut config = Config::new();
+        // Wasmtime 46 aborts when SIGCHLD interrupts its Mach receiver with
+        // MACH_RCV_INTERRUPTED: https://github.com/bytecodealliance/wasmtime/issues/14393
+        // Use supported Unix trap handling until upstream #14414 is released here.
+        // Keep the V2 ScoreHost configuration in plugin-host aligned with this one.
+        #[cfg(target_os = "macos")]
+        config.macos_use_mach_ports(false);
         config.consume_fuel(true);
         config.epoch_interruption(true);
         config

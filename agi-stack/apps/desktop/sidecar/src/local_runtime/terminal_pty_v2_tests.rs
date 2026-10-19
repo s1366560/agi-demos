@@ -298,6 +298,17 @@ async fn repeated_real_unix_idle_and_foreground_shutdown_does_not_signal_groups_
 
 #[tokio::test]
 async fn concurrent_real_unix_pty_shutdown_reaps_idle_and_short_lived_foreground_groups() {
+    // Retain a real Wasmtime engine while Tokio installs its SIGCHLD handler and
+    // concurrent PTY children exit. Wasmtime 46's default Mach receiver used to
+    // abort this same process with MACH_RCV_INTERRUPTED under that combination.
+    let wasm = child_signal_wasm_tools();
+    assert_child_signal_wasm_tools(&wasm).await;
+    assert!(tokio::process::Command::new("/bin/sh")
+        .args(["-c", "exit 0"])
+        .status()
+        .await
+        .expect("Tokio child installs the SIGCHLD handler")
+        .success());
     let mut tasks = tokio::task::JoinSet::new();
     for worker in 0..8 {
         tasks.spawn(async move {
@@ -315,6 +326,36 @@ async fn concurrent_real_unix_pty_shutdown_reaps_idle_and_short_lived_foreground
     }
     while let Some(result) = tasks.join_next().await {
         result.expect("each concurrent real PTY completes cleanup");
+    }
+    assert_child_signal_wasm_tools(&wasm).await;
+}
+
+fn child_signal_wasm_tools() -> [agistack_adapters_wasmtime::WasmtimeTool; 4] {
+    use agistack_adapters_wasmtime::{
+        WasmtimeTool, INFINITE_WAT, MEMORY_HOG_WAT, SCORE_V1_WAT,
+    };
+    let bounds = r#"(module (memory 1)
+        (func (export "score") (param i32) (result i32)
+            local.get 0 i32.load))"#;
+    [
+        WasmtimeTool::from_wat("score", "1.0.0", SCORE_V1_WAT, 10_000).unwrap(),
+        WasmtimeTool::from_wat("bounds", "1.0.0", bounds, 10_000).unwrap(),
+        WasmtimeTool::from_wat("fuel", "1.0.0", INFINITE_WAT, 10_000).unwrap(),
+        WasmtimeTool::from_bytes_with_limits(
+            "memory", "1.0.0", MEMORY_HOG_WAT.as_bytes(), 10_000, 64 * 1024, None,
+        )
+        .unwrap(),
+    ]
+}
+
+async fn assert_child_signal_wasm_tools(tools: &[agistack_adapters_wasmtime::WasmtimeTool; 4]) {
+    use agistack_plugin_host::Tool;
+    let output = tools[0].invoke(r#"{"len":5}"#).await.unwrap();
+    let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(value["score"], 22);
+    for (tool, expected) in tools[1..].iter().zip(["out of bounds", "fuel", "memory"]) {
+        let error = tool.invoke(r#"{"len":65536}"#).await.unwrap_err();
+        assert!(error.to_string().contains(expected), "{expected}: {error}");
     }
 }
 

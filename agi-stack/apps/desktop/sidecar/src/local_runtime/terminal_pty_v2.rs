@@ -190,9 +190,41 @@ mod platform {
     impl Resources {
         fn close(&mut self) -> DrainResult {
             let mut failures = Vec::new();
+            #[cfg(target_os = "macos")]
+            if let Some(session) = self
+                .child
+                .as_ref()
+                .and_then(|child| child.process_id())
+                .and_then(|pid| i32::try_from(pid).ok())
+            {
+                let foreground = self
+                    .master
+                    .as_ref()
+                    .and_then(|master| master.process_group_leader());
+                // Do not try_wait before this operation: even an already-exited
+                // leader must remain unreaped while foreground/migrated groups drain.
+                if let Err(error) = super::macos_groups::finish_owned_groups(
+                    [foreground, Some(session)].into_iter().flatten(),
+                    session,
+                    || {
+                        // EOF/hangup allows history cleanup after identities are
+                        // captured. macOS also needs all master handles closed
+                        // before a dying child can finish exiting.
+                        self.writer.take();
+                        self.reader.take();
+                        self.master.take();
+                    },
+                ) {
+                    record_failure(
+                        &mut failures,
+                        format!("finish owned process groups: {error}"),
+                    );
+                }
+            }
             if let Some(child) = self.child.as_mut() {
                 // Do not signal a naturally exited/reaped shell: its numeric group id may
                 // already be reusable. The pump itself never reaps the child.
+                #[cfg(not(target_os = "macos"))]
                 let mut can_signal_groups = false;
                 let exited = match child.try_wait() {
                     Ok(Some(_)) => true,
@@ -202,10 +234,14 @@ mod platform {
                         false
                     }
                     Ok(None) => {
-                        can_signal_groups = true;
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            can_signal_groups = true;
+                        }
                         false
                     }
                 };
+                #[cfg(not(target_os = "macos"))]
                 if !exited && can_signal_groups {
                     // portable-pty creates a new session. This covers foreground + shell
                     // groups, not ordinary background groups or escaped process trees.
@@ -214,30 +250,12 @@ mod platform {
                         .master
                         .as_ref()
                         .and_then(|master| master.process_group_leader());
-                    // Release the terminal before waiting for process exit. On macOS a
-                    // dying process can remain active while the master is still open.
-                    #[cfg(target_os = "macos")]
-                    {
-                        self.writer.take();
-                        self.reader.take();
-                        self.master.take();
-                    }
                     failures.extend(signal_process_groups(foreground, shell_group, |group| {
-                        #[cfg(target_os = "macos")]
-                        {
-                            let session = shell_group.ok_or_else(|| {
-                                io::Error::other("owned PTY session id is unavailable")
-                            })?;
-                            super::macos_groups::terminate_owned_group(group, session)
-                        }
-                        #[cfg(not(target_os = "macos"))]
-                        {
-                            // SAFETY: a positive group id comes from the owned PTY/session.
-                            if unsafe { libc::kill(-group, libc::SIGKILL) } == 0 {
-                                Ok(())
-                            } else {
-                                Err(io::Error::last_os_error())
-                            }
+                        // SAFETY: a positive group id comes from the owned PTY/session.
+                        if unsafe { libc::kill(-group, libc::SIGKILL) } == 0 {
+                            Ok(())
+                        } else {
+                            Err(io::Error::last_os_error())
                         }
                     }));
                 }
@@ -286,6 +304,7 @@ mod platform {
         }
     }
 
+    #[cfg(any(test, not(target_os = "macos")))]
     pub(super) fn signal_process_groups(
         foreground: Option<i32>,
         shell_group: Option<i32>,
@@ -528,3 +547,7 @@ mod platform;
 #[cfg(test)]
 #[path = "terminal_pty_v2_tests.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "terminal_pty_zsh_history_tests.rs"]
+mod zsh_history_tests;

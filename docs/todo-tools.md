@@ -2,26 +2,24 @@
 
 > ReActAgent 待办事项管理工具
 > 实现位置: `src/infrastructure/agent/tools/todo_tools.py`
-> Last checked against code: 2026-06-23
+> 绑定流程与 Workspace 退役边界核对日期：2026-10-19
 
 ## 概述
 
 Todo 工具为 ReActAgent 提供会话级别的待办事项管理功能，允许 Agent 在对话过程中跟踪任务进度。
 
-> 说明：名称沿用历史 "todo" 语义，但底层实现已由 `AgentTask`（持久化任务实体）承担，工具返回的字段也来自 `AgentTask.to_dict()`。在 workspace authority 场景下，读写会代理到 `WorkspaceTask`（见下文「Workspace Authority 模式」）。
+> 说明：名称沿用历史 "todo" 语义，底层由 `AgentTask`（持久化任务实体）承担。旧 Workspace authority SQL 路径已退役，工具会拒绝该路径并提示使用 Avernet Workspace Core（见下文「Workspace Authority 退役边界」）。
 
 ## 工具列表
 
 ### 1. todoread - 读取待办事项
 
-读取当前会话的待办事项列表，支持按状态和优先级过滤。
+读取当前会话的待办事项列表，支持按状态过滤。会话范围由运行时提供的 `ToolContext` 决定，取 `ctx.conversation_id`，缺省时取 `ctx.session_id`。
 
 **输入参数**：
 ```python
 {
-    "session_id": str,     # 必需：会话ID（通常为 conversation_id）
-    "status": str,         # 可选：过滤状态 (pending/in_progress/completed/cancelled)
-    "priority": str,       # 可选：过滤优先级 (high/medium/low)
+    "status": str,         # 可选：过滤状态 (pending/in_progress/completed/failed/cancelled)
 }
 ```
 
@@ -45,7 +43,7 @@ Todo 工具为 ReActAgent 提供会话级别的待办事项管理功能，允许
 
 **特性**：
 - 自动按优先级排序（high > medium > low）
-- 同优先级按创建时间排序
+- 同优先级按 `order_index` 排序
 - 返回的待办事项包含完整时间戳
 
 ---
@@ -57,7 +55,6 @@ Todo 工具为 ReActAgent 提供会话级别的待办事项管理功能，允许
 **输入参数**：
 ```python
 {
-    "session_id": str,     # 必需：会话ID
     "action": str,         # 必需：操作类型
     "todos": list,         # 可选：待办事项数组（replace/add 时需要）
     "todo_id": str,        # 可选：待办ID（update 时需要）
@@ -139,7 +136,7 @@ class AgentTask:
 - `medium` - 中等优先级
 - `low` - 低优先级
 
-> 工具输出会经过 `AgentTask.to_dict()`，实际 JSON 字段以该方法返回为准；workspace 模式下则使用 `_workspace_task_to_todo(...)` 做映射，会额外携带 `workspace_task_id`、`workspace_agent_id`、worker 报告相关字段等。
+> 会话任务列表通过 `AgentTask.to_dict()` 序列化，实际 JSON 字段以该方法返回为准。旧 Workspace 任务映射与派发辅助逻辑已随退役路径移除。
 
 ---
 
@@ -156,26 +153,47 @@ class AgentTask:
   - `update` → `repo.update(todo_id, **updates)`，按 `todo_id` 精确定位
 - 每次写入都会 `await session.commit()` 并通过 `ctx.emit(...)` 发送 `task_list_updated` / `task_updated` 事件到前端。
 
-> 工具在启动时通过 `configure_todoread` / `configure_todowrite` 注入 DB 会话工厂 `_todoread_session_factory` / `_todowrite_session_factory`。
+工具由 `make_todo_tools(session_factory=...)` 创建。工厂返回 `todoread` / `todowrite` 两个 `ToolInfo`，各自捕获同一不可变 `TodoToolRuntime` 中的会话工厂；执行期间通过 `ContextVar` 绑定该运行时，并在结束时恢复，隔离并发调用和不同 generation 的依赖。
 
-### Workspace Authority 模式
+如果当前已固定 V2 operation，绑定执行器会检查其为 SESSION scope，并核对会话及上下文中提供的 tenant/project 标识；不匹配时抛出 `todo_operation_scope_mismatch`。直接执行未绑定的工具模板会返回 `Task storage not configured`。
 
-当运行时上下文满足 `task_authority == "workspace"` 且携带 `(workspace_id, root_goal_task_id)` 时，工具切换为 workspace 模式：
+### Workspace Authority 退役边界
 
-- 读写代理到 `WorkspaceTask`（由 `WorkspaceTaskCommandService` + `WorkspaceTaskService` 驱动），而非 `AgentTask`。
-- `replace` / `add` 会创建派发给 worker agent 的 execution task（见 `_dispatch_created_workspace_tasks`），并受 leader/worker 角色权限约束（worker 不能 `replace` / `add`）。
-- 字段经过映射：`WorkspaceTaskStatus` ↔ todo status，`WorkspaceTaskPriority` (P1..P4) ↔ priority (high/medium/low)。
+当 `task_authority == "workspace"` 且 `workspace_id`、`root_goal_task_id` 均为字符串时，工具识别旧 Workspace authority 标记。在依赖已绑定且参数校验通过的调用中：
+
+- `todoread` 抛出 `LegacyWorkspaceRuntimeRetiredError`，提示使用 Avernet Workspace Core。
+- `todowrite` 保留结构性写入限制：角色不是 leader，且角色为 worker 或同时带有 `workspace_task_id` / `attempt_id` 时，`replace` / `add` 返回工具错误，引导使用 `workspace_report_progress/complete/blocked`；其余进入旧 Workspace 写入路径的调用抛出同一退役异常。
+- 退役异常发生后不会读写 Workspace SQL、回退到会话任务仓库、提交事务或发布任务事件。插件 generation 切换不会恢复旧路径。
 
 ---
 
 ## 使用示例
+
+先通过工厂创建绑定工具。生产运行时提供每次调用的 `ToolContext`，直接执行示例如下：
+
+```python
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.agent.tools.todo_tools import make_todo_tools
+
+tools = make_todo_tools(session_factory=async_session_factory)
+todoread = tools["todoread"]
+todowrite = tools["todowrite"]
+ctx = ToolContext(
+    session_id="conv-123",
+    conversation_id="conv-123",
+    message_id="message-1",
+    call_id="call-1",
+    agent_name="example-agent",
+)
+```
 
 ### 示例 1：创建初始待办列表
 
 ```python
 # 使用 replace 操作创建初始列表
 await todowrite.execute(
-    session_id="conv-123",
+    ctx,
     action="replace",
     todos=[
         {"content": "设计数据库 schema", "priority": "high"},
@@ -190,7 +208,7 @@ await todowrite.execute(
 ```python
 # 使用 add 操作追加新待办
 await todowrite.execute(
-    session_id="conv-123",
+    ctx,
     action="add",
     todos=[
         {"content": "部署到生产环境", "priority": "high"},
@@ -203,21 +221,18 @@ await todowrite.execute(
 ```python
 # 使用 update 操作更新状态
 await todowrite.execute(
-    session_id="conv-123",
+    ctx,
     action="update",
     todo_id="uuid-of-design-task",
     todos=[{"status": "completed"}]
 )
 ```
 
-### 示例 4：读取高优先级待办
+### 示例 4：读取全部待办
 
 ```python
-# 读取所有高优先级待办
-result = await todoread.execute(
-    session_id="conv-123",
-    priority="high"
-)
+# 返回列表已按优先级和 order_index 排序
+result = await todoread.execute(ctx)
 ```
 
 ### 示例 5：读取进行中的任务
@@ -225,7 +240,7 @@ result = await todoread.execute(
 ```python
 # 读取所有进行中的任务
 result = await todoread.execute(
-    session_id="conv-123",
+    ctx,
     status="in_progress"
 )
 ```
@@ -244,13 +259,11 @@ result = await todoread.execute(
 
 ## 测试覆盖
 
-当前单元测试位于 `src/tests/unit/infrastructure/agent/tools/test_todo_tools.py`：
+相关单元测试：
 
-| 测试类 | 测试数量 | 覆盖内容 |
-|--------|----------|----------|
-| `TestTodoReadTool` | 6 | 读取、过滤、排序 |
-| `TestTodoWriteTool` | 25 | replace / add / update / workspace authority / dispatch 等场景 |
-| **总计** | **31** | （以实际测试为准） |
+- `src/tests/unit/infrastructure/agent/tools/test_todo_tools.py`：会话读写、工厂绑定隔离、旧 Workspace authority 拒绝及无 SQL 回退、提交或事件副作用。
+- `src/tests/unit/infrastructure/plugins/v2/test_agent_todo_redis_authority_v2.py`：generation 切换期间，旧 Workspace 读写继续拒绝且不发布 Redis 任务事件。
+- `src/tests/unit/infrastructure/agent/processor/test_processor_goal_completion.py`：旧 Workspace 目标读取拒绝后，不回退到会话任务读取或 LLM 判断。
 
 > 旧版文档列出的 `TestTodoItem` / `TestTodoStorage` / `TestTodoIntegration` 测试类已不存在——任务模型与存储已迁移至 `AgentTask` + `SqlAgentTaskRepository`，对应测试随实现路径调整。维护时请以 `test_todo_tools.py` 实际测试为参考，不要沿用历史数字。
 
@@ -270,6 +283,6 @@ result = await todoread.execute(
 ## 未来改进
 
 1. **过期清理**：自动清理长时间未活动的会话待办
-2. **父子关系**：支持待办的父子层级结构（workspace authority 已部分实现 root goal → execution task 的树形结构）
+2. **父子关系**：支持会话待办的父子层级结构
 3. **标签系统**：为待办添加标签分类
 4. **提醒功能**：基于时间的待办提醒

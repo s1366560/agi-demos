@@ -114,6 +114,11 @@ impl ScoreHost {
             return Err(failure("invalid WASM binary"));
         }
         let mut config = Config::new();
+        // Match adapters-wasmtime: Wasmtime 46's Mach receiver aborts on a caught
+        // SIGCHLD (MACH_RCV_INTERRUPTED). Unix handling preserves guest traps.
+        // Upstream fix: https://github.com/bytecodealliance/wasmtime/pull/14414
+        #[cfg(target_os = "macos")]
+        config.macos_use_mach_ports(false);
         config.consume_fuel(true).epoch_interruption(true);
         let engine = Engine::new(&config).map_err(|error| failure(error.to_string()))?;
         let module = Module::new(&engine, bytes).map_err(|error| failure(error.to_string()))?;

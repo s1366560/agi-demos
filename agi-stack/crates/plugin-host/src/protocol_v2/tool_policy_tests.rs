@@ -182,15 +182,30 @@ fn result_block_discards_private_output() {
 fn non_builtin_policy_handler_is_rejected_before_activation() {
     block_on(async {
         let mut snapshot = parse_profile_snapshot_v2(include_str!(
-            "../../../../../shared/fixtures/platform-plugin-profile.v2.json"
+            "../../../../../shared/profiles/memstack-default-bootstrap.v2.json"
         ))
         .unwrap();
-        snapshot.manifests[0].trust = TrustKindV2::Signed;
-        snapshot.manifests[0].modules[0].contract.events.handles[0].event =
-            TOOLS_BEFORE_EXECUTE_EVENT_V2.into();
-        let result = LoaderV2::new([]).stage(snapshot).await;
+        // Keep the module registered in the production catalog so external-WASM
+        // admission reaches the policy trust check instead of rejecting a fixture.
+        let manifest = snapshot
+            .manifests
+            .iter_mut()
+            .find(|manifest| manifest.plugin_id == "memstack-native-target-hosts")
+            .unwrap();
+        manifest.trust = TrustKindV2::Signed;
+        let module = manifest
+            .modules
+            .iter_mut()
+            .find(|module| module.module_ref == "builtin://memstack/rust-server/generation-host")
+            .unwrap();
+        module.contract.events.handles = module.contract.events.emits.clone();
+        let error = match LoaderV2::new([]).stage(snapshot).await {
+            Ok(_) => panic!("signed policy module must be rejected"),
+            Err(error) => error,
+        };
         assert!(
-            matches!(result, Err(RuntimeV2Error::Module(message)) if message == "tool execution policies require trusted bundled modules")
+            matches!(&error, RuntimeV2Error::Module(message) if message == "tool execution policies require trusted bundled modules"),
+            "unexpected policy rejection: {error:?}"
         );
     });
 }
