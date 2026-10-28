@@ -5,7 +5,9 @@ Revises: b2c7d8e9f0a1
 Create Date: 2026-07-28
 """
 
+import json
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 
@@ -19,6 +21,14 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Add revisioned metadata pointer and durable idempotency receipts."""
+    # The original artifact table was created by ORM startup, never by Alembic.
+    # Its frozen definition is from f84d25ad99db10d14e57506f95a20c43807e9a3e.
+    if not sa.inspect(op.get_bind()).has_table("artifacts"):
+        baseline = (
+            Path(__file__).resolve().parents[1] / "baselines/c3d8e9f0a1b2-legacy-artifacts.json"
+        )
+        for statement in json.loads(baseline.read_text(encoding="utf-8"))["artifacts"]:
+            op.execute(sa.text(statement))
     op.add_column(
         "artifacts",
         sa.Column(

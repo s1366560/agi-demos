@@ -1,0 +1,19 @@
+{
+  "channel_configs": [
+    "CREATE TABLE channel_configs (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tchannel_type VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\tenabled BOOLEAN NOT NULL, \n\tconnection_mode VARCHAR NOT NULL, \n\tapp_id VARCHAR, \n\tapp_secret VARCHAR, \n\tencrypt_key VARCHAR, \n\tverification_token VARCHAR, \n\twebhook_url VARCHAR, \n\twebhook_port INTEGER, \n\twebhook_path VARCHAR, \n\tdomain VARCHAR, \n\textra_settings JSON, \n\tstatus VARCHAR NOT NULL, \n\tlast_error TEXT, \n\tdescription TEXT, \n\tcreated_by VARCHAR, \n\tcreated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(created_by) REFERENCES users (id)\n)",
+    "CREATE INDEX ix_channel_configs_channel_type ON channel_configs (channel_type)",
+    "CREATE INDEX ix_channel_configs_project_enabled ON channel_configs (project_id, enabled)",
+    "CREATE INDEX ix_channel_configs_project_id ON channel_configs (project_id)",
+    "CREATE INDEX ix_channel_configs_project_type ON channel_configs (project_id, channel_type)"
+  ],
+  "channel_messages": [
+    "CREATE TABLE channel_messages (\n\tid VARCHAR NOT NULL, \n\tchannel_config_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tchannel_message_id VARCHAR NOT NULL, \n\tchat_id VARCHAR NOT NULL, \n\tchat_type VARCHAR NOT NULL, \n\tsender_id VARCHAR NOT NULL, \n\tsender_name VARCHAR, \n\tmessage_type VARCHAR NOT NULL, \n\tcontent_text TEXT, \n\tcontent_data JSON, \n\treply_to VARCHAR, \n\tmentions JSON, \n\tdirection VARCHAR NOT NULL, \n\traw_data JSON, \n\tcreated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(channel_config_id) REFERENCES channel_configs (id) ON DELETE CASCADE, \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n)",
+    "CREATE INDEX ix_channel_messages_channel_config_id ON channel_messages (channel_config_id)",
+    "CREATE INDEX ix_channel_messages_channel_message_id ON channel_messages (channel_message_id)",
+    "CREATE INDEX ix_channel_messages_chat_id ON channel_messages (chat_id)",
+    "CREATE INDEX ix_channel_messages_config_time ON channel_messages (channel_config_id, created_at)",
+    "CREATE INDEX ix_channel_messages_project_chat ON channel_messages (project_id, chat_id)",
+    "CREATE INDEX ix_channel_messages_project_id ON channel_messages (project_id)",
+    "CREATE INDEX ix_channel_messages_sender_id ON channel_messages (sender_id)"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "artifacts": [
+    "CREATE TABLE artifacts (\n\tid VARCHAR(64) NOT NULL, \n\tproject_id VARCHAR(64) NOT NULL, \n\ttenant_id VARCHAR(64) NOT NULL, \n\tsandbox_id VARCHAR(64), \n\ttool_execution_id VARCHAR(64), \n\tconversation_id VARCHAR(64), \n\tworkspace_id VARCHAR(64), \n\tfilename VARCHAR(255) NOT NULL, \n\tmime_type VARCHAR(100) NOT NULL, \n\tcategory VARCHAR(20) NOT NULL, \n\tsize_bytes BIGINT NOT NULL, \n\tobject_key VARCHAR(500) NOT NULL, \n\turl TEXT, \n\tpreview_url TEXT, \n\tstatus VARCHAR(20) NOT NULL, \n\terror_message TEXT, \n\tsource_tool VARCHAR(100), \n\tsource_path VARCHAR(500), \n\tartifact_metadata JSON, \n\tcreated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(tenant_id) REFERENCES tenants (id) ON DELETE CASCADE, \n\tFOREIGN KEY(conversation_id) REFERENCES conversations (id) ON DELETE SET NULL, \n\tFOREIGN KEY(workspace_id) REFERENCES workspaces (id) ON DELETE SET NULL\n)",
+    "CREATE INDEX ix_artifacts_conversation_id ON artifacts (conversation_id)",
+    "CREATE INDEX ix_artifacts_project_category ON artifacts (project_id, category)",
+    "CREATE INDEX ix_artifacts_project_id ON artifacts (project_id)",
+    "CREATE INDEX ix_artifacts_project_status ON artifacts (project_id, status)",
+    "CREATE INDEX ix_artifacts_status ON artifacts (status)",
+    "CREATE INDEX ix_artifacts_tenant_id ON artifacts (tenant_id)",
+    "CREATE INDEX ix_artifacts_tool_execution ON artifacts (tool_execution_id)",
+    "CREATE INDEX ix_artifacts_workspace_id ON artifacts (workspace_id)",
+    "CREATE INDEX ix_artifacts_workspace_status ON artifacts (workspace_id, status)"
+  ]
+}

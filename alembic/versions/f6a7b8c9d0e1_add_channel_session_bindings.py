@@ -5,7 +5,9 @@ Revises: e1f2a3b4c5d6
 Create Date: 2026-02-21 00:00:00.000000
 """
 
-from typing import Sequence, Union
+import json
+from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 
@@ -13,12 +15,21 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "f6a7b8c9d0e1"
-down_revision: Union[str, Sequence[str], None] = "e1f2a3b4c5d6"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "e1f2a3b4c5d6"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # These two preexisting ORM tables never received a CREATE migration.
+    # Freeze their definitions from c7328bc00773b290b818b5aefc803dce8ad3453f
+    # before introducing the first foreign key that depends on them.
+    baseline = Path(__file__).resolve().parents[1] / "baselines/f6a7b8c9d0e1-legacy-channels.json"
+    inspector = sa.inspect(op.get_bind())
+    for table, statements in json.loads(baseline.read_text(encoding="utf-8")).items():
+        if not inspector.has_table(table):
+            for statement in statements:
+                op.execute(sa.text(statement))
     op.create_table(
         "channel_session_bindings",
         sa.Column("id", sa.String(), nullable=False),

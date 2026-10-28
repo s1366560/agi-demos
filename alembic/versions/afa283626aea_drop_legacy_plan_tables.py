@@ -8,24 +8,27 @@ Drop legacy Plan Mode tables (plan_documents, work_plans, plan_executions,
 plan_snapshots) and the conversations.current_plan_id FK. Plan Mode is now
 a simple permission toggle stored in conversations.current_mode.
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 revision: str = 'afa283626aea'
-down_revision: Union[str, Sequence[str], None] = 'd8f2a1b3c4e5'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = 'd8f2a1b3c4e5'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     """Drop legacy plan tables and FK."""
     # Drop FK from conversations to plan_documents first
-    op.drop_constraint(
-        'conversations_current_plan_id_fkey', 'conversations', type_='foreignkey'
-    )
+    # The pre-Alembic ORM left this reference unconstrained; some legacy
+    # deployments added the FK manually. Both histories remove the same tables.
+    op.execute(sa.text(
+        'ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_current_plan_id_fkey'
+    ))
 
     # Drop plan_snapshots (depends on plan_executions)
     op.drop_index('ix_plan_snapshots_execution_created', table_name='plan_snapshots')

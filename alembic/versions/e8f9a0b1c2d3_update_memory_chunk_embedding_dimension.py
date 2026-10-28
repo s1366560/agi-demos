@@ -9,9 +9,9 @@ Changes:
 - 3072 is the max dimension for text-embedding-3-large
 - This allows all common embedding models to be used without migration
 """
-from alembic import op
-import sqlalchemy as sa
 from sqlalchemy import text
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = 'e8f9a0b1c2d3'
@@ -35,23 +35,20 @@ def upgrade() -> None:
 
     # Drop the existing vector index if exists
     conn.execute(text("DROP INDEX IF EXISTS ix_memory_chunks_embedding"))
+    conn.execute(text("DROP INDEX IF EXISTS ix_chunks_embedding_hnsw"))
 
     # Alter the column to use larger dimension
-    # Note: pgvector allows casting smaller vectors to larger columns
-    # Existing 1024-dim vectors will be padded with zeros or need re-embedding
+    # Existing non-null vectors must already have the target dimension. The cast
+    # fails rather than silently padding or discarding existing embeddings.
     conn.execute(text("""
         ALTER TABLE memory_chunks
         ALTER COLUMN embedding TYPE vector(3072)
         USING embedding::vector(3072)
     """))
 
-    # Recreate index for the new dimension
-    conn.execute(text("""
-        CREATE INDEX IF NOT EXISTS ix_memory_chunks_embedding
-        ON memory_chunks
-        USING ivfflat (embedding vector_cosine_ops)
-        WITH (lists = 100)
-    """))
+    # pgvector's full-precision HNSW/IVFFlat indexes support up to 2000
+    # dimensions. Keep exact-search storage at 3072 instead of creating an
+    # unsupported index or changing the stored vector precision.
 
 
 def downgrade() -> None:

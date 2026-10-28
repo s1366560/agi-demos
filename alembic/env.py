@@ -10,8 +10,8 @@ This module configures Alembic for async SQLAlchemy with:
 import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool
-from sqlalchemy.engine import Connection
+from sqlalchemy import pool, text
+from sqlalchemy.engine import Connection, make_url
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Import models to ensure they're registered with Base.metadata
@@ -24,8 +24,8 @@ import src.infrastructure.adapters.secondary.persistence.knowledge_sync_models
 import src.infrastructure.adapters.secondary.persistence.legacy_cron_admission_model
 import src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_model_v2
 import src.infrastructure.adapters.secondary.persistence.plugin_marketplace_models_v3
-import src.infrastructure.adapters.secondary.persistence.project_schema_models  # noqa: F401
-import src.infrastructure.adapters.secondary.persistence.subagent_owner_model_v2  # noqa: F401
+import src.infrastructure.adapters.secondary.persistence.project_schema_models
+import src.infrastructure.adapters.secondary.persistence.subagent_owner_model_v2
 import src.infrastructure.adapters.secondary.persistence.subagent_run_snapshot_model_v2  # noqa: F401
 from alembic import context
 
@@ -39,7 +39,7 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 # Set database URL from environment
@@ -48,6 +48,17 @@ config.set_main_option("sqlalchemy.url", settings.postgres_url)
 
 # add your model's MetaData object here for 'autogenerate' support
 target_metadata = Base.metadata
+
+
+def default_admin_promotion_options() -> dict[str, str | None]:
+    """Pass only explicit nonsecret development account selection to the data migration."""
+    arguments = context.get_x_argument(as_dictionary=True)
+    return {
+        "user_id": arguments.get("development_admin_user_id"),
+        "email": arguments.get("development_admin_email"),
+        "environment": settings.environment,
+        "database_host": make_url(settings.postgres_url).host,
+    }
 
 
 def run_migrations_offline() -> None:
@@ -67,6 +78,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        development_admin_promotion=default_admin_promotion_options(),
     )
 
     with context.begin_transaction():
@@ -75,9 +87,16 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations using the provided connection."""
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        development_admin_promotion=default_admin_promotion_options(),
+    )
 
     with context.begin_transaction():
+        # API workers and CLI migrations share this database-scoped transaction
+        # lock. Acquire it before reading the version or executing any DDL.
+        connection.execute(text("SELECT pg_advisory_xact_lock(1947362821, 1)"))
         context.run_migrations()
 
 

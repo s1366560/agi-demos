@@ -772,12 +772,12 @@ db-shell: ## Open PostgreSQL shell
 	@echo " Opening PostgreSQL shell..."
 	docker compose exec postgres psql -U postgres memstack
 
-db-schema: ## Initialize database schema (create tables + stamp alembic)
+db-schema: ## Initialize or upgrade the database through Alembic migrations
 	@echo "  Initializing database schema..."
 	@PYTHONPATH=. uv run python -c \
 		"import asyncio; from src.infrastructure.adapters.secondary.persistence.database import initialize_database; asyncio.run(initialize_database())"
 	@echo " Schema initialized"
-	@echo " Note: Alembic version auto-stamped to head. 'make db-migrate' is now a no-op."
+	@echo " All Alembic migrations applied, including Workspace Core schema."
 
 db-migrate: ## Run Alembic migrations (upgrade to latest)
 	@echo " Running database migrations..."

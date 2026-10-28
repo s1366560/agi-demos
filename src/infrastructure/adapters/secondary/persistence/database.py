@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import os
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
@@ -106,74 +108,21 @@ async def get_read_db() -> AsyncGenerator[Any, None]:
 
 
 async def initialize_database() -> None:
-    """
-    Initialize database schema.
+    """Apply the complete Alembic schema, including tables owned outside the ORM."""
+    from alembic.config import Config
 
-    This function creates all tables defined in SQLAlchemy models.
-    Also enables required PostgreSQL extensions (pgvector).
+    from alembic import command
 
-    After create_all(), stamps the Alembic version to ``head`` so that
-    ``alembic upgrade head`` becomes a no-op.  Without this stamp,
-    running ``make db-migrate`` after ``create_all()`` attempts to replay
-    all migrations against an already-complete schema and blocks on DDL
-    locks held by the running API server.
-    """
-    # All model files must be imported before create_all() so that their
-    # table definitions are registered with Base.metadata.
-    import src.infrastructure.adapters.secondary.persistence.artifact_model  # pyright: ignore[reportUnusedImport]
-    import src.infrastructure.adapters.secondary.persistence.attachment_model  # pyright: ignore[reportUnusedImport]
-    import src.infrastructure.adapters.secondary.persistence.channel_models  # pyright: ignore[reportUnusedImport]
-    import src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_model_v2  # noqa: F401  # pyright: ignore[reportUnusedImport]
-    from src.infrastructure.adapters.secondary.persistence.models import Base
-
-    logger.info("Initializing database schema...")
-    async with engine.begin() as conn:
-        logger.info("Enabling pgvector extension...")
-        await conn.execute(refresh_select_statement(text("CREATE EXTENSION IF NOT EXISTS vector")))
-
-        await conn.run_sync(Base.metadata.create_all)
-
-    # ``create_all()`` can bootstrap databases that are then stamped past
-    # follow-up migrations, so repair any drift in the event timeline table
-    # before marking the schema current.
-    await update_agent_events_schema()
-    await _stamp_alembic_head()
-    logger.info("Database schema initialized successfully")
-
-
-async def _stamp_alembic_head() -> None:
-    """Stamp alembic_version to head so migrations are skipped after create_all().
-
-    Only stamps when the alembic_version table is empty or missing (fresh DB).
-    """
-    async with engine.begin() as conn:
-        has_table = await conn.run_sync(
-            lambda sync_conn: engine.dialect.has_table(sync_conn, "alembic_version")
-        )
-        if has_table:
-            result = await conn.execute(
-                refresh_select_statement(text("SELECT COUNT(*) FROM alembic_version"))
-            )
-            count = result.scalar()
-            if count and count > 0:
-                logger.info("Alembic version already set, skipping stamp")
-                return
-
-    logger.info("Stamping Alembic version to head...")
-    try:
-        import asyncio
-        from pathlib import Path
-
-        from alembic.config import Config
-
-        from alembic import command
-
-        project_root = Path(__file__).resolve().parents[5]
-        alembic_cfg = Config(str(project_root / "alembic.ini"))
-        await asyncio.to_thread(command.stamp, alembic_cfg, "head")
-        logger.info("Alembic version stamped to head")
-    except Exception:
-        logger.warning("Failed to stamp Alembic version", exc_info=True)
+    project_root = Path(__file__).resolve().parents[5]
+    alembic_cfg = Config(str(project_root / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(project_root / "alembic"))
+    logger.info("Applying database migrations...")
+    # Alembic owns its async event loop. Run it outside the application's loop and
+    # propagate migration failures so startup cannot report an incomplete schema.
+    # Embedded migrations must not disable the application's already configured loggers.
+    alembic_cfg.attributes["configure_logger"] = False
+    await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
+    logger.info("Database migrations completed successfully")
 
 
 async def update_agent_events_schema() -> None:

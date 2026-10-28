@@ -8,7 +8,6 @@ from src.infrastructure.adapters.secondary.persistence import database
 from src.infrastructure.adapters.secondary.persistence.models import (
     AGENT_EXECUTION_EVENT_CORRELATION_ID_LENGTH,
     AgentExecutionEvent,
-    Base,
 )
 
 
@@ -22,41 +21,26 @@ def test_agent_execution_event_correlation_id_allows_prefixed_uuids() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
-async def test_initialize_database_repairs_agent_events_schema_before_stamping() -> None:
-    """Fresh schemas should be repaired before Alembic is stamped to head."""
-    conn = MagicMock()
-    conn.execute = AsyncMock()
-    conn.run_sync = AsyncMock()
-
-    begin_ctx = AsyncMock()
-    begin_ctx.__aenter__.return_value = conn
-    begin_ctx.__aexit__.return_value = None
-    fake_engine = MagicMock()
-    fake_engine.begin.return_value = begin_ctx
-
-    call_order: list[str] = []
-
-    async def _record_schema_update() -> None:
-        call_order.append("schema")
-
-    async def _record_stamp() -> None:
-        call_order.append("stamp")
-
-    with (
-        patch.object(database, "engine", fake_engine),
-        patch.object(
-            database, "update_agent_events_schema", new=AsyncMock(side_effect=_record_schema_update)
-        ),
-        patch.object(database, "_stamp_alembic_head", new=AsyncMock(side_effect=_record_stamp)),
-    ):
+async def test_initialize_database_runs_full_migrations_without_stamping() -> None:
+    """Schema owners outside SQLAlchemy must be initialized by their migrations."""
+    with patch("alembic.command.upgrade") as upgrade, patch("alembic.command.stamp") as stamp:
         await database.initialize_database()
 
-    conn.execute.assert_awaited_once()
-    conn.run_sync.assert_awaited_once()
-    assert "artifacts" in Base.metadata.tables
-    assert "artifact_content_receipts" in Base.metadata.tables
-    assert call_order == ["schema", "stamp"]
+    config, target = upgrade.call_args.args
+    assert target == "head"
+    assert config.attributes["configure_logger"] is False
+    assert config.get_main_option("script_location").endswith("/alembic")
+    stamp.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_initialize_database_propagates_migration_failure() -> None:
+    """Startup must fail instead of serving from a partially migrated schema."""
+    with (
+        patch("alembic.command.upgrade", side_effect=RuntimeError("migration failed")),
+        pytest.raises(RuntimeError, match="migration failed"),
+    ):
+        await database.initialize_database()
 
 
 @pytest.mark.unit
