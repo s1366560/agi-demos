@@ -15,7 +15,7 @@
 //! the server, on device, and in the browser. Concurrency (running independent
 //! plan branches in parallel) is the host runner's job, not the core's.
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{collections::BTreeSet, future::Future, sync::Arc, task::Poll};
 
 use async_trait::async_trait;
 
@@ -146,6 +146,7 @@ impl Drop for DecisionStream<'_> {
 /// The core deliberately does not abort an in-flight tool call: a pause or
 /// cancellation becomes authoritative only after the current boundary is
 /// checkpointed, preserving the no-repeat guarantee for completed side effects.
+/// A host may interrupt an in-flight model decision before this checkpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunDirective {
     Continue,
@@ -169,6 +170,15 @@ pub struct SteeringInstruction {
 #[async_trait]
 pub trait ReActControl: Send + Sync {
     async fn directive(&self, session_id: &str, round: u64) -> CoreResult<RunDirective>;
+
+    /// Wait until `directive` can report Pause or Cancel for this execution.
+    ///
+    /// Hosts must register their notification before checking current state so
+    /// a command cannot be lost between the check and the wait. The default
+    /// preserves boundary-only control for hosts without a notification channel.
+    async fn wait_for_interrupt(&self, _session_id: &str, _round: u64) -> CoreResult<()> {
+        std::future::pending().await
+    }
 
     async fn acknowledge_steering(
         &self,
@@ -436,21 +446,38 @@ impl ReActEngine {
                     round: state.round,
                     emitted: std::sync::atomic::AtomicBool::new(false),
                 };
-                self.llm
-                    .decide_with_tools_stream(
-                        &decision_goal,
-                        state.round,
-                        &state.transcript,
-                        &available,
-                        &|delta| stream.emit(delta),
-                    )
+                let on_text = |delta: &str| stream.emit(delta);
+                let decision = self.llm.decide_with_tools_stream(
+                    &decision_goal,
+                    state.round,
+                    &state.transcript,
+                    &available,
+                    &on_text,
+                );
+                if let Some(control) = control.as_deref() {
+                    let mut decision = std::pin::pin!(decision);
+                    let interrupt = control.wait_for_interrupt(session_id, state.round);
+                    let mut interrupt = std::pin::pin!(interrupt);
+                    std::future::poll_fn(|cx| {
+                        // Control wins when both futures are ready. Leaving this
+                        // scope drops the request before checkpointing control.
+                        if let Poll::Ready(result) = interrupt.as_mut().poll(cx) {
+                            return Poll::Ready(result.map(|()| None));
+                        }
+                        decision.as_mut().poll(cx).map(|result| result.map(Some))
+                    })
                     .await
+                } else {
+                    decision.await.map(Some)
+                }
             };
             // A decision made before new control input must never be dispatched.
             if self.apply_control(&mut state, control.as_deref()).await? {
                 continue;
             }
-            let mut action = action?;
+            let Some(mut action) = action? else {
+                continue;
+            };
             let mut denied_tool = None;
             if let (Some(policy), AgentAction::CallTool { tool, input_json }) =
                 (self.tool_policy.as_ref(), &action)
@@ -560,6 +587,7 @@ impl ReActEngine {
                                 !result.is_error && outcome.matches_result(&ToolResult {
                                     output_json: result.output.clone(), media: result.media.clone(),
                                     control_outcome: Some(*outcome), control_generation: generation.clone(),
+                                    permission_required: None,
                                 })
                             });
                             let (control_outcome, control_generation) = control
@@ -596,6 +624,7 @@ impl ReActEngine {
                         let result = tool_control::validate(ToolResult {
                             output_json: output.clone(), media: media.clone(),
                             control_outcome: Some(outcome), control_generation,
+                            permission_required: None,
                         })?;
                         let resolution = match observer.as_deref() {
                             Some(observer) => observer.on_tool_control(
@@ -628,12 +657,15 @@ impl ReActEngine {
                         state.status = SessionStatus::Finished;
                     }
                 }
-                AgentAction::RequestHuman { request } => {
+                AgentAction::RequestHuman { mut request } => {
+                    let context = HitlValidationContext { session_id, round: state.round };
+                    if let Some(port) = self.hitl_validation.as_ref() {
+                        request.id = port.bind_request_id(&context, &request.id)?;
+                    }
                     // Consumed native pending requests need not remain live on
                     // replay after their human answer was durably recorded.
                     if state.hitl_answer(&request.id).is_none() {
                         if let Some(port) = self.hitl_validation.as_ref() {
-                            let context = HitlValidationContext { session_id, round: state.round };
                             if let Err(error) = port.validate(&context, &request).await {
                                 let reason: String = error.to_string().chars().take(512).collect();
                                 state.push_unique(TranscriptEntry::new(state.round, Role::Observation,

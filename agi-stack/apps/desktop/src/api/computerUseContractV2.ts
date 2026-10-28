@@ -1,3 +1,5 @@
+import type { ComputerUseInputMode } from './computerUseInput';
+
 export type ComputerUseConsentScope = "once" | "session" | "always";
 export type ComputerUsePhase =
   | "idle"
@@ -78,7 +80,29 @@ export function computerUseConsentScopes(
     return ["once"];
   return [...new Set(scopes)];
 }
+export interface ComputerUseLockedUseBinding {
+  readonly session_id: string;
+  readonly run_id: string;
+  readonly generation: string;
+}
+export type ComputerUseLockedSessionStatus = (
+  | (ComputerUseLockedUseBinding & { readonly revoked_binding?: never })
+  | { readonly revoked_binding: ComputerUseLockedUseBinding;
+      readonly session_id?: never; readonly run_id?: never; readonly generation?: never }
+) & {
+  readonly state?: string;
+  readonly phase?: string;
+  readonly enabled?: boolean;
+  readonly reason?: string;
+  readonly requires_manual_unlock?: boolean;
+  readonly failure?: { readonly stage?: string; readonly reason?: string } | null;
+};
+
 export interface ComputerUseSnapshot {
+  readonly input_support?: Readonly<Record<ComputerUseInputMode, {
+    readonly supported: boolean;
+    readonly reason: string | null;
+  }>>;
   readonly execution?: {
     readonly local: boolean;
     readonly cloud: boolean;
@@ -95,6 +119,7 @@ export interface ComputerUseSnapshot {
     readonly microphone: boolean;
     readonly system_audio: boolean;
     readonly locked_use: boolean;
+    readonly input_mode?: ComputerUseInputMode;
   };
   readonly pending: readonly ComputerUsePendingConsent[];
   readonly grants: readonly {
@@ -108,9 +133,20 @@ export interface ComputerUseSnapshot {
     readonly conversation_id: string;
     readonly run_id: string;
     readonly stopped: boolean;
+    readonly input_mode?: ComputerUseInputMode;
+    readonly input_generation?: string | null;
     readonly presentation?: ComputerUsePresentation;
+    readonly locked_use?: ComputerUseLockedSessionStatus;
   }[];
   readonly recent_presentation?: ComputerUsePresentation;
+  readonly locked_use?: {
+    readonly installed?: boolean;
+    readonly state?: string;
+    readonly phase?: string;
+    readonly enabled?: boolean;
+    readonly reason?: string;
+    readonly requires_manual_unlock?: boolean;
+  } | null;
   readonly recordings?: readonly ComputerUseRecording[];
   readonly connectors?: readonly {
     readonly account_id: string;
@@ -149,6 +185,7 @@ export type ComputerUseOperation = Readonly<{
     | "disable"
     | "uninstall"
     | "configure"
+    | "set_input_mode"
     | "grant"
     | "decline"
     | "revoke"
@@ -164,8 +201,12 @@ export type ComputerUseOperation = Readonly<{
     | "connector_cancel"
     | "connector_disconnect"
     | "permissions_status"
+    | "locked_use_status"
+    | "locked_use_install"
+    | "locked_use_uninstall"
     | "permission_request";
   expected_revision?: number;
+  input_mode?: ComputerUseInputMode;
   capability?:
     | "microphone"
     | "system_audio"
@@ -189,6 +230,7 @@ export type ComputerUseOperation = Readonly<{
   account_id?: string;
 }>;
 export interface ComputerUseClientV2 {
+  conversationMedia?(conversationId: string, reference: import('../../../../packages/plugin-slots/src/replOutputPresentationV2').ReplMediaReferenceV2, signal: AbortSignal): Promise<Blob>;
   snapshot(signal?: AbortSignal): Promise<ComputerUseSnapshot>;
   manage(
     operation: ComputerUseOperation,
@@ -212,12 +254,28 @@ export function isComputerUseSnapshotForScope(
     result.scope?.tenant_id === scope.tenantId &&
     result.scope?.project_id === scope.projectId &&
     Number.isSafeInteger(result.instance?.revision) &&
+    (result.instance?.input_mode === undefined ||
+      ['background', 'foreground'].includes(result.instance.input_mode)) &&
+    (result.input_support === undefined || isInputSupport(result.input_support)) &&
     Array.isArray(result.sessions) &&
+    result.sessions.every((session) => session &&
+      (session.input_mode === undefined || ['background', 'foreground'].includes(session.input_mode)) &&
+      (session.input_generation == null ||
+        (typeof session.input_generation === 'string' && session.input_generation.length > 0 &&
+          session.input_generation.length <= 1024))) &&
     Array.isArray(result.pending) &&
     Array.isArray(result.grants) &&
     (result.recordings === undefined ||
       (Array.isArray(result.recordings) && result.recordings.every(isRecording)))
   );
+}
+
+function isInputSupport(value: ComputerUseSnapshot['input_support']): boolean {
+  return !!value && (['background', 'foreground'] as const).every((mode) => {
+    const support = value[mode];
+    return support && typeof support.supported === 'boolean' &&
+      (support.reason === null || typeof support.reason === 'string');
+  });
 }
 
 function isRecording(value: unknown): value is ComputerUseRecording {

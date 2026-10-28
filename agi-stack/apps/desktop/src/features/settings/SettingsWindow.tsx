@@ -1,3 +1,5 @@
+import { createDeviceMcpClientV2 } from '../../api/deviceMcpClientV2';
+import { mcpManagementOwnerKey } from './mcpManagementLocationModel';
 import { PluginInstancesV2 } from './PluginInstancesV2';
 import { ComputerUseSettingsPage } from './ComputerUseSettingsPage';
 import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
@@ -219,6 +221,29 @@ export function SettingsWindow({
     () => createDesktopProjectMcpServersClientV2(projectMcpServersOperationsV2, config),
     [config, projectMcpServersOperationsV2],
   );
+  const mcpOwnerKey = mcpManagementOwnerKey(config, auth);
+  const mcpOwnerKeyRef = useRef(mcpOwnerKey);
+  mcpOwnerKeyRef.current = mcpOwnerKey;
+  const [mcpLocationSelection, setMcpLocationSelection] = useState<{
+    owner: string;
+    location: 'project' | 'device';
+    generation: number;
+  }>({ owner: mcpOwnerKey, location: 'project', generation: 0 });
+  const mcpLocation =
+    config.mode === 'cloud' && mcpLocationSelection.owner === mcpOwnerKey
+      ? mcpLocationSelection.location
+      : 'project';
+  const mcpContextKey = `${mcpOwnerKey}:${mcpLocation}:${mcpLocationSelection.generation}`;
+  const mcpContextKeyRef = useRef(mcpContextKey);
+  mcpContextKeyRef.current = mcpContextKey;
+  const deviceMcpClientV2 = useMemo(
+    () => createDeviceMcpClientV2(config, () =>
+      mcpOwnerKeyRef.current === mcpOwnerKey &&
+      mcpContextKeyRef.current === mcpContextKey &&
+      mcpLocation === 'device',
+    ),
+    [config, mcpOwnerKey, mcpContextKey, mcpLocation],
+  );
   const tenantProvidersClientV2 = useMemo(
     () => createDesktopTenantProvidersClientV2(tenantProvidersOperationsV2, config),
     [config, tenantProvidersOperationsV2],
@@ -396,10 +421,11 @@ export function SettingsWindow({
     projectChannelsOperationsV2,
   });
   const mcpServerManagement = useMCPServerManagement({
-    client: projectMcpServersClientV2,
+    client: mcpLocation === 'device' ? deviceMcpClientV2 : projectMcpServersClientV2,
+    location: mcpLocation,
     active: open && sectionEnabled && section === 'mcp',
     config,
-    contextKey: resourceContextKey,
+    contextKey: mcpContextKey,
     canManage: canManagePluginControlPlane,
   });
   const skillManagement = useSkillManagement({
@@ -850,6 +876,12 @@ export function SettingsWindow({
               {section === 'mcp' ? (
                 <MCPServerSettingsPage
                   management={mcpServerManagement}
+                  location={config.mode === 'cloud' ? mcpLocation : undefined}
+                  onLocationChange={(location) => setMcpLocationSelection((previous) => ({
+                    owner: mcpOwnerKey,
+                    location,
+                    generation: previous.generation + 1,
+                  }))}
                   canManage={canManagePluginControlPlane}
                 />
               ) : null}

@@ -14,7 +14,7 @@ pub(super) struct Device {
     pub tools: Vec<ToolDefinition>,
     pub send: mpsc::Sender<Value>,
 }
-#[derive(Clone, Serialize)]
+#[derive(Clone, PartialEq, Serialize)]
 pub(super) struct Claim {
     pub request_id: String,
     pub user_id: String,
@@ -34,14 +34,17 @@ pub(super) struct Claim {
     pub authorization_revision: i32,
     pub plan_version_id: String,
     pub allowed_mcp_servers: Vec<String>,
+    pub mcp_binding: Option<Value>,
 }
 pub(super) struct Request {
     pub connection_id: String,
     pub owner: Owner,
     pub run: authority::RunAuthority,
     pub claim: Claim,
+    pub definition: ToolDefinition,
     pub status: &'static str,
     pub result: Option<ToolResult>,
+    pub display: Option<Value>,
     pub failed: bool,
     pub cancelled: bool,
     pub output: Option<String>,
@@ -69,6 +72,8 @@ pub(crate) struct Broker {
     pub(super) cache: Arc<Mutex<Option<PathBuf>>>,
     pub(super) pending: Arc<Mutex<HashMap<String, hitl::Pending>>>,
     pub(super) control_receipts: Arc<Mutex<HashMap<(String, String), String>>>,
+    pub(super) step_lock: Arc<tokio::sync::Mutex<()>>,
+    pub(super) permission_steps: Arc<Mutex<HashMap<(String, String, String), String>>>,
 }
 fn fail(code: &str) -> CoreError {
     CoreError::Tool(code.into())
@@ -80,32 +85,14 @@ pub(super) fn identifier(value: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
 }
-fn digest(input: &str) -> String {
+pub(super) fn digest(input: &str) -> String {
     format!("{:x}", Sha256::digest(input.as_bytes()))
 }
-fn operation_effect(
-    device: &Device,
-    tool: &str,
-    input: &str,
-) -> CoreResult<agistack_adapters_cua::CuaToolEffect> {
-    let definition = device
-        .tools
-        .iter()
-        .find(|definition| definition.name == tool)
+fn operation_effect(device: &Device, tool: &str, input: &str) -> CoreResult<catalog::Effect> {
+    let definition = device.tools.iter().find(|definition| definition.name == tool)
         .ok_or_else(|| fail("computer_use_tool_unavailable"))?;
-    if tool == "computer_connector_call" {
-        let input: Value =
-            serde_json::from_str(input).map_err(|_| fail("computer_use_input_invalid"))?;
-        Ok(agistack_adapters_cua::connector_operation_effect(
-            definition.input_schema.as_ref().unwrap_or(&Value::Null),
-            &input,
-        ))
-    } else {
-        agistack_adapters_cua::tool_effects()
-            .get(tool)
-            .copied()
-            .ok_or_else(|| fail("computer_use_tool_unknown"))
-    }
+    let input: Value = serde_json::from_str(input).map_err(|_| fail("computer_use_input_invalid"))?;
+    catalog::effect(definition, &input)
 }
 fn validate_connector_access(
     device: &Device,
@@ -114,6 +101,14 @@ fn validate_connector_access(
     allowed: &[String],
 ) -> CoreResult<()> {
     if tool != "computer_connector_call" {
+        if let Some(definition) = device.tools.iter().find(|definition| definition.name == tool) {
+            if let Some(schema) = &definition.input_schema {
+                if catalog::mcp_binding(schema)?.is_some() {
+                    let input: Value = serde_json::from_str(input).map_err(|_| fail("computer_use_input_invalid"))?;
+                    catalog::validate_call(definition, &input, allowed)?;
+                }
+            }
+        }
         return Ok(());
     }
     let definition = device
@@ -142,6 +137,23 @@ impl Broker {
             objects: Some(objects),
             ..Self::default()
         }
+    }
+    pub(crate) fn current_tool_display(
+        &self, owner: &Owner, conversation: &str, session: &str, round: u64,
+        tool: &str, input: &str, output: &str,
+    ) -> Option<Value> {
+        let requests = self.requests.lock().expect("CUA requests");
+        let mut matching = requests.values().filter(|request| {
+            request.owner == *owner && request.claim.conversation_id == conversation
+                && request.claim.session_id == session && request.claim.round == round
+                && request.claim.tool_name == tool && request.claim.input_json == input
+                && request.status == "completed" && !request.failed && !request.cancelled
+                && request.result.as_ref().is_some_and(|result| result.output_json == output
+                    && result.control_outcome.is_none() && result.permission_required.is_none())
+        });
+        let request = matching.next()?;
+        if matching.next().is_some() { return None; }
+        request.display.clone()
     }
     pub(super) fn device(&self, owner: &Owner) -> CoreResult<Device> {
         let devices = self.devices.lock().expect("CUA devices");
@@ -174,16 +186,16 @@ impl Broker {
         if !run.agent_profile.permits(&context.tool) {
             return Err(fail("computer_use_tool_not_allowed_by_agent"));
         }
+        if device.tools.iter().find(|tool| tool.name == context.tool)
+            .and_then(|tool| tool.input_schema.as_ref()).is_some_and(|schema| schema[catalog::STEP_ONLY] == true) {
+            return Err(fail("computer_use_step_context_required"));
+        }
         let effect = operation_effect(&device, &context.tool, input)?;
         validate_connector_access(&device, &context.tool, input, &run.allowed_mcp_servers)?;
-        if effect != agistack_adapters_cua::CuaToolEffect::Read
-            && run.permission_profile != "full_access"
-        {
-            return Err(fail("computer_use_run_permission_denied"));
-        }
         if !device.tools.iter().any(|tool| tool.name == context.tool) {
             return Err(fail("computer_use_tool_unavailable"));
         }
+        let timeout = catalog::request_timeout(&context.tool, input)?;
         let id = digest(
             &serde_json::to_string(&(
                 owner,
@@ -194,7 +206,7 @@ impl Broker {
             ))
             .unwrap(),
         );
-        let claim = Claim {
+        let mut claim = Claim {
             request_id: id.clone(),
             user_id: owner.user_id.clone(),
             tenant_id: owner.tenant_id.clone(),
@@ -209,11 +221,33 @@ impl Broker {
             input_json: input.into(),
             permission_profile: run.permission_profile.clone(),
             approved_tools: vec![],
-            expires_at: chrono::Utc::now().timestamp() + 90,
+            expires_at: chrono::Utc::now().timestamp() + timeout.as_secs() as i64,
             authorization_revision: run.authorization_revision,
             plan_version_id: run.plan_version_id.clone(),
             allowed_mcp_servers: run.allowed_mcp_servers.clone(),
+            mcp_binding: device.tools.iter().find(|definition|definition.name == context.tool)
+                .and_then(|definition|definition.input_schema.as_ref())
+                .and_then(|schema|schema.get(catalog::MCP_BINDING)).cloned(),
         };
+        {
+            let requests = self.requests.lock().expect("CUA requests");
+            if let Some(previous) = requests.get(&id) {
+                if previous.claim.input_json != input || previous.claim.tool_name != context.tool
+                    || previous.owner != *owner {
+                    return Err(fail("computer_use_call_identity_conflict"));
+                }
+                if previous.cancelled { return Err(fail("cua_outcome_unknown")); }
+                if previous.failed {
+                    return Err(CoreError::ToolObservation(previous.result.as_ref()
+                        .map(|result|result.output_json.clone()).unwrap_or_else(||"cua_outcome_unknown".into())));
+                }
+                return previous.result.clone().ok_or_else(||fail("cua_outcome_unknown"));
+            }
+        }
+        let pending = if effect == catalog::Effect::Mutate && run.permission_profile != "full_access" {
+            self.authorize_outer_mcp(&device, run, &mut claim).await?
+        } else { None };
+        let request_expires_at = claim.expires_at;
         let notify = {
             let mut requests = self.requests.lock().expect("CUA requests");
             if let Some(previous) = requests.get(&id) {
@@ -245,8 +279,11 @@ impl Broker {
                     owner: owner.clone(),
                     run: run.clone(),
                     claim,
-                    status: "requested",
-                    result: None,
+                    definition: device.tools.iter().find(|tool| tool.name == context.tool)
+                        .cloned().ok_or_else(||fail("computer_use_tool_unavailable"))?,
+                    status: if pending.is_some() { "completed" } else { "requested" },
+                    result: pending.clone(),
+                    display: None,
                     failed: false,
                     cancelled: false,
                     output: None,
@@ -256,6 +293,7 @@ impl Broker {
             );
             notify
         };
+        if let Some(pending) = pending { return Ok(pending); }
         let mut guard = RequestGuard {
             broker: self.clone(),
             id: id.clone(),
@@ -263,7 +301,7 @@ impl Broker {
         };
         device
             .send
-            .send(json!({"type":"computer_use_request","request_id":id}))
+            .send(json!({"type":"computer_use_request","request_id":id,"expires_at":request_expires_at}))
             .await
             .map_err(|_| fail("computer_use_device_disconnected"))?;
         let wait = async {
@@ -287,7 +325,7 @@ impl Broker {
                 notified.await;
             }
         };
-        let result = tokio::time::timeout(std::time::Duration::from_secs(90), wait)
+        let result = tokio::time::timeout(timeout, wait)
             .await
             .map_err(|_| fail("cua_outcome_unknown"))?;
         guard.finished = result.is_ok();
@@ -335,6 +373,18 @@ impl Broker {
         if !request.run.agent_profile.permits(&request.claim.tool_name) {
             return Err(fail("computer_use_tool_not_allowed_by_agent"));
         }
+        if registered.tools.iter().find(|definition| definition.name == request.claim.tool_name)
+            != Some(&request.definition) {
+            return Err(fail("computer_use_catalog_changed"));
+        }
+        if registered.tools.iter().find(|definition| definition.name == request.claim.tool_name)
+            .and_then(|definition| definition.input_schema.as_ref()).is_some_and(|schema| schema[catalog::STEP_ONLY] == true) {
+            return Err(fail("computer_use_step_context_required"));
+        }
+        let current_binding = registered.tools.iter().find(|definition|definition.name == request.claim.tool_name)
+            .and_then(|definition|definition.input_schema.as_ref())
+            .and_then(|schema|schema.get(catalog::MCP_BINDING)).cloned();
+        if current_binding != request.claim.mcp_binding { return Err(fail("computer_use_mcp_binding_changed")); }
         let effect = operation_effect(
             &registered,
             &request.claim.tool_name,
@@ -346,8 +396,9 @@ impl Broker {
             &request.claim.input_json,
             &request.run.allowed_mcp_servers,
         )?;
-        if effect != agistack_adapters_cua::CuaToolEffect::Read
+        if effect == catalog::Effect::Mutate
             && request.run.permission_profile != "full_access"
+            && request.claim.approved_tools != [request.claim.tool_name.clone()]
         {
             return Err(fail("computer_use_run_permission_denied"));
         }
@@ -460,7 +511,25 @@ impl Broker {
         control_outcome: Option<agistack_core::ports::ToolControlOutcome>,
         control_generation: Option<String>,
     ) -> CoreResult<bool> {
+        self.receive_result_with_permission(connection, id, output, is_error, descriptors,
+            control_outcome, control_generation, None)
+    }
+    pub(super) fn receive_result_with_permission(
+        &self,
+        connection: &str,
+        id: &str,
+        output: String,
+        is_error: bool,
+        descriptors: Vec<Descriptor>,
+        control_outcome: Option<agistack_core::ports::ToolControlOutcome>,
+        control_generation: Option<String>,
+        permission: Option<permission::ValidatedPermission>,
+    ) -> CoreResult<bool> {
         let mut result = ToolResult::text(output.clone());
+        if permission.is_some() && (is_error || !descriptors.is_empty() || control_outcome.is_some()
+            || control_generation.is_some()) {
+            return Err(fail("computer_use_permission_result_invalid"));
+        }
         if let Some(outcome) = control_outcome {
             if is_error
                 || !descriptors.is_empty()
@@ -481,17 +550,29 @@ impl Broker {
         } else if control_generation.is_some() {
             return Err(fail("computer_use_control_result_invalid"));
         }
+        let mut requests = self.requests.lock().expect("CUA requests");
+        let request = requests
+            .get_mut(id)
+            .ok_or_else(|| fail("computer_use_result_denied"))?;
+        if request.connection_id != connection
+            || request.status != "claimed"
+            || request.cancelled
+            || request.claim.expires_at <= chrono::Utc::now().timestamp()
+        {
+            return Err(fail("computer_use_result_denied"));
+        }
+        let repl = repl_output::declared(&request.definition);
         if output.len() > 1024 * 1024
-            || descriptors.len() > 21
-            || descriptors
+            || descriptors.len() > if repl { 256 } else { 21 }
+            || (!repl && descriptors
                 .iter()
                 .filter(|d| d.mime_type != "audio/wav")
                 .count()
-                > 20
+                > 20)
             || descriptors
                 .iter()
                 .try_fold(0u64, |total, d| total.checked_add(d.size_bytes))
-                .is_none_or(|total| total > 64 * 1024 * 1024)
+                .is_none_or(|total| total > if repl { 32 * 1024 * 1024 } else { 64 * 1024 * 1024 })
         {
             return Err(fail("computer_use_result_invalid"));
         }
@@ -501,29 +582,27 @@ impl Broker {
                 || !ids.insert(&descriptor.artifact_id)
                 || descriptor.size_bytes == 0
                 || descriptor.size_bytes
-                    > if descriptor.mime_type == "audio/wav" {
+                    > if repl {
+                        media_storage::MAX_BYTES
+                    } else if descriptor.mime_type == "audio/wav" {
                         64 * 1024 * 1024
                     } else {
                         8 * 1024 * 1024
                     }
-                || !matches!(
-                    descriptor.mime_type.as_str(),
-                    "image/png" | "image/jpeg" | "image/webp" | "audio/wav"
-                )
+                || !(matches!(descriptor.mime_type.as_str(),
+                    "image/png" | "image/jpeg" | "image/webp" | "audio/wav")
+                    || (repl && matches!(descriptor.mime_type.as_str(), "audio/x-wav" | "audio/mpeg")))
             {
                 return Err(fail("computer_use_media_invalid"));
             }
         }
         serde_json::from_str::<Value>(&output).map_err(|_| fail("computer_use_output_invalid"))?;
-        let mut requests = self.requests.lock().expect("CUA requests");
-        let request = requests
-            .get_mut(id)
-            .ok_or_else(|| fail("computer_use_result_denied"))?;
-        if request.connection_id != connection
-            || request.status != "claimed"
-            || request.claim.expires_at <= chrono::Utc::now().timestamp()
-        {
-            return Err(fail("computer_use_result_denied"));
+        if let Some(permission) = permission {
+            if !permission.matches(connection, request) {
+                return Err(fail("computer_use_permission_binding_invalid"));
+            }
+            self.validate_request_device(request)?;
+            result.permission_required = Some(permission.into_permission());
         }
         if control_outcome.is_some()
             && !agistack_adapters_cua::tool_effects().contains_key(request.claim.tool_name.as_str())
@@ -541,6 +620,9 @@ impl Broker {
             })
             .collect();
         if is_error || request.media.is_empty() {
+            request.display = if !is_error && result.control_outcome.is_none() && result.permission_required.is_none() {
+                repl_output::display(&request.definition, &output, &[])
+            } else { None };
             request.result = Some(result);
             request.status = "completed";
             request.notify.notify_one();
@@ -605,7 +687,7 @@ impl Broker {
         Ok(complete)
     }
     pub(super) async fn complete(&self, id: &str) -> CoreResult<()> {
-        let (owner, claim, run, output, media) = {
+        let (owner, claim, run, definition, output, media) = {
             let requests = self.requests.lock().expect("CUA requests");
             let request = requests
                 .get(id)
@@ -614,6 +696,7 @@ impl Broker {
                 request.owner.clone(),
                 request.claim.clone(),
                 request.run.clone(),
+                request.definition.clone(),
                 request
                     .output
                     .clone()
@@ -630,33 +713,37 @@ impl Broker {
             .ok_or_else(|| fail("computer_use_authority_unavailable"))?
             .recheck(&owner, &claim.conversation_id, &run)
             .await?;
-        let root = {
-            let mut cache = self.cache.lock().expect("CUA cache");
-            cache
-                .get_or_insert_with(|| {
-                    std::env::temp_dir()
-                        .join(format!("memstack-cloud-cua-{}", uuid::Uuid::new_v4()))
-                })
-                .clone()
-        };
-        std::fs::create_dir_all(&root).map_err(|_| fail("computer_use_artifact_save_failed"))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
-                .map_err(|_| fail("computer_use_artifact_save_failed"))?;
-        }
+        let admitted = repl_output::admitted_media(
+            &definition, &output, &media.iter().map(|(descriptor, _)| descriptor.clone()).collect::<Vec<_>>(),
+        ).unwrap_or_default();
         let mut attachments = vec![];
+        let mut bindings = vec![];
         for (descriptor, bytes) in media {
-            let valid = match descriptor.mime_type.as_str() {
-                "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
-                "image/jpeg" => bytes.starts_with(b"\xff\xd8\xff"),
-                "image/webp" => bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP"),
-                "audio/wav" => bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WAVE"),
-                _ => false,
-            };
-            if !valid {
+            if !media_storage::valid_bytes(&bytes, &descriptor.mime_type, repl_output::declared(&definition)) {
                 return Err(fail("computer_use_media_invalid"));
+            }
+            if repl_output::declared(&definition) && !admitted.contains(&descriptor.artifact_id) {
+                bindings.push(media_storage::Binding {
+                    native_id: descriptor.artifact_id.clone(), artifact_id: None,
+                    mime_type: descriptor.mime_type.clone(), size_bytes: descriptor.size_bytes,
+                });
+                continue;
+            }
+            let root = {
+                let mut cache = self.cache.lock().expect("CUA cache");
+                cache
+                    .get_or_insert_with(|| {
+                        std::env::temp_dir()
+                            .join(format!("memstack-cloud-cua-{}", uuid::Uuid::new_v4()))
+                    })
+                    .clone()
+            };
+            std::fs::create_dir_all(&root).map_err(|_| fail("computer_use_artifact_save_failed"))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
+                    .map_err(|_| fail("computer_use_artifact_save_failed"))?;
             }
             let key = format!(
                 "computer-use/{}/{}/{}",
@@ -669,21 +756,25 @@ impl Broker {
                 .ok_or_else(|| fail("computer_use_artifact_store_unavailable"))?
                 .put(&key, bytes.clone(), Some(&descriptor.mime_type))
                 .await?;
-            if descriptor.mime_type != "audio/wav" {
-                let path = root.join(digest(&key));
-                std::fs::write(&path, bytes)
-                    .map_err(|_| fail("computer_use_artifact_save_failed"))?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-                        .map_err(|_| fail("computer_use_artifact_save_failed"))?;
-                }
-                attachments.push(MediaAttachment {
-                    artifact_path: path.to_string_lossy().into_owned(),
-                    mime_type: descriptor.mime_type,
-                });
+            if repl_output::declared(&definition) {
+                bindings.push(media_storage::save(
+                    self.objects.as_ref().ok_or_else(||fail("computer_use_artifact_store_unavailable"))?.as_ref(),
+                    &owner, &claim.conversation_id, id, &descriptor, &bytes,
+                ).await?);
             }
+            let path = root.join(digest(&key));
+            std::fs::write(&path, bytes)
+                .map_err(|_| fail("computer_use_artifact_save_failed"))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+                    .map_err(|_| fail("computer_use_artifact_save_failed"))?;
+            }
+            attachments.push(MediaAttachment {
+                artifact_path: path.to_string_lossy().into_owned(),
+                mime_type: descriptor.mime_type,
+            });
         }
         let mut requests = self.requests.lock().expect("CUA requests");
         let request = requests
@@ -692,7 +783,9 @@ impl Broker {
         if request.status != "saving" {
             return Err(fail("cua_outcome_unknown"));
         }
+        request.display = repl_output::display(&definition, &output, &bindings);
         request.result = Some(ToolResult {
+            permission_required: None,
             control_outcome: None,
             control_generation: None,
             output_json: output,

@@ -155,7 +155,7 @@ export function startNativeTransport(chrome: ChromeApi, bridge: Bridge): NativeT
 
   chrome.debugger.onEvent.addListener((source, method, params) => {
     if (typeof source?.tabId !== 'number') return;
-    notify('onCDPEvent', { tabId: source.tabId, method, params });
+    notify('onCDPEvent', { tabId: source.tabId, method, params, ...(source.sessionId ? { sessionId: source.sessionId } : {}) });
   });
 
   chrome.debugger.onDetach.addListener((source, reason) => {

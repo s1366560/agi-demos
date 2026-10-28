@@ -75,3 +75,4 @@ class CallAuthorization:
     child_owner_digest: str | None = field(default=None, repr=False)
     run_kind: Literal["chat", "plan"] = "chat"
     allowed_mcp_servers: tuple[str, ...] = ()
+    agent_id: str | None = None

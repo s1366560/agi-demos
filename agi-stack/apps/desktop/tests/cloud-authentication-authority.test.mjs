@@ -409,3 +409,54 @@ test('cancellation while a vault write is pending removes the retired credential
   await Promise.all([cancelled, rejected]);
   assert.equal(session, null);
 });
+
+test('invalid custom Cloud origins issue no authentication request or credential write', async () => {
+  const calls = [];
+  const saved = [];
+  const authority = authorityFor({ calls, saved, responses: [] });
+  for (const apiBaseUrl of [
+    '',
+    'not-a-url',
+    'http://cloud.example.test',
+    'https://user:password@cloud.example.test',
+    'https://cloud.example.test/api/v1',
+    'https://cloud.example.test?tenant=one',
+    'https://cloud.example.test#login',
+  ]) {
+    await assert.rejects(
+      authority.loginWithPassword({
+        apiBaseUrl,
+        username: 'qa@example.test',
+        password: 'test-password',
+        trustedDevice: false,
+      }),
+      /cloud_auth_contract_invalid/u,
+    );
+  }
+  assert.equal(calls.length, 0);
+  assert.equal(saved.length, 0);
+});
+
+test('a custom loopback Cloud origin reaches the same native authentication authority', async () => {
+  const calls = [];
+  const saved = [];
+  const authority = authorityFor({
+    calls,
+    saved,
+    responses: [
+      jsonResponse({
+        access_token: 'test-vault-token',
+        token_type: 'bearer',
+        must_change_password: false,
+      }),
+    ],
+  });
+  await authority.loginWithPassword({
+    apiBaseUrl: 'http://127.0.0.1:18766',
+    username: 'qa@example.test',
+    password: 'test-password',
+    trustedDevice: false,
+  });
+  assert.equal(calls[0].url, 'http://127.0.0.1:18766/api/v1/auth/token');
+  assert.equal(saved[0].input.api_base_url, 'http://127.0.0.1:18766');
+});

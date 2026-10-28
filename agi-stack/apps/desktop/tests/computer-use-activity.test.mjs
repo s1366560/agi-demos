@@ -198,6 +198,41 @@ test('owner cleanup invalidates its first pending management request before it h
   monitor.clear();
 });
 
+test('owner cleanup retires its first pending status without retiring a different owner', async () => {
+  const requests = [];
+  const emitted = [];
+  const cleared = [];
+  const monitor = new ComputerUseActivityMonitor({
+    invoke: () => new Promise((resolve) => requests.push(resolve)),
+    emit: (owner) => emitted.push(owner),
+    show() {},
+    surface: { update() {}, hide() {} },
+    inputs: {
+      bind() {},
+      clear: (owner) => cleared.push(owner),
+    },
+  });
+  try {
+    const first = monitor.track(7, args());
+    monitor.clear(7);
+    requests[0](base);
+    await first;
+    assert.deepEqual(emitted, [], 'a late first status cannot restore a retired renderer');
+    assert.deepEqual(cleared, [7]);
+
+    const old = monitor.track(7, args());
+    const current = monitor.track(8, args());
+    monitor.clear(7);
+    requests[2](base);
+    await current;
+    requests[1](base);
+    await old;
+    assert.deepEqual(emitted, [8], 'retiring an old pending owner preserves the new request');
+  } finally {
+    monitor.clear();
+  }
+});
+
 test('an older poll failure cannot hide the surface while Stop is pending', async () => {
   const requests = [];
   let hidden = 0;

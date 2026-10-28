@@ -187,6 +187,15 @@ test("a stop request is scoped, immediate, and never enters the reconnect outbox
   );
 });
 
+test("local planning Stop includes exact message identity and rejects a blank target", () => {
+  const sent = [];
+  const send = (payload) => { sent.push(payload); return true; };
+  assert.equal(deliverAgentStopSession("conversation-1", send, { messageId: " planning-1 " }), true);
+  assert.deepEqual(sent, [{ type: "stop_session", conversation_id: "conversation-1", message_id: "planning-1" }]);
+  assert.equal(deliverAgentStopSession("conversation-1", send, { messageId: " " }), false);
+  assert.equal(sent.length, 1);
+});
+
 test("a steer message sends directly and never enters the reconnect outbox", () => {
   const sent = [];
   const accepted = deliverAgentSteerMessage(

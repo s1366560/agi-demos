@@ -13,14 +13,13 @@
  *  - per-tab CDP debugger sessions (`webContents.debugger`, protocol 1.3)
  *    with a 20s command timeout and event/detach forwarding,
  *  - pane attachment: the active tab's view is added to the host window's
- *    content view at renderer-reported bounds; hiding the panel zeroes the
- *    bounds but keeps the view alive for the agent.
+ *    content view at renderer-reported bounds; hidden views are detached while
+ *    retaining a nonzero viewport for agent input and screenshots.
  */
 
-import { WebContentsView, session, type BrowserWindow, type WebContents } from 'electron';
+import { BrowserWindow, WebContentsView, session, type WebContents } from 'electron';
 
 import { IabCursorController } from './iabCursor';
-import { buildIabInputScript, isIabSynthesizedInputMethod } from './iabInputTranslation';
 import {
   evaluateIabNavigation,
   evaluateIabWindowOpen,
@@ -31,6 +30,7 @@ import { IabTabRegistry, type IabTurnEndedLease } from './iabTabRegistry';
 export const IAB_SESSION_PARTITION = 'persist:memstack-iab';
 export const IAB_CDP_TIMEOUT_MS = 20_000;
 export const IAB_WINDOW_ID = 1;
+const IAB_INITIAL_BOUNDS = Object.freeze({ x: 0, y: 0, width: 1200, height: 800 });
 
 export type IabTabSnapshot = Readonly<{
   tabId: number;
@@ -51,8 +51,9 @@ export type IabViewPoolOptions = Readonly<{
   preloadPath: string;
   cursorScriptPath: () => string;
   onTabsChanged?: () => void;
-  onCdpEvent?: (tabId: number, method: string, params: unknown) => void;
+  onCdpEvent?: (tabId: number, method: string, params: unknown, sessionId?: string) => void;
   onCdpDetach?: (tabId: number, reason: string) => void;
+  onVisibilityRequested?: (visible: boolean) => void;
 }>;
 
 type IabTabEntry = {
@@ -87,6 +88,7 @@ export class IabViewPool {
   #hostWindow: BrowserWindow | null = null;
   #paneVisible = false;
   #paneBounds: IabPaneBounds = Object.freeze({ x: 0, y: 0, width: 0, height: 0 });
+  #viewport: { width: number; height: number } | null = null;
 
   constructor(options: IabViewPoolOptions) {
     this.#options = options;
@@ -94,6 +96,9 @@ export class IabViewPool {
   }
 
   setHostWindow(window: BrowserWindow | null): void {
+    if (window !== this.#hostWindow) {
+      for (const entry of this.#tabs.values()) this.#detachFromWindow(entry);
+    }
     this.#hostWindow = window;
     this.#layoutActiveView();
   }
@@ -130,6 +135,8 @@ export class IabViewPool {
         session: session.fromPartition(IAB_SESSION_PARTITION),
       },
     });
+    view.setBounds(IAB_INITIAL_BOUNDS);
+    view.setVisible(false);
     const tabId = this.registry.createTab();
     const entry: IabTabEntry = { view, debuggerAttached: false };
     this.#tabs.set(tabId, entry);
@@ -137,6 +144,7 @@ export class IabViewPool {
     if (this.#activeTabId === null) this.#activeTabId = tabId;
     this.#layoutActiveView();
     this.#emitTabsChanged();
+    if (this.#viewport) await this.#applyViewport(tabId, this.#viewport);
     try {
       await view.webContents.loadURL(target);
     } catch (error) {
@@ -150,6 +158,8 @@ export class IabViewPool {
         throw error instanceof Error ? error : new Error(String(error));
       }
     }
+    this.#initializeView(entry);
+    this.#layoutActiveView();
     return tabId;
   }
 
@@ -195,6 +205,33 @@ export class IabViewPool {
     return snapshots;
   }
 
+  get browserVisible(): boolean {
+    return this.#paneVisible && this.#paneBounds.width > 0 && this.#paneBounds.height > 0;
+  }
+
+  async setBrowserVisible(visible: boolean): Promise<void> {
+    if (typeof visible !== 'boolean') throw new Error('browser visibility must be boolean');
+    this.#options.onVisibilityRequested?.(visible);
+    if (!visible) { this.hidePane(); return; }
+    this.#hostWindow?.show();
+    const deadline = Date.now() + 5_000;
+    while (!this.browserVisible) {
+      if (Date.now() >= deadline) throw new Error('browser panel did not become visible');
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+
+  async setViewport(size: { width: number; height: number } | null): Promise<void> {
+    if (size && (!Number.isSafeInteger(size.width) || !Number.isSafeInteger(size.height) || size.width < 1 || size.height < 1 || size.width > 8192 || size.height > 8192)) throw new Error('viewport dimensions must be integers from 1 to 8192');
+    for (const tabId of this.#tabs.keys()) await this.#applyViewport(tabId, size);
+    this.#viewport = size;
+  }
+
+  async #applyViewport(tabId: number, size: { width: number; height: number } | null): Promise<void> {
+    await this.executeCdp(tabId, size ? 'Emulation.setDeviceMetricsOverride' : 'Emulation.clearDeviceMetricsOverride',
+      size ? { width: size.width, height: size.height, deviceScaleFactor: 1, mobile: false } : {});
+  }
+
   /** Idempotent: attaching an already-attached tab is a no-op. */
   attachDebugger(tabId: number): void {
     const entry = this.#entry(tabId);
@@ -208,8 +245,8 @@ export class IabViewPool {
       );
     }
     entry.debuggerAttached = true;
-    tabDebug.on('message', (_event, method, params: unknown) => {
-      this.#options.onCdpEvent?.(tabId, method, params);
+    tabDebug.on('message', (_event, method, params: unknown, sessionId?: string) => {
+      this.#options.onCdpEvent?.(tabId, method, params, sessionId);
     });
     tabDebug.on('detach', (_event, reason) => {
       entry.debuggerAttached = false;
@@ -233,26 +270,16 @@ export class IabViewPool {
   }
 
   /**
-   * Run one CDP command. Input.* methods are translated to in-page
-   * synthesized events (never sent over the debugger); everything else goes
-   * through the debugger with the 20s contract timeout. Auto-attaches on
-   * first use.
+   * Run the already-authorized command against this tab's Chromium target.
+   * Input uses the same CDP path as Chrome so browser default actions and
+   * trusted events are preserved. No host-window activation is requested.
+   * Protocol errors reject instead of reporting an unapplied input as success.
    */
-  async executeCdp(tabId: number, method: string, params: unknown): Promise<unknown> {
+  async executeCdp(tabId: number, method: string, params: unknown, sessionId?: string): Promise<unknown> {
     const entry = this.#entry(tabId);
-    if (isIabSynthesizedInputMethod(method)) {
-      const script = buildIabInputScript(method, params);
-      if (script === null) throw new Error(`iab cannot translate input method: ${method}`);
-      const result: unknown = await withTimeout(
-        entry.view.webContents.executeJavaScript(script, true) as Promise<unknown>,
-        IAB_CDP_TIMEOUT_MS,
-        `iab input synthesis ${method}`,
-      );
-      return result;
-    }
     this.attachDebugger(tabId);
     return withTimeout(
-      entry.view.webContents.debugger.sendCommand(method, params as object | undefined),
+      entry.view.webContents.debugger.sendCommand(method, params as object | undefined, sessionId),
       IAB_CDP_TIMEOUT_MS,
       `iab CDP command ${method}`,
     );
@@ -295,9 +322,7 @@ export class IabViewPool {
 
   hidePane(): void {
     this.#paneVisible = false;
-    const active = this.#activeEntry();
-    // The view keeps running for the agent; only its bounds go to zero.
-    if (active) active.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    this.#layoutActiveView();
   }
 
   destroyAll(): void {
@@ -310,9 +335,29 @@ export class IabViewPool {
     }
   }
 
-  #activeEntry(): IabTabEntry | null {
-    if (this.#activeTabId === null) return null;
-    return this.#tabs.get(this.#activeTabId) ?? null;
+  #initializeView(entry: IabTabEntry): void {
+    // Chromium initializes a view's viewport only while it has a native parent
+    // and is visible within that parent. A hidden, nonfocusable temporary host
+    // provides this without ever attaching hidden content to the user's window.
+    this.#detachFromWindow(entry);
+    const host = new BrowserWindow({
+      show: false,
+      focusable: false,
+      width: IAB_INITIAL_BOUNDS.width,
+      height: IAB_INITIAL_BOUNDS.height,
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+    });
+    try {
+      host.contentView.addChildView(entry.view);
+      entry.view.setVisible(true);
+    } finally {
+      try {
+        entry.view.setVisible(false);
+        host.contentView.removeChildView(entry.view);
+      } finally {
+        host.destroy();
+      }
+    }
   }
 
   #detachFromWindow(entry: IabTabEntry): void {
@@ -327,21 +372,22 @@ export class IabViewPool {
 
   #layoutActiveView(): void {
     const window = this.#hostWindow;
-    if (!window || window.isDestroyed()) return;
-    const active = this.#activeEntry();
-    // Detach every non-active view; only the active tab is on screen.
     for (const [tabId, entry] of this.#tabs) {
-      if (tabId !== this.#activeTabId) this.#detachFromWindow(entry);
+      if (window && !window.isDestroyed() && tabId === this.#activeTabId && this.browserVisible) {
+        entry.view.setBounds(this.#paneBounds);
+        try {
+          window.contentView.addChildView(entry.view);
+        } catch {
+          // Already attached: addChildView throws on double-add in some versions.
+        }
+        entry.view.setVisible(true);
+      } else {
+        // A zero-size view breaks layout and hit testing; an attached invisible
+        // view can stall captureScreenshot. Retain its last size and detach it.
+        entry.view.setVisible(false);
+        this.#detachFromWindow(entry);
+      }
     }
-    if (!active) return;
-    try {
-      window.contentView.addChildView(active.view);
-    } catch {
-      // Already attached: addChildView throws on double-add in some versions.
-    }
-    active.view.setBounds(
-      this.#paneVisible ? this.#paneBounds : { x: 0, y: 0, width: 0, height: 0 },
-    );
   }
 
   #installPolicy(tabId: number, view: WebContentsView): void {

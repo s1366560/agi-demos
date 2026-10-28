@@ -7,7 +7,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 use agistack_core::ports::{CoreError, CoreResult, ToolDefinition, ToolHost};
@@ -38,16 +38,18 @@ struct McpAgentTool {
     definition: ToolDefinition,
     metadata: ToolMetadata,
     computer_use_capability: bool,
+    agent_visible: bool,
 }
 
 /// Snapshot of the active project-scoped MCP tool catalog for one agent run.
 pub(super) struct McpAgentToolHost {
     supervisor: Arc<McpSupervisor>,
     scope: McpScope,
+    app_project_id: String,
     run_id: String,
     catalog_lease: McpCatalogLease,
     apps: Vec<McpAppDefinition>,
-    app_events: Option<(Arc<super::LocalRuntimeState>, String, String)>,
+    app_events: Option<(Weak<super::LocalRuntimeState>, String, String)>,
     tools: BTreeMap<String, McpAgentTool>,
     legacy_aliases: BTreeMap<String, String>,
     advertised_aliases: BTreeSet<String>,
@@ -103,6 +105,7 @@ impl McpAgentToolHost {
                     exposed_name.clone(),
                     McpAgentTool {
                         computer_use_capability:super::computer_use_v2::declared_connector_tool(&server,tool_name),
+                        agent_visible: agent_visible(definition),
                         server_id: server.id.clone(),
                         server_name: server.name.clone(),
                         tool_name: tool_name.to_string(),
@@ -137,6 +140,7 @@ impl McpAgentToolHost {
             .collect();
         Ok(Self {
             supervisor,
+            app_project_id: scope.project_id.clone(),
             scope,
             run_id,
             catalog_lease,
@@ -146,6 +150,41 @@ impl McpAgentToolHost {
             legacy_aliases,
             advertised_aliases,
         })
+    }
+
+    /// Authenticated device catalog; untrusted remote effect hints never grant read access.
+    pub(super) fn device_tool_definitions(&self) -> CoreResult<Vec<ToolDefinition>> {
+        let mut definitions = BTreeMap::new();
+        for (name, tool) in &self.tools {
+            let binding = self.supervisor.resolve_tool(&self.scope, &tool.server_id, &tool.tool_name)
+                .map_err(|error| CoreError::Tool(error.reason_code().into()))?;
+            let mut definition = tool.definition.clone();
+            if definition.description.is_none() {
+                definition.description = Some(format!("Call MCP tool {} on {}", tool.tool_name, tool.server_name));
+            }
+            let mut schema = binding.definition.get("inputSchema").cloned()
+                .unwrap_or_else(|| json!({"type":"object"}));
+            let object = schema.as_object_mut()
+                .ok_or_else(|| CoreError::Tool("local_mcp_input_schema_invalid".into()))?;
+            object.insert("x-cua-mcp-binding".into(), json!({
+                "server_id": binding.server_id, "server_name": tool.server_name,
+                "revision": binding.server_revision, "catalog_digest": binding.catalog_digest,
+            }));
+            if tool.agent_visible {
+                object.remove("x-cua-step-only");
+            } else {
+                object.insert("x-cua-step-only".into(), json!(true));
+            }
+            definition.input_schema = Some(schema);
+            definitions.insert(name.clone(), definition);
+        }
+        for (alias, canonical) in &self.legacy_aliases {
+            if let Some(mut definition) = definitions.get(canonical).cloned() {
+                definition.name.clone_from(alias);
+                definitions.insert(alias.clone(), definition);
+            }
+        }
+        Ok(definitions.into_values().collect())
     }
 
     pub(super) fn authority_metadata_by_name(&self) -> BTreeMap<String, ToolMetadata> {
@@ -171,7 +210,13 @@ impl McpAgentToolHost {
         conversation_id: String,
         message_id: String,
     ) -> Self {
-        self.app_events = Some((state, conversation_id, message_id));
+        self.app_events = Some((Arc::downgrade(&state), conversation_id, message_id));
+        self
+    }
+
+    /// Cloud device storage has a private namespace; UI events retain the claimed project.
+    pub(super) fn with_app_project(mut self, project_id: String) -> Self {
+        self.app_project_id = project_id;
         self
     }
 
@@ -189,6 +234,22 @@ impl McpAgentToolHost {
         let Some(tool) = self.tool_by_exposed_name(name) else {
             return Ok(None);
         };
+        if let Some(state) = self
+            .app_events
+            .as_ref()
+            .and_then(|(state, _, _)| state.upgrade())
+        {
+            if super::mcp_app_automation::is_callback_result(
+                &state,
+                &self.run_id,
+                &tool.server_id,
+                &tool.tool_name,
+            )
+            .map_err(|error| error.to_string())?
+            {
+                return Ok(None);
+            }
+        }
         let app = self
             .apps
             .iter()
@@ -221,10 +282,16 @@ impl McpAgentToolHost {
                     .flatten()
             })
             .ok_or_else(|| "local_mcp_app_html_unavailable".to_string())?;
+        let automation_tab_id = self.app_events.as_ref().and_then(|(state, conversation, _)| {
+            let state = state.upgrade()?;
+            state.mcp_app_automation.open(&state, &self.run_id, conversation, app).ok()
+        });
         Ok(Some(json!({
             "app_id": app.id,
-            "project_id": self.scope.project_id,
+            "project_id": self.app_project_id,
             "server_name": tool.server_name,
+            "server_id": tool.server_id,
+            "automation_tab_id": automation_tab_id,
             "tool_name": tool.tool_name,
             "resource_uri": uri,
             "resource_html": html,
@@ -246,9 +313,10 @@ impl ToolHost for McpAgentToolHost {
 
     fn list_tools(&self) -> Vec<String> {
         self.tools
-            .keys()
-            .cloned()
-            .chain(self.advertised_aliases.iter().cloned())
+            .iter()
+            .filter(|(_,tool)| tool.agent_visible)
+            .map(|(name,_)| name.clone())
+            .chain(self.advertised_aliases.iter().filter(|alias| self.tool_by_exposed_name(alias).is_some_and(|tool|tool.agent_visible)).cloned())
             .collect()
     }
 
@@ -260,9 +328,13 @@ impl ToolHost for McpAgentToolHost {
         let definition = self
             .tool_by_exposed_name(tool)
             .ok_or_else(|| CoreError::Tool(format!("unknown MCP agent tool: {tool}")))?;
+        if !definition.agent_visible && super::execution_authority::current_step_id().is_none() {
+            return Err(CoreError::Tool("mcp_app_callback_required".into()));
+        }
         if definition.computer_use_capability {
             if let Some((state,conversation,_))=&self.app_events {
-                super::computer_use_v2::denials::ensure_mcp_run(state,conversation,&self.run_id)?;
+                let state = state.upgrade().ok_or_else(|| CoreError::Tool("local_mcp_runtime_stopped".into()))?;
+                super::computer_use_v2::denials::ensure_mcp_run(&state,conversation,&self.run_id)?;
             }
         }
         let arguments: Value = serde_json::from_str(input_json)
@@ -272,8 +344,12 @@ impl ToolHost for McpAgentToolHost {
                 "MCP tool input must be a JSON object".to_string(),
             ));
         }
+        let identity = super::computer_use_v2::call_identity::active().ok();
         let call_digest = canonical_json_digest(&json!({
             "run_id": self.run_id,
+            "engine_session_id": identity.as_ref().map(|value| value.engine_session_id()),
+            "round": identity.as_ref().map(|value| value.round()),
+            "step_id": super::execution_authority::current_step_id(),
             "tool": definition.metadata.name.as_str(),
             "arguments": arguments,
         }))
@@ -314,6 +390,15 @@ impl ToolHost for McpAgentToolHost {
     }
 }
 
+// MCP Apps visibility is declared protocol metadata, never inferred from tool text.
+fn agent_visible(definition: &Value) -> bool {
+    let metadata = &definition["_meta"];
+    metadata.get("ui").and_then(|ui| ui.get("visibility"))
+        .or_else(|| metadata.get("visibility"))
+        .or_else(|| metadata.get("mcp/visibility"))
+        .map_or(true, |visibility| visibility.as_array().is_some_and(|values| values.iter().any(|value| value == "model")))
+}
+
 fn server_allowed(allowed: Option<&[String]>, server_id: &str, server_name: &str) -> bool {
     allowed.map_or(true, |values| {
         values
@@ -332,9 +417,12 @@ async fn publish_app_result(
     let Some((state, conversation_id, message_id)) = host.app_events.as_ref() else {
         return;
     };
+    let Some(state) = state.upgrade() else { return; };
     match host.app_result(tool, input, output).await {
         Ok(Some(mut payload)) => {
             payload["message_id"] = json!(message_id);
+            payload["conversation_id"] = json!(conversation_id);
+            payload["run_id"] = json!(host.run_id);
             payload["tool_call_id"] = json!(call_id);
             let item = state.timeline_item(
                 "mcp_app_result",
@@ -344,7 +432,7 @@ async fn publish_app_result(
                 None,
                 payload,
             );
-            super::tool_result_events_v2::append(state, conversation_id, item);
+            super::tool_result_events_v2::append(&state, conversation_id, item);
         }
         Ok(None) => {}
         Err(reason) => {
@@ -362,7 +450,7 @@ async fn publish_app_result(
                     "error": reason,
                 }),
             );
-            super::tool_result_events_v2::append(state, conversation_id, item);
+            super::tool_result_events_v2::append(&state, conversation_id, item);
         }
     }
 }
@@ -525,6 +613,7 @@ mod tests {
             canonical.clone(),
             McpAgentTool {
                 computer_use_capability:false,
+                agent_visible:true,
                 server_id: server_id.to_string(),
                 server_name: server_name.to_string(),
                 tool_name: tool_name.to_string(),
@@ -562,6 +651,7 @@ mod tests {
             exposed_name.clone(),
             McpAgentTool {
                 computer_use_capability:false,
+                agent_visible:true,
                 server_id: "server-a".to_string(),
                 server_name: "Same".to_string(),
                 tool_name: "tool-a".to_string(),

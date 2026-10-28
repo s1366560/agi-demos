@@ -1,4 +1,8 @@
-import type { ToolResultPresentationV2 } from "@agistack/plugin-slots";
+import {
+  projectReplOutputPresentationV2,
+  validateReplOutputPresentationV2,
+  type ToolResultPresentationV2,
+} from "@agistack/plugin-slots";
 import {
   detectPayloadLanguage,
   type ToolCallPresentationKind,
@@ -11,13 +15,22 @@ export function projectToolOutputPresentationV2({
   kind,
   output,
   details,
+  display,
   summary,
 }: Readonly<{
   kind: ToolCallPresentationKind;
   output: unknown;
   details?: unknown;
+  display?: unknown;
   summary?: string;
 }>): ToolResultPresentationV2 {
+  if (kind === "repl_output") {
+    const presentation =
+      display && typeof display === "object" && "entries" in display
+        ? validateReplOutputPresentationV2(display)
+        : projectReplOutputPresentationV2(output, "device");
+    if (presentation) return presentation;
+  }
   return kind === "computer_use"
     ? computerUseResultPresentationV2(output, summary)
     : projectToolResultPresentationV2(

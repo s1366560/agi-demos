@@ -203,6 +203,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@modelcontextprotocol/sdk@1.29.0': dc6690e9bf14fada846cafc3a32cc063e72baa4642142e3a3ec5c067bb515b04
+
 importers:
 
   .:
@@ -5403,8 +5406,8 @@ snapshots:
 
   '@mcp-ui/client@6.1.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)':
     dependencies:
-      '@modelcontextprotocol/ext-apps': 1.7.4(@modelcontextprotocol/sdk@1.29.0(supports-color@7.2.0)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)
-      '@modelcontextprotocol/sdk': 1.29.0(supports-color@7.2.0)(zod@3.25.76)
+      '@modelcontextprotocol/ext-apps': 1.7.4(@modelcontextprotocol/sdk@1.29.0(patch_hash=dc6690e9bf14fada846cafc3a32cc063e72baa4642142e3a3ec5c067bb515b04)(supports-color@7.2.0)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.29.0(patch_hash=dc6690e9bf14fada846cafc3a32cc063e72baa4642142e3a3ec5c067bb515b04)(supports-color@7.2.0)(zod@3.25.76)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       zod: 3.25.76
@@ -5416,16 +5419,16 @@ snapshots:
     dependencies:
       '@chevrotain/types': 11.1.2
 
-  '@modelcontextprotocol/ext-apps@1.7.4(@modelcontextprotocol/sdk@1.29.0(supports-color@7.2.0)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)':
+  '@modelcontextprotocol/ext-apps@1.7.4(@modelcontextprotocol/sdk@1.29.0(patch_hash=dc6690e9bf14fada846cafc3a32cc063e72baa4642142e3a3ec5c067bb515b04)(supports-color@7.2.0)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.29.0(supports-color@7.2.0)(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.29.0(patch_hash=dc6690e9bf14fada846cafc3a32cc063e72baa4642142e3a3ec5c067bb515b04)(supports-color@7.2.0)(zod@3.25.76)
       '@standard-schema/spec': 1.1.0
       zod: 3.25.76
     optionalDependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  '@modelcontextprotocol/sdk@1.29.0(supports-color@7.2.0)(zod@3.25.76)':
+  '@modelcontextprotocol/sdk@1.29.0(patch_hash=dc6690e9bf14fada846cafc3a32cc063e72baa4642142e3a3ec5c067bb515b04)(supports-color@7.2.0)(zod@3.25.76)':
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.31)
       ajv: 8.20.0

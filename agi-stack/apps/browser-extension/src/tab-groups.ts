@@ -45,11 +45,19 @@ export function createTabGroupRegistry(chrome: ChromeApi) {
     async ensureTabGroup(key: string, title: string, color?: string): Promise<number> {
       const stored = await readStoredGroupId(key);
       if (stored !== undefined && (await groupExists(stored))) {
+        await chrome.tabGroups.update(stored, { title, ...(color ? { color } : {}) });
         return stored;
       }
       const groupId = await createGroup(title, color);
       await writeStoredGroupId(key, groupId);
       return groupId;
+    },
+    /** Naming an unused session never creates a blank browser tab. */
+    async renameTabGroup(key: string, title: string, color?: string): Promise<void> {
+      const stored = await readStoredGroupId(key);
+      if (stored !== undefined && (await groupExists(stored))) {
+        await chrome.tabGroups.update(stored, { title, ...(color ? { color } : {}) });
+      }
     },
   };
 }

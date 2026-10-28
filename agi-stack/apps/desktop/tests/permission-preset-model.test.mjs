@@ -189,6 +189,19 @@ test('native binding presence blocks auto-approval even when malformed or missin
   }
 });
 
+test('device MCP Once requests require explicit approval for every permission preset', () => {
+  for (const preset of ['default', 'relaxed', 'full']) {
+    const request = permissionRequest({
+      decision: {
+        target: { kind: 'device_mcp_tool', id: 'pending-device-mcp' },
+        action: { name: 'mcp_owned', label: 'Invoke the connected MCP tool' },
+      },
+    });
+    assert.equal(autoApprovalForPermissionRequest(preset, request), null);
+    assert.equal(autoApprovalSubmission(request, preset), null);
+  }
+});
+
 test('ordinary computer tool invocations retain runtime auto-approval', () => {
   const request = permissionRequest({
     permission: {

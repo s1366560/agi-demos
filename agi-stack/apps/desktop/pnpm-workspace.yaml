@@ -9,3 +9,6 @@ allowBuilds:
   electron: true
   electron-winstaller: false
   esbuild: true
+
+patchedDependencies:
+  '@modelcontextprotocol/sdk@1.29.0': patches/@modelcontextprotocol__sdk@1.29.0.patch

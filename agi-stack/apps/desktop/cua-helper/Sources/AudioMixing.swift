@@ -4,7 +4,7 @@ import Foundation
 /// Bounded offline mixing. Each converter holds only one input/output chunk;
 /// original tracks remain private and only the mixed WAV is published.
 enum AudioMixing {
-    static let rate = 48_000.0
+    static let rate = 24_000.0
     static let channels: AVAudioChannelCount = 2
     static let maxSeconds = 300.0
     static let maxBytes = 64 * 1024 * 1024
@@ -25,7 +25,7 @@ enum AudioMixing {
             }
             self.converter = converter; self.format = format
         }
-        func add(to output: AVAudioPCMBuffer, outputOffset: Int, count: Int) throws {
+        func add(to output: AVAudioPCMBuffer, outputOffset: Int, count: Int, gain: Float) throws {
             var destination = outputOffset
             let end = outputOffset + count
             while destination < end && !ended {
@@ -35,7 +35,7 @@ enum AudioMixing {
                 let available = min(end - destination, Int(source.frameLength - cursor))
                 for channel in 0..<Int(AudioMixing.channels) {
                     for frame in 0..<available {
-                        outputData[channel][destination + frame] += sourceData[channel][Int(cursor) + frame] * 0.5
+                        outputData[channel][destination + frame] += sourceData[channel][Int(cursor) + frame] * gain
                     }
                 }
                 cursor += AVAudioFrameCount(available); destination += available
@@ -101,7 +101,8 @@ enum AudioMixing {
                 for index in readers.indices {
                     let begin = max(position, offsets[index]); let end = min(position + Int64(count), offsets[index] + lengths[index])
                     if end > begin {
-                        try readers[index].add(to: buffer, outputOffset: Int(begin - position), count: Int(end - begin))
+                        try readers[index].add(to: buffer, outputOffset: Int(begin - position),
+                            count: Int(end - begin), gain: 1 / Float(readers.count))
                     }
                 }
                 for channel in 0..<Int(channels) {
@@ -117,6 +118,7 @@ enum AudioMixing {
         }
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: output.path)
         return ["url": output.absoluteString, "mime_type": "audio/wav", "kind": "audio", "source": "mixed",
-                "frames": frames, "sample_rate": rate, "channels": channels, "duration_seconds": Double(frames) / rate]
+                "frames": frames, "sample_rate": rate, "channels": channels,
+                "encoding": "pcm_s16le", "duration_seconds": Double(frames) / rate]
     }
 }

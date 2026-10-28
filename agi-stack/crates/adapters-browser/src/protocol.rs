@@ -287,6 +287,8 @@ pub struct OnCdpEventParams {
     /// chrome-extension backend.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 /// `onCDPDetach` params: the debugger detached from a tab.

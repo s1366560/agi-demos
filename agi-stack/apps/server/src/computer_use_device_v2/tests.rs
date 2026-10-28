@@ -10,6 +10,14 @@ use tokio::sync::mpsc;
 mod resume_authority_tests;
 #[path = "control_tests.rs"]
 mod control_tests;
+#[path = "steps_tests.rs"]
+mod steps_tests;
+#[path = "outer_permission_tests.rs"]
+mod outer_permission_tests;
+#[path = "audio_tests.rs"]
+mod audio_tests;
+#[path = "permission_tests.rs"]
+mod permission_tests;
 const PNG: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=";
 struct Authority {
@@ -194,7 +202,8 @@ async fn socket_owner_claim_typed_media_and_real_provider_image_blocks_round_tri
     let control = receive.recv().await.unwrap();
     let id = control["request_id"].as_str().unwrap();
     assert_eq!(control["type"], "computer_use_request");
-    assert_eq!(control.as_object().unwrap().len(), 2);
+    assert_eq!(control.as_object().unwrap().len(), 3);
+    assert!(control["expires_at"].as_i64().is_some());
     assert!(broker.claim(id, "other-user", "device").is_err());
     let (claim, _, _) = broker.claim(id, "user", "device").unwrap();
     assert_eq!(claim.run_id, "run");
@@ -398,3 +407,53 @@ async fn media_size_offset_disconnect_and_error_results_are_enforced() {
         .to_string()
         .contains("outcome_unknown"));
 }
+
+#[tokio::test]
+async fn outer_mcp_claim_pins_catalog_and_requires_current_roster_and_permission() {
+    let (broker, _, mut receive) = fixture();
+    let binding = json!({"server_id":"owned","server_name":"owned-server","revision":1,"catalog_digest":"catalog-1"});
+    broker.devices.lock().unwrap().get_mut("connection").unwrap().tools.push(
+        ToolDefinition::new("mcp_owned", "Owned MCP", json!({"type":"object",catalog::MCP_BINDING:binding})),
+    );
+    let mut authority = run();
+    authority.allowed_mcp_servers = vec!["owned".into()];
+    authority.agent_profile.allowed_mcp_servers = authority.allowed_mcp_servers.clone();
+    let call_context = context(1,"mcp_owned");
+    let copied = broker.clone();
+    let allowed = authority.clone();
+    let task = tokio::spawn(async move {
+        copied.request(&owner(),"conversation",&allowed,&call_context,"{\"value\":1}").await
+    });
+    let event = receive.recv().await.unwrap();
+    let id = event["request_id"].as_str().unwrap();
+    let (claim, _, _) = broker.claim(id,"user","device").unwrap();
+    assert_eq!(event["expires_at"], claim.expires_at);
+    assert_eq!(claim.mcp_binding,Some(binding.clone()));
+    assert_eq!(claim.input_json,"{\"value\":1}");
+    task.abort(); let _ = task.await;
+    let mut denied = authority.clone();
+    denied.allowed_mcp_servers.clear();
+    assert!(broker.request(&owner(),"conversation",&denied,&context(2,"mcp_owned"),"{}").await.is_err());
+    denied = authority.clone(); denied.permission_profile = "read_only".into();
+    let pending = broker.request(&owner(),"conversation",&denied,&context(3,"mcp_owned"),"{}").await.unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&pending.output_json).unwrap()["error"], "cua_permission_required");
+    let copied = broker.clone(); let allowed = authority.clone();
+    let task = tokio::spawn(async move {copied.request(&owner(),"conversation",&allowed,&context(4,"mcp_owned"),"{}").await});
+    // Aborting the prior request also sends cancellation; consume only the next request.
+    let next = loop { let event = receive.recv().await.unwrap(); if event["type"]=="computer_use_request" {break event;} };
+    {
+        let mut devices = broker.devices.lock().unwrap();
+        let schema = devices.get_mut("connection").unwrap().tools.last_mut().unwrap().input_schema.as_mut().unwrap();
+        schema[catalog::MCP_BINDING]["catalog_digest"] = json!("catalog-2");
+    }
+    assert!(broker.claim(next["request_id"].as_str().unwrap(),"user","device").is_err());
+    task.abort(); let _ = task.await;
+    broker.devices.lock().unwrap().get_mut("connection").unwrap().tools.last_mut().unwrap().input_schema.as_mut().unwrap()[catalog::STEP_ONLY] = json!(true);
+    assert!(broker.request(&owner(),"conversation",&authority,&context(5,"mcp_owned"),"{}").await.unwrap_err().to_string().contains("step_context_required"));
+}
+
+#[path = "repl_media_tests.rs"]
+mod repl_media_tests;
+
+#[path = "repl_wire_tests.rs"]
+mod repl_wire_tests;

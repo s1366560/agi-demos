@@ -25,6 +25,10 @@ impl RequestLoggedLlm {
 
 #[async_trait]
 impl LlmPort for RequestLoggedLlm {
+    fn supports_audio_input(&self) -> bool {
+        self.inner.supports_audio_input()
+    }
+
     async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
         with_model_request_log(self.log.clone(), self.inner.extract_memory(episode)).await
     }

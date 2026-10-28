@@ -13,6 +13,7 @@ pub mod signed_archive;
 #[cfg(all(feature = "external-wasm-v2", not(target_arch = "wasm32")))]
 pub mod wasm_runtime;
 mod target_modules;
+mod tool_argument_validation;
 pub mod tool_policy;
 pub mod tool_policy_adapter;
 

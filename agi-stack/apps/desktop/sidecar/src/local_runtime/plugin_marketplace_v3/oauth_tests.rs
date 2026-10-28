@@ -37,6 +37,7 @@ async fn authorize(client: &reqwest::Client, url: &str, origin: &str) -> String 
 }
 #[tokio::test]
 async fn real_oauth_pkce_callback_refresh_rotation_scope_cancel_and_disconnect() {
+    let _origin_lock = super::oauth_http::TEST_ORIGIN_LOCK.lock().await;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener);

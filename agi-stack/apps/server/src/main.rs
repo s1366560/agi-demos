@@ -40,6 +40,7 @@ mod agent_conversations_api;
 mod agent_events_api;
 mod agent_ws;
 mod computer_use_device_v2;
+mod provider_audio_declaration;
 mod artifacts_api;
 mod attachments_api;
 mod audit_api;
@@ -542,15 +543,21 @@ type SelectedLlmAndEmbedding = (
 /// seam. Default is the offline stub pair so `cargo run` and tests need no
 /// network or keys; setting `AGISTACK_LLM_BASE_URL` swaps in the HTTP adapter
 /// (optionally `AGISTACK_LLM_MODEL`, `AGISTACK_EMBED_MODEL`, `AGISTACK_LLM_API_KEY`).
-fn select_llm_and_embedding() -> SelectedLlmAndEmbedding {
-    match std::env::var("AGISTACK_LLM_BASE_URL") {
+fn select_llm_and_embedding() -> ServerResult<SelectedLlmAndEmbedding> {
+    let audio_models = provider_audio_declaration::parse(
+        std::env::var("AGISTACK_LLM_AUDIO_INPUT_MODELS").ok().as_deref(),
+    )
+    .map_err(std::io::Error::other)?;
+    Ok(match std::env::var("AGISTACK_LLM_BASE_URL") {
         Ok(base) if !base.is_empty() => {
             let chat_model =
                 std::env::var("AGISTACK_LLM_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
             let embed_model = std::env::var("AGISTACK_EMBED_MODEL")
                 .unwrap_or_else(|_| "text-embedding-3-small".into());
             let key = std::env::var("AGISTACK_LLM_API_KEY").ok();
-            let mut llm = HttpLlm::new(base.clone(), chat_model);
+            let audio_supported = audio_models.contains(&chat_model);
+            let mut llm = HttpLlm::new(base.clone(), chat_model)
+                .with_audio_input_support(audio_supported);
             let mut emb = HttpEmbedding::new(base, embed_model);
             if let Some(k) = key {
                 llm = llm.with_api_key(k.clone());
@@ -568,7 +575,7 @@ fn select_llm_and_embedding() -> SelectedLlmAndEmbedding {
             Arc::new(HashEmbedding::new(64)),
             cron_readiness_v2::CronModelBackendV2::Stub,
         ),
-    }
+    })
 }
 
 fn build_registry() -> HotPlugRegistry {
@@ -949,7 +956,7 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
     // OpenAI-/LiteLLM-compatible endpoint (`adapters-http-llm`); otherwise use
     // the deterministic offline stubs. The core never sees which — it only holds
     // `Arc<dyn LlmPort>` / `Arc<dyn EmbeddingPort>` (ADR-0001).
-    let (llm, embedding, model_backend) = select_llm_and_embedding();
+    let (llm, embedding, model_backend) = select_llm_and_embedding()?;
 
     let registry = build_registry();
     let workspace_authority: SharedWorkspaceAuthority =

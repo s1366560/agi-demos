@@ -15,10 +15,12 @@ export interface NativePort {
 
 export interface DebuggerTarget {
   tabId: number;
+  sessionId?: string;
 }
 
 export interface Debuggee {
   tabId?: number;
+  sessionId?: string;
 }
 
 export interface TabLike {

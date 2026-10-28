@@ -471,3 +471,22 @@ test("an empty registered roster acknowledgement cannot mark the native device r
   assert.deepEqual(actions, ["describe"]);
   bridge.closed("empty", scope);
 });
+
+test('server claim deadline reaches the private supervisor without changing native arguments', async () => {
+  const invocations = [];
+  const bridge = createComputerUseCloudDeviceBridge(async (command, args) => {
+    invocations.push({ command, args });
+    if (args.input.action === 'describe') return { device_id: 'device', tool_definitions: [], scope };
+    return { request_id: args.input.request_id, output_json: '{}', is_error: false, media: [] };
+  });
+  await bridge.opened('deadline', scope, async () => {});
+  try {
+    bridge.receive('deadline', scope, JSON.stringify({ type: 'computer_use_request', request_id: 'timed', expires_at: 2_000_000_000 }), async () => {});
+    await tick(); await tick();
+    const call = invocations.find(item => item.args.input.action === 'call');
+    assert.equal(call.args.request_deadline_ms, 2_000_000_000_000);
+    assert.deepEqual(Object.keys(call.args.input).sort(), ['action', 'connection_id', 'request_id', 'scope']);
+    assert.throws(() => bridge.receive('deadline', scope, JSON.stringify({ type: 'computer_use_request', request_id: 'invalid', expires_at: '300000' }), async () => {}), /deadline_invalid/);
+    assert.equal(invocations.filter(item => item.args.input.action === 'call').length, 1);
+  } finally { bridge.closed('deadline', scope); }
+});

@@ -11,6 +11,7 @@ final class AudioCapture {
         let id = UUID().uuidString
         let session: NativeSession
         let source: String
+        let maxDurationMilliseconds: Int
         let started = Date()
         var ended: Date?
         var state = "recording"
@@ -19,10 +20,14 @@ final class AudioCapture {
         var tracks: [AudioRecording] = []
         var artifacts: [[String: Any]] = []
         var timer: DispatchSourceTimer?
-        init(session: NativeSession, source: String) { self.session = session; self.source = source }
+        init(session: NativeSession, source: String, maxDurationMilliseconds: Int) {
+            self.session = session; self.source = source
+            self.maxDurationMilliseconds = maxDurationMilliseconds
+        }
         var receipt: [String: Any] {
             var value: [String: Any] = ["recording_id": id, "source": source, "status": state,
-                "artifact_root": session.artifactDirectory.path,
+                "artifact_root": session.artifactDirectory.path, "max_duration_ms": maxDurationMilliseconds,
+                "sample_rate": Int(AudioMixing.rate), "channels": Int(AudioMixing.channels), "encoding": "pcm_s16le",
                 "started_at": ISO8601DateFormatter().string(from: started),
                 "elapsed_ms": Int(max(0, (ended ?? Date()).timeIntervalSince(started)) * 1000),
                 "artifacts": artifacts]
@@ -55,8 +60,18 @@ final class AudioCapture {
         }
         return ["granted": result]
     }
-    func start(source: String, session: NativeSession) throws -> [String: Any] {
-        try queue.sync {
+    static func duration(_ raw: Any?) throws -> Int {
+        guard let raw = raw else { return 300_000 }
+        guard let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite, number.doubleValue.rounded() == number.doubleValue,
+              (100...300_000).contains(number.intValue) else {
+            throw ActionError.failure(kind: "invalid_params", message: "max_duration_ms must be an integer from 100 through 300000")
+        }
+        return number.intValue
+    }
+    func start(source: String, session: NativeSession, maxDurationMilliseconds: Int = 300_000) throws -> [String: Any] {
+        let duration = try Self.duration(maxDurationMilliseconds)
+        return try queue.sync {
             guard ["microphone", "system", "mixed"].contains(source) else {
                 throw ActionError.failure(kind: "invalid_params", message: "source must be microphone, system or mixed")
             }
@@ -66,11 +81,12 @@ final class AudioCapture {
             guard (recordings[session.id]?.count ?? 0) < 128 else {
                 throw ActionError.failure(kind: "audio_receipt_limit", message: "acknowledge completed recordings first")
             }
-            let recording = Recording(session: session, source: source)
+            let recording = Recording(session: session, source: source, maxDurationMilliseconds: duration)
             recordings[session.id, default: []].append(recording)
             do {
                 for source in source == "mixed" ? ["microphone", "system"] : [source] {
-                    let track = AudioRecording(url: session.artifactDirectory.appendingPathComponent("audio-\(UUID().uuidString).wav"), source: source)
+                    let track = AudioRecording(url: session.artifactDirectory.appendingPathComponent("audio-\(UUID().uuidString).wav"),
+                        source: source, maximumSeconds: min(maximumSeconds, Double(duration) / 1000))
                     recording.tracks.append(track)
                     track.onFailure = { [weak self, weak recording] reason, error in
                         guard let self = self, let recording = recording else { return }
@@ -81,7 +97,7 @@ final class AudioCapture {
                 }
                 try session.cancellation.check()
                 let timer = DispatchSource.makeTimerSource(queue: queue)
-                timer.schedule(deadline: .now() + maximumSeconds)
+                timer.schedule(deadline: .now() + min(maximumSeconds, Double(duration) / 1000))
                 timer.setEventHandler { [weak self, weak recording] in
                     if let recording = recording { self?.finalize(recording, reason: "duration_limit") }
                 }
@@ -196,14 +212,25 @@ final class AudioCapture {
         value.tracks.forEach { $0.stopResources() }
         value.ended = Date()
         let valid = value.tracks.filter { $0.track != nil }
-        value.artifacts = valid.map { $0.payload }
+        value.artifacts = []
         if value.source == "mixed", valid.count == 2, error == nil {
             do {
                 var artifact = try AudioMixing.render(tracks: valid.compactMap { $0.track },
                     output: value.session.artifactDirectory.appendingPathComponent("mixed-\(value.id).wav"))
                 artifact["source"] = "mixed"; value.artifacts = [artifact]
             } catch { value.error = "audio_mix_failed" }
-        } else if value.source == "mixed", valid.count != 2, value.error == nil { value.error = "audio_source_empty" }
+        }
+        if value.artifacts.isEmpty {
+            if value.source == "mixed", valid.count != 2, value.error == nil { value.error = "audio_source_empty" }
+            for track in valid {
+                guard let sealed = track.track else { continue }
+                do {
+                    var artifact = try AudioMixing.render(tracks: [sealed], output:
+                        value.session.artifactDirectory.appendingPathComponent("export-\(value.id)-\(track.source).wav"))
+                    artifact["source"] = track.source; value.artifacts.append(artifact)
+                } catch { value.error = value.error ?? "audio_conversion_failed" }
+            }
+        }
         if value.artifacts.isEmpty { value.error = value.error ?? "audio_empty" }
         if value.error != nil {
             value.artifacts = value.artifacts.map { var artifact = $0; artifact["partial"] = true; return artifact }

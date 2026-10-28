@@ -90,6 +90,9 @@ input.once('line', (line) => {
 
     input.on('line', (requestLine) => {
       const request = JSON.parse(requestLine);
+      if (request.command === 'computer_input_fixture') {
+        send({ type: 'computer_use_input', input: request.args?.input });
+      }
       if (
         request.command === 'local_runtime_status' &&
         startCount <= crashCount &&
@@ -115,6 +118,43 @@ input.once('line', (line) => {
   }
 });
 `;
+
+test('authenticated sidecar input push is typed, independent of responses, and cleared on disconnect', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agistack-sidecar-input-'));
+  const binaryPath = join(root, 'fake-sidecar.cjs');
+  await writeFile(binaryPath, fakeSidecarSource, 'utf8');
+  await chmod(binaryPath, 0o700);
+  const received = [];
+  let cleared = 0;
+  const supervisor = new SidecarSupervisor({
+    binaryPath, workspaceCoreBinaryPath: binaryPath, dataDirectory: join(root, 'data'),
+    workspaceRoot: root, legacyDataDirectories: [],
+    environment: { FAKE_SIDECAR_COUNTER: join(root, 'starts.txt'), FAKE_SIDECAR_CRASH_COUNT: '0' },
+    onComputerUseInput: (value) => { received.push(value); throw new Error('decorative consumer failed'); },
+    onComputerUseInputDisconnected: () => { cleared++; },
+  });
+  const input = {
+    mode: 'local', tenant_id: 'tenant', project_id: 'project', conversation_id: 'conversation',
+    run_id: 'run', session_id: 'session', input_mode: 'background', input_generation: 'generation',
+    sequence: 1, updated_at: 1, phase: 'holding', target_pid: 42, target_window_id: 'window',
+    virtual_cursor: { x: 10, y: 20, width: 300, height: 200, window_id: 'window' },
+    held_keys: [55], held_buttons: [0], evidence: 'dispatched', typed_text: 'discard this field',
+  };
+  try {
+    const response = await supervisor.invoke('computer_input_fixture', { input });
+    assert.equal(response.running, true);
+    assert.equal(received.length, 1);
+    assert.equal('typed_text' in received[0], false);
+    await supervisor.invoke('computer_input_fixture', { input: { ...input, sequence: -1 } });
+    assert.equal(received.length, 1, 'invalid notifications do not reach the display consumer');
+    assert.equal((await supervisor.invoke('local_runtime_status')).running, true);
+    await supervisor.stop();
+    assert.ok(cleared >= 1);
+  } finally {
+    await supervisor.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test('sidecar initialization serializes explicit empty legacy migration candidates', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agistack-sidecar-empty-legacy-'));
@@ -402,4 +442,25 @@ test('sidecar diagnostics are drained without blocking readiness or requests', a
     await supervisor.stop();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('only exact native component actions and cloud execution extend the IPC wait', async () => {
+  const { sidecarRequestTimeoutMs } = await import('file:///tmp/agistack-desktop-test-dist/electron/main/sidecarSupervisor.js');
+  const management = action => ({ input: { mode: 'local', operation: { action } } });
+  assert.equal(sidecarRequestTimeoutMs('computer_use_manage_v2', management('locked_use_install')), 310_000);
+  assert.equal(sidecarRequestTimeoutMs('computer_use_manage_v2', management('locked_use_uninstall')), 310_000);
+  for (const action of ['status', 'locked_use_probe', 'locked_use_install_extra', 'grant', 'audio_stop']) {
+    assert.equal(sidecarRequestTimeoutMs('computer_use_manage_v2', management(action)), 30_000);
+  }
+  assert.equal(sidecarRequestTimeoutMs('other_command', management('locked_use_install')), 30_000);
+  assert.equal(sidecarRequestTimeoutMs('computer_use_manage_v2', { input: { action: 'locked_use_install' } }), 30_000);
+  assert.equal(sidecarRequestTimeoutMs('local_runtime_status', undefined, 12), 12);
+  const now = 1_000_000;
+  const call = { input: { action: 'call' }, request_deadline_ms: now + 315_000 };
+  assert.equal(sidecarRequestTimeoutMs('computer_use_cloud_v2', call, 30_000, now), 320_000);
+  assert.equal(sidecarRequestTimeoutMs('computer_use_cloud_v2', { ...call, request_deadline_ms: now + 90_000 }, 30_000, now), 95_000);
+  assert.equal(sidecarRequestTimeoutMs('computer_use_cloud_v2', { ...call, request_deadline_ms: Number.MAX_SAFE_INTEGER }, 30_000, now), 321_000);
+  assert.equal(sidecarRequestTimeoutMs('computer_use_cloud_v2', { input: { action: 'call' } }, 30_000, now), 321_000);
+  assert.equal(sidecarRequestTimeoutMs('computer_use_cloud_v2', { ...call, input: { action: 'media' } }, 30_000, now), 30_000);
+  assert.equal(sidecarRequestTimeoutMs('cloud_request', call, 30_000, now), 30_000);
 });

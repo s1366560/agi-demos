@@ -45,21 +45,27 @@ class Channel:
         )
         self.counter = 0
         self.notifications = []
+        self.input_telemetry = []
+        self.bindings = {}
+        self.pending = {}
         self.request(
             "initialize",
             {
-                "client_api_version": "MemstackComputerUseIPC-2",
+                "client_api_version": "MemstackComputerUseIPC-3",
                 "secret": "native-fixture-not-a-secret-000000000000",
                 "nonce": "native-fixture-nonce-000000000000",
                 "native_status_notifications": True,
+                "input_telemetry_notifications": True,
             },
             request_id=0,
         )
 
     def send(self, method, params, request_id=None):
         self.counter += 1
+        if method == "begin_session":
+            params = {"input_mode": "foreground", **params}
         if "session_id" in params:
-            params = {**OWNER, **params}
+            params = {**OWNER, **self.bindings.get(params["session_id"], {}), **params}
         value = {
             "jsonrpc": "2.0",
             "id": self.counter if request_id is None else request_id,
@@ -69,6 +75,7 @@ class Channel:
         data = json.dumps(value).encode()
         self.process.stdin.write(struct.pack("<I", len(data)) + data)
         self.process.stdin.flush()
+        self.pending[value["id"]] = params.get("session_id")
         return value["id"]
 
     def read(self):
@@ -79,10 +86,20 @@ class Channel:
         assert 0 < length <= 8_388_608
         result = json.loads(self.process.stdout.read(length))
         if "id" not in result:
-            assert result["method"] == "native_status", result
-            self.notifications.append(result["params"])
+            assert result["method"] in {"native_status", "native_input_telemetry"}, result
+            if result["method"] == "native_status":
+                self.notifications.append(result["params"])
+            else:
+                self.input_telemetry.append(result["params"])
             return self.read()
+        self.update_binding(self.pending.pop(result["id"], None), result.get("result", {}))
         return result
+
+    def update_binding(self, session_id, result):
+        if session_id and result.get("input_mode") and result.get("input_generation"):
+            self.bindings[session_id] = {
+                key: result[key] for key in ("input_mode", "input_generation")
+            }
 
     def request(self, method, params, request_id=None):
         sent = self.send(method, params, request_id)
@@ -117,6 +134,30 @@ def jpeg_dimensions(path):
             return width, height
         offset += length
     raise AssertionError("JPEG dimensions absent")
+
+
+def wait_for_external_pause(channel, status_offset, telemetry_offset):
+    deadline = time.monotonic() + 2
+    while True:
+        channel.request("capabilities", {})
+        paused = any(
+            value["phase"] == "paused" and value["user_initiated"] is True
+            for value in channel.notifications[status_offset:]
+        )
+        released = any(
+            value["phase"] == "paused"
+            and value.get("reason") == "user_input_detected"
+            and not value["held_keys"]
+            and not value["held_buttons"]
+            for value in channel.input_telemetry[telemetry_offset:]
+        )
+        if paused and released:
+            break
+        assert time.monotonic() < deadline, (
+            channel.notifications[status_offset:],
+            channel.input_telemetry[telemetry_offset:],
+        )
+        time.sleep(0.05)
 
 
 # Keep foreground input, pause/stop, and crash recovery in one ordered fixture lifecycle.
@@ -221,6 +262,11 @@ def main():  # noqa: C901, PLR0915
                         "snapshot_id": state["snapshot_id"],
                         "window_id": state["window_id"],
                         "request_id": "action-" + str(channel.counter),
+                        **(
+                            {"input_generation": state["input_generation"]}
+                            if "input_generation" in state
+                            else {}
+                        ),
                         "action": payload,
                     },
                 )
@@ -233,7 +279,11 @@ def main():  # noqa: C901, PLR0915
             paused_image = Path(unquote(urlparse(first["screenshot"]["url"]).path))
             channel.request("pause_session", base)
             assert channel.notifications[-1]["phase"] == "paused"
-            assert channel.notifications[-1]["context"] == {**OWNER, **base}
+            assert channel.notifications[-1]["context"] == {
+                **OWNER,
+                **base,
+                "input_mode": "foreground",
+            }, channel.notifications[-1]
             assert not paused_image.exists()
             assert (
                 channel.request("list_apps", base)["error"]["data"]["kind"]
@@ -241,7 +291,7 @@ def main():  # noqa: C901, PLR0915
             )
             assert channel.request("resume_session", base)["result"]["requires_observation"]
             rejected = action(first, {"kind": "type_text", "text": "must not be typed"})
-            assert rejected["error"]["data"]["kind"] == "stale_element", rejected
+            assert rejected["error"]["data"]["kind"] == "stale_input_generation", rejected
             assert channel.request("audio_status", base)["result"]["recording"] is False
             # Resume invalidates observations, while the same live window can
             # immediately be observed again without retargeting the task.
@@ -257,6 +307,11 @@ def main():  # noqa: C901, PLR0915
             assert rejected["error"]["data"]["kind"] == "target_not_focused", rejected
             activate(windows[0])
             first = observe(windows[0])
+            missing = action(
+                {**first, "snapshot_id": "absent-snapshot"},
+                {"kind": "type_text", "text": "must not be typed"},
+            )
+            assert missing["error"]["data"]["kind"] == "stale_element", missing
             text_index = int(re.search(r"\[(\d+)\] AXTextField", first["text"])[1])
             assert "result" in action(first, {"kind": "click", "element_index": text_index})
             current = observe(windows[0])
@@ -321,7 +376,9 @@ def main():  # noqa: C901, PLR0915
             )
             subprocess.run(["codesign", "--force", "--sign", "-", str(simulator)], check=True)
             assert "result" in action(observe(windows[0]), {"kind": "key_down", "key": "shift"})
-            observe_until(windows[0], "Shift held: true")
+            held_state = observe_until(windows[0], "Shift held: true")
+            status_offset = len(channel.notifications)
+            telemetry_offset = len(channel.input_telemetry)
             simulated = subprocess.Popen(
                 [str(simulator), str(fixture.pid)],
                 stdin=subprocess.PIPE,
@@ -330,7 +387,11 @@ def main():  # noqa: C901, PLR0915
             )
             try:
                 assert simulated.stdout.readline() == b"simulated-foreign-shift-held\n"
-                assert "result" in action(observe(windows[0]), {"kind": "key_up", "key": "shift"})
+                wait_for_external_pause(channel, status_offset, telemetry_offset)
+                rejected = action(held_state, {"kind": "key_up", "key": "shift"})
+                assert rejected["error"]["data"]["kind"] == "user_stopped_session", rejected
+                resumed = channel.request("resume_session", base)
+                assert resumed["result"]["requires_observation"], resumed
                 assert "Shift held: true" in observe(windows[0])["text"], (
                     "foreign simulated hold was released"
                 )
@@ -357,7 +418,7 @@ def main():  # noqa: C901, PLR0915
                 simulated.stderr.close()
             observe_until(windows[0], "Shift held: false")
             stale = action(first, {"kind": "type_text", "text": "stale input"})
-            assert stale["error"]["data"]["kind"] == "stale_element", stale
+            assert stale["error"]["data"]["kind"] == "stale_input_generation", stale
             current = observe(windows[0])
             started = channel.send(
                 "perform_action",

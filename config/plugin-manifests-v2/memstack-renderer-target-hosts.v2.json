@@ -215,7 +215,7 @@
       "entrypoint": "applyDesktopProjectMcpServersAuthorityV2",
       "artifact": {
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectMcpServersAuthorityModuleV2.ts",
-        "digest": "sha256:60d2533a8b011c0134826e6a5aabc7229c13ebaedfe380e7ed4eca226680ccfd"
+        "digest": "sha256:3ca68967825a82beb03938e2b99ab8b3fabe505d15c9e42b5a67049d60b167b9"
       },
       "targets": [
         "desktop-renderer"

@@ -388,6 +388,18 @@ pub(super) struct AutomationWorkerHandle {
 }
 
 impl AutomationWorkerHandle {
+    #[cfg(test)]
+    pub(super) fn blocked_shutdown_fixture(release: Arc<tokio::sync::Notify>) -> Self {
+        let (shutdown, _) = watch::channel(false);
+        // Model an in-flight drain_once that has not reached the shutdown select.
+        let task = tokio::spawn(async move { release.notified().await });
+        Self {
+            shutdown,
+            task: Mutex::new(Some(task)),
+            shutdown_grace: Duration::from_secs(5),
+        }
+    }
+
     pub(super) fn spawn(worker: AutomationWorker) -> Self {
         let (shutdown, receiver) = watch::channel(false);
         let shutdown_grace = worker.config.shutdown_grace;

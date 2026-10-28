@@ -98,8 +98,16 @@ async fn import(state: &Arc<LocalRuntimeState>, bytes: &[u8]) -> Value {
 async fn run(
     state: &Arc<LocalRuntimeState>,
 ) -> (local_runtime::LocalConversation, local_runtime::DesktopRun) {
+    seed_plugin_plan(state);
+    start_plugin_plan(state).await
+}
+fn seed_plugin_plan(state: &Arc<LocalRuntimeState>) {
     local_runtime::tests::seed_plan_conversation(state, "local-plugin-conversation");
     state.session_store.replace_agent_plan_tasks("local-plugin-conversation",&[json!({"id":"local-plugin-task","conversation_id":"local-plugin-conversation","content":"Call signed marker","status":"pending","priority":"high","order_index":0,"created_at":local_runtime::now_iso(),"updated_at":local_runtime::now_iso()})]).unwrap();
+}
+async fn start_plugin_plan(
+    state: &Arc<LocalRuntimeState>,
+) -> (local_runtime::LocalConversation, local_runtime::DesktopRun) {
     let reviewed = state
         .session_store
         .latest_draft_plan("local-plugin-conversation")

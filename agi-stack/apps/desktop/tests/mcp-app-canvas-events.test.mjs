@@ -45,6 +45,7 @@ test('mcp_app_result opens an interactive canvas tab from a nested server event'
     {
       id: 'mcp-app-ui://release/dashboard',
       appId: 'release-dashboard',
+      automationTabId: null,
       title: 'Release dashboard',
       toolName: 'show_release_dashboard',
       serverName: 'release-tools',

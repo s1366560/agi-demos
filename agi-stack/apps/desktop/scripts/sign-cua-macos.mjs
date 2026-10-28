@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { cuaOptionsForFile, sealCuaMacApp } from './cua-packaging.mjs';
+import { cuaOptionsForFile, sealCuaMacApp, signCuaNodeRuntime } from './cua-packaging.mjs';
 
 // Delegate the ordinary Electron signing flow, retaining its entitlements and
 // configured identity. Only CUA component identifiers and their post-signing
@@ -10,5 +10,6 @@ export default async function signCuaMacos(options) {
   const { sign } = electronRequire('app-builder-lib/out/codeSign/macCodeSign.js');
   const prior = options.optionsForFile;
   await sign({ ...options, optionsForFile: (path) => cuaOptionsForFile(path, options.app, prior?.(path) ?? {}) });
+  await signCuaNodeRuntime(options.app, options.identity, { keychain: options.keychain });
   await sealCuaMacApp(options.app, options.identity, { keychain: options.keychain });
 }

@@ -53,6 +53,7 @@ export type IabBackendOptions = Readonly<{
   /** Test seam for deterministic connect and stop races. */
   connectBridgeSocket?: typeof connectIabBridgeSocket;
   log?: (message: string) => void;
+  executeMcpApp?: (input: unknown) => Promise<unknown>;
   /** Fires on every failed connect attempt, before the backoff sleep. */
   onRetry?: (failures: number, error: string) => void;
 }>;
@@ -83,8 +84,8 @@ export class IabBackend {
   }
 
   /** Called by the pool when a debugger session emits a CDP event. */
-  notifyCdpEvent(tabId: number, method: string, params: unknown): void {
-    this.#sendNotification(IAB_NOTIFY_ON_CDP_EVENT, { tabId, method, params: params ?? null });
+  notifyCdpEvent(tabId: number, method: string, params: unknown, sessionId?: string): void {
+    this.#sendNotification(IAB_NOTIFY_ON_CDP_EVENT, { tabId, method, params: params ?? null, ...(sessionId ? { sessionId } : {}) });
   }
 
   /** Called by the pool when a debugger session detaches. */
@@ -230,6 +231,10 @@ export class IabBackend {
     return {
       hello: () => buildIabHelloResult(),
       ping: () => ({}),
+      mcpAppsExecute: (params) => {
+        if (!this.#options.executeMcpApp) throw new Error('mcp_app_frame_unavailable');
+        return this.#options.executeMcpApp(params);
+      },
       attach: (params) => {
         const tabId = requireIabTabId(requireIabParamsRecord(params, 'attach'), 'attach');
         pool.attachDebugger(tabId);
@@ -244,10 +249,29 @@ export class IabBackend {
         const record = requireIabParamsRecord(params, 'executeCdp');
         const tabId = requireIabTabId(record, 'executeCdp');
         const method = requireIabString(record, 'method', 'executeCdp', { maxLength: 256 });
-        const result = await pool.executeCdp(tabId, method, record.params);
+        const sessionId = optionalIabString(record, 'sessionId', 'executeCdp', { maxLength: 256 }) ?? undefined;
+        const result = await pool.executeCdp(tabId, method, record.params, sessionId);
         return { result: result === undefined ? null : result };
       },
       getTabs: () => ({ tabs: pool.getTabs() }),
+      facadeCapabilities: () => ({ browser: ['visibility', 'viewport'], tab: ['cdp', 'pageAssets', 'webmcp'] }),
+      browserPresentation: async (params) => {
+        const record = requireIabParamsRecord(params, 'browserPresentation');
+        const args = Array.isArray(record.args) ? record.args : [];
+        switch (record.operation) {
+          case 'capability.visibility.get': return pool.browserVisible;
+          case 'capability.visibility.set': {
+            if (typeof args[0] !== 'boolean') throw new IabInvalidParamsError('visibility requires a boolean');
+            await pool.setBrowserVisible(args[0]); return null;
+          }
+          case 'capability.viewport.set': {
+            const size = requireIabParamsRecord(args[0], 'viewport.set');
+            await pool.setViewport({ width: Number(size.width), height: Number(size.height) }); return null;
+          }
+          case 'capability.viewport.reset': await pool.setViewport(null); return null;
+          default: throw new IabInvalidParamsError('unsupported browser presentation operation');
+        }
+      },
       createTab: async (params) => {
         const record = params === undefined || params === null ? {} : requireIabParamsRecord(params, 'createTab');
         const url = optionalIabString(record, 'url', 'createTab');
@@ -268,6 +292,13 @@ export class IabBackend {
         const record = requireIabParamsRecord(params, 'ensureTabGroup');
         const key = requireIabString(record, 'key', 'ensureTabGroup', { maxLength: 256 });
         return { groupId: pool.registry.ensureTabGroup(key) };
+      },
+      nameSession: (params) => {
+        const record = requireIabParamsRecord(params, 'nameSession');
+        const key = requireIabString(record, 'key', 'nameSession', { maxLength: 256 });
+        const title = requireIabString(record, 'title', 'nameSession', { maxLength: 256 });
+        pool.registry.nameSession(key, title);
+        return {};
       },
       assignTab: (params) => {
         const record = requireIabParamsRecord(params, 'assignTab');

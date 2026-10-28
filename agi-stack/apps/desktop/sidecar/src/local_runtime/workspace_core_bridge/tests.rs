@@ -2216,6 +2216,8 @@ async fn task_session_persists_and_replays_explicit_llm_route() {
                 base_url: "http://127.0.0.1:19001/v1".to_string(),
                 model: "default-model".to_string(),
                 auth_method: "none".to_string(),
+                audio_input_models: Default::default(),
+                request_timeout: std::time::Duration::from_millis(45_000),
             },
         );
     }

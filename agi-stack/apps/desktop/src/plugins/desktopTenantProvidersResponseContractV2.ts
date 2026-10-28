@@ -30,6 +30,15 @@ export function normalizeManagedLlmProviderV2(payload: unknown): ManagedLlmProvi
     'credentialConfigured',
   );
   const revision = readCompatInteger(payload, 'revision', 'version') ?? 0;
+  const requestTimeoutMs = payload.request_timeout_ms;
+  if (
+    requestTimeoutMs !== undefined &&
+    (!Number.isSafeInteger(requestTimeoutMs) ||
+      Number(requestTimeoutMs) < 1 ||
+      Number(requestTimeoutMs) > 300_000)
+  ) {
+    throw new DesktopApiError('Invalid provider request timeout', 502, null);
+  }
 
   return {
     id,
@@ -58,6 +67,7 @@ export function normalizeManagedLlmProviderV2(payload: unknown): ManagedLlmProvi
     api_key_masked: credentialConfigured && maskedCredential ? '••••••••••••' : null,
     health_last_check: readCompatNullableString(payload, 'health_last_check', 'healthLastCheck'),
     response_time_ms: readCompatNullableNumber(payload, 'response_time_ms', 'responseTimeMs'),
+    ...(requestTimeoutMs === undefined ? {} : { request_timeout_ms: Number(requestTimeoutMs) }),
     error_message: readCompatNullableString(payload, 'error_message', 'errorMessage'),
     revision,
     updated_at: readCompatNullableString(payload, 'updated_at', 'updatedAt'),

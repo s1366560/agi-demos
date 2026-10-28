@@ -28,8 +28,22 @@
 //!   world, the virtual cursor, and per-run tab leases.
 
 pub mod actions;
+pub mod browser_auth;
+mod browser_identity;
 pub mod cdp_policy;
 pub mod framing;
+pub mod facade;
+mod facade_input;
+mod input_visibility;
+#[cfg(test)]
+mod future_stack_tests;
+mod facade_events;
+mod facade_artifacts;
+mod facade_targets;
+pub mod facade_frames;
+mod facade_content;
+mod facade_screenshot;
+mod facade_waits;
 pub mod host;
 pub mod jsonrpc;
 pub mod protocol;

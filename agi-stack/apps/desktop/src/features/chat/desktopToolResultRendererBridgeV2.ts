@@ -1,4 +1,7 @@
-import type { ToolResultPresentationV2 } from "@agistack/plugin-slots";
+import type {
+  ToolResultMediaV2,
+  ToolResultPresentationV2,
+} from "@agistack/plugin-slots";
 import { projectToolResultPresentationV2 } from "./toolResultPresentationV2";
 import type { ToolCallPresentationKind } from "./chatTimelineModel";
 import type { ToolResultStatus } from "./toolResultStatus";
@@ -15,6 +18,9 @@ export interface DesktopToolResultRendererPayloadV2 {
   readonly kindLabel: string;
   readonly statusLabel: string;
   readonly presentation?: ToolResultPresentationV2;
+  readonly media?: readonly ToolResultMediaV2[];
+  readonly mediaLoadingLabel?: string;
+  readonly mediaUnavailableLabel?: string;
   readonly computerUsePreview?: Readonly<{
     artifactId: string;
     mimeType: string;
@@ -97,6 +103,7 @@ const TOOL_RESULT_KINDS_V2 = new Set<ToolCallPresentationKind>([
   "edit",
   "check",
   "computer_use",
+  "repl_output",
   "tool",
 ]);
 

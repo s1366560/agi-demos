@@ -380,9 +380,17 @@ async fn hitl_continuation_keeps_original_generation_and_message_after_publicati
             lease,
         )
         .await;
+    let checkpoint = state
+        .checkpoints
+        .load(conversation_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let pending_id = &checkpoint.pending_hitl.as_ref().unwrap().id;
+    assert_ne!(pending_id, "generation-hitl");
     let pending = state
         .session_store
-        .hitl_request("generation-hitl")
+        .hitl_request(pending_id)
         .unwrap()
         .unwrap();
     assert_eq!(state.suspended_agent_operations_v2.lock().unwrap().len(), 1);

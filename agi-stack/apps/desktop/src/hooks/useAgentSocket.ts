@@ -75,7 +75,7 @@ type AgentSocketState = {
   sendSubAgentControl: (
     command: SubAgentControlCommand,
   ) => Promise<SubAgentControlReceipt>;
-  stopAgentResponse: (conversationId: string) => boolean;
+  stopAgentResponse: (conversationId: string, target?: { messageId: string }) => boolean;
 };
 
 export type AgentSocketConversationTransition = {
@@ -118,6 +118,7 @@ export type AgentRunSocketMessage = {
 export type AgentStopSocketMessage = {
   type: "stop_session";
   conversation_id: string;
+  message_id?: string;
 };
 
 export type AgentSteerMessage = {
@@ -309,12 +310,16 @@ export function deliverAgentRunMessage(
 export function deliverAgentStopSession(
   conversationId: string,
   send: (message: AgentStopSocketMessage) => boolean,
+  target?: { messageId: string },
 ): boolean {
   const normalizedConversationId = conversationId.trim();
   if (!normalizedConversationId) return false;
+  const messageId = target?.messageId.trim();
+  if (target && !messageId) return false;
   return send({
     type: "stop_session",
     conversation_id: normalizedConversationId,
+    ...(messageId ? { message_id: messageId } : {}),
   });
 }
 
@@ -710,8 +715,8 @@ export function useAgentSocket(
   ]);
 
   const stopAgentResponse = useCallback(
-    (conversationId: string) =>
-      deliverAgentStopSession(conversationId, sendSocketMessage),
+    (conversationId: string, target?: { messageId: string }) =>
+      deliverAgentStopSession(conversationId, sendSocketMessage, target),
     [sendSocketMessage],
   );
 

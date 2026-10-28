@@ -22,7 +22,7 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.agent.native_computer_use.broker import NativeComputerBroker
 from src.infrastructure.agent.native_computer_use.schema import validator
 from src.infrastructure.agent.native_computer_use.store import DeviceBridgeError, identifier, record
-from src.tests.integration.agent.test_native_computer_bridge import authorization
+from src.tests.integration.agent.test_native_computer_bridge import DEFINITION, authorization
 
 pytestmark = pytest.mark.unit
 
@@ -66,10 +66,50 @@ def test_invalid_device_schema_fails_before_tools_are_advertised(schema):
 def test_connector_mutation_cannot_inherit_read_permission_or_unknown_tool_prefix():
     with pytest.raises(DeviceBridgeError, match="permission_denied"):
         NativeComputerBroker._validate_authorization(authorization(), "computer_connector_call")
-    with pytest.raises(DeviceBridgeError, match="unknown_tool"):
+    with pytest.raises(DeviceBridgeError, match="run_permission_denied"):
         NativeComputerBroker._validate_authorization(authorization(), "computer_fake_safe_read")
     approved = authorization(approved_tools=("computer_connector_call",))
     NativeComputerBroker._validate_authorization(approved, "computer_connector_call")
+
+
+@pytest.mark.parametrize(
+    "profile,approved_tools",
+    [
+        ("read_only", ()),
+        ("read_only", ("computer_fake_safe_read",)),
+        ("full_access", ()),
+    ],
+)
+async def test_unadvertised_tool_cannot_dispatch_even_with_permission(
+    monkeypatch, profile, approved_tools
+):
+    redis = AsyncMock()
+    broker = NativeComputerBroker(redis)
+    monkeypatch.setattr(
+        broker.devices,
+        "list",
+        AsyncMock(
+            return_value=[
+                {
+                    "device_id": "d",
+                    "connection_id": "connection",
+                    "tool_definitions": [deepcopy(DEFINITION)],
+                }
+            ]
+        ),
+    )
+    dispatch = AsyncMock()
+    monkeypatch.setattr(broker, "dispatch", dispatch)
+
+    with pytest.raises(DeviceBridgeError, match="computer_use_tool_unavailable"):
+        await broker.request(
+            authorization(permission_profile=profile, approved_tools=approved_tools),
+            "computer_fake_safe_read",
+            {},
+        )
+
+    dispatch.assert_not_awaited()
+    redis.set.assert_not_awaited()
 
 
 @pytest.mark.parametrize("value", ["[]", "null", "{bad", 12, b"\xff"])

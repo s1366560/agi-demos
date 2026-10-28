@@ -123,10 +123,9 @@ test('macOS packaging signs the sidecar and enables hardened notarized builds', 
     builderConfig,
     /entitlementsInherit:\s*electron\/resources\/entitlements\.mac\.inherit\.plist/u,
   );
-  assert.match(
-    builderConfig,
-    /binaries:\s*\n\s*-\s*Contents\/Resources\/sidecar\/agistack-desktop-sidecar/u,
-  );
+  const signedBinaries = parseDocument(builderConfig).toJSON().mac.binaries;
+  assert.ok(signedBinaries.includes('Contents/Resources/sidecar/agistack-desktop-sidecar'));
+  assert.ok(signedBinaries.includes('Contents/Resources/sidecar/cua-repl/bin/node'));
   assert.doesNotMatch(macEntitlements, /disable-library-validation/u);
   assert.doesNotMatch(inheritedMacEntitlements, /disable-library-validation/u);
   for (const entitlements of [macEntitlements, inheritedMacEntitlements, localMacEntitlements]) {
@@ -176,9 +175,11 @@ test('packaging stages an integrity digest and enables signed auto-updates', () 
   assert.match(localBuilderConfig, /identity:\s*null/u);
   assert.match(localBuilderConfig, /publish:\s*null/u);
   assert.match(localBuilderConfig, /afterPack:\s*scripts\/sign-local-cua-macos\.mjs/u);
-  assert.match(localCuaSigningHook, /await signLocalMacos\(context\)/u);
-  assert.match(localCuaSigningHook, /await sealCuaMacApp\(appPath, '-', \{ timestamp: false \}\)/u);
-  assert.match(localSigningHook, /--sign',\s*'-'/u);
+  assert.match(localCuaSigningHook, /await signLocalMacos\(context, \{ identity \}\)/u);
+  assert.match(localCuaSigningHook, /await sealCuaMacApp\(appPath, identity, \{ timestamp: false \}\)/u);
+  assert.match(localSigningHook, /--sign',\s*identity/u);
+  assert.match(localSigningHook, /identity = '-'/u);
+  assert.match(localCuaSigningHook, /MEMSTACK_CUA_CODESIGN_IDENTITY/u);
   assert.match(localSigningHook, /entitlements\.mac\.local\.plist/u);
   assert.match(localSigningHook, /--verify/u);
   assert.doesNotMatch(packageJson.scripts['release:electron'], /electron-builder\.local\.yml/u);

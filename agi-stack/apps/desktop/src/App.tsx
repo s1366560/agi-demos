@@ -394,6 +394,12 @@ import {
   type SessionRunAction,
 } from './features/session/sessionViewModel';
 import { socketEventMatchesSessionScope } from './features/session/sessionScope';
+import {
+  composerStopMessageId,
+  composerStopTarget,
+  dispatchComposerStop,
+} from './features/chat/composerStopResponse';
+import { agentStopTargetKey, type AgentStopReceipt } from './features/chat/agentStopResponseModel';
 import { sessionActivityPresence } from './features/session/sessionNarrativeModel';
 import {
   sessionSelectionRequiresRuntimeRefresh,
@@ -1993,6 +1999,7 @@ export function App() {
   useEffect(() => {
     const emptyArtifactState = emptyArtifactCanvasState();
     const emptyMCPAppState = emptyMCPAppCanvasState();
+    void window.__MEMSTACK_DESKTOP__?.core?.invoke?.('mcp_app_guest_clear').catch(() => {});
     artifactCanvasStateRef.current = emptyArtifactState;
     mcpAppCanvasStateRef.current = emptyMCPAppState;
     setArtifactCanvasState(emptyArtifactState);
@@ -5742,6 +5749,47 @@ export function App() {
       t,
     ],
   );
+  const stopResponseTarget = useMemo(() => composerStopTarget({
+    mode: config.mode,
+    scopeKey: JSON.stringify([
+      config.mode, config.apiBaseUrl, config.tenantId, config.projectId, config.workspaceId,
+      auth.session?.session_id, auth.context?.revision,
+    ]),
+    conversationId: selectedConversation?.id ?? '',
+    run: currentArtifactRun,
+    messageId: composerStopMessageId(
+      selectedConversation?.id ?? '', sessionTimeline.items, agentTaskSignals,
+    ),
+  }), [
+    config.mode, config.apiBaseUrl, config.tenantId, config.projectId, config.workspaceId,
+    auth.session?.session_id, auth.context?.revision, selectedConversation?.id,
+    currentArtifactRun, sessionTimeline.items, agentTaskSignals,
+  ]);
+  const stopResponseTargetRef = useRef(stopResponseTarget);
+  stopResponseTargetRef.current = stopResponseTarget;
+  const stopComposerResponse = useCallback(
+    async (conversationId: string): Promise<AgentStopReceipt> => {
+      const target = stopResponseTarget;
+      if (!target || target.conversationId !== conversationId ||
+          agentStopTargetKey(target) !== agentStopTargetKey(stopResponseTargetRef.current)) {
+        return { status: 'rejected', errorCode: 'SESSION_NOT_RUNNING' };
+      }
+      // Capture this rendered authority; a stale request never resolves a successor's run.
+      const requestConfig = { ...config };
+      return dispatchComposerStop(target, {
+        cancelRun: (runId, revision) => desktopSessionRunControlOperationsV2
+          .bindOperation(requestConfig, target.conversationId).cancelRun(runId, revision),
+        stopSession: socket.stopAgentResponse,
+        onRunOutcome: (outcome) => {
+          if (agentStopTargetKey(target) !== agentStopTargetKey(stopResponseTargetRef.current)) return;
+          applyAuthoritativeRun(outcome.run);
+          invalidateSessionAuthority();
+        },
+      });
+    },
+    [stopResponseTarget, config, desktopSessionRunControlOperationsV2,
+      socket.stopAgentResponse, applyAuthoritativeRun, invalidateSessionAuthority],
+  );
   const handleArtifactAction = useCallback(
     async (version: DesktopArtifactVersion, action: ArtifactVersionAction, feedback?: string) => {
       const capabilities = sessionProjection?.capabilities;
@@ -6456,6 +6504,18 @@ export function App() {
       ? defaultSessionCanvasTab(sessionDetailViewModel.status, sessionDetailViewModel.capabilityMode)
       : 'plan'));
   };
+  useEffect(() => {
+    const bridge = window.__MEMSTACK_DESKTOP__?.iab;
+    if (!bridge?.onVisibilityRequested) return;
+    return bridge.onVisibilityRequested((visible) => {
+      if (visible) {
+        setActiveSection('chat');
+        rightPanels.open('browser');
+      } else {
+        rightPanels.dispatch({ type: 'close', tab: 'browser' });
+      }
+    });
+  }, [rightPanels.open, rightPanels.dispatch]);
   const handleCloseCanvas = () => rightPanels.hide();
   const handleSelectRightPanel = (tab: WorkPanelTab) => openRightCanvasPanel(tab);
   const handleCloseRightTab = (tab: WorkPanelTab) => {
@@ -7203,7 +7263,10 @@ export function App() {
       onRemoveReference: handleChatRemoveReference,
       onSend: sendChatMessage,
       onRegenerateConversationSummary: regenerateConversationSummary,
-      onStopResponse: socket.stopAgentResponse,
+      onStopResponse: stopResponseTarget ? stopComposerResponse : undefined,
+      stopResponseTarget,
+      stopResponseTransportConnected: stopResponseTarget?.kind === 'local_run'
+        ? connection === 'ready' : socket.connected,
       onSteerResponse: (request) =>
         socket.sendSteerMessage({
           conversationId: request.conversationId,
@@ -7681,6 +7744,10 @@ export function App() {
               mode={config.mode}
               localReady={localRuntimeAuthorityReady}
               localModeAvailable={runsInNativeDesktop}
+              cloudApiBaseUrl={config.apiBaseUrl}
+              onCloudApiBaseUrlChange={(apiBaseUrl) =>
+                handleConfigChange({ ...configRef.current, apiBaseUrl })
+              }
               email={loginEmail}
               password={loginPassword}
               onModeChange={changeLoginMode}

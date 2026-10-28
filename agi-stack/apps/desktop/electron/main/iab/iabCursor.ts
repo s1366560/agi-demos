@@ -13,8 +13,8 @@
  * from the last dispatched state and bridges `AGENT_CURSOR_ARRIVED` out over
  * a `console.log` prefix (picked up on the main side via the webContents
  * `console-message` event — the simplest reliable channel; no preload
- * coupling and it works in the page's main world). Cross-origin iframes are
- * unsupported, same as synthesized input.
+ * coupling and it works in the page's main world). The overlay belongs to
+ * the top document; frame input is independently scoped through CDP.
  */
 
 import { readFile } from 'node:fs/promises';

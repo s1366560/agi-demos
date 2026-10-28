@@ -188,6 +188,7 @@ export interface ThoughtEvent extends BaseTimelineEvent {
  * Act event (tool call)
  */
 export interface ActEvent extends BaseTimelineEvent {
+  display?: { kind: string; entries?: unknown } | undefined;
   type: 'act';
   toolName: string;
   toolInput: Record<string, unknown>;
@@ -205,6 +206,7 @@ export interface ActEvent extends BaseTimelineEvent {
  * Observe event (tool result)
  */
 export interface ObserveEvent extends BaseTimelineEvent {
+  display?: { kind: string; entries?: unknown } | undefined;
   type: 'observe';
   toolName: string;
   toolOutput?: string | undefined; // May be undefined if result is not a string or empty

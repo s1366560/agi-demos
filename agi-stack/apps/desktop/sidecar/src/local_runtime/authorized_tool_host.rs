@@ -1,6 +1,12 @@
 //! Fail-closed, run-scoped tool execution for the local desktop runtime.
 #[cfg(test)]
 mod connector_tests;
+#[cfg(test)]
+mod repl_permission_tests;
+#[cfg(test)]
+mod audio_release_tests;
+#[cfg(test)]
+mod permission_provenance_tests;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -8,7 +14,7 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-use agistack_core::ports::{CoreError, CoreResult, ToolHost};
+use agistack_core::ports::{CoreError, CoreResult, PermissionKind, PermissionRequired, ToolHost, ToolResult};
 use async_trait::async_trait;
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -56,7 +62,9 @@ pub(super) struct AuthorizedRunToolHost {
     inner: Arc<dyn ToolHost>,
     session_store: DesktopSessionStore,
     run: DesktopRun,
+    owner: Option<super::auth_context::AuthenticatedContext>,
     dynamic_metadata: BTreeMap<String, ToolMetadata>,
+    permission_request_tools: BTreeSet<String>,
     once_permissions: RunOnceToolPermissions,
 }
 
@@ -79,9 +87,21 @@ impl AuthorizedRunToolHost {
             inner,
             session_store,
             run,
+            owner: super::knowledge_authority_v2::agent_access::current_auth(),
             dynamic_metadata,
+            permission_request_tools: BTreeSet::new(),
             once_permissions: Arc::new(Mutex::new(BTreeSet::new())),
         }
+    }
+
+    /// Keep host-declared tools discoverable so the agent can request permission.
+    /// These names do not grant execution and cannot add tools to the inner roster.
+    pub(super) fn with_permission_request_tools(
+        mut self,
+        tools: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.permission_request_tools = tools.into_iter().collect();
+        self
     }
 
     pub(super) fn with_once_permissions(
@@ -92,18 +112,31 @@ impl AuthorizedRunToolHost {
         self
     }
 
-    fn once_permission_active(&self, tool: &str) -> bool {
-        self.once_permissions
-            .lock()
-            .expect("run once tool permissions")
-            .contains(&(self.run.id.clone(), tool.to_string()))
+    fn once_permission_key(&self, tool: &str, input: Option<&str>) -> Option<String> {
+        if let Some(step) = super::execution_authority::current_step_id() {
+            let input: Value = serde_json::from_str(input?).ok()?;
+            step_permission_key(&step, tool, &input).ok()
+        } else {
+            Some(tool.to_string())
+        }
     }
 
-    fn consume_once_permission(&self, tool: &str) {
+    fn once_permission_active(&self, tool: &str, input: Option<&str>) -> bool {
+        self.once_permission_key(tool, input).is_some_and(|key| {
+            self.once_permissions
+                .lock()
+                .expect("run once tool permissions")
+                .contains(&(self.run.id.clone(), key))
+        })
+    }
+
+    fn consume_once_permission(&self, tool: &str, input: &str) -> Option<String> {
+        let key = self.once_permission_key(tool, Some(input))?;
         self.once_permissions
             .lock()
             .expect("run once tool permissions")
-            .remove(&(self.run.id.clone(), tool.to_string()));
+            .remove(&(self.run.id.clone(), key.clone()))
+            .then_some(key)
     }
 
     fn metadata(&self, tool: &str) -> Option<ToolMetadata> {
@@ -113,11 +146,14 @@ impl AuthorizedRunToolHost {
             .or_else(|| tool_metadata(tool))
     }
 
-    fn allows(&self, tool: &str, effect: ToolEffect) -> bool {
-        self.allows_without_once(tool, effect) || self.once_permission_active(tool)
+    fn allows(&self, tool: &str, effect: ToolEffect, input: Option<&str>) -> bool {
+        self.allows_without_once(tool, effect) || self.once_permission_active(tool, input)
     }
 
     fn allows_without_once(&self, tool: &str, effect: ToolEffect) -> bool {
+        if agistack_adapters_cua::OWNED_RECORDING_RELEASE_TOOLS.contains(&tool) {
+            return true;
+        }
         // DesktopRun is an approved plan authority, including Build execution.
         // Historical workspace grants cannot broaden that plan's chosen profile.
         // Fresh, exact run/tool approvals are handled separately by `allows`.
@@ -130,7 +166,20 @@ impl AuthorizedRunToolHost {
         }
     }
 
+    fn validate_owner(&self) -> CoreResult<()> {
+        if let Some(owner) = &self.owner {
+            if !self.session_store
+                .session_context_is_current(owner, Utc::now().timestamp_millis())
+                .map_err(CoreError::Storage)?
+            {
+                return Err(CoreError::Tool("run owner session is no longer current".into()));
+            }
+        }
+        Ok(())
+    }
+
     fn validate_browser_run(&self) -> CoreResult<()> {
+        self.validate_owner()?;
         let current = self
             .session_store
             .run(&self.run.id)
@@ -157,49 +206,62 @@ impl AuthorizedRunToolHost {
         tool: &str,
         input_json: &str,
         effect: ToolEffect,
-    ) -> CoreResult<String> {
+    ) -> CoreResult<ToolResult> {
         self.validate_browser_run()?;
         let profile_allowed = self.allows_without_once(tool, effect);
         // Reserve the exact once capability before any await. A second concurrent
         // call cannot observe or reuse it while origin consent is being resolved.
-        let used_once = self
-            .once_permissions
-            .lock()
-            .expect("run once tool permissions")
-            .remove(&(self.run.id.clone(), tool.to_string()));
+        let once_key = self.consume_once_permission(tool, input_json);
+        let used_once = once_key.is_some();
         if !profile_allowed && !used_once {
             return Err(CoreError::Tool(
                 "browser tool permission is no longer active".into(),
             ));
         }
-        let result = self.inner.call(tool, input_json).await;
-        // These protocol results mean the origin/capability gate did not execute
-        // the action. Restore only this attempt's reserved capability, only while
-        // the same run authority remains live, so an approved retry can proceed.
-        let consent_pending = result
+        let result = self.inner.call_with_content(tool, input_json).await;
+        // Only a trusted gate for this exact action proves that it was not sent.
+        let permission = result
             .as_ref()
             .ok()
-            .and_then(|output| serde_json::from_str::<Value>(output).ok())
-            .is_some_and(|output| {
-                matches!(
-                    output.get("error").and_then(Value::as_str),
-                    Some(
-                        "origin_consent_required"
-                            | "full_cdp_consent_required"
-                            | "credential_fill_consent_required"
-                    )
-                )
-            });
-        // A transport/execution error means the bridge never completed the
-        // authorized action; restore the reserved capability as well, so a
-        // flaky bridge does not burn the human's once approval. A successful
-        // execution still consumes it.
-        let action_not_executed = consent_pending || result.is_err();
-        if used_once && action_not_executed && self.validate_browser_run().is_ok() {
+            .filter(|result| result.control_outcome.is_none() && result.control_generation.is_none())
+            .and_then(|result| result.permission_required.as_ref());
+        let consent_pending = if let Some(permission) = permission {
+            matches!(permission.kind(), PermissionKind::BrowserOrigin | PermissionKind::BrowserFullCdp | PermissionKind::BrowserCredentialFill)
+                && permission.binding() == &super::execution_authority::permission_binding(tool, input_json)?
+        } else {
+            false
+        };
+        if used_once && consent_pending && self.validate_browser_run().is_ok() {
             self.once_permissions
                 .lock()
                 .expect("run once tool permissions")
-                .insert((self.run.id.clone(), tool.to_string()));
+                .insert((self.run.id.clone(), once_key.expect("reserved once permission")));
+        }
+        result
+    }
+
+    async fn call_native(&self, tool: &str, input_json: &str) -> CoreResult<ToolResult> {
+        self.metadata(tool).ok_or_else(|| CoreError::Tool("computer-use authority metadata is missing".into()))?;
+        self.validate_browser_run()?;
+        let effect = super::computer_use_v2::input_effect(&*self.inner, tool, input_json)?;
+        let resolved = match effect { agistack_adapters_cua::CuaToolEffect::Read => ToolEffect::Read, agistack_adapters_cua::CuaToolEffect::Mutate => ToolEffect::Mutate };
+        let profile_allowed = self.allows_without_once(tool, resolved);
+        let once_key = self.consume_once_permission(tool, input_json);
+        if !profile_allowed && once_key.is_none() {
+            if super::execution_authority::current_step_id().is_some() { return repl_permission_required(tool, input_json); }
+            return Err(CoreError::Tool("computer-use tool is outside the approved permission profile".into()));
+        }
+        let result = super::computer_use_v2::with_effect(effect, self.inner.call_with_content(tool, input_json)).await;
+        let permission = result.as_ref().ok().filter(|result| result.control_outcome.is_none() && result.control_generation.is_none())
+            .and_then(|result| result.permission_required.as_ref());
+        let consent_required = if let Some(permission) = permission {
+            permission.kind() == PermissionKind::NativeConsent
+                && permission.binding() == &super::execution_authority::permission_binding(tool, input_json)?
+        } else {
+            false
+        };
+        if let Some(key) = once_key.filter(|_| consent_required && self.validate_browser_run().is_ok()) {
+            self.once_permissions.lock().expect("run once tool permissions").insert((self.run.id.clone(), key));
         }
         result
     }
@@ -226,6 +288,9 @@ impl AuthorizedRunToolHost {
 
 #[async_trait]
 impl ToolHost for AuthorizedRunToolHost {
+    fn can_dispatch(&self, tool: &str) -> bool {
+        self.metadata(tool).is_some() && self.inner.can_dispatch(tool)
+    }
     fn tool_definition(&self, name: &str) -> Option<agistack_core::ports::ToolDefinition> {
         if !self.list_tools().iter().any(|allowed| allowed == name) {
             return None;
@@ -239,7 +304,8 @@ impl ToolHost for AuthorizedRunToolHost {
             .into_iter()
             .filter(|tool| {
                 self.metadata(tool).is_some_and(|metadata| {
-                    self.allows(tool, metadata.effect)
+                    self.allows(tool, metadata.effect,None)
+                        || self.permission_request_tools.contains(tool)
                         || super::computer_use_v2::has_read_operation(&*self.inner,tool)
                         || (self.run.permission_profile == DesktopPermissionProfile::ReadOnly
                             && is_workspace_write_tool(tool))
@@ -248,20 +314,21 @@ impl ToolHost for AuthorizedRunToolHost {
             .collect()
     }
 
-    async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
+    async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<ToolResult> {
+        self.validate_owner()?;
         if agistack_adapters_cua::tool_effects().contains_key(tool) {
-            return Ok(self.call_with_content(tool,input_json).await?.output_json);
+            return self.call_native(tool, input_json).await;
         }
         let metadata = self
             .metadata(tool)
             .ok_or_else(|| CoreError::Tool(format!("tool '{tool}' has no authority metadata")))?;
-        if !self.allows(tool, metadata.effect) {
+        if !self.allows(tool, metadata.effect,Some(input_json)) {
+            if super::execution_authority::current_step_id().is_some() {
+                return repl_permission_required(tool, input_json);
+            }
             return Err(CoreError::Tool(format!(
                 "tool '{tool}' is outside the approved permission profile; request human permission with the exact canonical tool name"
             )));
-        }
-        if agistack_adapters_cua::tool_effects().contains_key(tool) {
-            return Ok(self.call_with_content(tool, input_json).await?.output_json);
         }
         // Browser tools are remote side effects authorized by the
         // origin-consent layer (persisted origin grants + the run-scoped once
@@ -277,7 +344,7 @@ impl ToolHost for AuthorizedRunToolHost {
         let input: Value = serde_json::from_str(input_json)
             .map_err(|error| CoreError::Tool(format!("invalid tool input: {error}")))?;
         let request = self.request(tool, input)?;
-        let identity = json!({
+        let mut identity = json!({
             "run_id": request.run_id,
             "plan_version_id": request.plan_version_id,
             "run_revision": request.run_revision,
@@ -285,6 +352,9 @@ impl ToolHost for AuthorizedRunToolHost {
             "tool_name": request.tool_name,
             "input_digest": request.input_digest().map_err(authority_error)?,
         });
+        if let Some(step_id) = super::execution_authority::current_step_id() {
+            identity["step_id"] = json!(step_id);
+        }
         let identity_digest = canonical_json_digest(&identity).map_err(authority_error)?;
         let invocation_id = format!("local-invocation-{identity_digest}");
         let invocation_context = AuthorizedInvocationContext {
@@ -334,7 +404,7 @@ impl ToolHost for AuthorizedRunToolHost {
                         "invocation_id": invocation_id,
                         "replayed": true,
                     }))
-                    .map_err(|error| CoreError::Tool(error.to_string()));
+                    .map(ToolResult::text).map_err(|error| CoreError::Tool(error.to_string()));
                 }
                 InvocationStatus::Failed => {
                     return Err(CoreError::Tool(format!(
@@ -353,8 +423,12 @@ impl ToolHost for AuthorizedRunToolHost {
         // Consume the run-scoped once-permission only when the invocation will
         // actually execute. Replays and idempotency short-circuits above must
         // not burn the user's one-shot approval.
-        if self.once_permission_active(tool) {
-            self.consume_once_permission(tool);
+        let once_key = self.consume_once_permission(tool, input_json);
+        if !self.allows_without_once(tool, metadata.effect) && once_key.is_none() {
+            if super::execution_authority::current_step_id().is_some() {
+                return repl_permission_required(tool, input_json);
+            }
+            return Err(CoreError::Tool("tool once permission was already consumed".into()));
         }
 
         self.session_store
@@ -374,7 +448,7 @@ impl ToolHost for AuthorizedRunToolHost {
                         Utc::now().timestamp_millis(),
                     )
                     .map_err(CoreError::Tool)?;
-                Ok(output)
+                Ok(ToolResult::text(output))
             }
             Err(error) => {
                 self.session_store
@@ -388,25 +462,23 @@ impl ToolHost for AuthorizedRunToolHost {
             }
         }
     }
-    async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<agistack_core::ports::ToolResult> {
-        if !agistack_adapters_cua::tool_effects().contains_key(tool) {
-            return self.call(tool, input_json).await.map(|output_json| agistack_core::ports::ToolResult::text(output_json));
-        }
-        self.metadata(tool).ok_or_else(||CoreError::Tool("computer-use authority metadata is missing".into()))?;
-        self.validate_browser_run()?;
-        let effect=super::computer_use_v2::input_effect(&*self.inner,tool,input_json)?;
-        let resolved=match effect {agistack_adapters_cua::CuaToolEffect::Read=>ToolEffect::Read,agistack_adapters_cua::CuaToolEffect::Mutate=>ToolEffect::Mutate};
-        let profile_allowed=self.allows_without_once(tool,resolved);
-        let once=self.once_permissions.lock().expect("run once tool permissions").remove(&(self.run.id.clone(),tool.to_string()));
-        if !profile_allowed && !once { return Err(CoreError::Tool("computer-use tool is outside the approved permission profile".into())); }
-        let result=super::computer_use_v2::with_effect(effect,self.inner.call_with_content(tool,input_json)).await;
-        let consent_required=result.as_ref().ok().and_then(|result|serde_json::from_str::<Value>(&result.output_json).ok())
-            .is_some_and(|value|value["error"]=="cua_permission_required");
-        if once && consent_required && self.validate_browser_run().is_ok() {
-            self.once_permissions.lock().expect("run once tool permissions").insert((self.run.id.clone(),tool.to_string()));
-        }
-        result
+    async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
+        self.call_with_content(tool, input_json).await.map(|result| result.output_json)
     }
+}
+
+fn repl_permission_required(tool: &str, input: &str) -> CoreResult<ToolResult> {
+    let binding = super::execution_authority::permission_binding(tool, input)?;
+    Ok(PermissionRequired::new(PermissionKind::ToolStep, binding, json!({"error":"repl_tool_permission_required","tool_name":tool,"step_id":super::execution_authority::current_step_id(),
+        "arguments":serde_json::from_str::<Value>(input).unwrap_or(Value::Null),
+        "decision_target":{"kind":"repl_step","id":super::execution_authority::current_step_id()},
+        "hint":"Request once-only human permission using the returned decision_target and the exact canonical tool name as decision.action.name. The approval is bound to this pending step and its exact arguments. This operation has not been dispatched."})).into_result())
+}
+
+pub(super) fn step_permission_key(step: &str, tool: &str, input: &Value) -> CoreResult<String> {
+    canonical_json_digest(&json!({"step_id":step,"tool":tool,"input":input}))
+        .map(|digest| format!("repl-step:{digest}"))
+        .map_err(authority_error)
 }
 
 fn authority_error(error: impl std::fmt::Display) -> CoreError {
@@ -443,6 +515,7 @@ pub(super) fn sensitive_input_fields() -> BTreeSet<String> {
 
 pub(super) fn redact_tool_payload(tool: &str, payload: &str) -> String {
     if tool_effect(tool).is_none()
+        && !super::cua_repl::TOOLS.contains(&tool)
         && tool != "submit_plan"
         && !tool.starts_with("mcp__")
         && !tool.starts_with("skill__")
@@ -617,7 +690,7 @@ const MUTATING_TOOLS: &[&str] = &[
 ];
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     include!("authorized_tool_contract_tests.rs");
     use super::*;
     use crate::local_runtime::{
@@ -630,7 +703,7 @@ mod tests {
     use agistack_adapters_local_tools::LocalToolHost;
     use uuid::Uuid;
 
-    pub(super) fn running_host(
+    pub(in crate::local_runtime) fn running_host(
         profile: DesktopPermissionProfile,
     ) -> Result<
         (
@@ -887,6 +960,7 @@ mod tests {
     #[derive(Default)]
     struct FlakyBrowserProbe {
         calls: std::sync::atomic::AtomicUsize,
+        effects: std::sync::atomic::AtomicUsize,
     }
 
     #[async_trait]
@@ -897,6 +971,7 @@ mod tests {
 
         async fn call(&self, _tool: &str, _input: &str) -> CoreResult<String> {
             let attempt = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.effects.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             tokio::task::yield_now().await;
             if attempt == 0 {
                 return Err(CoreError::Tool("browser bridge connection reset".into()));
@@ -906,7 +981,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn browser_transport_error_restores_once_permission_until_success() -> Result<(), String>
+    async fn browser_transport_error_after_effect_never_restores_once_permission() -> Result<(), String>
     {
         let (root, store, run, _) = running_host(DesktopPermissionProfile::ReadOnly)?;
         let probe = Arc::new(FlakyBrowserProbe::default());
@@ -927,19 +1002,17 @@ mod tests {
         host.call("browser_navigate", "{}")
             .await
             .expect_err("the first bridge attempt fails at the transport layer");
-        assert!(
-            once_active(),
-            "a transport/execution error must restore the reserved once permission"
-        );
+        assert!(!once_active(), "a transport error does not prove the action was not sent");
 
         host.call("browser_navigate", "{}")
             .await
-            .map_err(|error| error.to_string())?;
+            .expect_err("the consumed permission cannot dispatch a second attempt");
         assert!(
             !once_active(),
-            "successful execution still consumes the once permission"
+            "unknown execution keeps the permission consumed"
         );
-        assert_eq!(probe.calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(probe.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(probe.effects.load(std::sync::atomic::Ordering::SeqCst), 1);
         std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
         Ok(())
     }
@@ -1310,6 +1383,28 @@ mod tests {
         assert!(!redacted.contains("digest"));
         std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
         Ok(())
+    }
+
+    #[test]
+    fn repl_timeline_keeps_results_and_artifacts_while_redacting_secrets() {
+        let payload = json!({
+            "output": {"marker": "native-qa", "count": 2},
+            "error": "repl_tool_permission_required",
+            "artifacts": [{"artifact_id": "scoped-audio", "mime_type": "audio/wav"}],
+            "nested": {"api_key": "must-not-persist"}
+        });
+        for tool in super::super::cua_repl::TOOLS {
+            let redacted = redact_tool_payload(tool, &payload.to_string());
+            let result: Value = serde_json::from_str(&redacted).expect("readable REPL timeline");
+            assert_eq!(result["output"]["count"], 2);
+            assert_eq!(result["error"], "repl_tool_permission_required");
+            assert_eq!(result["artifacts"][0]["artifact_id"], "scoped-audio");
+            assert_eq!(result["nested"]["api_key"], "[REDACTED]");
+            assert!(!redacted.contains("must-not-persist"));
+            // Timeline visibility must not authorize arbitrary JavaScript as a read tool.
+            assert!(tool_metadata(tool).is_none());
+        }
+        assert_eq!(redact_tool_payload("cua_repl_forged", "{}"), "[UNAVAILABLE]");
     }
 
     #[test]

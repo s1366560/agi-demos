@@ -370,6 +370,7 @@ export interface WorkPlanEventData {
  * Act event data (tool execution)
  */
 export interface ActEventData {
+  display?: { kind?: string; entries?: unknown } | undefined;
   tool_name: string;
   tool_input: Record<string, unknown>;
   step_number?: number | undefined;
@@ -392,6 +393,7 @@ export interface ActDeltaEventData {
  * Observe event data (tool result)
  */
 export interface ObserveEventData {
+  display?: { kind?: string; entries?: unknown } | undefined;
   observation?: string | undefined; // Legacy field for observation text
   tool_name?: string | undefined; // New: tool name
   execution_id?: string | undefined; // Legacy alias

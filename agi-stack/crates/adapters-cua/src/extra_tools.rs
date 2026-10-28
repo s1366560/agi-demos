@@ -45,7 +45,7 @@ pub(super) fn contracts() -> Vec<(&'static str, CuaToolEffect, Value)> {
             Mutate,
             contract(
                 "computer_activate_app",
-                "Explicitly activate an application/window before observing it.",
+                "Bring an application/window to the foreground only when the user explicitly requests it and device settings select foreground input. Background input does not require activation; never use this as a fallback for unsupported background input.",
                 json!({"app":app}),
                 &["app"],
             ),
@@ -131,12 +131,23 @@ pub(super) fn contracts() -> Vec<(&'static str, CuaToolEffect, Value)> {
             ),
         ),
         (
+            "computer_locked_use",
+            Mutate,
+            contract(
+                "computer_locked_use",
+                "Enable or disable explicitly approved lock-screen continuity for the current active run.",
+                json!({"enabled":{"type":"boolean"}}),
+                &["enabled"],
+            ),
+        ),
+        (
             "computer_audio_start",
             Mutate,
             contract(
                 "computer_audio_start",
                 "Start explicitly approved microphone, system, or mixed recording for this session.",
-                json!({"source":{"type":"string","enum":["microphone","system","mixed"]}}),
+                json!({"source":{"type":"string","enum":["microphone","system","mixed"]},
+                    "max_duration_ms":{"type":"integer","minimum":100,"maximum":300000}}),
                 &["source"],
             ),
         ),
@@ -145,8 +156,8 @@ pub(super) fn contracts() -> Vec<(&'static str, CuaToolEffect, Value)> {
             Read,
             contract(
                 "computer_audio_status",
-                "Read recording state and owned artifact metadata.",
-                json!({}),
+                "Read recording state and owned artifact metadata. Optionally select one recording_id; omitting it returns recordings owned by this session.",
+                json!({"recording_id":{"type":"string","minLength":1}}),
                 &[],
             ),
         ),
@@ -155,8 +166,8 @@ pub(super) fn contracts() -> Vec<(&'static str, CuaToolEffect, Value)> {
             Mutate,
             contract(
                 "computer_audio_stop",
-                "Stop recording, release devices, and return audio artifacts.",
-                json!({}),
+                "Stop and save recording, release devices, and return audio artifacts. Optionally select one recording_id; omitting it stops recordings owned by this session. Stopping always saves; discard is not supported.",
+                json!({"recording_id":{"type":"string","minLength":1}}),
                 &[],
             ),
         ),

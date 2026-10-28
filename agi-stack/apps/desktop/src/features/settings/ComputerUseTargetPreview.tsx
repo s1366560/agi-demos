@@ -12,6 +12,8 @@ import {
   computerUseImageIdentity,
   computerUsePhaseLabel,
 } from "./computerUsePresentationModel";
+import type { ComputerUseInputStore } from './computerUseInputStore';
+import { ComputerUseWindowPreview } from './ComputerUseWindowPreview';
 
 export function useComputerUseArtifact(
   client: ComputerUseClientV2 | null,
@@ -84,10 +86,14 @@ export function ComputerUseTargetPreview({
   presentation,
   client,
   recent = false,
+  sessionId,
+  inputStore,
 }: {
   presentation: ComputerUsePresentation;
   client: ComputerUseClientV2 | null;
   recent?: boolean;
+  sessionId?: string;
+  inputStore?: ComputerUseInputStore | null;
 }) {
   const { t } = useI18n();
   const image = useComputerUseArtifact(client, presentation.preview);
@@ -104,21 +110,8 @@ export function ComputerUseTargetPreview({
         icon={presentation.app_icon}
         client={client}
       />
-      <div className="computer-use-window-preview">
-        {image ? (
-          <img
-            src={image}
-            alt={t("cua.previewAlt", {
-              app: presentation.target?.display_name ?? "",
-            })}
-          />
-        ) : (
-          <p>{t("cua.previewUnavailable")}</p>
-        )}
-        {image && icon ? (
-          <img className="computer-use-preview-app-badge" src={icon} alt="" />
-        ) : null}
-      </div>
+      <ComputerUseWindowPreview image={image} icon={icon} presentation={presentation}
+        sessionId={recent ? undefined : sessionId} inputStore={recent ? null : inputStore} />
       <figcaption>
         <span>
           {t(recent ? "cua.recentObservation" : "cua.latestObservation")}

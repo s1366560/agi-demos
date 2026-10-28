@@ -15,6 +15,7 @@ pub(super) mod managed_resources;
 #[cfg(test)]
 mod managed_resources_tests;
 mod mcp_apps;
+pub(super) use mcp_apps::native as device_mcp_contract;
 #[cfg(test)]
 mod mcp_apps_tests;
 mod project_overview;

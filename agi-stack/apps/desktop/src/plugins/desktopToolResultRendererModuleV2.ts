@@ -1,9 +1,10 @@
 export interface DesktopToolResultRendererModuleV2 {
-  readonly moduleRef: 'builtin:structured-tool-result';
+  readonly moduleRef: "builtin:structured-tool-result";
   readonly srcDoc: string;
 }
 
-export const DESKTOP_TOOL_RESULT_RENDERER_MODULE_REF_V2 = 'builtin:structured-tool-result' as const;
+export const DESKTOP_TOOL_RESULT_RENDERER_MODULE_REF_V2 =
+  "builtin:structured-tool-result" as const;
 
 const DESKTOP_TOOL_RESULT_RENDERER_SRC_DOC_V2 = `<!doctype html>
 <html>
@@ -11,7 +12,7 @@ const DESKTOP_TOOL_RESULT_RENDERER_SRC_DOC_V2 = `<!doctype html>
     <meta charset="utf-8">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'sha256-pZKI4XU1CninkXOlz12xvgkDjoee2THMtW/Retfuoss='; style-src 'unsafe-inline'; connect-src 'none'; img-src blob:; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'sha256-Ld13Wx9ubp8tdlKauYzcazdh+4nLB1hgou+GLzjHQFc='; style-src 'unsafe-inline'; connect-src 'none'; img-src blob:; media-src blob:; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
     >
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
@@ -50,12 +51,14 @@ const DESKTOP_TOOL_RESULT_RENDERER_SRC_DOC_V2 = `<!doctype html>
         const tool = document.getElementById('tool');
         const status = document.getElementById('status');
         const presentation = document.getElementById('presentation');
-        const kinds = new Set(['search', 'read', 'command', 'edit', 'check', 'computer_use', 'tool']);
+        const kinds = new Set(['search', 'read', 'command', 'edit', 'check', 'computer_use', 'repl_output', 'tool']);
         const statuses = new Set(['complete', 'failed', 'paused', 'stopped']);
         let disposed = false;
+        const mediaUrls = [];
         let previewUrl = null;
         let iconUrl = null;
         const revokePreview = () => {
+          for (const url of mediaUrls.splice(0)) URL.revokeObjectURL(url);
           if (previewUrl !== null) URL.revokeObjectURL(previewUrl);
           previewUrl = null;
           if (iconUrl !== null) URL.revokeObjectURL(iconUrl);
@@ -69,6 +72,7 @@ const DESKTOP_TOOL_RESULT_RENDERER_SRC_DOC_V2 = `<!doctype html>
           send({ type: 'slot:resize', slotId: SLOT_ID, height: document.body.scrollHeight });
         };
         const fail = () => {
+          revokePreview(); presentation.replaceChildren(); surface.hidden = true;
           send({ type: 'slot:error', slotId: SLOT_ID, message: 'invalid_payload' });
         };
         const render = (payload) => {
@@ -98,7 +102,47 @@ const DESKTOP_TOOL_RESULT_RENDERER_SRC_DOC_V2 = `<!doctype html>
           revokePreview();
           presentation.replaceChildren();
           const view = payload.presentation;
-          if (view && view.kind === 'computer_use') {
+          if (view && view.kind === 'repl_output') {
+            if (!Array.isArray(view.entries) || view.entries.length > 256) { fail(); return; }
+            let textBytes = 0, mediaBytes = 0;
+            const valid = view.entries.every(entry => {
+              if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+              if (entry.kind === 'unavailable') return entry.reason === 'media_size_limit';
+              if (entry.kind === 'text') return typeof entry.text === 'string' && (textBytes += entry.text.length) <= 32768;
+              const image = entry.kind === 'image';
+              const types = image ? ['image/png', 'image/jpeg', 'image/webp'] : ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/ogg'];
+              return (image || entry.kind === 'audio') && ['device', 'conversation_tool_media'].includes(entry.store) &&
+                typeof entry.artifactId === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,255}$/.test(entry.artifactId) &&
+                types.includes(entry.mimeType) && Number.isSafeInteger(entry.sizeBytes) && entry.sizeBytes > 0 &&
+                entry.sizeBytes <= 10 * 1024 * 1024 && (mediaBytes += entry.sizeBytes) <= 32 * 1024 * 1024;
+            });
+            if (!valid) { fail(); return; }
+            for (const entry of view.entries) {
+              if (entry.kind === 'unavailable') { const label = document.createElement('span'); label.textContent = payload.mediaUnavailableLabel; presentation.append(label); continue; }
+              if (entry.kind === 'text' && typeof entry.text === 'string') {
+                const text = document.createElement('pre'); text.textContent = entry.text;
+                text.style.whiteSpace = 'pre-wrap'; presentation.append(text); continue;
+              }
+              const image = entry.kind === 'image';
+              const types = image ? ['image/png', 'image/jpeg', 'image/webp'] : ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/ogg'];
+              if ((!image && entry.kind !== 'audio') || !types.includes(entry.mimeType) ||
+                  !Number.isSafeInteger(entry.sizeBytes) || entry.sizeBytes < 1 ||
+                  entry.sizeBytes > 10 * 1024 * 1024) { fail(); return; }
+              const content = Array.isArray(payload.media) && payload.media.find(value => value &&
+                value.store === entry.store && value.artifactId === entry.artifactId && value.mimeType === entry.mimeType &&
+                value.bytes instanceof Uint8Array && value.bytes.byteLength === entry.sizeBytes);
+              if (!content) {
+                const pending = document.createElement('span'); pending.textContent = payload.media === undefined ? payload.mediaLoadingLabel : payload.mediaUnavailableLabel;
+                presentation.append(pending); continue;
+              }
+              const url = URL.createObjectURL(new Blob([content.bytes], {type: content.mimeType}));
+              mediaUrls.push(url);
+              const node = document.createElement(image ? 'img' : 'audio'); node.src = url;
+              if (image) { node.alt = payload.resultLabel; node.style.maxWidth = '100%'; node.style.maxHeight = '340px'; node.style.objectFit = 'contain'; node.onload = resize; }
+              else { node.controls = true; node.preload = 'metadata'; node.onloadedmetadata = resize; }
+              presentation.append(node);
+            }
+          } else if (view && view.kind === 'computer_use') {
             if (typeof view.app !== 'string' || typeof view.text !== 'string' || typeof view.summary !== 'string') { fail(); return; }
             const icon = payload.computerUseAppIcon;
             if (icon && icon.artifactId === view.appIconArtifactId &&

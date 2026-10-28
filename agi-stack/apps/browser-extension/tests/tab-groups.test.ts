@@ -41,6 +41,24 @@ describe('ensureTabGroup', () => {
     expect(chrome.tabGroups.update).toHaveBeenCalledWith(555, { title: 'Run', color: 'red' });
   });
 
+  it('renames a current session group without creating or grouping tabs', async () => {
+    const { chrome, bridge } = setup();
+    chrome.storage.local.get.mockResolvedValue({ 'memstackTabGroup:run-1': 432 });
+    chrome.tabGroups.get.mockResolvedValue({ id: 432 });
+    const response = await bridge.dispatch({ jsonrpc: '2.0', id: 1, method: 'nameSession', params: { key: 'run-1', title: 'Research' } });
+    expect(response).toMatchObject({ result: {} });
+    expect(chrome.tabGroups.update).toHaveBeenCalledWith(432, { title: 'Research' });
+    expect(chrome.tabs.create).not.toHaveBeenCalled();
+  });
+
+  it('naming an unused session does not create a browser tab', async () => {
+    const { chrome, bridge } = setup();
+    const response = await bridge.dispatch({ jsonrpc: '2.0', id: 1, method: 'nameSession', params: { key: 'fresh', title: 'Research' } });
+    expect(response).toMatchObject({ result: {} });
+    expect(chrome.tabs.create).not.toHaveBeenCalled();
+    expect(chrome.tabGroups.update).not.toHaveBeenCalled();
+  });
+
   it('is idempotent per key: a live stored group is reused', async () => {
     const { chrome, bridge } = setup();
     chrome.storage.local.get.mockResolvedValue({ 'memstackTabGroup:run-1': 432 });

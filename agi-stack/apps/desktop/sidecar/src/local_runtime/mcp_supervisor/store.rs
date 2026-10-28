@@ -11,6 +11,8 @@ use crate::local_runtime::DesktopSessionStore;
 
 mod credentials;
 mod mutations;
+mod oauth_flows;
+pub(in crate::local_runtime) use oauth_flows::ManualOAuthFlow;
 
 pub(super) use credentials::CredentialStageStatus;
 
@@ -37,6 +39,15 @@ CREATE TABLE IF NOT EXISTS desktop_mcp_servers_v1 (
 );
 CREATE INDEX IF NOT EXISTS idx_desktop_mcp_servers_scope_v1
   ON desktop_mcp_servers_v1(tenant_id, project_id, enabled, name);
+CREATE TABLE IF NOT EXISTS desktop_mcp_oauth_flows_v1 (
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  server_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  metadata_json TEXT NOT NULL,
+  PRIMARY KEY(tenant_id, project_id, server_id, user_id),
+  FOREIGN KEY(server_id) REFERENCES desktop_mcp_servers_v1(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS desktop_mcp_apps_v1 (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,

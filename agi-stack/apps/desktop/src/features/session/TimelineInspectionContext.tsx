@@ -10,6 +10,7 @@ import {
 import type { AgentTimelineItem } from "../../types";
 
 type TimelineInspection = {
+  sessionKey: string | null;
   items: readonly AgentTimelineItem[];
   inspect: (items: AgentTimelineItem[], trigger: HTMLElement) => void;
   dismiss: () => void;
@@ -17,6 +18,7 @@ type TimelineInspection = {
 };
 
 const TimelineInspectionContext = createContext<TimelineInspection>({
+  sessionKey: null,
   items: [],
   inspect: () => {},
   dismiss: () => {},
@@ -58,11 +60,13 @@ export function TimelineInspectionProvider({
     const trigger = triggersRef.current.get(sessionKey);
     triggersRef.current.delete(sessionKey);
     window.requestAnimationFrame(() => {
-      if (sessionRef.current === sessionKey && trigger?.isConnected) trigger.focus();
+      if (sessionRef.current === sessionKey && trigger?.isConnected)
+        trigger.focus();
     });
   }, [sessionKey]);
   const value = useMemo(
     () => ({
+      sessionKey,
       items: selections[sessionKey] ?? [],
       inspect,
       dismiss,

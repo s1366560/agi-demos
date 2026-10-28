@@ -1,24 +1,32 @@
 //! Supervised, authenticated, multiplexed private-pipe computer-use client.
 
-use crate::{IPC_PROTOCOL_VERSION, error::CuaError, framing};
-use hmac::{Hmac, Mac};
+use crate::{error::CuaError, framing, IPC_PROTOCOL_VERSION};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use sha2::Sha256;
+use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
     path::PathBuf,
     process::Stdio,
     sync::{
-        Arc, Mutex as SyncMutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex as SyncMutex,
     },
 };
 use tokio::{
     process::{Child, ChildStdin, Command},
-    sync::{Mutex, broadcast, oneshot},
-    time::{Duration, timeout},
+    sync::{broadcast, oneshot, watch, Mutex},
+    time::{timeout, Duration},
 };
+
+#[path = "client_bindings.rs"]
+mod bindings;
+#[path = "client_lifecycle.rs"]
+mod lifecycle;
+#[path = "client_notifications.rs"]
+mod notifications;
+#[path = "client_protocol.rs"]
+mod protocol;
+use protocol::{decode_response, input_generation, mutates, random_hex, valid_proof};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -35,6 +43,7 @@ pub struct CuaCallContext {
     pub conversation_id: String,
     pub run_id: String,
     pub session_id: String,
+    pub input_mode: crate::CuaInputMode,
 }
 
 #[derive(Default)]
@@ -70,11 +79,16 @@ impl CuaClientBuilder {
             next_id: AtomicU64::new(1),
             request_timeout: self.request_timeout.unwrap_or(REQUEST_TIMEOUT),
             native_status: broadcast::channel(256).0,
+            input_telemetry: watch::channel(BTreeMap::new()).0,
+            input_bindings: Arc::new(bindings::Bindings::default()),
+            shutting_down: AtomicBool::new(false),
         }
     }
 }
 
 struct Connection {
+    input_binding_id: String,
+    input_bindings: Arc<bindings::Bindings>,
     writer: Arc<Mutex<Option<ChildStdin>>>,
     child: SyncMutex<Option<Child>>,
     reaper: SyncMutex<Option<tokio::task::JoinHandle<()>>>,
@@ -82,54 +96,12 @@ struct Connection {
     sessions: Mutex<BTreeMap<String, (CuaCallContext, Option<PathBuf>)>>,
     closed_sessions: Mutex<BTreeMap<String, (CuaCallContext, Option<PathBuf>)>>,
     session_admission: Mutex<()>,
+    generations: Mutex<BTreeMap<String, String>>,
+    input_sequences: Mutex<BTreeMap<String, (String, u64)>>,
     observations: Mutex<BTreeMap<String, crate::coordinates::ObservationCoordinates>>,
     alive: AtomicBool,
+    input_telemetry: watch::Sender<BTreeMap<String, crate::CuaInputTelemetry>>,
 }
-impl Connection {
-    fn abort(&self, reason: &str) {
-        self.alive.store(false, Ordering::Release);
-        // EOF reaches the native reader immediately and releases held input.
-        if let Ok(mut writer) = self.writer.try_lock() {
-            writer.take();
-        }
-        if let Ok(mut child) = self.child.lock() {
-            if let Some(mut child) = child.take() {
-                if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-                    let writer = Arc::clone(&self.writer);
-                    let task = runtime.spawn(async move {
-                        let _ = timeout(Duration::from_millis(200), async {
-                            writer.lock().await.take();
-                        })
-                        .await;
-                        if timeout(Duration::from_millis(500), child.wait())
-                            .await
-                            .is_err()
-                        {
-                            let _ = child.start_kill();
-                            let _ = child.wait().await;
-                        }
-                    });
-                    if let Ok(mut reaper) = self.reaper.lock() {
-                        *reaper = Some(task);
-                    }
-                } else {
-                    let _ = child.start_kill();
-                }
-            }
-        }
-        if let Ok(mut pending) = self.pending.lock() {
-            for (_, tx) in std::mem::take(&mut *pending) {
-                let _ = tx.send(Err(CuaError::Unreachable(reason.into())));
-            }
-        }
-    }
-}
-impl Drop for Connection {
-    fn drop(&mut self) {
-        self.abort("helper connection closed");
-    }
-}
-
 /// Dropping a partially dispatched future must not leave a usable poisoned pipe.
 struct ExchangeGuard {
     connection: Arc<Connection>,
@@ -148,7 +120,10 @@ impl Drop for ExchangeGuard {
 }
 
 pub struct CuaClient {
+    shutting_down: AtomicBool,
+    input_bindings: Arc<bindings::Bindings>,
     native_status: broadcast::Sender<crate::CuaNativeStatus>,
+    input_telemetry: watch::Sender<BTreeMap<String, crate::CuaInputTelemetry>>,
     helper_path: Option<PathBuf>,
     helper_args: Vec<std::ffi::OsString>,
     state: Mutex<Option<Arc<Connection>>>,
@@ -159,12 +134,23 @@ impl CuaClient {
     pub fn subscribe_native_status(&self) -> broadcast::Receiver<crate::CuaNativeStatus> {
         self.native_status.subscribe()
     }
+    pub fn subscribe_input_telemetry(
+        &self,
+    ) -> watch::Receiver<BTreeMap<String, crate::CuaInputTelemetry>> {
+        self.input_telemetry.subscribe()
+    }
+    pub fn current_input_generation(&self, session_id: &str) -> Option<String> {
+        self.input_bindings.current(session_id)
+    }
     pub fn builder() -> CuaClientBuilder {
         CuaClientBuilder::default()
     }
 
     async fn connection(&self) -> Result<Arc<Connection>, CuaError> {
         let mut state = self.state.lock().await;
+        if self.shutting_down.load(Ordering::Acquire) {
+            return Err(CuaError::Unreachable("helper is shutting down".into()));
+        }
         if let Some(connection) = state.as_ref().filter(|c| c.alive.load(Ordering::Acquire)) {
             return Ok(connection.clone());
         }
@@ -204,7 +190,7 @@ impl CuaClient {
         let secret = random_hex()?;
         let nonce = random_hex()?;
         let initialize = json!({"jsonrpc":"2.0","id":0,"method":"initialize","params":{
-            "native_status_notifications":true,
+            "native_status_notifications":true,"input_telemetry_notifications":true,
             "client_api_version":IPC_PROTOCOL_VERSION,"nonce":nonce,"secret":secret}});
         let response = timeout(HANDSHAKE_TIMEOUT, async {
             framing::write_frame(&mut writer, initialize.to_string().as_bytes()).await?;
@@ -230,6 +216,8 @@ impl CuaClient {
             ));
         }
         let connection = Arc::new(Connection {
+            input_binding_id: nonce,
+            input_bindings: self.input_bindings.clone(),
             writer: Arc::new(Mutex::new(Some(writer))),
             child: SyncMutex::new(Some(child)),
             reaper: SyncMutex::new(None),
@@ -237,11 +225,15 @@ impl CuaClient {
             sessions: Mutex::new(BTreeMap::new()),
             closed_sessions: Mutex::new(BTreeMap::new()),
             session_admission: Mutex::new(()),
+            generations: Mutex::new(BTreeMap::new()),
+            input_sequences: Mutex::new(BTreeMap::new()),
             observations: Mutex::new(BTreeMap::new()),
             alive: AtomicBool::new(true),
+            input_telemetry: self.input_telemetry.clone(),
         });
         let weak = Arc::downgrade(&connection);
         let native_status = self.native_status.clone();
+        self.input_telemetry.send_replace(BTreeMap::new());
         tokio::spawn(async move {
             loop {
                 let raw = framing::read_frame(&mut reader).await;
@@ -257,36 +249,9 @@ impl CuaClient {
                 };
                 let value = serde_json::from_slice::<Value>(&raw).ok();
                 if let Some(value) = value.as_ref().filter(|v| v.get("id").is_none()) {
-                    let event = value.get("params").cloned().and_then(|params| {
-                        serde_json::from_value::<crate::CuaNativeStatus>(params).ok()
-                    });
-                    let valid = if let Some(event) = event.as_ref() {
-                        let active = connection
-                            .sessions
-                            .lock()
-                            .await
-                            .get(&event.context.session_id)
-                            .is_some_and(|(context, _)| context == &event.context);
-                        let closed = !active
-                            && connection
-                                .closed_sessions
-                                .lock()
-                                .await
-                                .get(&event.context.session_id)
-                                .is_some_and(|(context, _)| context == &event.context);
-                        value["jsonrpc"] == "2.0"
-                            && value["method"] == "native_status"
-                            && event.valid()
-                            && (active || closed)
-                    } else {
-                        false
-                    };
-                    if !valid {
+                    if !connection.notification(value, &native_status).await {
                         connection.abort("invalid native status notification");
                         return;
-                    }
-                    if let Some(event) = event {
-                        let _ = native_status.send(event);
                     }
                     continue;
                 }
@@ -317,6 +282,7 @@ impl CuaClient {
         method: &str,
         params: Value,
     ) -> Result<Value, CuaError> {
+        self.allow_during_shutdown(method)?;
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let payload = json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}).to_string();
         // Validate the entire frame before reserving or dispatching anything.
@@ -332,8 +298,12 @@ impl CuaClient {
             id,
             completed: false,
         };
-        let exchange = timeout(self.request_timeout, async {
+        let request_timeout = if matches!(method,"locked_use_install" | "locked_use_uninstall") {
+            self.request_timeout.max(Duration::from_secs(300))
+        } else { self.request_timeout };
+        let exchange = timeout(request_timeout, async {
             let mut writer = connection.writer.lock().await;
+            self.allow_during_shutdown(method)?;
             if !connection.alive.load(Ordering::Acquire) {
                 return Err(CuaError::Unreachable("helper disconnected".into()));
             }
@@ -397,6 +367,13 @@ impl CuaClient {
                 message: "all owner and session fields are required".into(),
             });
         }
+        if method == "activate_app" && context.input_mode == crate::CuaInputMode::Background {
+            return Err(CuaError::Request {
+                kind: "background_input_requires_foreground_mode".into(),
+                message: "explicit foreground input mode is required to activate an application"
+                    .into(),
+            });
+        }
         let connection = self.connection().await?;
         let admission = connection.session_admission.lock().await;
         let bound = connection
@@ -421,6 +398,18 @@ impl CuaClient {
                         .map_err(|e| CuaError::InvalidResponse(e.to_string()))?,
                 )
                 .await?;
+            let generation = input_generation(&begun, context)
+                .inspect_err(|_| connection.abort("invalid input binding"))?;
+            connection
+                .generations
+                .lock()
+                .await
+                .insert(context.session_id.clone(), generation.clone());
+            self.input_bindings.set(
+                &connection.input_binding_id,
+                &context.session_id,
+                &generation,
+            );
             let root = begun
                 .get("artifact_root")
                 .and_then(Value::as_str)
@@ -443,6 +432,13 @@ impl CuaClient {
                 .cloned()
                 .ok_or_else(|| CuaError::InvalidResponse("invalid context".into()))?,
         );
+        params["input_generation"] = json!(connection
+            .generations
+            .lock()
+            .await
+            .get(&context.session_id)
+            .cloned()
+            .ok_or_else(|| CuaError::InvalidResponse("input generation missing".into()))?);
         if matches!(
             method,
             "stop_session"
@@ -459,7 +455,44 @@ impl CuaClient {
                 .await
                 .remove(&context.session_id);
         }
-        self.exchange(connection, method, params).await
+        let dispatched_generation = params["input_generation"].as_str().map(str::to_owned);
+        let result = self.exchange(connection.clone(), method, params).await?;
+        if result.get("input_generation").is_some() {
+            let generation = input_generation(&result, context)?;
+            let mut generations = connection.generations.lock().await;
+            if generations.get(&context.session_id) != Some(&generation) {
+                if !matches!(
+                    method,
+                    "get_app_state"
+                        | "resume_session"
+                        | "reset"
+                        | "reset_session"
+                        | "pause_session"
+                ) || generations.get(&context.session_id) != dispatched_generation.as_ref()
+                {
+                    return Err(CuaError::InvalidResponse(
+                        "stale native input generation".into(),
+                    ));
+                }
+                // Observing another native target rotates the same binding as
+                // resume/reset. A late response cannot replace a newer binding.
+                connection
+                    .observations
+                    .lock()
+                    .await
+                    .remove(&context.session_id);
+                self.input_bindings.set(
+                    &connection.input_binding_id,
+                    &context.session_id,
+                    &generation,
+                );
+                generations.insert(context.session_id.clone(), generation);
+                self.input_telemetry.send_modify(|latest| {
+                    latest.remove(&context.session_id);
+                });
+            }
+        }
+        Ok(result)
     }
     pub async fn session_artifact_root(&self, session_id: &str) -> Option<PathBuf> {
         let connection = self.state.lock().await.as_ref().cloned()?;
@@ -537,6 +570,13 @@ impl CuaClient {
                     .cloned()
                     .ok_or_else(|| CuaError::InvalidResponse("invalid context".into()))?,
             );
+        params["input_generation"] = json!(connection
+            .generations
+            .lock()
+            .await
+            .get(&context.session_id)
+            .cloned()
+            .ok_or_else(|| CuaError::InvalidResponse("input generation missing".into()))?);
         self.exchange(connection, method, params).await
     }
     pub(crate) async fn remember_observation(
@@ -553,6 +593,17 @@ impl CuaClient {
             .ok_or_else(|| {
                 agistack_core::CoreError::Tool("cua_snapshot_connection_closed".into())
             })?;
+        if connection
+            .generations
+            .lock()
+            .await
+            .get(&observation.context.session_id)
+            != Some(&observation.input_generation)
+        {
+            return Err(agistack_core::CoreError::Tool(
+                "cua_snapshot_input_generation_mismatch".into(),
+            ));
+        }
         connection
             .observations
             .lock()
@@ -591,8 +642,19 @@ impl CuaClient {
             .filter(|c| c.alive.load(Ordering::Acquire))
             .cloned()
             .ok_or_else(missing)?;
+        let generation = connection
+            .generations
+            .lock()
+            .await
+            .get(&context.session_id)
+            .cloned();
         let mut observations = connection.observations.lock().await;
         let observation = observations.get(&context.session_id).ok_or_else(missing)?;
+        if generation.as_ref() != Some(&observation.input_generation) {
+            return Err(agistack_core::CoreError::Tool(
+                "cua_snapshot_input_generation_mismatch".into(),
+            ));
+        }
         observation.transform(context, params)?;
         if consume {
             observations.remove(&context.session_id);
@@ -640,6 +702,8 @@ impl CuaClient {
         connection.observations.lock().await.remove(session_id);
         let mut params = serde_json::to_value(context)
             .map_err(|_| CuaError::InvalidResponse("invalid context".into()))?;
+        params["input_generation"] =
+            json!(connection.generations.lock().await.get(session_id).cloned());
         if let Some(reason) = reason {
             params["end_reason"] = json!(reason);
         }
@@ -650,7 +714,17 @@ impl CuaClient {
                 params,
             )
             .await;
+        if result.is_err() {
+            // A generation race must not leave held input behind after host revocation.
+            connection.abort("native session cleanup failed");
+        }
+        self.input_telemetry.send_modify(|latest| {
+            latest.remove(session_id);
+        });
         if end {
+            self.input_bindings
+                .remove_session(&connection.input_binding_id, session_id);
+            connection.input_sequences.lock().await.remove(session_id);
             if let Some(binding) = connection.sessions.lock().await.remove(session_id) {
                 connection
                     .closed_sessions
@@ -662,6 +736,7 @@ impl CuaClient {
         result
     }
     pub async fn shutdown(&self) {
+        self.input_telemetry.send_replace(BTreeMap::new());
         let connection = self.state.lock().await.take();
         if let Some(connection) = connection {
             connection.abort("runtime shutdown");
@@ -675,86 +750,20 @@ impl CuaClient {
             }
         }
     }
+    pub async fn capabilities_if_connected(&self) -> Option<Result<Value, CuaError>> {
+        let connection = self
+            .state
+            .lock()
+            .await
+            .as_ref()
+            .filter(|connection| connection.alive.load(Ordering::Acquire))
+            .cloned()?;
+        Some(self.exchange(connection, "capabilities", json!({})).await)
+    }
     pub async fn list_apps(&self) -> Result<Value, CuaError> {
         self.request("list_apps", json!({})).await
     }
     pub async fn accessibility_status(&self) -> Result<Value, CuaError> {
         self.request("accessibility_status", json!({})).await
-    }
-}
-
-fn mutates(method: &str) -> bool {
-    matches!(
-        method,
-        "perform_action"
-            | "activate_app"
-            | "launch_app"
-            | "audio_start"
-            | "clipboard_write"
-            | "connector_call"
-            | "enable_locked_use"
-    )
-}
-fn random_hex() -> Result<String, CuaError> {
-    let mut bytes = [0u8; 32];
-    getrandom::getrandom(&mut bytes)
-        .map_err(|_| CuaError::HelperSpawnFailed("secure random unavailable".into()))?;
-    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
-}
-fn valid_proof(secret: &str, nonce: &str, proof: &str) -> bool {
-    let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(secret.as_bytes()) else {
-        return false;
-    };
-    mac.update(nonce.as_bytes());
-    if proof.len() != 64 || !proof.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return false;
-    }
-    let bytes = (0..32)
-        .map(|i| u8::from_str_radix(&proof[i * 2..i * 2 + 2], 16))
-        .collect::<Result<Vec<_>, _>>();
-    bytes.is_ok_and(|bytes| mac.verify_slice(&bytes).is_ok())
-}
-fn decode_response(raw: &[u8], id: u64) -> Result<Value, CuaError> {
-    let response: Value = serde_json::from_slice(raw)
-        .map_err(|_| CuaError::InvalidResponse("invalid JSON response".into()))?;
-    if response.get("jsonrpc") != Some(&json!("2.0"))
-        || response.get("id") != Some(&json!(id))
-        || response.get("result").is_some() == response.get("error").is_some()
-    {
-        return Err(CuaError::InvalidResponse(
-            "invalid JSON-RPC envelope".into(),
-        ));
-    }
-    if let Some(error) = response.get("error") {
-        let kind = error
-            .pointer("/data/kind")
-            .and_then(Value::as_str)
-            .unwrap_or("helper_error");
-        if kind == "incompatible_client_version" {
-            return Err(CuaError::IncompatibleClientVersion {
-                client: IPC_PROTOCOL_VERSION.into(),
-                server: error
-                    .pointer("/data/server_api_version")
-                    .and_then(Value::as_str)
-                    .unwrap_or("unknown")
-                    .into(),
-            });
-        }
-        return Err(CuaError::from_rpc_kind(
-            kind,
-            error
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("helper request failed"),
-        ));
-    }
-    response
-        .get("result")
-        .cloned()
-        .ok_or_else(|| CuaError::InvalidResponse("missing result".into()))
-}
-impl From<agistack_core::CoreError> for CuaError {
-    fn from(error: agistack_core::CoreError) -> Self {
-        Self::Unreachable(error.to_string())
     }
 }

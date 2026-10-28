@@ -6,13 +6,18 @@ import { SettingsPage } from './SettingsCorePages';
 import { SettingsState } from './ManagedResourceViews';
 import type { useMCPServerManagement } from './useMCPServerManagement';
 import './MCPServerSettingsPage.css';
+import { MCPServerOAuth } from './MCPServerOAuth';
 
 export function MCPServerSettingsPage({
   management,
   canManage,
+  location,
+  onLocationChange,
 }: {
   management: ReturnType<typeof useMCPServerManagement>;
   canManage: boolean;
+  location?: 'project' | 'device';
+  onLocationChange?: (location: 'project' | 'device') => void;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
@@ -42,6 +47,22 @@ export function MCPServerSettingsPage({
         </>
       }
     >
+      {location ? (
+        <section className="settings-panel">
+          <label>
+            {t('settings.mcpServers.location')}
+            <select
+              aria-label={t('settings.mcpServers.location')}
+              value={location}
+              onChange={(event) => onLocationChange?.(event.target.value === 'device' ? 'device' : 'project')}
+            >
+              <option value="project">{t('settings.mcpServers.locationCloud')}</option>
+              <option value="device">{t('settings.mcpServers.locationDevice')}</option>
+            </select>
+          </label>
+          <p>{t(location === 'device' ? 'settings.mcpServers.deviceDescription' : 'settings.mcpServers.cloudDescription')}</p>
+        </section>
+      ) : null}
       <label className="mcp-server-search">
         <MagnifyingGlassIcon aria-hidden="true" />
         <input
@@ -83,6 +104,11 @@ export function MCPServerSettingsPage({
                 {server.runtime_metadata?.reason_code ? (
                   <details><summary>{t('settings.mcpServers.diagnostics')}</summary><code>{server.runtime_metadata.reason_code}</code></details>
                 ) : null}
+                {server.server_type === 'http' && management.oauthClient ? <MCPServerOAuth
+                  key={`${server.tenant_id}:${server.project_id}:${server.id}`}
+                  server={server} client={management.oauthClient} canManage={canManage}
+                  onChanged={() => management.reload()}
+                /> : null}
               </div>
               <div className="mcp-server-actions">
                 <button

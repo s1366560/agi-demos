@@ -590,30 +590,33 @@ export function HitlResponseCard({
             >
               {t('chat.allowOnce')}
             </Button>
-            <Button
-              size="1"
-              color="green"
-              variant="soft"
-              disabled={
-                responseDisabled ||
-                !requestId ||
-                busy ||
-                !approvalValidation?.canApprove ||
-                !(
-                  approvalRequest?.permission?.allow_remember ||
-                  approvalRequest?.decision?.action?.name
-                )
-              }
-              onClick={() =>
-                void submit({
-                  action: 'allow_always',
-                  granted: true,
-                  scope: 'workspace_tool',
-                })
-              }
-            >
-              {t('chat.allowAlways')}
-            </Button>
+            {approvalRequest?.decision?.target.kind !== 'repl_step' &&
+            approvalRequest?.decision?.target.kind !== 'device_mcp_tool' ? (
+              <Button
+                size="1"
+                color="green"
+                variant="soft"
+                disabled={
+                  responseDisabled ||
+                  !requestId ||
+                  busy ||
+                  !approvalValidation?.canApprove ||
+                  !(
+                    approvalRequest?.permission?.allow_remember ||
+                    approvalRequest?.decision?.action?.name
+                  )
+                }
+                onClick={() =>
+                  void submit({
+                    action: 'allow_always',
+                    granted: true,
+                    scope: 'workspace_tool',
+                  })
+                }
+              >
+                {t('chat.allowAlways')}
+              </Button>
+            ) : null}
             <Button
               size="1"
               color="red"

@@ -792,7 +792,7 @@ pub fn router() -> Router<AppState> {
 }
 
 #[cfg(test)]
-mod unit {
+pub(crate) mod unit {
     mod legacy_memory_tests {
         include!("legacy_memory_tests.rs");
     }
@@ -850,7 +850,7 @@ mod unit {
         }
     }
 
-    fn test_state() -> AppState {
+    pub(crate) fn test_state() -> AppState {
         let registry = crate::build_registry();
         let llm = Arc::new(StubLlm);
         let checkpoint: Arc<dyn CheckpointStore> = Arc::new(InMemoryCheckpointStore::new());

@@ -131,6 +131,9 @@ impl AnthropicLlm {
         let content = if media.is_empty() {
             json!(user.into())
         } else {
+            if media.iter().any(crate::audio::is_audio) {
+                return Err(crate::audio::unsupported());
+            }
             if !self.vision_supported {
                 return Err(CoreError::Llm(
                     "vision_unsupported: configured model does not accept image observations".into(),

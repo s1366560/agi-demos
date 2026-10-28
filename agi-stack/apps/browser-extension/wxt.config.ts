@@ -20,7 +20,9 @@ export default defineConfig({
     minimum_chrome_version: '116',
     permissions: [
       'alarms',
+      'bookmarks',
       'debugger',
+      'history',
       'nativeMessaging',
       'scripting',
       'sidePanel',

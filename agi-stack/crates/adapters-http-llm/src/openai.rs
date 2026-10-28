@@ -157,6 +157,7 @@ No prose, no code fences.";
 pub struct HttpLlm {
     ep: Endpoint,
     vision_supported: bool,
+    audio_input_supported: bool,
 }
 
 impl HttpLlm {
@@ -165,6 +166,7 @@ impl HttpLlm {
         Self {
             ep: Endpoint::new(base_url, model),
             vision_supported: true,
+            audio_input_supported: false,
         }
     }
 
@@ -180,6 +182,13 @@ impl HttpLlm {
         self
     }
 
+    /// Enable explicit WAV/MP3 input capability declared for this provider/model.
+    /// Disabled by default; this does not enable generated audio responses.
+    pub fn with_audio_input_support(mut self, supported: bool) -> Self {
+        self.audio_input_supported = supported;
+        self
+    }
+
     async fn user_content(
         &self,
         user: String,
@@ -188,13 +197,11 @@ impl HttpLlm {
         if media.is_empty() {
             return Ok(json!(user));
         }
-        if !self.vision_supported {
-            return Err(CoreError::Llm(
-                "vision_unsupported: configured model does not accept image observations".into(),
-            ));
-        }
         let mut content = vec![json!({"type":"text","text":user})];
-        content.extend(crate::media::image_blocks(media, false).await?);
+        content.extend(
+            crate::media::openai_blocks(media, self.vision_supported, self.audio_input_supported)
+                .await?,
+        );
         Ok(json!(content))
     }
 
@@ -224,28 +231,25 @@ impl HttpLlm {
             stream: None,
         };
         crate::request_log::record_request("openai.chat_completions", &body, async {
-        let resp: ChatResponse = self
-            .ep
-            .post_json("/chat/completions", &body, CoreError::Llm)
-            .await?;
-        resp.choices
-            .into_iter()
-            .next()
-            .map(|c| c.message.content)
-            .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))
-        }).await
+            let resp: ChatResponse = self
+                .ep
+                .post_json("/chat/completions", &body, CoreError::Llm)
+                .await?;
+            resp.choices
+                .into_iter()
+                .next()
+                .map(|c| c.message.content)
+                .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))
+        })
+        .await
     }
 
-    async fn chat_stream<F>(
-        &self,
-        system: &str,
-        user: String,
-        on_delta: F,
-    ) -> CoreResult<String>
+    async fn chat_stream<F>(&self, system: &str, user: String, on_delta: F) -> CoreResult<String>
     where
         F: FnMut(&str),
     {
-        self.chat_with_media_stream(system, user, &[], on_delta).await
+        self.chat_with_media_stream(system, user, &[], on_delta)
+            .await
     }
 
     async fn chat_with_media_stream<F>(
@@ -274,71 +278,72 @@ impl HttpLlm {
             stream: Some(true),
         };
         crate::request_log::record_request("openai.chat_completions", &body, async {
-        let url = format!("{}/chat/completions", self.ep.base_url);
-        let mut req = self.ep.client.post(&url).json(&body);
-        if let Some(key) = &self.ep.api_key {
-            req = req.bearer_auth(key);
-        }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| CoreError::Llm(e.to_string()))?;
-        let resp = resp
-            .error_for_status()
-            .map_err(|e| CoreError::Llm(e.to_string()))?;
-        // Some compatible providers ignore the stream flag and return a JSON
-        // completion. Preserve their response while exposing native SSE where supported.
-        if resp
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|value| {
-                value
-                    .split(';')
-                    .next()
-                    .is_some_and(|mime| mime.trim() == "application/json")
-            })
-        {
-            let response: ChatResponse = resp
-                .json()
+            let url = format!("{}/chat/completions", self.ep.base_url);
+            let mut req = self.ep.client.post(&url).json(&body);
+            if let Some(key) = &self.ep.api_key {
+                req = req.bearer_auth(key);
+            }
+            let resp = req
+                .send()
                 .await
-                .map_err(|error| CoreError::Llm(error.to_string()))?;
-            let content = response
-                .choices
-                .into_iter()
-                .next()
-                .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))?
-                .message
-                .content;
-            on_delta(&content);
-            return Ok(content);
-        }
-        let mut chunks = resp.bytes_stream();
-        let mut line_buffer = Vec::new();
-        let mut content = String::new();
-        let mut done = false;
+                .map_err(|e| CoreError::Llm(e.to_string()))?;
+            let resp = resp
+                .error_for_status()
+                .map_err(|e| CoreError::Llm(e.to_string()))?;
+            // Some compatible providers ignore the stream flag and return a JSON
+            // completion. Preserve their response while exposing native SSE where supported.
+            if resp
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .is_some_and(|value| {
+                    value
+                        .split(';')
+                        .next()
+                        .is_some_and(|mime| mime.trim() == "application/json")
+                })
+            {
+                let response: ChatResponse = resp
+                    .json()
+                    .await
+                    .map_err(|error| CoreError::Llm(error.to_string()))?;
+                let content = response
+                    .choices
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))?
+                    .message
+                    .content;
+                on_delta(&content);
+                return Ok(content);
+            }
+            let mut chunks = resp.bytes_stream();
+            let mut line_buffer = Vec::new();
+            let mut content = String::new();
+            let mut done = false;
 
-        while let Some(chunk) = chunks.next().await {
-            let chunk = chunk.map_err(|e| CoreError::Llm(e.to_string()))?;
-            line_buffer.extend_from_slice(&chunk);
-            while let Some(newline_index) = line_buffer.iter().position(|b| *b == b'\n') {
-                let line: Vec<u8> = line_buffer.drain(..=newline_index).collect();
-                if handle_openai_stream_line(&line, &mut content, &mut on_delta)? {
-                    done = true;
+            while let Some(chunk) = chunks.next().await {
+                let chunk = chunk.map_err(|e| CoreError::Llm(e.to_string()))?;
+                line_buffer.extend_from_slice(&chunk);
+                while let Some(newline_index) = line_buffer.iter().position(|b| *b == b'\n') {
+                    let line: Vec<u8> = line_buffer.drain(..=newline_index).collect();
+                    if handle_openai_stream_line(&line, &mut content, &mut on_delta)? {
+                        done = true;
+                        break;
+                    }
+                }
+                if done {
                     break;
                 }
             }
-            if done {
-                break;
+
+            if !done && !line_buffer.is_empty() {
+                handle_openai_stream_line(&line_buffer, &mut content, &mut on_delta)?;
             }
-        }
 
-        if !done && !line_buffer.is_empty() {
-            handle_openai_stream_line(&line_buffer, &mut content, &mut on_delta)?;
-        }
-
-        Ok(content)
-        }).await
+            Ok(content)
+        })
+        .await
     }
 
     /// Raw single-turn completion: returns the model's message content
@@ -368,7 +373,8 @@ impl HttpLlm {
     where
         F: FnMut(&str),
     {
-        self.chat_with_media_stream(system, user.into(), media, on_delta).await
+        self.chat_with_media_stream(system, user.into(), media, on_delta)
+            .await
     }
 
     /// Stream a raw single-turn completion from an OpenAI-/LiteLLM-compatible
@@ -427,6 +433,10 @@ where
 
 #[async_trait]
 impl LlmPort for HttpLlm {
+    fn supports_audio_input(&self) -> bool {
+        self.audio_input_supported
+    }
+
     async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
         let content = self.chat(EXTRACT_SYSTEM, episode.content.clone()).await?;
         parse_memory_draft(&content)
@@ -528,7 +538,8 @@ impl HttpLlm {
             })
             .await?
         } else {
-            self.chat_with_media(DECIDE_SYSTEM, user.clone(), &media).await?
+            self.chat_with_media(DECIDE_SYSTEM, user.clone(), &media)
+                .await?
         };
         let first_wire = serde_json::from_str::<AgentActionWire>(clean_structured(&content));
         let repair_guidance = match first_wire.as_ref() {

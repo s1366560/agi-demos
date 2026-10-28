@@ -572,9 +572,18 @@ impl DesktopSessionStore {
         }))
     }
 
+    #[cfg(test)]
     pub(super) fn revoke_session(&self, credential: &str, now_ms: i64) -> Result<bool, String> {
+        self.revoke_session_with_id(credential, now_ms).map(|id| id.is_some())
+    }
+
+    pub(super) fn revoke_session_with_id(
+        &self,
+        credential: &str,
+        now_ms: i64,
+    ) -> Result<Option<String>, String> {
         if credential.trim().is_empty() {
-            return Ok(false);
+            return Ok(None);
         }
         let digest = credential_digest(credential);
         let mut connection = self.connection()?;
@@ -594,7 +603,7 @@ impl DesktopSessionStore {
             .map_err(|error| error.to_string())?;
         let Some(session_id) = session_id else {
             transaction.commit().map_err(|error| error.to_string())?;
-            return Ok(false);
+            return Ok(None);
         };
         transaction
             .execute(
@@ -605,7 +614,7 @@ impl DesktopSessionStore {
             )
             .map_err(|error| error.to_string())?;
         transaction.commit().map_err(|error| error.to_string())?;
-        Ok(true)
+        Ok(Some(session_id))
     }
 
     pub(super) fn session_context_is_current(

@@ -1,0 +1,26 @@
+diff --git a/dist/cjs/shared/protocol.js b/dist/cjs/shared/protocol.js
+index 3617e787f0ba70447c99501aee7aa67584d89758..7f5180287bc19194641f2636f0aff30a8b3688c7 100644
+--- a/dist/cjs/shared/protocol.js
++++ b/dist/cjs/shared/protocol.js
+@@ -171,7 +171,7 @@ class Protocol {
+         }
+     }
+     async _oncancel(notification) {
+-        if (!notification.params.requestId) {
++        if (notification.params.requestId === undefined) {
+             return;
+         }
+         // Handle request cancellation
+diff --git a/dist/esm/shared/protocol.js b/dist/esm/shared/protocol.js
+index bfa2b7120a0f50c569364ea5264e6f811076f44f..8e01af80d49753bbeae8ca450b828f573933dce0 100644
+--- a/dist/esm/shared/protocol.js
++++ b/dist/esm/shared/protocol.js
+@@ -167,7 +167,7 @@ export class Protocol {
+         }
+     }
+     async _oncancel(notification) {
+-        if (!notification.params.requestId) {
++        if (notification.params.requestId === undefined) {
+             return;
+         }
+         // Handle request cancellation

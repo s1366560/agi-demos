@@ -1,0 +1,16 @@
+.computer-use-locked-session {
+  margin-top: 8px;
+  border-inline-start: 3px solid var(--desktop-accent);
+  border-radius: 4px;
+  padding: 6px 10px;
+  background: var(--desktop-panel-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.computer-use-locked-session p {
+  margin: 4px 0;
+}
+.computer-use-locked-session details {
+  margin-top: 6px;
+  color: var(--desktop-muted);
+}

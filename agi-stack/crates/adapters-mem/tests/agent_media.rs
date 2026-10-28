@@ -77,6 +77,7 @@ impl ToolHost for VisualHost {
         Ok(ToolResult {
             control_outcome: None,
             control_generation: None,
+            permission_required: None,
             output_json: "screen text".into(),
             media: vec![screenshot()],
         })

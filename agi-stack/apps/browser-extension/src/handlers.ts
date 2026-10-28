@@ -17,6 +17,9 @@ import {
   type JsonRpcResponse,
 } from './protocol';
 import { createTabGroupRegistry } from './tab-groups';
+import { createManagementHandler } from './facade-management';
+import { createHistoryHandler } from './browser-history';
+import { createBrowserIdentity } from './browser-identity';
 
 export const CDP_PROTOCOL_VERSION = '1.3';
 export const CDP_COMMAND_TIMEOUT_MS = 10_000;
@@ -42,11 +45,13 @@ export interface Bridge {
 
 type Handler = (params: unknown) => unknown | Promise<unknown>;
 
-export function createBridge(chrome: ChromeApi): Bridge {
+export function createBridge(chrome: ChromeApi, browserFamily: 'chrome' | 'edge' = 'chrome'): Bridge {
+  const identity = createBrowserIdentity(chrome);
   const attachedTabs = new Set<number>();
   const tabGroupRegistry = createTabGroupRegistry(chrome);
   const cursorManager = createCursorManager(chrome);
   const monitorInjector = createMonitorInjector(chrome);
+  const management = createManagementHandler(chrome);
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     cursorManager.handleMessage(message, sender, sendResponse);
@@ -88,12 +93,14 @@ export function createBridge(chrome: ChromeApi): Bridge {
     const tabId = requireTabId(params);
     const method = requireCdpMethod(params);
     const commandParams = optionalCdpParams(params);
+    const sessionId = (params as Record<string, unknown>).sessionId;
+    if (sessionId !== undefined && (typeof sessionId !== 'string' || !sessionId || sessionId.length > 256)) throw new RpcError(ErrorCodes.invalidParams, 'invalid CDP sessionId');
     await attachTab(tabId); // implicit attach on first use
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const result = await Promise.race([
-        chrome.debugger.sendCommand({ tabId }, method, commandParams),
+        chrome.debugger.sendCommand({ tabId, ...(typeof sessionId === 'string' ? { sessionId } : {}) }, method, commandParams),
         new Promise<never>((_resolve, reject) => {
           timer = setTimeout(() => {
             reject(
@@ -124,7 +131,7 @@ export function createBridge(chrome: ChromeApi): Bridge {
     for (const tab of tabs) {
       if (typeof tab.id !== 'number') continue;
       const url = typeof tab.url === 'string' ? tab.url : '';
-      if (EXCLUDED_TAB_URL_PREFIXES.some((prefix) => url.startsWith(prefix))) continue;
+      if (url !== 'about:blank' && EXCLUDED_TAB_URL_PREFIXES.some((prefix) => url.startsWith(prefix))) continue;
       out.push({
         tabId: tab.id,
         windowId: typeof tab.windowId === 'number' ? tab.windowId : -1,
@@ -240,11 +247,12 @@ export function createBridge(chrome: ChromeApi): Bridge {
   }
 
   const handlers: Record<string, Handler> = {
-    hello: () => ({
+    hello: async () => ({
+      ...await identity(),
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
       protocolMin: BRIDGE_PROTOCOL_MIN,
       protocolMax: BRIDGE_PROTOCOL_MAX,
-      backend: 'chrome-extension',
+      backend: browserFamily === 'edge' ? 'edge-extension' : 'chrome-extension',
       extensionId: chrome.runtime.id,
       extensionVersion: chrome.runtime.getManifest().version,
       capabilities: ['cdp', 'tabs', 'events'],
@@ -260,6 +268,14 @@ export function createBridge(chrome: ChromeApi): Bridge {
     },
     executeCdp,
     getTabs,
+    browserManagement: management,
+    browserHistory: createHistoryHandler(chrome),
+    nameSession: async (params) => {
+      const { key, title, color } = requireEnsureTabGroupParams(params);
+      await tabGroupRegistry.renameTabGroup(key, title, color);
+      return {};
+    },
+    facadeCapabilities: () => ({ browser: ['management'], tab: ['cdp', 'pageAssets', 'webmcp'] }),
     createTab,
     ensureTabGroup,
     assignTab,

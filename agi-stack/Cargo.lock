@@ -59,13 +59,16 @@ version = "0.1.0"
 dependencies = [
  "agistack-core",
  "async-trait",
+ "base64",
  "futures-util",
+ "image",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tokio-tungstenite",
  "tracing",
+ "url",
 ]
 
 [[package]]
@@ -326,7 +329,9 @@ dependencies = [
  "async-trait",
  "futures",
  "serde",
+ "serde_jcs",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
 ]
 
@@ -433,6 +438,7 @@ dependencies = [
 name = "agistack-server"
 version = "0.1.0"
 dependencies = [
+ "agistack-adapters-browser",
  "agistack-adapters-cua",
  "agistack-adapters-device",
  "agistack-adapters-docker",
@@ -457,6 +463,7 @@ dependencies = [
  "croner",
  "futures-util",
  "http-body 1.0.1",
+ "jsonschema",
  "regex",
  "reqwest",
  "rustls 0.23.41",

@@ -21,6 +21,7 @@
 //! the structured tool-call to and from the provider.
 
 mod answer_stream;
+mod audio;
 mod anthropic;
 mod embedding;
 mod endpoint;

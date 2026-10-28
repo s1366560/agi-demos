@@ -61,6 +61,7 @@ final class NativePresentation {
     func begin(_ session: NativeSession) {
         lock.lock(); defer { lock.unlock() }
         var context = session.owner; context["session_id"] = session.id
+        context["input_mode"] = session.inputMode.rawValue
         values[session.id] = ["context": context, "phase": "idle", "updated_at": Date().timeIntervalSince1970]
     }
     func update(_ session: NativeSession, phase: String, target: [String: Any]? = nil,

@@ -64,6 +64,7 @@ export const ActItem = memo(
           toolName={event.toolName}
           status={observeEvent.isError ? 'error' : 'success'}
           parameters={event.toolInput}
+          display={observeEvent.display}
           result={observeEvent.isError ? undefined : observeEvent.toolOutput}
           error={observeEvent.isError ? observeEvent.toolOutput : undefined}
           duration={observeEvent.timestamp - event.timestamp}
@@ -131,6 +132,7 @@ export const ObserveItem = memo(
         <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800" opacity={true}>
           <ToolExecutionCardDisplay
             toolName={event.toolName}
+            display={event.display}
             status={event.isError ? 'error' : 'success'}
             result={event.toolOutput}
             error={event.isError ? event.toolOutput : undefined}

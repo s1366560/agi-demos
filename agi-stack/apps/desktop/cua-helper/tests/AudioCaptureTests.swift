@@ -23,7 +23,8 @@ enum AudioCaptureTests {
         precondition(receipts(stopped)[0]["status"] as? String == "pending_export")
         let file = URL(string: (receipts(stopped)[0]["artifacts"] as! [[String: Any]])[0]["url"] as! String)!
         let savedFile = try AVAudioFile(forReading: file)
-        precondition(savedFile.length == 480)
+        precondition(savedFile.length == 240 && savedFile.processingFormat.sampleRate == 24_000)
+        precondition(savedFile.processingFormat.channelCount == 2)
         let duplicate = try audio.stop(session, recordingID: firstID)
         precondition(NSDictionary(dictionary: receipts(stopped)[0]).isEqual(to: receipts(duplicate)[0]))
         let second = try audio.start(source: "system", session: session)
@@ -53,6 +54,17 @@ enum AudioCaptureTests {
         precondition(partials.count == 2 && partials.allSatisfy { $0["partial"] as? Bool == true && $0["kind"] as? String == "audio" })
         _ = try mixed.acknowledge(session.id, recordingID: mixedStart["recording_id"] as! String)
 
+        let conversionFailure = AudioCapture { track, _ in track.write(samples()) }
+        let failedMix = try conversionFailure.start(source: "mixed", session: session)
+        let failedMixID = failedMix["recording_id"] as! String
+        try FileManager.default.createDirectory(at: session.artifactDirectory.appendingPathComponent("mixed-\(failedMixID).wav"),
+            withIntermediateDirectories: false)
+        let recoveredMix = receipts(try conversionFailure.stop(session, recordingID: failedMixID))[0]
+        precondition(recoveredMix["status"] as? String == "pending_export")
+        precondition(recoveredMix["error_code"] as? String == "audio_mix_failed")
+        precondition((recoveredMix["artifacts"] as! [[String: Any]]).count == 2)
+        _ = try conversionFailure.acknowledge(session.id, recordingID: failedMixID)
+
         let bounded = AudioCapture { track, _ in track.maximumFrames = 120; track.write(samples()) }
         _ = try bounded.start(source: "microphone", session: session)
         let limited = receipts(bounded.status(session.id))[0]
@@ -66,6 +78,19 @@ enum AudioCaptureTests {
         _ = try duration.start(source: "system", session: session)
         Thread.sleep(forTimeInterval: 0.03)
         precondition(receipts(duration.status(session.id))[0]["end_reason"] as? String == "duration_limit")
+        let defaultDuration = try AudioCapture.duration(nil)
+        let minimumDuration = try AudioCapture.duration(100)
+        precondition(defaultDuration == 300_000 && minimumDuration == 100)
+        for invalid: Any in [true, 99, 300_001, 100.5, "100", Double.infinity] {
+            do { _ = try AudioCapture.duration(invalid); preconditionFailure("invalid duration accepted") } catch {}
+        }
+        let short = AudioCapture { track, _ in track.write(samples()) }
+        _ = try short.start(source: "system", session: session, maxDurationMilliseconds: 100)
+        Thread.sleep(forTimeInterval: 0.15)
+        let shortReceipt = receipts(short.status(session.id))[0]
+        precondition(shortReceipt["end_reason"] as? String == "duration_limit")
+        precondition(shortReceipt["max_duration_ms"] as? Int == 100)
+        precondition(shortReceipt["encoding"] as? String == "pcm_s16le")
         print("AUDIO_CAPTURE_LIFECYCLE_OK")
     }
 }

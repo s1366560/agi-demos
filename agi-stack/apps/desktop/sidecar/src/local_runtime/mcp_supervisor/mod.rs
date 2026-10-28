@@ -22,6 +22,10 @@ mod http;
 mod http_session;
 mod marketplace_generations;
 mod oauth;
+mod protocol;
+#[cfg(test)]
+mod protocol_tests;
+pub(in crate::local_runtime) use protocol::McpToolBinding;
 pub(super) use marketplace_generations::McpCatalogLease;
 mod remote_common;
 pub(in crate::local_runtime) mod stdio;
@@ -39,12 +43,13 @@ use remote_common::{
 };
 use stdio::StdioRuntime;
 use store::{CredentialStageStatus, McpStore};
+pub(in crate::local_runtime) use store::ManualOAuthFlow;
 use websocket::WebSocketRuntime;
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(super) struct McpScope {
+pub(crate) struct McpScope {
     pub(super) tenant_id: String,
     pub(super) project_id: String,
 }
@@ -329,6 +334,17 @@ impl McpRuntime {
 }
 
 impl McpSupervisor {
+    pub(in crate::local_runtime) fn manual_oauth_flow(
+        &self, scope: &McpScope, server_id: &str, user_id: &str,
+    ) -> Result<Option<ManualOAuthFlow>, String> {
+        self.store.manual_oauth_flow(scope, server_id, user_id)
+    }
+
+    pub(in crate::local_runtime) fn save_manual_oauth_flow(
+        &self, scope: &McpScope, server_id: &str, user_id: &str, flow: &ManualOAuthFlow,
+    ) -> Result<(), String> {
+        self.store.save_manual_oauth_flow(scope, server_id, user_id, flow)
+    }
     pub(super) fn new(
         session_store: DesktopSessionStore,
         workspace_root: PathBuf,
@@ -700,31 +716,6 @@ impl McpSupervisor {
             .staged_credential_reference(scope, provision_idempotency_key)
     }
 
-    pub(super) async fn list_tools(
-        &self,
-        scope: &McpScope,
-        server_id: &str,
-    ) -> McpResult<Vec<Value>> {
-        let server = self.required_server(scope, server_id)?;
-        let result = self
-            .request(&server, "tools/list", serde_json::json!({}))
-            .await?;
-        let tools = result
-            .get("tools")
-            .and_then(Value::as_array)
-            .cloned()
-            .ok_or_else(|| {
-                McpSupervisorError::new(
-                    "local_mcp_malformed_response",
-                    "MCP tools/list response is malformed",
-                )
-            })?;
-        self.store
-            .record_tools_and_apps(&server, &tools)
-            .map_err(|_| storage_error())?;
-        Ok(tools)
-    }
-
     pub(super) async fn call_tool(
         &self,
         scope: &McpScope,
@@ -791,20 +782,7 @@ impl McpSupervisor {
         };
         let mut resources = Vec::new();
         for server in servers {
-            let _generation = self.acquire_active_call(scope, &server.id)?;
-            let result = self
-                .request(&server, "resources/list", serde_json::json!({}))
-                .await?;
-            let values = result
-                .get("resources")
-                .and_then(Value::as_array)
-                .ok_or_else(|| {
-                    McpSupervisorError::new(
-                        "local_mcp_malformed_response",
-                        "MCP resources/list response is malformed",
-                    )
-                })?;
-            resources.extend(values.iter().cloned());
+            resources.extend(self.list_collection(scope, &server, "resources/list", "resources").await?);
         }
         Ok(resources)
     }
@@ -946,7 +924,7 @@ impl McpSupervisor {
         Ok(())
     }
 
-    fn evict_runtime(&self, server_id: &str) -> McpResult<()> {
+    pub(super) fn evict_runtime(&self, server_id: &str) -> McpResult<()> {
         self.runtimes
             .lock()
             .map_err(|_| storage_error())?

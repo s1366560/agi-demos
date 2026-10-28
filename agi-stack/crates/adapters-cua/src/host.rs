@@ -131,6 +131,14 @@ impl CuaToolHost {
         let (method, mut params) = match tool {
             TOOL_LIST_APPS => ("list_apps", input),
             TOOL_GET_APP_STATE => ("get_app_state", input),
+            "computer_locked_use" => (
+                if input["enabled"] == true {
+                    "locked_use_enable"
+                } else {
+                    "locked_use_disable"
+                },
+                input,
+            ),
             _ if crate::extra_tools::method(tool).is_some() => (
                 crate::extra_tools::method(tool).expect("declared method"),
                 input,
@@ -265,6 +273,7 @@ impl CuaToolHost {
         Ok(ToolResult {
             control_outcome: None,
             control_generation: None,
+            permission_required: None,
             output_json: output.to_string(),
             media,
         })

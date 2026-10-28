@@ -1,6 +1,6 @@
 //! Private JSON-lines control protocol between Electron main and the sidecar.
 
-use std::{path::PathBuf, process, sync::Arc};
+use std::{path::PathBuf, process};
 
 use agistack_adapters_browser::protocol::{
     PROTOCOL_MAX as BRIDGE_PROTOCOL_MAX, PROTOCOL_MIN as BRIDGE_PROTOCOL_MIN,
@@ -23,7 +23,7 @@ use crate::{
     application_vault::ApplicationCredentialVault,
     data_migration::migrate_legacy_data,
     local_runtime::{
-        browser_bridge, LocalRuntimeConfig, LocalRuntimeService, PlatformPluginAuthorityModeV2,
+        browser_bridge, LocalRuntimeConfigPatch, LocalRuntimeService, PlatformPluginAuthorityModeV2,
         PlatformPluginControlPlaneReconcilerV2,
     },
     native_host,
@@ -37,6 +37,11 @@ use crate::{
     },
     workspace_core_helper::WorkspaceCoreSupervisor,
 };
+
+#[path = "control_output.rs"]
+mod control_output;
+#[path = "control_local_requests.rs"]
+pub(crate) mod local_requests;
 
 const PROTOCOL_VERSION: u16 = 1;
 const SECRET_BYTES: usize = 32;
@@ -78,7 +83,7 @@ struct ReadyResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ControlRequest {
+pub(crate) struct ControlRequest {
     #[serde(rename = "type")]
     message_type: String,
     id: String,
@@ -89,7 +94,7 @@ struct ControlRequest {
 
 #[derive(Debug, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ControlResponse {
+pub(crate) struct ControlResponse {
     #[serde(rename = "type")]
     message_type: &'static str,
     id: String,
@@ -211,9 +216,31 @@ pub(crate) async fn run() -> Result<(), String> {
         workspace_core,
         plugin_control_plane_v2,
     };
-    let output = Arc::new(tokio::sync::Mutex::new(output));
+    let input_events = state.runtime.subscribe_computer_use_input();
+    let (output_tx, controls) = tokio::sync::mpsc::channel(32);
+    let output_runtime = state.runtime.clone();
+    let mut output_task = tokio::spawn(async move {
+        let result = control_output::run(output, controls, input_events).await;
+        if result.is_err() {
+            output_runtime.shutdown().await;
+        }
+        result
+    });
+    let mut output_failure = None;
     let mut device_calls = task::JoinSet::new();
-    while let Some(line) = read_bounded_line(&mut input, MAX_REQUEST_BYTES).await? {
+    let mut local_requests = local_requests::LocalControlRequests::default();
+    loop {
+        let line = tokio::select! {
+            result = &mut output_task => {
+                output_failure = Some(result.unwrap_or_else(|error| Err(error.to_string())).err().unwrap_or_else(|| "sidecar output closed".into()));
+                break;
+            }
+            line = read_bounded_line(&mut input, MAX_REQUEST_BYTES) => match line {
+                Ok(Some(line)) => line,
+                Ok(None) => break,
+                Err(error) => { output_failure = Some(error); break; }
+            }
+        };
         while device_calls.try_join_next().is_some() {}
         let response = match serde_json::from_str::<ControlRequest>(&line) {
             Ok(request) if parallel_cloud_call(&request) => {
@@ -222,7 +249,7 @@ pub(crate) async fn run() -> Result<(), String> {
                 } else {
                     let runtime = state.runtime.clone();
                     let broker = state.trusted_sessions.clone();
-                    let output = output.clone();
+                    let output_tx = output_tx.clone();
                     device_calls.spawn(async move {
                         let id = request.id;
                         let response =
@@ -247,12 +274,21 @@ pub(crate) async fn run() -> Result<(), String> {
                                     Err(error) => failure(id, &error),
                                 }
                             };
-                        write_json_line(&mut *output.lock().await, &response).await
+                        let value =
+                            serde_json::to_value(response).map_err(|error| error.to_string())?;
+                        output_tx
+                            .send(value)
+                            .await
+                            .map_err(|_| "sidecar output closed".to_owned())
                     });
                     continue;
                 }
             }
-            Ok(request) => execute_request(&state, request).await,
+            Ok(request) => match local_requests.dispatch(&state.runtime, &request, &output_tx).await {
+                local_requests::Dispatch::Response(response) => response,
+                local_requests::Dispatch::Unhandled => execute_request(&state, request).await,
+                local_requests::Dispatch::Pending => continue,
+            },
             Err(_) => ControlResponse {
                 message_type: "response",
                 id: String::new(),
@@ -261,13 +297,26 @@ pub(crate) async fn run() -> Result<(), String> {
                 error: Some("sidecar control request is invalid".to_string()),
             },
         };
-        write_json_line(&mut *output.lock().await, &response).await?;
+        let value = match serde_json::to_value(response) {
+            Ok(value) => value,
+            Err(error) => {
+                output_failure = Some(error.to_string());
+                break;
+            }
+        };
+        if output_tx.send(value).await.is_err() {
+            output_failure = Some("sidecar output closed".into());
+            break;
+        }
     }
+    output_task.abort();
+    // Native admission and held input are fenced before waiting on other services.
+    state.runtime.shutdown().await;
+    local_requests.shutdown().await;
     device_calls.shutdown().await;
     state.workspace_core.shutdown().await;
     state.plugin_control_plane_v2.shutdown().await;
-    state.runtime.shutdown().await;
-    Ok(())
+    output_failure.map_or(Ok(()), Err)
 }
 
 fn parallel_cloud_call(request: &ControlRequest) -> bool {
@@ -370,9 +419,8 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
         return failure(id, "sidecar control request is invalid");
     }
     let result = match request.command.as_str() {
-        "local_runtime_status" => {
-            serde_json::to_value(state.runtime.status()).map_err(|error| error.to_string())
-        }
+        "browser_auth_pending" => state.runtime.browser_auth_pending(request.args.clone().unwrap_or(Value::Null)),
+        "browser_auth_respond" => state.runtime.browser_auth_respond(request.args.clone().unwrap_or(Value::Null)),
         "computer_use_cloud_v2" => match request.args.as_ref().and_then(|args| args.get("input")) {
             Some(input) => {
                 state
@@ -382,6 +430,12 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
             }
             None => Err("cua_cloud_request_required".into()),
         },
+        "device_mcp_manage_v2" => {
+            match request.args.as_ref().and_then(|args| args.get("input")) {
+                Some(input) => state.runtime.device_mcp_manage_v2(&state.trusted_sessions, input.clone()).await,
+                None => Err("device_mcp_request_invalid".into()),
+            }
+        }
         "computer_use_manage_v2" => {
             match request.args.as_ref().and_then(|args| args.get("input")) {
                 Some(input) => {
@@ -397,7 +451,7 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
             .map_err(|error| error.to_string()),
         "local_runtime_configure" => {
             let runtime = state.runtime.clone();
-            parse_arg::<LocalRuntimeConfig>(request.args.as_ref(), "config")
+            parse_arg::<LocalRuntimeConfigPatch>(request.args.as_ref(), "config")
                 .and_then(|config| task::block_in_place(|| runtime.configure(config)))
                 .and_then(|status| serde_json::to_value(status).map_err(|error| error.to_string()))
         }

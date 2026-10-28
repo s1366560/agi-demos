@@ -51,3 +51,34 @@ export function createComputerUseManagement(callbacks: ManagementCallbacks) {
     },
   };
 }
+
+/** A pushed activity snapshot supersedes any earlier in-flight renderer refresh. */
+export function createComputerUseSnapshotUpdates(callbacks: {
+  completed: (snapshot: ComputerUseSnapshot) => void;
+  failed: (error: unknown) => void;
+}) {
+  let revision = 0;
+  let closed = false;
+  return {
+    refresh() {
+      const started = revision;
+      return {
+        completed(snapshot: ComputerUseSnapshot) {
+          if (!closed && started === revision) callbacks.completed(snapshot);
+        },
+        failed(error: unknown) {
+          if (!closed && started === revision) callbacks.failed(error);
+        },
+      };
+    },
+    activity(snapshot: ComputerUseSnapshot) {
+      if (closed) return;
+      revision++;
+      callbacks.completed(snapshot);
+    },
+    dispose() {
+      closed = true;
+      revision++;
+    },
+  };
+}

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:154dd1f853c215f070eece369815cecabd849127fc16ab89a262fe0721',
-  'de3105","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:3345f681916b4570a87450bdc2af4d35f737b1818c51d2092023a31ee6',
+  '92c877","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -2079,8 +2079,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'bcfb54786359738f18d3a","entrypoint":"applyDesktopProjectMcpAppsAuthorityV2","module_',
   'ref":"builtin://memstack/desktop/project-mcp-apps-authority","plugin_id":"memstack-r',
   'enderer-target-hosts","plugin_version":"2.0.0","targets":["desktop-renderer"]},{"art',
-  'ifact_digest":"sha256:60d2533a8b011c0134826e6a5aabc7229c13ebaedfe380e7ed4eca226680cc',
-  'fd","artifact_source":"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopP',
+  'ifact_digest":"sha256:3ca68967825a82beb03938e2b99ab8b3fabe505d15c9e42b5a67049d60b167',
+  'b9","artifact_source":"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopP',
   'rojectMcpServersAuthorityModuleV2.ts","contract":{"config_schema":{"$schema":"https:',
   '//json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"',
   'strategy":{"const":"desktop-api-fetch","type":"string"}},"required":["strategy"],"ty',
@@ -3086,8 +3086,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'rypoint":"src.infrastructure.plugins.v2.builtin_agent_pool_http_routes:builtin_agent',
   '_pool_http_routes_definition_v2","module_ref":"builtin://memstack/http/agent-pool-ro',
   'utes","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["pyt',
-  'hon"]},{"artifact_digest":"sha256:b0bd5dd6a4d40440d00b021df25d1f39a9627a2265e84b0ca1',
-  '172a96bcd584bf","artifact_source":"repo+python://src/infrastructure/plugins/v2/built',
+  'hon"]},{"artifact_digest":"sha256:20743c21758bf9e037e1a3ae3fc14b3bf74f6261291f14911a',
+  '6f17fc3ea29d69","artifact_source":"repo+python://src/infrastructure/plugins/v2/built',
   'in_agent_http_routes.py","contract":{"config_schema":{"$schema":"https://json-schema',
   '.org/draft/2020-12/schema","additionalProperties":false,"properties":{},"type":"obje',
   'ct"},"events":{"emits":[],"handles":[]},"services":{"provides":[],"requires":[{"alia',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:154dd1f853c215f070eece369815cecabd849127fc16ab89a262fe0721de3105' as const;
+  'sha256:3345f681916b4570a87450bdc2af4d35f737b1818c51d2092023a31ee692c877' as const;

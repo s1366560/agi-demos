@@ -197,26 +197,120 @@ async fn child_signed_plugin_uses_own_execution_and_rejects_parent_sibling_cance
     }).await;
 }
 
+async fn configured_signed_subagent() -> (
+    Arc<LocalRuntimeState>,
+    String,
+    local_runtime::execution_profile::ExecutionProfile,
+) {
+    let (state, bytes) = setup().await;
+    import(&state, &bytes).await;
+    seed_plugin_plan(&state);
+    let conversation = state
+        .session_store
+        .conversation("local-plugin-conversation")
+        .unwrap()
+        .unwrap();
+    let native = capture(&state, &conversation, "plugin-selection-plan", None);
+    let name = agent_access::scope(Some(native), async {
+        let control = state.claim_agent_run(&conversation.id, None).unwrap();
+        let tools = LocalPluginToolHostV2::new_plan(&state, &conversation)
+            .await
+            .unwrap()
+            .unwrap()
+            .list_tools();
+        state.release_agent_run_if_control(&conversation.id, &control);
+        assert_eq!(tools.len(), 1);
+        tools.into_iter().next().unwrap()
+    })
+    .await;
+    let agent = json!({
+        "id":"qa-plugin-parent", "name":"qa-plugin-parent", "enabled":true,
+        "status":"active", "allowed_tools":[name,"subagent"], "allowed_skills":["*"],
+        "allowed_mcp_servers":[], "can_spawn":true,
+        "spawn_policy":{"allowed_subagents":["qa-plugin-child"]}
+    });
+    let child = json!({
+        "id":"qa-plugin-child", "name":"qa-plugin-child", "display_name":"QA plugin child",
+        "tenant_id":"local", "project_id":"local-project", "status":"active", "enabled":true,
+        "allowed_tools":[name], "allowed_skills":["*"], "allowed_mcp_servers":[]
+    });
+    for (kind, scope, owner, id, value) in [
+        (
+            local_runtime::ManagedResourceKind::Agent,
+            "project",
+            "local-project",
+            "qa-plugin-parent",
+            agent,
+        ),
+        (
+            local_runtime::ManagedResourceKind::SubAgent,
+            "tenant",
+            "local",
+            "qa-plugin-child",
+            child,
+        ),
+    ] {
+        state
+            .session_store
+            .put_managed_resource(
+                kind,
+                scope,
+                owner,
+                id,
+                "active",
+                None,
+                value,
+                chrono::Utc::now().timestamp_millis(),
+            )
+            .unwrap();
+    }
+    assert!(state
+        .session_store
+        .list_runs(&conversation.id)
+        .unwrap()
+        .is_empty());
+    let (status, configured) = request(
+        &state,
+        "PATCH",
+        &format!("/api/v1/agent/conversations/{}/config", conversation.id),
+        json!({"execution_selection":{"agent_id":"qa-plugin-parent"}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{configured}");
+    let profile = state.execution_profile(&conversation).unwrap();
+    assert_eq!(profile.agent.id, "qa-plugin-parent");
+    (state, name, profile)
+}
+
+fn signed_subagent_boundary(
+    state: &LocalRuntimeState,
+    conversation: &local_runtime::LocalConversation,
+    run: &local_runtime::DesktopRun,
+) -> Arc<local_runtime::agent_boundary_v2::AgentBoundaryV2> {
+    local_runtime::agent_boundary_v2::AgentBoundaryV2::new(
+        state,
+        conversation,
+        &run.message_id,
+        &run.id,
+        Arc::new(state.platform_plugin_authority_v2.acquire_generation().unwrap()),
+    ).unwrap()
+}
+
 #[tokio::test]
 async fn production_subagent_factory_delegates_real_signed_read_plugin_through_approved_parent() {
     use agistack_adapters_mem::ScriptedLlm;
     use agistack_core::agent::types::AgentAction;
-    let (state, bytes) = setup().await;
-    import(&state, &bytes).await;
-    let (conversation, run) = run(&state).await;
+    let (state, name, _) = configured_signed_subagent().await;
+    let (conversation, run) = start_plugin_plan(&state).await;
     let parent = state
         .claim_agent_run(&conversation.id, Some(&run.id))
         .unwrap();
     let native = capture(&state, &conversation, &run.message_id, Some(&run.id));
     agent_access::scope(Some(native),async {
-        let name=LocalPluginToolHostV2::new(&state,&conversation,&run).await.unwrap().unwrap().list_tools().pop().unwrap();
-        let agent=json!({"id":"qa-plugin-parent","name":"qa-plugin-parent","enabled":true,"status":"active","allowed_tools":[name,"subagent"],"allowed_skills":["*"],"allowed_mcp_servers":[],"can_spawn":true,"spawn_policy":{"allowed_subagents":["qa-plugin-child"]}});
-        let child=json!({"id":"qa-plugin-child","name":"qa-plugin-child","display_name":"QA plugin child","tenant_id":"local","project_id":"local-project","status":"active","enabled":true,"allowed_tools":[name],"allowed_skills":["*"],"allowed_mcp_servers":[]});
-        for (kind,scope,owner,id,value) in [(local_runtime::ManagedResourceKind::Agent,"project","local-project","qa-plugin-parent",agent.clone()),(local_runtime::ManagedResourceKind::SubAgent,"tenant","local","qa-plugin-child",child)] {
-            state.session_store.put_managed_resource(kind,scope,owner,id,"active",None,value,chrono::Utc::now().timestamp_millis()).unwrap();
-        }
-        let profile=local_runtime::execution_profile::ExecutionProfile::resolve("qa-plugin-parent",&agent,None,None).unwrap();
-        let host=state.subagent_agent_tool_host(&conversation,&run,&profile,&[],Arc::new(ScriptedLlm::new(vec![AgentAction::CallTool {tool:name.clone(), input_json:r#"{"input":"中"}"#.into()},AgentAction::Finish {answer:"child completed".into()}])),4).await.unwrap().unwrap();
+        let profile=state.execution_profile(&conversation).unwrap();
+        assert_eq!(profile.agent.id,"qa-plugin-parent");
+        let boundary=signed_subagent_boundary(&state,&conversation,&run);
+        let host=state.subagent_agent_tool_host_with_boundary(&conversation,&run,&profile,&[],Arc::new(ScriptedLlm::new(vec![AgentAction::CallTool {tool:name.clone(), input_json:r#"{"input":"中"}"#.into()},AgentAction::Finish {answer:"child completed".into()}])),4,Some(boundary)).await.unwrap().unwrap();
         let metadata=host.authority_metadata_by_name();
         assert_eq!(metadata["subagent"].effect,ToolEffect::Read);
         let wrapped=AuthorizedRunToolHost::with_dynamic_metadata(Arc::new(host),state.session_store.clone(),run.clone(),metadata);
@@ -228,6 +322,7 @@ async fn production_subagent_factory_delegates_real_signed_read_plugin_through_a
         let timeline = state.session_store.timeline(&conversation.id, 100).unwrap();
         let child_events = timeline.iter().filter(|item| item["type"] == "subagent_tool_call" || item["type"] == "subagent_tool_result").collect::<Vec<_>>();
         assert_eq!(child_events.len(), 2);
+        assert!(!timeline.iter().any(|item| item["type"] == "subagent_tool_error"));
         for event in &child_events {
             assert_eq!(event["payload"]["execution_id"], result["execution_id"]);
             assert_eq!(event["payload"]["parent_run_id"], run.id);
@@ -242,6 +337,104 @@ async fn production_subagent_factory_delegates_real_signed_read_plugin_through_a
         assert!(invocations.iter().any(|row| row.tool_name==name && row.status==local_runtime::tool_authority::InvocationStatus::Completed));
         state.release_agent_run_if_control(&conversation.id,&parent);
     }).await;
+}
+
+#[tokio::test]
+async fn production_subagent_factory_rejects_real_signed_plugin_with_mismatched_selection() {
+    use agistack_adapters_mem::ScriptedLlm;
+    use agistack_core::agent::types::AgentAction;
+    let (state, name, stale_profile) = configured_signed_subagent().await;
+    let (status, configured) = request(
+        &state,
+        "PATCH",
+        "/api/v1/agent/conversations/local-plugin-conversation/config",
+        json!({"execution_selection":{"agent_id":"builtin:all-access"}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{configured}");
+    let (conversation, run) = start_plugin_plan(&state).await;
+    assert_eq!(
+        state.execution_profile(&conversation).unwrap().agent.id,
+        "builtin:all-access"
+    );
+    let parent = state
+        .claim_agent_run(&conversation.id, Some(&run.id))
+        .unwrap();
+    let native = capture(&state, &conversation, &run.message_id, Some(&run.id));
+    let result = agent_access::scope(Some(native), async {
+        let boundary = signed_subagent_boundary(&state, &conversation, &run);
+        let host = state
+            .subagent_agent_tool_host_with_boundary(
+                &conversation,
+                &run,
+                &stale_profile,
+                &[],
+                Arc::new(ScriptedLlm::new(vec![
+                    AgentAction::CallTool {
+                        tool: name.clone(),
+                        input_json: r#"{"input":"中"}"#.into(),
+                    },
+                    AgentAction::Finish {
+                        answer: "child observed rejection".into(),
+                    },
+                ])),
+                4,
+                Some(boundary),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let metadata = host.authority_metadata_by_name();
+        assert_eq!(metadata["subagent"].effect, ToolEffect::Read);
+        let wrapped = AuthorizedRunToolHost::with_dynamic_metadata(
+            Arc::new(host),
+            state.session_store.clone(),
+            run.clone(),
+            metadata,
+        );
+        let output = wrapped
+            .call(
+                "subagent",
+                r#"{"subagent_id":"qa-plugin-child","task":"Call marker"}"#,
+            )
+            .await
+            .unwrap();
+        serde_json::from_str::<Value>(&output).unwrap()
+    })
+    .await;
+    state.release_agent_run_if_control(&conversation.id, &parent);
+    let checkpoint = state
+        .checkpoints
+        .load(result["execution_id"].as_str().unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(checkpoint.completed_tool_calls.len(), 1);
+    let call = &checkpoint.completed_tool_calls[0];
+    assert_eq!(call.tool, name);
+    assert!(call.failed);
+    assert!(
+        call.output_json.contains("repl_agent_permissions_changed"),
+        "{}",
+        call.output_json
+    );
+    let timeline = state.session_store.timeline(&conversation.id, 100).unwrap();
+    assert_eq!(
+        timeline
+            .iter()
+            .filter(|item| item["type"] == "subagent_tool_error")
+            .count(),
+        1
+    );
+    assert!(!timeline
+        .iter()
+        .any(|item| item["type"] == "subagent_tool_result"));
+    assert!(!state
+        .session_store
+        .list_tool_invocations(&conversation.id)
+        .unwrap()
+        .iter()
+        .any(|row| row.tool_name == name));
 }
 
 #[tokio::test]

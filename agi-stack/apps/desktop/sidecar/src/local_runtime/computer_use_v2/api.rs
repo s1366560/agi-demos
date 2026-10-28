@@ -18,6 +18,7 @@ pub(crate) struct ManagementRequest {
     pub expected_revision: Option<u64>,
     pub capability: Option<String>,
     pub enabled: Option<bool>,
+    pub input_mode: Option<agistack_adapters_cua::CuaInputMode>,
     pub request_id: Option<String>,
     pub scope: Option<store::GrantScope>,
     pub grant_id: Option<String>,
@@ -60,10 +61,12 @@ async fn status(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(auth): Extension<AuthenticatedContext>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    super::recordings::refresh_owner(&state, &owner(&state, &auth)).await;
-    snapshot(&state, &owner(&state, &auth))
-        .map(Json)
-        .map_err(failure)
+    let owner = owner(&state, &auth);
+    super::input::refresh_status(&state, &owner)
+        .await
+        .map_err(failure)?;
+    super::recordings::refresh_owner(&state, &owner).await;
+    snapshot(&state, &owner).map(Json).map_err(failure)
 }
 
 async fn manage(
@@ -92,6 +95,7 @@ async fn stop(
             expected_revision: None,
             capability: None,
             enabled: None,
+            input_mode: None,
             request_id: None,
             scope: None,
             grant_id: None,
@@ -112,14 +116,28 @@ pub(super) fn snapshot(state: &LocalRuntimeState, owner: &Owner) -> Result<Value
         let db = state.session_store.connection()?;
         (store::instance(&db, owner)?, store::grants(&db, owner)?)
     };
+    let mut sessions = state.computer_use.sessions_for(owner);
+    for session in &mut sessions {
+        if session["stopped"] == false {
+            if let Some(status) = session["session_id"]
+                .as_str()
+                .zip(session["run_id"].as_str())
+                .and_then(|(id, run)| state.computer_use.locked_use.session_status(id, run))
+            {
+                session["locked_use"] = status;
+            }
+        }
+    }
     Ok(
         json!({"plugin_id":"memstack-computer-use","version":env!("CARGO_PKG_VERSION"),"device_id":owner.device_id,
         "execution":{"local":true,"cloud":super::cloud::ready(state,owner),"reason":if super::cloud::ready(state,owner){Value::Null}else{json!("device_bridge_unavailable")}},
         "scope":{"tenant_id":owner.tenant_id,"project_id":owner.project_id},"instance":instance,
         "helper_available":super::helper_path().is_some(),"grants":grants,
+        "input_support":super::input::support(state),
+        "locked_use":state.computer_use.locked_use.status(),
         "recent_presentation":super::presentation::recent(state,owner)?,
         "recordings":super::recordings::snapshot(state,owner)?,
-        "pending":state.computer_use.pending_for(owner).into_iter().filter(|pending| super::consent::needs_approval(pending,&grants)).map(|pending| {let mut value=json!(pending);value["scopes"]=json!(super::consent::scopes(&pending.capability));value}).collect::<Vec<_>>(),"sessions":state.computer_use.sessions_for(owner),"connectors":super::connectors::list(state,owner)?,"accounts":super::accounts::list(state,owner)?,
+        "pending":state.computer_use.pending_for(owner).into_iter().filter(|pending| super::consent::needs_approval(pending,&grants)).map(|pending| {let mut value=json!(pending);value["scopes"]=json!(super::consent::scopes(&pending.capability));value}).collect::<Vec<_>>(),"sessions":sessions,"connectors":super::connectors::list(state,owner)?,"accounts":super::accounts::list(state,owner)?,
         "permissions":state.computer_use.permissions.lock().map_err(|_|"cua_permission_status_unavailable")?.clone()}),
     )
 }
@@ -145,6 +163,18 @@ pub(in crate::local_runtime) async fn operation(
         );
     }
     match input.action.as_str() {
+        "locked_use_status" => {
+            super::locked_use::probe(state).await?;
+        }
+        "locked_use_install" | "locked_use_uninstall" => {
+            super::locked_use::manage(
+                state,
+                owner,
+                input.action == "locked_use_install",
+                input.expected_revision.ok_or("cua_revision_required")?,
+            )
+            .await?;
+        }
         "permissions_status" | "permission_request" => {
             let _dispatch = state
                 .computer_use
@@ -170,7 +200,11 @@ pub(in crate::local_runtime) async fn operation(
                         )
                     })
                     .ok_or("cua_capability_invalid")?;
-                let context = settings_context(owner);
+                let mode = {
+                    let db = state.session_store.connection()?;
+                    store::instance(&db, owner)?.input_mode
+                };
+                let context = settings_context(owner, mode);
                 let result = client
                     .request_in_session(
                         &context,
@@ -181,6 +215,7 @@ pub(in crate::local_runtime) async fn operation(
                 let _ = client.stop_session(&context.session_id).await;
                 let _ = client.end_session(&context.session_id).await;
                 if result.is_err() {
+                    super::input::refresh_support(state, false).await;
                     state.computer_use.shutdown_if_idle().await;
                 }
                 result.map_err(|_| "cua_permission_request_unavailable")?;
@@ -194,6 +229,7 @@ pub(in crate::local_runtime) async fn operation(
                 .permissions
                 .lock()
                 .map_err(|_| "cua_permission_status_unavailable")? = Some(result);
+            let _ = super::locked_use::probe(state).await;
             state.computer_use.shutdown_if_idle().await;
         }
         "connector_connect" => {
@@ -224,7 +260,11 @@ pub(in crate::local_runtime) async fn operation(
             .await?
         }
         "status" => {
+            super::input::refresh_status(state, owner).await?;
             super::recordings::refresh_owner(state, owner).await;
+            if state.computer_use.locked_use.status().is_some() {
+                let _ = super::locked_use::probe(state).await;
+            }
         }
         "audio_stop" => {
             super::recordings::stop(
@@ -238,29 +278,32 @@ pub(in crate::local_runtime) async fn operation(
             )
             .await?;
         }
+        "set_input_mode" => {
+            let mode = input.input_mode.ok_or("cua_input_mode_required")?;
+            {
+                let db = state.session_store.connection()?;
+                store::set_input_mode(
+                    &db,
+                    owner,
+                    input.expected_revision.ok_or("cua_revision_required")?,
+                    mode,
+                )?;
+            }
+            state.computer_use.stop_owner(state, owner, "revoked").await;
+        }
         "install" | "enable" | "disable" | "uninstall" | "configure" => {
             if input.action == "enable" {
-                state
-                    .computer_use
-                    .client()?
-                    .request("capabilities", json!({}))
-                    .await
-                    .map_err(|_| "cua_helper_unavailable_or_incompatible")?;
+                if !super::input::refresh_support(state, true).await {
+                    return Err("cua_helper_unavailable_or_incompatible".into());
+                }
             }
-            if input.action == "configure" && input.capability.as_deref() == Some("locked_use") {
-                let method = if input.enabled == Some(true) {
-                    "locked_use_enable"
-                } else {
-                    "locked_use_disable"
-                };
-                let result = state
-                    .computer_use
-                    .client()?
-                    .request(method, json!({}))
-                    .await
-                    .map_err(|_| "cua_locked_use_unavailable")?;
-                if input.enabled == Some(true)
-                    && result.get("enabled").and_then(Value::as_bool) != Some(true)
+            if input.action == "configure"
+                && input.capability.as_deref() == Some("locked_use")
+                && input.enabled == Some(true)
+            {
+                let result = super::locked_use::probe(state).await?;
+                if result["installed"] != true
+                    || !matches!(result["state"].as_str(), Some("available" | "active"))
                 {
                     return Err("cua_locked_use_unverified".into());
                 }
@@ -403,7 +446,10 @@ pub(in crate::local_runtime) async fn operation(
     snapshot(state, owner)
 }
 
-fn settings_context(owner: &Owner) -> agistack_adapters_cua::CuaCallContext {
+pub(super) fn settings_context(
+    owner: &Owner,
+    input_mode: agistack_adapters_cua::CuaInputMode,
+) -> agistack_adapters_cua::CuaCallContext {
     let id = format!("cua-settings-{}", uuid::Uuid::new_v4());
     agistack_adapters_cua::CuaCallContext {
         user_id: owner.user_id.clone(),
@@ -413,6 +459,7 @@ fn settings_context(owner: &Owner) -> agistack_adapters_cua::CuaCallContext {
         conversation_id: "computer-use-settings".into(),
         run_id: id.clone(),
         session_id: id,
+        input_mode,
     }
 }
 

@@ -1,0 +1,23 @@
+{
+  "name": "@memstack/cua-repl",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "exports": {
+    ".": "./src/kernel.mjs",
+    "./facade": "./src/facade.mjs"
+  },
+  "scripts": {
+    "start": "node --experimental-vm-modules src/cli.mjs",
+    "test": "node --experimental-vm-modules --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "ws": "8.18.3"
+  }
+}

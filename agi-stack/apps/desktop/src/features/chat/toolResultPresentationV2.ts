@@ -1,4 +1,7 @@
-import type { ToolResultPresentationV2 } from "@agistack/plugin-slots";
+import {
+  validateReplOutputPresentationV2,
+  type ToolResultPresentationV2,
+} from "@agistack/plugin-slots";
 
 const MAX_TEXT = 32_768;
 const text = (value: string) => value.slice(0, MAX_TEXT);
@@ -15,6 +18,8 @@ export function projectToolResultPresentationV2(
     !Array.isArray(presentation)
   ) {
     const value = presentation as Record<string, unknown>;
+    const repl = validateReplOutputPresentationV2(value);
+    if (repl) return repl;
     if (
       value.kind === "computer_use" &&
       typeof value.app === "string" &&

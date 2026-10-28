@@ -10,6 +10,8 @@ pub(super) use recovery::recover;
 #[cfg(test)]
 mod cache_tests;
 #[cfg(test)]
+mod candidate_verification_tests;
+#[cfg(test)]
 mod generation_tests;
 #[cfg(test)]
 mod lifecycle_tests;

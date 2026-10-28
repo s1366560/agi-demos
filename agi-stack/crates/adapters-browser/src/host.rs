@@ -45,6 +45,8 @@ use crate::protocol::{
     NOTIFY_ON_CDP_DETACH, NOTIFY_ON_CDP_EVENT,
 };
 use crate::snapshot::{self, PLACEHOLDER_CONTEXT_ID, PLACEHOLDER_FRAME_ID, SNAPSHOT_WORLD_NAME};
+pub(crate) use crate::browser_identity::Backend;
+pub use crate::browser_identity::browser_family;
 
 /// Registered tool names (exact — the agent engine matches on these strings).
 pub const TOOL_LIST_TABS: &str = "browser_list_tabs";
@@ -68,7 +70,7 @@ pub(crate) fn tool_err(message: impl Into<String>) -> CoreError {
 /// stream. Implemented by
 /// [`BridgeWsClient`](crate::ws_client::BridgeWsClient) in production.
 #[async_trait]
-pub trait BridgeEndpoint: Send + Sync {
+pub trait BridgeEndpoint: Send + Sync + 'static {
     /// Issue one bridge request, returning the JSON-RPC `result` payload.
     async fn request(&self, method: &str, params: Value) -> CoreResult<Value>;
     /// Issue one bridge request against a named non-default backend (e.g.
@@ -76,40 +78,39 @@ pub trait BridgeEndpoint: Send + Sync {
     /// delegates to [`BridgeEndpoint::request`]; multi-backend endpoints
     /// (the sidecar) override it.
     async fn request_on(&self, backend: &str, method: &str, params: Value) -> CoreResult<Value> {
-        let _ = backend;
-        self.request(method, params).await
+        if matches!(backend, "chrome" | "chrome-extension") {
+            self.request(method, params).await
+        } else {
+            Err(tool_err(format!("unsupported backend: {backend}")))
+        }
+    }
+    /// Resolve a family alias once, before authorization. Production endpoints
+    /// return an opaque connection identity and reject missing/ambiguous aliases.
+    async fn resolve_browser(&self, selector: &str) -> CoreResult<String> {
+        Backend::parse(selector).map(|backend| backend.as_str())
+    }
+    fn scoped_browsers(&self) -> Option<Value> { None }
+    /// Connected browser instances. Single-provider transports keep their legacy
+    /// family identity; the desktop bridge overrides this with scoped identities.
+    async fn browsers(&self) -> CoreResult<Value> {
+        if let Some(browsers) = self.scoped_browsers() { return Ok(browsers); }
+        let mut browsers = Vec::new();
+        for backend in [Backend::Chrome, Backend::Edge, Backend::Iab] {
+            let result = if backend == Backend::Chrome {
+                self.request("getTabs", json!({})).await
+            } else {
+                self.request_on(&backend.wire_name(), "getTabs", json!({})).await
+            };
+            match result {
+                Ok(_) => browsers.push(json!({"id":backend.as_str(),"type":backend.family(),"backend":backend.family()})),
+                Err(error) if error.to_string().contains("is not connected") || error.to_string().contains("unsupported backend") => {},
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(json!(browsers))
     }
     /// Subscribe to extension notifications (`onCDPEvent` / `onCDPDetach`).
     fn subscribe_notifications(&self) -> broadcast::Receiver<BridgeNotification>;
-}
-
-/// Browser backend selector carried by the optional `backend` tool input
-/// (`"chrome"` | `"iab"`, default chrome). All per-tab host state is keyed
-/// by `(Backend, tabId)`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Backend {
-    /// The Chrome extension bridge (default).
-    Chrome,
-    /// The in-app browser backend.
-    Iab,
-}
-
-impl Backend {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Backend::Chrome => "chrome",
-            Backend::Iab => "iab",
-        }
-    }
-
-    /// Backend named on a bridge notification; absent or unknown means the
-    /// default chrome-extension backend.
-    pub(crate) fn from_wire(name: Option<&str>) -> Self {
-        match name {
-            Some("iab") => Backend::Iab,
-            _ => Backend::Chrome,
-        }
-    }
 }
 
 /// Extract the optional `backend` tool input (`"chrome"` | `"iab"`, default
@@ -117,13 +118,7 @@ impl Backend {
 pub(crate) fn backend_of(input: &Value) -> CoreResult<Backend> {
     match input.get("backend") {
         None | Some(Value::Null) => Ok(Backend::Chrome),
-        Some(Value::String(s)) => match s.as_str() {
-            "chrome" => Ok(Backend::Chrome),
-            "iab" => Ok(Backend::Iab),
-            other => Err(tool_err(format!(
-                "invalid 'backend': {other:?} (expected \"chrome\" or \"iab\")"
-            ))),
-        },
+        Some(Value::String(s)) => Backend::parse(s),
         Some(_) => Err(tool_err(
             "invalid 'backend' (expected \"chrome\" or \"iab\")",
         )),
@@ -162,6 +157,7 @@ pub(crate) struct TabLease {
 /// per-tab dimension is keyed by `(backend, tabId)`: the same tab id on two
 /// backends refers to different tabs.
 pub(crate) struct HostState {
+    pub(crate) input_states: Mutex<HashMap<(Backend, u64), Arc<tokio::sync::Mutex<crate::input_visibility::InputState>>>>,
     /// Tabs we have already sent `attach` for (attach is idempotent, but the
     /// memo avoids a round trip per tool call).
     pub(crate) attached: Mutex<HashSet<(Backend, u64)>>,
@@ -169,6 +165,10 @@ pub(crate) struct HostState {
     pub(crate) console_enabled: Mutex<HashSet<(Backend, u64)>>,
     /// Per-tab console ring buffers.
     pub(crate) console_buffers: Mutex<HashMap<(Backend, u64), VecDeque<ConsoleEntry>>>,
+    pub(crate) facade_events: Mutex<HashMap<(Backend, u64), crate::facade_events::EventBuffer>>,
+    pub(crate) facade_artifacts: Mutex<crate::facade_artifacts::ArtifactState>,
+    pub(crate) facade_sessions: Mutex<HashMap<(Backend, String), String>>,
+    pub(crate) browser_auth: Mutex<HashMap<(Backend, u64), crate::browser_auth::Protection>>,
     /// Isolated-world cache: `(backend, tabId, frameId)` →
     /// `executionContextId`. The world is created once and reused for
     /// snapshots and ref resolution (same-name `Page.createIsolatedWorld`
@@ -187,6 +187,20 @@ pub(crate) struct HostState {
 impl HostState {
     fn handle_notification(&self, notification: &BridgeNotification) {
         match notification.method.as_str() {
+            "onBrowserDisconnected" => {
+                let Some(identity) = notification.params["backend"].as_str() else { return; };
+                let Ok(backend) = Backend::parse(identity) else { return; };
+                self.attached.lock().unwrap().retain(|(owner, _)| *owner != backend);
+                self.console_enabled.lock().unwrap().retain(|(owner, _)| *owner != backend);
+                self.page_enabled.lock().unwrap().retain(|(owner, _)| *owner != backend);
+                self.console_buffers.lock().unwrap().retain(|(owner, _), _| *owner != backend);
+                self.tab_urls.lock().unwrap().retain(|(owner, _), _| *owner != backend);
+                self.facade_events.lock().unwrap().retain(|(owner, _), _| *owner != backend);
+                self.browser_auth.lock().unwrap().retain(|(owner, _), _| *owner != backend);
+                self.worlds.lock().unwrap().retain(|(owner, _, _), _| *owner != backend);
+                self.facade_sessions.lock().unwrap().retain(|(owner, _), _| *owner != backend);
+                self.leases.lock().unwrap().values_mut().for_each(|leases| leases.retain(|lease| lease.backend != backend));
+            }
             NOTIFY_ON_CDP_EVENT => {
                 let Ok(event) =
                     serde_json::from_value::<OnCdpEventParams>(notification.params.clone())
@@ -194,6 +208,9 @@ impl HostState {
                     return;
                 };
                 let backend = Backend::from_wire(event.backend.as_deref());
+                if let Ok(mut buffers) = self.facade_events.lock() {
+                    buffers.entry((backend, event.tab_id)).or_default().push(&event);
+                }
                 if let Some(entry) = console_entry(&event) {
                     let mut buffers = self.console_buffers.lock().unwrap();
                     let buffer = buffers.entry((backend, event.tab_id)).or_default();
@@ -216,6 +233,7 @@ impl HostState {
                 self.console_enabled.lock().unwrap().remove(&key);
                 self.page_enabled.lock().unwrap().remove(&key);
                 self.tab_urls.lock().unwrap().remove(&key);
+                self.facade_events.lock().unwrap().remove(&key);
                 self.worlds
                     .lock()
                     .unwrap()
@@ -356,9 +374,14 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     pub fn new(endpoint: E) -> Self {
         let endpoint = Arc::new(endpoint);
         let state = Arc::new(HostState {
+            input_states: Mutex::new(HashMap::new()),
             attached: Mutex::new(HashSet::new()),
             console_enabled: Mutex::new(HashSet::new()),
             console_buffers: Mutex::new(HashMap::new()),
+            facade_events: Mutex::new(HashMap::new()),
+            facade_artifacts: Mutex::new(crate::facade_artifacts::ArtifactState::default()),
+            facade_sessions: Mutex::new(HashMap::new()),
+            browser_auth: Mutex::new(HashMap::new()),
             worlds: Mutex::new(HashMap::new()),
             page_enabled: Mutex::new(HashSet::new()),
             tab_urls: Mutex::new(HashMap::new()),
@@ -388,14 +411,36 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         method: &str,
         params: Value,
     ) -> CoreResult<Value> {
+        let _input_lock = self.serialize_input_request(backend, method, &params).await?;
         match backend {
             Backend::Chrome => self.endpoint.request(method, params).await,
-            Backend::Iab => {
+            Backend::Iab | Backend::Edge | Backend::Instance { .. } => {
                 self.endpoint
-                    .request_on(backend.as_str(), method, params)
+                    .request_on(&backend.wire_name(), method, params)
                     .await
             }
         }
+    }
+
+    /// Pin the target before looking up its URL or requesting permission. A
+    /// connection replacement must fail rather than select another profile.
+    pub async fn bind_input(&self, tool: &str, input: &Value) -> CoreResult<Value> {
+        if input["operation"] == "browsers.list"
+            || (tool == TOOL_LIST_TABS && input.get("backend").is_none()) {
+            return Ok(input.clone());
+        }
+        let mut bound = input.clone();
+        let object = bound.as_object_mut().ok_or_else(|| tool_err("browser input must be an object"))?;
+        let selector = match object.get("browserId").or_else(|| object.get("backend")) {
+            None | Some(Value::Null) => "chrome",
+            Some(Value::String(selector)) => selector.as_str(),
+            Some(_) => return Err(tool_err("invalid browser selector")),
+        };
+        let identity = self.endpoint.resolve_browser(selector).await?;
+        Backend::parse(&identity)?;
+        object.insert("backend".into(), json!(identity));
+        if object.contains_key("browserId") { object.insert("browserId".into(), json!(identity)); }
+        Ok(bound)
     }
 
     /// Send `attach` for `tab_id` unless already attached.
@@ -591,6 +636,9 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     /// state is cleaned up regardless. (Stage B's consent wrapper also drops
     /// any per-run cached consent here; M2 holds none.)
     pub async fn turn_ended(&self, run_id: &str) {
+        if let Ok(mut sessions) = self.state.facade_sessions.lock() {
+            sessions.retain(|(_, owner),_|owner!=run_id);
+        }
         let leases = self
             .state
             .leases
@@ -636,6 +684,22 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         self.current_url_on(Backend::Chrome, tab_id).await
     }
 
+    /// Resolve the exact backend's live URL for an authorization decision.
+    /// Inventory is refreshed because a user navigation can precede debugger events.
+    pub async fn current_url_for_input(&self, input: &Value, tab_id: i64) -> CoreResult<String> {
+        let backend = backend_of(input)?;
+        if tab_id <= 0 {
+            return Err(tool_err("tab id must be a positive integer"));
+        }
+        let result = self.backend_request(backend, METHOD_GET_TABS, json!({})).await?;
+        let url = result.get("tabs").and_then(Value::as_array)
+            .and_then(|tabs| tabs.iter().find(|tab| tab.get("tabId").and_then(Value::as_i64) == Some(tab_id)))
+            .and_then(|tab| tab.get("url")).and_then(Value::as_str)
+            .ok_or_else(|| tool_err(format!("tab {tab_id} not found on {}", backend.as_str())))?;
+        self.set_tab_url(backend, tab_id as u64, url);
+        Ok(url.to_owned())
+    }
+
     /// Current URL of a tab on one backend. Uses the cheapest available
     /// source: the navigate/event-tracked URL cache, falling back to a
     /// bridge `getTabs` lookup.
@@ -671,12 +735,15 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     /// is registered): it contributes an empty list. Chrome-branch errors
     /// and any other iab error still propagate.
     async fn list_tabs(&self, input: &Value) -> CoreResult<Value> {
-        let backend = backend_of(input)?;
         let aggregate = matches!(input.get("backend"), None | Some(Value::Null));
         let backends = if aggregate {
-            vec![Backend::Chrome, Backend::Iab]
+            if let Some(browsers) = self.endpoint.scoped_browsers() {
+                browsers.as_array().ok_or_else(|| tool_err("invalid browser inventory"))?
+                    .iter().map(|browser| Backend::parse(browser["id"].as_str().unwrap_or_default()))
+                    .collect::<CoreResult<Vec<_>>>()?
+            } else { vec![Backend::Chrome, Backend::Iab] }
         } else {
-            vec![backend]
+            vec![backend_of(input)?]
         };
         let mut tabs = Vec::new();
         for backend in backends {
@@ -708,7 +775,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         Ok(json!({ "tabs": tabs }))
     }
 
-    async fn snapshot(&self, input: &Value) -> CoreResult<Value> {
+    pub(crate) async fn snapshot(&self, input: &Value) -> CoreResult<Value> {
         let backend = backend_of(input)?;
         let tab_id = required_tab_id(input)?;
         let max_chars = input
@@ -747,7 +814,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         Ok(json!({ "snapshot": snapshot, "truncated": truncated }))
     }
 
-    async fn screenshot(&self, input: &Value) -> CoreResult<Value> {
+    pub(crate) async fn screenshot(&self, input: &Value) -> CoreResult<Value> {
         let backend = backend_of(input)?;
         let tab_id = required_tab_id(input)?;
         let full_page = input
@@ -802,7 +869,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         }))
     }
 
-    async fn console_logs(&self, input: &Value) -> CoreResult<Value> {
+    pub(crate) async fn console_logs(&self, input: &Value) -> CoreResult<Value> {
         let backend = backend_of(input)?;
         let tab_id = required_tab_id(input)?;
         let limit = input
@@ -942,6 +1009,9 @@ impl<E: BridgeEndpoint> ToolHost for BrowserToolHost<E> {
             TOOL_CLAIM_TAB.to_string(),
             TOOL_MARK_TAB.to_string(),
             TOOL_CDP_RAW.to_string(),
+            crate::facade::TOOL_READ.to_string(),
+            crate::facade::TOOL_WRITE.to_string(),
+            crate::facade::TOOL_CDP.to_string(),
         ]
     }
 
@@ -952,6 +1022,8 @@ impl<E: BridgeEndpoint> ToolHost for BrowserToolHost<E> {
             serde_json::from_str(input_json)
                 .map_err(|e| tool_err(format!("invalid tool input json: {e}")))?
         };
+        let input = self.bind_input(tool, &input).await?;
+        let navigation = self.auth_guard(tool, &input)?;
         let output = match tool {
             TOOL_LIST_TABS => self.list_tabs(&input).await?,
             TOOL_SNAPSHOT => self.snapshot(&input).await?,
@@ -965,8 +1037,12 @@ impl<E: BridgeEndpoint> ToolHost for BrowserToolHost<E> {
             TOOL_CLAIM_TAB => self.claim_tab(&input).await?,
             TOOL_MARK_TAB => self.mark_tab(&input).await?,
             TOOL_CDP_RAW => self.cdp_raw(&input).await?,
+            crate::facade::TOOL_READ | crate::facade::TOOL_WRITE | crate::facade::TOOL_CDP => self.facade_operation(tool, &input).await?,
             other => return Err(tool_err(format!("unknown browser tool: {other}"))),
         };
+        if let Some((backend, tab, previous)) = navigation {
+            self.auth_after_navigation(backend, tab, &previous).await?;
+        }
         Ok(output.to_string())
     }
 }
@@ -981,17 +1057,16 @@ pub fn list_tool_metadata() -> Vec<Value> {
     let backend_prop = || {
         json!({
             "type": "string",
-            "enum": ["chrome", "iab"],
             "default": "chrome",
-            "description": "Browser backend to drive: \"chrome\" (the Chrome extension \
-                bridge) or \"iab\" (the in-app browser). Default \"chrome\".",
+            "description": "Exact browser instance id from the inventory. Family selectors \
+                chrome, edge and iab are accepted only when exactly one instance is connected.",
         })
     };
     let mut tools = vec![
         json!({
             "name": TOOL_LIST_TABS,
             "description": "List open browser tabs (read-only). With no backend, \
-                aggregates the chrome and iab backends; each entry is annotated with \
+                aggregates connected browser instances; each entry is annotated with \
                 its \"backend\". Returns {tabs: [{tabId, windowId, title, url, active, backend}]}.",
             "inputSchema": {
                 "type": "object",
@@ -1210,6 +1285,9 @@ pub fn list_tool_metadata() -> Vec<Value> {
             },
         }),
     ]);
+    for name in [crate::facade::TOOL_READ, crate::facade::TOOL_WRITE, crate::facade::TOOL_CDP] {
+        tools.push(json!({"name":name,"description":"Execute a structured browser facade operation with validated authority effects.","inputSchema":{"type":"object","properties":{"browserId":{"type":"string"},"tabId":{"oneOf":[{"type":"string"},{"type":"integer"}]},"operation":{"type":"string"},"args":{"type":"array"}},"required":["operation","args"]}}));
+    }
     tools
 }
 
@@ -1351,7 +1429,7 @@ mod tests {
         let out: Value = serde_json::from_str(&out).unwrap();
         assert_eq!(out["tabs"][0]["tabId"], 7);
         assert_eq!(out["tabs"][0]["backend"], "chrome");
-        assert_eq!(host.list_tools().len(), 12);
+        assert_eq!(host.list_tools().len(), 15);
     }
 
     #[tokio::test]
@@ -1575,7 +1653,7 @@ mod tests {
     #[test]
     fn metadata_covers_all_tools_and_never_exposes_run_id() {
         let metadata = list_tool_metadata();
-        assert_eq!(metadata.len(), 12);
+        assert_eq!(metadata.len(), 15);
         let names: Vec<&str> = metadata
             .iter()
             .map(|m| m["name"].as_str().unwrap())
@@ -1595,6 +1673,9 @@ mod tests {
                 crate::actions::TOOL_CLAIM_TAB,
                 crate::actions::TOOL_MARK_TAB,
                 TOOL_CDP_RAW,
+                crate::facade::TOOL_READ,
+                crate::facade::TOOL_WRITE,
+                crate::facade::TOOL_CDP,
             ]
         );
         for m in &metadata {
@@ -1781,7 +1862,7 @@ mod tests {
         ];
         for (tool, input) in cases {
             let err = host.call(tool, &input.to_string()).await.unwrap_err();
-            assert!(err.to_string().contains("backend"), "{tool}: {err}");
+            assert!(err.to_string().contains("invalid browser"), "{tool}: {err}");
         }
         assert!(host.endpoint.requests.lock().unwrap().is_empty());
     }

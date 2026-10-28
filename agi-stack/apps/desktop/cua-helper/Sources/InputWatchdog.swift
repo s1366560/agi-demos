@@ -9,6 +9,8 @@ struct InputClaim: Codable, Equatable {
     var buttons: [UInt32: InputPoint] = [:]
     var artifactDirectories: [String] = []
     var inputSessionID: String? = nil
+    var route: InputRoute? = nil
+    var lockedUse: LockedUseSupervisionClaim? = nil
 }
 struct InputPoint: Codable, Equatable {
     let x: Double
@@ -90,27 +92,30 @@ enum InputWatchdogWire {
 
 enum InputRelease {
     static func flags(_ claim: InputClaim, external: ExternalInputState) -> CGEventFlags {
-        claim.keys.reduce(external.flags) {
+        claim.keys.reduce(claim.route?.mode == .background ? CGEventFlags() : external.flags) {
             $0.union(CGEventFlags(rawValue: $1.value)).union(OwnedEventSource.modifierFlags($1.key))
         }
     }
-    static func key(_ code: UInt16, flags: CGEventFlags, source: CGEventSource?, external: ExternalInputState) -> Bool {
-        guard !external.key(code) else { return false }
+    static func key(_ code: UInt16, flags: CGEventFlags, source: CGEventSource?, external: ExternalInputState,
+                    route: InputRoute? = nil) -> Bool {
+        guard route?.mode == .background || !external.key(code) else { return false }
         let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
         event?.flags = flags
-        event?.post(tap: .cghidEventTap)
+        if let event = event { if let route = route { try? route.post(event) } else { event.post(tap: .cghidEventTap) } }
         return event != nil
     }
-    static func button(_ raw: UInt32, point: InputPoint, flags: CGEventFlags, source: CGEventSource?, external: ExternalInputState) -> Bool {
+    static func button(_ raw: UInt32, point: InputPoint, flags: CGEventFlags, source: CGEventSource?, external: ExternalInputState,
+                       route: InputRoute? = nil) -> Bool {
         guard let button = CGMouseButton(rawValue: raw),
-              !external.button(raw) else { return false }
+              route?.mode == .background || !external.button(raw) else { return false }
         let type: CGEventType = button == .left ? .leftMouseUp : button == .right ? .rightMouseUp : .otherMouseUp
         // Releasing a crashed drag must not warp a pointer the person moved.
-        let currentPoint = CGEvent(source: nil)?.location ?? CGPoint(x: point.x, y: point.y)
+        let currentPoint = route?.mode == .background ? CGPoint(x: point.x, y: point.y)
+            : CGEvent(source: nil)?.location ?? CGPoint(x: point.x, y: point.y)
         let event = CGEvent(mouseEventSource: source, mouseType: type,
             mouseCursorPosition: currentPoint, mouseButton: button)
         event?.flags = flags
-        event?.post(tap: .cghidEventTap)
+        if let event = event { if let route = route { try? route.post(event) } else { event.post(tap: .cghidEventTap) } }
         return event != nil
     }
 }
@@ -165,7 +170,8 @@ enum InputWatchdogWorker {
         signal(SIGPIPE, SIG_IGN)
         guard (try? DesktopInputLease.verify(STDERR_FILENO)) != nil else { exit(1) }
         let source: CGEventSource
-        let external: ExternalInputState
+        var external: ExternalInputState?
+        let recoveryTag: Int64
         let parent = getppid()
         do {
             let hello = try InputWatchdogWire.receive(InputWatchdogMessage.self, fd: STDIN_FILENO, timeout: 3)
@@ -175,7 +181,7 @@ enum InputWatchdogWorker {
                   let nonce = hello.nonce, nonce.utf8.count >= 16, hello.claim == nil, hello.clipboard == nil else { exit(1) }
             guard let createdSource = OwnedEventSource.make(tag: eventTag) else { exit(1) }
             source = createdSource
-            external = try ExternalInputState(tag: eventTag)
+            recoveryTag = eventTag
             try InputWatchdogWire.send(InputWatchdogReply(id: 0,
                 proof: IpcServer.proof(secret: secret, nonce: nonce), accepted: true), fd: STDOUT_FILENO)
         } catch { exit(1) }
@@ -185,20 +191,48 @@ enum InputWatchdogWorker {
         var lease = ProcessInfo.processInfo.systemUptime + 10
         var connected = true
         let clipboard = ClipboardRecovery()
+        var supervision = LockedUseSupervision()
+        let relock = LockedUseRelock(request: { LockedUseRelock.postLock(tag: recoveryTag) })
         var leaseHeld = false
         func releaseDeferred() {
-            let flags = InputRelease.flags(active, external: external)
-            for code in Array(deferred.keys.keys) where InputRelease.key(code, flags: flags, source: source, external: external) {
-                deferred.keys[code] = nil
+            if let external = external {
+                var remaining = active
+                if remaining.route == nil { remaining.route = deferred.route }
+                let flags = InputRelease.flags(remaining, external: external)
+                for code in Array(deferred.keys.keys) where InputRelease.key(code, flags: flags, source: source, external: external, route: deferred.route) {
+                    deferred.keys[code] = nil
+                }
+                for (button, point) in deferred.buttons where InputRelease.button(button, point: point, flags: flags, source: source, external: external, route: deferred.route) {
+                    deferred.buttons[button] = nil
+                }
             }
-            for (button, point) in deferred.buttons where InputRelease.button(button, point: point, flags: flags, source: source, external: external) {
-                deferred.buttons[button] = nil
-            }
-            if leaseHeld && active.inputSessionID == nil && deferred.keys.isEmpty && deferred.buttons.isEmpty && !clipboard.hasOwnedWrites {
-                DesktopInputLease.release(STDERR_FILENO); leaseHeld = false
+            if active.inputSessionID == nil && deferred.keys.isEmpty && deferred.buttons.isEmpty
+                && !clipboard.hasOwnedWrites && supervision.claim == nil {
+                if leaseHeld { DesktopInputLease.release(STDERR_FILENO); leaseHeld = false }
+                external?.stop(); external = nil
             }
         }
-        while connected || !deferred.keys.isEmpty || !deferred.buttons.isEmpty {
+        func recoverOwner() {
+            let directories = active.artifactDirectories
+            deferred.route = active.route ?? deferred.route
+            deferred.keys.merge(active.keys) { current, _ in current }
+            deferred.buttons.merge(active.buttons) { current, _ in current }
+            active = InputClaim(); connected = false
+            supervision.revoke("helper_disconnected")
+            terminateOwner(parent)
+            clipboard.recover(); releaseDeferred()
+            if let route = deferred.route { SyntheticFocus.deactivate(route, tag: recoveryTag) }
+            for path in directories {
+                if let owned = ownedDirectory(path) { try? FileManager.default.removeItem(at: owned) }
+            }
+        }
+        while connected || !deferred.keys.isEmpty || !deferred.buttons.isEmpty || supervision.mustRelock {
+            supervision.check(now: ProcessInfo.processInfo.systemUptime,
+                guardianAlive: supervision.claim?.guardian.alive ?? true)
+            if supervision.mustRelock {
+                if connected && supervision.reason != "lease_released" { recoverOwner() }
+                if relock.step() { supervision.confirmLocked() }
+            }
             releaseDeferred()
             if !connected { Thread.sleep(forTimeInterval: 0.02); continue }
             var descriptor = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
@@ -219,6 +253,23 @@ enum InputWatchdogWorker {
                       claim.buttons.allSatisfy({ $0.key <= 2 && $0.value.x.isFinite && $0.value.y.isFinite }) else {
                     throw IpcError.protocolError("invalid input claim")
                 }
+                if let guarded = claim.lockedUse {
+                    guard guarded.binding.sessionID == claim.inputSessionID,
+                          guarded.valid(now: ProcessInfo.processInfo.systemUptime) else {
+                        throw IpcError.protocolError("invalid lock-continuity claim")
+                    }
+                    if supervision.claim?.guardian != guarded.guardian {
+                        guard let executable = Bundle.main.executableURL,
+                              let team = LockedUseSigning.team(executable, identifier: "ai.agistack.desktop.cua-helper"),
+                              LockedUseSigning.process(guarded.guardian, identifier: "ai.agistack.desktop.cua.guardian", team: team) else {
+                            throw IpcError.protocolError("untrusted lock guardian")
+                        }
+                    }
+                }
+                var proposedSupervision = supervision
+                guard proposedSupervision.accept(claim.lockedUse, now: ProcessInfo.processInfo.systemUptime) else {
+                    throw IpcError.protocolError("lock-continuity generation expired")
+                }
                 guard message.releasedKeys.count <= 128, message.releasedButtons.count <= 3,
                       message.releasedKeys.allSatisfy({ active.keys[$0] != nil && claim.keys[$0] == nil }),
                       message.releasedButtons.allSatisfy({ active.buttons[$0] != nil && claim.buttons[$0] == nil }) else {
@@ -227,19 +278,25 @@ enum InputWatchdogWorker {
                 let newKeys = Set(claim.keys.keys).subtracting(active.keys.keys)
                 let newButtons = Set(claim.buttons.keys).subtracting(active.buttons.keys)
                 let compatibleSession = active.inputSessionID == nil || claim.inputSessionID == nil || active.inputSessionID == claim.inputSessionID
+                let compatibleRoute = active.route == claim.route ||
+                    (active.keys.isEmpty && active.buttons.isEmpty && deferred.keys.isEmpty && deferred.buttons.isEmpty)
                 let requestedLease = claim.inputSessionID != nil
+                if requestedLease && external == nil { external = try ExternalInputState(tag: recoveryTag) }
                 let acquired = !requestedLease || leaseHeld || DesktopInputLease.acquire(STDERR_FILENO)
                 if requestedLease && acquired { leaseHeld = true }
-                let available = compatibleSession && acquired && newKeys.allSatisfy {
-                    deferred.keys[$0] == nil && !external.key($0)
+                let available = compatibleSession && compatibleRoute && acquired
+                    && (!proposedSupervision.mustRelock || (claim.keys.isEmpty && claim.buttons.isEmpty)) && newKeys.allSatisfy {
+                    deferred.keys[$0] == nil && (claim.route?.mode == .background || external?.key($0) == false)
                 } && newButtons.allSatisfy {
                     guard let button = CGMouseButton(rawValue: $0) else { return false }
-                    return deferred.buttons[$0] == nil && !external.button(button.rawValue)
+                    return deferred.buttons[$0] == nil && (claim.route?.mode == .background || external?.button(button.rawValue) == false)
                 }
                 sequence = message.id
                 var clipboardReceipt: ClipboardReceipt?
                 var operationError: String?
                 if available {
+                    supervision = proposedSupervision
+                    deferred.route = active.route
                     for (code, flags) in active.keys where claim.keys[code] == nil && !message.releasedKeys.contains(code) { deferred.keys[code] = flags }
                     for (button, point) in active.buttons where claim.buttons[button] == nil && !message.releasedButtons.contains(button) { deferred.buttons[button] = point }
                     active = claim
@@ -257,17 +314,7 @@ enum InputWatchdogWorker {
                     accepted: available, clipboard: clipboardReceipt,
                     error: operationError ?? (!acquired || !compatibleSession ? "device_busy" : nil)), fd: STDOUT_FILENO)
             } catch {
-                let directories = active.artifactDirectories
-                deferred.keys.merge(active.keys) { current, _ in current }
-                deferred.buttons.merge(active.buttons) { current, _ in current }
-                active = InputClaim()
-                connected = false
-                terminateOwner(parent)
-                clipboard.recover()
-                releaseDeferred()
-                for path in directories {
-                    if let owned = ownedDirectory(path) { try? FileManager.default.removeItem(at: owned) }
-                }
+                recoverOwner()
             }
         }
         if leaseHeld { DesktopInputLease.release(STDERR_FILENO) }

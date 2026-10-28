@@ -5,6 +5,27 @@ import Foundation
 enum StructuralTests {
     static func main() throws {
         if CommandLine.arguments == [CommandLine.arguments[0], "--input-watchdog"] { InputWatchdogWorker.run() }
+        if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--install-transaction-child" {
+            try LockedUseInstallerTests.child(CommandLine.arguments)
+        }
+        if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--activation-helper-child" {
+            try LockedUseActivationTests.child()
+            return
+        }
+        try WindowIdentityTests.run()
+        if CommandLine.arguments == [CommandLine.arguments[0], "--window-identity-tests"] {
+            print("CUA_WINDOW_IDENTITY_TESTS_OK")
+            return
+        }
+        keyboardSourceTests()
+        if CommandLine.arguments == [CommandLine.arguments[0], "--keyboard-sources"] {
+            print("CUA_KEYBOARD_SOURCE_TESTS_OK")
+            return
+        }
+        try LockedUseTests.run()
+        try LockedUseInstallerTests.run()
+        try LockedUseActivationTests.run()
+        try InputOutputTests.run()
         let payload = Data("{\"jsonrpc\":\"2.0\",\"id\":1}".utf8)
         let frame = encodeFrame(payload)
         let decoder = FrameDecoder()
@@ -12,6 +33,12 @@ enum StructuralTests {
         precondition(partial.isEmpty)
         let complete = try decoder.append(frame.dropFirst(2))
         precondition(complete.first == payload)
+        precondition(NativeScreenMonitor.unavailableReason(nil) == "console_session_unavailable")
+        precondition(NativeScreenMonitor.unavailableReason(["CGSSessionScreenIsLocked": true]) == "screen_locked")
+        precondition(NativeScreenMonitor.unavailableReason([kCGSessionOnConsoleKey as String: false]) == "console_session_inactive")
+        precondition(NativeScreenMonitor.unavailableReason([kCGSessionLoginDoneKey as String: false]) == "console_session_inactive")
+        precondition(NativeScreenMonitor.unavailableReason([
+            kCGSessionOnConsoleKey as String: true, kCGSessionLoginDoneKey as String: true]) == nil)
         var invalid = UInt32(maxFrameBytes + 1).littleEndian
         do {
             _ = try FrameDecoder().append(Data(bytes: &invalid, count: 4))
@@ -29,7 +56,43 @@ enum StructuralTests {
             preconditionFailure("ambiguous selection accepted")
         } catch {}
         let owner = Dictionary(uniqueKeysWithValues: Sessions.ownerFields.map { ($0, "fixture-" + $0) })
+        let targetedMouse = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown,
+            mouseCursorPosition: CGPoint(x: 20, y: 30), mouseButton: .left)!
+        BackgroundInputSPI.setTargetWindow(targetedMouse, 12345)
+        precondition(NSEvent(cgEvent: targetedMouse)?.windowNumber == 12345,
+            "a process-directed mouse event must retain its AppKit window binding")
         var session = try Sessions.shared.begin("structural-test", owner: owner)
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
+        let hiddenWindow = NSPanel(contentRect: CGRect(x: -10000, y: -10000, width: 20, height: 20),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        hiddenWindow.isReleasedWhenClosed = false
+        // Register a real WindowServer window without activating the test app or
+        // showing test content on any display. Unordered NSWindows have no live ID.
+        hiddenWindow.orderBack(nil)
+        hiddenWindow.displayIfNeeded()
+        // AppKit flushes a new window to WindowServer on its run loop. Having
+        // a window number does not yet mean that the geometry was registered.
+        let registrationDeadline = Date(timeIntervalSinceNow: 1)
+        while (CGWindowListCopyWindowInfo(.optionIncludingWindow,
+            CGWindowID(hiddenWindow.windowNumber)) as? [[String: Any]])?.isEmpty != false,
+              Date() < registrationDeadline {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+        }
+        let hiddenNativeWindow = NativeWindow(id: "input-route-hidden", element: AXUIElementCreateApplication(getpid()),
+            frame: hiddenWindow.frame, title: "Hidden route fixture", captureID: CGWindowID(hiddenWindow.windowNumber))
+        let ownApp = ResolvedApp(id: "input-route-fixture", displayName: "Input route fixture", pid: getpid(), bundleId: nil)
+        let route = try InputRoute(session: session, app: ownApp, window: hiddenNativeWindow)
+        try route.validate()
+        var reusedPID = try JSONSerialization.jsonObject(with: JSONEncoder().encode(route)) as! [String: Any]
+        reusedPID["startMicroseconds"] = route.startMicroseconds + 1
+        let staleRoute = try JSONDecoder().decode(InputRoute.self,
+            from: JSONSerialization.data(withJSONObject: reusedPID))
+        do {
+            try staleRoute.validate()
+            preconditionFailure("a reused process identifier must never receive recovery input")
+        } catch ActionError.failure(let kind, _, _) { precondition(kind == "stale_input_target") }
+        hiddenWindow.close()
         do {
             var other = owner; other["device_id"] = "other"
             _ = try Sessions.shared.require(session.id, owner: other)
@@ -54,7 +117,8 @@ enum StructuralTests {
         let app = ResolvedApp(id: "fixture", displayName: "Fixture", pid: getpid(), bundleId: nil)
         session.windows[app.id] = [window]
         session.snapshots[app.id] = Snapshot(id: "before-pause", app: app, window: window, records: [:])
-        let pauseParams: [String: Any] = owner.merging(["session_id": session.id]) { _, value in value }
+        let pauseParams: [String: Any] = session.inputBinding.merging(owner) { _, value in value }
+            .merging(["session_id": session.id]) { _, value in value }
         if case .failure(let error) = dispatch("pause_session", pauseParams) {
             preconditionFailure("pause failed: \(error)")
         }
@@ -85,13 +149,6 @@ enum StructuralTests {
         do {try session.reset(sequence: 60);preconditionFailure("later terminal stop lost")} catch {}
         Sessions.shared.end(session.id)
         session = try Sessions.shared.begin("structural-records", owner: owner)
-        session.windows[app.id] = [window]
-        let otherProcess = ResolvedApp(id: app.id, displayName: "Other", pid: getpid() + 1, bundleId: nil)
-        let replaced = try AxEngine.windows(app: otherProcess, session: session, reader: { _ in
-            [AXUIElementCreateApplication(otherProcess.pid)]
-        })
-        precondition(replaced.count == 1 && replaced[0].id != window.id)
-        precondition(replaced[0].id.hasPrefix("\(otherProcess.pid):"))
         session.windows[app.id] = [window]
         for (error, kind) in [(AXError.cannotComplete,"accessibility_unavailable"),(.apiDisabled,"permission_required"),(.invalidUIElement,"stale_target")] {
             do {
@@ -148,6 +205,62 @@ enum StructuralTests {
         precondition(!FileManager.default.fileExists(atPath: path))
         try presentationTests(owner: owner)
         print("CUA_STRUCTURAL_TESTS_OK")
+    }
+
+    static func keyboardSourceTests() {
+        // Exercise the IPC capability-building path with an OS reader that
+        // enforces HIToolbox's real main-thread requirement. Replacing the
+        // source between calls must refresh the result, including the distinct
+        // IME identifier and base keyboard layout. No system source is changed.
+        let sources = [
+            NativeKeyboardSources(layoutIdentifier: "com.apple.keylayout.French",
+                inputSourceIdentifier: "com.apple.keylayout.French",
+                inputSourceType: "TISTypeKeyboardLayout"),
+            NativeKeyboardSources(layoutIdentifier: "com.apple.keylayout.US",
+                inputSourceIdentifier: "com.apple.inputmethod.SCIM.ITABC",
+                inputSourceType: "TISTypeKeyboardInputMode"),
+            NativeKeyboardSources(layoutIdentifier: nil, inputSourceIdentifier: nil,
+                inputSourceType: nil),
+        ]
+        let direct = NativeKeyboard.capabilities(readSources: {
+            precondition(Thread.isMainThread, "TIS reader left the main thread")
+            return sources[0]
+        })
+        precondition(direct["keyboard_layout"] as? String == sources[0].layoutIdentifier)
+        precondition(direct["key_names"] as? String == "ansi_us_physical_positions")
+        precondition(direct["literal_text"] as? String == "unicode_key_events")
+        precondition(direct["ime_composition_supported"] as? Bool == false)
+        let finished = DispatchSemaphore(value: 0)
+        let queue = DispatchQueue(label: "memstack.cua.keyboard-source-test")
+        queue.async {
+            precondition(!Thread.isMainThread, "regression requires an IPC-style worker")
+            for source in sources {
+                let metadata = NativeKeyboard.capabilities(readSources: {
+                    precondition(Thread.isMainThread,
+                        "worker called TIS concurrently with the AppKit main thread")
+                    return source
+                })
+                precondition(metadata["keyboard_layout"] as? String
+                    == (source.layoutIdentifier ?? "unavailable"))
+                precondition(metadata["input_source"] as? String
+                    == (source.inputSourceIdentifier ?? "unavailable"))
+                precondition(metadata["input_source_type"] as? String
+                    == (source.inputSourceType ?? "unavailable"))
+                precondition(metadata["implicit_clipboard_fallback"] as? Bool == false)
+                precondition(metadata["implicit_ax_fallback"] as? Bool == false)
+            }
+            // Include the real Carbon reader without selecting an input source
+            // or creating NSApplication/windows, even when the screen is locked.
+            let actual = NativeKeyboard.capabilities
+            precondition(JSONSerialization.isValidJSONObject(actual))
+            precondition(actual["input_source"] is String && actual["keyboard_layout"] is String)
+            finished.signal()
+        }
+        let deadline = Date(timeIntervalSinceNow: 3)
+        while finished.wait(timeout: .now()) != .success {
+            precondition(Date() < deadline, "keyboard capability worker deadlocked on the main thread")
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.005))
+        }
     }
 
     static func presentationTests(owner: [String: String]) throws {

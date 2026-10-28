@@ -1,5 +1,5 @@
 //! Explicit opt-in native helper observation. This test never synthesizes input.
-use agistack_adapters_cua::{CuaCallContext, CuaClient};
+use agistack_adapters_cua::{CuaCallContext, CuaClient, IPC_PROTOCOL_VERSION};
 use serde_json::json;
 
 #[tokio::test]
@@ -9,7 +9,7 @@ async fn real_private_helper_capabilities_and_observation() {
         .expect("set AGISTACK_CUA_TEST_HELPER to the owned test helper");
     let client = CuaClient::builder().helper_path(helper).build();
     let capabilities = client.request("capabilities", json!({})).await.unwrap();
-    assert_eq!(capabilities["protocol_version"], "MemstackComputerUseIPC-2");
+    assert_eq!(capabilities["protocol_version"], IPC_PROTOCOL_VERSION);
     let context = CuaCallContext {
         user_id: "native-test".into(),
         tenant_id: "native-test".into(),
@@ -18,6 +18,7 @@ async fn real_private_helper_capabilities_and_observation() {
         conversation_id: "native-test".into(),
         run_id: "native-test".into(),
         session_id: "native-test".into(),
+        input_mode: agistack_adapters_cua::CuaInputMode::default(),
     };
     let apps = client
         .request_in_session(&context, "list_apps", json!({}))

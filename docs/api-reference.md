@@ -57,6 +57,39 @@ API keys use the `ms_sk_` prefix and are sent with `Authorization: Bearer <key>`
 Current live chat is WebSocket-based. Historical `POST /api/v1/agent/chat` examples are not
 registered by the current router set.
 
+### Conversation Tool Media
+
+`GET /api/v1/agent/conversations/{conversation_id}/tool-media/{artifact_id}` accepts
+`tenant_id` and `project_id` query parameters and the existing Bearer authentication.
+Python and Rust cloud runtimes check project membership, conversation access and
+the exact user/tenant/project/conversation media owner. Use the cloud artifact ID
+from the server-produced `repl_output` display entry; native device IDs are not
+valid substitutes. Reading historical media does not resume a run or execute a tool.
+
+The response is at most 10 MiB of raw bytes, with matching `Content-Type` and
+`Content-Length`, `Cache-Control: private, no-store` and
+`X-Content-Type-Options: nosniff`. Authentication, access, missing media, integrity
+failure and oversized content return 401, 403, 404, 409 and 413 respectively.
+Python normalizes stored `audio/x-wav` to `audio/wav`; its display entry and HTTP
+response both use the stored MIME type.
+
+New REPL device results admit at most 256 media descriptors, 10 MiB per item and
+32 MiB in total. An over-limit result is rejected before media bytes are received;
+it does not preserve a partial live result. The presentation layer's
+`unavailable: media_size_limit` entries preserve surrounding text only when
+projecting already available historical or internal bindings.
+
+### Device REPL Step Authorization
+
+`POST /api/v1/agent/device/requests/{request_id}/steps/{step_id}/authorize` is
+registered in the active Python generation dispatcher and the Rust server.
+It uses existing Bearer authentication and a claimed device request. The body
+identifies `device_id`, `cell_id`, the canonical `tool_name`, serialized
+`input_json` and a structured `target`. The server checks current request, run,
+agent, device connection and tool authority before issuing or consuming the
+step receipt. Generic REPL approval does not authorize another step or changed
+arguments.
+
 ## Memory, Episodes, Graph
 
 | Area | Paths |

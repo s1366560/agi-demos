@@ -131,7 +131,7 @@ test('desktop shell mounts only the prototype sidebar and page-owned headers', (
 });
 
 test('streaming conversation replies expose a dedicated stop-session control', () => {
-  assert.match(appSource, /onStopResponse:\s*socket\.stopAgentResponse/u);
+  assert.match(appSource, /onStopResponse:\s*stopResponseTarget \? stopComposerResponse : undefined/u);
   assert.match(chatPanelSource, /responseStreaming[\s\S]*session\.stopResponse/);
   assert.match(chatPanelSource, /<StopIcon\s*\/>/);
   assert.match(

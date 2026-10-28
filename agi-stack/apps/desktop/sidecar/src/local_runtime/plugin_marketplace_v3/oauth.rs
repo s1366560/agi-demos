@@ -3,6 +3,8 @@ use super::super::mcp_supervisor::McpScope;
 use super::*;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+#[path = "oauth_manual.rs"]
+pub(in crate::local_runtime) mod manual;
 static PENDING: std::sync::LazyLock<
     std::sync::Mutex<BTreeMap<String, tokio::sync::oneshot::Sender<()>>>,
 > = std::sync::LazyLock::new(|| std::sync::Mutex::new(BTreeMap::new()));
@@ -20,6 +22,9 @@ pub(in crate::local_runtime) fn pending(flow: &str) -> bool {
 }
 
 enum FlowTarget {
+    ManualMcp {
+        auth: AuthenticatedContext,
+    },
     Marketplace {
         auth: AuthenticatedContext,
         id: String,
@@ -578,6 +583,9 @@ async fn callback(
     }
 }
 async fn complete(flow: &Flow, code: Option<String>) -> PackageResult<()> {
+    if let FlowTarget::ManualMcp { auth } = &flow.target {
+        return manual::complete(flow, auth, code).await;
+    }
     if let FlowTarget::Connector { owner, account_id } = &flow.target {
         return super::super::computer_use_v2::accounts::complete_oauth(
             &flow.state,

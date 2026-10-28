@@ -24,7 +24,7 @@ fn app() -> App {
     )
 }
 fn context(id: &str) -> Value {
-    json!({"device_id":"device","user_id":"u","tenant_id":"t","project_id":"p","conversation_id":id,"run_id":id,"session_id":id})
+    json!({"input_mode":"foreground","device_id":"device","user_id":"u","tenant_id":"t","project_id":"p","conversation_id":id,"run_id":id,"session_id":id})
 }
 fn params(id: &str) -> Value {
     let mut params = context(id);
@@ -121,24 +121,24 @@ async fn cancel_of_another_session_does_not_release_the_input_owner() {
     let backend = Arc::new(MockBackend::default());
     let sessions = Sessions::new(backend.clone());
     let first = sessions
-        .dispatch("begin_session", &context("first"))
+        .test_dispatch("begin_session", &context("first"))
         .await
         .unwrap();
     let second = sessions
-        .dispatch("begin_session", &context("second"))
+        .test_dispatch("begin_session", &context("second"))
         .await
         .unwrap();
     sessions
-        .dispatch("get_app_state", &params("first"))
+        .test_dispatch("get_app_state", &params("first"))
         .await
         .unwrap();
     sessions
-        .dispatch("stop_session", &context("second"))
+        .test_dispatch("stop_session", &context("second"))
         .await
         .unwrap();
     assert_eq!(backend.releases.load(Ordering::SeqCst), 0);
     sessions
-        .dispatch("stop_session", &context("first"))
+        .test_dispatch("stop_session", &context("first"))
         .await
         .unwrap();
     assert_eq!(backend.releases.load(Ordering::SeqCst), 1);
@@ -152,21 +152,21 @@ async fn device_context_is_required_and_immutable() {
     invalid.as_object_mut().unwrap().remove("device_id");
     assert_eq!(
         sessions
-            .dispatch("begin_session", &invalid)
+            .test_dispatch("begin_session", &invalid)
             .await
             .unwrap_err()
             .kind,
         "invalid_params"
     );
     let root = sessions
-        .dispatch("begin_session", &context("one"))
+        .test_dispatch("begin_session", &context("one"))
         .await
         .unwrap();
     let mut other = context("one");
     other["device_id"] = json!("different-device");
     assert_eq!(
         sessions
-            .dispatch("begin_session", &other)
+            .test_dispatch("begin_session", &other)
             .await
             .unwrap_err()
             .kind,
@@ -179,15 +179,15 @@ async fn reset_releases_owned_input_and_invalidates_the_old_observation() {
     let backend = Arc::new(MockBackend::default());
     let sessions = Sessions::new(backend.clone());
     let root = sessions
-        .dispatch("begin_session", &context("reset"))
+        .test_dispatch("begin_session", &context("reset"))
         .await
         .unwrap();
     let old = sessions
-        .dispatch("get_app_state", &params("reset"))
+        .test_dispatch("get_app_state", &params("reset"))
         .await
         .unwrap();
     sessions
-        .dispatch("reset_session", &context("reset"))
+        .test_dispatch("reset_session", &context("reset"))
         .await
         .unwrap();
     assert_eq!(backend.releases.load(Ordering::SeqCst), 1);
@@ -197,22 +197,25 @@ async fn reset_releases_owned_input_and_invalidates_the_old_observation() {
     action["expected_identity_digest"] = json!(app().identity_digest);
     assert_eq!(
         sessions
-            .dispatch("perform_action", &action)
+            .test_dispatch("perform_action", &action)
             .await
             .unwrap_err()
             .kind,
         "stale_element"
     );
     let fresh = sessions
-        .dispatch("get_app_state", &params("reset"))
+        .test_dispatch("get_app_state", &params("reset"))
         .await
         .unwrap();
     assert_ne!(old["lease_epoch"], fresh["lease_epoch"]);
     action["snapshot_id"] = fresh["snapshot_id"].clone();
-    sessions.dispatch("perform_action", &action).await.unwrap();
+    sessions
+        .test_dispatch("perform_action", &action)
+        .await
+        .unwrap();
     assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
     sessions
-        .dispatch("end_session", &context("reset"))
+        .test_dispatch("end_session", &context("reset"))
         .await
         .unwrap();
     let _ = std::fs::remove_dir(root["artifact_root"].as_str().unwrap());
@@ -221,7 +224,7 @@ async fn reset_releases_owned_input_and_invalidates_the_old_observation() {
 async fn host_context_identity_and_global_desktop_lease_are_exact() {
     let sessions = Sessions::new(Arc::new(MockBackend::default()));
     let root = sessions
-        .dispatch("begin_session", &context("one"))
+        .test_dispatch("begin_session", &context("one"))
         .await
         .unwrap()["artifact_root"]
         .as_str()
@@ -231,18 +234,18 @@ async fn host_context_identity_and_global_desktop_lease_are_exact() {
     foreign["project_id"] = json!("foreign");
     assert_eq!(
         sessions
-            .dispatch("begin_session", &foreign)
+            .test_dispatch("begin_session", &foreign)
             .await
             .unwrap_err()
             .kind,
         "session_owner_mismatch"
     );
     sessions
-        .dispatch("get_app_state", &params("one"))
+        .test_dispatch("get_app_state", &params("one"))
         .await
         .unwrap();
     let second = sessions
-        .dispatch("begin_session", &context("two"))
+        .test_dispatch("begin_session", &context("two"))
         .await
         .unwrap()["artifact_root"]
         .as_str()
@@ -250,18 +253,18 @@ async fn host_context_identity_and_global_desktop_lease_are_exact() {
         .to_owned();
     assert_eq!(
         sessions
-            .dispatch("get_app_state", &params("two"))
+            .test_dispatch("get_app_state", &params("two"))
             .await
             .unwrap_err()
             .kind,
         "desktop_busy"
     );
     sessions
-        .dispatch("end_session", &context("one"))
+        .test_dispatch("end_session", &context("one"))
         .await
         .unwrap();
     sessions
-        .dispatch("get_app_state", &params("two"))
+        .test_dispatch("get_app_state", &params("two"))
         .await
         .unwrap();
     let _ = std::fs::remove_dir(root);
@@ -272,14 +275,14 @@ async fn snapshots_and_application_identity_cannot_cross_sessions_or_replay() {
     let backend = Arc::new(MockBackend::default());
     let sessions = Sessions::new(backend.clone());
     let root = sessions
-        .dispatch("begin_session", &context("one"))
+        .test_dispatch("begin_session", &context("one"))
         .await
         .unwrap()["artifact_root"]
         .as_str()
         .unwrap()
         .to_owned();
     let observed = sessions
-        .dispatch("get_app_state", &params("one"))
+        .test_dispatch("get_app_state", &params("one"))
         .await
         .unwrap();
     let mut action = params("one");
@@ -288,17 +291,20 @@ async fn snapshots_and_application_identity_cannot_cross_sessions_or_replay() {
     action["expected_identity_digest"] = json!("wrong");
     assert_eq!(
         sessions
-            .dispatch("perform_action", &action)
+            .test_dispatch("perform_action", &action)
             .await
             .unwrap_err()
             .kind,
         "application_identity_changed"
     );
     action["expected_identity_digest"] = json!(app().identity_digest);
-    sessions.dispatch("perform_action", &action).await.unwrap();
+    sessions
+        .test_dispatch("perform_action", &action)
+        .await
+        .unwrap();
     assert_eq!(
         sessions
-            .dispatch("perform_action", &action)
+            .test_dispatch("perform_action", &action)
             .await
             .unwrap_err()
             .kind,
@@ -312,21 +318,21 @@ async fn cancellation_interrupts_an_inflight_action_without_success_or_replay() 
     let backend = Arc::new(MockBackend::default());
     let sessions = Arc::new(Sessions::new(backend.clone()));
     let root = sessions
-        .dispatch("begin_session", &context("one"))
+        .test_dispatch("begin_session", &context("one"))
         .await
         .unwrap()["artifact_root"]
         .as_str()
         .unwrap()
         .to_owned();
     let observed = sessions
-        .dispatch("get_app_state", &params("one"))
+        .test_dispatch("get_app_state", &params("one"))
         .await
         .unwrap();
     let mut action = params("one");
     action["snapshot_id"] = observed["snapshot_id"].clone();
     action["action"] = json!({"kind":"type_text","text":"long unicode input"});
     let worker = sessions.clone();
-    let call = tokio::spawn(async move { worker.dispatch("perform_action", &action).await });
+    let call = tokio::spawn(async move { worker.test_dispatch("perform_action", &action).await });
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     sessions.cancel("one").await;
     assert_eq!(
@@ -351,14 +357,14 @@ async fn pause_resume_requires_fresh_observation_and_releases_resources() {
     let backend = Arc::new(MockBackend::default());
     let sessions = Sessions::new(backend.clone());
     let started = sessions
-        .dispatch("begin_session", &context("pause"))
+        .test_dispatch("begin_session", &context("pause"))
         .await
         .unwrap();
     let root = PathBuf::from(started["artifact_root"].as_str().unwrap());
     let artifact = root.join("private-capture.png");
     std::fs::write(&artifact, b"owned fixture").unwrap();
     let observed = sessions
-        .dispatch("get_app_state", &params("pause"))
+        .test_dispatch("get_app_state", &params("pause"))
         .await
         .unwrap();
     assert!(observed.get("app_icon").is_none());
@@ -367,7 +373,7 @@ async fn pause_resume_requires_fresh_observation_and_releases_resources() {
         "capability_unsupported"
     );
     let result = sessions
-        .dispatch("pause_session", &context("pause"))
+        .test_dispatch("pause_session", &context("pause"))
         .await
         .unwrap();
     assert_eq!(result["phase"], "paused");
@@ -378,7 +384,7 @@ async fn pause_resume_requires_fresh_observation_and_releases_resources() {
     assert_eq!(backend.session_releases.load(Ordering::SeqCst), 1);
     assert_eq!(
         sessions
-            .dispatch("get_app_state", &params("pause"))
+            .test_dispatch("get_app_state", &params("pause"))
             .await
             .unwrap_err()
             .kind,
@@ -386,7 +392,7 @@ async fn pause_resume_requires_fresh_observation_and_releases_resources() {
     );
     assert_eq!(
         sessions
-            .dispatch("resume_session", &context("pause"))
+            .test_dispatch("resume_session", &context("pause"))
             .await
             .unwrap()["requires_observation"],
         true
@@ -396,26 +402,29 @@ async fn pause_resume_requires_fresh_observation_and_releases_resources() {
     action["action"] = json!({"kind":"click","x":5,"y":5});
     assert_eq!(
         sessions
-            .dispatch("perform_action", &action)
+            .test_dispatch("perform_action", &action)
             .await
             .unwrap_err()
             .kind,
         "stale_element"
     );
     let fresh = sessions
-        .dispatch("get_app_state", &params("pause"))
+        .test_dispatch("get_app_state", &params("pause"))
         .await
         .unwrap();
     action["snapshot_id"] = fresh["snapshot_id"].clone();
-    sessions.dispatch("perform_action", &action).await.unwrap();
+    sessions
+        .test_dispatch("perform_action", &action)
+        .await
+        .unwrap();
     assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
     sessions
-        .dispatch("stop_session", &context("pause"))
+        .test_dispatch("stop_session", &context("pause"))
         .await
         .unwrap();
     assert_eq!(
         sessions
-            .dispatch("resume_session", &context("pause"))
+            .test_dispatch("resume_session", &context("pause"))
             .await
             .unwrap_err()
             .kind,
@@ -428,19 +437,19 @@ async fn pause_interrupts_in_flight_input_and_rejects_a_different_owner() {
     let backend = Arc::new(MockBackend::default());
     let sessions = Arc::new(Sessions::new(backend.clone()));
     let started = sessions
-        .dispatch("begin_session", &context("pause-race"))
+        .test_dispatch("begin_session", &context("pause-race"))
         .await
         .unwrap();
     let root = PathBuf::from(started["artifact_root"].as_str().unwrap());
     let observed = sessions
-        .dispatch("get_app_state", &params("pause-race"))
+        .test_dispatch("get_app_state", &params("pause-race"))
         .await
         .unwrap();
     let mut other = context("pause-race");
     other["device_id"] = json!("another-device");
     assert_eq!(
         sessions
-            .dispatch("pause_session", &other)
+            .test_dispatch("pause_session", &other)
             .await
             .unwrap_err()
             .kind,
@@ -451,11 +460,11 @@ async fn pause_interrupts_in_flight_input_and_rejects_a_different_owner() {
     action["action"] = json!({"kind":"type_text","text":"cancel fixture"});
     let task = {
         let sessions = sessions.clone();
-        tokio::spawn(async move { sessions.dispatch("perform_action", &action).await })
+        tokio::spawn(async move { sessions.test_dispatch("perform_action", &action).await })
     };
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     sessions
-        .dispatch("pause_session", &context("pause-race"))
+        .test_dispatch("pause_session", &context("pause-race"))
         .await
         .unwrap();
     assert_eq!(
@@ -464,12 +473,12 @@ async fn pause_interrupts_in_flight_input_and_rejects_a_different_owner() {
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
     sessions
-        .dispatch("stop_session", &context("pause-race"))
+        .test_dispatch("stop_session", &context("pause-race"))
         .await
         .unwrap();
     assert_eq!(
         sessions
-            .dispatch("resume_session", &context("pause-race"))
+            .test_dispatch("resume_session", &context("pause-race"))
             .await
             .unwrap_err()
             .kind,
@@ -482,7 +491,7 @@ async fn pause_interrupts_in_flight_input_and_rejects_a_different_owner() {
 async fn concurrent_terminal_stop_cannot_be_downgraded_by_pause_cleanup() {
     let sessions = Arc::new(Sessions::new(Arc::new(MockBackend::default())));
     let started = sessions
-        .dispatch("begin_session", &context("lifecycle-race"))
+        .test_dispatch("begin_session", &context("lifecycle-race"))
         .await
         .unwrap();
     let root = PathBuf::from(started["artifact_root"].as_str().unwrap());
@@ -491,7 +500,7 @@ async fn concurrent_terminal_stop_cannot_be_downgraded_by_pause_cleanup() {
         let sessions = sessions.clone();
         tokio::spawn(async move {
             sessions
-                .dispatch("pause_session", &context("lifecycle-race"))
+                .test_dispatch("pause_session", &context("lifecycle-race"))
                 .await
         })
     };
@@ -507,7 +516,7 @@ async fn concurrent_terminal_stop_cannot_be_downgraded_by_pause_cleanup() {
         let sessions = sessions.clone();
         tokio::spawn(async move {
             sessions
-                .dispatch("stop_session", &context("lifecycle-race"))
+                .test_dispatch("stop_session", &context("lifecycle-race"))
                 .await
         })
     };
@@ -526,7 +535,7 @@ async fn concurrent_terminal_stop_cannot_be_downgraded_by_pause_cleanup() {
     stopped.await.unwrap().unwrap();
     assert_eq!(
         sessions
-            .dispatch("resume_session", &context("lifecycle-race"))
+            .test_dispatch("resume_session", &context("lifecycle-race"))
             .await
             .unwrap_err()
             .kind,
@@ -539,45 +548,45 @@ async fn concurrent_terminal_stop_cannot_be_downgraded_by_pause_cleanup() {
 async fn reset_recovers_cancel_but_cannot_rearm_paused_or_terminal_sessions() {
     let sessions = Sessions::new(Arc::new(MockBackend::default()));
     let started = sessions
-        .dispatch("begin_session", &context("reset-boundary"))
+        .test_dispatch("begin_session", &context("reset-boundary"))
         .await
         .unwrap();
     let root = PathBuf::from(started["artifact_root"].as_str().unwrap());
     sessions
-        .dispatch("cancel", &context("reset-boundary"))
+        .test_dispatch("cancel", &context("reset-boundary"))
         .await
         .unwrap();
     sessions
-        .dispatch("reset_session", &context("reset-boundary"))
+        .test_dispatch("reset_session", &context("reset-boundary"))
         .await
         .unwrap();
     sessions
-        .dispatch("get_app_state", &params("reset-boundary"))
+        .test_dispatch("get_app_state", &params("reset-boundary"))
         .await
         .unwrap();
     sessions
-        .dispatch("pause_session", &context("reset-boundary"))
+        .test_dispatch("pause_session", &context("reset-boundary"))
         .await
         .unwrap();
     assert_eq!(
         sessions
-            .dispatch("reset_session", &context("reset-boundary"))
+            .test_dispatch("reset_session", &context("reset-boundary"))
             .await
             .unwrap_err()
             .kind,
         "session_paused"
     );
     sessions
-        .dispatch("resume_session", &context("reset-boundary"))
+        .test_dispatch("resume_session", &context("reset-boundary"))
         .await
         .unwrap();
     sessions
-        .dispatch("stop_session", &context("reset-boundary"))
+        .test_dispatch("stop_session", &context("reset-boundary"))
         .await
         .unwrap();
     assert_eq!(
         sessions
-            .dispatch("reset_session", &context("reset-boundary"))
+            .test_dispatch("reset_session", &context("reset-boundary"))
             .await
             .unwrap_err()
             .kind,
@@ -585,7 +594,7 @@ async fn reset_recovers_cancel_but_cannot_rearm_paused_or_terminal_sessions() {
     );
     assert_eq!(
         sessions
-            .dispatch("cancel", &context("reset-boundary"))
+            .test_dispatch("cancel", &context("reset-boundary"))
             .await
             .unwrap_err()
             .kind,
@@ -599,14 +608,20 @@ async fn recording_receipts_survive_pause_end_rebegin_and_ack_without_stopping_n
     let backend = Arc::new(MockBackend::default());
     let sessions = Sessions::new(backend.clone());
     let base = context("audio-lifecycle");
-    let begun = sessions.dispatch("begin_session", &base).await.unwrap();
+    let begun = sessions
+        .test_dispatch("begin_session", &base)
+        .await
+        .unwrap();
     let old_root = PathBuf::from(begun["artifact_root"].as_str().unwrap());
     let mut start = base.clone();
     start["source"] = json!("microphone");
-    let first = sessions.dispatch("audio_start", &start).await.unwrap();
+    let first = sessions.test_dispatch("audio_start", &start).await.unwrap();
     let first_id = first["recording_id"].as_str().unwrap();
-    sessions.dispatch("pause_session", &base).await.unwrap();
-    let receipt = sessions.dispatch("audio_status", &base).await.unwrap();
+    sessions
+        .test_dispatch("pause_session", &base)
+        .await
+        .unwrap();
+    let receipt = sessions.test_dispatch("audio_status", &base).await.unwrap();
     assert_eq!(receipt["recordings"][0]["status"], "pending_export");
     assert_eq!(receipt["recordings"][0]["end_reason"], "user_paused");
     assert_eq!(receipt["recordings"][0]["artifacts"][0]["kind"], "audio");
@@ -619,56 +634,69 @@ async fn recording_receipts_survive_pause_end_rebegin_and_ack_without_stopping_n
     .to_file_path()
     .unwrap();
     assert!(path.is_file());
-    sessions.dispatch("end_session", &base).await.unwrap();
+    sessions.test_dispatch("end_session", &base).await.unwrap();
     let mut selected = base.clone();
     selected["recording_id"] = json!(first_id);
     assert_eq!(
-        sessions.dispatch("audio_stop", &selected).await.unwrap()["recordings"],
+        sessions
+            .test_dispatch("audio_stop", &selected)
+            .await
+            .unwrap()["recordings"],
         receipt["recordings"]
     );
     let mut foreign = selected.clone();
     foreign["user_id"] = json!("foreign");
     assert_eq!(
         sessions
-            .dispatch("audio_ack", &foreign)
+            .test_dispatch("audio_ack", &foreign)
             .await
             .unwrap_err()
             .kind,
         "session_owner_mismatch"
     );
-    assert!(
-        sessions
-            .dispatch("get_app_state", &params("audio-lifecycle"))
-            .await
-            .is_err()
-    );
-    let new_begun = sessions.dispatch("begin_session", &base).await.unwrap();
+    assert!(sessions
+        .test_dispatch("get_app_state", &params("audio-lifecycle"))
+        .await
+        .is_err());
+    let new_begun = sessions
+        .test_dispatch("begin_session", &base)
+        .await
+        .unwrap();
     let new_root = PathBuf::from(new_begun["artifact_root"].as_str().unwrap());
     assert_ne!(old_root, new_root);
-    let second = sessions.dispatch("audio_start", &start).await.unwrap();
+    let second = sessions.test_dispatch("audio_start", &start).await.unwrap();
     assert_ne!(first["recording_id"], second["recording_id"]);
-    sessions.dispatch("audio_stop", &selected).await.unwrap();
+    sessions
+        .test_dispatch("audio_stop", &selected)
+        .await
+        .unwrap();
     assert_eq!(backend.audio_stops.load(Ordering::SeqCst), 1);
-    let active = sessions.dispatch("audio_status", &base).await.unwrap();
+    let active = sessions.test_dispatch("audio_status", &base).await.unwrap();
     assert_eq!(active["recording"], true);
     let mut unknown = selected.clone();
     unknown["recording_id"] = json!("unknown");
     assert_eq!(
         sessions
-            .dispatch("audio_ack", &unknown)
+            .test_dispatch("audio_ack", &unknown)
             .await
             .unwrap_err()
             .kind,
         "recording_not_found"
     );
-    let ack = sessions.dispatch("audio_ack", &selected).await.unwrap();
+    let ack = sessions
+        .test_dispatch("audio_ack", &selected)
+        .await
+        .unwrap();
     assert_eq!(ack["recordings"][0]["status"], "saved");
     assert!(!path.exists());
     assert_eq!(
-        sessions.dispatch("audio_ack", &selected).await.unwrap(),
+        sessions
+            .test_dispatch("audio_ack", &selected)
+            .await
+            .unwrap(),
         ack
     );
-    sessions.dispatch("end_session", &base).await.unwrap();
+    sessions.test_dispatch("end_session", &base).await.unwrap();
     assert_eq!(backend.audio_stops.load(Ordering::SeqCst), 2);
     std::fs::remove_dir_all(old_root).unwrap();
     std::fs::remove_dir_all(new_root).unwrap();
@@ -679,18 +707,21 @@ async fn recording_stop_bypasses_input_queue_and_preserves_requested_reason() {
     let backend = Arc::new(MockBackend::default());
     let sessions = Sessions::new(backend);
     let base = context("audio-independent-stop");
-    let begun = sessions.dispatch("begin_session", &base).await.unwrap();
+    let begun = sessions
+        .test_dispatch("begin_session", &base)
+        .await
+        .unwrap();
     let root = PathBuf::from(begun["artifact_root"].as_str().unwrap());
     let mut start = base.clone();
     start["source"] = json!("microphone");
-    let first = sessions.dispatch("audio_start", &start).await.unwrap();
+    let first = sessions.test_dispatch("audio_start", &start).await.unwrap();
     let operation = sessions.operation.lock().await;
     let mut stop = base.clone();
     stop["recording_id"] = first["recording_id"].clone();
     stop["end_reason"] = json!("user_stopped");
     let receipt = tokio::time::timeout(
         std::time::Duration::from_millis(250),
-        sessions.dispatch("audio_stop", &stop),
+        sessions.test_dispatch("audio_stop", &stop),
     )
     .await
     .expect("audio stop queued behind input")
@@ -698,24 +729,68 @@ async fn recording_stop_bypasses_input_queue_and_preserves_requested_reason() {
     assert_eq!(receipt["recordings"][0]["end_reason"], "user_stopped");
     drop(operation);
     let mut bad_stop = stop.clone();
+    bad_stop["input_generation"] = json!(
+        sessions
+            .session(bad_stop["session_id"].as_str().unwrap())
+            .await
+            .unwrap()
+            .lock()
+            .await
+            .input_generation
+    );
     bad_stop["end_reason"] = json!("unrecognized_reason");
     assert_eq!(
         sessions.cancel_request(&bad_stop).await.unwrap_err().kind,
         "invalid_params"
     );
-    let again = sessions.dispatch("audio_stop", &base).await.unwrap();
+    let again = sessions.test_dispatch("audio_stop", &base).await.unwrap();
     assert_eq!(again["recordings"], receipt["recordings"]);
-    let second = sessions.dispatch("audio_start", &start).await.unwrap();
+    let second = sessions.test_dispatch("audio_start", &start).await.unwrap();
     let mut expiry = base.clone();
+    expiry["input_generation"] = json!(
+        sessions
+            .session(expiry["session_id"].as_str().unwrap())
+            .await
+            .unwrap()
+            .lock()
+            .await
+            .input_generation
+    );
     expiry["end_reason"] = json!("lease_expired");
     sessions.cancel_request(&expiry).await.unwrap();
-    sessions.dispatch("stop_session", &expiry).await.unwrap();
+    sessions
+        .test_dispatch("stop_session", &expiry)
+        .await
+        .unwrap();
     let mut selected = base.clone();
     selected["recording_id"] = second["recording_id"].clone();
     assert_eq!(
-        sessions.dispatch("audio_status", &selected).await.unwrap()["recordings"][0]["end_reason"],
+        sessions
+            .test_dispatch("audio_status", &selected)
+            .await
+            .unwrap()["recordings"][0]["end_reason"],
         "lease_expired"
     );
-    sessions.dispatch("end_session", &base).await.unwrap();
+    sessions.test_dispatch("end_session", &base).await.unwrap();
     std::fs::remove_dir_all(root).unwrap();
 }
+
+impl Sessions {
+    async fn test_dispatch(&self, method: &str, params: &Value) -> Result<Value> {
+        let mut params = params.clone();
+        if method != "begin_session" {
+            let id = params["session_id"].as_str().unwrap_or("");
+            let session = match self.session(id).await {
+                Ok(value) => Some(value),
+                Err(_) => self.closed.lock().await.get(id).cloned(),
+            };
+            if let Some(session) = session {
+                params["input_generation"] = json!(session.lock().await.input_generation);
+            }
+        }
+        self.dispatch(method, &params).await
+    }
+}
+
+#[path = "session_input_tests.rs"]
+mod input_tests;

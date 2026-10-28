@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 from dataclasses import replace
 from uuid import uuid4
 
@@ -38,7 +39,9 @@ async def bridge(monkeypatch):
     prefix = f"test:computer-use:{uuid4()}"
     for module in (store, devices, media):
         monkeypatch.setattr(module, "PREFIX", prefix)
-    redis = Redis.from_url("redis://localhost:6379", decode_responses=True)
+    redis = Redis.from_url(
+        os.getenv("NATIVE_CUA_TEST_REDIS_URL", "redis://localhost:6379"), decode_responses=True
+    )
     try:
         await redis.ping()
     except Exception:
@@ -124,6 +127,8 @@ async def test_real_redis_request_claim_and_typed_image_round_trip(bridge):
     assert replay.attachments[0].content == PNG
     events = await bridge.redis.xrange(control_key("connection"))
     assert len(events) == 1
+    claimed = await bridge.read(store.request_key(request_id))
+    assert int(events[0][1]["expires_at"]) == claimed["expires_at"]
 
 
 async def test_lost_response_never_redispatches_same_call(bridge):
@@ -150,6 +155,21 @@ async def test_owner_and_device_claims_do_not_consume_legitimate_request(bridge)
     with pytest.raises(DeviceBridgeError, match="already_claimed"):
         await bridge.claim(request_id, user_id="u", device_id="d")
     assert not (await task).is_error
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("input_mode", "foreground"),
+        ("input_generation", "forged-generation"),
+        ("target_pid", 123),
+        ("process_id", 123),
+    ],
+)
+async def test_model_cannot_override_native_input_authority(bridge, field, value):
+    with pytest.raises(DeviceBridgeError, match="computer_use_invalid_params"):
+        await bridge.request(authorization(), DEFINITION["name"], {"app": "fixture", field: value})
+    assert await bridge.redis.xlen(control_key("connection")) == 0
 
 
 async def test_different_round_observes_again_with_same_arguments(bridge):

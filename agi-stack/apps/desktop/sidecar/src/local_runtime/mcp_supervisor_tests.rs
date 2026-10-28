@@ -16,6 +16,8 @@ use uuid::Uuid;
 
 #[path = "mcp_app_event_tests.rs"]
 mod app_event_tests;
+#[path = "mcp_catalog_visibility_tests.rs"]
+mod catalog_visibility_tests;
 
 use super::{
     authority_store::{

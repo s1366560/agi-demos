@@ -13,6 +13,7 @@ export function requireMcpServerSummaryV2(
   raw: unknown,
   scope: McpServersScopeV2,
   serverId?: string,
+  requireRevision = scope.authority === 'local',
 ): DesktopMCPServerSummary {
   if (
     !mcpServersRecordV2(raw) ||
@@ -87,7 +88,7 @@ export function requireMcpServerSummaryV2(
     ? raw.runtime_metadata.revision
     : undefined;
   if (
-    (scope.authority === 'local' || revision !== undefined) &&
+    (requireRevision || revision !== undefined) &&
     (!Number.isSafeInteger(revision) || Number(revision) < 1)
   )
     throw mcpServersErrorV2('project_mcp_servers_revision_response_invalid', 502);
@@ -140,20 +141,31 @@ export function requireMcpServersResultV2<K extends McpServersMethodV2>(
   method: K,
   raw: unknown,
   input: McpServersInputV2<K>,
+  deviceStorage = false,
 ): McpServersResultsV2[K] {
   let result: unknown;
   switch (method) {
+    case 'getMCPOAuthStatus':
+    case 'mutateMCPOAuth':
+      if (!mcpServersRecordV2(raw) || raw.server_id !== input.args[0] ||
+          !['not_connected', 'authorizing', 'connected', 'expired', 'error'].includes(String(raw.status)) ||
+          (raw.authorization_url != null && typeof raw.authorization_url !== 'string') ||
+          (raw.reason != null && typeof raw.reason !== 'string') ||
+          (raw.expires_at != null && !Number.isSafeInteger(raw.expires_at)))
+        throw mcpServersErrorV2('project_mcp_oauth_response_invalid', 502);
+      result = pickSafeFields(raw, ['server_id', 'status', 'reason', 'expires_at', 'authorization_url']);
+      break;
     case 'listMCPServers':
       if (!Array.isArray(raw))
         throw mcpServersErrorV2('project_mcp_servers_list_response_invalid', 502);
-      result = raw.map((item) => requireMcpServerSummaryV2(item, input.scope));
+      result = raw.map((item) => requireMcpServerSummaryV2(item, input.scope, undefined, deviceStorage || input.scope.authority === 'local'));
       break;
     case 'createMCPServer':
-      result = requireMcpServerSummaryV2(raw, input.scope);
+      result = requireMcpServerSummaryV2(raw, input.scope, undefined, deviceStorage || input.scope.authority === 'local');
       break;
     case 'updateMCPServer':
     case 'setMCPServerEnabled':
-      result = requireMcpServerSummaryV2(raw, input.scope, input.args[0] as string);
+      result = requireMcpServerSummaryV2(raw, input.scope, input.args[0] as string, deviceStorage || input.scope.authority === 'local');
       break;
     case 'provisionMCPServerCredential': {
       const request: unknown = input.args[0];
@@ -194,7 +206,7 @@ export function requireMcpServersResultV2<K extends McpServersMethodV2>(
       break;
     case 'deleteMCPServer':
       if (
-        input.scope.authority === 'cloud'
+        input.scope.authority === 'cloud' && !deviceStorage
           ? raw !== null
           : !mcpServersRecordV2(raw) ||
             raw.deleted !== true ||

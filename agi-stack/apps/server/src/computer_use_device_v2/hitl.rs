@@ -15,15 +15,28 @@ pub(super) struct Pending {
     message_id: Option<String>,
     goal: String,
     scopes: Vec<String>,
+    execution_step: Option<Value>,
+    outer_permission: Option<Value>,
 }
-fn consent_matches(output: &Value, pending_id: &str, session: &str, tool: &str) -> bool {
-    output["error"] == "cua_permission_required"
+fn consent_matches(permission: &agistack_core::ports::PermissionRequired, pending_id: &str, session: &str, tool: &str, action: &str) -> bool {
+    use agistack_core::ports::PermissionKind;
+    let output = permission.demand();
+    let binding = permission.binding();
+    let source_matches = match permission.kind() {
+        PermissionKind::NativeConsent => tool == binding.tool_name || (tool == "cua_repl_js" && binding.cell_id.is_some()),
+        PermissionKind::CloudExecutionStep => tool == "cua_repl_js" && output["request"]["capability"] == "execution_step",
+        PermissionKind::ServerMcpTool => tool == binding.tool_name && output["request"]["capability"] == "mcp_tool",
+        _ => false,
+    };
+    source_matches && binding.engine_session_id.as_deref() == Some(session)
+        && binding.tool_name == action
+        && output["error"] == "cua_permission_required"
         && output["request"]["request_id"] == pending_id
         && output["request"]["engine_session_id"] == session
+        && output["request"]["tool_name"] == action
         && output["request"]["session_id"]
             .as_str()
             .is_some_and(|id| !id.is_empty())
-        && output["request"]["tool_name"] == tool
 }
 pub(crate) async fn park(
     app: &AppState,
@@ -39,7 +52,7 @@ pub(crate) async fn park(
             && request
                 .decision
                 .as_deref()
-                .is_some_and(|decision| decision.target.kind == "computer_app")
+                .is_some_and(|decision| matches!(decision.target.kind.as_str(), "computer_app" | "device_mcp_tool"))
     }) else {
         return Ok(None);
     };
@@ -65,25 +78,41 @@ pub(crate) async fn park(
             .find_map(|tool| {
                 tool.result
                     .as_ref()
-                    .and_then(|result| serde_json::from_str::<Value>(&result.output_json).ok())
-                    .filter(|output| {
+                    .and_then(|result| result.permission_required.as_ref())
+                    .filter(|permission| {
                         consent_matches(
-                            output,
+                            permission,
                             &decision.target.id,
                             &tool.claim.session_id,
                             &tool.claim.tool_name,
+                            &decision.action.name,
                         )
                     })
-                    .map(|output| {
+                    .map(|permission| {
                         (
                             tool.claim.clone(),
-                            output["request"].clone(),
-                            output["scopes"].clone(),
+                            permission.demand()["request"].clone(),
+                            permission.demand()["scopes"].clone(),
+                            permission.clone(),
                         )
                     })
             })
             .ok_or_else(|| CoreError::Tool("computer_use_pending_consent_not_bound".into()))?
     };
+    if actual.3.kind() != agistack_core::ports::PermissionKind::ServerMcpTool {
+        app.computer_use_devices.validate_permission_claim(&actual.0, &permission::WirePermission {
+            kind: actual.3.kind(), binding: actual.3.binding().clone(), demand: actual.3.demand().clone(),
+        }).await?;
+    }
+    let execution_step = if actual.1["capability"] == "execution_step" {
+        if actual.2 != json!(["once"]) { return Err(CoreError::Tool("computer_use_step_scopes_invalid".into())); }
+        Some(app.computer_use_devices.verify_pending_step(&actual.0, &actual.1).await?)
+    } else { None };
+    let outer_permission = if actual.1["capability"] == "mcp_tool" {
+        if decision.target.kind != "device_mcp_tool" { return Err(CoreError::Tool("computer_use_permission_target_invalid".into())); }
+        if actual.2 != json!(["once"]) { return Err(CoreError::Tool("computer_use_permission_scopes_invalid".into())); }
+        Some(app.computer_use_devices.verify_pending_outer(&actual.0, &actual.1).await?)
+    } else { None };
     let pool = app
         .worker_postgres
         .clone()
@@ -100,7 +129,7 @@ pub(crate) async fn park(
             "computer_use_consent_scopes_invalid".into(),
         ));
     }
-    let metadata = json!({"hitl_type":"permission","decision":decision,"tool_name":actual.0.tool_name,"action":decision.action.name,"description":decision.data.summary,"risk_level":decision.risk.level,"allow_remember":scopes.iter().any(|scope| scope!="once"),"native_computer_use":{"schema_version":1,"owner":bound.owner,"run_id":bound.run.run_id,"session_id":state.session_id,"native_session_id":actual.1["session_id"],"device_id":actual.0.device_id,"message_id":message_id,"pending_request_id":decision.target.id}});
+    let metadata = json!({"execution_step":execution_step,"hitl_type":"permission","decision":decision,"tool_name":actual.0.tool_name,"action":decision.action.name,"description":decision.data.summary,"risk_level":decision.risk.level,"allow_remember":scopes.iter().any(|scope| scope!="once"),"native_computer_use":{"schema_version":1,"owner":bound.owner,"run_id":bound.run.run_id,"session_id":state.session_id,"native_session_id":actual.1["session_id"],"device_id":actual.0.device_id,"message_id":message_id,"pending_request_id":decision.target.id}});
     PgHitlRequestRepository::new(pool)
         .insert_pending(&NewHitlRequestRecord {
             id: request.id.clone(),
@@ -135,6 +164,8 @@ pub(crate) async fn park(
                 message_id: message_id.map(str::to_owned),
                 goal: state.goal.clone(),
                 scopes,
+                execution_step,
+                outer_permission,
             },
         );
     Ok(Some(event))
@@ -190,6 +221,13 @@ pub(crate) async fn resume(
         .ok_or_else(|| CoreError::Tool("computer_use_authority_unavailable".into()))?
         .recheck(&pending.owner, &pending.conversation_id, &pending.bound.run)
         .await?;
+    if let Some(step) = &pending.execution_step {
+        // hitl_api has already committed the bound human response before this resume hook.
+        app.computer_use_devices.resolve_step_permission(step, request.response_data["granted"] == true, &request.request_id).await?;
+    }
+    if let Some(permission) = &pending.outer_permission {
+        app.computer_use_devices.resolve_outer_permission(permission, request.response_data["granted"] == true, &request.request_id).await?;
+    }
     pending
         .engine
         .accept_human_response(
@@ -268,31 +306,44 @@ mod tests {
         let pending = output["request"]["request_id"].as_str().unwrap();
         let logical = output["request"]["engine_session_id"].as_str().unwrap();
         let physical = output["request"]["session_id"].as_str().unwrap();
+        let permission = agistack_core::ports::PermissionRequired::new(
+            agistack_core::ports::PermissionKind::NativeConsent,
+            agistack_core::ports::PermissionBinding {
+                tool_name: "computer_get_app_state".into(), input_digest: "fixture".into(),
+                engine_session_id: Some(logical.into()), cell_id: None, step_id: None,
+            }, output.clone(),
+        );
         assert_ne!(logical, physical);
         assert!(consent_matches(
-            &output,
+            &permission,
             pending,
             logical,
+            "computer_get_app_state",
             "computer_get_app_state"
         ));
         assert!(!consent_matches(
-            &output,
+            &permission,
             pending,
             physical,
+            "computer_get_app_state",
             "computer_get_app_state"
         ));
         assert!(!consent_matches(
-            &output,
+            &permission,
             pending,
             logical,
+            "computer_click",
             "computer_click"
         ));
         assert!(!consent_matches(
-            &output,
+            &permission,
             "forged",
             logical,
+            "computer_get_app_state",
             "computer_get_app_state"
         ));
+        assert!(!consent_matches(&permission, pending, logical,
+            "computer_get_app_state", "different_action"));
         assert!(
             output["request"].get("owner").is_none(),
             "owner comes from authenticated broker, not native payload"

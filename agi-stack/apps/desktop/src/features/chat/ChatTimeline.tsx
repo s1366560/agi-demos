@@ -82,7 +82,7 @@ import {
   formatTimelineTime,
   isImportantTimelineItem,
   isTimelineItemInitiallyExpanded,
-  timelineComputerUseScreenshot,
+  timelineComputerUseScreenshots,
   timelineDetailLineCount,
   timelineFileMetadata,
   timelineHasDetails,
@@ -928,10 +928,10 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
   const input = pair.call.toolInput;
   const output = pair.result?.toolOutput ?? pair.result?.payload;
   const resultItem = pair.result ?? (pair.call.type === 'observe' ? pair.call : null);
-  const computerScreenshot =
+  const computerScreenshots =
     resultItem && !resultItem.isError && !resultItem.error
-      ? timelineComputerUseScreenshot(resultItem)
-      : null;
+      ? timelineComputerUseScreenshots(resultItem)
+      : [];
   return (
     <div className="timeline-details">
       {display?.summary ? (
@@ -940,7 +940,9 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
         </Text>
       ) : null}
       {fileMetadata ? <ToolFileMetadataView metadata={fileMetadata} /> : null}
-      {computerScreenshot ? <ToolComputerUseScreenshotView screenshot={computerScreenshot} /> : null}
+      {computerScreenshots.map((screenshot, index) => (
+        <ToolComputerUseScreenshotView key={screenshot.artifactId ?? index} screenshot={screenshot} />
+      ))}
       {resultItem ? <ToolComputerUseAudioView item={resultItem} /> : null}
       {display?.details !== undefined ? (
         <TimelinePayloadBlock
@@ -954,7 +956,7 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
       {resultItem ? (
         <PlatformPluginToolResultSlots
           resultId={resultItem.id}
-          presentation={projectToolOutputPresentationV2({kind:toolCallPresentationKind(pair),output,details:display?.details,summary:display?.summary})}
+          presentation={projectToolOutputPresentationV2({kind:toolCallPresentationKind(pair),output,display:pair.result?.display,details:display?.details,summary:display?.summary})}
           toolName={resultItem.toolName ?? pair.call.toolName ?? ''}
           status={timelineToolResultStatus(resultItem)}
           kind={toolCallPresentationKind(pair)}
@@ -1296,7 +1298,7 @@ function TimelineItemBody({
         {item.type === 'observe' ? (
           <PlatformPluginToolResultSlots
             resultId={item.id}
-            presentation={projectToolOutputPresentationV2({kind:toolCallPresentationKind({call:item,result:item}),output:item.toolOutput,details:display?.details,summary:display?.summary})}
+            presentation={projectToolOutputPresentationV2({kind:toolCallPresentationKind({call:item,result:item}),output:item.toolOutput,display:item.display,details:display?.details,summary:display?.summary})}
             toolName={item.toolName ?? ''}
             status={timelineToolResultStatus(item)}
             kind={toolCallPresentationKind({ call: item, result: null })}

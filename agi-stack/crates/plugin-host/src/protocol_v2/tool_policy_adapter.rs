@@ -15,9 +15,9 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use super::{
+    tool_argument_validation::ToolArgumentValidator,
     tool_policy::{
-        validate_tool_arguments_v2, TrustedToolPolicyV2, TOOLS_BEFORE_EXECUTE_EVENT_V2,
-        TOOLS_RESULT_TRANSFORM_EVENT_V2,
+        TrustedToolPolicyV2, TOOLS_BEFORE_EXECUTE_EVENT_V2, TOOLS_RESULT_TRANSFORM_EVENT_V2,
     },
     ScopeKindV2, ScopeV2,
 };
@@ -28,6 +28,7 @@ pub struct GenerationToolExecutionPolicyV2 {
     scope: ScopeV2,
     operation_id: String,
     generation_digest: String,
+    arguments: ToolArgumentValidator,
 }
 
 impl GenerationToolExecutionPolicyV2 {
@@ -42,6 +43,7 @@ impl GenerationToolExecutionPolicyV2 {
             scope,
             operation_id,
             generation_digest,
+            arguments: ToolArgumentValidator::default(),
         }
     }
 
@@ -106,9 +108,12 @@ impl ToolExecutionPolicy for GenerationToolExecutionPolicyV2 {
             .to_owned();
         match result["decision"]["kind"].as_str() {
             Some("allow") => {
-                validate_tool_arguments_v2(schema, &result["arguments"]).map_err(|_| {
-                    CoreError::Tool("rewritten tool arguments violate input schema".into())
-                })?;
+                self.arguments
+                    .validate(schema, &result["arguments"])
+                    .await
+                    .map_err(|_| {
+                        CoreError::Tool("rewritten tool arguments violate input schema".into())
+                    })?;
                 Ok(ToolPolicyDecision::Allow {
                     input_json: result["arguments"].to_string(),
                 })
@@ -175,7 +180,12 @@ impl ToolExecutionPolicy for GenerationToolExecutionPolicyV2 {
             // This transform contract can rewrite text, but cannot transform images.
             // Only the unchanged accepted result retains its owned attachments.
             media: if result["result"]["output"].as_str() == Some(&original_output)
-                && result["result"]["is_error"].as_bool() == Some(false) { media } else { Vec::new() },
+                && result["result"]["is_error"].as_bool() == Some(false)
+            {
+                media
+            } else {
+                Vec::new()
+            },
         })
     }
 }

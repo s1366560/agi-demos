@@ -164,9 +164,11 @@ async def recorded_completion_stream_v2(
     completion: Callable[..., Awaitable[Any]],
     kwargs: dict[str, Any],
     recorder: ModelRequestRecorderV2 | None,
+    *,
+    owned_transport: bool = False,
 ) -> AsyncGenerator[Any, None]:
     """Record actual serialized HTTP bodies after all provider transformations."""
-    if recorder is None:
+    if recorder is None and not owned_transport:
         async with aclosing(_consume_completion_v2(completion, kwargs, None)) as source:
             async for chunk in source:
                 yield chunk

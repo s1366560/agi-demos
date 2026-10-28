@@ -11,7 +11,10 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.native_computer_use.permission_result import PermissionRequired
 
 
 class ToolControlOutcome(str, Enum):
@@ -34,6 +37,7 @@ class ToolAttachment:
     name: str
     content: bytes | str = field(repr=False)
     mime_type: str = "application/octet-stream"
+    native_request_id: str | None = None
 
 
 @dataclass
@@ -63,6 +67,7 @@ class ToolResult:
     original_bytes: int | None = None
     full_output_path: str | None = None
     control_outcome: ToolControlOutcome | None = None
+    permission_required: PermissionRequired | None = None
     control_wait: Callable[[], Awaitable[ToolControlOutcome | None]] | None = field(
         default=None, repr=False, compare=False
     )

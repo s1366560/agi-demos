@@ -1,19 +1,21 @@
 #!/bin/zsh
 set -eo pipefail
 cd "$(dirname "$0")"
+shared=(../Sources/LockedUseLease.swift ../Sources/LockedUseWire.swift ../Sources/LockedUseSigning.swift ../Sources/LockedUseInputProtection.swift ../Sources/LockedUseCoverage.swift)
+activation=(../Sources/LockedUseActivation.swift ../Sources/LockedUseWire.swift)
 mkdir -p ../bin/locked-use/MemStackComputerUseAuthorizationPlugin.bundle/Contents/MacOS
 if [ "$MEMSTACK_CUA_UNIVERSAL" = "1" ]; then
   for arch in arm64 x86_64; do
-    swiftc -swift-version 5 -target "$arch-apple-macos14.4" -O -o "../bin/locked-use/guardian-$arch" Guardian/main.swift
-    swiftc -swift-version 5 -target "$arch-apple-macos14.4" -O -o "../bin/locked-use/installer-$arch" Installer/main.swift
+    swiftc -swift-version 5 -target "$arch-apple-macos14.4" -O -o "../bin/locked-use/guardian-$arch" $shared Guardian/*.swift
+    swiftc -swift-version 5 -target "$arch-apple-macos14.4" -O -o "../bin/locked-use/installer-$arch" $activation Installer/*.swift
   done
   lipo -create ../bin/locked-use/guardian-arm64 ../bin/locked-use/guardian-x86_64 -output ../bin/locked-use/memstack-cua-guardian
   lipo -create ../bin/locked-use/installer-arm64 ../bin/locked-use/installer-x86_64 -output ../bin/locked-use/memstack-cua-lock-installer
   rm ../bin/locked-use/guardian-arm64 ../bin/locked-use/guardian-x86_64 ../bin/locked-use/installer-arm64 ../bin/locked-use/installer-x86_64
   clang -arch arm64 -arch x86_64 -mmacosx-version-min=14.4 -fobjc-arc -bundle -O2 -framework Foundation -framework Security -lbsm AuthorizationPlugin/AuthorizationPlugin.m -o ../bin/locked-use/MemStackComputerUseAuthorizationPlugin.bundle/Contents/MacOS/MemStackComputerUseAuthorizationPlugin
 else
-  swiftc -swift-version 5 -O -o ../bin/locked-use/memstack-cua-guardian Guardian/main.swift
-  swiftc -swift-version 5 -O -o ../bin/locked-use/memstack-cua-lock-installer Installer/main.swift
+  swiftc -swift-version 5 -O -o ../bin/locked-use/memstack-cua-guardian $shared Guardian/*.swift
+  swiftc -swift-version 5 -O -o ../bin/locked-use/memstack-cua-lock-installer $activation Installer/*.swift
   clang -fobjc-arc -bundle -O2 -framework Foundation -framework Security -lbsm AuthorizationPlugin/AuthorizationPlugin.m -o ../bin/locked-use/MemStackComputerUseAuthorizationPlugin.bundle/Contents/MacOS/MemStackComputerUseAuthorizationPlugin
 fi
 cat > ../bin/locked-use/MemStackComputerUseAuthorizationPlugin.bundle/Contents/Info.plist <<'PLIST'

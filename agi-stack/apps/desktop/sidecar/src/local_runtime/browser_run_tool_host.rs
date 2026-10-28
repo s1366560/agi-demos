@@ -27,13 +27,16 @@ use std::{
 };
 
 use agistack_adapters_browser::{
+    facade::{self, TOOL_CDP as TOOL_FACADE_CDP, TOOL_WRITE as TOOL_FACADE_WRITE},
     actions::{
         TOOL_CLAIM_TAB, TOOL_CLICK, TOOL_MARK_TAB, TOOL_NAVIGATE, TOOL_NEW_TAB, TOOL_SCROLL,
         TOOL_TYPE,
     },
     host::{BridgeEndpoint, BrowserToolHost, TOOL_CDP_RAW, TOOL_SCREENSHOT},
 };
-use agistack_core::ports::{CoreError, CoreResult, ToolHost};
+use agistack_core::ports::{
+    CoreError, CoreResult, PermissionKind, PermissionRequired, ToolHost, ToolResult,
+};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde_json::{json, Value};
@@ -47,6 +50,12 @@ use super::{
     provider_credentials::SiteCredentialBroker,
     session_store::DesktopSessionStore,
 };
+
+#[path = "cloud_browser_tool_host.rs"]
+mod cloud;
+#[path = "browser_auth_host.rs"]
+mod auth;
+pub(super) use cloud::{BrowserStepAuthority, CloudBrowserToolHost};
 
 /// The wrapper-composed credential fill tool (M3). Implemented here (not in
 /// the browser crate) because the vault, the consent matrix, and the
@@ -64,6 +73,8 @@ const GATED_BROWSER_TOOLS: &[&str] = &[
     TOOL_CLAIM_TAB,
     TOOL_MARK_TAB,
     TOOL_CDP_RAW,
+    TOOL_FACADE_WRITE,
+    TOOL_FACADE_CDP,
 ];
 
 const DECLINE_HINT: &str = "The user declined this origin. Do not retry or work around.";
@@ -103,10 +114,15 @@ pub(super) struct BrowserRunToolHost<E: BridgeEndpoint> {
     inner: Arc<BrowserToolHost<E>>,
     session_store: DesktopSessionStore,
     run: Option<DesktopRun>,
+    owner: Option<super::auth_context::AuthenticatedContext>,
     once_consents: BrowserOnceConsents,
     full_cdp_enabled: bool,
     site_credentials: SiteCredentialBroker,
     screenshot_dir: Option<PathBuf>,
+    file_roots: Vec<PathBuf>,
+    blocked_file_roots: Vec<PathBuf>,
+    artifact_root: Option<PathBuf>,
+    browser_auth: Option<super::browser_auth::BrowserAuthBroker>,
 }
 
 impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
@@ -119,15 +135,57 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
         site_credentials: SiteCredentialBroker,
         screenshot_dir: Option<PathBuf>,
     ) -> Self {
+        let file_roots = run.as_ref().and_then(|run| run.environment.as_ref())
+            .map(|environment| vec![PathBuf::from(&environment.workspace_path)]).unwrap_or_default();
+        let artifact_root = screenshot_dir.as_ref().and_then(|path| path.parent())
+            .map(|parent| parent.join("browser-downloads"));
         Self {
             inner,
             session_store,
+            owner: run.as_ref().and_then(|_| super::knowledge_authority_v2::agent_access::current_auth()),
             run,
             once_consents,
             full_cdp_enabled,
             site_credentials,
             screenshot_dir,
+            file_roots,
+            blocked_file_roots: Vec::new(),
+            artifact_root,
+            browser_auth: None,
         }
+    }
+
+    pub(super) fn with_file_roots(mut self, roots: Vec<PathBuf>) -> Self { self.file_roots = roots; self }
+    pub(super) fn with_blocked_file_roots(mut self, roots: Vec<PathBuf>) -> Self { self.blocked_file_roots = roots; self }
+    pub(super) fn with_artifact_root(mut self, root: PathBuf) -> Self { self.artifact_root = Some(root); self }
+    pub(super) fn with_browser_auth(mut self, broker: super::browser_auth::BrowserAuthBroker) -> Self { self.browser_auth = Some(broker); self }
+
+    fn validate_owner(&self) -> CoreResult<()> {
+        if self.owner.as_ref().is_some_and(|owner| !self.session_store
+            .session_context_is_current(owner, chrono::Utc::now().timestamp_millis())
+            .unwrap_or(false)) {
+            return Err(CoreError::Tool("browser owner session is no longer current".into()));
+        }
+        Ok(())
+    }
+
+    fn inject_file_authority(&self, input: &mut Value, run_id: &str) -> CoreResult<()> {
+        let object = input.as_object_mut().ok_or_else(|| CoreError::Tool("browser input must be an object".into()))?;
+        for key in ["_authorized_file_roots", "_blocked_file_roots", "_artifact_root"] { object.remove(key); }
+        let configured = super::execution_authority::current_file_roots().unwrap_or_else(|| self.file_roots.clone());
+        let roots: Vec<_> = configured.iter().filter_map(|root| root.canonicalize().ok()).collect();
+        let blocked: Vec<_> = self.blocked_file_roots.iter().filter_map(|root| root.canonicalize().ok()).collect();
+        object.insert("_authorized_file_roots".into(), json!(roots));
+        object.insert("_blocked_file_roots".into(), json!(blocked));
+        let root = super::execution_authority::current_download_root().or_else(|| self.artifact_root.clone());
+        if let Some(root) = root {
+            // UUID v5 makes the trusted run id an opaque path component.
+            let directory = root.join(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, run_id.as_bytes()).to_string());
+            std::fs::create_dir_all(&directory).map_err(|_| CoreError::Tool("browser artifact directory is unavailable".into()))?;
+            let directory = directory.canonicalize().map_err(|_| CoreError::Tool("browser artifact directory is unavailable".into()))?;
+            object.insert("_artifact_root".into(), json!(directory));
+        }
+        Ok(())
     }
 
     /// Resolve the consent origin for a mutating call: `browser_navigate`
@@ -135,6 +193,15 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
     /// tab-bound tools gate on the tab's current URL. `None` means the call
     /// carries no consent origin (about:blank, non-http(s), no url arg).
     async fn resolve_origin(&self, tool: &str, input: &Value) -> CoreResult<Option<String>> {
+        if matches!(tool, TOOL_FACADE_WRITE | TOOL_FACADE_CDP) && input.get("tabId").is_none()
+            && input.get("operation").and_then(Value::as_str).is_some_and(|operation| operation == "nameSession" || operation.starts_with("capability.management.") || operation.starts_with("capability.visibility.") || operation.starts_with("capability.viewport.")) {
+            return Ok(None);
+        }
+        if matches!(tool, TOOL_FACADE_WRITE | TOOL_FACADE_CDP)
+            && matches!(input.get("operation").and_then(Value::as_str), Some("tabs.new" | "tab.goto")) {
+            let url = input.pointer("/args/0").and_then(Value::as_str).ok_or_else(|| CoreError::Tool("navigation requires a URL".into()))?;
+            return Ok(origin_host(url));
+        }
         match tool {
             TOOL_NAVIGATE | TOOL_NEW_TAB => {
                 let Some(url) = input.get("url").and_then(Value::as_str) else {
@@ -148,7 +215,7 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
                         "tool '{tool}' requires a numeric 'tabId' for origin consent"
                     ))
                 })?;
-                let url = self.inner.current_url(tab_id).await?;
+                let url = self.inner.current_url_for_input(input, tab_id).await?;
                 Ok(origin_host(&url))
             }
         }
@@ -195,20 +262,25 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
 
     /// Gate one mutating call. `Ok(None)` allows; `Ok(Some(result))` is the
     /// tool RESULT the model receives (decline or consent-required).
-    fn gate(&self, tool: &str, origin: Option<String>) -> CoreResult<Option<String>> {
+    fn gate(
+        &self,
+        tool: &str,
+        origin: Option<String>,
+        original_input: &str,
+    ) -> CoreResult<Option<ToolResult>> {
         let Some(host) = origin else {
             return Ok(None);
         };
         match self.persisted_verdict(&host)? {
             Some(false) => {
-                return Ok(Some(
+                return Ok(Some(ToolResult::text(
                     json!({
                         "error": "origin_declined",
                         "origin": host,
                         "hint": DECLINE_HINT,
                     })
                     .to_string(),
-                ));
+                )));
             }
             Some(true) => return Ok(None),
             None => {}
@@ -217,13 +289,17 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
             return Ok(None);
         }
         Ok(Some(
-            json!({
-                "error": "origin_consent_required",
-                "origin": host,
-                "tool": tool,
-                "hint": CONSENT_HINT,
-            })
-            .to_string(),
+            PermissionRequired::new(
+                PermissionKind::BrowserOrigin,
+                super::execution_authority::permission_binding(tool, original_input)?,
+                json!({
+                    "error": "origin_consent_required",
+                    "origin": host,
+                    "tool": tool,
+                    "hint": CONSENT_HINT,
+                }),
+            )
+            .into_result(),
         ))
     }
 
@@ -231,24 +307,33 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
     /// enablement first, then the persisted per-origin capability decision
     /// (decline blocks, site allows), then the run-scoped once cache. There
     /// is no all-sites scope for full CDP.
-    fn full_cdp_gate(&self, origin: Option<String>) -> CoreResult<Option<String>> {
+    fn full_cdp_gate(
+        &self,
+        tool: &str,
+        origin: Option<String>,
+        original_input: &str,
+    ) -> CoreResult<Option<ToolResult>> {
         if !self.full_cdp_enabled {
-            return Ok(Some(
+            return Ok(Some(ToolResult::text(
                 json!({
                     "error": "full_cdp_disabled",
                     "hint": FULL_CDP_DISABLED_HINT,
                 })
                 .to_string(),
-            ));
+            )));
         }
         let Some(host) = origin else {
             return Ok(Some(
-                json!({
-                    "error": "full_cdp_consent_required",
-                    "origin": Value::Null,
-                    "hint": FULL_CDP_CONSENT_HINT,
-                })
-                .to_string(),
+                PermissionRequired::new(
+                    PermissionKind::BrowserFullCdp,
+                    super::execution_authority::permission_binding(tool, original_input)?,
+                    json!({
+                        "error": "full_cdp_consent_required",
+                        "origin": Value::Null,
+                        "hint": FULL_CDP_CONSENT_HINT,
+                    }),
+                )
+                .into_result(),
             ));
         };
         let decisions = self
@@ -259,14 +344,14 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
             .iter()
             .any(|grant| grant.decision == BrowserCapabilityDecision::Decline)
         {
-            return Ok(Some(
+            return Ok(Some(ToolResult::text(
                 json!({
                     "error": "full_cdp_declined",
                     "origin": host,
                     "hint": DECLINE_HINT,
                 })
                 .to_string(),
-            ));
+            )));
         }
         if decisions
             .iter()
@@ -278,12 +363,16 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
             return Ok(None);
         }
         Ok(Some(
-            json!({
-                "error": "full_cdp_consent_required",
-                "origin": host,
-                "hint": FULL_CDP_CONSENT_HINT,
-            })
-            .to_string(),
+            PermissionRequired::new(
+                PermissionKind::BrowserFullCdp,
+                super::execution_authority::permission_binding(tool, original_input)?,
+                json!({
+                    "error": "full_cdp_consent_required",
+                    "origin": host,
+                    "hint": FULL_CDP_CONSENT_HINT,
+                }),
+            )
+            .into_result(),
         ))
     }
 
@@ -293,8 +382,12 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
     /// is loaded and a fill script is composed and executed through the inner
     /// host. The password never appears in the tool result — only the list of
     /// filled field kinds is returned.
-    async fn fill_credentials(&self, input: &Value) -> CoreResult<String> {
-        let tab_id = input.get("tabId").and_then(Value::as_i64).ok_or_else(|| {
+    async fn fill_credentials(
+        &self,
+        input: &Value,
+        original_input: &str,
+    ) -> CoreResult<ToolResult> {
+        let _tab_id = input.get("tabId").and_then(Value::as_i64).ok_or_else(|| {
             CoreError::Tool(format!(
                 "tool '{TOOL_FILL_CREDENTIALS}' requires a numeric 'tabId'"
             ))
@@ -309,17 +402,44 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
                     "tool '{TOOL_FILL_CREDENTIALS}' requires a bare-host 'origin'"
                 ))
             })?;
-        let username = input.get("username").and_then(Value::as_str);
-        if let Some(result) = self.gate(TOOL_FILL_CREDENTIALS, Some(origin.clone()))? {
+        if let Some(result) =
+            self.gate(TOOL_FILL_CREDENTIALS, Some(origin.clone()), original_input)?
+        {
             return Ok(result);
         }
         if !self.once_consent_active(&credential_fill_once_key(&origin)) {
-            return Ok(json!({
-                "error": "credential_fill_consent_required",
-                "origin": origin,
-                "hint": CREDENTIAL_FILL_CONSENT_HINT,
-            })
-            .to_string());
+            return Ok(PermissionRequired::new(
+                PermissionKind::BrowserCredentialFill,
+                super::execution_authority::permission_binding(
+                    TOOL_FILL_CREDENTIALS,
+                    original_input,
+                )?,
+                json!({
+                    "error": "credential_fill_consent_required",
+                    "origin": origin,
+                    "hint": CREDENTIAL_FILL_CONSENT_HINT,
+                }),
+            )
+            .into_result());
+        }
+        self.fill_credentials_after_consent(input)
+            .await
+            .map(ToolResult::text)
+    }
+
+    /// Called only after the local or authenticated cloud authority has admitted
+    /// this exact credential-fill step. The vault and page checks stay local.
+    async fn fill_credentials_after_consent(&self, input: &Value) -> CoreResult<String> {
+        let tab_id = input.get("tabId").and_then(Value::as_i64)
+            .ok_or_else(|| CoreError::Tool("credential fill requires a numeric tabId".into()))?;
+        let origin = input.get("origin").and_then(Value::as_str)
+            .map(|origin| origin.trim().to_lowercase()).filter(|origin| !origin.is_empty())
+            .ok_or_else(|| CoreError::Tool("credential fill requires a bare-host origin".into()))?;
+        let username = input.get("username").and_then(Value::as_str);
+        let current_url = self.inner.current_url_for_input(input, tab_id).await?;
+        self.validate_owner()?;
+        if origin_host(&current_url).as_deref() != Some(origin.as_str()) {
+            return Ok(json!({"error":"credential_origin_mismatch"}).to_string());
         }
         let metadata = self
             .session_store
@@ -343,13 +463,14 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
             })
             .to_string());
         };
-        let script = credential_fill_script(&secret.username, &secret.password);
+        let script = format!("(() => {{ if (location.hostname.toLowerCase() !== {}) throw new Error('credential origin changed'); return {}; }})()", serde_json::to_string(&origin).map_err(|error| CoreError::Tool(error.to_string()))?, credential_fill_script(&secret.username, &secret.password));
         let raw = self
             .inner
             .call(
                 TOOL_CDP_RAW,
                 &json!({
                     "tabId": tab_id,
+                    "backend": input.get("backend").cloned().unwrap_or(json!("chrome")),
                     "method": "Runtime.evaluate",
                     "params": { "expression": script, "returnByValue": true },
                 })
@@ -450,14 +571,14 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
     /// lookup and the write itself never fail the tool call. The target
     /// summary is a compact sanitized handle (CDP method, snapshot ref, host)
     /// — never an input value.
-    async fn record_audit(
+    fn record_audit(
         &self,
         tool: &str,
         input: Option<&Value>,
-        result: &CoreResult<String>,
+        origin: Option<String>,
+        result: &CoreResult<ToolResult>,
         started: Instant,
     ) {
-        let origin = self.audit_origin(tool, input).await;
         let target_summary = audit_target_summary(tool, input, origin.as_deref());
         let outcome = audit_outcome(result);
         let run_id = self.run.as_ref().map(|run| run.id.clone());
@@ -476,9 +597,11 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
 
     /// Best-effort audit origin: the argument URL for navigation tools, the
     /// declared origin for credential fills, the tab's current URL for
-    /// tab-bound tools (cache-backed after the first resolution). Never
+    /// tab-bound read tools. Mutating calls reuse their authorization origin.
+    /// Only an already-bound backend can be inspected here. Never
     /// fails; an unresolvable origin audits as NULL.
     async fn audit_origin(&self, tool: &str, input: Option<&Value>) -> Option<String> {
+        self.validate_owner().ok()?;
         let input = input?;
         match tool {
             TOOL_NAVIGATE | TOOL_NEW_TAB => input
@@ -492,7 +615,7 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
                 .filter(|origin| !origin.is_empty()),
             _ => {
                 let tab_id = input.get("tabId").and_then(Value::as_i64)?;
-                let url = self.inner.current_url(tab_id).await.ok()?;
+                let url = self.inner.current_url_for_input(input, tab_id).await.ok()?;
                 origin_host(&url)
             }
         }
@@ -531,22 +654,22 @@ fn audit_target_summary(tool: &str, input: Option<&Value>, origin: Option<&str>)
     summary.chars().take(200).collect()
 }
 
-/// The audit outcome for one call: consent short-circuits and declines are
-/// Ok tool results, so the outcome is read off the result payload; a
-/// transport/execution failure (Err) audits as `error`.
-fn audit_outcome(result: &CoreResult<String>) -> &'static str {
+/// Only trusted gate metadata identifies pending permission. Application error
+/// payloads stay ordinary outcomes; transport/execution failures audit as error.
+fn audit_outcome(result: &CoreResult<ToolResult>) -> &'static str {
     let Ok(output) = result else {
         return "error";
     };
-    let Ok(parsed) = serde_json::from_str::<Value>(output) else {
+    if output.permission_required.is_some() {
+        return "consent_required";
+    }
+    let Ok(parsed) = serde_json::from_str::<Value>(&output.output_json) else {
         return "ok";
     };
     let Some(error) = parsed.get("error").and_then(Value::as_str) else {
         return "ok";
     };
-    if error.contains("consent_required") {
-        "consent_required"
-    } else if error.contains("declined") {
+    if matches!(error, "origin_declined" | "full_cdp_declined") {
         "declined"
     } else {
         "error"
@@ -651,21 +774,47 @@ impl<E: BridgeEndpoint> ToolHost for BrowserRunToolHost<E> {
     }
 
     async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
+        self.call_with_content(tool, input_json)
+            .await
+            .map(|result| result.output_json)
+    }
+
+    async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<ToolResult> {
         let started = Instant::now();
         let audit_input: Option<Value> = if input_json.trim().is_empty() {
             Some(json!({}))
         } else {
             serde_json::from_str(input_json).ok()
         };
-        let result = self.dispatch(tool, input_json).await;
-        self.record_audit(tool, audit_input.as_ref(), &result, started)
+        let mut bound_input = None;
+        let mut resolved_origin = None;
+        let result = self
+            .dispatch(tool, input_json, &mut bound_input, &mut resolved_origin)
             .await;
+        let origin = match resolved_origin {
+            Some(origin) => origin,
+            None => self.audit_origin(tool, bound_input.as_ref()).await,
+        };
+        self.record_audit(
+            tool,
+            bound_input.as_ref().or(audit_input.as_ref()),
+            origin,
+            &result,
+            started,
+        );
         result
     }
 }
 
 impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
-    async fn dispatch(&self, tool: &str, input_json: &str) -> CoreResult<String> {
+    async fn dispatch(
+        &self,
+        tool: &str,
+        input_json: &str,
+        bound_input: &mut Option<Value>,
+        resolved_origin: &mut Option<Option<String>>,
+    ) -> CoreResult<ToolResult> {
+        self.validate_owner()?;
         let mut input: Value = if input_json.trim().is_empty() {
             json!({})
         } else {
@@ -673,41 +822,69 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
                 Ok(input) => input,
                 // Let the inner host produce its own invalid-input error.
                 Err(_) if tool != TOOL_FILL_CREDENTIALS => {
-                    return self.inner.call(tool, input_json).await;
+                    return self.inner.call_with_content(tool, input_json).await;
                 }
                 Err(error) => {
                     return Err(CoreError::Tool(format!("invalid tool input json: {error}")));
                 }
             }
         };
+        if matches!(tool, facade::TOOL_READ | TOOL_FACADE_WRITE | TOOL_FACADE_CDP) {
+            if facade::operation_effect(&input)?.tool() != tool {
+                return Err(CoreError::Tool("browser operation authority does not match its effect".into()));
+            }
+            input = facade::normalize_input(&input)?;
+        }
+        input = self.inner.bind_input(tool, &input).await?;
+        *bound_input = Some(input.clone());
+        self.validate_owner()?;
         if let (Some(run), Value::Object(map)) = (self.run.as_ref(), &mut input) {
             map.insert("_run_id".to_string(), json!(run.id));
         }
+        self.inject_file_authority(&mut input, self.run.as_ref().map(|run|run.id.as_str()).unwrap_or("unbound"))?;
         if tool == TOOL_FILL_CREDENTIALS {
-            return self.fill_credentials(&input).await;
+            return self.fill_credentials(&input, input_json).await;
         }
         if GATED_BROWSER_TOOLS.contains(&tool) {
+            // A failed authorization lookup must not be retried for audit: a
+            // second lookup could observe a different page after the denial.
+            *resolved_origin = Some(None);
             let origin = self.resolve_origin(tool, &input).await?;
-            if let Some(result) = self.gate(tool, origin.clone())? {
+            *resolved_origin = Some(origin.clone());
+            self.validate_owner()?;
+            if let Some(result) = self.gate(tool, origin.clone(), input_json)? {
                 return Ok(result);
             }
-            if tool == TOOL_CDP_RAW {
-                if let Some(result) = self.full_cdp_gate(origin)? {
+            if matches!(tool, TOOL_CDP_RAW | TOOL_FACADE_CDP) {
+                if let Some(result) = self.full_cdp_gate(tool, origin, input_json)? {
                     return Ok(result);
                 }
             }
         }
-        let output = self
+        if input["operation"] == "capability.browserAuth.request" {
+            return self.request_browser_auth(&input)
+                .await
+                .map(ToolResult::text);
+        }
+        self.validate_owner()?;
+        let mut output = self
             .inner
-            .call(
+            .call_with_content(
                 tool,
                 &serde_json::to_string(&input).map_err(|error| {
                     CoreError::Tool(format!("failed to encode tool input: {error}"))
                 })?,
             )
             .await?;
+        self.validate_owner()?;
         if tool == TOOL_SCREENSHOT {
-            return Ok(self.deliver_screenshot(&input, &output));
+            output.output_json = self.deliver_screenshot(&input, &output.output_json);
+            return Ok(output);
+        }
+        if input["operation"] == "capabilities.list" && input.get("tabId").is_some() && self.browser_auth.is_some() && self.run.is_some() {
+            let mut capabilities: Value = serde_json::from_str(&output.output_json).map_err(|_| CoreError::Tool("invalid browser capabilities".into()))?;
+            if let Some(capabilities) = capabilities.as_array_mut() { capabilities.push(json!("browserAuth")); }
+            output.output_json = capabilities.to_string();
         }
         Ok(output)
     }
@@ -774,12 +951,12 @@ mod tests {
     /// every request is recorded behind a shared handle.
     struct MockEndpoint {
         responses: Mutex<HashMap<String, VecDeque<CoreResult<Value>>>>,
-        requests: Arc<Mutex<Vec<(String, Value)>>>,
+        requests: Arc<Mutex<Vec<(String, String, Value)>>>,
         notifications: broadcast::Sender<BridgeNotification>,
     }
 
     #[derive(Clone)]
-    struct MockRequests(Arc<Mutex<Vec<(String, Value)>>>);
+    struct MockRequests(Arc<Mutex<Vec<(String, String, Value)>>>);
 
     impl MockRequests {
         fn count(&self, method: &str) -> usize {
@@ -787,7 +964,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .iter()
-                .filter(|(m, _)| m == method)
+                .filter(|(_, m, _)| m == method)
                 .count()
         }
 
@@ -796,8 +973,18 @@ mod tests {
                 .lock()
                 .unwrap()
                 .iter()
-                .filter(|(m, _)| m == method)
-                .map(|(_, params)| params.clone())
+                .filter(|(_, m, _)| m == method)
+                .map(|(_, _, params)| params.clone())
+                .collect()
+        }
+
+        fn backends_of(&self, method: &str) -> Vec<String> {
+            self.0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(_, m, _)| m == method)
+                .map(|(backend, _, _)| backend.clone())
                 .collect()
         }
     }
@@ -822,15 +1009,12 @@ mod tests {
         fn requests(&self) -> MockRequests {
             MockRequests(Arc::clone(&self.requests))
         }
-    }
 
-    #[async_trait]
-    impl BridgeEndpoint for MockEndpoint {
-        async fn request(&self, method: &str, params: Value) -> CoreResult<Value> {
+        fn scripted_request(&self, backend: &str, method: &str, params: Value) -> CoreResult<Value> {
             self.requests
                 .lock()
                 .unwrap()
-                .push((method.to_string(), params));
+                .push((backend.to_string(), method.to_string(), params));
             let mut responses = self.responses.lock().unwrap();
             let queue = responses
                 .get_mut(method)
@@ -838,6 +1022,17 @@ mod tests {
             queue
                 .pop_front()
                 .unwrap_or_else(|| panic!("scripted responses for {method} exhausted"))
+        }
+    }
+
+    #[async_trait]
+    impl BridgeEndpoint for MockEndpoint {
+        async fn request(&self, method: &str, params: Value) -> CoreResult<Value> {
+            self.scripted_request("chrome", method, params)
+        }
+
+        async fn request_on(&self, backend: &str, method: &str, params: Value) -> CoreResult<Value> {
+            self.scripted_request(backend, method, params)
         }
 
         fn subscribe_notifications(&self) -> broadcast::Receiver<BridgeNotification> {
@@ -1353,8 +1548,8 @@ mod tests {
             host.call(TOOL_CLAIM_TAB, r#"{"tabId":7}"#).await.is_err(),
             "the tool grant cannot execute a second action"
         );
-        // Both calls resolved the origin (the second via the URL cache).
-        assert_eq!(requests.count(METHOD_GET_TABS), 1);
+        // Each action checks the live URL; consent retries cannot trust a cache.
+        assert_eq!(requests.count(METHOD_GET_TABS), 2);
     }
 
     #[test]
@@ -1577,6 +1772,7 @@ mod tests {
 
     fn fill_endpoint(filled: Value) -> MockEndpoint {
         MockEndpoint::new()
+            .script(METHOD_GET_TABS, vec![ok(tabs_with(7, "https://foo.test"))])
             .script(METHOD_ATTACH, vec![ok(json!({}))])
             .script(
                 METHOD_EXECUTE_CDP,
@@ -1685,7 +1881,7 @@ mod tests {
 
     #[tokio::test]
     async fn fill_credentials_without_a_stored_credential_returns_not_found() {
-        let endpoint = MockEndpoint::new();
+        let endpoint = claim_tab_endpoint("https://foo.test");
         let fixture = build_fixture(endpoint);
         grant_origin(&fixture, "foo.test");
         consent_credential_fill(&fixture, "foo.test");
@@ -1716,7 +1912,6 @@ mod tests {
             METHOD_GET_TABS,
             vec![
                 ok(tabs_with(7, "https://foo.test")),
-                Err(CoreError::Tool("bridge offline".to_string())),
                 Err(CoreError::Tool("bridge offline".to_string())),
             ],
         );
@@ -1926,4 +2121,7 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(directory);
     }
+
+    include!("browser_run_audit_tests.rs");
+    include!("browser_permission_provenance_tests.rs");
 }

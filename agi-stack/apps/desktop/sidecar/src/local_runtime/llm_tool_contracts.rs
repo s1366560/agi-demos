@@ -2,6 +2,10 @@ use super::*;
 
 #[async_trait]
 impl LlmPort for MeteredLlm {
+    fn supports_audio_input(&self) -> bool {
+        self.inner.supports_audio_input()
+    }
+
     async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
         let started_at = std::time::Instant::now();
         let result = self.inner.extract_memory(episode).await;
@@ -78,6 +82,12 @@ impl LlmPort for MeteredLlm {
 
 #[async_trait]
 impl LlmPort for FailoverLlm {
+    fn supports_audio_input(&self) -> bool {
+        self.candidates
+            .first()
+            .is_some_and(|candidate| candidate.supports_audio_input())
+    }
+
     async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
         self.attempt(|candidate| async move { candidate.extract_memory(episode).await })
             .await
@@ -105,17 +115,9 @@ impl LlmPort for FailoverLlm {
         };
         let mut last_error = None;
         for candidate in &self.candidates {
-            let result = tokio::time::timeout(
-                self.candidate_timeout,
-                candidate.decide_with_tools_stream(goal, round, transcript, tools, &forward),
-            )
-            .await
-            .unwrap_or_else(|_| {
-                Err(CoreError::Llm(format!(
-                    "model_timeout: LLM routing candidate exceeded {} ms",
-                    self.candidate_timeout.as_millis()
-                )))
-            });
+            let result = candidate
+                .decide_with_tools_stream(goal, round, transcript, tools, &forward)
+                .await;
             match result {
                 Ok(action) => return Ok(action),
                 // Never join an already visible partial answer to another provider's answer.
@@ -191,7 +193,12 @@ impl LlmPort for AnthropicAgentLlm {
         })
         .to_string();
         let mut answer = agistack_adapters_http_llm::AgentAnswerStream::default();
-        let media = transcript.iter().rev().find(|entry| !entry.media.is_empty()).map(|entry| entry.media.as_slice()).unwrap_or(&[]);
+        let media = transcript
+            .iter()
+            .rev()
+            .find(|entry| !entry.media.is_empty())
+            .map(|entry| entry.media.as_slice())
+            .unwrap_or(&[]);
         let raw = self.inner.complete_with_media_stream(
             "You are a ReAct agent. Respond with ONLY JSON: {\"kind\":\"finish\",\"answer\":string} or {\"kind\":\"call_tool\",\"tool\":string,\"input_json\":string}.",
             user,

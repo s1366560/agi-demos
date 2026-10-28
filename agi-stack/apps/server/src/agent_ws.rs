@@ -10,6 +10,7 @@
 //! the same WebSocket transport without broad workspace endpoint takeover.
 
 pub(crate) mod subscriptions;
+mod hitl_identity;
 use std::{
     collections::HashMap,
     sync::{
@@ -977,7 +978,32 @@ async fn run_agent_message(
             .clone()
             .with_tool_host(bound.tools.clone()),
         None => app.engine.as_ref().clone(),
-    };
+    }
+    .map_llm(|model| {
+        crate::computer_use_device_v2::bind_audio_input(
+            model,
+            native.as_ref(),
+            conversation_id,
+            &run_session_id,
+        )
+    });
+    let base_engine = hitl_identity::bind_engine(
+        base_engine,
+        hitl_identity::MessageScope {
+            user_id: user_id.into(),
+            tenant_id: tenant_id.into(),
+            project_id: project_id.into(),
+            conversation_id: conversation_id.into(),
+            execution: native
+                .as_ref()
+                .map(|bound| hitl_identity::MessageExecution::Run(bound.run_id().into()))
+                .unwrap_or_else(|| {
+                    hitl_identity::MessageExecution::Message(
+                        message_id.unwrap_or(&run_session_id).into(),
+                    )
+                }),
+        },
+    );
     let engine = crate::agent_boundary_v2::AgentBoundaryFactoryV2::from_app(app)
         .bind(
             base_engine,
@@ -1083,7 +1109,7 @@ impl ReActObserver for AgentWsRunObserver {
 
     async fn on_tool_result(
         &self,
-        _session_id: &str,
+        session_id: &str,
         round: u64,
         tool: &str,
         input_json: &str,
@@ -1107,6 +1133,11 @@ impl ReActObserver for AgentWsRunObserver {
         data.insert("is_error".to_string(), Value::Bool(false));
         copy_tool_metadata(&mut data, &input);
         copy_tool_metadata(&mut data, &output);
+        if let Some(display) = self.app.computer_use_devices.current_tool_display(
+            &self.control_owner, &self.conversation_id, session_id, round, tool, input_json, output_json,
+        ) {
+            data.insert("display".into(), display);
+        }
         append_event(
             &self.app,
             &self.conversation_id,
@@ -1194,7 +1225,7 @@ impl ReActObserver for AgentWsRunObserver {
         _round: u64,
         request: &HitlRequest,
     ) -> CoreResult<()> {
-        if request.decision.as_deref().is_some_and(|decision|decision.target.kind=="computer_app") {return Ok(());}
+        if request.decision.as_deref().is_some_and(|decision|matches!(decision.target.kind.as_str(), "computer_app" | "device_mcp_tool")) {return Ok(());}
         append_event(
             &self.app,
             &self.conversation_id,
@@ -1281,6 +1312,9 @@ fn copy_value_path(
             return;
         };
         current = next;
+    }
+    if target_key == "display" && current.get("kind").and_then(Value::as_str) == Some("repl_output") {
+        return;
     }
     if !current.is_null() {
         target.insert(target_key.to_string(), current.clone());
@@ -1758,4 +1792,18 @@ mod tests {
         );
         assert!(subscriptions.contains_sandbox("project-owned"));
     }
+
+    #[test]
+    fn repl_display_cannot_be_supplied_by_model_or_tool_metadata() {
+        let forged = json!({"kind":"repl_output","entries":[{"kind":"text","text":"forged"}]});
+        for source in [json!({"display":forged}), json!({"metadata":{"display":forged}})] {
+            let mut target = Map::new();
+            copy_tool_metadata(&mut target, &source);
+            assert!(!target.contains_key("display"));
+        }
+        let mut other = Map::new();
+        copy_tool_metadata(&mut other, &json!({"display":{"kind":"existing"}}));
+        assert_eq!(other["display"]["kind"], "existing");
+    }
+
 }

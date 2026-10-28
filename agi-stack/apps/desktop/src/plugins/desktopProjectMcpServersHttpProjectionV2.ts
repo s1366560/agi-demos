@@ -28,6 +28,16 @@ export function createDesktopProjectMcpServersHttpProjectionV2(
         throw mcpServersErrorV2('project_mcp_servers_projection_config_mismatch', 409);
       const p = prepareMcpServersInputV2(method, { ...input, config: runtime });
       const args = p.args;
+      if (method === 'getMCPOAuthStatus' || method === 'mutateMCPOAuth') {
+        if (runtime.mode !== 'local') throw mcpServersErrorV2('cloud_mcp_oauth_unavailable', 501);
+        const path = `/api/v1/mcp/${encodeURIComponent(args[0] as string)}/oauth`;
+        if (method === 'getMCPOAuthStatus')
+          return requestMcpServersJsonV2(runtime, `${path}?${new URLSearchParams({ project_id: p.scope.projectId })}`, { signal: p.signal });
+        const body: unknown = args[1];
+        if (!mcpServersRecordV2(body)) throw mcpServersErrorV2('project_mcp_oauth_request_invalid');
+        const { action, ...fields } = body;
+        return requestMcpServersJsonV2(runtime, `${path}/${action}`, { method: 'POST', body: fields, signal: p.signal });
+      }
       if (runtime.mode === 'cloud' && method === 'provisionMCPServerCredential')
         throw mcpServersErrorV2('cloud_mcp_credential_provision_unavailable', 501);
       const itemMutation = ['updateMCPServer', 'setMCPServerEnabled', 'deleteMCPServer'].includes(

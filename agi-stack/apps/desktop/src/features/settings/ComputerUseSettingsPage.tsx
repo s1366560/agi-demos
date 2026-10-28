@@ -3,6 +3,8 @@ import { useComputerUseDevice } from './ComputerUseDeviceProvider';
 import './ComputerUseSettingsPage.css';
 import { ComputerUseTargetPreview } from './ComputerUseTargetPreview';
 import { ComputerUseRecordings } from './ComputerUseRecordings';
+import { ComputerUseInputModeControl } from './ComputerUseInputModeControl';
+import { ComputerUseLockedUse } from './ComputerUseLockedUse';
 
 export function ComputerUseSettingsPage() {
   const { t } = useI18n();
@@ -33,6 +35,7 @@ export function ComputerUseSettingsPage() {
         )}
       </p>
       <p>{t('cua.description')}</p>
+      <ComputerUseInputModeControl snapshot={snapshot} busy={busy} manage={manage} />
       <ComputerUseRecordings recordings={snapshot.recordings ?? []} client={client}
         manage={manage} stopping={stopping} />
       {snapshot.recent_presentation ? (
@@ -117,6 +120,7 @@ export function ComputerUseSettingsPage() {
         ))}
       </fieldset>
       <p>{t('cua.permissionDescription')}</p>
+      <ComputerUseLockedUse snapshot={snapshot} busy={busy} manage={manage} />
       <h4>{t('cua.systemPermissions')}</h4>
       <button
         type="button"

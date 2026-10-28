@@ -18,14 +18,18 @@ import type { DesktopRuntimeConfig } from '../../types';
 import { useI18n } from '../../i18n';
 import { ComputerUseAppIdentity, ComputerUseTargetPreview } from './ComputerUseTargetPreview';
 import { computerUsePhaseLabel, computerUseSessionView } from './computerUsePresentationModel';
-import { createComputerUseManagement } from './computerUseManagement';
+import { createComputerUseManagement, createComputerUseSnapshotUpdates } from './computerUseManagement';
 import { ComputerUseRecordings } from './ComputerUseRecordings';
 import { computerUseRecordingIsPending } from '../../api/computerUseRecording';
+import { createComputerUseInputStore, type ComputerUseInputStore } from './computerUseInputStore';
+import { ComputerUseInputModeControl } from './ComputerUseInputModeControl';
+import { ComputerUseLockedSessionStatus } from './ComputerUseLockedSessionStatus';
 import './ComputerUseSettingsPage.css';
 
 type DeviceContext = {
   mode: DesktopRuntimeConfig['mode'];
   client: ComputerUseClientV2 | null;
+  inputStore: ComputerUseInputStore | null;
   snapshot: ComputerUseSnapshot | null;
   busy: boolean;
   stopping: boolean;
@@ -35,6 +39,7 @@ type DeviceContext = {
 const DeviceContext = createContext<DeviceContext>({
   mode: 'local',
   client: null,
+  inputStore: null,
   snapshot: null,
   busy: false,
   stopping: false,
@@ -52,7 +57,7 @@ export function ComputerUseDeviceProvider({
 }) {
   const client = useMemo(
     () => createComputerUseClientV2(config),
-    [config.mode, config.apiKey, config.tenantId, config.projectId]
+    [config.mode, config.apiKey, config.localApiToken, config.apiBaseUrl, config.tenantId, config.projectId, config.workspaceId]
   );
   const [state, setState] = useState<{
     client: ComputerUseClientV2;
@@ -63,31 +68,55 @@ export function ComputerUseDeviceProvider({
   const [stopping, setStopping] = useState(false);
   const activeClient = useRef(client);
   activeClient.current = client;
+  const inputStore = useMemo(() => createComputerUseInputStore({
+    mode: config.mode, tenant_id: config.tenantId, project_id: config.projectId,
+  }, {
+    request: (callback) => requestAnimationFrame(callback),
+    cancel: (id) => cancelAnimationFrame(id),
+  }), [client]);
   const management = useMemo(
     () =>
       createComputerUseManagement({
-        run: (operation, signal) => client.manage(operation, signal),
+        run: (operation, signal) => {
+          inputStore.willManage(operation);
+          return client.manage(operation, signal);
+        },
         changed: (nextBusy, nextStopping) => {
           if (activeClient.current !== client) return;
           setBusy(nextBusy);
           setStopping(nextStopping);
         },
         completed: (snapshot) => {
-          if (activeClient.current === client) setState({ client, snapshot, error: null });
+          if (activeClient.current === client) {
+            inputStore.updateSnapshot(snapshot);
+            setState({ client, snapshot, error: null });
+          }
         },
         failed: (error) => {
           if (activeClient.current === client) setState((current) => ({ ...current, error }));
         },
       }),
-    [client]
+    [client, inputStore]
   );
   useEffect(() => {
     setBusy(false);
     setStopping(false);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const updates = createComputerUseSnapshotUpdates({
+      completed: (snapshot) => {
+        inputStore.updateSnapshot(snapshot);
+        setState({ client, snapshot, error: null });
+      },
+      failed: (error) => {
+        inputStore.dispose();
+        setState({ client, snapshot: null,
+          error: error instanceof Error ? error.message : 'cua_operation_failed' });
+      },
+    });
     const refresh = async () => {
       const generation = management.generation();
+      const update = updates.refresh();
       let delay = 30000;
       try {
         const snapshot = await client.snapshot(controller.signal);
@@ -98,15 +127,13 @@ export function ComputerUseDeviceProvider({
           snapshot.accounts?.some((account) => account.status === 'authorizing')
         )
           delay = 5000;
-        if (!controller.signal.aborted && management.acceptsRefresh(generation))
-          setState({ client, snapshot, error: null });
+        if (!controller.signal.aborted && management.acceptsRefresh(generation)) {
+          update.completed(snapshot);
+        }
       } catch (error) {
-        if (!controller.signal.aborted && management.acceptsRefresh(generation))
-          setState({
-            client,
-            snapshot: null,
-            error: error instanceof Error ? error.message : 'cua_operation_failed',
-          });
+        if (!controller.signal.aborted && management.acceptsRefresh(generation)) {
+          update.failed(error);
+        }
       }
       if (!controller.signal.aborted) timer = setTimeout(() => void refresh(), delay);
     };
@@ -121,21 +148,29 @@ export function ComputerUseDeviceProvider({
           tenantId: config.tenantId,
           projectId: config.projectId,
         })
-      )
-        setState({ client, snapshot: event.snapshot, error: null });
+      ) {
+        updates.activity(event.snapshot);
+      }
+    });
+    const unsubscribeInput = window.__MEMSTACK_DESKTOP__?.events?.onComputerUseInput?.((value) => {
+      if (!controller.signal.aborted && activeClient.current === client) inputStore.receive(value);
     });
     return () => {
       unsubscribe?.();
+      unsubscribeInput?.();
+      updates.dispose();
+      inputStore.dispose();
       controller.abort();
       management.dispose();
       if (timer) clearTimeout(timer);
     };
-  }, [client, management]);
+  }, [client, management, inputStore]);
   return (
     <DeviceContext.Provider
       value={{
         mode: config.mode,
         client,
+        inputStore,
         snapshot: state.client === client ? state.snapshot : null,
         error: state.client === client ? state.error : null,
         busy,
@@ -153,7 +188,7 @@ export function ComputerUseActivity({ conversationId, runId }: {
   runId: string | null;
 }) {
   const { t } = useI18n();
-  const { snapshot, manage, busy, stopping, error, client } = useComputerUseDevice();
+  const { snapshot, manage, busy, stopping, error, client, inputStore } = useComputerUseDevice();
   const sessions = (snapshot?.sessions ?? []).filter((session) =>
     conversationId && runId && session.conversation_id === conversationId && session.run_id === runId);
   const pending = (snapshot?.pending ?? []).filter((request) =>
@@ -163,8 +198,9 @@ export function ComputerUseActivity({ conversationId, runId }: {
     (runId ? recording.run_id === runId : !computerUseRecordingIsPending(recording)));
   if (!sessions.length && !pending.length && !recordings.length) return null;
   return (
-    <aside className="computer-use-activity" aria-live="polite">
+    <aside className="computer-use-activity" data-native-view-occluder aria-live="polite">
       <strong>{t('cua.title')}</strong>
+      {snapshot ? <ComputerUseInputModeControl snapshot={snapshot} busy={busy} manage={manage} /> : null}
       {error ? (
         <p role="alert">
           {t('cua.error')} <code>{error}</code>
@@ -177,7 +213,12 @@ export function ComputerUseActivity({ conversationId, runId }: {
         return (
           <section key={session.session_id} className="computer-use-session-activity">
             <span className="computer-use-phase">{t(computerUsePhaseLabel(view.phase))}</span>
-            {view.target ? <ComputerUseTargetPreview presentation={view} client={client} /> : null}
+            {session.input_mode ? <span className="computer-use-session-mode">
+              {t(`cua.input.${session.input_mode}`)}
+            </span> : null}
+            <ComputerUseLockedSessionStatus session={session} />
+            {view.target ? <ComputerUseTargetPreview presentation={view} client={client}
+              sessionId={session.session_id} inputStore={inputStore} /> : null}
             <div className="computer-use-actions">
               {view.phase === 'paused' && view.can_resume ? (
                 <button

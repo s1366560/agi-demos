@@ -24,12 +24,18 @@ import {
 } from './mcpAppHostBridge';
 import type { MCPAppCanvasState, MCPAppCanvasTab } from './mcpAppCanvasEventModel';
 import { createMcpAppHostClient } from './mcpAppsClient';
+import { invokeMcpApp, useMcpAppAutomation } from './mcpAppAutomation';
+import { hasMcpAppNativeGuest, useMcpAppNativeGuest, type McpAppGuestHandlers } from './useMcpAppNativeGuest';
+import type { McpAppGuestConfig } from './mcpAppGuestProtocol';
 import './DesktopMCPAppCanvas.css';
 
 const LazyAppRenderer = React.lazy(async () => {
   const module = await import('@mcp-ui/client');
   return { default: module.AppRenderer };
 });
+
+// Resource prefetch can call host handlers without an SDK request signal.
+type MCPAppRequestContext = Readonly<{ signal?: AbortSignal }>;
 
 type DesktopMCPAppCanvasProps = {
   state: MCPAppCanvasState;
@@ -117,18 +123,46 @@ export function DesktopMCPAppCanvas({
     state.tabs[state.tabs.length - 1];
   const [renderError, setRenderError] = useState<string | null>(null);
   const [frameHeight, setFrameHeight] = useState(420);
+  const automationContainer = useRef<HTMLElement>(null);
+  const nativeGuest = hasMcpAppNativeGuest();
+  const nativeHandlers = useRef<McpAppGuestHandlers | null>(null);
+  const legacyMount = useMcpAppAutomation(nativeGuest ? undefined : active?.automationTabId, automationContainer);
   const sandboxConfig = useMemo(
     () => buildSandboxConfig(sandboxProxyUrl, active?.uiMetadata),
     [active?.uiMetadata, sandboxProxyUrl],
   );
+  const guestConfig = useMemo<McpAppGuestConfig | null>(() => active ? {
+    toolName: active.toolName || active.appId || 'mcp-app',
+    sandbox: { ...sandboxConfig, url: sandboxConfig.url.toString(),
+      csp: sandboxConfig.csp as McpAppGuestConfig['sandbox']['csp'] },
+    ...(active.resourceHtml ? { html: active.resourceHtml } : {}),
+    ...(active.resourceUri ? { toolResourceUri: active.resourceUri } : {}),
+    ...(active.toolInput ? { toolInput: active.toolInput } : {}),
+    ...(active.toolResult !== undefined ? { toolResult: toCallToolResult(active.toolResult) } : {}),
+  } : null, [active, sandboxConfig]);
+  const nativeAuthority = useMemo(() => ({ api, projectId }), [api, projectId]);
+  const nativeMount = useMcpAppNativeGuest({
+    enabled: nativeGuest && !renderError,
+    key: active?.id,
+    tabId: active?.automationTabId,
+    keys: state.tabs.map(tab => tab.id),
+    config: guestConfig,
+    container: automationContainer,
+    handlers: nativeHandlers,
+    authority: nativeAuthority,
+    onError: setRenderError,
+  });
+  const automationMount = nativeGuest ? nativeMount : legacyMount;
   const hostContext = useMemo(
     () => ({
       projectId,
       appId: active?.appId ?? null,
       serverName: active?.serverName ?? null,
       originalToolName: active?.toolName ?? '',
+      automationTabId: active?.automationTabId,
+      automationMount,
     }),
-    [active?.appId, active?.serverName, active?.toolName, projectId],
+    [active?.appId, active?.serverName, active?.toolName, active?.automationTabId, automationMount, projectId],
   );
   const requestLifetime = useMemo(
     () => ({ controller: new AbortController() }),
@@ -143,15 +177,17 @@ export function DesktopMCPAppCanvas({
     }
     return () => requestLifetime.controller.abort();
   }, [requestLifetime]);
-  const requireCurrentLifetime = useCallback(() => {
-    if (lifetimeRef.current !== requestLifetime || requestLifetime.controller.signal.aborted) {
+  const requireCurrentLifetime = useCallback((requestSignal?: AbortSignal) => {
+    if (lifetimeRef.current !== requestLifetime || requestLifetime.controller.signal.aborted || requestSignal?.aborted) {
       throw new DOMException('MCP App request cancelled', 'AbortError');
     }
-    return requestLifetime.controller.signal;
+    return requestSignal
+      ? AbortSignal.any([requestLifetime.controller.signal, requestSignal])
+      : requestLifetime.controller.signal;
   }, [requestLifetime]);
   const handleCallTool = useCallback<NonNullable<AppRendererProps['onCallTool']>>(
-    async (params) => {
-      const signal = requireCurrentLifetime();
+    async (params, extra: MCPAppRequestContext) => {
+      const signal = requireCurrentLifetime(extra?.signal);
       const result = await callMCPAppTool(mcpAppsClient, hostContext, params, undefined, signal);
       requireCurrentLifetime();
       return result;
@@ -159,8 +195,8 @@ export function DesktopMCPAppCanvas({
     [hostContext, mcpAppsClient, requireCurrentLifetime],
   );
   const handleReadResource = useCallback<NonNullable<AppRendererProps['onReadResource']>>(
-    async ({ uri }) => {
-      const signal = requireCurrentLifetime();
+    async ({ uri }, extra: MCPAppRequestContext) => {
+      const signal = requireCurrentLifetime(extra?.signal);
       const result = await readMCPAppResource(mcpAppsClient, hostContext, uri, signal);
       requireCurrentLifetime();
       return result;
@@ -169,8 +205,8 @@ export function DesktopMCPAppCanvas({
   );
   const handleListResources = useCallback<
     NonNullable<AppRendererProps['onListResources']>
-  >(async () => {
-    const signal = requireCurrentLifetime();
+  >(async (_params, extra: MCPAppRequestContext) => {
+    const signal = requireCurrentLifetime(extra?.signal);
     const result = await listMCPAppResources(mcpAppsClient, hostContext, signal);
     requireCurrentLifetime();
     return result;
@@ -201,6 +237,51 @@ export function DesktopMCPAppCanvas({
     setRenderError(null);
     setFrameHeight(420);
   }, [active?.id]);
+
+  nativeHandlers.current = {
+    callTool: (params, extra) => handleCallTool(
+      params as Parameters<typeof handleCallTool>[0], extra as Parameters<typeof handleCallTool>[1]),
+    readResource: (params, extra) => handleReadResource(
+      params as Parameters<typeof handleReadResource>[0], extra as Parameters<typeof handleReadResource>[1]),
+    listResources: (params, extra) => handleListResources(
+      params as Parameters<typeof handleListResources>[0], extra as Parameters<typeof handleListResources>[1]),
+    message: (params, extra) => handleMessage(
+      params as Parameters<typeof handleMessage>[0], extra as Parameters<typeof handleMessage>[1]),
+    openLink: (params, extra) => handleOpenLink(
+      params as Parameters<typeof handleOpenLink>[0], extra as Parameters<typeof handleOpenLink>[1]),
+    listResourceTemplates: async (_params, extra) => {
+      const signal = requireCurrentLifetime(extra.signal);
+      const result = await invokeMcpApp(automationMount, 'resources/templates/list', {}, signal);
+      requireCurrentLifetime(signal);
+      return result;
+    },
+    listPrompts: async (_params, extra) => {
+      const signal = requireCurrentLifetime(extra.signal);
+      const result = await invokeMcpApp(automationMount, 'prompts/list', {}, signal);
+      requireCurrentLifetime(signal);
+      return result;
+    },
+    fallbackRequest: async (params, extra) => {
+      const request = recordValue(params);
+      if (request?.method !== 'prompts/get') throw new Error('mcp_app_method_unsupported');
+      const signal = requireCurrentLifetime(extra.signal);
+      const result = await invokeMcpApp(automationMount, 'prompts/get', request.params, signal);
+      requireCurrentLifetime(signal);
+      return result;
+    },
+    sizeChanged: params => {
+      requireCurrentLifetime();
+      const height = recordValue(params)?.height;
+      if (typeof height === 'number' && Number.isFinite(height)) setFrameHeight(Math.min(900, Math.max(240, height)));
+      return {};
+    },
+    error: params => {
+      requireCurrentLifetime();
+      const message = recordValue(params)?.message;
+      if (typeof message === 'string') setRenderError(message);
+      return {};
+    },
+  };
 
   if (!active) return null;
   const title = active.title || active.toolName || t('mcpApp.untitled');
@@ -234,6 +315,27 @@ export function DesktopMCPAppCanvas({
           onCallTool={handleCallTool}
           onReadResource={handleReadResource}
           onListResources={handleListResources}
+          {...(active.automationTabId ? {
+            onListResourceTemplates: async (_params: unknown, extra: MCPAppRequestContext) => {
+              const signal = requireCurrentLifetime(extra?.signal);
+              const result = await invokeMcpApp(automationMount, 'resources/templates/list', {}, signal);
+              requireCurrentLifetime();
+              return result as { resourceTemplates: [] };
+            },
+            onListPrompts: async (_params: unknown, extra: MCPAppRequestContext) => {
+              const signal = requireCurrentLifetime(extra?.signal);
+              const result = await invokeMcpApp(automationMount, 'prompts/list', {}, signal);
+              requireCurrentLifetime();
+              return result as { prompts: [] };
+            },
+            onFallbackRequest: async (request: { method: string; params?: unknown }, extra: MCPAppRequestContext) => {
+              const signal = requireCurrentLifetime(extra?.signal);
+              if (request.method !== 'prompts/get') throw new Error('mcp_app_method_unsupported');
+              const result = await invokeMcpApp(automationMount, 'prompts/get', request.params, signal);
+              requireCurrentLifetime();
+              return result as Record<string, unknown>;
+            },
+          } : {})}
           onMessage={handleMessage}
           onOpenLink={handleOpenLink}
           onSizeChanged={({ height }) => {
@@ -304,11 +406,14 @@ export function DesktopMCPAppCanvas({
         })}
       </nav>
       <article
+        ref={automationContainer}
         className="desktop-mcp-app-frame"
         aria-label={t('mcpApp.content', { title })}
         style={{ minHeight: frameHeight }}
       >
-        {renderError ? errorFallback : <IsolatedMCPAppRenderer renderer={renderer} />}
+        {renderError ? errorFallback : nativeGuest ? (
+          <div className="desktop-mcp-app-native-slot" />
+        ) : <IsolatedMCPAppRenderer renderer={renderer} />}
       </article>
     </section>
   );
@@ -332,11 +437,15 @@ function buildSandboxConfig(
   if (!csp) return config;
   const connectDomains = stringArray(csp.connectDomains);
   const resourceDomains = stringArray(csp.resourceDomains);
+  const frameDomains = stringArray(csp.frameDomains);
+  const baseUriDomains = stringArray(csp.baseUriDomains);
   return {
     ...config,
     csp: {
       ...(connectDomains ? { connectDomains } : {}),
       ...(resourceDomains ? { resourceDomains } : {}),
+      ...(frameDomains ? { frameDomains } : {}),
+      ...(baseUriDomains ? { baseUriDomains } : {}),
     },
   };
 }

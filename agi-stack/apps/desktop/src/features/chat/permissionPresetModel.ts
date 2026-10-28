@@ -141,10 +141,11 @@ export function autoApprovalForPermissionRequest(
 ): 'allow' | null {
   if (preset === 'default') return null;
   if (request.kind !== 'permission' || !request.permission) return null;
-  // Device application grants require an explicit local consent scope. A malformed
+  // Device application and MCP grants require explicit approval. A malformed
   // native binding must not fall back to ordinary runtime tool auto-approval.
   if (
     request.decision?.target?.kind === 'computer_app' ||
+    request.decision?.target?.kind === 'device_mcp_tool' ||
     Object.hasOwn(request, 'native_binding')
   )
     return null;

@@ -5,10 +5,26 @@ export type AgentStopErrorCode =
   | 'STOP_SESSION_FAILED'
   | 'SESSION_NOT_RUNNING';
 
+export type AgentStopTarget = Readonly<{
+  kind: 'local_run' | 'local_turn' | 'cloud';
+  scopeKey: string;
+  conversationId: string;
+  runId?: string;
+  revision?: number;
+  messageId?: string;
+}>;
+
+export type AgentStopReceipt =
+  | { status: 'cancel_requested' }
+  | { status: 'cancelled' }
+  | { status: 'rejected'; errorCode: AgentStopErrorCode };
+
 export type AgentStopRequestState = {
   conversationId: string | null;
   status: 'idle' | 'stopping' | 'stopped' | 'error';
   errorCode: AgentStopErrorCode | null;
+  target?: AgentStopTarget;
+  requestId?: number;
 };
 
 export const EMPTY_AGENT_STOP_REQUEST: AgentStopRequestState = {
@@ -25,6 +41,8 @@ const STOP_ERROR_CODES = new Set<AgentStopErrorCode>([
 export function beginAgentStopRequest(
   conversationId: string,
   sent: boolean,
+  target?: AgentStopTarget,
+  requestId?: number,
 ): AgentStopRequestState {
   const normalizedConversationId = conversationId.trim();
   if (!normalizedConversationId) return EMPTY_AGENT_STOP_REQUEST;
@@ -32,7 +50,30 @@ export function beginAgentStopRequest(
     conversationId: normalizedConversationId,
     status: sent ? 'stopping' : 'error',
     errorCode: sent ? null : 'socket_unavailable',
+    ...(target ? { target } : {}),
+    ...(requestId === undefined ? {} : { requestId }),
   };
+}
+
+export function agentStopTargetKey(target: AgentStopTarget | undefined): string {
+  return target ? JSON.stringify([
+    target.scopeKey, target.kind, target.conversationId, target.runId,
+    target.revision, target.messageId,
+  ]) : '';
+}
+
+export function applyAgentStopReceipt(
+  state: AgentStopRequestState,
+  requestId: number,
+  target: AgentStopTarget | undefined,
+  receipt: AgentStopReceipt,
+): AgentStopRequestState {
+  if (state.status !== 'stopping' || state.requestId !== requestId ||
+      agentStopTargetKey(state.target) !== agentStopTargetKey(target)) return state;
+  if (receipt.status === 'cancel_requested') return state;
+  return receipt.status === 'cancelled'
+    ? { ...state, status: 'stopped', errorCode: null }
+    : { ...state, status: 'error', errorCode: receipt.errorCode };
 }
 
 export function applyAgentStopEvent(
@@ -43,19 +84,25 @@ export function applyAgentStopEvent(
   if (structuredString(event, ['conversation_id', 'conversationId']) !== state.conversationId) {
     return state;
   }
+  if (state.target?.kind === 'local_run' &&
+      structuredString(event, ['run_id', 'execution_id']) !== state.target.runId) return state;
+  if (state.target?.kind === 'local_turn' &&
+      structuredString(event, ['message_id', 'messageId']) !== state.target.messageId) return state;
 
   const eventType = structuredString(event, ['type', 'event_type']) ?? '';
   if (eventType === 'ack' && event.action === 'stop_session') {
-    return settledAgentStopRequest(state.conversationId);
+    if (state.target?.kind !== 'cloud' && state.target &&
+        structuredString(event, ['status']) !== 'cancelled') return state;
+    return { ...state, status: 'stopped', errorCode: null };
   }
-  if (eventType === 'cancelled') {
+  if (eventType === 'cancelled' || eventType === 'run_status') {
     // The runtime emits {type: "cancelled", data: {run_id, status:
     // "cancelled"}}; the boolean flag form is a legacy alias.
     if (
       structuredString(event, ['status']) === 'cancelled' ||
       structuredBoolean(event, ['cancelled']) === true
     ) {
-      return settledAgentStopRequest(state.conversationId);
+      return { ...state, status: 'stopped', errorCode: null };
     }
     return state;
   }
@@ -64,7 +111,7 @@ export function applyAgentStopEvent(
   const errorCode = structuredString(event, ['code']);
   if (!errorCode || !STOP_ERROR_CODES.has(errorCode as AgentStopErrorCode)) return state;
   return {
-    conversationId: state.conversationId,
+    ...state,
     status: 'error',
     errorCode: errorCode as AgentStopErrorCode,
   };
@@ -73,9 +120,11 @@ export function applyAgentStopEvent(
 export function reconcileAgentStopScope(
   state: AgentStopRequestState,
   conversationId: string | null | undefined,
+  target?: AgentStopTarget,
 ): AgentStopRequestState {
   const normalizedConversationId = conversationId?.trim() ?? '';
-  return state.conversationId === normalizedConversationId
+  return state.conversationId === normalizedConversationId &&
+    agentStopTargetKey(state.target) === agentStopTargetKey(target)
     ? state
     : EMPTY_AGENT_STOP_REQUEST;
 }
@@ -112,14 +161,6 @@ export function agentStopResponseButtonTitleKey(input: AgentStopButtonInput): st
   return input.socketConnected
     ? 'session.stopResponse'
     : 'session.stopResponseDisconnectedHint';
-}
-
-function settledAgentStopRequest(conversationId: string): AgentStopRequestState {
-  return {
-    conversationId,
-    status: 'stopped',
-    errorCode: null,
-  };
 }
 
 function structuredString(

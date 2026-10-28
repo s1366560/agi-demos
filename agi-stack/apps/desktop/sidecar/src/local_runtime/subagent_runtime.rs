@@ -110,6 +110,7 @@ impl LocalRuntimeState {
                 conversation.id.clone(),
                 run.message_id.clone(),
             );
+            let child_permission_request_tools = mcp_host.list_tools();
             let mut child_dynamic_metadata = mcp_host.authority_metadata_by_name();
             let child_mcp_metadata = child_dynamic_metadata.clone();
             let mut child_plugin_host = None;
@@ -167,13 +168,16 @@ impl LocalRuntimeState {
             } else {
                 child_tool_host
             };
-            let child_tool_host: Arc<dyn ToolHost> =
-                Arc::new(AuthorizedRunToolHost::with_dynamic_metadata(
+            let child_tool_host: Arc<dyn ToolHost> = Arc::new(
+                AuthorizedRunToolHost::with_dynamic_metadata(
                     child_tool_host,
                     self.session_store.clone(),
                     run.clone(),
                     child_dynamic_metadata,
-                ));
+                )
+                .with_permission_request_tools(child_permission_request_tools),
+            );
+            let child_tool_host=cua_repl::wrap_tools(self,child_tool_host,conversation,run,&profile,boundary.clone());
             computer_use_v2::apply_guidance(&mut profile,&*child_tool_host);
             let child_llm: Arc<dyn LlmPort> = Arc::new(execution_profile::ProfiledLlm::new(
                 Arc::clone(&base_llm),

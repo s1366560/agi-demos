@@ -20,6 +20,9 @@ tokio = { version = "1", features = ["net", "io-util", "sync", "time", "macros",
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
 tracing = "0.1"
+base64 = "0.22"
+url = "2"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "process"] }

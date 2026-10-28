@@ -125,6 +125,7 @@ function providerBody(
     body.llm_model = input.primaryModel;
     body.allowed_models = input.allowedModels;
     if (input.embeddingModel !== undefined) body.embedding_model = input.embeddingModel;
+    if (input.requestTimeoutMs !== undefined) body.request_timeout_ms = input.requestTimeoutMs;
   }
   // Keys remain transient request data. Local sidecar stores them in ApplicationCredentialVault;
   // Cloud uses the existing vault-bound broker when no renderer session token is present.

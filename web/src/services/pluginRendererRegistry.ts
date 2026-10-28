@@ -1,5 +1,7 @@
 import { createElement, type ComponentType } from 'react';
 
+import { ReplToolResultContentV2 } from '../components/plugins/ReplToolResultContentV2';
+
 import { ToolResultDisplay } from '../components/agent/chat/ToolResultDisplay';
 
 import type { UiSlotDefinition } from '@/types/pluginSlots';
@@ -20,6 +22,12 @@ export interface PluginRendererRegistryV2 {
 const ToolResultRenderer: PluginRendererComponent = ({ context }) => {
   if (!context || !('kind' in context) || context.kind !== 'tool-result') return null;
   const { presentation } = context;
+  if (presentation.kind === 'repl_output')
+    return createElement(ReplToolResultContentV2, {
+      presentation,
+      media: context.media,
+      label: context.mediaLabel,
+    });
   if (presentation.kind !== 'text') return null;
   return createElement(ToolResultDisplay, {
     result: presentation.text,

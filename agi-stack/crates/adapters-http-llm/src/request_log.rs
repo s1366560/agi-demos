@@ -31,7 +31,7 @@ impl RequestAttempt {
         let active = if let Some(log) = log {
             let mut body = serde_json::to_value(body)
                 .map_err(|error| CoreError::Llm(format!("invalid prepared request: {error}")))?;
-            crate::media::redact_image_payloads(&mut body);
+            crate::media::redact_payloads(&mut body);
             let id = log.prepare_request(protocol, body).await?;
             Some((log, id))
         } else {

@@ -120,9 +120,12 @@ impl Sessions {
             )),
             Phase::Paused => {
                 state.phase = Phase::Active;
+                state.input_generation = uuid::Uuid::new_v4().to_string();
                 state.snapshot = None;
                 state.cancel = Arc::new(AtomicBool::new(false));
-                Ok(json!({"ok":true,"phase":"idle","requires_observation":true}))
+                Ok(
+                    json!({"ok":true,"phase":"idle","requires_observation":true,"input_mode":state.context.input_mode,"input_generation":state.input_generation}),
+                )
             }
         }
     }

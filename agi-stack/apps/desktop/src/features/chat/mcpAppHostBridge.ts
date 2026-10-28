@@ -1,5 +1,7 @@
 import type { AppRendererProps } from '@mcp-ui/client';
 import type { DesktopProjectMcpAppsClientV2 } from '../../plugins/desktopProjectMcpAppsAuthorityModuleV2';
+import { invokeMcpApp } from './mcpAppAutomation';
+import type { McpAppAutomationMount } from './mcpAppAutomation';
 
 import type {
   DesktopMCPAppResourceListResponse,
@@ -14,6 +16,8 @@ export type MCPAppHostContext = Readonly<{
   appId: string | null;
   serverName: string | null;
   originalToolName: string;
+  automationTabId?: string | null;
+  automationMount?: McpAppAutomationMount | null;
 }>;
 
 export type MCPAppHostClient = Pick<
@@ -104,6 +108,13 @@ export async function callMCPAppTool(
   requireActiveRequest(signal);
   const toolName = requiredText(params.name, 'MCP tool name');
   const argumentsValue = params.arguments ?? {};
+  if (context.automationTabId) {
+    const response = await invokeMcpApp(context.automationMount, 'tools/call', { name: toolName, arguments: argumentsValue }, signal);
+    requireActiveRequest(signal);
+    const value = recordValue(response);
+    if (!value || !Array.isArray(value.content)) throw new Error('mcp_app_result_invalid');
+    return { content: value.content as MCPAppCallToolResult['content'], isError: value.is_error === true || value.isError === true };
+  }
   const keyLease = await keyStore.acquire(context, toolName, argumentsValue);
   requireActiveRequest(signal);
   const appId = context.appId?.trim() ?? '';
@@ -162,6 +173,11 @@ export async function readMCPAppResource(
   signal?: AbortSignal,
 ): Promise<DesktopMCPAppResourceReadResponse> {
   requireActiveRequest(signal);
+  if (context.automationTabId) {
+    const response = await invokeMcpApp(context.automationMount, 'resources/read', { uri }, signal);
+    requireActiveRequest(signal);
+    return response as DesktopMCPAppResourceReadResponse;
+  }
   const result = await client.readMCPAppResource(
     requiredText(context.projectId, 'project id'),
     requiredText(uri, 'MCP resource URI'),
@@ -178,6 +194,11 @@ export async function listMCPAppResources(
   signal?: AbortSignal,
 ): Promise<MCPAppResourceListResult> {
   requireActiveRequest(signal);
+  if (context.automationTabId) {
+    const response = await invokeMcpApp(context.automationMount, 'resources/list', {}, signal);
+    requireActiveRequest(signal);
+    return response as MCPAppResourceListResult;
+  }
   const result = await client.listMCPAppResources(
     requiredText(context.projectId, 'project id'),
     context.serverName,

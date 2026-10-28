@@ -12,17 +12,19 @@ pub mod error;
 mod extra_tools;
 pub mod framing;
 pub mod host;
+mod input;
 mod status;
+pub use input::{CuaInputMode, CuaInputTelemetry, CuaVirtualCursor};
 pub use status::{CuaNativeStatus, CuaNativeTarget};
 
 pub use ax_tree::{CuaAxBounds, CuaAxCoordinateSpace, CuaAxNode, CuaAxSource, CuaAxTree};
 pub use catalog::*;
 pub use client::{CuaCallContext, CuaClient, CuaClientBuilder};
 pub use connector_contract::*;
-pub use dispatch::{CuaDispatchSignal, scope_dispatch_signal};
+pub use dispatch::{scope_dispatch_signal, CuaDispatchSignal};
 pub use error::CuaError;
-pub use host::{CuaToolEffect, CuaToolHost, validate_tool_input};
+pub use host::{validate_tool_input, CuaToolEffect, CuaToolHost};
 
 /// Wire protocol version negotiated during the `ping` handshake. Must match the
 /// helper's `ipcProtocolVersion`; bump both on any contract change.
-pub const IPC_PROTOCOL_VERSION: &str = "MemstackComputerUseIPC-2";
+pub const IPC_PROTOCOL_VERSION: &str = "MemstackComputerUseIPC-3";

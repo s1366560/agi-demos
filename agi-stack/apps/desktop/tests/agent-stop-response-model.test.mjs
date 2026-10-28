@@ -11,6 +11,7 @@ const {
   agentStopResponseButtonLabelKey,
   agentStopResponseButtonTitleKey,
   applyAgentStopEvent,
+  applyAgentStopReceipt,
   beginAgentStopRequest,
   reconcileAgentStopScope,
 } = require(
@@ -170,4 +171,62 @@ test('ChatPanel wires the composer stop button to the live socket state', () => 
     chatPanelSource,
     /disabled=\{agentStopResponseButtonDisabled\(\{[\s\S]*socketConnected: stopResponseSocketConnected/,
   );
+});
+
+const localRunTarget = {
+  kind: 'local_run', scopeKey: 'owner-a', conversationId: 'conversation-1',
+  runId: 'run-1', revision: 7, messageId: 'message-1',
+};
+
+test('cancel_requested receipts remain pending and only the matching request may settle', () => {
+  const stopping = beginAgentStopRequest('conversation-1', true, localRunTarget, 1);
+  assert.equal(applyAgentStopReceipt(stopping, 1, localRunTarget, { status: 'cancel_requested' }), stopping);
+  assert.equal(applyAgentStopReceipt(stopping, 0, localRunTarget, { status: 'cancelled' }), stopping);
+  assert.equal(applyAgentStopReceipt(stopping, 1, { ...localRunTarget, scopeKey: 'owner-b' }, { status: 'cancelled' }), stopping);
+  assert.equal(applyAgentStopReceipt(stopping, 1, localRunTarget, { status: 'cancelled' }).status, 'stopped');
+  assert.equal(applyAgentStopReceipt(stopping, 1, localRunTarget, { status: 'rejected', errorCode: 'STOP_SESSION_FAILED' }).status, 'error');
+});
+
+test('same-conversation successor and owner changes discard old asynchronous stop state', () => {
+  const stopping = beginAgentStopRequest('conversation-1', true, localRunTarget, 1);
+  const successor = { ...localRunTarget, runId: 'run-2', messageId: 'message-2' };
+  const reset = reconcileAgentStopScope(stopping, 'conversation-1', successor);
+  assert.equal(reset, EMPTY_AGENT_STOP_REQUEST);
+  const next = beginAgentStopRequest('conversation-1', true, successor, 2);
+  assert.equal(applyAgentStopReceipt(next, 1, localRunTarget, { status: 'cancelled' }), next);
+  assert.equal(reconcileAgentStopScope(stopping, 'conversation-1', { ...localRunTarget, scopeKey: 'owner-b' }), EMPTY_AGENT_STOP_REQUEST);
+});
+
+test('local run Stop settles only on its own authoritative cancellation event', () => {
+  const stopping = beginAgentStopRequest('conversation-1', true, localRunTarget, 1);
+  assert.equal(applyAgentStopEvent(stopping, {
+    type: 'ack', action: 'stop_session', conversation_id: 'conversation-1',
+  }), stopping);
+  assert.equal(applyAgentStopEvent(stopping, {
+    type: 'cancelled', conversation_id: 'conversation-1', data: { run_id: 'run-2', status: 'cancelled' },
+  }), stopping);
+  assert.equal(applyAgentStopEvent(stopping, {
+    type: 'run_status', conversation_id: 'conversation-1', payload: { execution_id: 'run-1', status: 'running' },
+  }), stopping);
+  assert.equal(applyAgentStopEvent(stopping, {
+    type: 'run_status', conversation_id: 'conversation-1', payload: { execution_id: 'run-1', status: 'cancelled' },
+  }).status, 'stopped');
+});
+
+test('local planning acknowledgment stays pending and cancellation must match the message', () => {
+  const target = { kind: 'local_turn', scopeKey: 'owner-a', conversationId: 'conversation-1', messageId: 'planning-1' };
+  const stopping = beginAgentStopRequest('conversation-1', true, target, 1);
+  assert.equal(applyAgentStopEvent(stopping, {
+    type: 'ack', action: 'stop_session', status: 'cancel_requested',
+    conversation_id: 'conversation-1', message_id: 'planning-1',
+  }), stopping);
+  assert.equal(applyAgentStopEvent(stopping, {
+    type: 'cancelled', status: 'cancelled', conversation_id: 'conversation-1', message_id: 'planning-2',
+  }), stopping);
+  assert.equal(applyAgentStopEvent(stopping, {
+    type: 'cancelled', status: 'cancelled', conversation_id: 'conversation-1', message_id: 'planning-1',
+  }).status, 'stopped');
+  assert.equal(applyAgentStopEvent(stopping, {
+    type: 'error', code: 'SESSION_NOT_RUNNING', conversation_id: 'conversation-1', message_id: 'planning-1',
+  }).status, 'error');
 });

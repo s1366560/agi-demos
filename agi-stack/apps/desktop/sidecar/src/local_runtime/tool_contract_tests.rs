@@ -148,11 +148,13 @@ async fn declared_contract_survives_native_engine_metering_failover_and_http() {
         let metered = Arc::new(MeteredLlm {
             inner: Arc::new(FailoverLlm {
                 candidates: vec![
-                    Arc::new(FailedTypedLlm { stall: true }),
+                    llm_request_timeout::RequestTimedLlm::wrap(
+                        Arc::new(FailedTypedLlm { stall: true }),
+                        std::time::Duration::from_millis(200),
+                    ),
                     Arc::new(FailedTypedLlm { stall: false }),
                     provider,
                 ],
-                candidate_timeout: std::time::Duration::from_millis(200),
             }),
             session_store: store.clone(),
             provider_id: "fixture".into(),

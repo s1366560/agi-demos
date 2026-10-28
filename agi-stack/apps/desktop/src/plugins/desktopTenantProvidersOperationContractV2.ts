@@ -232,6 +232,14 @@ function validateMutation(value: unknown, method: ProviderMethodV2): void {
     )
       throw providerErrorV2('tenant_provider_embedding_model_invalid');
   }
+  if (
+    value.requestTimeoutMs !== undefined &&
+    (method === 'testLlmProviderDraft' ||
+      !Number.isSafeInteger(value.requestTimeoutMs) ||
+      Number(value.requestTimeoutMs) < 1 ||
+      Number(value.requestTimeoutMs) > 300_000)
+  )
+    throw providerErrorV2('tenant_provider_request_timeout_invalid');
   if (method === 'updateLlmProvider') revision(value.expectedRevision);
 }
 function validateRouting(value: unknown): void {

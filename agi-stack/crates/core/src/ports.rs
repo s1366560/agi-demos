@@ -11,6 +11,9 @@
 pub mod legacy_memory;
 pub use crate::tool_control::ToolControlOutcome;
 pub use crate::tool_definition::ToolDefinition;
+pub use crate::tool_permission::{
+    permission_input_digest, PermissionBinding, PermissionKind, PermissionRequired,
+};
 use async_trait::async_trait;
 
 use crate::agent::types::{AgentAction, MediaAttachment, SessionState, TranscriptEntry};
@@ -98,6 +101,12 @@ pub struct RelationshipDraft {
 /// which serves extraction and agent reasoning from the same provider.
 #[async_trait]
 pub trait LlmPort: Send + Sync {
+    /// Whether the selected target explicitly supports audio model input.
+    /// Hosts use this declared capability without inferring it from model names.
+    fn supports_audio_input(&self) -> bool {
+        false
+    }
+
     /// Turn an episode into a structured memory draft.
     async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft>;
 
@@ -218,6 +227,7 @@ pub struct ToolResult {
     pub media: Vec<MediaAttachment>,
     pub control_outcome: Option<ToolControlOutcome>,
     pub control_generation: Option<String>,
+    pub permission_required: Option<PermissionRequired>,
 }
 
 impl ToolResult {
@@ -227,6 +237,7 @@ impl ToolResult {
             media: Vec::new(),
             control_outcome: None,
             control_generation: None,
+            permission_required: None,
         }
     }
 }

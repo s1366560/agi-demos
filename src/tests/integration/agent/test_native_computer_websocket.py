@@ -314,7 +314,9 @@ async def test_real_websocket_registration_http_claim_png_result_and_session_rel
             transport.broker.request(authorization(), DEFINITION["name"], {"app": "fixture"})
         )
         event = await receive(websocket)
-        assert set(event) == {"type", "request_id"} and event["type"] == "computer_use_request"
+        assert set(event) == {"type", "request_id", "expires_at"}
+        assert event["type"] == "computer_use_request"
+        assert isinstance(event["expires_at"], int)
         request_id = event["request_id"]
         async with httpx.AsyncClient(base_url=f"http://{transport.address}") as client:
             assert (await claim(client, request_id)).status_code == 401

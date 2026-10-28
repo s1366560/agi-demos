@@ -181,14 +181,19 @@ interface Window {
       setBounds(bounds: DesktopIabPaneBounds): Promise<void>;
       hidePane(): Promise<void>;
       onTabsChanged(listener: (payload: DesktopIabTabsPayload) => void): () => void;
+      onVisibilityRequested(listener: (visible: boolean) => void): () => void;
     }>;
     core?: {
       invoke?: DesktopInvoke;
     };
     events?: {
+      onMcpAppGuest?: (listener: (payload: import('./features/chat/mcpAppGuestProtocol').McpAppGuestHostEvent) => void) => () => void;
       onSidecarRecovered?: (listener: () => void) => () => void;
       onOAuthSessionChanged?: (listener: (payload: unknown) => void) => () => void;
       onComputerUseActivity?: (listener: (payload: unknown) => void) => () => void;
+      onComputerUseInput?: (
+        listener: (payload: import('./api/computerUseInput').ComputerUseInputEvent) => void,
+      ) => () => void;
     };
   };
 }

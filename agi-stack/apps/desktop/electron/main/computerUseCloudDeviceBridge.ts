@@ -56,9 +56,11 @@ export function createComputerUseCloudDeviceBridge(
     scope: CloudSocketScope,
     action: string,
     fields: Record<string, unknown> = {},
+    requestDeadlineMs?: number,
   ) =>
     invoke("computer_use_cloud_v2", {
       input: { action, connection_id: connectionId, scope, ...fields },
+      ...(requestDeadlineMs === undefined ? {} : { request_deadline_ms: requestDeadlineMs }),
     });
   const announce = async (id: string, connection: Connection) => {
     const result = (await native(id, connection.scope, "describe")) as {
@@ -159,6 +161,7 @@ export function createComputerUseCloudDeviceBridge(
     id: string,
     connection: Connection,
     requestId: string,
+    expiresAt?: number,
   ) => {
     const requests = active.get(id) ?? new Set<string>();
     active.set(id, requests);
@@ -167,7 +170,7 @@ export function createComputerUseCloudDeviceBridge(
     try {
       const result = (await native(id, connection.scope, "call", {
         request_id: requestId,
-      })) as NativeResult;
+      }, expiresAt === undefined ? undefined : expiresAt * 1000)) as NativeResult;
       if (connection.closed) return;
       if (
         result.request_id !== requestId ||
@@ -360,7 +363,10 @@ export function createComputerUseCloudDeviceBridge(
         }).catch(() => undefined);
         return true;
       }
-      void execute(id, connection, message.request_id).catch(() => undefined);
+      if (message.expires_at !== undefined && (!Number.isSafeInteger(message.expires_at) || (message.expires_at as number) <= 0)) {
+        throw new Error("cua_cloud_request_deadline_invalid");
+      }
+      void execute(id, connection, message.request_id, message.expires_at as number | undefined).catch(() => undefined);
       return true;
     },
     closed(id, scope) {

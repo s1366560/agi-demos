@@ -1,6 +1,107 @@
 # ChatGPT.app Computer Use analysis
 
-## Current package check: 2026-10-14
+## Facade, browser, MCP, audio and lock investigation: 2026-10-22
+
+The inspected installation remains ChatGPT.app 26.1016.51333, with `@oai/sky`
+0.7.12 and native service 26.1015.1001540. The actual
+`npx -y rea-agents@6.4.0 setup --client codex --json` returned `ready` with no
+configuration changes. No native decompiler provider was available.
+
+Readable package analysis covered `@oai/cua-repl` 0.1.2 and `@oai/cua` 0.2.6.
+REA parsed 35 JavaScript files without parse failures
+(`ev_e068aa1cbd2627539bc2338326656f121ae8c45a9552ff09b189db6b4baf0917`).
+The exported types and implementation establish persistent CUA entrypoints,
+provider-specific tab facades, documentation emission, DOM-only MCP App tabs,
+and a trusted host-service boundary. The reference provides no general connector
+namespace inside `cua`; MCP tools are a separate host capability.
+
+The shipped Node launcher exposes broad module capabilities under a host-managed
+sandbox, rather than treating JavaScript VM isolation as the security boundary.
+Audio declarations accept 100–300000 ms with a 60000 ms default and describe
+24 kHz stereo WAV output. The lock coordinator, guardian and authorization-plugin
+symbols support a cover plus temporary-unlock mechanism; they do not establish
+that the OS session remains locked while applications are controlled.
+
+These are static findings, not observed reference recording, authentication,
+unlock or fault-recovery behavior. MemStack uses its own implementation and
+executable tests, described in [Persistent Computer Use](computer-use-repl.md).
+Chrome, Edge, IAB and MCP Apps are the selected browser scope; proprietary remote
+browser services and new non-MCP account integrations are outside this change.
+
+## Background input investigation: 2026-10-21
+
+The current inspected host is ChatGPT.app 26.1016.51333, with `@oai/sky`
+0.7.12 and native service 26.1015.1001540. The requested
+`npx -y rea-agents@6.4.0 setup --client codex --yes` completed with `ready`;
+the registration was already aligned and no configuration change was needed.
+No native decompiler engine was installed. The observations below use shipped
+JavaScript, native symbols and bounded arm64 disassembly; they do not establish
+runtime behavior in the reference application.
+
+The focused REA analysis of the 41 shipped macOS JavaScript files completed
+without parse failures (`ev_ede8f27ac9360d06ea41e24b77b007bd7a6fda9bf31169c2332fca8685c16d6b`).
+Its semantic graph retains 1,553 unresolved facts, so syntax coverage does not
+imply complete semantic recovery.
+
+The host launches `@oai/cua-repl`, selects `@oai/sky/service` for the computer
+surface, and starts `Codex Computer Use.app`. The native service owns input.
+`Resources/native/sky.node` also bridges presentation, including cursor location
+updates to the pet overlay; those updates are not proof of input isolation.
+
+In `SkyComputerUseService`, `SynthesizedEvent.send(to:)` at `0x10075d574`
+calls the `CGEventAPI.postToPid` wrapper. The mouse path constructs an NSEvent
+with a window number, sets CGEvent window fields 91/92, and uses a separate
+window-location adapter. `SyntheticAppFocusEnforcer` separately tracks actual
+application activity and the focus/activity reported to the application.
+Its activate/deactivate paths send targeted events. Process-notification and
+ViewBridge keyboard taps participate in `SystemFocusStealPreventer`.
+
+The focus event construction includes app-activation/deactivation and window
+key-focus-returned/removed events. Bounded disassembly identifies AppActivated as
+type 13/subtype 1 with the target window number and flags `0xc0000`; Returned and
+Removed are type 21/subtypes `0x8000` and `0x4000`, with window number zero. These
+are state-dependent branches: an application believed active and focused needs
+no repeated notification. Initial activation can use the window's structured
+`AXActivationPoint` with mouse subtype 3 and click count zero. It is distinct from
+the requested content click; guessing an activation coordinate or repeating a
+content click is not established by the reference.
+
+The focus preventer installs a mutable annotated-session tap for type 21 and
+tracks the target and its ViewBridge keyboard route. Menus use a separate
+per-process mouse tap, including field 51's window ownership. Some ViewBridge
+private PID-resolution details remain unresolved. Removing the reference taps
+does not by itself prove handback of real keyboard focus, so that behavior needs
+an independent native check.
+
+`ComputerUseCursor.Window` is a software
+window with show/order-out and application/window/Space observers. This supports
+reconstructing targeted input, synthetic focus and software presentation as
+separate components. It does not establish an OS virtual HID device.
+
+The same binary also contains global event-posting paths. Several source-create
+calls use HID system state rather than a private source. Therefore neither
+universal background routing nor modifier isolation can be inferred merely from
+the existence of `postToPid`. `SetsCursorInBackground` was decoded from a private
+property wrapper, but its participation in the input path was not established;
+the MemStack background implementation does not enable it.
+
+The broader shipped surface still includes application discovery/policy/start,
+paired AX/screenshot observations, indexed or coordinate input, text selection,
+AX value/actions, clipboard-preserving paste and separate audio start/stop.
+The shell exposes click-sound policy, target presentation and a separate Locked
+Use installer/guardian. Windows window input and Linux targeted desktop input
+have different documented semantics; their claims must not be transferred to
+macOS. Account connectors, browser surfaces and persistent REPL objects remain
+separate integration work, outside this background-input change.
+
+REA retained the host-ASAR analysis, but its summary exceeded the transport
+budget; one signed unpacked native member also contradicted its ASAR integrity
+declaration. Those limitations prevent claiming complete semantic analysis of
+the host bundle. The narrow native and readable-client findings above were
+checked independently. MemStack completion is determined by executable tests and
+native behavior, not by a parity manifest or an analysis report.
+
+## Historical package check: 2026-10-14
 
 `npx rea-agents setup` was run and scoped to Codex with a dry-run followed by
 `--client codex --yes --json`. REA reports `ready` and aligned registration/skill;

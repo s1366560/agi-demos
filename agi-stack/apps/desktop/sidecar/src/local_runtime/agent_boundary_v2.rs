@@ -19,6 +19,13 @@ pub(super) struct AgentBoundaryV2 {
 }
 
 impl AgentBoundaryV2 {
+    pub(super) fn generation(&self) -> u64 { self._lease.descriptor().generation }
+    pub(super) fn current(&self, state: &LocalRuntimeState) -> bool {
+        state.platform_plugin_authority_v2.with_current_generation(self._lease.descriptor(), || ()).is_some()
+    }
+    pub(super) async fn execute_nested(&self, context: &agistack_core::agent::tool_policy::ToolPolicyContext<'_>, tools: &dyn ToolHost, input: &str) -> CoreResult<agistack_core::ports::ToolResult> {
+        execute_nested_with_policy(&*self.policy, context, tools, input).await
+    }
     pub(super) fn new(
         state: &LocalRuntimeState,
         conversation: &LocalConversation,
@@ -67,6 +74,41 @@ impl AgentBoundaryV2 {
             pending: Mutex::new(HashMap::new()),
         }))
     }
+}
+
+pub(super) async fn execute_nested_with_policy(
+    policy: &dyn ToolExecutionPolicy,
+    context: &agistack_core::agent::tool_policy::ToolPolicyContext<'_>,
+    tools: &dyn ToolHost,
+    original_input: &str,
+) -> CoreResult<agistack_core::ports::ToolResult> {
+    use agistack_core::agent::tool_policy::{ToolPolicyDecision, ToolPolicyResult};
+    use agistack_core::ports::{PermissionKind, PermissionRequired};
+    let definition = tools.tool_definition(context.tool);
+    let decision = policy.before_execute(context, original_input, definition.as_ref().and_then(|definition| definition.input_schema.as_ref())).await?;
+    let input = match decision {
+        ToolPolicyDecision::Allow { input_json } => input_json,
+        ToolPolicyDecision::Deny { reason } | ToolPolicyDecision::Cancel { reason } => return Err(CoreError::Tool(reason)),
+        ToolPolicyDecision::Ask { request } => return Ok(PermissionRequired::new(PermissionKind::PolicyAsk, super::execution_authority::permission_binding(context.tool, original_input)?,
+            json!({"error":"repl_policy_permission_required","request":request})).into_result()),
+    };
+    let (result, events) = capture_content(context, tools, &input).await;
+    let mut result = result?;
+    if let Some(permission) = result.permission_required.as_ref() {
+        if result.control_outcome.is_some() || result.control_generation.is_some()
+            || permission.binding() != &super::execution_authority::permission_binding(context.tool, &input)? {
+            return Err(CoreError::Tool("permission_binding_mismatch".into()));
+        }
+        // The policy may transform dispatch arguments. The trusted gate demand
+        // retains those exact arguments; the outer step keeps its entry identity.
+        result.permission_required = Some(PermissionRequired::new(permission.kind(), super::execution_authority::permission_binding(context.tool, original_input)?, permission.demand().clone()));
+    }
+    let transformed = policy.transform_result(context, ToolPolicyResult { output: result.output_json.clone(), media: result.media.clone(), is_error: false, metadata: json!({}) }).await?;
+    if !transformed.is_error && transformed.output == result.output_json && transformed.media == result.media { tool_result_events_v2::publish(events); }
+    result.output_json = transformed.output;
+    result.media = transformed.media;
+    if transformed.is_error { return Err(CoreError::Tool(result.output_json)); }
+    Ok(result)
 }
 
 struct PinnedPolicy {

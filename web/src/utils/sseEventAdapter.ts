@@ -16,6 +16,8 @@
  * @module utils/sseEventAdapter
  */
 
+import { validateReplOutputPresentationV2 } from '@agistack/plugin-slots';
+
 import { isCanonicalTimelineEventType } from '../types/agent/eventParity';
 import { isEventEnvelope } from '../types/generated/eventEnvelope';
 
@@ -348,6 +350,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         eventCounter,
         timestamp,
         toolName: data.tool_name,
+        display: validateReplOutputPresentationV2(data.display) ?? undefined,
         toolInput: data.tool_input,
         execution_id: data.tool_execution_id ?? data.execution_id,
         execution: {
@@ -392,6 +395,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         eventTimeUs,
         eventCounter,
         timestamp,
+        display: validateReplOutputPresentationV2(data.display) ?? undefined,
         toolName: data.tool_name ?? 'unknown', // Use tool_name from event
         execution_id: data.tool_execution_id ?? data.execution_id,
         toolOutput: observationValue,

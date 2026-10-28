@@ -1,4 +1,8 @@
-import type { ToolResultPresentationV2 } from "@agistack/plugin-slots";
+import {
+  loadReplMediaV2,
+  type ToolResultMediaV2,
+  type ToolResultPresentationV2,
+} from "@agistack/plugin-slots";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -13,6 +17,8 @@ import type { DesktopToolResultRendererModuleV2 } from "../../plugins/desktopToo
 import type { AuthorizedUiSlotDefinitionV2 } from "../../plugins/uiSlotRegistry";
 import { usePlatformPluginUiSlots } from "../settings/usePlatformPluginUiSlots";
 import { useComputerUseDevice } from "../settings/ComputerUseDeviceProvider";
+import { useTimelineInspection } from "../session/TimelineInspectionContext";
+import { projectToolResultPresentationV2 } from "./toolResultPresentationV2";
 import { computerUsePreviewBlobV2 } from "./computerUseResultPresentationV2";
 import type { ToolCallPresentationKind } from "./chatTimelineModel";
 import {
@@ -47,24 +53,33 @@ export function PlatformPluginToolResultSlots({
 }: PlatformPluginToolResultSlotsProps) {
   const { t } = useI18n();
   const generation = useOptionalDesktopRendererGenerationV2();
+  const { sessionKey } = useTimelineInspection();
   const { slots, error, loading } = usePlatformPluginUiSlots({ active: true });
   const [hostError, setHostError] = useState<string | null>(null);
+  // Stable declared content prevents unrelated timeline rerenders from restarting playback.
+  const presentationKey = JSON.stringify(
+    presentation ? projectToolResultPresentationV2(presentation, "") : null,
+  );
+  const stablePresentation = useMemo(() => {
+    const value = JSON.parse(presentationKey);
+    return value ? projectToolResultPresentationV2(value, "") : undefined;
+  }, [presentationKey]);
   const payload = useMemo(
     () =>
       createDesktopToolResultRendererPayloadV2({
         resultId,
-        presentation,
+        presentation: stablePresentation,
         toolName,
         status,
         kind,
         resultLabel: t("chat.toolResult"),
         kindLabel:
-          kind === "tool"
+          kind === "tool" || kind === "repl_output"
             ? t("chat.toolResult")
             : t(`session.toolKind.${kind}`),
         statusLabel: t(`session.toolStatus.${status}`),
       }),
-    [kind, resultId, presentation, status, t, toolName],
+    [kind, resultId, stablePresentation, status, t, toolName],
   );
   const visible = slots.filter((slot) => slot.slot === "tool_result_renderer");
   if (generation === null || visible.length === 0) return null;
@@ -82,7 +97,8 @@ export function PlatformPluginToolResultSlots({
         if (module === null) return null;
         return (
           <DesktopToolResultRendererFrameV2
-            key={`${generation.meta.digest}:${slot.sourceEntryId}:${slot.pluginId}:${slot.id}:${resultId}`}
+            key={`${sessionKey}:${generation.meta.digest}:${slot.sourceEntryId}:${slot.pluginId}:${slot.id}:${resultId}`}
+            ownerKey={sessionKey}
             module={module}
             onError={setHostError}
             payload={payload}
@@ -95,22 +111,65 @@ export function PlatformPluginToolResultSlots({
 }
 
 function DesktopToolResultRendererFrameV2({
+  ownerKey,
   module,
   onError,
   payload,
   slot,
 }: Readonly<{
+  ownerKey: string | null;
   module: DesktopToolResultRendererModuleV2;
   onError: (errorCode: string) => void;
   payload: DesktopToolResultRendererPayloadV2;
   slot: AuthorizedUiSlotDefinitionV2;
 }>) {
+  const { t } = useI18n();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const bridgeRef = useRef<DesktopToolResultRendererBridgeV2 | null>(null);
   const frameLoadedRef = useRef(false);
   const payloadRef = useRef(payload);
   const [height, setHeight] = useState(40);
   const { client } = useComputerUseDevice();
+  const [replMedia, setReplMedia] = useState<Readonly<{
+    owner: typeof client;
+    presentation: ToolResultPresentationV2;
+    ownerKey: string;
+    values: readonly ToolResultMediaV2[];
+  }> | null>(null);
+  const replPresentation =
+    payload.presentation?.kind === "repl_output" ? payload.presentation : null;
+  useEffect(() => {
+    setReplMedia(null);
+    if (!client || !replPresentation || !ownerKey) return;
+    const controller = new AbortController();
+    void loadReplMediaV2(
+      replPresentation,
+      async (reference, signal) => {
+        if (reference.store === "conversation_tool_media") {
+          if (!client.conversationMedia)
+            throw new Error("tool_media_store_unavailable");
+          return client.conversationMedia(ownerKey, reference, signal);
+        }
+        return reference.kind === "image"
+          ? computerUsePreviewBlobV2(
+              await client.preview(reference.artifactId, signal),
+            )
+          : client.audio(reference.artifactId, signal);
+      },
+      controller.signal,
+    )
+      .then((values) => {
+        if (!controller.signal.aborted)
+          setReplMedia({
+            owner: client,
+            ownerKey,
+            presentation: replPresentation,
+            values,
+          });
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [client, ownerKey, replPresentation]);
   const [preview, setPreview] = useState<Readonly<{
     owner: typeof client;
     artifactId: string;
@@ -135,6 +194,14 @@ function DesktopToolResultRendererFrameV2({
   const resolvedPayload = useMemo(
     () => ({
       ...payload,
+      mediaLoadingLabel: t("cua.loading"),
+      mediaUnavailableLabel: t("cua.unavailable"),
+      ...(replMedia &&
+      replMedia.owner === client &&
+      replMedia.ownerKey === ownerKey &&
+      replMedia.presentation === replPresentation
+        ? { media: replMedia.values }
+        : {}),
       ...(preview &&
       preview.owner === client &&
       preview.artifactId === artifactId
@@ -150,7 +217,18 @@ function DesktopToolResultRendererFrameV2({
         ? { computerUseAppIcon: icon.value }
         : {}),
     }),
-    [payload, preview, artifactId, icon, iconId, client],
+    [
+      payload,
+      preview,
+      artifactId,
+      icon,
+      iconId,
+      client,
+      ownerKey,
+      replMedia,
+      replPresentation,
+      t,
+    ],
   );
   payloadRef.current = resolvedPayload;
   useEffect(() => {

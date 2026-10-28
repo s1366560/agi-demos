@@ -2,6 +2,7 @@
 pub(in crate::local_runtime) mod accounts;
 mod api;
 mod artifacts;
+pub(super) mod repl_media;
 pub(in crate::local_runtime) mod call_identity;
 pub(in crate::local_runtime) mod cloud;
 mod cloud_cleanup;
@@ -13,6 +14,7 @@ mod consent;
 mod consent_tests;
 pub(in crate::local_runtime) mod denials;
 mod host;
+mod locked_use;
 pub(super) mod local_control;
 mod user_control;
 use host::ScopedComputerUseHost;
@@ -24,6 +26,7 @@ pub(super) mod hitl_validation;
 mod management_lifecycle_tests;
 mod module;
 mod presentation;
+mod input;
 mod recordings;
 mod recordings_export;
 mod recordings_store;
@@ -235,10 +238,13 @@ impl NativeIdentity {
 }
 
 pub(super) struct ComputerUseRuntimeV2 {
+    locked_use: locked_use::Leases,
     client: OnceLock<Arc<CuaClient>>,
     sessions: Mutex<BTreeMap<String, Arc<Session>>>,
     pending: Mutex<BTreeMap<String, PendingConsent>>,
     helper_closing: AtomicBool,
+    shutting_down: AtomicBool,
+    shutdown_gate: tokio::sync::Mutex<()>,
     permissions: Mutex<Option<Value>>,
     cloud_connections: Mutex<BTreeMap<String, cloud::Connection>>,
     cloud_cleanup: cloud_cleanup::Bindings,
@@ -248,15 +254,21 @@ pub(super) struct ComputerUseRuntimeV2 {
     management: tokio::sync::Mutex<()>,
     recordings_gate: tokio::sync::Mutex<()>,
     status_listener: AtomicBool,
+    input_support: Mutex<Option<Value>>,
+    input_support_probe: AtomicBool,
+    pub(in crate::local_runtime) input_events: tokio::sync::watch::Sender<BTreeMap<String, Value>>,
 }
 
 impl Default for ComputerUseRuntimeV2 {
     fn default() -> Self {
         Self {
+            locked_use: Default::default(),
             client: OnceLock::new(),
             sessions: Mutex::new(BTreeMap::new()),
             pending: Mutex::new(BTreeMap::new()),
             helper_closing: AtomicBool::new(false),
+            shutting_down: AtomicBool::new(false),
+            shutdown_gate: tokio::sync::Mutex::new(()),
             permissions: Mutex::new(None),
             cloud_connections: Mutex::new(BTreeMap::new()),
             cloud_cleanup: cloud_cleanup::Bindings::default(),
@@ -266,6 +278,9 @@ impl Default for ComputerUseRuntimeV2 {
             management: tokio::sync::Mutex::new(()),
             recordings_gate: tokio::sync::Mutex::new(()),
             status_listener: AtomicBool::new(false),
+            input_support: Mutex::new(None),
+            input_support_probe: AtomicBool::new(false),
+            input_events: tokio::sync::watch::channel(BTreeMap::new()).0,
         }
     }
 }
@@ -293,7 +308,10 @@ impl ComputerUseRuntimeV2 {
         child: super::local_plugin_tool_host_v2::identity::ChildIdentityV2,
     ) -> CoreResult<Arc<Session>> {
         let mut sessions = self.sessions.lock().expect("computer-use sessions");
-        if self.helper_closing.load(Ordering::SeqCst) || parent.stopped.load(Ordering::SeqCst) {
+        if self.shutting_down.load(Ordering::SeqCst)
+            || self.helper_closing.load(Ordering::SeqCst)
+            || parent.stopped.load(Ordering::SeqCst)
+        {
             return Err(CoreError::Tool("cua_device_stopping".into()));
         }
         if let Some(existing) = sessions.values().find(|session| {
@@ -327,13 +345,21 @@ impl ComputerUseRuntimeV2 {
         Ok(session)
     }
     fn client(&self) -> Result<Arc<CuaClient>, String> {
+        if self.shutting_down.load(Ordering::SeqCst) {
+            return Err("cua_device_stopping".into());
+        }
         if let Some(client) = self.client.get() {
             return Ok(client.clone());
         }
         let path = helper_path().ok_or("cua_helper_unavailable")?;
         let client = Arc::new(CuaClient::builder().helper_path(path).build());
         let _ = self.client.set(client);
-        Ok(self.client.get().expect("client initialized").clone())
+        let client = self.client.get().expect("client initialized").clone();
+        if self.shutting_down.load(Ordering::SeqCst) {
+            client.begin_shutdown();
+            return Err("cua_device_stopping".into());
+        }
+        Ok(client)
     }
 
     pub(super) fn invalidate_run(&self, run_id: &str) -> Vec<String> {
@@ -457,7 +483,9 @@ impl ComputerUseRuntimeV2 {
             (session, last)
         };
         if let Some(session) = session {
+            input::terminal(self, id, reason);
             session.stopped.store(true, Ordering::SeqCst);
+            self.locked_use.forget_display(id);
             presentation::update(&session, "stopped", None);
             presentation::record(state, &session);
             session.resources.invalidate();
@@ -496,7 +524,15 @@ impl ComputerUseRuntimeV2 {
         }
     }
 
+    pub(super) fn begin_shutdown(&self) {
+        self.shutting_down.store(true, Ordering::SeqCst);
+        if let Some(client) = self.client.get() {
+            client.begin_shutdown();
+        }
+    }
+
     pub(super) async fn shutdown(&self, state: &LocalRuntimeState) {
+        let _shutdown = self.shutdown_gate.lock().await;
         for session in self
             .sessions
             .lock()
@@ -512,6 +548,9 @@ impl ComputerUseRuntimeV2 {
             .keys()
             .cloned()
             .collect();
+        if let Some(client) = self.client.get() {
+            client.stop_all_sessions("session_ended").await;
+        }
         for id in ids {
             self.close_session(state, &id).await;
         }
@@ -534,7 +573,7 @@ impl ComputerUseRuntimeV2 {
     fn sessions_for(&self, owner: &Owner) -> Vec<Value> {
         self.sessions.lock().expect("computer-use sessions").iter().filter(|(_, session)| session.owner == *owner)
             .map(|(id, session)| json!({"session_id":id,"run_id":session.context.run_id,
-                "conversation_id":session.context.conversation_id,"stopped":session.stopped.load(Ordering::SeqCst),
+                "conversation_id":session.context.conversation_id,"input_mode":session.context.input_mode,"input_generation":self.client.get().and_then(|client|client.current_input_generation(id)),"stopped":session.stopped.load(Ordering::SeqCst),
                 "presentation":session.presentation.lock().ok().map(|p|p.clone()).unwrap_or(Value::Null)})).collect()
     }
 }
@@ -609,7 +648,9 @@ pub(super) fn tool_host(
         .sessions
         .lock()
         .expect("computer-use sessions");
-    if state.computer_use.helper_closing.load(Ordering::SeqCst) {
+    if state.computer_use.shutting_down.load(Ordering::SeqCst)
+        || state.computer_use.helper_closing.load(Ordering::SeqCst)
+    {
         return None;
     }
     let existing = sessions
@@ -642,6 +683,7 @@ pub(super) fn tool_host(
         conversation_id: conversation.id.clone(),
         run_id,
         session_id: session_id.clone(),
+        input_mode: instance.input_mode,
     };
     let session = Arc::new(Session {
         resources: Default::default(),

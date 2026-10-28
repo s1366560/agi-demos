@@ -19,9 +19,15 @@ use crate::local_runtime::mcp_supervisor::{
 };
 
 const CONTRACT_VERSION: &str = "desktop-local-mcp-v2";
+#[path = "mcp_protocol.rs"]
+mod protocol;
+#[path = "mcp_apps_native.rs"]
+pub(in crate::local_runtime) mod native;
 
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
+        .merge(protocol::router())
+        .merge(super::super::plugin_marketplace_v3::oauth::manual::router())
         .route("/api/v1/mcp", get(list_servers).post(create_server))
         .route("/api/v1/mcp/create", post(create_server))
         .route(

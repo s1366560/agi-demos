@@ -56,7 +56,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::{
     net::TcpListener,
-    sync::{broadcast, mpsc, oneshot, Notify},
+    sync::{broadcast, mpsc, oneshot, watch, Notify},
     task::JoinHandle,
 };
 use url::Url;
@@ -66,6 +66,10 @@ use super::session_store::DesktopSessionStore;
 use crate::private_file_permissions::{
     set_private_directory_permissions, set_private_file_permissions,
 };
+#[path = "browser_bridge_instances.rs"]
+mod instances;
+#[path = "browser_bridge_lifecycle.rs"]
+mod lifecycle;
 
 /// Default loopback port for the bridge WebSocket server.
 pub const DEFAULT_BROWSER_BRIDGE_PORT: u16 = 9765;
@@ -93,6 +97,7 @@ const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Backend id of the Chrome extension broker.
 pub(crate) const BACKEND_CHROME_EXTENSION: &str = "chrome-extension";
+pub(crate) const BACKEND_EDGE_EXTENSION: &str = "edge-extension";
 /// Backend id of the in-app browser connecting from the Electron main
 /// process.
 pub(crate) const BACKEND_IAB: &str = "iab";
@@ -295,14 +300,6 @@ fn validate_socket_path(socket_path: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Log the permission failure before [`read_registry`] returns the same
-/// failure to the broker. The registry is never consumed after this warning.
-pub(crate) fn warn_if_registry_permissions_open(path: &FsPath) {
-    if let Err(error) = validate_registry_file_permissions(path) {
-        tracing::warn!(path = %path.display(), %error, "browser bridge registry rejected");
-    }
-}
-
 /// Constant-time bearer-token comparison.
 pub(crate) fn token_matches(expected: &str, presented: &str) -> bool {
     if expected.len() != presented.len() {
@@ -389,10 +386,10 @@ impl SidePanelSessionMinter {
     }
 }
 
-/// One live broker connection. The server holds at most one of these per
-/// backend id; a new authenticated connection for the same backend replaces
-/// the previous one.
+/// One live broker connection. Reconnects replace only the same family,
+/// profile and extension worker, and always receive a fresh browser identity.
 struct BrokerSession {
+    browser_id: String,
     backend: String,
     hello: BrokerHelloIdentity,
     transport: BridgeTransport,
@@ -402,11 +399,25 @@ struct BrokerSession {
     notify_closed: Notify,
 }
 
+/// A dropped request future retires only its own waiter. Late broker replies
+/// cannot settle a newly admitted read, even on the same connection.
+struct ResponseWaiter {
+    session: Arc<BrokerSession>,
+    id: u64,
+}
+impl Drop for ResponseWaiter {
+    fn drop(&mut self) {
+        self.session.waiters.lock().expect("browser bridge waiters").remove(&self.id);
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct BrokerHelloIdentity {
     backend: String,
     extension_id: Option<String>,
     extension_version: Option<String>,
+    profile_id: Option<String>,
+    extension_instance_id: Option<String>,
     protocol_version: u32,
     protocol_min: u32,
     protocol_max: u32,
@@ -427,6 +438,10 @@ struct BrokerHelloWire {
     extension_id: Option<String>,
     #[serde(default)]
     extension_version: Option<String>,
+    #[serde(default)]
+    profile_id: Option<String>,
+    #[serde(default)]
+    extension_instance_id: Option<String>,
 }
 
 fn default_protocol_version() -> u32 {
@@ -485,6 +500,7 @@ pub(crate) struct BrowserBridgeServer {
     next_id: AtomicU64,
     minter: Option<SidePanelSessionMinter>,
     heartbeat_interval: Duration,
+    shutdown: watch::Sender<bool>,
 }
 
 impl BrowserBridgeServer {
@@ -503,6 +519,7 @@ impl BrowserBridgeServer {
             next_id: AtomicU64::new(1),
             minter,
             heartbeat_interval,
+            shutdown: watch::channel(false).0,
         }
     }
 
@@ -516,7 +533,7 @@ impl BrowserBridgeServer {
         self.backends
             .lock()
             .expect("browser bridge backends")
-            .contains_key(BACKEND_CHROME_EXTENSION)
+            .values().any(|session| matches!(session.backend.as_str(), BACKEND_CHROME_EXTENSION | BACKEND_EDGE_EXTENSION))
     }
 
     /// Backend ids with a live session, sorted for a stable status payload.
@@ -525,10 +542,11 @@ impl BrowserBridgeServer {
             .backends
             .lock()
             .expect("browser bridge backends")
-            .keys()
-            .cloned()
+            .values()
+            .map(|session| session.backend.clone())
             .collect();
         backends.sort();
+        backends.dedup();
         backends
     }
 
@@ -536,7 +554,7 @@ impl BrowserBridgeServer {
         self.backends
             .lock()
             .expect("browser bridge backends")
-            .get(BACKEND_CHROME_EXTENSION)
+            .values().find(|session| matches!(session.backend.as_str(), BACKEND_CHROME_EXTENSION | BACKEND_EDGE_EXTENSION))
             .map(|session| session.hello.clone())
     }
 
@@ -555,24 +573,17 @@ impl BrowserBridgeServer {
         method: &str,
         params: Value,
     ) -> CoreResult<Value> {
-        let session = self
-            .backends
-            .lock()
-            .expect("browser bridge backends")
-            .get(backend)
-            .cloned()
-            .ok_or_else(|| {
-                CoreError::Tool(format!(
-                    "browser bridge backend '{backend}' is not connected"
-                ))
-            })?;
+        let session = self.resolve_session(backend)?;
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
-        session
-            .waiters
-            .lock()
-            .expect("browser bridge waiters")
-            .insert(id, tx);
+        {
+            let mut waiters = session.waiters.lock().expect("browser bridge waiters");
+            if self.is_stopped() || session.closed.load(Ordering::SeqCst) {
+                return Err(CoreError::Tool("browser bridge connection is closed".into()));
+            }
+            waiters.insert(id, tx);
+        }
+        let _waiter = ResponseWaiter { session: session.clone(), id };
         let frame = jsonrpc::encode_request(id, method, params);
         if session.outbound.send(frame).await.is_err() {
             session
@@ -585,6 +596,9 @@ impl BrowserBridgeServer {
             ));
         }
         match rx.await {
+            Ok(Ok(_)) if self.is_stopped() => {
+                Err(CoreError::Tool("browser bridge connection is closed".into()))
+            }
             Ok(Ok(result)) => Ok(result),
             Ok(Err(message)) => Err(CoreError::Tool(format!("browser bridge error: {message}"))),
             Err(_) => Err(CoreError::Tool(
@@ -594,6 +608,9 @@ impl BrowserBridgeServer {
     }
 
     async fn dispatch_inbound(&self, session: &Arc<BrokerSession>, payload: &str) {
+        if self.is_stopped() || session.closed.load(Ordering::SeqCst) {
+            return;
+        }
         match jsonrpc::decode(payload) {
             Ok(JsonRpcMessage::Response { id, result }) => {
                 let waiter = session
@@ -606,7 +623,11 @@ impl BrowserBridgeServer {
                         waiter.send(result.map_err(|e| format!("code {}: {}", e.code, e.message)));
                 }
             }
-            Ok(JsonRpcMessage::Notification { method, params }) => {
+            Ok(JsonRpcMessage::Notification { method, mut params }) => {
+                if session.closed.load(Ordering::SeqCst) { return; }
+                if let Some(params) = params.as_object_mut() {
+                    params.insert("backend".into(), json!(session.browser_id));
+                }
                 let _ = self
                     .notifications
                     .send(BridgeNotification { method, params });
@@ -669,6 +690,15 @@ impl BrowserBridgeServer {
     /// Gated twice: the session must have arrived over the peer-UID-checked
     /// unix socket, and only the Chrome-extension backend may mint.
     fn side_panel_session(&self, session: &BrokerSession) -> Result<Value, BrokerRequestError> {
+        // Serialize minting with stop and replacement of this exact connection.
+        let sessions = self.backends.lock().expect("browser bridge backends");
+        if self.is_stopped()
+            || session.closed.load(Ordering::SeqCst)
+            || !sessions.get(&session.browser_id)
+                .is_some_and(|current| std::ptr::eq(current.as_ref(), session))
+        {
+            return Err(BrokerRequestError::denied("browser bridge connection is closed"));
+        }
         if session.transport != BridgeTransport::Unix {
             return Err(BrokerRequestError::denied(
                 "side panel session requires the unix socket transport",
@@ -700,6 +730,9 @@ async fn browser_bridge_ws(
     headers: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Result<Response, StatusCode> {
+    if server.is_stopped() {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
     let presented = headers
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
@@ -786,13 +819,25 @@ fn hello_identity(payload: &str, hello_id: u64) -> Option<BrokerHelloIdentity> {
     }
     let backend = match wire.backend.as_deref() {
         Some(BACKEND_IAB) => BACKEND_IAB.to_string(),
-        // Absent/unknown → the current extension build's implicit identity.
-        _ => BACKEND_CHROME_EXTENSION.to_string(),
+        Some(BACKEND_EDGE_EXTENSION) => BACKEND_EDGE_EXTENSION.to_string(),
+        // Only the absent legacy identity may use the Chrome default.
+        None | Some(BACKEND_CHROME_EXTENSION) => BACKEND_CHROME_EXTENSION.to_string(),
+        Some(_) => return None,
+    };
+    let (profile_id, extension_instance_id) = match (wire.profile_id, wire.extension_instance_id) {
+        (None, None) => (None, None),
+        (Some(profile), Some(instance)) => (
+            Some(Uuid::parse_str(&profile).ok()?.to_string()),
+            Some(Uuid::parse_str(&instance).ok()?.to_string()),
+        ),
+        _ => return None,
     };
     Some(BrokerHelloIdentity {
         backend,
         extension_id: wire.extension_id,
         extension_version: wire.extension_version,
+        profile_id,
+        extension_instance_id,
         protocol_version: wire.protocol_version,
         protocol_min,
         protocol_max,
@@ -800,6 +845,24 @@ fn hello_identity(payload: &str, hello_id: u64) -> Option<BrokerHelloIdentity> {
 }
 
 async fn serve_broker(
+    server: Arc<BrowserBridgeServer>,
+    socket: WebSocket,
+    transport: BridgeTransport,
+) {
+    let mut shutdown = server.shutdown.subscribe();
+    if *shutdown.borrow() {
+        return;
+    }
+    // Upgraded sockets have tasks independent of either listener. Cancelling
+    // the entire session also closes sockets waiting on hello or a blocked send.
+    tokio::select! {
+        biased;
+        _ = shutdown.changed() => {},
+        _ = serve_broker_session(server, socket, transport) => {},
+    }
+}
+
+async fn serve_broker_session(
     server: Arc<BrowserBridgeServer>,
     socket: WebSocket,
     transport: BridgeTransport,
@@ -818,6 +881,7 @@ async fn serve_broker(
     heartbeat.tick().await;
     let mut unanswered_heartbeats: u8 = 0;
     let session = Arc::new(BrokerSession {
+        browser_id: instances::browser_id(&hello),
         backend: backend.clone(),
         hello,
         transport,
@@ -827,16 +891,15 @@ async fn serve_broker(
         notify_closed: Notify::new(),
     });
 
-    // One active session per backend: an authenticated newcomer for the same
-    // backend replaces the incumbent; other backends are untouched.
-    let previous = server
-        .backends
-        .lock()
-        .expect("browser bridge backends")
-        .insert(backend.clone(), Arc::clone(&session));
+    // Only this worker's reconnect replaces its former connection. Other
+    // profiles and browser instances remain independently addressable.
+    let Ok(previous) = server.admit(Arc::clone(&session)) else {
+        let _ = sink.close().await;
+        return;
+    };
     if let Some(previous) = previous {
         previous.closed.store(true, Ordering::SeqCst);
-        previous.notify_closed.notify_waiters();
+        previous.notify_closed.notify_one();
         previous.fail_waiters("browser bridge broker connection was replaced");
     }
 
@@ -892,17 +955,22 @@ async fn serve_broker(
             _ = session.notify_closed.notified() => break,
         }
     }
+    session.closed.store(true, Ordering::SeqCst);
     let _ = sink.close().await;
 
     // Clear the backend slot only if it still points at this session.
     let mut backends = server.backends.lock().expect("browser bridge backends");
     if backends
-        .get(&backend)
+        .get(&session.browser_id)
         .is_some_and(|current| Arc::ptr_eq(current, &session))
     {
-        backends.remove(&backend);
+        backends.remove(&session.browser_id);
     }
     drop(backends);
+    let _ = server.notifications.send(BridgeNotification {
+        method: "onBrowserDisconnected".into(),
+        params: json!({"backend":session.browser_id}),
+    });
     session.fail_waiters("browser bridge broker disconnected");
 }
 
@@ -923,6 +991,12 @@ impl BridgeEndpoint for BrowserBridgeEndpoint {
     async fn request_on(&self, backend: &str, method: &str, params: Value) -> CoreResult<Value> {
         self.server.request_on(backend, method, params).await
     }
+
+    async fn resolve_browser(&self, selector: &str) -> CoreResult<String> {
+        self.server.resolve_session(selector).map(|session| session.browser_id.clone())
+    }
+
+    fn scoped_browsers(&self) -> Option<Value> { Some(self.server.browser_inventory()) }
 
     fn subscribe_notifications(&self) -> broadcast::Receiver<BridgeNotification> {
         self.server.notifications.subscribe()
@@ -1098,6 +1172,7 @@ impl BrowserBridgeRuntime {
     }
 
     pub(crate) fn stop(self) {
+        self.server.stop();
         self.server_task.abort();
         #[cfg(unix)]
         if let Some(unix_listener) = &self.unix_listener {
@@ -1252,6 +1327,8 @@ fn unix_peer_uid(stream: &tokio::net::UnixStream) -> std::io::Result<u32> {
 mod tests {
     use super::*;
     use agistack_adapters_browser::protocol::{METHOD_GET_TABS, NOTIFY_ON_CDP_EVENT};
+    include!("browser_bridge_instance_tests.rs");
+    include!("browser_bridge_lifecycle_tests.rs");
     use futures_util::{SinkExt, StreamExt};
     use serde_json::json;
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -1551,10 +1628,10 @@ mod tests {
     /// Test runtime on an ephemeral port with the registry in a temp dir. The
     /// registry lives under `<root>/.memstack/browser-bridge/` so the written
     /// `socketPath` satisfies registry validation on unix.
-    struct TestBridge {
-        runtime: BrowserBridgeRuntime,
-        registry: BridgeRegistry,
-        root: PathBuf,
+    pub(super) struct TestBridge {
+        pub(super) runtime: BrowserBridgeRuntime,
+        pub(super) registry: BridgeRegistry,
+        pub(super) root: PathBuf,
     }
 
     impl TestBridge {
@@ -1578,7 +1655,7 @@ mod tests {
         base.join(format!("ag-bb-{tag}-{}", &id[..8]))
     }
 
-    async fn start_test_bridge() -> TestBridge {
+    pub(super) async fn start_test_bridge() -> TestBridge {
         start_test_bridge_full(None, BROKER_HEARTBEAT_INTERVAL).await
     }
 
@@ -1613,7 +1690,7 @@ mod tests {
         }
     }
 
-    async fn connect_broker(
+    pub(super) async fn connect_broker(
         url: &str,
         token: Option<&str>,
     ) -> Result<
@@ -1751,7 +1828,7 @@ mod tests {
     }
 
     /// Read one text frame from the broker side and decode it.
-    async fn broker_next_request<S>(
+    pub(super) async fn broker_next_request<S>(
         ws: &mut tokio_tungstenite::WebSocketStream<S>,
     ) -> (u64, String, Value)
     where
@@ -1771,7 +1848,7 @@ mod tests {
         }
     }
 
-    async fn broker_respond<S>(
+    pub(super) async fn broker_respond<S>(
         ws: &mut tokio_tungstenite::WebSocketStream<S>,
         id: u64,
         result: Value,
@@ -1826,7 +1903,7 @@ mod tests {
     /// Answer the server's post-auth `hello`. `Some(backend)` tags the
     /// session with that backend id; `None` answers without a `backend`
     /// field (the pre-M4 extension shape, defaulting to chrome-extension).
-    async fn broker_answer_hello<S>(
+    pub(super) async fn broker_answer_hello<S>(
         ws: &mut tokio_tungstenite::WebSocketStream<S>,
         backend: Option<&str>,
     ) where
@@ -1842,7 +1919,7 @@ mod tests {
     }
 
     /// Poll until the server reports exactly these connected backends.
-    async fn wait_for_backends(runtime: &BrowserBridgeRuntime, expected: &[&str]) {
+    pub(super) async fn wait_for_backends(runtime: &BrowserBridgeRuntime, expected: &[&str]) {
         for _ in 0..250 {
             if runtime.connected_backends() == expected {
                 return;
@@ -2108,7 +2185,7 @@ mod tests {
             .request_on("unknown", "noop", json!({}))
             .await
             .expect_err("unknown backend must fail");
-        assert!(error.to_string().contains("not connected"));
+        assert!(error.to_string().contains("browser_instance_expired"));
 
         bridge.runtime.stop();
         std::fs::remove_dir_all(&bridge.root).unwrap();
@@ -2367,3 +2444,7 @@ mod tests {
         std::fs::remove_dir_all(&state_root).unwrap();
     }
 }
+
+#[cfg(test)]
+#[path = "browser_bridge_request_tests.rs"]
+mod request_lifetime_tests;

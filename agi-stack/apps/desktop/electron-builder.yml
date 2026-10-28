@@ -15,6 +15,8 @@ protocols:
     schemes:
       - agistack-auth
 extraResources:
+  - from: build/cua-repl
+    to: sidecar/cua-repl
   - from: build/sidecar
     to: sidecar
     filter:
@@ -59,6 +61,7 @@ mac:
     NSCalendarsUsageDescription: Computer Use accesses calendars only for an authorized Calendar operation.
     NSMicrophoneUsageDescription: Voice input and voice calls use the microphone only while you are actively interacting with a conversation.
   binaries:
+    - Contents/Resources/sidecar/cua-repl/bin/node
     - Contents/Resources/sidecar/agistack-desktop-sidecar
     - Contents/Resources/sidecar/memstack-cua-cloud-connectors
     - Contents/Resources/sidecar/Memstack Computer Use.app/Contents/MacOS/cua-helper

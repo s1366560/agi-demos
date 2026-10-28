@@ -34,6 +34,15 @@ export class IabTabRegistry {
   #nextGroupId = 1;
   readonly #tabs = new Map<number, { groupId: number | null }>();
   readonly #groupsByKey = new Map<string, number>();
+  readonly #sessionNames = new Map<string, string>();
+
+  nameSession(key: string, title: string): void {
+    this.#sessionNames.set(key, title);
+  }
+
+  sessionName(key: string): string | undefined {
+    return this.#sessionNames.get(key);
+  }
 
   createTab(): number {
     const tabId = this.#nextTabId;

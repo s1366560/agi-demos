@@ -7,7 +7,7 @@ use std::{
     collections::{BTreeSet, HashMap, HashSet},
     path::{Path as FsPath, PathBuf},
     sync::{
-        atomic::{AtomicU64, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
         Arc, Mutex,
     },
 };
@@ -58,6 +58,7 @@ use crate::application_vault::ApplicationCredentialVault;
 use agistack_core::model::Entity;
 
 mod agent_continuation_v2;
+mod agent_stop;
 mod auth_context;
 mod authority_store;
 mod authorized_tool_host;
@@ -80,9 +81,12 @@ mod automation_worker;
 mod automation_worker_tests;
 pub(crate) mod browser_bridge;
 mod browser_run_tool_host;
+mod browser_auth;
+mod browser_auth_routes;
 mod changes;
 mod composer_context;
 mod computer_use_v2;
+pub(crate) mod execution_authority;
 mod conversation_llm_route;
 mod conversation_history;
 mod model_request_replay_v2;
@@ -91,12 +95,15 @@ mod execution_profile;
 mod execution_selection;
 mod execution_selection_patch;
 mod fan_out_tool_host;
+mod hitl_model_response;
 mod knowledge_authority_v2;
 #[cfg(test)]
 mod local_route_parity_tests;
 #[cfg(test)]
 mod managed_resource_tests;
 mod mcp_agent_tool_host;
+mod mcp_app_automation;
+mod cua_repl;
 mod mcp_app_static;
 #[cfg(test)]
 mod mcp_remote_transport_tests;
@@ -104,6 +111,7 @@ mod mcp_supervisor;
 #[cfg(test)]
 mod mcp_supervisor_tests;
 mod parity_routes;
+mod device_mcp;
 mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
 mod plugin_marketplace_v3;
@@ -120,11 +128,16 @@ pub(crate) use platform_plugin_sync_v2::{
 };
 mod provider_credentials;
 mod provider_embedding_declaration;
+mod provider_audio_declaration;
+mod llm_request_timeout;
 mod provider_management;
 mod provider_probe;
 mod provider_usage_store;
 mod resource_registry;
 mod run_control;
+mod run_owner_control;
+mod runtime_config_patch;
+pub(crate) use runtime_config_patch::LocalRuntimeConfigPatch;
 mod search_projection;
 mod session_projection;
 mod session_store;
@@ -293,13 +306,21 @@ impl LocalRuntimeService {
     }
 
     pub(crate) async fn shutdown(&self) {
+        self.state.cua_repl.shutdown();
+        self.state.computer_use.begin_shutdown();
+        self.state.computer_use.shutdown(&self.state).await;
         self.state.stop_automation_worker().await;
         self.state.stop_browser_bridge();
-        self.state.computer_use.shutdown(&self.state).await;
     }
 
     pub(crate) async fn computer_use_manage_v2(&self, broker: &crate::trusted_session::TrustedSessionBroker, input: Value) -> Result<Value, String> {
         computer_use_v2::native_operation(&self.state, broker, input).await
+    }
+    pub(crate) async fn device_mcp_manage_v2(&self, broker: &crate::trusted_session::TrustedSessionBroker, input: Value) -> Result<Value, String> {
+        device_mcp::native_operation(&self.state, broker, input).await
+    }
+    pub(crate) fn subscribe_computer_use_input(&self) -> tokio::sync::watch::Receiver<std::collections::BTreeMap<String, Value>> {
+        self.state.computer_use.input_events.subscribe()
     }
     pub(crate) async fn computer_use_cloud_v2(&self,broker:&crate::trusted_session::TrustedSessionBroker,input:Value)->Result<Value,String>{computer_use_v2::cloud::operation(&self.state,broker,input).await}
 
@@ -470,14 +491,29 @@ impl LocalRuntimeService {
             .await
     }
 
-    pub fn configure(&self, config: LocalRuntimeConfig) -> Result<LocalRuntimeStatus, String> {
+    pub(crate) fn configure(
+        &self,
+        config: LocalRuntimeConfigPatch,
+    ) -> Result<LocalRuntimeStatus, String> {
         self.state.configure(config, &self.api_base_url)?;
         Ok(self.status())
     }
 }
 
 impl LocalRuntimeState {
-    fn configure(&self, mut config: LocalRuntimeConfig, api_base_url: &str) -> Result<(), String> {
+    fn configure(
+        &self,
+        patch: impl Into<LocalRuntimeConfigPatch>,
+        api_base_url: &str,
+    ) -> Result<(), String> {
+        // Merge and apply as one operation: independent workspace and bridge
+        // updates must not restore a value read before another update settled.
+        let _update = self
+            .config_update
+            .lock()
+            .expect("local runtime config update");
+        let current = self.config.lock().expect("local runtime config").clone();
+        let mut config = patch.into().apply_to(current);
         if !config.workspace_root.trim().is_empty() {
             let root = PathBuf::from(config.workspace_root.trim());
             if let Some(qualification) = &self.local_knowledge_acceptance {
@@ -594,7 +630,7 @@ impl LocalRuntimeState {
             .lock()
             .expect("browser bridge runtime")
             .as_ref()
-            .filter(|runtime| runtime.broker_connected())
+            .filter(|runtime| !runtime.connected_backends().is_empty())
             .map(|runtime| runtime.browser_tool_host())
     }
 
@@ -606,18 +642,15 @@ impl LocalRuntimeState {
         if !status.is_terminal() {
             return;
         }
+        if status != DesktopRunStatus::Completed { self.cua_repl.cancel_run(run_id); }
+        self.clear_run_capabilities(run_id);
+        self.run_owners.lock().expect("local run owners").retain(|_, owner| {
+            owner.run_id.as_deref() != Some(run_id)
+        });
         self.computer_use.stop_run(self, run_id).await;
         if let Some(host) = self.connected_browser_tool_host() {
             host.turn_ended(run_id).await;
         }
-        self.browser_once_consents
-            .lock()
-            .expect("browser once consents")
-            .retain(|(consent_run_id, _)| consent_run_id != run_id);
-        self.run_once_tool_permissions
-            .lock()
-            .expect("run once tool permissions")
-            .retain(|(permission_run_id, _)| permission_run_id != run_id);
     }
 }
 
@@ -859,14 +892,18 @@ struct LocalRuntimeState {
     checkpoints: Arc<dyn CheckpointStore>,
     clock: Arc<SystemClock>,
     config: Mutex<LocalRuntimeConfig>,
+    config_update: Mutex<()>,
     provider_runtime: Mutex<ProviderRuntimeState>,
     provider_credentials: ProviderCredentialBroker,
     provider_probe: ProviderProbeService,
     session_store: DesktopSessionStore,
     mcp_supervisor: Arc<McpSupervisor>,
+    mcp_app_automation: mcp_app_automation::McpAppAutomationRegistry,
+    cua_repl: cua_repl::ReplRuntime,
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
+    run_owners: Mutex<HashMap<String, run_owner_control::OwnedExecution>>,
     suspended_agent_operations_v2:
         Mutex<HashMap<String, agent_continuation_v2::SuspendedAgentOperationV2>>,
     subagent_controls: subagent_control::SubagentControls,
@@ -885,6 +922,7 @@ struct LocalRuntimeState {
     browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
     run_once_tool_permissions: RunOnceToolPermissions,
     site_credentials: provider_credentials::SiteCredentialBroker,
+    browser_auth: browser_auth::BrowserAuthBroker,
     /// Application data directory (set by `LocalRuntimeService::start`;
     /// `None` in tests). Backs browser screenshot artifact files.
     app_data_dir: Option<PathBuf>,
@@ -914,6 +952,8 @@ struct ProviderRuntimeBinding {
     base_url: String,
     model: String,
     auth_method: String,
+    audio_input_models: BTreeSet<String>,
+    request_timeout: std::time::Duration,
 }
 
 #[derive(Clone, Debug)]
@@ -968,8 +1008,12 @@ struct TerminalSessionLease {
 
 struct LocalRunControl {
     directive: AtomicU8,
+    interrupted: tokio::sync::Notify,
+    released: AtomicBool,
+    release_notification: tokio::sync::Notify,
     session_store: DesktopSessionStore,
     run_id: Option<String>,
+    message_id: Mutex<Option<String>>,
 }
 
 impl LocalRunControl {
@@ -980,22 +1024,59 @@ impl LocalRunControl {
     fn new(session_store: DesktopSessionStore, run_id: Option<&str>) -> Self {
         Self {
             directive: AtomicU8::new(Self::CONTINUE),
+            interrupted: tokio::sync::Notify::new(),
+            released: AtomicBool::new(false),
+            release_notification: tokio::sync::Notify::new(),
             session_store,
             run_id: run_id.map(ToString::to_string),
+            message_id: Mutex::new(None),
         }
     }
 
     fn request_pause(&self) {
-        self.directive.store(Self::PAUSE, Ordering::Release);
+        // Cancellation is final; a racing pause must never restore a revoked run.
+        if self.directive.compare_exchange(
+            Self::CONTINUE, Self::PAUSE, Ordering::AcqRel, Ordering::Acquire,
+        ).is_ok() {
+            self.interrupted.notify_waiters();
+        }
     }
 
     fn request_cancel(&self) {
         self.directive.store(Self::CANCEL, Ordering::Release);
+        self.interrupted.notify_waiters();
+    }
+
+    fn mark_released(&self) {
+        self.released.store(true, Ordering::Release);
+        self.release_notification.notify_waiters();
+    }
+
+    async fn wait_until_released(&self) {
+        loop {
+            let notified = self.release_notification.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.released.load(Ordering::Acquire) { return; }
+            notified.await;
+        }
     }
 }
 
 #[async_trait]
 impl ReActControl for LocalRunControl {
+    async fn wait_for_interrupt(&self, _session_id: &str, _round: u64) -> CoreResult<()> {
+        loop {
+            let notified = self.interrupted.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.directive.load(Ordering::Acquire) != Self::CONTINUE {
+                return Ok(());
+            }
+            notified.await;
+        }
+    }
+
     async fn directive(&self, _session_id: &str, _round: u64) -> CoreResult<RunDirective> {
         match self.directive.load(Ordering::Acquire) {
             Self::PAUSE => return Ok(RunDirective::Pause),
@@ -1157,6 +1238,7 @@ impl LocalRuntimeState {
             checkpoints,
             clock: Arc::new(SystemClock),
             config: Mutex::new(LocalRuntimeConfig::default()),
+            config_update: Mutex::new(()),
             provider_runtime: Mutex::new(ProviderRuntimeState {
                 bindings: provider_bindings,
                 credentials: runtime_credentials,
@@ -1168,9 +1250,12 @@ impl LocalRuntimeState {
             provider_probe: ProviderProbeService::default(),
             session_store,
             mcp_supervisor,
+            mcp_app_automation: Default::default(),
+            cua_repl: Default::default(),
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
             agent_runs: Mutex::new(HashMap::new()),
+            run_owners: Mutex::new(HashMap::new()),
             suspended_agent_operations_v2: Mutex::new(HashMap::new()),
             subagent_controls: subagent_control::SubagentControls::default(),
             workspace_core_generation: AtomicU64::new(0),
@@ -1186,6 +1271,7 @@ impl LocalRuntimeState {
             browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
             run_once_tool_permissions: Arc::new(Mutex::new(BTreeSet::new())),
             site_credentials,
+            browser_auth: browser_auth::BrowserAuthBroker::default(),
             app_data_dir: None,
             local_knowledge_acceptance: None,
             #[cfg(test)]
@@ -1382,6 +1468,26 @@ impl LocalRuntimeState {
         conversation_id: &str,
         run_id: Option<&str>,
     ) -> Option<Arc<LocalRunControl>> {
+        self.claim_agent_run_with_owner(
+            conversation_id, run_id, knowledge_authority_v2::agent_access::current_auth(),
+        )
+    }
+
+    fn claim_agent_run_owned(
+        &self,
+        conversation_id: &str,
+        run_id: Option<&str>,
+        auth: &AuthenticatedContext,
+    ) -> Option<Arc<LocalRunControl>> {
+        self.claim_agent_run_with_owner(conversation_id, run_id, Some(auth.clone()))
+    }
+
+    fn claim_agent_run_with_owner(
+        &self,
+        conversation_id: &str,
+        run_id: Option<&str>,
+        auth: Option<AuthenticatedContext>,
+    ) -> Option<Arc<LocalRunControl>> {
         #[cfg(test)]
         self.agent_run_claim_attempts.fetch_add(1, Ordering::SeqCst);
         let mut runs = self.agent_runs.lock().expect("local agent runs");
@@ -1396,6 +1502,12 @@ impl LocalRuntimeState {
                 control: Arc::clone(&control),
             },
         );
+        if let Some(auth) = auth {
+            self.record_run_owner(conversation_id, run_id, &control, auth);
+        } else {
+            // A service-principal execution must not inherit a prior browser owner.
+            self.run_owners.lock().expect("local run owners").remove(conversation_id);
+        }
         Some(control)
     }
 
@@ -1406,6 +1518,7 @@ impl LocalRuntimeState {
             .remove(conversation_id);
         if let Some(released) = released {
             self.subagent_controls.release_parent(&released.control);
+            released.control.mark_released();
         }
     }
 
@@ -1420,6 +1533,7 @@ impl LocalRuntimeState {
         drop(runs);
         if owns_claim {
             self.subagent_controls.release_parent(control);
+            control.mark_released();
         }
     }
 
@@ -1989,6 +2103,8 @@ impl LocalRuntimeState {
             };
             control
         };
+        *control.message_id.lock().expect("local run message") = Some(message_id.clone());
+        self.bind_current_run_owner(&conversation_id, authoritative_run_id.as_deref(), &control);
         let authoritative_run = if let Some(run_id) = authoritative_run_id.as_deref() {
             match self
                 .prepare_authoritative_run_for_execution(
@@ -2169,6 +2285,13 @@ impl LocalRuntimeState {
                 Err(error.to_string())
             }
         };
+        if authoritative_run.is_none() && run_result.as_ref().is_ok_and(|state| state.status == SessionStatus::Cancelled) {
+            let item = self.timeline_item(
+                "cancelled", conversation_id.clone(), Some(message_id.clone()), None, None,
+                json!({"status":"cancelled", "conversation_id":conversation_id, "message_id":message_id}),
+            );
+            self.append_timeline(&conversation_id, item);
+        }
         self.retain_suspended_operation_v2(
             &conversation_id,
             &message_id,
@@ -2347,7 +2470,8 @@ impl LocalRuntimeState {
                 self.app_data_dir
                     .as_ref()
                     .map(|dir| dir.join("browser-screenshots")),
-            )));
+            ).with_browser_auth(self.browser_auth.clone())
+                .with_blocked_file_roots(self.app_data_dir.iter().cloned().collect())));
         }
         let child_base_tool_hosts = tool_hosts.clone();
         if let Some(host) = knowledge_authority_v2::agent_access::tool_host(
@@ -2360,6 +2484,10 @@ impl LocalRuntimeState {
         }
         let mut dynamic_metadata =
             std::collections::BTreeMap::<String, tool_authority::ToolMetadata>::new();
+        let mut permission_request_tools = Vec::new();
+        for (name, effect) in [("browser_read_operation", tool_authority::ToolEffect::Read), ("browser_write_operation", tool_authority::ToolEffect::Mutate), ("browser_cdp_operation", tool_authority::ToolEffect::Mutate)] {
+            dynamic_metadata.insert(name.into(), tool_authority::ToolMetadata { name: name.into(), effect, sensitive_input_fields: Default::default() });
+        }
         for (name, effect) in agistack_adapters_cua::tool_effects() {
             dynamic_metadata.insert(
                 name.to_string(),
@@ -2403,11 +2531,13 @@ impl LocalRuntimeState {
                 conversation.id.clone(),
                 run.message_id.clone(),
             );
+            permission_request_tools.extend(mcp_host.list_tools());
             dynamic_metadata.extend(mcp_host.authority_metadata_by_name());
             tool_hosts.push(Arc::new(mcp_host));
         }
         let combined_tool_host: Arc<dyn ToolHost> =
             Arc::new(fan_out_tool_host::FanOutToolHost::new(tool_hosts));
+        let combined_tool_host = if let Some(run) = run { mcp_app_automation::wrap_tools(combined_tool_host, Arc::downgrade(self), run.id.clone()) } else { combined_tool_host };
         let profiled_tool_host: Arc<dyn ToolHost> = Arc::new(
             execution_profile::ProfiledToolHost::new(combined_tool_host, &profile),
         );
@@ -2445,7 +2575,7 @@ impl LocalRuntimeState {
             .unwrap_or_else(|| workload_role_for_capability(conversation.capability_mode));
         let base_llm = self.llm_for_role(conversation, role).await?;
         let vision_llm = self.llm_for_role(conversation, LlmWorkloadRole::Vision).await?;
-        let base_llm: Arc<dyn LlmPort> = Arc::new(visual_input_llm::VisualInputLlm { default: base_llm, vision: vision_llm });
+        let base_llm: Arc<dyn LlmPort> = Arc::new(visual_input_llm::VisualInputLlm::new(self, conversation, run, boundary.clone(), base_llm, vision_llm));
         let base_llm = boundary.as_ref().map_or_else(|| base_llm.clone(), |boundary| boundary.wrap_llm(base_llm.clone()));
         let max_rounds = policy
             .as_ref()
@@ -2504,9 +2634,11 @@ impl LocalRuntimeState {
                     })?,
                     dynamic_metadata,
                 )
+                .with_permission_request_tools(permission_request_tools)
                 .with_once_permissions(Arc::clone(&self.run_once_tool_permissions)),
             ),
         };
+        let tool_host = if let Some(run) = run { cua_repl::wrap_tools(self, tool_host, conversation, run, &profile, boundary.clone()) } else { tool_host };
         let llm: Arc<dyn LlmPort> =
             {computer_use_v2::apply_guidance(&mut profile,&*tool_host);
             Arc::new(execution_profile::ProfiledLlm::new(base_llm, &profile))};
@@ -2623,6 +2755,7 @@ impl LocalRuntimeState {
         };
         validate_pending_hitl_authority(pending)?;
         computer_use_v2::hitl::validate_creation(self, conversation_id, run_id, &state.session_id, pending)?;
+        cua_repl::permission_for_request(&self.cua_repl,conversation_id,run_id,Some(&state.session_id),pending.kind,pending.decision.as_deref())?;
         let request = DesktopHitlRequest {
             id: pending.id.clone(),
             conversation_id: conversation_id.to_string(),
@@ -2702,6 +2835,12 @@ impl LocalRuntimeState {
         plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
     ) {
         let conversation_id = conversation.id.clone();
+        *control.message_id.lock().expect("local run message") = Some(message_id.clone());
+        self.bind_current_run_owner(
+            &conversation_id,
+            authoritative_run.as_ref().map(|run| run.id.as_str()),
+            &control,
+        );
         self.clear_suspended_operation_v2(
             &conversation_id,
             authoritative_run.as_ref().map(|run| run.id.as_str()),
@@ -2793,6 +2932,13 @@ impl LocalRuntimeState {
                 Err(message)
             }
         };
+        if authoritative_run.is_none() && run_result.as_ref().is_ok_and(|state| state.status == SessionStatus::Cancelled) {
+            let item = self.timeline_item(
+                "cancelled", conversation_id.clone(), Some(message_id.clone()), None, None,
+                json!({"status":"cancelled", "conversation_id":conversation_id, "message_id":message_id}),
+            );
+            self.append_timeline(&conversation_id, item);
+        }
         self.retain_suspended_operation_v2(
             &conversation_id,
             &message_id,
@@ -3380,6 +3526,8 @@ fn local_router_with_generation_admission(
             post(deliver_artifact_version),
         )
         .route("/api/v1/agent/hitl/respond", post(respond_to_hitl))
+        .route("/api/v1/agent/conversations/:conversation_id/browser-auth", get(browser_auth_routes::pending))
+        .route("/api/v1/agent/browser-auth/:request_id/respond", post(browser_auth_routes::respond))
         .route("/api/v1/agent/plan/mode", post(switch_plan_mode))
         .route(
             "/api/v1/agent/plan/mode/:conversation_id",
@@ -3908,14 +4056,15 @@ async fn sign_out(
     };
     let revoked = state
         .session_store
-        .revoke_session(credential, Utc::now().timestamp_millis())
+        .revoke_session_with_id(credential, Utc::now().timestamp_millis())
         .map_err(local_store_error)?;
-    if !revoked {
+    let Some(session_id) = revoked else {
         return Err((
             StatusCode::UNAUTHORIZED,
             Json(json!({ "detail": "authenticated desktop session required" })),
         ));
-    }
+    };
+    state.revoke_session_runs(&session_id).await;
     Ok(Json(json!({ "success": true })))
 }
 
@@ -4045,6 +4194,9 @@ async fn switch_workspace_context(
         .session_store
         .switch_workspace_context(&authenticated, &request, Utc::now().timestamp_millis())
         .map_err(auth_context_error)?;
+    if outcome.changed {
+        state.revoke_stale_context_runs(&authenticated.user.user_id).await;
+    }
     serde_json::to_value(outcome)
         .map(Json)
         .map_err(|error| local_store_error(error.to_string()))
@@ -4077,6 +4229,14 @@ struct LlmProviderMutation {
     allowed_models: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     embedding_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    audio_input_models: Option<Vec<String>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "llm_request_timeout::deserialize_milliseconds"
+    )]
+    request_timeout_ms: Option<u64>,
     #[serde(default)]
     is_active: Option<bool>,
     #[serde(default)]
@@ -5101,7 +5261,8 @@ fn provider_probe_catalog(
     } else {
         None
     };
-    let source = outcome.healthy().then_some(if embedding.is_some() {
+    let audio_input = if outcome.healthy() { provider.map(provider_audio_declaration::models).unwrap_or_default() } else { BTreeSet::new() };
+    let source = outcome.healthy().then_some(if embedding.is_some() || !audio_input.is_empty() {
         "provider-api+explicit-configuration"
     } else {
         "provider-api"
@@ -5117,6 +5278,7 @@ fn provider_probe_catalog(
         "models": {
             "chat": chat,
             "embedding": embedding.into_iter().collect::<Vec<_>>(),
+            "audio_input": audio_input,
             "rerank": [],
         },
     })
@@ -5501,6 +5663,8 @@ fn runtime_binding_from_provider(provider: &Value) -> Option<ProviderRuntimeBind
         base_url,
         model: model.to_string(),
         auth_method: auth_method.to_string(),
+        audio_input_models: provider_audio_declaration::models(provider),
+        request_timeout: llm_request_timeout::duration(provider).ok()?,
     })
 }
 
@@ -5584,6 +5748,7 @@ fn llm_from_runtime_binding(
     binding: ProviderRuntimeBinding,
     credential: Option<String>,
 ) -> Option<Arc<dyn LlmPort>> {
+    let request_timeout = binding.request_timeout;
     if binding.auth_method != "none" && credential.is_none() {
         return None;
     }
@@ -5591,13 +5756,17 @@ fn llm_from_runtime_binding(
         binding.provider_type.as_str(),
         "openai" | "openai_compatible"
     ) {
-        let llm = HttpLlm::new(binding.base_url, binding.model);
+        let audio_input_supported = binding.audio_input_models.contains(&binding.model);
+        let llm = HttpLlm::new(binding.base_url, binding.model).with_audio_input_support(audio_input_supported);
         let llm = if let Some(credential) = credential {
             llm.with_api_key(credential)
         } else {
             llm
         };
-        return Some(Arc::new(llm));
+        return Some(llm_request_timeout::RequestTimedLlm::wrap(
+            Arc::new(llm),
+            request_timeout,
+        ));
     }
     if binding.provider_type == "anthropic" {
         let llm = AnthropicLlm::new(binding.base_url, binding.model);
@@ -5606,7 +5775,10 @@ fn llm_from_runtime_binding(
         } else {
             llm
         };
-        return Some(Arc::new(AnthropicAgentLlm { inner: llm }));
+        return Some(llm_request_timeout::RequestTimedLlm::wrap(
+            Arc::new(AnthropicAgentLlm { inner: llm }),
+            request_timeout,
+        ));
     }
     None
 }
@@ -5693,6 +5865,9 @@ fn provider_with_runtime_state(
         _ => "application_vault",
     };
     if let Some(object) = provider.as_object_mut() {
+        object
+            .entry("request_timeout_ms")
+            .or_insert(json!(llm_request_timeout::DEFAULT_REQUEST_TIMEOUT_MS));
         object.insert("credential_source".to_string(), json!(credential_source));
         object.insert(
             "credential_configured".to_string(),
@@ -7281,7 +7456,7 @@ async fn promote_run_input_to_plan(
     } else {
         Some(
             state
-                .claim_agent_run(&existing.conversation_id, None)
+                .claim_agent_run_owned(&existing.conversation_id, None, &authenticated)
                 .ok_or_else(|| {
                     (
                         StatusCode::CONFLICT,
@@ -7539,7 +7714,7 @@ async fn review_artifact_version(
                 .agent_engine(&conversation, Some(&run))
                 .await
                 .map_err(execution_environment_error)?;
-            let Some(control) = state.claim_agent_run(&conversation.id, Some(&run.id)) else {
+            let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
                 return Err((
                     StatusCode::CONFLICT,
                     Json(json!({ "detail": "conversation already running" })),
@@ -8133,7 +8308,7 @@ async fn respond_to_hitl(
         .await
         .map_err(execution_environment_error)?;
 
-    let Some(control) = state.claim_agent_run(&conversation.id, request.run_id.as_deref()) else {
+    let Some(control) = state.claim_agent_run_owned(&conversation.id, request.run_id.as_deref(), &authenticated) else {
         return wait_for_competing_hitl_response(
             &state,
             &request.id,
@@ -8153,8 +8328,8 @@ async fn respond_to_hitl(
     // A prior cancellation can have persisted its terminal checkpoint before
     // the desktop run transition is reconciled. Never commit a grant or human
     // answer against that checkpoint, even while the run row still waits.
-    let pending_matches = match state.checkpoints.load(&conversation.id).await {
-        Ok(checkpoint) => checkpoint.is_some_and(|checkpoint| {
+    let pending_checkpoint = match state.checkpoints.load(&conversation.id).await {
+        Ok(checkpoint) => checkpoint.filter(|checkpoint| {
             checkpoint.status == SessionStatus::AwaitingInput
                 && checkpoint
                     .pending_hitl
@@ -8166,10 +8341,25 @@ async fn respond_to_hitl(
             return Err(local_store_error(error.to_string()));
         }
     };
-    if !pending_matches {
+    let Some(pending_checkpoint) = pending_checkpoint else {
         state.release_agent_run_if_control(&conversation.id, &control);
         return Err(hitl_response_commit_error(HitlResponseCommitError::RunNotWaiting));
-    }
+    };
+    let repl_tool_permission=match cua_repl::permission_for_request(&state.cua_repl,&request.conversation_id,request.run_id.as_deref(),None,request.kind,request.decision.as_ref()) {
+        Ok(permission)=>permission,
+        Err(error)=>{state.release_agent_run_if_control(&conversation.id,&control);return Err(local_bad_request(error));}
+    };
+    let pending_mcp_continuation = request.run_id.as_deref().zip(request.decision.as_ref())
+        .filter(|(_, decision)| request.kind == HitlKind::Permission && decision.target.kind == "repl_step"
+            && hitl_response_approves(request.kind, &body.response_data))
+        .and_then(|(run, decision)| state.cua_repl.pending_permission_scope(
+            &request.conversation_id, run, &decision.target.id, &decision.action.name,
+        ));
+    let pending_mcp_surfaces = engine_run.as_ref().and_then(|waiting| {
+        state.mcp_app_automation.capture_local_human_response(
+            waiting, &request, &conversation.tenant_id, &pending_checkpoint.session_id,
+        )
+    });
     let response_commit = state.session_store.mark_hitl_responded(
         &request.id,
         HitlResponseCommit {
@@ -8200,7 +8390,7 @@ async fn respond_to_hitl(
             .run_once_tool_permissions
             .lock()
             .expect("run once tool permissions")
-            .insert((run_id, canonical_tool_name));
+            .insert(repl_tool_permission.unwrap_or((run_id, canonical_tool_name)));
     }
     if let Some((owner,input))=computer_use_consent {
         if let Err(error)=computer_use_v2::apply_management(&state,&owner,input).await {
@@ -8279,6 +8469,10 @@ async fn respond_to_hitl(
     item["answered"] = json!(true);
     state.append_timeline(&conversation.id, item);
 
+    // Project the committed record, after all exact grants have been applied.
+    // A bare "approved" loses the action, target and once-only scope that the
+    // model needs to continue the pending operation without asking again.
+    let answer = hitl_model_response::answer(&committed_request, &answer);
     let accepted = match engine
         .accept_human_response(&conversation.id, &request.id, &answer)
         .await
@@ -8344,6 +8538,9 @@ async fn respond_to_hitl(
         None
     };
 
+    if let (Some(waiting), Some(resumed)) = (engine_run.as_ref(), authoritative_run.as_ref()) {
+        state.mcp_app_automation.resume_local_permission(waiting, resumed, &committed_request, pending_mcp_continuation.as_ref());
+    }
     let mut response = hitl_response_receipt(&committed_request, false);
     response["execution_status"] = json!("running");
     response["revision"] = json!(authoritative_run.as_ref().map(|run| run.revision));
@@ -8360,6 +8557,15 @@ async fn respond_to_hitl(
         Some(&request.id),
         plugin_generation.map(|Extension(generation)| generation),
     );
+    if let (Some(waiting), Some(resumed), Some(captured), Some(generation)) = (
+        engine_run.as_ref(), authoritative_run.as_ref(), pending_mcp_surfaces.as_ref(),
+        plugin_generation.as_ref(),
+    ) {
+        state.mcp_app_automation.resume_local_human_response(
+            &state, waiting, resumed, &committed_request, captured,
+            &accepted.session_id, generation,
+        );
+    }
     let native_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
         authenticated.clone(),
         plugin_generation.clone(),
@@ -8533,6 +8739,16 @@ fn valid_permission_response(request: &DesktopHitlRequest, response_data: &Value
     let Some(granted) = object.get("granted").and_then(Value::as_bool) else {
         return false;
     };
+    if request.decision.as_ref().is_some_and(|decision| decision.target.kind == "repl_step") {
+        return !object.contains_key("tool")
+            && !object.contains_key("tool_name")
+            && !object.contains_key("canonical_tool_name")
+            && matches!(
+                (object.get("action").and_then(Value::as_str), granted,
+                    object.get("scope").and_then(Value::as_str)),
+                (Some("allow"), true, Some("once")) | (Some("deny"), false, Some("once"))
+            );
+    }
     let Some(action) = object.get("action").and_then(Value::as_str) else {
         return true;
     };
@@ -9226,6 +9442,9 @@ async fn agent_socket_loop(
                         }).await;
                     });
                     if !acknowledgement_sent { break; }
+                } else if kind == "stop_session" {
+                    let receipt = agent_stop::handle_command(&state, &authenticated, &value);
+                    if sender.send(Message::Text(receipt.to_string())).await.is_err() { break; }
                 } else if kind == "steer" || kind == "kill_run" {
                     let receipt = subagent_control::handle_command(&state, &authenticated, &value).await;
                     if sender.send(Message::Text(receipt.to_string())).await.is_err() {
@@ -10341,7 +10560,6 @@ fn artifact_tool_outputs(tool: &str, output_json: &str) -> Vec<Value> {
 
 struct FailoverLlm {
     candidates: Vec<Arc<dyn LlmPort>>,
-    candidate_timeout: std::time::Duration,
 }
 
 struct MeteredLlm {
@@ -10373,13 +10591,8 @@ impl MeteredLlm {
 }
 
 impl FailoverLlm {
-    const CANDIDATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
-
     fn from_candidates(candidates: Vec<Arc<dyn LlmPort>>) -> Arc<dyn LlmPort> {
-        Arc::new(Self {
-            candidates,
-            candidate_timeout: Self::CANDIDATE_TIMEOUT,
-        })
+        Arc::new(Self { candidates })
     }
 
     async fn attempt<T, F, Fut>(&self, mut operation: F) -> CoreResult<T>
@@ -10389,17 +10602,9 @@ impl FailoverLlm {
     {
         let mut last_error = None;
         for candidate in &self.candidates {
-            match tokio::time::timeout(self.candidate_timeout, operation(Arc::clone(candidate)))
-                .await
-            {
-                Ok(Ok(value)) => return Ok(value),
-                Ok(Err(error)) => last_error = Some(error),
-                Err(_) => {
-                    last_error = Some(CoreError::Llm(format!(
-                        "model_timeout: LLM routing candidate exceeded {} ms",
-                        self.candidate_timeout.as_millis()
-                    )));
-                }
+            match operation(Arc::clone(candidate)).await {
+                Ok(value) => return Ok(value),
+                Err(error) => last_error = Some(error),
             }
         }
         Err(last_error.unwrap_or_else(|| {
@@ -10526,6 +10731,24 @@ mod tests {
     mod conversation_llm_route_tests {
         use super::*;
         include!("conversation_llm_route_tests.rs");
+    }
+
+    mod provider_audio_declaration_tests {
+        use super::*;
+        include!("provider_audio_declaration_tests.rs");
+    }
+
+    mod provider_request_timeout_tests {
+        use super::*;
+        include!("provider_request_timeout_tests.rs");
+    }
+
+    mod run_control_http_tests {
+        include!("run_control_http_tests.rs");
+    }
+
+    mod hitl_request_identity_tests {
+        include!("hitl_request_identity_tests.rs");
     }
 
     mod provider_embedding_declaration_tests {
@@ -11079,6 +11302,27 @@ mod tests {
         request.decision.as_mut().expect("decision").target.kind = "file".to_string();
         request.decision.as_mut().expect("decision").action.name = canonical_tool_name.to_string();
         request
+    }
+
+    #[test]
+    fn repl_step_permission_response_requires_explicit_once_scope() {
+        let mut request = workspace_permission_hitl_request(Some("run-1"), "write");
+        request.decision.as_mut().unwrap().target.kind = "repl_step".into();
+        for response in [
+            json!({"action":"allow","granted":true,"scope":"once"}),
+            json!({"action":"deny","granted":false,"scope":"once"}),
+        ] {
+            assert!(valid_permission_response(&request, &response));
+        }
+        for response in [
+            json!({"granted":true}),
+            json!({"action":"allow","granted":true,"scope":"session"}),
+            json!({"action":"allow_always","granted":true,"scope":"workspace_tool"}),
+            json!({"action":"allow","granted":true,"scope":"once","tool":"bash"}),
+            json!({"action":"deny","granted":true,"scope":"once"}),
+        ] {
+            assert!(!valid_permission_response(&request, &response));
+        }
     }
 
     #[test]
@@ -19036,7 +19280,7 @@ mod tests {
                         json!({
                             "request_id": "permission-hitl",
                             "hitl_type": "permission",
-                            "response_data": { "granted": true },
+                            "response_data": { "action": "allow", "granted": true, "scope": "once" },
                             "expected_revision": 2,
                             "idempotency_key": "permission-hitl:stale",
                         })
@@ -19069,7 +19313,7 @@ mod tests {
         let response_command = json!({
             "request_id": "permission-hitl",
             "hitl_type": "permission",
-            "response_data": { "granted": true },
+            "response_data": { "action": "allow", "granted": true, "scope": "once" },
             "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
             "idempotency_key": "permission-hitl:approve",
         })
@@ -19147,7 +19391,28 @@ mod tests {
             .await
             .expect("load checkpoint")
             .expect("checkpoint");
-        assert_eq!(saved.hitl_answer("permission-hitl"), Some("approved"));
+        let human_answer = saved.hitl_answer("permission-hitl").expect("recorded answer");
+        let receipt: Value = serde_json::from_str(human_answer).expect("structured permission receipt");
+        assert_eq!(receipt["type"], "permission_response");
+        assert_eq!(receipt["request_id"], "permission-hitl");
+        assert_eq!(receipt["run_id"], running.id);
+        assert_eq!(receipt["authority_revision"], 2);
+        assert_eq!(receipt["decision"], json!(test_decision_context()));
+        assert_eq!(
+            receipt["response_data"],
+            json!({ "action": "allow", "granted": true, "scope": "once" })
+        );
+        assert!(
+            saved.transcript.iter().any(|entry| {
+                entry.role == Role::Human && entry.content == human_answer
+            }),
+            "the next model round receives the exact committed response"
+        );
+        assert_eq!(
+            saved.hitl_responses.len(),
+            1,
+            "duplicate submission must not duplicate the response"
+        );
         let request = state
             .session_store
             .hitl_request("permission-hitl")
@@ -19155,7 +19420,10 @@ mod tests {
             .expect("HITL");
         assert_eq!(request.status, DesktopHitlStatus::Responded);
         assert_eq!(request.authority_revision, 2);
-        assert_eq!(request.response_data, Some(json!({ "granted": true })));
+        assert_eq!(
+            request.response_data,
+            Some(json!({ "action": "allow", "granted": true, "scope": "once" }))
+        );
         assert_eq!(request.response_actor.as_deref(), Some("local_user"));
         assert_eq!(request.response_revision, None);
         assert_eq!(
@@ -19174,7 +19442,7 @@ mod tests {
                         json!({
                             "request_id": "permission-hitl",
                             "hitl_type": "permission",
-                            "response_data": { "granted": true },
+                            "response_data": { "action": "allow", "granted": true, "scope": "once" },
                             "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
                             "idempotency_key": "permission-hitl:approve",
                         })
@@ -21469,6 +21737,8 @@ mod tests {
                     base_url: "https://secret-endpoint.example.test/v1".to_string(),
                     model: "model-a".to_string(),
                     auth_method: "api_key".to_string(),
+                    audio_input_models: BTreeSet::new(),
+                    request_timeout: std::time::Duration::from_millis(45_000),
                 },
             );
             runtime.credentials.insert(key, "llm-secret".to_string());
@@ -21536,6 +21806,8 @@ mod tests {
                     base_url: "http://127.0.0.1:1/v1".to_string(),
                     model: "model-a".to_string(),
                     auth_method: "api_key".to_string(),
+                    audio_input_models: BTreeSet::new(),
+                    request_timeout: std::time::Duration::from_millis(45_000),
                 },
             );
             runtime.credentials.insert(key, "llm-secret".to_string());
@@ -21590,6 +21862,8 @@ mod tests {
                     base_url: "http://127.0.0.1:1/v1".to_string(),
                     model: "model-a".to_string(),
                     auth_method: "api_key".to_string(),
+                    audio_input_models: BTreeSet::new(),
+                    request_timeout: std::time::Duration::from_millis(45_000),
                 },
             );
             runtime.credentials.insert(key, "llm-secret".to_string());
@@ -21656,6 +21930,8 @@ mod tests {
                         base_url: "http://127.0.0.1:1/v1".to_string(),
                         model: model.to_string(),
                         auth_method: "api_key".to_string(),
+                    audio_input_models: BTreeSet::new(),
+                    request_timeout: std::time::Duration::from_millis(45_000),
                     },
                 );
                 runtime.credentials.insert(key, "llm-secret".to_string());
@@ -21698,6 +21974,8 @@ mod tests {
                     base_url: "http://127.0.0.1:1/v1".to_string(),
                     model: "model-a".to_string(),
                     auth_method: "api_key".to_string(),
+                    audio_input_models: BTreeSet::new(),
+                    request_timeout: std::time::Duration::from_millis(45_000),
                 },
             );
             runtime.credentials.insert(key, "llm-secret".to_string());

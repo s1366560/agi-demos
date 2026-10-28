@@ -35,6 +35,7 @@ from src.infrastructure.agent.native_computer_use.store import DeviceBridgeError
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
+from .computer_use_steps import router as execution_steps_router
 from .run_authority_common import _load_scoped_run
 
 router = APIRouter()
@@ -181,7 +182,9 @@ async def require_child_owner(db: AsyncSession, value: dict[str, Any]) -> bool:
     return True
 
 
-async def current_call_effect(broker: NativeComputerBroker, value: dict[str, Any]) -> str:
+async def current_call_effect(
+    broker: NativeComputerBroker, value: dict[str, Any], *, allow_step_only: bool = False
+) -> str:
     devices = await broker.devices.list(
         user_id=value["user_id"], tenant_id=value["tenant_id"], project_id=value["project_id"]
     )
@@ -197,7 +200,16 @@ async def current_call_effect(broker: NativeComputerBroker, value: dict[str, Any
     )
     if device is None:
         raise DeviceBridgeError("computer_use_device_disconnected")
-    return validate_registered_call(device, value)
+    return validate_registered_call(device, value, allow_step_only=allow_step_only)
+
+
+async def require_current_mcp_agent(db: AsyncSession, value: dict[str, Any]) -> None:
+    if value.get("mcp_binding") is not None:
+        from .computer_use_steps import current_agent_servers
+
+        current_servers = await current_agent_servers(db, value, value["tool_name"])
+        if tuple(value.get("allowed_mcp_servers", ())) != current_servers:
+            raise DeviceBridgeError("computer_use_agent_authority_changed")
 
 
 async def require_request_authority(
@@ -207,9 +219,11 @@ async def require_request_authority(
     user_id: str,
     *,
     resume: bool = False,
+    allow_step_only: bool = False,
 ) -> None:
     """Recheck current run, workspace, child and catalog before native authority."""
-    effect = await current_call_effect(broker, value)
+    effect = await current_call_effect(broker, value, allow_step_only=allow_step_only)
+    await require_current_mcp_agent(db, value)
     run, conversation = await _load_scoped_run(db, run_id=value["run_id"], user_id=user_id)
     initial_workspace_id = conversation.workspace_id
     live_child = await require_child_owner(db, value)
@@ -264,7 +278,9 @@ async def require_request_authority(
         raise DeviceBridgeError("computer_use_run_authorization_invalid")
     await require_peer_sender_permission_v2(
         run,
-        "read" if effect == "read" else "system_api",
+        "conversation_progress"
+        if effect == "execute"
+        else ("read" if effect == "read" else "system_api"),
         (run.tenant_id, run.project_id, run.conversation_id, user_id),
         async_session_factory,
     )
@@ -283,7 +299,8 @@ async def require_request_authority(
         or await load_chat_permission_policy(current_conversation) != policy
     ):
         raise DeviceBridgeError("computer_use_workspace_authority_changed")
-    if await current_call_effect(broker, value) != effect:
+    await require_current_mcp_agent(db, value)
+    if await current_call_effect(broker, value, allow_step_only=allow_step_only) != effect:
         raise DeviceBridgeError("computer_use_tool_effect_changed")
 
 
@@ -374,3 +391,6 @@ async def resume_device_authority(
             status_code=409,
             detail=_("Computer Use request is unavailable or its authority changed"),
         ) from exc
+
+
+router.include_router(execution_steps_router)

@@ -1,12 +1,13 @@
 //! Coordinate conversion is arithmetic over the exact, scoped native observation.
 use crate::client::CuaCallContext;
 use agistack_core::{CoreError, CoreResult};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 #[derive(Clone, Debug)]
 pub(crate) struct ObservationCoordinates {
     pub context: CuaCallContext,
     pub snapshot: String,
+    pub input_generation: String,
     pub window: String,
     app: String,
     requested_app: String,
@@ -46,8 +47,12 @@ impl ObservationCoordinates {
                     && *w <= 1_000_000.0
                     && *h <= 1_000_000.0
             });
+        if result["input_mode"] != json!(context.input_mode) {
+            return Err(invalid("observation_input_mode_mismatch"));
+        }
         Ok(Self {
             context,
+            input_generation: required("input_generation")?,
             snapshot: required("snapshot_id")?,
             window: required("window_id")?,
             app: result["app"].as_str().unwrap_or(requested_app).to_owned(),
@@ -143,10 +148,11 @@ mod tests {
             conversation_id: "c".into(),
             run_id: "r".into(),
             session_id: "s".into(),
+            input_mode: crate::CuaInputMode::default(),
         }
     }
     fn observation(width: f64, height: f64, pixels: (u32, u32)) -> ObservationCoordinates {
-        ObservationCoordinates::new(context(),"pid:1",&json!({"app":"native-app","snapshot_id":"observation","window_id":"window","window_bounds":{"x":100,"y":200,"width":width,"height":height}}),Some(pixels)).unwrap()
+        ObservationCoordinates::new(context(),"pid:1",&json!({"input_mode":"background","input_generation":"fixture-generation","app":"native-app","snapshot_id":"observation","window_id":"window","window_bounds":{"x":100,"y":200,"width":width,"height":height}}),Some(pixels)).unwrap()
     }
     fn action(space: &str) -> Value {
         json!({"app":"pid:1","snapshot_id":"observation","action":{"kind":"drag","coordinate_space":space,"from_x":400,"from_y":200,"to_x":800,"to_y":600}})
@@ -198,10 +204,8 @@ mod tests {
         assert!(record.transform(&context(), &mut params).is_err());
         let mut no_image = record.clone();
         no_image.image = None;
-        assert!(
-            no_image
-                .transform(&context(), &mut action("screenshot"))
-                .is_err()
-        );
+        assert!(no_image
+            .transform(&context(), &mut action("screenshot"))
+            .is_err());
     }
 }

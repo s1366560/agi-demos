@@ -14,6 +14,12 @@ pub const TOOL_DRAG: &str = "computer_drag";
 pub const TOOL_SECONDARY_ACTION: &str = "computer_secondary_action";
 pub const TOOL_PASTE: &str = "computer_paste";
 
+/// These mutations only close recordings already owned by the current native
+/// session and return their receipts. They accept no destination path and must
+/// remain available without a new generic mutation grant. The native host still
+/// validates run/session ownership and arguments before releasing the resource.
+pub const OWNED_RECORDING_RELEASE_TOOLS: &[&str] = &["computer_audio_stop"];
+
 /// Authority-relevant effect declared per tool. The sidecar maps this onto its
 /// internal `ToolMetadata` when wiring the host (mirrors
 /// `authority_metadata_by_name` on the other hosts).

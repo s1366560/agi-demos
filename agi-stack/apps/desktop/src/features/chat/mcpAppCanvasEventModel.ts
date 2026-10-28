@@ -10,6 +10,7 @@ export type MCPAppCanvasTab = {
   toolResult: unknown;
   uiMetadata: Record<string, unknown>;
   projectId: string | null;
+  automationTabId?: string | null;
 };
 
 export type MCPAppCanvasState = {
@@ -63,6 +64,7 @@ export function applyMCPAppCanvasStreamEvent(
   const tab: MCPAppCanvasTab = {
     id: `mcp-app-${identity}`,
     appId,
+    automationTabId: nonEmptyString(parsed.data, 'automation_tab_id'),
     title: nonEmptyString(uiMetadata, 'title') ?? toolName,
     toolName,
     serverName:

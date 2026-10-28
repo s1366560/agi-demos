@@ -70,7 +70,7 @@ class _AzureEndpointKwargs(TypedDict, total=False):
 class RequestCaptureV2:
     """Await durable preparation inside the HTTP hook, before transport.send."""
 
-    def __init__(self, recorder: ModelRequestRecorderV2, provider: str, model: str) -> None:
+    def __init__(self, recorder: ModelRequestRecorderV2 | None, provider: str, model: str) -> None:
         self.recorder = recorder
         self.provider = provider
         self.model = model
@@ -92,6 +92,8 @@ class RequestCaptureV2:
             cast(_DeferredStreamingResponse, response).make_call = bound_call
 
     async def before_request(self, request: httpx.Request) -> None:
+        if self.recorder is None:
+            return
         from .model_request_log import MODEL_REQUEST_PREPARED_EVENT_V2, prepared_model_request_v2
 
         try:
@@ -126,6 +128,8 @@ class RequestCaptureV2:
 
         for response in self.responses:
             await response.aclose()
+        if self.recorder is None:
+            return
         for attempt_id in self.attempts:
             await self.recorder.append(
                 MODEL_REQUEST_SETTLED_EVENT_V2,
@@ -141,7 +145,7 @@ class RequestCaptureV2:
 @asynccontextmanager
 async def recording_client_v2(
     kwargs: dict[str, Any],
-    recorder: ModelRequestRecorderV2,
+    recorder: ModelRequestRecorderV2 | None,
 ) -> AsyncIterator[tuple[dict[str, Any], RequestCaptureV2]]:
     """No global clients or callbacks: concurrent tenants cannot share hooks."""
     import litellm

@@ -210,3 +210,81 @@ test("real timeline distinguishes loading authority from ready or failed missing
     element.remove();
   }
 });
+
+test("device MCP approval renders only Once and denial and submits the formal responses", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const submissions = [];
+  const render = async (kind) => {
+    await act(async () => root.render(React.createElement(
+      I18nProvider,
+      null,
+      React.createElement(HitlResponseCard, {
+        item: {
+          id: "device-mcp-event",
+          type: "permission_asked",
+          requestId: "device-mcp-permission",
+          payload: { request_id: "device-mcp-permission" },
+        },
+        hitlType: "permission",
+        canRespond: true,
+        onRespond: async (submission) => submissions.push(submission),
+        approvalRequest: {
+          id: "device-mcp-permission",
+          kind: "permission",
+          status: "pending",
+          authority_revision: 4,
+          permission: {
+            tool_name: "mcp_owned",
+            action: "execute",
+            description: "Invoke the connected MCP tool once",
+            risk_level: "low",
+            allow_remember: false,
+          },
+          decision: {
+            action: { name: "mcp_owned", label: "Invoke MCP tool" },
+            target: { kind, id: "pending-device-mcp" },
+            data: { summary: "Apply the approved input" },
+            reason: "The task requires this invocation",
+            risk: { level: "low", rationale: "Restricted to the approved input" },
+            reversibility: { mode: "reversible" },
+            scope: { kind: "tool", ids: ["mcp_owned"] },
+            evidence: [{ kind: "tool", id: "mcp_owned", label: "Connected tool" }],
+          },
+        },
+      }),
+    )));
+  };
+  const button = (label) => [...element.querySelectorAll("button")]
+    .find((candidate) => candidate.textContent.trim() === label);
+  try {
+    await render("device_mcp_tool");
+    assert.equal(button("Always allow this tool"), undefined);
+    assert.equal(button("Allow once")?.disabled, false);
+    assert.equal(button("Deny")?.disabled, false);
+    await act(async () => button("Allow once").click());
+    assert.equal(submissions.length, 1);
+    assert.deepEqual(submissions[0], {
+      requestId: "device-mcp-permission",
+      hitlType: "permission",
+      responseData: { action: "allow", granted: true, scope: "once" },
+      expectedRevision: 4,
+      idempotencyKey: "device-mcp-permission:4:permission",
+    });
+    await act(async () => button("Deny").click());
+    await act(async () => button("Deny without feedback").click());
+    assert.equal(submissions.length, 2);
+    assert.deepEqual(submissions[1].responseData, {
+      action: "deny", granted: false, scope: "once",
+    });
+
+    await render("repl_step");
+    assert.equal(button("Always allow this tool"), undefined);
+    await render("tool");
+    assert.equal(button("Always allow this tool")?.disabled, false);
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});

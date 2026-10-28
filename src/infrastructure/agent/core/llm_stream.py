@@ -510,7 +510,8 @@ class LLMStream:
         if any(
             isinstance(message.get("content"), list)
             and any(
-                isinstance(part, dict) and part.get("type") == "image_url"
+                isinstance(part, dict)
+                and part.get("type") in {"image_url", "artifact_audio", "input_audio"}
                 for part in message["content"]
             )
             for message in messages
@@ -657,7 +658,11 @@ class LLMStream:
 
         # Prepare kwargs
         kwargs = self.config.to_litellm_kwargs()
-        kwargs["messages"] = messages
+        from src.infrastructure.agent.native_computer_use.audio_messages import prepare_audio_input
+
+        # This fallback has no persisted Provider capability declaration.
+        audio = await prepare_audio_input(messages, supported=False, provider=None)
+        kwargs["messages"] = audio.messages
 
         # Clamp max_tokens to model-specific limits
         from src.infrastructure.llm.model_registry import clamp_max_tokens as _clamp_max_tokens

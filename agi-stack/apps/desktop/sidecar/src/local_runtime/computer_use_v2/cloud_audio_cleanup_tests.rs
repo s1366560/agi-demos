@@ -30,6 +30,7 @@ impl AudioFixture {
             conversation_id: "conversation".into(),
             run_id: "audio-run".into(),
             session_id: "audio-session".into(),
+            input_mode: agistack_adapters_cua::CuaInputMode::default(),
         };
         let recording_id = Uuid::new_v4().to_string();
         // One mono, 16-bit PCM sample at 16 kHz.

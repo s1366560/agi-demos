@@ -1,3 +1,4 @@
+import { authorizeCloudToolMediaEndpoint } from './cloudToolMediaEndpointPolicy';
 import { authorizeCloudChildControlEndpoint } from './cloudChildControlEndpointPolicy';
 import { authorizeCloudSubagentTraceEndpoint } from './cloudSubagentTraceEndpointPolicy';
 import { authorizeCloudJourneyReadEndpoint } from './cloudJourneyReadEndpointPolicy';
@@ -191,6 +192,8 @@ export function authorizeCloudProductEndpoint(
   const memory = authorizeCloudMemoryEndpoint(request, target);
   if (memory) return memory;
 
+  const toolMedia = authorizeCloudToolMediaEndpoint(request, target);
+  if (toolMedia) return toolMedia;
   const privilegedTransfer = authorizePrivilegedTransfer(request, target, segments);
   if (privilegedTransfer) return privilegedTransfer;
   if (request.form !== undefined || request.response !== undefined) return null;

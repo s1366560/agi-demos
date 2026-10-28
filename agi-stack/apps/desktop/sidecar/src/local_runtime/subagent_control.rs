@@ -18,6 +18,7 @@ pub(super) struct SubagentControl {
     parent_agent_id: String,
     parent: Arc<LocalRunControl>,
     inner: Mutex<ControlState>,
+    interrupted: tokio::sync::Notify,
 }
 
 #[derive(Default)]
@@ -68,6 +69,7 @@ impl SubagentControls {
             parent_agent_id: parent_agent_id.to_string(),
             parent,
             inner: Mutex::new(ControlState::default()),
+            interrupted: tokio::sync::Notify::new(),
         });
         executions.insert(execution_id.to_string(), Arc::clone(&control));
         Ok(control)
@@ -134,6 +136,24 @@ impl SubagentControls {
 
 #[async_trait]
 impl ReActControl for SubagentControl {
+    async fn wait_for_interrupt(&self, session_id: &str, round: u64) -> CoreResult<()> {
+        loop {
+            let changed = self.interrupted.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            match self.directive(session_id, round).await? {
+                RunDirective::Pause | RunDirective::Cancel => return Ok(()),
+                RunDirective::Continue | RunDirective::Steer(_) => {}
+            }
+            tokio::select! {
+                () = &mut changed => {},
+                result = self.parent.wait_for_interrupt(&self.conversation_id, round) => {
+                    result?;
+                }
+            }
+        }
+    }
+
     async fn directive(&self, session_id: &str, _round: u64) -> CoreResult<RunDirective> {
         if session_id != self.execution_id {
             return Err(control_error());
@@ -363,6 +383,9 @@ pub(super) async fn handle_command(
         .receipts
         .insert(command.idempotency_key, (payload.clone(), receipt.clone()));
     drop(inner);
+    if command.action == "kill_run" {
+        control.interrupted.notify_waiters();
+    }
     let event = state.timeline_item(
         "ack",
         conversation.id.clone(),

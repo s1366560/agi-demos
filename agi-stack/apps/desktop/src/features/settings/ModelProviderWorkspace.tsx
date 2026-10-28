@@ -1039,6 +1039,7 @@ export function ModelProviderWorkspace({
 
       {adding ? (
         <AddProviderDialog
+          allowRequestTimeout={config.mode === 'local'}
           onClose={() => setAdding(false)}
           onLoadTypes={client.listLlmProviderTypes.bind(client)}
           onValidateDraft={client.testLlmProviderDraft.bind(client)}

@@ -19,6 +19,8 @@ pub(super) struct Instance {
     pub microphone: bool,
     pub system_audio: bool,
     pub locked_use: bool,
+    #[serde(default)]
+    pub input_mode: agistack_adapters_cua::CuaInputMode,
 }
 
 impl Default for Instance {
@@ -30,6 +32,7 @@ impl Default for Instance {
             microphone: false,
             system_audio: false,
             locked_use: false,
+            input_mode: Default::default(),
         }
     }
 }
@@ -184,6 +187,7 @@ pub(super) fn update(
             value.microphone = false;
             value.system_audio = false;
             value.locked_use = false;
+            value.input_mode = Default::default();
         }
         "configure" if value.installed => match capability {
             Some(("microphone", enabled)) => value.microphone = enabled,
@@ -205,6 +209,29 @@ pub(super) fn update(
     if action == "uninstall" {
         revoke_all(db, owner)?;
     }
+    Ok(value)
+}
+
+pub(super) fn set_input_mode(
+    db: &Connection,
+    owner: &Owner,
+    expected: u64,
+    mode: agistack_adapters_cua::CuaInputMode,
+) -> Result<Instance, String> {
+    let mut value = instance(db, owner)?;
+    if value.revision != expected {
+        return Err("cua_instance_revision_conflict".into());
+    }
+    if !value.installed {
+        return Err("cua_instance_action_invalid".into());
+    }
+    value.input_mode = mode;
+    value.revision = value
+        .revision
+        .checked_add(1)
+        .ok_or("cua_instance_revision_exhausted")?;
+    db.execute("INSERT INTO desktop_cua_instances_v2 VALUES(?1,?2,?3,?4,?5) ON CONFLICT(user_id,tenant_id,project_id,device_id) DO UPDATE SET config_json=excluded.config_json",
+        params![owner.user_id,owner.tenant_id,owner.project_id,owner.device_id,serde_json::to_string(&value).map_err(|error|error.to_string())?]).map_err(|error|error.to_string())?;
     Ok(value)
 }
 
@@ -456,5 +483,98 @@ mod tests {
         update(&db, &owner, 1, "uninstall", None).unwrap();
         assert!(grants(&db, &owner).unwrap().is_empty());
         assert!(!instance(&db, &owner).unwrap().installed);
+    }
+
+    #[test]
+    fn locked_use_rejects_persistent_grants_and_legacy_coverage() {
+        let db = Connection::open_in_memory().unwrap();
+        initialize(&db).unwrap();
+        let owner = owner();
+        update(&db, &owner, 0, "enable", None).unwrap();
+        for scope in [GrantScope::Session, GrantScope::Always] {
+            let legacy: Grant = serde_json::from_value(serde_json::json!({
+                "id":format!("legacy-locked-use-{scope:?}"),
+                "app":"device:control",
+                "identity_digest":"device",
+                "capability":"locked_use",
+                "scope":scope,
+                "session_id":if scope == GrantScope::Always { None } else { Some("session") },
+                "request_id":null,
+            }))
+            .unwrap();
+            assert_eq!(
+                grant(&db, &owner, legacy.clone()).unwrap_err(),
+                "cua_action_requires_once"
+            );
+            // Represent a prior version's persisted grant in this isolated in-memory database.
+            db.execute(
+                "INSERT INTO desktop_cua_grants_v2 VALUES(?1,?2,?3,?4,?5,?6)",
+                params![
+                    legacy.id,
+                    owner.user_id,
+                    owner.tenant_id,
+                    owner.project_id,
+                    owner.device_id,
+                    serde_json::to_string(&legacy).unwrap()
+                ],
+            )
+            .unwrap();
+            let persisted = grants(&db, &owner).unwrap();
+            for session in ["session", "new-run-session"] {
+                assert!(!legacy.covers(
+                    "device:control",
+                    "device",
+                    "locked_use",
+                    session,
+                    "new-request"
+                ));
+                assert!(
+                    !authorize(
+                        &db,
+                        &owner,
+                        "device:control",
+                        "device",
+                        "locked_use",
+                        session,
+                        "new-request"
+                    )
+                    .unwrap()
+                );
+                let pending = super::super::PendingConsent {
+                    request_id: "new-request".into(),
+                    session_id: session.into(),
+                    engine_session_id: Some("new-engine".into()),
+                    app: "device:control".into(),
+                    identity_digest: "device".into(),
+                    capability: "locked_use".into(),
+                    tool_name: "computer_locked_use".into(),
+                    input_digest: "enable-input".into(),
+                    target: None,
+                    app_icon: None,
+                    owner: owner.clone(),
+                };
+                assert!(super::super::consent::needs_approval(&pending, &persisted));
+            }
+        }
+        assert_eq!(
+            grants(&db, &owner).unwrap().len(),
+            2,
+            "legacy rows are harmless without rewriting storage"
+        );
+    }
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+    #[test]
+    fn old_configuration_defaults_to_background_without_erasing_permissions() {
+        let value: Instance = serde_json::from_str(r#"{"installed":true,"enabled":true,"revision":7,"microphone":true,"system_audio":false,"locked_use":false}"#).unwrap();
+        assert_eq!(
+            value.input_mode,
+            agistack_adapters_cua::CuaInputMode::Background
+        );
+        assert!(value.microphone);
+        assert_eq!(value.revision, 7);
     }
 }

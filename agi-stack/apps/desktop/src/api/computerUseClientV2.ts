@@ -1,4 +1,5 @@
 import type { DesktopRuntimeConfig } from "../types";
+import { createConversationToolMediaReaderV2 } from "./conversationToolMediaClientV2";
 
 export * from "./computerUseContractV2";
 import {
@@ -53,6 +54,7 @@ export function createComputerUseClientV2(
     return result;
   };
   return Object.freeze({
+    conversationMedia: createConversationToolMediaReaderV2(config),
     snapshot: async (signal?: AbortSignal) =>
       requireSnapshot(await call({ action: "status" }, signal)),
     manage: async (operation: ComputerUseOperation, signal?: AbortSignal) =>
@@ -75,6 +77,7 @@ export function createComputerUseClientV2(
     audio: async (artifactId: string, signal?: AbortSignal) => {
       const chunks: ArrayBuffer[] = [];
       let offset = 0;
+      let mimeType: string | undefined;
       for (;;) {
         const value = (await call(
           { action: "audio_chunk", artifact_id: artifactId, offset },
@@ -89,7 +92,8 @@ export function createComputerUseClientV2(
         };
         if (
           value.artifact_id !== artifactId ||
-          value.mime_type !== "audio/wav" ||
+          !["audio/wav", "audio/x-wav", "audio/mpeg"].includes(value.mime_type ?? "") ||
+          (mimeType !== undefined && value.mime_type !== mimeType) ||
           value.offset !== offset ||
           typeof value.data_base64 !== "string" ||
           !Number.isSafeInteger(value.next_offset) ||
@@ -98,6 +102,7 @@ export function createComputerUseClientV2(
           (value.next_offset === offset && value.eof !== true)
         )
           throw new Error("cua_audio_invalid");
+        mimeType = value.mime_type;
         const raw = atob(value.data_base64);
         if (
           raw.length > 128 * 1024 ||
@@ -109,7 +114,7 @@ export function createComputerUseClientV2(
           bytes[index] = raw.charCodeAt(index);
         chunks.push(bytes.buffer);
         offset = value.next_offset!;
-        if (value.eof === true) return new Blob(chunks, { type: "audio/wav" });
+        if (value.eof === true) return new Blob(chunks, { type: mimeType });
       }
     },
   });

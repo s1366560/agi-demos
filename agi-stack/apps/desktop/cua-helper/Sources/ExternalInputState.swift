@@ -1,6 +1,18 @@
 import CoreGraphics
 import Foundation
 
+struct ExternalInputObservation {
+    let type: CGEventType
+    let point: CGPoint
+    let targetPID: Int32
+    let window: UInt32
+    var isPointer: Bool {
+        [.mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged,
+         .rightMouseDown, .rightMouseUp, .rightMouseDragged,
+         .otherMouseDown, .otherMouseUp, .otherMouseDragged, .scrollWheel].contains(type)
+    }
+}
+
 /// Observe source-tag membership, not aggregate HID state, to preserve a
 /// person's or another controller's same-key/button takeover.
 final class ExternalInputState {
@@ -10,9 +22,20 @@ final class ExternalInputState {
     private var buttons = Set<UInt32>()
     private var tap: CFMachPort?
     private var thread: Thread?
-    init(tag: Int64) throws {
+    private var runLoop: CFRunLoop?
+    private var active = true
+    private let onInput: ((ExternalInputObservation) -> Void)?
+    private let onInterruption: (() -> Void)?
+    private let callbackQueue = DispatchQueue(label: "memstack.cua.user-input")
+    private var notificationQueued = false
+    private var pending: [ExternalInputObservation] = []
+    init(tag: Int64, onInput: ((ExternalInputObservation) -> Void)? = nil,
+         onInterruption: (() -> Void)? = nil) throws {
         self.tag = tag
+        self.onInput = onInput
+        self.onInterruption = onInterruption
         let mask = [CGEventType.keyDown, .keyUp, .flagsChanged,
+            .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel,
             .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
             .otherMouseDown, .otherMouseUp].reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
         guard let tap = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap,
@@ -28,6 +51,7 @@ final class ExternalInputState {
         let ready = DispatchSemaphore(value: 0)
         let thread = Thread { [weak self] in
             guard let self = self, let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else { ready.signal(); return }
+            self.lock.lock(); self.runLoop = CFRunLoopGetCurrent(); self.lock.unlock()
             CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
             ready.signal()
@@ -35,7 +59,9 @@ final class ExternalInputState {
             _ = self
         }
         self.thread = thread; thread.name = "memstack.cua.external-input"; thread.start()
-        guard ready.wait(timeout: .now() + 1) == .success else {
+        guard ready.wait(timeout: .now() + 1) == .success,
+              CFMachPortIsValid(tap), CGEvent.tapIsEnabled(tap: tap) else {
+            stop()
             throw ActionError.failure(kind: "input_tracking_unavailable", message: "safe input tracking failed to start")
         }
         lock.lock()
@@ -48,6 +74,13 @@ final class ExternalInputState {
         }.map { $0.rawValue })
         lock.unlock()
     }
+    func stop() {
+        lock.lock(); active = false; pending.removeAll()
+        let loop = runLoop, port = tap; tap = nil; lock.unlock()
+        if let port = port { CFMachPortInvalidate(port) }
+        if let loop = loop { CFRunLoopStop(loop) }
+    }
+    deinit { stop() }
     func key(_ code: UInt16) -> Bool { lock.lock(); defer { lock.unlock() }; return keys.contains(code) }
     func button(_ raw: UInt32) -> Bool { lock.lock(); defer { lock.unlock() }; return buttons.contains(raw) }
     var flags: CGEventFlags {
@@ -58,10 +91,30 @@ final class ExternalInputState {
     }
     private func receive(_ type: CGEventType, _ event: CGEvent) {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap = tap { CGEvent.tapEnable(tap: tap, enable: true) }; return
+            lock.lock(); let wasActive = active; lock.unlock()
+            guard wasActive else { return }
+            // Restoring the tap cannot recover missed input. Background leases
+            // pause and release before tracking is allowed to resume.
+            onInterruption?()
+            lock.lock(); let port = active ? tap : nil; lock.unlock()
+            if let port = port, CFMachPortIsValid(port) { CGEvent.tapEnable(tap: port, enable: true) }
+            return
         }
         guard event.getIntegerValueField(.eventSourceUserData) != tag else { return }
         lock.lock(); defer { lock.unlock() }
+        guard active else { return }
+        if onInput != nil {
+            let observation = ExternalInputObservation(type: type, point: event.location,
+                targetPID: Int32(clamping: event.getIntegerValueField(.eventTargetUnixProcessID)),
+                window: UInt32(clamping: event.getIntegerValueField(.mouseEventWindowUnderMousePointer)))
+            if type == .mouseMoved { pending.removeAll { $0.type == .mouseMoved } }
+            if pending.count == 128 { pending.removeFirst() }
+            pending.append(observation)
+            if !notificationQueued {
+                notificationQueued = true
+                callbackQueue.async { [weak self] in self?.drain() }
+            }
+        }
         let rawCode = event.getIntegerValueField(.keyboardEventKeycode)
         let rawButton = event.getIntegerValueField(.mouseEventButtonNumber)
         switch type {
@@ -93,6 +146,14 @@ final class ExternalInputState {
         default: break
         }
     }
+    private func drain() {
+        while true {
+            lock.lock()
+            guard active, !pending.isEmpty else { notificationQueued = false; lock.unlock(); return }
+            let next = pending.removeFirst(); lock.unlock()
+            onInput?(next)
+        }
+    }
 }
 
 enum OwnedEventSource {
@@ -112,7 +173,7 @@ enum OwnedEventSource {
         }
     }
     static func make(tag: Int64) -> CGEventSource? {
-        guard let source = CGEventSource(stateID: .combinedSessionState) else { return nil }
+        guard let source = CGEventSource(stateID: .privateState) else { return nil }
         source.userData = tag
         source.localEventsSuppressionInterval = 0
         for state in [UInt32(0), 1] {

@@ -3,6 +3,8 @@ import {
   type ComputerUseSnapshot,
 } from '../../src/api/computerUseContractV2';
 import { computerUseRecordingIsPending } from '../../src/api/computerUseRecording';
+import type { ComputerUseOperation } from '../../src/api/computerUseContractV2';
+import type { ComputerUseInputMonitor } from './computerUseInputMonitor';
 
 type Input = Readonly<{
   mode: 'local' | 'cloud';
@@ -27,6 +29,7 @@ export class ComputerUseActivityMonitor {
   private binding: Binding | null = null;
   private sequence = 0;
   private management: Management | null = null;
+  private readonly pending = new Set<{ ownerId: number }>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   constructor(
     private readonly ports: {
@@ -34,6 +37,7 @@ export class ComputerUseActivityMonitor {
       emit: (ownerId: number, snapshot: ComputerUseSnapshot, mode: Input['mode']) => void;
       show: () => void;
       surface: ComputerUseActivitySurface;
+      inputs?: ComputerUseInputMonitor;
     }
   ) {}
   async track(ownerId: number, args: Record<string, unknown> | undefined): Promise<unknown> {
@@ -42,6 +46,12 @@ export class ComputerUseActivityMonitor {
       ?.action;
     if (operation === 'artifact_preview' || operation === 'audio_chunk')
       return this.ports.invoke(args ?? {});
+    if (input && operation && this.binding?.ownerId === ownerId &&
+      sameInput(this.binding.input, input)) {
+      this.ports.inputs?.willManage(
+        (args?.input as { operation: ComputerUseOperation }).operation,
+      );
+    }
     if (
       input &&
       this.management &&
@@ -52,11 +62,15 @@ export class ComputerUseActivityMonitor {
     const statusDuringManagement = !receipt && this.management !== null;
     if (receipt) this.management = receipt;
     const sequence = ++this.sequence;
+    const pending = { ownerId };
+    this.pending.add(pending);
     try {
       const result = await this.ports.invoke(args ?? {});
-      const current = receipt
-        ? this.management === receipt
-        : !statusDuringManagement && this.management === null && sequence === this.sequence;
+      const current =
+        this.pending.has(pending) &&
+        (receipt
+          ? this.management === receipt
+          : !statusDuringManagement && this.management === null && sequence === this.sequence);
       if (receipt && current) {
         this.management = null;
         this.sequence++;
@@ -75,6 +89,7 @@ export class ComputerUseActivityMonitor {
       }
       return result;
     } finally {
+      this.pending.delete(pending);
       if (receipt && this.management === receipt) {
         this.management = null;
         this.sequence++;
@@ -84,9 +99,17 @@ export class ComputerUseActivityMonitor {
   clear(ownerId?: number): void {
     const ownsBinding = ownerId === undefined || this.binding?.ownerId === ownerId;
     const ownsManagement = ownerId === undefined || this.management?.ownerId === ownerId;
-    if (!ownsBinding && !ownsManagement) return;
-    this.sequence++;
+    let ownsPending = false;
+    for (const pending of this.pending) {
+      if (ownerId === undefined || pending.ownerId === ownerId) {
+        this.pending.delete(pending);
+        ownsPending = true;
+      }
+    }
+    if (!ownsBinding && !ownsManagement && !ownsPending) return;
+    if (ownsBinding || ownsManagement) this.sequence++;
     if (ownsManagement) this.management = null;
+    this.ports.inputs?.clear(ownerId);
     if (!ownsBinding) return;
     this.binding = null;
     if (this.timer) clearTimeout(this.timer);
@@ -95,6 +118,7 @@ export class ComputerUseActivityMonitor {
   }
   private publish(binding: Binding, snapshot: ComputerUseSnapshot): void {
     if (this.binding !== binding) return;
+    this.ports.inputs?.bind(binding.ownerId, binding.input, snapshot);
     this.ports.emit(binding.ownerId, snapshot, binding.input.mode);
     this.ports.surface.update(snapshot, {
       show: this.ports.show,

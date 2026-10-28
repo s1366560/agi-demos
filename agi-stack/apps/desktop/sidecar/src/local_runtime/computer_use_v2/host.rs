@@ -78,6 +78,12 @@ impl ToolHost for ScopedComputerUseHost {
             .state
             .upgrade()
             .ok_or_else(|| CoreError::Tool("cua_runtime_stopped".into()))?;
+        if state.connected_browser_tool_host().is_some_and(|host| host.has_protected_auth())
+            && !matches!(tool, "computer_audio_stop" | "computer_key_up" | "computer_clipboard_release")
+            && !(tool == "computer_drag_step" && serde_json::from_str::<Value>(input).ok().is_some_and(|value|value["phase"]=="end"))
+            && !(tool == "computer_locked_use" && serde_json::from_str::<Value>(input).ok().is_some_and(|value|value["enabled"]==false)) {
+            return Err(CoreError::Tool("browser_auth_protected: finish authentication and explicitly navigate the browser before native observation or input".into()));
+        }
         denials::ensure(
             &*state
                 .session_store
@@ -157,6 +163,7 @@ impl ToolHost for ScopedComputerUseHost {
         if !instance.enabled || !instance.installed || instance.revision != self.session.revision {
             return Err(CoreError::Tool("cua_instance_disabled".into()));
         }
+        let original_input = input;
         let mut input: Value =
             serde_json::from_str(input).map_err(|error| CoreError::Tool(error.to_string()))?;
         if !input.is_object()
@@ -243,6 +250,7 @@ impl ToolHost for ScopedComputerUseHost {
                 .await
                 .map_err(|error| CoreError::Tool(error.to_string()))?;
             let mut decoration = ToolResult {
+                permission_required: None,
                 control_outcome: None,
                 control_generation: None,
                 output_json: target.to_string(),
@@ -357,7 +365,13 @@ impl ToolHost for ScopedComputerUseHost {
                         json!({"phase":"awaiting_permission"}),
                     )
                     .await;
-                return Ok(consent::permission_required(pending));
+                return Ok(consent::permission_required(
+                    pending,
+                    crate::local_runtime::execution_authority::permission_binding(
+                        tool,
+                        original_input,
+                    )?,
+                ));
             }
             if let Some(pending) = pending {
                 state
@@ -490,7 +504,13 @@ impl ToolHost for ScopedComputerUseHost {
                         json!({"phase":"awaiting_permission"}),
                     )
                     .await;
-                return Ok(consent::permission_required(pending));
+                return Ok(consent::permission_required(
+                    pending,
+                    crate::local_runtime::execution_authority::permission_binding(
+                        tool,
+                        original_input,
+                    )?,
+                ));
             }
             state
                 .computer_use
@@ -536,7 +556,17 @@ impl ToolHost for ScopedComputerUseHost {
             },
             None,
         );
-        let mut result = if let Some(connector) = connector {
+        let mut result = if tool == "computer_locked_use" {
+            locked_use::call(
+                &state,
+                &self.session,
+                &self.native,
+                &_factory,
+                &self.client,
+                &input,
+            )
+            .await?
+        } else if let Some(connector) = connector {
             connectors::call(&state, &self.session.owner, &connector, &input, &call_id).await?
         } else {
             let signal = agistack_adapters_cua::CuaDispatchSignal::new(call_id.clone());
@@ -585,6 +615,13 @@ impl ToolHost for ScopedComputerUseHost {
         if tool == "computer_capabilities" {
             let mut output: Value = serde_json::from_str(&result.output_json)
                 .map_err(|_| CoreError::Tool("cua_capabilities_invalid".into()))?;
+            if let Some(status) = output.pointer_mut("/capabilities/locked_use") {
+                *status = state.computer_use.locked_use.caller_status(
+                    &self.session.context.session_id,
+                    &self.session.context.run_id,
+                    status,
+                );
+            }
             output["connectors"] = json!(
                 connectors::scoped_list(
                     &state,

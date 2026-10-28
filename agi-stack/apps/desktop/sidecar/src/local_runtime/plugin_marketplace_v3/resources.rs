@@ -545,7 +545,7 @@ pub(super) async fn verify(
     for id in &installation.server_ids {
         state
             .mcp_supervisor
-            .list_tools(&scope(auth), id)
+            .list_tools_for_marketplace_verification(&scope(auth), id)
             .await
             .map_err(|e| e.to_string())?;
     }

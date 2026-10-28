@@ -11,6 +11,8 @@ agistack-plugin-host = { path = "../../crates/plugin-host" }
 agistack-adapters-mem = { path = "../../crates/adapters-mem" }
 agistack-adapters-device = { path = "../../crates/adapters-device" }
 agistack-adapters-cua = { path = "../../crates/adapters-cua" }
+agistack-adapters-browser = { path = "../../crates/adapters-browser" }
+jsonschema = { version = "0.33", default-features = false }
 agistack-adapters-http-llm = { path = "../../crates/adapters-http-llm" }
 agistack-adapters-postgres = { path = "../../crates/adapters-postgres" }
 agistack-adapters-neo4j = { path = "../../crates/adapters-neo4j" }

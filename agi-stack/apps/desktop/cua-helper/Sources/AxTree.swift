@@ -93,7 +93,8 @@ enum AxEngine {
         return elements
     }
     static func windows(app: ResolvedApp, session: NativeSession,
-                        reader: ((AXUIElement) throws -> [AXUIElement])? = nil) throws -> [NativeWindow] {
+                        reader: ((AXUIElement) throws -> [AXUIElement])? = nil,
+                        identityReader: WindowIdentityReader = .live) throws -> [NativeWindow] {
         let axApp = AXUIElementCreateApplication(app.pid)
         let elements: [AXUIElement]
         if let reader = reader { elements = try reader(axApp) }
@@ -102,14 +103,12 @@ enum AxEngine {
             let error = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &raw)
             elements = try checkedWindowElements(error: error, value: raw)
         }
-        let previous = session.windows[app.id] ?? []
-        let result = elements.map { element -> NativeWindow in
-            let frame = elementFrame(element)
-            let title = copyString(element, kAXTitleAttribute as String) ?? ""
-            let old = previous.first { CFEqual($0.element, element) }
-            return NativeWindow(id: old?.id ?? "\(app.pid):\(UUID().uuidString)",
-                element: element, frame: frame, title: title,
-                captureID: WindowCapture.matchWindowID(app: app, frame: frame, title: title))
+        guard let process = identityReader.process(app.pid) else {
+            throw ActionError.failure(kind: "stale_target", message: "the window process no longer exists")
+        }
+        let result = identityReader.reconcile(elements, previous: session.windows[app.id] ?? [], process: process)
+        guard identityReader.process(app.pid) == process else {
+            throw ActionError.failure(kind: "stale_target", message: "the window process changed during observation")
         }
         session.windows[app.id] = result
         return result
@@ -142,18 +141,24 @@ enum AxEngine {
         if counter >= nodeBudget { lines.append("! tree truncated at node budget") }
         let text = lines.joined(separator: "\n")
         let key = "\(app.pid):\(window.id)"
+        // Finish fallible observation before publishing a new input generation.
+        // Otherwise an error can leave the client permanently bound to the old one.
+        let image = try WindowCapture.capture(app: app, window: window, session: session)
+        let target = try AppIcon.target(app, window: window)
+        let identity = try AppIcon.identity(app, session: session)
+        try session.observeInputTarget(app, window: window)
         let previous = session.previousText[key]
         session.previousText[key] = text
-        let snapshot = Snapshot(id: UUID().uuidString, app: app, window: window, records: records)
+        let snapshot = Snapshot(id: UUID().uuidString, app: app, window: window, records: records,
+            inputGeneration: session.inputGeneration)
         session.snapshots[app.id] = snapshot
-        let image = try WindowCapture.capture(app: app, window: window, session: session)
         var result: [String: Any] = ["app": app.id, "app_id": app.id, "process_id": app.pid,
                 "window_id": window.id, "snapshot_id": snapshot.id,
+                "input_mode": session.inputMode.rawValue, "input_generation": session.inputGeneration,
                 "bounds": window.payload["bounds"]!,
                 "window_bounds": window.payload["bounds"]!,
                 "text": !disableDiff && previous == text ? "! unchanged" : text,
-                "screenshot": image ?? NSNull(), "target": try AppIcon.target(app, window: window)]
-        let identity = try AppIcon.identity(app, session: session)
+                "screenshot": image ?? NSNull(), "target": target]
         if let icon = identity["app_icon"] { result["app_icon"] = icon }
         if image == nil {
             result["screenshot_unavailable_reason"] = CGPreflightScreenCaptureAccess()

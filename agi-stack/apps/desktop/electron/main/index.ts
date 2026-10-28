@@ -1,6 +1,8 @@
+import { executeDeviceMcpManagementV2 } from './deviceMcpManagementPolicy';
 import { RendererDeliveryAdmissionV2 } from './rendererDeliveryAdmissionV2';
 import { createComputerUseCloudDeviceBridge } from './computerUseCloudDeviceBridge';
 import { ComputerUseActivityMonitor } from './computerUseActivityMonitor';
+import { ComputerUseInputMonitor } from './computerUseInputMonitor';
 import { createComputerUseActivityTray } from './computerUseActivityTray';
 import { desktopRendererDeliveryUnavailableV2 } from '../../src/plugins/desktopRendererDeliveryStatusV2';
 import {
@@ -36,6 +38,10 @@ import {
   blankSandboxDesktopGrantFrame,
 } from './sandboxDesktopGrantElectron';
 import { IabBackend } from './iab/backend';
+import { McpAppFrames } from './mcpAppFrames';
+import { McpAppFrameHost } from './mcpAppFrameHost';
+import { McpAppGuestHost } from './mcpAppGuestHost';
+import { MCP_APP_GUEST_CHANNEL } from '../../src/features/chat/mcpAppGuestProtocol';
 import { IabViewPool, installIabSessionPermissionPolicy } from './iab/viewPool';
 import {
   DesktopCloudAuthenticationAuthority,
@@ -111,7 +117,9 @@ const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
 const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
 const IAB_TABS_CHANGED_CHANNEL = 'agistack:iab-tabs-changed';
+const IAB_VISIBILITY_REQUESTED_CHANNEL = 'agistack:iab-visibility-requested';
 const COMPUTER_USE_ACTIVITY_CHANNEL = 'agistack:computer-use-activity';
+const COMPUTER_USE_INPUT_CHANNEL = 'agistack:computer-use-input';
 const UPDATE_STATE_CHANNEL = 'agistack:update-state';
 const UPDATE_CHECK_CHANNEL = 'agistack:update-check';
 const UPDATE_RESTART_TO_APPLY_CHANNEL = 'agistack:update-restart-to-apply';
@@ -130,9 +138,33 @@ const SIDECAR_COMMANDS = new Set([
   'browser_bridge_install',
   'browser_bridge_uninstall',
   'browser_bridge_status',
+  'browser_auth_pending',
+  'browser_auth_respond',
   'computer_use_manage_v2',
 ]);
 const captureAuthorizationGate = new DisplayCaptureAuthorizationGate();
+const mcpAppFrames: McpAppFrames = new McpAppFrames(owner => mcpAppGuestHost.ownsVisibleSurface(owner));
+const mcpAppFrameHost: McpAppFrameHost = new McpAppFrameHost(
+  mcpAppFrames,
+  async (input) => {
+    if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+    return sidecarSupervisor.invoke('mcp_app_operation', input);
+  },
+  async (input, signal) => {
+    if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+    return sidecarSupervisor.invokeCancellable('mcp_app_operation', input, signal);
+  },
+);
+const mcpAppGuestHost: McpAppGuestHost = new McpAppGuestHost({
+  getWindow: () => mainWindow,
+  preload: join(currentDirectory, '../preload/mcpAppGuest.cjs'),
+  entryUrl: () =>
+    new URL('mcp-app.html', rendererDevelopmentUrl() ?? RENDERER_ENTRY_URL).toString(),
+  installProtocol: (guestSession) => {
+    guestSession.protocol.handle(RENDERER_PROTOCOL_SCHEME, handleRendererRequest);
+  },
+  retireMount: input => mcpAppFrameHost.unregister(input),
+});
 const cloudRequestExecutions = new CloudRequestExecutionRegistry({ timeoutMs: 30_000 });
 const qaProfileDirectory = configureQaProfile({
   app,
@@ -167,6 +199,7 @@ let unsubscribeUpdateState: (() => void) | null = null;
 let iabPool: IabViewPool | null = null;
 let iabBackend: IabBackend | null = null;
 let computerUseActivity: ComputerUseActivityMonitor | null = null;
+let computerUseInput: ComputerUseInputMonitor | null = null;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -618,12 +651,18 @@ function createIabRuntime(): void {
         });
       }
     },
-    onCdpEvent: (tabId, method, params) => iabBackend?.notifyCdpEvent(tabId, method, params),
+    onVisibilityRequested: (visible) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IAB_VISIBILITY_REQUESTED_CHANNEL, visible);
+      }
+    },
+    onCdpEvent: (tabId, method, params, sessionId) => iabBackend?.notifyCdpEvent(tabId, method, params, sessionId),
     onCdpDetach: (tabId, reason) => iabBackend?.notifyCdpDetach(tabId, reason),
   });
   iabPool = pool;
   iabBackend = new IabBackend({
     pool,
+    executeMcpApp: (input) => mcpAppFrames.execute(input),
     log: (message) => console.warn(`[iab] ${message}`),
   });
   iabBackend.start();
@@ -641,6 +680,75 @@ async function executeDesktopCommand(
     return executeIabCommand(command, args);
   }
   switch (command) {
+    case 'browser_auth_pending':
+    case 'browser_auth_respond': {
+      void authorizedCloudRequestOwner(event);
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      return sidecarSupervisor.invoke(command, args);
+    }
+    case 'mcp_app_guest_open':
+    case 'mcp_app_guest_start':
+    case 'mcp_app_guest_update':
+    case 'mcp_app_guest_layout':
+    case 'mcp_app_guest_respond': {
+      void authorizedCloudRequestOwner(event);
+      if (command === 'mcp_app_guest_open') return mcpAppGuestHost.open(args);
+      if (command === 'mcp_app_guest_start') return mcpAppGuestHost.start(args);
+      if (command === 'mcp_app_guest_update') return mcpAppGuestHost.update(args);
+      if (command === 'mcp_app_guest_layout') return mcpAppGuestHost.layout(args);
+      return mcpAppGuestHost.respond(args);
+    }
+    case 'mcp_app_guest_release': {
+      void authorizedCloudRequestOwner(event);
+      return mcpAppGuestHost.release(args);
+    }
+    case 'mcp_app_guest_prune': {
+      void authorizedCloudRequestOwner(event);
+      return mcpAppGuestHost.prune(args);
+    }
+    case 'mcp_app_guest_clear': {
+      void authorizedCloudRequestOwner(event);
+      return mcpAppGuestHost.clear();
+    }
+    case 'mcp_app_frame_register': {
+      void authorizedCloudRequestOwner(event);
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      const result = await mcpAppFrameHost.register(mcpAppGuestHost.owner(args), args);
+      try {
+        if (result && typeof result === 'object' && 'pending' in result && result.pending === false) {
+          mcpAppGuestHost.registered(args);
+        }
+      }
+      catch (error) { await mcpAppFrameHost.unregister(args); throw error; }
+      return result;
+    }
+    case 'mcp_app_frame_unregister': {
+      void authorizedCloudRequestOwner(event);
+      return mcpAppFrameHost.unregister(args);
+    }
+    case 'mcp_app_operation_prepare': {
+      void authorizedCloudRequestOwner(event);
+      return mcpAppFrameHost.prepare(args);
+    }
+    case 'mcp_app_operation_cancel': {
+      void authorizedCloudRequestOwner(event);
+      return mcpAppFrameHost.cancel(args);
+    }
+    case 'mcp_app_operation': {
+      void authorizedCloudRequestOwner(event);
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      if (args?.operation === 'attach' || args?.operation === 'detach') throw new Error('mcp_app_operation_forbidden');
+      return mcpAppFrameHost.operation(args);
+    }
+    case 'device_mcp_manage_v2': {
+      const supervisor = sidecarSupervisor;
+      if (!supervisor) throw new Error('desktop sidecar is unavailable');
+      return executeDeviceMcpManagementV2(
+        args,
+        () => authorizedCloudRequestOwner(event),
+        (request) => supervisor.invoke(command, request),
+      );
+    }
     case 'computer_use_manage_v2': {
       void authorizedCloudRequestOwner(event);
       if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
@@ -1022,6 +1130,8 @@ function createSidecarSupervisor(): SidecarSupervisor {
       resolveNormalCandidates: () => legacyTauriDataDirectories(dataDirectory),
     }),
     environment: sidecarRendererEnvironment(rendererDevelopmentUrl()),
+    onComputerUseInput: (input) => computerUseInput?.receive(input),
+    onComputerUseInputDisconnected: () => computerUseInput?.clear(),
     onRecovered: () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send(SIDECAR_RECOVERED_CHANNEL);
@@ -1180,10 +1290,15 @@ async function createMainWindow(): Promise<void> {
   window.once('ready-to-show', () => window.show());
   window.webContents.on('did-start-navigation', (details) => {
     if (details.isMainFrame && !details.isSameDocument) {
+      mcpAppGuestHost.clear();
+      void mcpAppFrameHost.clear();
+      computerUseActivity?.clear(cloudRequestOwnerId);
       void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
     }
   });
   window.on('closed', () => {
+    mcpAppGuestHost.clear();
+    void mcpAppFrameHost.clear();
     computerUseActivity?.clear(cloudRequestOwnerId);
     void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
     void sandboxDesktopGrants?.revokeOwner(cloudRequestOwnerId).catch(() => {
@@ -1195,6 +1310,9 @@ async function createMainWindow(): Promise<void> {
     if (mainWindow === window) mainWindow = null;
   });
   window.webContents.on('render-process-gone', () => {
+    mcpAppGuestHost.clear();
+    void mcpAppFrameHost.clear();
+    computerUseActivity?.clear(cloudRequestOwnerId);
     void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
     void sandboxDesktopGrants?.revokeOwner(cloudRequestOwnerId).catch(() => {
       console.warn('Sandbox desktop owner cleanup failed');
@@ -1210,11 +1328,16 @@ async function createMainWindow(): Promise<void> {
 }
 
 async function withDesktopAuthorityTransitionV2<T>(operation: () => Promise<T>): Promise<T> {
+  mcpAppGuestHost.clear();
+  const mcpRetirement = mcpAppFrameHost.clear();
   computerUseActivity?.clear();
   const grants = sandboxDesktopGrants;
   if (!grants) throw new Error('sandbox desktop grants unavailable');
   return rendererDeliveryAdmissionV2.transition(
-    () => Promise.all([...rendererDeliveryOwnersV2.keys()].map(retireRendererDeliveryOwnerV2)),
+    () => Promise.all([
+      mcpRetirement,
+      ...[...rendererDeliveryOwnersV2.keys()].map(retireRendererDeliveryOwnerV2),
+    ]),
     () => grants.withAuthorityTransition(operation),
   );
 }
@@ -1326,11 +1449,17 @@ async function bootstrapApplication(): Promise<void> {
     blankFrame: (ownerId, frameId) =>
       blankSandboxDesktopGrantFrame(resolveSandboxDesktopOwner, ownerId, frameId),
   });
+  computerUseInput = new ComputerUseInputMonitor((ownerId, input) => {
+    const contents = mainWindow?.webContents;
+    if (contents && !contents.isDestroyed() && contents.id === ownerId)
+      contents.send(COMPUTER_USE_INPUT_CHANNEL, input);
+  });
   computerUseActivity = new ComputerUseActivityMonitor({
     invoke:(args)=>applicationSupervisor.invoke('computer_use_manage_v2',args),
     emit:(ownerId,snapshot,mode)=>{const contents=mainWindow?.webContents;if(contents&&!contents.isDestroyed()&&contents.id===ownerId)contents.send(COMPUTER_USE_ACTIVITY_CHANNEL,{mode,snapshot});},
     show:()=>{if(mainWindow?.isMinimized())mainWindow.restore();mainWindow?.show();mainWindow?.focus();},
     surface:createComputerUseActivityTray(),
+    inputs: computerUseInput,
   });
   cloudSocketBroker = new DesktopCloudSocketBroker({
     computerUse:createComputerUseCloudDeviceBridge((command,args)=>applicationSupervisor.invoke(command,args)),
@@ -1380,6 +1509,9 @@ async function bootstrapApplication(): Promise<void> {
   });
   createIabRuntime();
   ipcMain.handle(DESKTOP_COMMAND_CHANNEL, executeDesktopCommand);
+  ipcMain.handle(MCP_APP_GUEST_CHANNEL, (event, command, input) =>
+    mcpAppGuestHost.receive(event, command, input),
+  );
   ipcMain.handle(NATIVE_FILE_SAVE_CHANNEL, handleNativeFileSave);
   ipcMain.handle(NATIVE_FILE_OPEN_CHANNEL, handleNativeFileOpen);
   ipcMain.handle(NATIVE_FILE_INGEST_CHANNEL, handleNativeFileIngest);
@@ -1436,6 +1568,7 @@ if (!hasSingleInstanceLock) {
   });
   app.on('before-quit', (event) => {
     computerUseActivity?.clear();computerUseActivity=null;
+    computerUseInput?.clear();computerUseInput=null;
     const grantsClosed = sandboxDesktopGrants?.revokeAll().catch(() => {
       console.warn('Sandbox desktop shutdown cleanup failed');
     });

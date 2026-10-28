@@ -43,6 +43,7 @@ export default defineConfig(({ command }) => ({
         input: {
           index: resolve(desktopRoot, 'electron/preload/index.ts'),
           iab: resolve(desktopRoot, 'electron/preload/iabPreload.ts'),
+          mcpAppGuest: resolve(desktopRoot, 'electron/preload/mcpAppGuestPreload.ts'),
         },
         output: {
           format: 'cjs',
@@ -77,7 +78,7 @@ export default defineConfig(({ command }) => ({
       outDir: resolve(desktopRoot, 'out/renderer'),
       emptyOutDir: true,
       rollupOptions: {
-        input: resolve(desktopRoot, 'index.html'),
+        input: { index: resolve(desktopRoot, 'index.html'), mcpApp: resolve(desktopRoot, 'mcp-app.html') },
       },
     },
   },

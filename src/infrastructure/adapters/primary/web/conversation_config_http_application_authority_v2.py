@@ -21,6 +21,7 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
+    bind_operation_context_v2,
     current_generation_v2,
 )
 from src.infrastructure.plugins.v2.conversation_config_services import (
@@ -77,11 +78,12 @@ async def conversation_config_http_application_authority_dependency_v2(
                 "invalid_conversation_config_resolver",
                 "conversation config service has an invalid implementation",
             )
-        yield ConversationConfigHttpApplicationAuthorityV2(
-            operation=operation,
-            db=db,
-            service=resolver.resolve(operation),
-        )
+        with bind_operation_context_v2(operation):
+            yield ConversationConfigHttpApplicationAuthorityV2(
+                operation=operation,
+                db=db,
+                service=resolver.resolve(operation),
+            )
 
 
 __all__ = [

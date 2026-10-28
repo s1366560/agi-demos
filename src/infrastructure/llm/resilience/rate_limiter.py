@@ -249,20 +249,26 @@ class ProviderRateLimiter:
 
         start_time = time.time()
 
-        # Wait for semaphore
-        await semaphore.acquire()
-
-        # Check RPM limit
-        while not self._check_rpm_limit(provider_type):
-            # Release and wait a bit before retrying
-            semaphore.release()
-            logger.debug(f"RPM limit reached for {provider_type.value}, waiting 1s...")
-            await asyncio.sleep(1.0)
+        acquired = False
+        try:
             await semaphore.acquire()
-
-        wait_time = (time.time() - start_time) * 1000
-        stats.waiting_requests -= 1
-        stats.total_wait_time_ms += wait_time
+            acquired = True
+            # Check RPM limit without retaining a concurrency slot while waiting.
+            while not self._check_rpm_limit(provider_type):
+                semaphore.release()
+                acquired = False
+                logger.debug(f"RPM limit reached for {provider_type.value}, waiting 1s...")
+                await asyncio.sleep(1.0)
+                await semaphore.acquire()
+                acquired = True
+        except BaseException:
+            if acquired:
+                semaphore.release()
+            raise
+        finally:
+            wait_time = (time.time() - start_time) * 1000
+            stats.waiting_requests -= 1
+            stats.total_wait_time_ms += wait_time
 
         if wait_time > 100:  # Log if waited more than 100ms
             logger.debug(f"Rate limiter: waited {wait_time:.1f}ms for {provider_type.value}")

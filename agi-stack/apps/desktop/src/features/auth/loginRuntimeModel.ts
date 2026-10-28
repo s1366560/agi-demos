@@ -68,11 +68,12 @@ export function writeLoginModePreference(
 export function runtimeConfigForLoginMode(
   current: DesktopRuntimeConfig,
   mode: RuntimeMode,
+  cloudApiBaseUrl?: string,
 ): DesktopRuntimeConfig {
   const preset = mode === 'local' ? LOCAL_DEV_SERVER_PRESETS[0] : LOCAL_DEV_SERVER_PRESETS[1];
   return {
     ...current,
-    apiBaseUrl: preset.apiBaseUrl,
+    apiBaseUrl: mode === 'cloud' ? cloudApiBaseUrl ?? preset.apiBaseUrl : preset.apiBaseUrl,
     apiKey: '',
     localApiToken: '',
     tenantId: mode === 'local' ? 'local' : 'default',

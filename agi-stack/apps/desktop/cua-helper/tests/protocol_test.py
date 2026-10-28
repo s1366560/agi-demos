@@ -25,6 +25,7 @@ class ProtocolTests(unittest.TestCase):
         )
         self.counter = 0
         self.notifications = []
+        self.bindings = {}
 
     def tearDown(self):
         self.process.stdin.close()
@@ -34,6 +35,8 @@ class ProtocolTests(unittest.TestCase):
 
     def request(self, method, params, request_id=None):
         self.counter += 1
+        if method == "begin_session":
+            params = {"input_mode": "foreground", **params}
         if method != "initialize" and "session_id" in params:
             params = {
                 **{
@@ -47,6 +50,7 @@ class ProtocolTests(unittest.TestCase):
                         "device_id",
                     )
                 },
+                **self.bindings.get(params["session_id"], {}),
                 **params,
             }
         request = {
@@ -71,6 +75,11 @@ class ProtocolTests(unittest.TestCase):
             (length,) = struct.unpack("<I", header)
             result = json.loads(self.process.stdout.read(length))
         self.assertEqual(result["id"], request["id"])
+        body = result.get("result", {})
+        if "session_id" in params and body.get("input_generation"):
+            self.bindings[params["session_id"]] = {
+                key: body[key] for key in ("input_mode", "input_generation")
+            }
         return result
 
     def initialize(self, notifications=False):
@@ -79,7 +88,7 @@ class ProtocolTests(unittest.TestCase):
         result = self.request(
             "initialize",
             {
-                "client_api_version": "MemstackComputerUseIPC-2",
+                "client_api_version": "MemstackComputerUseIPC-3",
                 "secret": secret,
                 "nonce": nonce,
                 "native_status_notifications": notifications,
@@ -185,6 +194,61 @@ class ProtocolTests(unittest.TestCase):
             self.assertEqual(result["error"]["data"]["kind"], "screen_locked")
         self.request("end_session", base)
 
+    def test_input_binding_rejects_mode_changes_and_old_generations(self):
+        self.initialize()
+        base = {"session_id": "input-binding"}
+        started = self.request("begin_session", base)["result"]
+        self.assertEqual(started["input_mode"], "foreground")
+        self.assertTrue(started["input_generation"])
+        for changed in (
+            {"input_mode": "background"},
+            {"input_generation": "old-generation"},
+        ):
+            response = self.request("list_apps", {**base, **changed})
+            self.assertEqual(response["error"]["data"]["kind"], "stale_input_generation")
+        self.request("pause_session", base)
+        resumed = self.request("resume_session", base)["result"]
+        self.assertNotEqual(resumed["input_generation"], started["input_generation"])
+        rejected = self.request(
+            "list_apps", {**base, "input_generation": started["input_generation"]}
+        )
+        self.assertEqual(rejected["error"]["data"]["kind"], "stale_input_generation")
+        self.assertIn("result", self.request("list_apps", base))
+        self.request("end_session", base)
+
+    def test_host_can_disable_background_without_implicit_foreground_fallback(self):
+        from unittest.mock import patch
+
+        from native_fixture_test import Channel
+
+        with patch.dict(os.environ, {"MEMSTACK_CUA_DISABLE_BACKGROUND_INPUT": "1"}):
+            channel = Channel()
+        try:
+            support = channel.request("capabilities", {})["result"]["input_support"]
+            self.assertEqual(
+                support["background"],
+                {
+                    "supported": False,
+                    "reason": "background_input_disabled",
+                    "global_button_state_emulation": False,
+                    "global_activation_suppression": False,
+                    "drag_button_state": "event_owned_only",
+                },
+            )
+            denied = channel.request(
+                "begin_session", {"session_id": "disabled-background", "input_mode": "background"}
+            )
+            self.assertEqual(denied["error"]["data"]["kind"], "background_input_unavailable")
+            self.assertIn(
+                "result",
+                channel.request(
+                    "begin_session",
+                    {"session_id": "explicit-foreground", "input_mode": "foreground"},
+                ),
+            )
+        finally:
+            channel.close()
+
     def test_version_and_request_envelope(self):
         failed = self.request(
             "initialize",
@@ -200,7 +264,7 @@ class ProtocolTests(unittest.TestCase):
         failed = self.request(
             "initialize",
             {
-                "client_api_version": "MemstackComputerUseIPC-2",
+                "client_api_version": "MemstackComputerUseIPC-3",
                 "secret": "x" * 32,
                 "nonce": "x" * 32,
             },

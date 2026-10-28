@@ -162,6 +162,8 @@ export function createDesktopProjectMcpServersClientV2(
     setMCPServerEnabled: (id, input, signal) => call('setMCPServerEnabled', [id, input], signal),
     deleteMCPServer: (id, input, signal) => call('deleteMCPServer', [id, input], signal),
     testMCPServer: (id, signal) => call('testMCPServer', [id], signal),
+    getMCPOAuthStatus: (id, signal) => call('getMCPOAuthStatus', [id], signal),
+    mutateMCPOAuth: (id, input, signal) => call('mutateMCPOAuth', [id, input], signal),
   };
   return Object.freeze(client);
 }

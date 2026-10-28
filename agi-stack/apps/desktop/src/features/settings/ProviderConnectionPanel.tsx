@@ -28,9 +28,11 @@ import {
   providerMutationFromDraft,
   providerProbeInputFromDraft,
   providerProbeInputIsValid,
+  providerRequestTimeoutIsValid,
   providerValidationAccepted,
   type ProviderEditorDraft,
 } from './providerManagementModel';
+import { ProviderRequestTimeoutField } from './ProviderRequestTimeoutField';
 
 const AUTH_METHOD_ORDER: LlmProviderAuthMethod[] = ['oauth', 'api_key', 'environment', 'none'];
 
@@ -93,6 +95,7 @@ export function ProviderConnectionPanel({
   }, [provider.id]);
 
   const mutation = useMemo(() => providerMutationFromDraft(draft), [draft]);
+  const requestTimeoutValid = providerRequestTimeoutIsValid(draft.requestTimeoutMs);
   const probeInput = useMemo(() => providerProbeInputFromDraft(draft), [draft]);
   const normalizedProviderBaseUrl = (provider.base_url ?? '').trim().replace(/\/$/, '');
   const endpointChanged =
@@ -523,13 +526,21 @@ export function ProviderConnectionPanel({
                 onChange={(event) => updateDraft('name', event.target.value)}
               />
             </label>
-            <div className="provider-capability-note compact wide">
-              <InfoCircledIcon />
-              <span>
-                <b>{t('providers.advancedUnavailable')}</b>
-                <small>{t('providers.advancedUnavailableDescription')}</small>
-              </span>
-            </div>
+            {mode === 'local' ? (
+              <ProviderRequestTimeoutField
+                value={draft.requestTimeoutMs}
+                disabled={!editing || busy === 'save'}
+                onChange={(value) => updateDraft('requestTimeoutMs', value)}
+              />
+            ) : (
+              <div className="provider-capability-note compact wide">
+                <InfoCircledIcon />
+                <span>
+                  <b>{t('providers.advancedUnavailable')}</b>
+                  <small>{t('providers.advancedUnavailableDescription')}</small>
+                </span>
+              </div>
+            )}
           </div>
         ) : null}
       </div>
@@ -590,7 +601,7 @@ export function ProviderConnectionPanel({
           <button
             className="primary"
             type="button"
-            disabled={!validationAccepted || busy !== null}
+            disabled={!validationAccepted || !requestTimeoutValid || busy !== null}
             onClick={() => void saveConnection()}
           >
             {t('providers.saveConnection')}

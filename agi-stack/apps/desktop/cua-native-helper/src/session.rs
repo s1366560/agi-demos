@@ -2,16 +2,16 @@ use std::{
     collections::BTreeMap,
     path::PathBuf,
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
 };
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
-use crate::backend::{App, Backend, NativeError, Observation, Result, check_cancel, required};
+use crate::backend::{check_cancel, required, App, Backend, NativeError, Observation, Result};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -23,6 +23,14 @@ pub struct Context {
     pub conversation_id: String,
     pub run_id: String,
     pub session_id: String,
+    pub input_mode: InputMode,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InputMode {
+    Background,
+    Foreground,
 }
 
 #[path = "session_lifecycle.rs"]
@@ -47,6 +55,7 @@ enum Phase {
 
 struct Session {
     context: Context,
+    input_generation: String,
     root: PathBuf,
     root_identity: (u64, u64),
     phase: Phase,
@@ -149,7 +158,7 @@ impl Sessions {
                 ));
             }
             return Ok(
-                json!({"session_id":context.session_id,"artifact_root":session.root,"ok":true}),
+                json!({"session_id":context.session_id,"artifact_root":session.root,"ok":true,"input_mode":context.input_mode,"input_generation":session.input_generation}),
             );
         }
         if sessions.len() >= 64 {
@@ -157,11 +166,13 @@ impl Sessions {
         }
         let root = self.backend.artifact_root().await?;
         let root_identity = lifecycle::root_identity(&root)?;
-        let result = json!({"session_id":context.session_id,"artifact_root":root,"ok":true});
+        let input_generation = uuid::Uuid::new_v4().to_string();
+        let result = json!({"session_id":context.session_id,"artifact_root":root,"ok":true,"input_mode":context.input_mode,"input_generation":input_generation});
         sessions.insert(
             context.session_id.clone(),
             Arc::new(Mutex::new(Session {
                 context,
+                input_generation,
                 root,
                 root_identity,
                 phase: Phase::Active,
@@ -195,6 +206,7 @@ impl Sessions {
         let id = required(params, "session_id")?;
         let session = self.session(id).await?;
         let context = session.lock().await.context.clone();
+        Self::validate_input_binding(&session, params).await?;
         for (field, expected) in [
             ("device_id", &context.device_id),
             ("user_id", &context.user_id),
@@ -338,9 +350,27 @@ impl Sessions {
         }
         Ok(app)
     }
+    async fn validate_input_binding(session: &Arc<Mutex<Session>>, params: &Value) -> Result<()> {
+        let state = session.lock().await;
+        if params["input_mode"] != json!(state.context.input_mode)
+            || params["input_generation"].as_str() != Some(state.input_generation.as_str())
+        {
+            return Err(NativeError::new(
+                "input_generation_mismatch",
+                "the complete current input binding is required",
+            ));
+        }
+        Ok(())
+    }
     pub async fn dispatch(&self, method: &str, params: &Value) -> Result<Value> {
         if method == "capabilities" {
-            return Ok(self.backend.capabilities().await);
+            let mut value = self.backend.capabilities().await;
+            let foreground = matches!(
+                value["capabilities"]["input"]["state"].as_str(),
+                Some("available" | "permission_required")
+            );
+            value["input_support"] = json!({"background":{"supported":false,"reason":"background_input_unsupported"},"foreground":{"supported":foreground,"reason":if foreground {Value::Null} else {json!("foreground_input_unavailable")}}});
+            return Ok(value);
         }
         if method == "permissions_status" {
             return Ok(self.backend.permissions().await);
@@ -360,6 +390,7 @@ impl Sessions {
             self.session(id).await?
         };
         let owner = session.lock().await.context.clone();
+        Self::validate_input_binding(&session, params).await?;
         for (field, expected) in [
             ("device_id", &owner.device_id),
             ("user_id", &owner.user_id),
@@ -412,6 +443,14 @@ impl Sessions {
                 .acknowledge(&owner, required(params, "recording_id")?)
                 .await;
         }
+        if owner.input_mode == InputMode::Background
+            && matches!(method, "perform_action" | "activate_app" | "launch_app")
+        {
+            return Err(NativeError::new(
+                "background_input_unsupported",
+                "this platform requires explicit foreground input mode",
+            ));
+        }
         let _operation = self.operation.lock().await;
         if method == "resume_session" {
             return self.resume(&session).await;
@@ -456,7 +495,10 @@ impl Sessions {
             session.snapshot = None;
             session.cancel = Arc::new(AtomicBool::new(false));
             session.phase = Phase::Active;
-            return Ok(json!({"ok":true}));
+            session.input_generation = uuid::Uuid::new_v4().to_string();
+            return Ok(
+                json!({"ok":true,"input_mode":session.context.input_mode,"input_generation":session.input_generation}),
+            );
         }
         if matches!(phase, Phase::Paused | Phase::Pausing) {
             return Err(NativeError::new(
@@ -565,7 +607,7 @@ impl Sessions {
             let observation = self.backend.observe(&app, &window, &root).await?;
             check_cancel(&cancel)?;
             let snapshot_id = uuid::Uuid::new_v4().to_string();
-            let mut result = json!({"app":app.id,"window_id":window.window_id,"snapshot_id":snapshot_id,"lease_epoch":epoch,"text":observation.text,"window_bounds":window.bounds,"screenshot":observation.screenshot});
+            let mut result = json!({"input_mode":owner.input_mode,"input_generation":session.lock().await.input_generation,"app":app.id,"window_id":window.window_id,"snapshot_id":snapshot_id,"lease_epoch":epoch,"text":observation.text,"window_bounds":window.bounds,"screenshot":observation.screenshot});
             if let Some(tree) = observation.native.get("ax_tree") {
                 result["ax_tree"] = json!({"version":1,"source":"at_spi","snapshot_id":snapshot_id,"window_id":window.window_id,"nodes":tree["nodes"],"truncated":tree["truncated"]});
             }

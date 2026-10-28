@@ -7,9 +7,7 @@ let destination = URL(fileURLWithPath: "/Library/Security/SecurityAgentPlugins/M
 let remoteRight = "ai.agistack.desktop.cua.locked-use"
 let screenRight = "system.login.screensaver"
 let configuration = support.appendingPathComponent("locked-use.plist")
-let backup = support.appendingPathComponent("screensaver-backup.plist")
 
-enum InstallError: Error { case failure(String) }
 func readRight(_ name: String) throws -> [String: Any] {
     var value: CFDictionary?
     guard AuthorizationRightGet(name, &value) == errSecSuccess,
@@ -25,10 +23,25 @@ func setRight(_ name: String, _ value: [String: Any]) throws {
         throw InstallError.failure("cannot update authorization rule")
     }
 }
-func write(_ value: [String: Any], at url: URL) throws {
-    let data = try PropertyListSerialization.data(fromPropertyList: value, format: .xml, options: 0)
-    try data.write(to: url, options: .atomic)
-    try FileManager.default.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0], ofItemAtPath: url.path)
+func optionalRight(_ name: String) throws -> [String: Any]? {
+    var value: CFDictionary?
+    let status = AuthorizationRightGet(name, &value)
+    if status == errAuthorizationDenied { return nil }
+    guard status == errSecSuccess, let result = value as? [String: Any] else {
+        throw InstallError.failure("cannot inspect authorization rule")
+    }
+    return result
+}
+func replaceRight(_ name: String, _ value: [String: Any]?) throws {
+    if let value = value { try setRight(name, value); return }
+    guard try optionalRight(name) != nil else { return }
+    var authorization: AuthorizationRef?
+    guard AuthorizationCreate(nil, nil, [], &authorization) == errSecSuccess,
+          let authorization = authorization else { throw InstallError.failure("cannot create authorization") }
+    defer { AuthorizationFree(authorization, []) }
+    guard AuthorizationRightRemove(authorization, name) == errSecSuccess else {
+        throw InstallError.failure("cannot remove authorization rule")
+    }
 }
 func signingTeam(_ source: URL, expectedID: String) throws -> String {
     var code: SecStaticCode?; var information: CFDictionary?
@@ -41,18 +54,6 @@ func signingTeam(_ source: URL, expectedID: String) throws -> String {
         throw InstallError.failure("a stable component signature is required")
     }
     return team
-}
-func protectedPath(_ path: URL) throws {
-    var current = URL(fileURLWithPath: "/", isDirectory: true)
-    for component in path.pathComponents.dropFirst() {
-        current.appendPathComponent(component)
-        var info = stat()
-        if lstat(current.path, &info) == 0 {
-            guard (info.st_mode & S_IFMT) == S_IFDIR, info.st_uid == 0, (info.st_mode & 0022) == 0 else {
-                throw InstallError.failure("installation directory is not protected")
-            }
-        } else if errno != ENOENT { throw InstallError.failure("cannot inspect installation directory") }
-    }
 }
 func verifiedRequirement(_ source: URL) throws -> String {
     var code: SecStaticCode?; var information: CFDictionary?
@@ -97,13 +98,21 @@ func protectBundle(_ url: URL) throws {
 }
 
 do {
-    let arguments = CommandLine.arguments
-    guard arguments.count >= 2 else { throw InstallError.failure("install|uninstall|status is required") }
-    if arguments[1] == "status" {
+    let command = CommandLine.arguments
+    guard command.count >= 2 else { throw InstallError.failure("install|uninstall|status is required") }
+    if command[1] == "status" {
         print(FileManager.default.fileExists(atPath: configuration.path) ? "installed" : "not_installed")
         exit(0)
     }
     guard geteuid() == 0 else { throw InstallError.failure("administrator authorization is required") }
+    let (request, activationSocket) = try LockedUseActivationRequest.parseCommand(command)
+    let arguments = request.arguments
+    let expectedTeam = try signingTeam(URL(fileURLWithPath: arguments[0]), expectedID: "ai.agistack.desktop.cua.lock-installer")
+    let activation = try LockedUseActivationClient(socketURL: activationSocket, request: request,
+        verifyPeer: { descriptor in
+            LockedUseActivationSocket.signedPeer(descriptor, uid: request.ownerUID,
+                identifier: "ai.agistack.desktop.cua-helper", team: expectedTeam)
+        })
     if arguments[1] == "install" {
         guard arguments.count == 6, let owner = UInt32(arguments[5]), owner > 0 else {
             throw InstallError.failure("install requires plugin, helper, socket, and owner UID")
@@ -115,7 +124,6 @@ do {
             throw InstallError.failure("invalid component paths")
         }
         try safeBundle(source)
-        let expectedTeam = try signingTeam(URL(fileURLWithPath: arguments[0]), expectedID: "ai.agistack.desktop.cua.lock-installer")
         guard try signingTeam(helper, expectedID: "ai.agistack.desktop.cua-helper") == expectedTeam,
               try signingTeam(source, expectedID: "ai.agistack.desktop.cua.authorization-plugin") == expectedTeam else {
             throw InstallError.failure("component signing teams do not match the installer")
@@ -123,43 +131,30 @@ do {
         try protectedPath(support)
         try protectedPath(destination.deletingLastPathComponent())
         let requirement = try verifiedRequirement(helper)
-        let previous = try readRight(screenRight)
-        guard previous["class"] as? String == "rule", previous["k-of-n"] as? Int == 1,
-              let rules = previous["rule"] as? [String], !rules.isEmpty else {
-            throw InstallError.failure("unsupported screensaver authorization configuration")
-        }
+        try activation.check()
         try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o755, .ownerAccountID: 0])
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try safeBundle(destination); try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.copyItem(at: source, to: destination)
-        try protectBundle(destination)
-        if !FileManager.default.fileExists(atPath: backup.path) { try write(previous, at: backup) }
-        try write(["socket_path": socket.path, "owner_uid": owner, "service_requirement": requirement], at: configuration)
-        try setRight(remoteRight, ["class": "evaluate-mechanisms",
-                                  "mechanisms": ["MemStackComputerUseAuthorizationPlugin:allow"], "shared": false])
-        var changed = previous
-        changed["rule"] = [remoteRight] + rules.filter { $0 != remoteRight }
-        do { try setRight(screenRight, changed) } catch {
-            try? setRight(screenRight, previous); try? FileManager.default.removeItem(at: configuration); throw error
-        }
+        let transaction = LockedUseInstallTransaction(support: support, destination: destination,
+            readRight: optionalRight, setRight: replaceRight, validatePlugin: { path in
+                try safeBundle(path)
+                guard try signingTeam(path, expectedID: "ai.agistack.desktop.cua.authorization-plugin") == expectedTeam else {
+                    throw InstallError.failure("plugin signing team changed")
+                }
+                if path != source { try protectBundle(path) }
+            }, authorize: { try activation.check() })
+        try transaction.install(source: source, configuration: ["socket_path": socket.path,
+            "owner_uid": owner, "service_requirement": requirement])
         print("installed")
     } else if arguments[1] == "uninstall" {
-        var rule = try readRight(screenRight)
-        guard let rules = rule["rule"] as? [String] else { throw InstallError.failure("unsupported authorization configuration") }
-        let remaining = rules.filter { $0 != remoteRight }
-        guard !remaining.isEmpty else { throw InstallError.failure("no safe screensaver authorization branch would remain") }
-        rule["rule"] = remaining
-        try setRight(screenRight, rule)
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try safeBundle(destination); try FileManager.default.removeItem(at: destination)
-        }
-        try? FileManager.default.removeItem(at: configuration)
-        var authorization: AuthorizationRef?
-        if AuthorizationCreate(nil, nil, [], &authorization) == errSecSuccess, let authorization = authorization {
-            _ = AuthorizationRightRemove(authorization, remoteRight); AuthorizationFree(authorization, [])
-        }
+        try protectedPath(support)
+        try protectedPath(destination.deletingLastPathComponent())
+        try activation.check()
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755, .ownerAccountID: 0])
+        let transaction = LockedUseInstallTransaction(support: support, destination: destination,
+            readRight: optionalRight, setRight: replaceRight, validatePlugin: safeBundle,
+            authorize: { try activation.check() })
+        try transaction.uninstall()
         print("uninstalled")
     } else { throw InstallError.failure("unknown installer operation") }
 } catch {

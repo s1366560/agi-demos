@@ -6,6 +6,8 @@ use std::collections::BTreeSet;
 
 #[path = "cloud_resume.rs"]
 mod resume;
+#[path = "cloud_repl.rs"]
+mod repl;
 pub(super) use resume::{authorize_resume, resume_available};
 
 #[derive(Clone)]
@@ -107,7 +109,7 @@ struct Input {
     artifact_id: Option<String>,
     offset: Option<u64>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct Claim {
     request_id: String,
     user_id: String,
@@ -125,6 +127,8 @@ struct Claim {
     approved_tools: Vec<String>,
     #[serde(default)]
     allowed_mcp_servers: Vec<String>,
+    #[serde(default)]
+    mcp_binding: Option<Value>,
     expires_at: i64,
     authorization_revision: u64,
     plan_version_id: Option<String>,
@@ -323,7 +327,7 @@ pub(in crate::local_runtime) async fn operation(
                     .is_ok()
             });
         let enabled = instance.installed && instance.enabled && helper_path().is_some() && factory;
-        let tools = if enabled {
+        let mut tools = if enabled {
             let host = CuaToolHost::new(state.computer_use.client()?);
             host.list_tools().iter().filter_map(|name|host.tool_definition(name)).map(|mut tool|{
                 if tool.name=="computer_connector_call" {tool.input_schema=Some(connectors::schema(state,&owner,&["*".into()],tool.input_schema.unwrap_or(Value::Null)));}
@@ -332,6 +336,7 @@ pub(in crate::local_runtime) async fn operation(
         } else {
             vec![]
         };
+        if enabled { tools.extend(repl::catalog(state, &owner, broker, transport.epoch)?); }
         state
             .computer_use
             .cloud_connections
@@ -562,7 +567,9 @@ pub(in crate::local_runtime) async fn operation(
                 agistack_core::ports::ToolControlOutcome::UserStopped.result(None),
             ));
         }
-        if state.computer_use.helper_closing.load(Ordering::SeqCst) {
+        if state.computer_use.shutting_down.load(Ordering::SeqCst)
+            || state.computer_use.helper_closing.load(Ordering::SeqCst)
+        {
             return Err("cua_device_stopping".into());
         }
         if let Some(session) = sessions.values().find(|session| {
@@ -585,6 +592,7 @@ pub(in crate::local_runtime) async fn operation(
                 conversation_id: claim.conversation_id.clone(),
                 run_id: claim.run_id.clone(),
                 session_id: format!("cua-cloud-{}", Uuid::new_v4()),
+                input_mode: instance.input_mode,
             };
             let session = Arc::new(Session {
                 resources: Default::default(),
@@ -628,9 +636,9 @@ pub(in crate::local_runtime) async fn operation(
         broker: broker.clone(),
         epoch: transport.epoch,
         expires_at: claim.expires_at,
-        profile: claim.permission_profile,
-        approved_tools: claim.approved_tools.into_iter().collect(),
-        allowed_mcp_servers: claim.allowed_mcp_servers,
+        profile: claim.permission_profile.clone(),
+        approved_tools: claim.approved_tools.iter().cloned().collect(),
+        allowed_mcp_servers: claim.allowed_mcp_servers.clone(),
         alive,
         cancelled,
         factory,
@@ -644,7 +652,7 @@ pub(in crate::local_runtime) async fn operation(
     let client = state.computer_use.client()?;
     let host = ScopedComputerUseHost {
         state: Arc::downgrade(state),
-        native: NativeIdentity::Cloud(lease),
+        native: NativeIdentity::Cloud(lease.clone()),
         session: session.clone(),
         client: client.clone(),
         inner: Arc::new(CuaToolHost::new(client).with_context(session.context.clone())),
@@ -654,12 +662,17 @@ pub(in crate::local_runtime) async fn operation(
         round: claim.round,
         tool: &claim.tool_name,
     };
-    let result = call_identity::scope(
+    let mut result = if crate::local_runtime::cua_repl::TOOLS.contains(&claim.tool_name.as_str()) || claim.mcp_binding.is_some() {
+        repl::execute(state, &owner, claim.clone(), lease, session.clone()).await
+    } else { call_identity::scope(
         &context,
         host.call_with_content(&claim.tool_name, &claim.input_json),
     )
-    .await
+    .await }
     .map_err(|error| error.to_string())?;
+    if crate::local_runtime::cua_repl::TOOLS.contains(&claim.tool_name.as_str()) {
+        artifacts::persist(state, &owner, &session.context, &mut result).await.map_err(|error|error.to_string())?;
+    }
     if let Some(binding) = &session.cloud {
         *binding
             .resume
@@ -699,7 +712,9 @@ pub(in crate::local_runtime) async fn operation(
                     .as_str()
                     .ok_or("cua_cloud_audio_artifact_missing")?
                     .to_owned();
-                media.push(artifacts::descriptor(state, &owner, &id)?);
+                if !media.iter().any(|descriptor| descriptor["artifact_id"] == id) {
+                    media.push(artifacts::descriptor(state, &owner, &id)?);
+                }
                 if let Some(object) = artifact.as_object_mut() {
                     object.remove("url");
                 }
@@ -719,7 +734,8 @@ pub(in crate::local_runtime) async fn operation(
             .collect();
     }
     Ok(
-        json!({"request_id":request_id,"output_json":output.to_string(),"is_error":false,"media":media,"authorization_revision":claim.authorization_revision}),
+        json!({"request_id":request_id,"output_json":output.to_string(),"is_error":false,"media":media,"authorization_revision":claim.authorization_revision,
+            "permission_required":result.permission_required}),
     )
 }
 

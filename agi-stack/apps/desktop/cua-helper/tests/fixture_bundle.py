@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent
 ICON_NAME = "ComputerUseFixture.icns"
 
 
-def build_fixture(bundle: Path) -> Path:
+def build_fixture(bundle: Path, *, identifier: str = "ai.memstack.cua.fixture") -> Path:
     binary = bundle / "Contents/MacOS/ComputerUseFixture"
     resources = bundle / "Contents/Resources"
     binary.parent.mkdir(parents=True)
@@ -16,7 +16,7 @@ def build_fixture(bundle: Path) -> Path:
     (bundle / "Contents/Info.plist").write_bytes(
         plistlib.dumps(
             {
-                "CFBundleIdentifier": "ai.memstack.cua.fixture",
+                "CFBundleIdentifier": identifier,
                 "CFBundleExecutable": binary.name,
                 "CFBundleName": "Computer Use Fixture",
                 "CFBundlePackageType": "APPL",

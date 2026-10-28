@@ -132,6 +132,7 @@ export type ComputerUseScreenshot = {
   app: string;
   dataUrl: string;
   artifactId?: string;
+  emitted?: boolean;
   /** Target app icon (PNG data URL) overlaid on the preview, appshot-style. */
   icon: string;
 };
@@ -175,6 +176,24 @@ export function timelineComputerUseScreenshot(
   };
 }
 
+export function timelineComputerUseScreenshots(item: AgentTimelineItem): ComputerUseScreenshot[] {
+  const legacy = timelineComputerUseScreenshot(item);
+  const images = legacy ? [legacy] : [];
+  const output = typeof item.toolOutput === 'string'
+    ? parseJsonRecord(item.toolOutput) : isRecord(item.toolOutput) ? item.toolOutput : null;
+  const seen = new Set(images.map((image) => image.artifactId));
+  if (!Array.isArray(output?.artifacts)) return images;
+  for (const artifact of output.artifacts) {
+    if (!isRecord(artifact) || artifact.kind !== 'image' ||
+        !['image/png', 'image/jpeg', 'image/webp'].includes(String(artifact.mime_type)) ||
+        typeof artifact.artifact_id !== 'string' ||
+        !/^cua-image-[0-9a-f-]+$/u.test(artifact.artifact_id) || seen.has(artifact.artifact_id)) continue;
+    seen.add(artifact.artifact_id);
+    images.push({ app: '', icon: '', dataUrl: '', artifactId: artifact.artifact_id, emitted: true });
+  }
+  return images;
+}
+
 export function ToolComputerUseAudioView({ item }: { item: AgentTimelineItem }) {
   const { t } = useI18n();
   const { client } = useComputerUseDevice();
@@ -189,7 +208,7 @@ export function ToolComputerUseAudioView({ item }: { item: AgentTimelineItem }) 
       ? output.artifacts.filter(
           (artifact): artifact is Record<string, unknown> =>
             isRecord(artifact) &&
-            artifact.mime_type === 'audio/wav' &&
+            ['audio/wav', 'audio/x-wav', 'audio/mpeg'].includes(String(artifact.mime_type)) &&
             typeof artifact.artifact_id === 'string' &&
             /^cua-audio-[0-9a-f-]+$/u.test(artifact.artifact_id)
         )
@@ -206,7 +225,9 @@ export function ToolComputerUseAudioView({ item }: { item: AgentTimelineItem }) 
               ? 'cua.capability.microphone'
               : artifact.source === 'mixed'
                 ? 'cua.capability.audio_mixed'
-                : 'cua.capability.system_audio'
+                : artifact.source === 'system'
+                  ? 'cua.capability.system_audio'
+                  : 'cua.audioPreview'
           )}
         />
       ))}
@@ -237,7 +258,8 @@ export function ToolComputerUseScreenshotView({
   }, [client, screenshot.artifactId]);
   const imageUrl =
     screenshot.dataUrl || (preview?.id === screenshot.artifactId ? preview?.url : '');
-  const label = screenshot.app || t('chat.computerScreenshot');
+  const imageLabel = t(screenshot.emitted ? 'chat.toolImageOutput' : 'chat.computerScreenshot');
+  const label = screenshot.app || imageLabel;
   return (
     <div className="tool-computer-screenshot">
       <div className="tool-computer-screenshot-head">
@@ -250,7 +272,7 @@ export function ToolComputerUseScreenshotView({
           />
         ) : null}
         <span>{label}</span>
-        <em>{t('chat.computerScreenshot')}</em>
+        <em>{imageLabel}</em>
       </div>
       <div className="tool-computer-screenshot-frame">
         {imageUrl ? (

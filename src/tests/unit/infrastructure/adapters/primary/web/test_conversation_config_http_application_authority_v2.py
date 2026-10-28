@@ -19,6 +19,7 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
+    current_operation_context_v2,
     pin_generation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
@@ -67,6 +68,7 @@ async def test_config_authority_uses_query_project_and_pinned_generation() -> No
             )
             authority = await anext(dependency)
 
+            assert current_operation_context_v2() is authority.operation
             assert authority.operation.phase is FiberPhaseV2.ACTIVE
             assert authority.operation.descriptor.generation == 955
             assert authority.operation.context.scope.tenant_id == "tenant-a"
@@ -84,6 +86,8 @@ async def test_config_authority_uses_query_project_and_pinned_generation() -> No
             }
             assert cast(Any, authority.service.access.repository)._session is db
             await dependency.aclose()
+            with pytest.raises(RuntimeV2Error, match="not pinned"):
+                current_operation_context_v2()
 
         assert authority.operation.phase is FiberPhaseV2.DISPOSED
     finally:

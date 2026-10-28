@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-let ipcProtocolVersion = "MemstackComputerUseIPC-2"
+let ipcProtocolVersion = "MemstackComputerUseIPC-3"
 let maxFrameBytes = 8_388_608
 enum IpcError: Error { case protocolError(String) }
 
@@ -60,9 +60,10 @@ final class IpcServer {
     private let dispatch: Dispatcher
     private let executionQueue = DispatchQueue(label: "memstack.cua.execution")
     private let audioControlQueue = DispatchQueue(label: "memstack.cua.audio.control")
-    private let outputLock = NSLock()
+    private lazy var output = IpcOutput { Self.stopEverything(quit: true) }
     private var initialized = false
     private var notificationsEnabled = false
+    private var inputNotificationsEnabled = false
     private let notificationLock = NSLock()
     private func enableNotifications(_ enabled: Bool) {
         notificationLock.lock(); notificationsEnabled = enabled; notificationLock.unlock()
@@ -75,7 +76,36 @@ final class IpcServer {
     init(dispatcher: @escaping Dispatcher) { dispatch = dispatcher; Self.active = self }
     static func notifyStatus(_ value: [String: Any]) {
         guard let active = active, active.sendsNotifications else { return }
-        active.respond(["jsonrpc": "2.0", "method": "native_status", "params": value])
+        // Lifecycle records, especially pause/stop, share the priority FIFO
+        // with replies. Only high-frequency input telemetry is coalesced.
+        active.output.enqueue(["jsonrpc": "2.0", "method": "native_status", "params": value])
+    }
+    static func notifyInput(_ value: [String: Any]) {
+        guard let active = active else { return }
+        active.notificationLock.lock(); let enabled = active.inputNotificationsEnabled; active.notificationLock.unlock()
+        guard enabled else { return }
+        let id = (value["context"] as? [String: String])?["session_id"] ?? ""
+        active.output.enqueue(["jsonrpc": "2.0", "method": "native_input_telemetry", "params": value], notificationKey: "input:" + id)
+    }
+    static func pauseForExternalInput(_ id: String) {
+        guard let active = active, let session = try? Sessions.shared.require(id) else { return }
+        LockedUseCoordinator.shared.revokeImmediately(sessionID: id, reason: "physical_input")
+        session.pause()
+        SyntheticInput.shared.releaseSession(id, phase: "paused", reason: "user_input_detected")
+        HeldInput.shared.release(id)
+        AudioCapture.shared.endSoon(id, reason: "user_paused")
+        NativePresentation.shared.update(session, phase: "paused", userInitiated: true, userAction: "pause")
+        active.executionQueue.async { Sessions.shared.cleanupStopped(session, preserveWindows: true, reason: "user_paused") }
+    }
+    static func pauseForInputFailure(_ id: String, reason: String) {
+        guard let active = active, let session = try? Sessions.shared.require(id) else { return }
+        LockedUseCoordinator.shared.revokeImmediately(sessionID: id, reason: reason)
+        session.pause()
+        SyntheticInput.shared.releaseSession(id, phase: "paused", reason: reason)
+        HeldInput.shared.release(id)
+        AudioCapture.shared.endSoon(id, reason: "input_unavailable")
+        NativePresentation.shared.update(session, phase: "paused", userInitiated: false)
+        active.executionQueue.async { Sessions.shared.cleanupStopped(session, preserveWindows: true, reason: "input_unavailable") }
     }
     static func controlSession(id: String, method: String, recordingID: String? = nil) {
         guard ["pause_session", "resume_session", "stop_session", "audio_stop"].contains(method),
@@ -91,7 +121,8 @@ final class IpcServer {
             return
         }
         if method == "pause_session" {
-            session.pause(); HeldInput.shared.release(id)
+            LockedUseCoordinator.shared.revokeImmediately(sessionID: id, reason: "user_paused")
+            session.pause(); SyntheticInput.shared.releaseSession(id, phase: "paused"); HeldInput.shared.release(id)
             AudioCapture.shared.endSoon(id, reason: "user_paused")
             NativePresentation.shared.update(session, phase: "paused", userInitiated: true, userAction: "pause")
         } else if method == "stop_session" {
@@ -101,6 +132,7 @@ final class IpcServer {
         }
         var params: [String: Any] = session.owner
         params["session_id"] = id
+        params.merge(session.inputBinding) { _, new in new }
         let bound = params
         active.executionQueue.async {
             if case .success = active.dispatch(method, bound), method == "resume_session" {
@@ -117,12 +149,21 @@ final class IpcServer {
             Sessions.shared.cleanupAllStopped()
         }
     }
+    static func stopForSystemEvent(reason: String) {
+        let sessions = Sessions.shared.stopAll(reason: reason)
+        guard !sessions.isEmpty, let active = active else { return }
+        active.executionQueue.async {
+            sessions.forEach { Sessions.shared.cleanupStopped($0, reason: reason) }
+        }
+    }
     static func proof(secret: String, nonce: String) -> String {
         HMAC<SHA256>.authenticationCode(
             for: Data(nonce.utf8), using: SymmetricKey(data: Data(secret.utf8)))
             .map { String(format: "%02x", $0) }.joined()
     }
     func start() {
+        _ = output
+        NativeScreenMonitor.shared.start()
         signal(SIGPIPE, SIG_IGN)
         signal(SIGTERM, SIG_IGN)
         let signalSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
@@ -144,6 +185,7 @@ final class IpcServer {
             } catch { break }
         }
         enableNotifications(false)
+        LockedUseCoordinator.shared.revokeImmediately(reason: "host_disconnected")
         Sessions.shared.stopAll()
         executionQueue.async { Sessions.shared.endAll(); exit(0) }
     }
@@ -166,6 +208,7 @@ final class IpcServer {
             }
             initialized = true
             enableNotifications(params["native_status_notifications"] as? Bool == true)
+            notificationLock.lock(); inputNotificationsEnabled = params["input_telemetry_notifications"] as? Bool == true; notificationLock.unlock()
             respond(resultPayload(id: id, ["server_api_version": ipcProtocolVersion,
                 "nonce": nonce, "proof": Self.proof(secret: secret, nonce: nonce)]))
             return
@@ -178,11 +221,19 @@ final class IpcServer {
         var boundParams = params
         boundParams["_native_receive_sequence"] = NSNumber(value: sequence)
         boundParams["_native_cancellation_only"] = method == "cancel" || method == "reset" || method == "reset_session"
+        if ["locked_use_renew", "locked_use_disable"].contains(method) {
+            switch dispatch(method, boundParams) {
+            case .success(let result): respond(resultPayload(id: id, result))
+            case .failure(let error): respond(error.payload(id: id))
+            }
+            return
+        }
         if ["stop_session", "end_session", "cancel", "reset", "reset_session"].contains(method),
            let sessionID = params["session_id"] as? String { Sessions.shared.stopAuthorized(sessionID, params: boundParams) }
         if method == "pause_session", let sessionID = params["session_id"] as? String,
-           let owner = try? Sessions.owner(params), let session = try? Sessions.shared.require(sessionID, owner: owner) {
-            session.pause(); HeldInput.shared.release(sessionID)
+           let owner = try? Sessions.owner(params), let session = try? Sessions.shared.require(sessionID, owner: owner),
+           (try? session.validateInputBinding(params)) != nil {
+            session.pause(); SyntheticInput.shared.releaseSession(sessionID, phase: "paused"); HeldInput.shared.release(sessionID)
             AudioCapture.shared.endSoon(sessionID, reason: params["end_reason"] as? String ?? "user_paused")
             NativePresentation.shared.update(session, phase: "paused")
         }
@@ -196,24 +247,6 @@ final class IpcServer {
         }
     }
     private func respond(_ object: [String: Any]) {
-        var payload = encodeJson(object)
-        if payload.count > maxFrameBytes {
-            payload = encodeJson(JsonRpcError(code: -32000, kind: "response_too_large",
-                message: "native result exceeds frame budget").payload(id: object["id"] ?? NSNull()))
-        }
-        let frame = encodeFrame(payload)
-        outputLock.lock(); defer { outputLock.unlock() }
-        frame.withUnsafeBytes { raw in
-            var offset = 0
-            while offset < raw.count {
-                let written = write(STDOUT_FILENO, raw.baseAddress!.advanced(by: offset), raw.count - offset)
-                if written < 0 && errno == EINTR { continue }
-                if written <= 0 {
-                    enableNotifications(false)
-                    Self.stopEverything(quit: true); return
-                }
-                offset += written
-            }
-        }
+        output.enqueue(object)
     }
 }

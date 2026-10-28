@@ -15,9 +15,12 @@ final class AudioRecording: NSObject, SCStreamOutput, SCStreamDelegate {
     var configurationObserver: NSObjectProtocol?
     var onFailure: ((String, String?) -> Void)?
     var maximumFrames: Int64? // injectable bounded writer budget
+    let maximumSeconds: Double
     var engine: AVAudioEngine?
     var stream: SCStream?
-    init(url: URL, source: String) { self.url = url; self.source = source }
+    init(url: URL, source: String, maximumSeconds: Double = AudioMixing.maxSeconds) {
+        self.url = url; self.source = source; self.maximumSeconds = maximumSeconds
+    }
     func write(_ buffer: AVAudioPCMBuffer, hostTime: Double? = nil) {
         lock.lock(); defer { lock.unlock() }
         guard !finished else { return }
@@ -29,7 +32,8 @@ final class AudioRecording: NSObject, SCStreamOutput, SCStreamDelegate {
                 ?? now - Double(buffer.frameLength) / buffer.format.sampleRate
         }
         let sampleBytes = max(1, 2 * Int(buffer.format.channelCount))
-        let budgetFrames = min(Int64(buffer.format.sampleRate * AudioMixing.maxSeconds),
+        let durationFrames = Int64(buffer.format.sampleRate * maximumSeconds)
+        let budgetFrames = min(durationFrames,
             Int64((AudioMixing.maxBytes - 4096) / sampleBytes))
         let remaining = max(0, min(budgetFrames, maximumFrames ?? budgetFrames) - frames)
         guard remaining > 0 else { signal("byte_limit", error: nil); return }
@@ -47,7 +51,9 @@ final class AudioRecording: NSObject, SCStreamOutput, SCStreamDelegate {
             }
             try file?.write(from: buffer)
             frames += AVAudioFramePosition(buffer.frameLength)
-            if Int64(buffer.frameLength) == remaining { signal("byte_limit", error: nil) }
+            if Int64(buffer.frameLength) == remaining {
+                signal(frames >= durationFrames ? "duration_limit" : "byte_limit", error: nil)
+            }
         } catch { signal("capture_error", error: "audio_write_failed") }
     }
     private func signal(_ reason: String, error: String?) {

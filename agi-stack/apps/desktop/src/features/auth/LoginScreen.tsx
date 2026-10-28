@@ -32,6 +32,8 @@ type LoginScreenProps = {
   mode: RuntimeMode;
   localReady: boolean;
   localModeAvailable?: boolean;
+  cloudApiBaseUrl: string;
+  onCloudApiBaseUrlChange: (value: string) => void;
   email: string;
   password: string;
   onModeChange: (mode: RuntimeMode) => void;
@@ -85,6 +87,8 @@ export function LoginScreen({
   mode,
   localReady,
   localModeAvailable = true,
+  cloudApiBaseUrl,
+  onCloudApiBaseUrlChange,
   email,
   password,
   onModeChange,
@@ -260,6 +264,21 @@ export function LoginScreen({
 
           {effectiveMode === 'cloud' ? (
             <>
+              <label>
+                <span>{t('runtime.serverUrl')}</span>
+                <input
+                  aria-label={t('runtime.serverUrl')}
+                  type="url"
+                  value={cloudApiBaseUrl}
+                  disabled={busy}
+                  onChange={(event) => {
+                    setInteractionError(null);
+                    onCloudApiBaseUrlChange(event.target.value);
+                  }}
+                  autoComplete="url"
+                  spellCheck={false}
+                />
+              </label>
               {nativeOAuthProviders.length > 0 ? (
                 <div className="desktop-login-oauth-providers">
                   {nativeOAuthProviders.map((provider) => (

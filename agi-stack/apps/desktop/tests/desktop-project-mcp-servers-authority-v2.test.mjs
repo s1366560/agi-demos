@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { afterEach, test } from 'node:test';
 const require = createRequire(import.meta.url);
-const ROOT = '/tmp/agistack-desktop-test-dist';
+const ROOT = process.env.AGISTACK_DESKTOP_TEST_DIST ?? '/tmp/agistack-desktop-test-dist';
 const m = require(`${ROOT}/src/plugins/desktopProjectMcpServersAuthorityModuleV2.js`);
 const p = require(`${ROOT}/src/plugins/desktopProjectMcpServersHttpProjectionV2.js`);
 const { DesktopApiError } = require(`${ROOT}/src/api/client.js`);
@@ -95,9 +95,9 @@ afterEach(() => {
 const json = (value) =>
   new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
 
-test('MCP Servers V2 exposes seven operations and rejects blank scope before lease', async () => {
+test('MCP Servers V2 exposes management and OAuth operations and rejects blank scope before lease', async () => {
   const f = fixture({ ...config('cloud'), tenantId: '', projectId: '' });
-  assert.equal(Object.keys(f.ops).length, 7);
+  assert.equal(Object.keys(f.ops).length, 9);
   await assert.rejects(f.client.listMCPServers('project-1'), /scope|identifier/u);
   assert.equal(f.events.length, 0);
 });
@@ -597,4 +597,25 @@ test('MCP Servers V2 real Loader publishes project-resolvable service and disabl
   } finally {
     await generation.dispose();
   }
+});
+
+test('manual MCP OAuth preserves scope, revision, idempotency and public status', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init, body: init.body ? JSON.parse(init.body) : undefined });
+    return json({ server_id: 'server-1', status: init.method === 'POST' ? 'authorizing' : 'not_connected', authorization_url: 'https://provider.test/authorize', refresh_token: 'must-not-cross-boundary' });
+  };
+  const f = fixture();
+  const status = await f.client.getMCPOAuthStatus('server-1');
+  assert.equal(status.status, 'not_connected');
+  assert.equal(status.refresh_token, undefined);
+  const action = { action: 'start', project_id: 'project-1', expected_revision: 2, idempotency_key: 'oauth-attempt', scopes: ['read:owned'] };
+  const started = await f.client.mutateMCPOAuth('server-1', action);
+  assert.equal(started.authorization_url, 'https://provider.test/authorize');
+  assert.equal(new URL(calls[0].url).searchParams.get('project_id'), 'project-1');
+  assert.equal(new URL(calls[1].url).pathname, '/api/v1/mcp/server-1/oauth/start');
+  assert.deepEqual(calls[1].body, { project_id: 'project-1', expected_revision: 2, idempotency_key: 'oauth-attempt', scopes: ['read:owned'] });
+  await assert.rejects(f.client.mutateMCPOAuth('server-1', { ...action, project_id: 'other' }), /scope/u);
+  await assert.rejects(f.client.mutateMCPOAuth('server-1', { ...action, expected_revision: 0 }), /revision/u);
+  assert.equal(calls.length, 2);
 });

@@ -24,6 +24,7 @@ export type ProviderEditorDraft = {
   apiKey: string;
   environmentVariable: string;
   expectedRevision: number;
+  requestTimeoutMs?: number;
 };
 
 export type ProviderValidationSignal = {
@@ -200,6 +201,9 @@ export function providerDraftFromProvider(provider: ManagedLlmProvider): Provide
     environmentVariable:
       authMethod === 'environment' ? (provider.environment_variable ?? '').trim() : '',
     expectedRevision: provider.revision ?? 0,
+    ...(provider.request_timeout_ms === undefined
+      ? {}
+      : { requestTimeoutMs: provider.request_timeout_ms }),
   };
 }
 
@@ -216,6 +220,7 @@ export function providerMutationFromDraft(draft: ProviderEditorDraft): LlmProvid
     allowedModels: normalizedModelIds(draft.allowedModels),
     active: draft.active,
     expectedRevision: draft.expectedRevision,
+    ...(draft.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: draft.requestTimeoutMs }),
     ...(apiKey ? { apiKey } : {}),
     ...(environmentVariable ? { environmentVariable } : {}),
   };
@@ -224,6 +229,11 @@ export function providerMutationFromDraft(draft: ProviderEditorDraft): LlmProvid
 export function providerCreateInputFromDraft(draft: ProviderEditorDraft): LlmProviderCreateInput {
   const { expectedRevision: _expectedRevision, ...input } = providerMutationFromDraft(draft);
   return input;
+}
+
+export function providerRequestTimeoutIsValid(milliseconds: number | undefined): boolean {
+  return milliseconds === undefined ||
+    (Number.isSafeInteger(milliseconds) && milliseconds >= 1 && milliseconds <= 300_000);
 }
 
 export function providerProbeInputFromDraft(draft: ProviderEditorDraft): LlmProviderProbeInput {

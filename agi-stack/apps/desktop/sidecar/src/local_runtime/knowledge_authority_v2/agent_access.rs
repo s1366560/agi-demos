@@ -109,6 +109,13 @@ impl RunAuthorization {
         {
             return Err(KnowledgeAuthorityErrorV2::Forbidden);
         }
+        if !state
+            .session_store
+            .session_context_is_current(&self.auth, chrono::Utc::now().timestamp_millis())
+            .map_err(|_| KnowledgeAuthorityErrorV2::Forbidden)?
+        {
+            return Err(KnowledgeAuthorityErrorV2::Forbidden);
+        }
         let conversation = state
             .session_store
             .conversation(&self.conversation_id)
@@ -126,6 +133,13 @@ impl RunAuthorization {
         }
         Ok(())
     }
+}
+
+pub(in crate::local_runtime) fn current_auth() -> Option<AuthenticatedContext> {
+    CURRENT
+        .try_with(|current| current.as_ref().map(|authorization| authorization.auth.clone()))
+        .ok()
+        .flatten()
 }
 
 pub(in crate::local_runtime) async fn scope<F: Future>(
@@ -184,5 +198,9 @@ impl PluginNativeIdentityV2 {
     }
     pub(in crate::local_runtime) fn current(&self, state: &LocalRuntimeState) -> bool {
         self.0.ensure_current(state).is_ok()
+    }
+    /// Reuse this captured authority for a host-owned continuation, retaining currentness checks.
+    pub(in crate::local_runtime) async fn scope<F: Future>(&self, future: F) -> F::Output {
+        scope(Some(self.0.clone()), future).await
     }
 }

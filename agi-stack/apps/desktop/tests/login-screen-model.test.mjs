@@ -381,3 +381,14 @@ test('email login enforces the approved structural credential boundary', () => {
   assert.equal(validateLoginCredentials('alex@northstar.ai', '12345'), 'invalid_credentials');
   assert.equal(validateLoginCredentials('', ''), 'invalid_credentials');
 });
+
+test('explicit Cloud login endpoint is kept while Local continues to use its sidecar preset', () => {
+  const current = initialDesktopRuntimeConfig(createMemoryStorage(), true);
+  const cloud = runtimeConfigForLoginMode(current, 'cloud', 'http://127.0.0.1:18766');
+  assert.equal(cloud.apiBaseUrl, 'http://127.0.0.1:18766');
+  assert.equal(
+    runtimeConfigForLoginMode(cloud, 'local', cloud.apiBaseUrl).apiBaseUrl,
+    'http://127.0.0.1:8088',
+  );
+  assert.equal(runtimeConfigForLoginMode(current, 'cloud', '').apiBaseUrl, '');
+});

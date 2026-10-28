@@ -1,4 +1,4 @@
-//! Copy helper-owned images before helper teardown; previews require the same device owner.
+//! Persist authorized media before teardown; previews require the same device owner.
 use super::Owner;
 use crate::local_runtime::LocalRuntimeState;
 use agistack_adapters_cua::CuaCallContext;
@@ -49,13 +49,33 @@ pub(super) async fn persist(
     }
     persist_icon(state, owner, context, &root, &mut output).await?;
     for media in &mut result.media {
-        let id = format!("cua-image-{}", Uuid::new_v4());
-        let extension = match media.mime_type.as_str() {
-            "image/png" => "png",
-            "image/jpeg" => "jpg",
-            "image/webp" => "webp",
-            _ => return Err(CoreError::Tool("cua_image_type_invalid".into())),
+        let (kind, extension) = match media.mime_type.as_str() {
+            "image/png" => ("image", "png"),
+            "image/jpeg" => ("image", "jpg"),
+            "image/webp" => ("image", "webp"),
+            "audio/wav" | "audio/x-wav" => ("audio", "wav"),
+            "audio/mpeg" => ("audio", "mp3"),
+            _ => return Err(CoreError::Tool("cua_media_type_invalid".into())),
         };
+        let existing = state.session_store.connection().map_err(CoreError::Tool)?.query_row(
+            "SELECT id FROM desktop_cua_artifacts_v2 WHERE path=?1 AND user_id=?2 AND tenant_id=?3 AND project_id=?4 AND device_id=?5 AND conversation_id=?6 AND mime_type=?7",
+            params![media.artifact_path,owner.user_id,owner.tenant_id,owner.project_id,owner.device_id,context.conversation_id,media.mime_type],
+            |row| row.get::<_,String>(0),
+        ).optional().map_err(|_|CoreError::Tool("cua_artifact_lookup_failed".into()))?;
+        if let Some(id) = existing {
+            attachment(state, owner, &context.conversation_id, &id).map_err(CoreError::Tool)?;
+            continue;
+        }
+        let metadata = tokio::fs::symlink_metadata(&media.artifact_path)
+            .await
+            .map_err(|_| CoreError::Tool("cua_artifact_not_found".into()))?;
+        if !metadata.is_file()
+            || metadata.file_type().is_symlink()
+            || metadata.len() > (if kind == "audio" { 64 } else { 10 }) * 1024 * 1024
+        {
+            return Err(CoreError::Tool("cua_artifact_invalid".into()));
+        }
+        let id = format!("cua-{kind}-{}", Uuid::new_v4());
         let destination = root.join(format!("{id}.{extension}"));
         tokio::fs::copy(&media.artifact_path, &destination)
             .await
@@ -301,7 +321,7 @@ pub(super) fn cloud_chunk(
 ) -> Result<Value, String> {
     let (_, mime) = owned_path(&*state.session_store.connection()?, owner, id)?
         .ok_or("cua_artifact_not_found")?;
-    chunk(state, owner, id, offset, mime != "audio/wav")
+    chunk(state, owner, id, offset, !mime.starts_with("audio/"))
 }
 pub(super) fn descriptor(
     state: &LocalRuntimeState,
@@ -339,11 +359,11 @@ fn chunk(
     if (if image {
         !matches!(mime.as_str(), "image/png" | "image/jpeg" | "image/webp")
     } else {
-        mime != "audio/wav"
+        !matches!(mime.as_str(), "audio/wav" | "audio/x-wav" | "audio/mpeg")
     }) || metadata.file_type().is_symlink()
         || !metadata.is_file()
         || !canonical.starts_with(root)
-        || metadata.len() > (if image { 8 } else { 64 }) * 1024 * 1024
+        || metadata.len() > (if image { 10 } else { 64 }) * 1024 * 1024
         || offset > metadata.len()
     {
         return Err("cua_artifact_invalid".into());
@@ -369,9 +389,43 @@ pub(super) fn media_descriptors(
     media.iter().map(|media| {
         let id:String=db.query_row("SELECT id FROM desktop_cua_artifacts_v2 WHERE path=?1 AND user_id=?2 AND tenant_id=?3 AND project_id=?4 AND device_id=?5 AND mime_type=?6",params![media.artifact_path,owner.user_id,owner.tenant_id,owner.project_id,owner.device_id,media.mime_type],|row|row.get(0)).map_err(|_|"cua_cloud_artifact_scope_invalid")?;
         let metadata=std::fs::symlink_metadata(&media.artifact_path).map_err(|_|"cua_artifact_not_found")?;
-        if !metadata.is_file()||metadata.file_type().is_symlink()||metadata.len()>8*1024*1024{return Err("cua_artifact_invalid".into());}
+        if !metadata.is_file()||metadata.file_type().is_symlink()||metadata.len()>(if media.mime_type.starts_with("audio/"){64}else{10})*1024*1024{return Err("cua_artifact_invalid".into());}
         Ok(json!({"artifact_id":id,"mime_type":media.mime_type,"size_bytes":metadata.len()}))
     }).collect()
+}
+
+pub(super) fn attachment(
+    state: &LocalRuntimeState,
+    owner: &Owner,
+    conversation: &str,
+    id: &str,
+) -> Result<agistack_core::agent::types::MediaAttachment, String> {
+    let db = state.session_store.connection()?;
+    let (path, mime): (String, String) = db.query_row(
+        "SELECT path,mime_type FROM desktop_cua_artifacts_v2 WHERE id=?1 AND user_id=?2 AND tenant_id=?3 AND project_id=?4 AND device_id=?5 AND conversation_id=?6",
+        params![id,owner.user_id,owner.tenant_id,owner.project_id,owner.device_id,conversation],
+        |row|Ok((row.get(0)?,row.get(1)?)),
+    ).map_err(|_|"cua_artifact_not_owned")?;
+    let root = state
+        .app_data_dir
+        .as_ref()
+        .ok_or("cua_artifact_storage_unavailable")?
+        .join("computer-use-artifacts")
+        .canonicalize()
+        .map_err(|_| "cua_artifact_storage_unavailable")?;
+    let metadata = std::fs::symlink_metadata(&path).map_err(|_| "cua_artifact_not_found")?;
+    let canonical = std::fs::canonicalize(&path).map_err(|_| "cua_artifact_not_found")?;
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
+        || !canonical.starts_with(root)
+        || metadata.len() > 64 * 1024 * 1024
+    {
+        return Err("cua_artifact_invalid".into());
+    }
+    Ok(agistack_core::agent::types::MediaAttachment {
+        artifact_path: path,
+        mime_type: mime,
+    })
 }
 
 fn owned_path(

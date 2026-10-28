@@ -20,6 +20,8 @@ describe('dispatcher', () => {
         protocolMin: 1,
         protocolMax: 2,
         backend: 'chrome-extension',
+        profileId: expect.any(String),
+        extensionInstanceId: expect.any(String),
         extensionId: 'enbljdpbhdllbbkcjhccmbgpkfmcdkkl',
         extensionVersion: '0.1.0',
         capabilities: ['cdp', 'tabs', 'events'],
@@ -184,7 +186,7 @@ describe('executeCdp', () => {
 });
 
 describe('tabs', () => {
-  it('getTabs filters internal schemes and maps fields', async () => {
+  it('getTabs preserves selectable blank tabs while filtering browser internal pages', async () => {
     const { chrome, bridge } = setup();
     chrome.tabs.query.mockResolvedValue([
       { id: 1, windowId: 10, title: 'Docs', url: 'https://example.com/docs', active: true },
@@ -202,6 +204,7 @@ describe('tabs', () => {
       result: {
         tabs: [
           { tabId: 1, windowId: 10, title: 'Docs', url: 'https://example.com/docs', active: true },
+          { tabId: 5, windowId: 10, title: '', url: 'about:blank', active: false },
           { tabId: 6, windowId: 11, title: 'Plain', url: '', active: false },
         ],
       },

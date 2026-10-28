@@ -6,6 +6,12 @@ use agistack_core::agent::tool_policy::ToolPolicyContext;
 mod hitl_validation_tests;
 #[path = "local_stop_dispatch_tests.rs"]
 mod local_stop_dispatch_tests;
+#[path = "consent_preflight_tests.rs"]
+mod consent_preflight_tests;
+#[path = "consent_provenance_tests.rs"]
+mod consent_provenance_tests;
+#[path = "locked_use_consent_tests.rs"]
+mod locked_use_consent_tests;
 
 struct Fixture {
     state: Arc<LocalRuntimeState>,

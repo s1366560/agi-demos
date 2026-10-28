@@ -11,7 +11,7 @@ from src.infrastructure.agent.native_computer_use.contracts import READ_TOOL_NAM
 from src.infrastructure.agent.native_computer_use.store import DeviceBridgeError
 
 OPERATION_EFFECTS = "x-cua-operation-effects"
-Effect = Literal["read", "mutate"]
+Effect = Literal["read", "mutate", "execute"]
 # These are protocol operations, never a classification of user text or intent.
 NATIVE_OPERATIONS = {
     ("calendar", "list"): "read",
@@ -83,10 +83,31 @@ def operation_rows(schema: dict[str, Any]) -> list[dict[str, Any]]:
 def argument_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Custom metadata does not become a model-supplied JSON Schema property."""
     operation_rows(schema)
-    return {key: value for key, value in schema.items() if key != OPERATION_EFFECTS}
+    from src.infrastructure.agent.native_computer_use.catalog import (
+        MCP_BINDING,
+        STEP_ONLY,
+        mcp_binding,
+    )
+
+    mcp_binding(schema)
+    return {
+        key: value
+        for key, value in schema.items()
+        if key not in {OPERATION_EFFECTS, MCP_BINDING, STEP_ONLY}
+    }
 
 
 def tool_effect(tool_name: str, schema: dict[str, Any], arguments: dict[str, Any]) -> Effect:
+    from src.infrastructure.agent.native_computer_use.catalog import (
+        BROWSER_TOOLS,
+        EXECUTE_TOOLS,
+        browser_effect,
+    )
+
+    if tool_name in EXECUTE_TOOLS:
+        return "execute"
+    if tool_name in BROWSER_TOOLS:
+        return "read" if browser_effect(tool_name, arguments) == "read" else "mutate"
     if tool_name in READ_TOOL_NAMES:
         return "read"
     if tool_name != "computer_connector_call":
@@ -155,7 +176,9 @@ def selection_effect(
     )
 
 
-def validate_registered_call(device: dict[str, Any], value: dict[str, Any]) -> Effect:
+def validate_registered_call(
+    device: dict[str, Any], value: dict[str, Any], *, allow_step_only: bool = False
+) -> Effect:
     """Recheck the current catalog before consuming a queued device invocation."""
     from src.infrastructure.agent.native_computer_use.schema import validator
 
@@ -170,6 +193,10 @@ def validate_registered_call(device: dict[str, Any], value: dict[str, Any]) -> E
     except (ValueError, TypeError) as error:
         raise DeviceBridgeError("computer_use_invalid_params") from error
     schema = definition["inputSchema"]
+    if schema.get("x-cua-step-only") is True and not allow_step_only:
+        raise DeviceBridgeError("computer_use_step_context_required")
+    if "mcp_binding" in value and value["mcp_binding"] != schema.get("x-cua-mcp-binding"):
+        raise DeviceBridgeError("computer_use_mcp_binding_changed")
     if not isinstance(arguments, dict) or not validator(argument_schema(schema)).is_valid(
         arguments
     ):
@@ -178,11 +205,14 @@ def validate_registered_call(device: dict[str, Any], value: dict[str, Any]) -> E
     if value.get("tool_effect", effect) != effect:
         raise DeviceBridgeError("computer_use_tool_effect_changed")
     if (
-        effect != "read"
+        effect not in {"read", "execute"}
         and value["permission_profile"] != "full_access"
         and value["tool_name"] not in value["approved_tools"]
     ):
         raise DeviceBridgeError("computer_use_run_permission_denied")
+    from src.infrastructure.agent.native_computer_use.catalog import require_mcp_server
+
+    require_mcp_server(schema, tuple(value.get("allowed_mcp_servers", ())))
     if value["tool_name"] == "computer_connector_call":
         require_connector_servers(schema, arguments, tuple(value.get("allowed_mcp_servers", ())))
     return effect

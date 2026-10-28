@@ -24,6 +24,10 @@ warnings.filterwarnings(
 )
 
 from src.configuration.config import get_settings
+from src.domain.llm_providers.audio_input import (
+    OPENAI_AUDIO_INPUT_ADAPTERS,
+    declared_audio_input_models,
+)
 from src.domain.llm_providers.llm_types import (
     LLMClient,
     LLMConfig,
@@ -32,6 +36,11 @@ from src.domain.llm_providers.llm_types import (
     RateLimitError,
 )
 from src.domain.llm_providers.models import ProviderConfig
+from src.infrastructure.agent.native_computer_use.audio_messages import (
+    PreparedAudioInput,
+    prepare_audio_input,
+)
+from src.infrastructure.agent.native_computer_use.store import DeviceBridgeError
 from src.infrastructure.llm.model_catalog import ModelCatalogService
 from src.infrastructure.llm.model_registry import (
     clamp_max_tokens as _clamp_max_tokens,
@@ -45,6 +54,7 @@ from src.infrastructure.llm.resilience import (
     get_circuit_breaker_registry,
     get_provider_rate_limiter,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
@@ -219,6 +229,23 @@ class LiteLLMClient(LLMClient):
         if self.provider_config.base_url:
             return self.provider_config.base_url
         return None
+
+    def supports_audio_input(self, model: str) -> bool:
+        """Only explicit exact model declarations on an OpenAI-wire adapter enable audio."""
+        if self.provider_config.provider_type.value not in OPENAI_AUDIO_INPUT_ADAPTERS:
+            return False
+        if "/" in model and not model.startswith("openai/"):
+            return False
+        return model in {
+            self._qualify_model_for_provider(item)
+            for item in declared_audio_input_models(self.provider_config.config)
+            if item
+            in {
+                self.provider_config.llm_model,
+                self.provider_config.llm_small_model,
+                *self.provider_config.secondary_models,
+            }
+        }
 
     def _configure_litellm(self) -> None:
         """Configure LiteLLM environment variables as fallback.
@@ -404,6 +431,15 @@ class LiteLLMClient(LLMClient):
             }
 
         settings = get_settings()
+        if any(
+            isinstance(message.get("content"), list)
+            and any(
+                isinstance(part, dict) and part.get("type") == "input_audio"
+                for part in message["content"]
+            )
+            for message in normalized_messages
+        ):
+            kwargs["metadata"] = {**kwargs.get("metadata", {}), "mask_input": True}
         kwargs["num_retries"] = settings.llm_max_retries
         return kwargs
 
@@ -412,8 +448,21 @@ class LiteLLMClient(LLMClient):
         """Estimate input tokens using LiteLLM tokenizer for provider-aware counting."""
         import litellm
 
+        # Audio has its own byte/count budget and provider tokenizer. Base64 is
+        # transport encoding, not text context; never send it to a text tokenizer.
+        text_messages = []
+        for message in messages:
+            content = message.get("content")
+            if isinstance(content, list):
+                content = [
+                    {"type": "text", "text": "[audio input]"}
+                    if isinstance(part, dict) and part.get("type") == "input_audio"
+                    else part
+                    for part in content
+                ]
+            text_messages.append({**message, "content": content})
         try:
-            return int(litellm.token_counter(model=model, messages=messages))
+            return int(litellm.token_counter(model=model, messages=text_messages))
         except Exception as e:
             logger.debug(f"Failed to estimate prompt tokens for {model}: {e}")
             return None
@@ -446,6 +495,8 @@ class LiteLLMClient(LLMClient):
                             total_chars += len(str(part.get("text", "")))
                         elif part_type == "image_url":
                             total_chars += _IMAGE_CHAR_BUDGET
+                        elif part_type == "input_audio":
+                            total_chars += len("[audio input]")
                         else:
                             total_chars += len(str(part))
                     else:
@@ -732,7 +783,12 @@ class LiteLLMClient(LLMClient):
         )
         return all(marker in error_str for marker in protocol_markers)
 
-    async def _execute_with_resilience(self, coro_factory: Callable[[], Awaitable[Any]]) -> None:
+    async def _execute_with_resilience(
+        self,
+        coro_factory: Callable[[], Awaitable[Any]],
+        *,
+        audio: PreparedAudioInput | None = None,
+    ) -> None:
         """Execute an LLM call with circuit breaker and rate limiter.
 
         Args:
@@ -753,10 +809,14 @@ class LiteLLMClient(LLMClient):
             )
 
         try:
-            async with await rate_limiter.acquire(provider_type):
+            async with (audio or PreparedAudioInput([])).admission(
+                lambda: rate_limiter.acquire(provider_type)
+            ):
                 result = await coro_factory()
             circuit_breaker.record_success()
             return result
+        except (RuntimeV2Error, DeviceBridgeError):
+            raise
         except Exception as e:
             if not self._is_client_error(e):
                 circuit_breaker.record_failure()
@@ -849,9 +909,15 @@ class LiteLLMClient(LLMClient):
         if isinstance(model_override, str) and model_override.strip():
             model = self._qualify_model_for_provider(model_override)
         effective_temp = self.temperature if temperature is None else temperature
+        audio = await prepare_audio_input(
+            litellm_messages,
+            supported=self.supports_audio_input(model),
+            provider=self.provider_config,
+        )
+        litellm_messages = audio.messages
 
         # Check response cache (only for non-tool, deterministic calls)
-        if self.cache and not tools and effective_temp == 0:
+        if self.cache and not tools and effective_temp == 0 and not audio.references:
             from src.infrastructure.llm.cache import get_response_cache
 
             cache = get_response_cache()
@@ -872,7 +938,8 @@ class LiteLLMClient(LLMClient):
             completion_kwargs["tools"] = tools
 
         response = await self._execute_with_resilience(
-            lambda: litellm.acompletion(**completion_kwargs)
+            lambda: audio.complete(litellm.acompletion, completion_kwargs),
+            audio=audio,
         )
 
         if response is None:
@@ -909,7 +976,7 @@ class LiteLLMClient(LLMClient):
             }
 
         # Store in cache (only for non-tool, deterministic calls)
-        if self.cache and not tools and effective_temp == 0:
+        if self.cache and not tools and effective_temp == 0 and not audio.references:
             from src.infrastructure.llm.cache import get_response_cache
 
             cache = get_response_cache()
@@ -948,6 +1015,13 @@ class LiteLLMClient(LLMClient):
             model = self._qualify_model_for_provider(model_override)
         litellm_messages = [self._convert_message(m) for m in messages]
 
+        audio = await prepare_audio_input(
+            litellm_messages,
+            supported=self.supports_audio_input(model),
+            provider=self.provider_config,
+        )
+        litellm_messages = audio.messages
+
         completion_kwargs = self._build_completion_kwargs(
             model=model,
             messages=litellm_messages,
@@ -969,18 +1043,23 @@ class LiteLLMClient(LLMClient):
             )
 
         try:
-            async with await rate_limiter.acquire(provider_type):
+            async with audio.admission(lambda: rate_limiter.acquire(provider_type)):
                 from src.infrastructure.plugins.v2.model_request_log import (
                     recorded_completion_stream_v2,
                 )
 
                 source = recorded_completion_stream_v2(
-                    litellm.acompletion, completion_kwargs, request_recorder,
+                    litellm.acompletion,
+                    completion_kwargs,
+                    request_recorder,
+                    owned_transport=bool(audio.references),
                 )
                 async with aclosing(source):
-                    async for chunk in source:
+                    async for chunk in audio.stream(source):
                         yield chunk
             circuit_breaker.record_success()
+        except (RuntimeV2Error, DeviceBridgeError):
+            raise
         except Exception as e:
             if not self._is_client_error(e):
                 circuit_breaker.record_failure()
@@ -1023,6 +1102,12 @@ class LiteLLMClient(LLMClient):
 
         model = self._get_model_for_size(model_size)
         litellm_messages = [self._convert_message(m) for m in messages]
+        audio = await prepare_audio_input(
+            litellm_messages,
+            supported=self.supports_audio_input(model),
+            provider=self.provider_config,
+        )
+        litellm_messages = audio.messages
 
         completion_kwargs = self._build_completion_kwargs(
             model=model,
@@ -1044,7 +1129,8 @@ class LiteLLMClient(LLMClient):
 
         try:
             response = await self._execute_with_resilience(
-                lambda: litellm.acompletion(**completion_kwargs)
+                lambda: audio.complete(litellm.acompletion, completion_kwargs),
+                audio=audio,
             )
 
             if response is None:

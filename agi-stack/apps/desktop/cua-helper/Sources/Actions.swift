@@ -20,11 +20,14 @@ enum Actions {
         }
         try session.cancellation.check()
         try NativeScreenState.requireUnlocked()
-        try TargetPolicy.requireFocused(snapshot.app, window: snapshot.window)
-        try SyntheticInput.shared.beginInputLease(session.id)
+        guard snapshot.inputGeneration == session.inputGeneration else {
+            throw ActionError.failure(kind: "stale_input_generation", message: "observe the target after resuming input")
+        }
+        if session.inputMode == .foreground { try TargetPolicy.requireFocused(snapshot.app, window: snapshot.window) }
+        try SyntheticInput.shared.bind(session, app: snapshot.app, window: snapshot.window)
         try session.cancellation.check()
         try NativeScreenState.requireUnlocked()
-        try TargetPolicy.requireFocused(snapshot.app, window: snapshot.window)
+        if session.inputMode == .foreground { try TargetPolicy.requireFocused(snapshot.app, window: snapshot.window) }
     }
     static func wait(_ seconds: Double) throws {
         let deadline = Date().addingTimeInterval(seconds)
@@ -59,13 +62,6 @@ enum Actions {
             try SyntheticInput.shared.post(move)
             try wait(0.05)
         }
-        if let index = elementIndex {
-            let record = try requireElement(app: app, index: index)
-            if record.isEditable {
-                _ = AXUIElementSetAttributeValue(record.axElement, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-            }
-        }
-
         var mouseDown = false
         func post(_ type: CGEventType, _ state: Int64) throws {
             guard let event = CGEvent(mouseEventSource: SyntheticInput.shared.source, mouseType: type, mouseCursorPosition: point, mouseButton: cgButton) else {
@@ -141,7 +137,7 @@ enum Actions {
             // Unicode insertion is literal. A prior chord must not leave its
             // Command/Control flags on characters and turn them into shortcuts.
             down.flags = []; up.flags = []
-            try SyntheticInput.shared.post(down, ownedFlags: [])
+            try SyntheticInput.shared.post(down, ownedFlags: [], literalText: true)
             defer { SyntheticInput.shared.release(up) }
             try SyntheticInput.shared.post(up)
             try wait(0.008)
@@ -225,6 +221,9 @@ enum Actions {
         guard let event = CGEvent(scrollWheelEvent2Source: SyntheticInput.shared.source, units: .line, wheelCount: 2, wheel1: wheel1, wheel2: wheel2, wheel3: 0) else {
             throw ActionError.failure(kind: "input_error", message: "cannot create scroll event")
         }
+        // Targeted background motion deliberately leaves the physical pointer
+        // unchanged, so a new wheel event must carry the selected location.
+        event.location = point
         try SyntheticInput.shared.post(event)
     }
 

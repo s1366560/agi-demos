@@ -109,7 +109,14 @@ def _native_permission_metadata(
     if (
         any(binding.get(key) != value for key, value in scope.items())
         or any(not isinstance(binding.get(key), str) or not binding[key] for key in binding_fields)
-        or binding.get("tool_name") not in TOOL_NAMES
+        or (
+            binding.get("tool_name") not in TOOL_NAMES
+            and not (
+                binding.get("capability") == "execution_step"
+                and isinstance(binding.get("execution_step"), dict)
+                and scopes == ["once"]
+            )
+        )
         or decision["target"]["id"] != binding.get("native_request_id")
         or not isinstance(revision, int)
         or isinstance(revision, bool)
@@ -135,6 +142,11 @@ def _native_permission_metadata(
         "native_binding": {
             **{key: binding[key] for key in binding_fields},
             "authorization_revision": revision,
+            **(
+                {"execution_step": deepcopy(binding["execution_step"])}
+                if isinstance(binding.get("execution_step"), dict)
+                else {}
+            ),
         },
         "scopes": list(scopes),
         "actions": deepcopy(actions),

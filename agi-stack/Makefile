@@ -127,12 +127,15 @@ desktop-icons: ## 桌面:验证已跟踪的 electron-builder 图标和 macOS ent
 desktop-cua-helper: ## 桌面:构建平台 computer-use 助手和云连接器并暂存到 sidecar 旁
 	MEMSTACK_CUA_CARGO="$(CARGO)" node $(DESKTOP_APP_DIR)/scripts/build-cua-helper.mjs --debug
 
-run-desktop: desktop-deps desktop-cua-helper ## 启动 Electron 原生客户端与 Rust sidecar
+desktop-cua-repl: ## 桌面:暂存独立 Node computer-use REPL
+	cd packages/cua-repl && CI=true $(PNPM) install --ignore-workspace --frozen-lockfile
+	node $(DESKTOP_APP_DIR)/scripts/stage-cua-repl.mjs
+
+run-desktop: desktop-deps desktop-cua-helper desktop-cua-repl ## 启动 Electron 原生客户端与 Rust sidecar
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
 	$(CARGO) build -p agistack-desktop-sidecar
 	cd $(DESKTOP_APP_DIR) && $(PNPM) exec install-electron --no
-	@./scripts/ensure-desktop-grants.sh
-	cd $(DESKTOP_APP_DIR) && { [ ! -f $(CURDIR)/.local/desktop-grants/grants.env ] || . $(CURDIR)/.local/desktop-grants/grants.env; } && $(PNPM) run dev:electron
+	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- $(PNPM) run dev:electron
 
 desktop-grants: ## 桌面:强制重新发放云端数据平面授权(24h 有效,仅本地开发)
 	@AGISTACK_DESKTOP_GRANTS_FORCE=1 ./scripts/ensure-desktop-grants.sh

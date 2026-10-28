@@ -1,9 +1,17 @@
 //! Authenticated device bridge for the Rust cloud agent. It never launches a native helper.
 mod agent_profile;
 mod authority;
+mod audio_input;
 mod broker;
+mod media_storage;
+mod media_api;
+mod repl_output;
+mod catalog;
+mod steps;
 mod control;
 mod hitl;
+mod outer_permission;
+mod permission;
 mod resume_authority;
 #[cfg(test)]
 mod tests;
@@ -22,6 +30,7 @@ use axum::{
     Extension, Json, Router,
 };
 pub(crate) use broker::Broker;
+pub(crate) use audio_input::bind as bind_audio_input;
 pub(crate) use hitl::{native_receipt, park, resume};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -30,7 +39,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct Owner {
     pub user_id: String,
     pub tenant_id: String,
@@ -51,10 +60,15 @@ fn rejected() -> (StatusCode, Json<Value>) {
 }
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/agent/conversations/:conversation_id/tool-media/:artifact_id", get(media_api::get_media))
         .route("/api/v1/agent/device/status", get(status))
         .route(
             "/api/v1/agent/device/requests/:request_id/claim",
             post(claim),
+        )
+        .route(
+            "/api/v1/agent/device/requests/:request_id/steps/:step_id/authorize",
+            post(steps::authorize),
         )
         .route(
             "/api/v1/agent/device/requests/:request_id/resume-authority",
@@ -224,7 +238,7 @@ async fn handle_device_frame(
             let announce: Announce = serde_json::from_value(value)
                 .map_err(|_| CoreError::Tool("computer_use_registration_invalid".into()))?;
             if !broker::identifier(&announce.device_id)
-                || announce.tool_definitions.len() > agistack_adapters_cua::tool_names().len()
+                || announce.tool_definitions.len() > 2048
             {
                 return Err(CoreError::Tool("computer_use_registration_invalid".into()));
             }
@@ -235,44 +249,19 @@ async fn handle_device_frame(
                 &announce.scope.project_id,
             )
             .await?;
-            let declared = agistack_adapters_cua::tool_definitions();
             let mut seen = std::collections::BTreeSet::new();
             let mut tools = vec![];
             for tool in announce.tool_definitions {
-                let name = tool["name"]
-                    .as_str()
-                    .ok_or_else(|| CoreError::Tool("computer_use_tool_invalid".into()))?;
-                let contract = declared
-                    .get(name)
-                    .ok_or_else(|| CoreError::Tool("computer_use_tool_invalid".into()))?;
-                let mut standard_schema = tool["inputSchema"].clone();
-                if name == "computer_connector_call" {
-                    agistack_adapters_cua::validate_connector_operations(&standard_schema)
-                        .map_err(|error| CoreError::Tool(error.into()))?;
-                    if let Some(schema) = standard_schema.as_object_mut() {
-                        schema.remove(agistack_adapters_cua::CONNECTOR_OPERATION_EFFECTS);
-                    }
+                let mut definition = catalog::validate_definition(&tool)?;
+                if !seen.insert(definition.name.clone()) {
+                    return Err(CoreError::Tool("computer_use_tool_contract_mismatch".into()));
                 }
-                if standard_schema != contract["inputSchema"] || !seen.insert(name.to_owned()) {
-                    return Err(CoreError::Tool(
-                        "computer_use_tool_contract_mismatch".into(),
-                    ));
-                }
-                let mut description = contract["description"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_owned();
-                if name == agistack_adapters_cua::TOOL_GET_APP_STATE {
+                if definition.name == agistack_adapters_cua::TOOL_GET_APP_STATE {
+                    let description = definition.description.get_or_insert_default();
                     description.push_str("\n\n");
-                    description.push_str(include_str!(
-                        "../../../desktop/cua-plugin/skills/computer-use/SKILL.md"
-                    ));
+                    description.push_str(include_str!("../../../desktop/cua-plugin/skills/computer-use/SKILL.md"));
                 }
-                tools.push(ToolDefinition::new(
-                    name,
-                    description,
-                    tool["inputSchema"].clone(),
-                ));
+                tools.push(definition);
             }
             let mut devices = app
                 .computer_use_devices
@@ -307,10 +296,24 @@ async fn handle_device_frame(
                 media: Vec<broker::Descriptor>,
                 control_outcome: Option<agistack_core::ports::ToolControlOutcome>,
                 control_generation: Option<String>,
+                permission_required: Option<permission::WirePermission>,
+                authorization_revision: Option<i32>,
             }
             let frame: ResultFrame = serde_json::from_value(value)
                 .map_err(|_| CoreError::Tool("computer_use_result_invalid".into()))?;
-            app.computer_use_devices.receive_control_result(
+            let permission = match frame.permission_required {
+                Some(permission) => {
+                    if frame.is_error || !frame.media.is_empty() || frame.control_outcome.is_some()
+                        || frame.control_generation.is_some() {
+                        return Err(CoreError::Tool("computer_use_permission_result_invalid".into()));
+                    }
+                    Some(app.computer_use_devices.permission_from_device(
+                        connection, &frame.request_id, frame.authorization_revision, permission,
+                    ).await?)
+                },
+                None => None,
+            };
+            app.computer_use_devices.receive_result_with_permission(
                 connection,
                 &frame.request_id,
                 frame.output_json,
@@ -318,6 +321,7 @@ async fn handle_device_frame(
                 frame.media,
                 frame.control_outcome,
                 frame.control_generation,
+                permission,
             )?;
             Ok(Value::Null)
         }
@@ -369,6 +373,11 @@ pub(crate) struct BoundRun {
     pub tools: Arc<dyn ToolHost>,
     broker: Broker,
     parked: bool,
+}
+impl BoundRun {
+    pub(crate) fn run_id(&self) -> &str {
+        &self.run.run_id
+    }
 }
 impl Drop for BoundRun {
     fn drop(&mut self) {
@@ -428,7 +437,15 @@ impl Host {
                     .into_iter()
                     .filter(|tool| {
                         self.run.agent_profile.permits(&tool.name)
+                            && !tool.input_schema.as_ref().is_some_and(|schema| schema[catalog::STEP_ONLY] == true)
                             && (self.run.permission_profile == "full_access"
+                                || tool.input_schema.as_ref().is_some_and(|schema| {
+                                    catalog::mcp_binding(schema).ok().flatten().is_some_and(|binding| {
+                                        self.run.allowed_mcp_servers.iter().any(|server|
+                                            server == "*" || binding["server_id"] == *server || binding["server_name"] == *server)
+                                    })
+                                })
+                                || catalog::EXECUTE.contains(&tool.name.as_str())
                                 || (tool.name == "computer_connector_call"
                                     && tool.input_schema.as_ref().is_some_and(
                                         agistack_adapters_cua::has_read_connector_operation,
@@ -460,7 +477,7 @@ impl ToolHost for Host {
             .map(|result| result.output_json)
     }
     async fn call_with_content(&self, tool: &str, input: &str) -> CoreResult<ToolResult> {
-        if !agistack_adapters_cua::tool_effects().contains_key(tool) {
+        if !self.broker.device(&self.owner).is_ok_and(|device| device.tools.iter().any(|item| item.name == tool)) {
             return self.base.call_with_content(tool, input).await;
         }
         let identity = CALL

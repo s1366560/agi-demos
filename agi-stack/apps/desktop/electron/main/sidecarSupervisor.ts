@@ -11,10 +11,43 @@ import {
   PLUGIN_RENDERER_DATA_PLANE_ACK_PARTICIPATION_ENV_V2,
 } from './platformPluginDataPlaneCredentialPolicy';
 import type { LocalKnowledgeAcceptanceRequest } from './qaProfilePolicy';
+import { parseComputerUseInput, type ComputerUseInput } from '../../src/api/computerUseInput';
 
 const SIDECAR_PROTOCOL_VERSION = 1;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const NATIVE_COMPONENT_INSTALL_TIMEOUT_MS = 310_000;
+const MAX_CLOUD_EXECUTION_TIMEOUT_MS = 321_000;
+
+/** Waiting limits do not grant authority; the sidecar still claims the server request. */
+export function sidecarRequestTimeoutMs(
+  command: string,
+  args?: Record<string, unknown>,
+  configuredTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  now = Date.now(),
+): number {
+  const input = args?.input;
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return configuredTimeoutMs;
+  const value = input as Record<string, unknown>;
+  if (command === 'computer_use_manage_v2') {
+    const operation = value.operation;
+    if (operation && typeof operation === 'object' && !Array.isArray(operation)) {
+      const action = (operation as Record<string, unknown>).action;
+      if (action === 'locked_use_install' || action === 'locked_use_uninstall') {
+        return Math.max(configuredTimeoutMs, NATIVE_COMPONENT_INSTALL_TIMEOUT_MS);
+      }
+    }
+  }
+  if (command === 'computer_use_cloud_v2' && value.action === 'call') {
+    const deadline = args?.request_deadline_ms;
+    const remaining = typeof deadline === 'number' && Number.isSafeInteger(deadline)
+      ? Math.max(1, deadline - now + 5_000)
+      : MAX_CLOUD_EXECUTION_TIMEOUT_MS;
+    return Math.max(configuredTimeoutMs, Math.min(MAX_CLOUD_EXECUTION_TIMEOUT_MS, remaining));
+  }
+  return configuredTimeoutMs;
+}
+
 const DEFAULT_RESTART_DELAYS_MS = [250, 1_000, 4_000, 10_000] as const;
 const DEFAULT_RESTART_STABILITY_MS = 60_000;
 const DEFAULT_MAX_RESTART_ATTEMPTS = 4;
@@ -41,8 +74,15 @@ type SidecarResponse = {
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  timeout: NodeJS.Timeout;
+  cleanup: () => void;
 };
+
+type BrowserBridgeConfiguration = Readonly<{
+  enabled: boolean;
+  port: number;
+  extension_ids: readonly string[];
+  full_cdp_access_enabled: boolean;
+}>;
 
 export type SidecarSupervisorOptions = {
   binaryPath: string;
@@ -59,6 +99,8 @@ export type SidecarSupervisorOptions = {
   maxRestartAttempts?: number;
   shutdownTimeoutMs?: number;
   onRecovered?: () => void;
+  onComputerUseInput?: (input: ComputerUseInput) => void;
+  onComputerUseInputDisconnected?: () => void;
 };
 
 export function sidecarRendererEnvironment(
@@ -113,13 +155,17 @@ export class SidecarSupervisor {
   #restartExhausted = false;
   #shouldRun = false;
   #hasBeenReady = false;
+  #stopRevision = 0;
+  #configurationTail: Promise<void> = Promise.resolve();
+  #bridgeConfiguration: BrowserBridgeConfiguration | null = null;
+  #bridgeConfigurationRevision = 0;
 
   constructor(options: SidecarSupervisorOptions) {
     this.#options = options;
   }
 
   get identity(): SidecarRuntimeIdentity | null {
-    return this.#identity ? { ...this.#identity } : null;
+    return this.#identity && !this.#starting ? { ...this.#identity } : null;
   }
 
   async start(): Promise<SidecarRuntimeIdentity> {
@@ -127,8 +173,8 @@ export class SidecarSupervisor {
     if (this.#restartDelay) await this.#restartDelay;
     if (!this.#shouldRun) throw new Error('sidecar stopped');
     if (this.#restartExhausted) throw new Error('sidecar restart budget exhausted');
-    if (this.#identity) return { ...this.#identity };
     if (this.#starting) return this.#starting;
+    if (this.#identity) return { ...this.#identity };
     const starting = this.#launch();
     this.#starting = starting;
     try {
@@ -139,34 +185,156 @@ export class SidecarSupervisor {
   }
 
   async invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T> {
+    const stopRevision = this.#stopRevision;
+    if (command !== 'local_runtime_configure') {
+      return this.#invokeReady<T>(command, args, stopRevision);
+    }
+    const request = args === undefined ? undefined : structuredClone(args);
+    const config = request?.config;
+    const changesBridge = isRecord(config) && Object.hasOwn(config, 'browser_bridge');
+    const revision = changesBridge ? ++this.#bridgeConfigurationRevision : null;
+    // An unacknowledged disable must never leave an older enable eligible for replay.
+    if (changesBridge) this.#bridgeConfiguration = null;
+    const task = this.#configurationTail.then(() =>
+      this.#invokeReady<T>(command, request, stopRevision, (result) => {
+        if (revision === this.#bridgeConfigurationRevision) {
+          const requested = isRecord(config) ? browserBridgeConfiguration(config.browser_bridge) : null;
+          const confirmed = configuredBrowserBridge(result);
+          if (requested && confirmed && sameBrowserBridge(requested, confirmed)) {
+            this.#bridgeConfiguration = confirmed;
+          }
+        }
+      }),
+    );
+    this.#configurationTail = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  /** Only a verified App callback may wait on human approval beyond the IPC budget. */
+  async invokeCancellable<T = unknown>(
+    command: string,
+    args: Record<string, unknown>,
+    signal: AbortSignal,
+  ): Promise<T> {
+    if (signal.aborted) throw new DOMException('MCP App request cancelled', 'AbortError');
+    if (command !== 'mcp_app_operation' || args.operation !== 'tools/call' ||
+        typeof args.tabId !== 'string' || typeof args.mountNonce !== 'string') {
+      throw new Error('sidecar cancellable request is not an App callback');
+    }
+    const stopRevision = this.#stopRevision;
+    const request = structuredClone(args);
+    await waitForSignal(this.start(), signal);
+    const child = this.#child;
+    if (signal.aborted) throw new DOMException('MCP App request cancelled', 'AbortError');
+    if (stopRevision !== this.#stopRevision || !child || !this.#identity) {
+      throw new Error('sidecar stopped');
+    }
+    const result = await this.#request<T>(child, command, request, signal);
+    if (this.#child !== child || stopRevision !== this.#stopRevision) {
+      throw new Error('sidecar response belongs to a retired process');
+    }
+    return result;
+  }
+
+  async #invokeReady<T>(
+    command: string,
+    args: Record<string, unknown> | undefined,
+    stopRevision: number,
+    onAccepted?: (result: T) => void,
+  ): Promise<T> {
+    if (stopRevision !== this.#stopRevision) throw new Error('sidecar stopped');
     await this.start();
     const child = this.#child;
-    if (!child || !this.#identity) {
+    if (stopRevision !== this.#stopRevision || !child || !this.#identity) {
       throw new Error('sidecar is unavailable');
     }
+    const result = await this.#request<T>(child, command, args);
+    if (this.#child !== child || stopRevision !== this.#stopRevision) {
+      throw new Error('sidecar response belongs to a retired process');
+    }
+    onAccepted?.(result);
+    return result;
+  }
+
+  #request<T = unknown>(
+    child: ChildProcessWithoutNullStreams,
+    command: string,
+    args?: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const id = randomUUID();
     return new Promise<T>((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      if (signal?.aborted) {
+        reject(new DOMException('MCP App request cancelled', 'AbortError'));
+        return;
+      }
+      const abort = (): void => {
+        const pending = this.#pending.get(id);
+        if (!pending) return;
+        this.#pending.delete(id);
+        pending.cleanup();
+        const cancelled = (confirmed: boolean): void => reject(Object.assign(
+          new DOMException('MCP App request cancelled', 'AbortError'),
+          { cancellationConfirmed: confirmed },
+        ));
+        if (this.#child === child && this.#identity && child.stdin.writable) {
+          // The transport id never crosses renderer IPC. Cancellation uses this
+          // same private pipe and cannot start or address a replacement process.
+          // Ignore the original response while aborting: it can precede the
+          // cancellation acknowledgement that proves the waiter was dropped.
+          void this.#request<{ cancelled?: boolean }>(child, 'mcp_app_operation_cancel', {
+            requestId: id, tabId: args?.tabId, mountNonce: args?.mountNonce,
+          }).then((ack) => cancelled(ack?.cancelled === true), () => cancelled(false));
+        } else cancelled(false);
+      };
+      const timeout = signal ? null : setTimeout(() => {
         this.#pending.delete(id);
         reject(new Error(`sidecar request timed out: ${command}`));
-      }, this.#options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+      }, sidecarRequestTimeoutMs(command, args, this.#options.requestTimeoutMs));
       this.#pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,
-        timeout,
+        cleanup: () => {
+          if (timeout) clearTimeout(timeout);
+          signal?.removeEventListener('abort', abort);
+        },
       });
+      signal?.addEventListener('abort', abort, { once: true });
       child.stdin.write(`${JSON.stringify({ type: 'request', id, command, args })}\n`, (error) => {
         if (!error) return;
         const pending = this.#pending.get(id);
         if (!pending) return;
-        clearTimeout(pending.timeout);
+        pending.cleanup();
         this.#pending.delete(id);
         pending.reject(new Error(`failed to send sidecar request: ${error.message}`));
       });
     });
   }
 
+  async #restoreBrowserBridge(child: ChildProcessWithoutNullStreams): Promise<void> {
+    const previous = this.#bridgeConfiguration;
+    if (!previous) return;
+    for (;;) {
+      if (this.#child !== child || !this.#shouldRun) throw new Error('sidecar stopped');
+      const revision = this.#bridgeConfigurationRevision;
+      // A newer pending user change fences an in-flight restore before readiness is exposed.
+      const config = this.#bridgeConfiguration ?? {
+        ...previous, enabled: false, full_cdp_access_enabled: false,
+      };
+      const result = await this.#request(child, 'local_runtime_configure', {
+        config: { browser_bridge: config },
+      });
+      const confirmed = configuredBrowserBridge(result);
+      if (this.#child !== child || !this.#shouldRun) throw new Error('sidecar stopped');
+      if (!confirmed || !sameBrowserBridge(config, confirmed)) {
+        throw new Error('sidecar browser bridge recovery was not confirmed');
+      }
+      if (revision === this.#bridgeConfigurationRevision) return;
+    }
+  }
+
   async stop(): Promise<void> {
+    this.#stopRevision += 1;
     this.#shouldRun = false;
     this.#restartAttempt = 0;
     this.#restartExhausted = false;
@@ -175,6 +343,7 @@ export class SidecarSupervisor {
     const child = this.#child;
     this.#child = null;
     this.#identity = null;
+    this.#clearComputerUseInput();
     this.#rejectPending(new Error('sidecar stopped'));
     if (!child || child.exitCode !== null) return;
 
@@ -218,6 +387,7 @@ export class SidecarSupervisor {
 
     return new Promise<SidecarRuntimeIdentity>((resolve, reject) => {
       let settled = false;
+      let authenticated = false;
       const handshakeTimeout = setTimeout(() => {
         fail(new Error('sidecar handshake timed out'));
       }, this.#options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
@@ -233,7 +403,11 @@ export class SidecarSupervisor {
         secretBytes.fill(0);
         output.close();
         if (child.exitCode === null) child.kill('SIGKILL');
-        if (this.#child === child) this.#child = null;
+        if (this.#child === child) {
+          this.#child = null;
+          this.#identity = null;
+          this.#rejectPending(error);
+        }
         reject(error);
       };
 
@@ -245,11 +419,12 @@ export class SidecarSupervisor {
           fail(new Error('sidecar emitted invalid control JSON'));
           return;
         }
-        if (!settled) {
+        if (!authenticated) {
           try {
             const ready = requireReadyMessage(message);
             verifyReadyMessage(ready, secretBytes, nonce);
-            settled = true;
+            if (this.#child !== child || !this.#shouldRun) throw new Error('sidecar stopped');
+            authenticated = true;
             clearTimeout(handshakeTimeout);
             secretBytes.fill(0);
             this.#identity = {
@@ -257,21 +432,34 @@ export class SidecarSupervisor {
               apiBaseUrl: ready.apiBaseUrl,
               apiToken: ready.apiToken,
             };
-            const recovered = this.#hasBeenReady;
-            this.#hasBeenReady = true;
-            this.#armRestartStabilityReset(child);
-            resolve({ ...this.#identity });
-            if (recovered) {
-              queueMicrotask(() => {
-                try {
-                  this.#options.onRecovered?.();
-                } catch {
-                  // Recovery notification failures must not restart a healthy sidecar.
-                }
-              });
-            }
+            void this.#restoreBrowserBridge(child).then(() => {
+              if (this.#child !== child || !this.#identity || !this.#shouldRun) {
+                throw new Error('sidecar stopped');
+              }
+              settled = true;
+              const recovered = this.#hasBeenReady;
+              this.#hasBeenReady = true;
+              this.#armRestartStabilityReset(child);
+              resolve({ ...this.#identity });
+              if (recovered) {
+                queueMicrotask(() => {
+                  try { this.#options.onRecovered?.(); }
+                  catch { /* Recovery notifications cannot restart a healthy sidecar. */ }
+                });
+              }
+            }).catch((error) => fail(error instanceof Error ? error : new Error('sidecar recovery failed')));
           } catch (error) {
             fail(error instanceof Error ? error : new Error('sidecar handshake failed'));
+          }
+          return;
+        }
+        if (this.#child !== child || !this.#identity) return;
+        if (message && typeof message === 'object' &&
+          (message as { type?: unknown }).type === 'computer_use_input') {
+          const input = parseComputerUseInput((message as { input?: unknown }).input);
+          if (input) {
+            try { this.#options.onComputerUseInput?.(input); }
+            catch { /* Telemetry consumers cannot interrupt control response delivery. */ }
           }
           return;
         }
@@ -287,8 +475,10 @@ export class SidecarSupervisor {
           fail(new Error(`sidecar exited during handshake (${formatExitReason(code, signal)})`));
           return;
         }
-        if (this.#child === child) this.#child = null;
+        if (this.#child !== child) return;
+        this.#child = null;
         this.#identity = null;
+        this.#clearComputerUseInput();
         this.#clearRestartStabilityTimer();
         this.#rejectPending(
           new Error(`sidecar exited unexpectedly (${formatExitReason(code, signal)})`),
@@ -319,7 +509,7 @@ export class SidecarSupervisor {
     if (!isSidecarResponse(message)) return;
     const pending = this.#pending.get(message.id);
     if (!pending) return;
-    clearTimeout(pending.timeout);
+    pending.cleanup();
     this.#pending.delete(message.id);
     if (message.ok) {
       pending.resolve(message.result);
@@ -328,9 +518,14 @@ export class SidecarSupervisor {
     }
   }
 
+  #clearComputerUseInput(): void {
+    try { this.#options.onComputerUseInputDisconnected?.(); }
+    catch { /* Input decoration must not prevent sidecar shutdown or recovery. */ }
+  }
+
   #rejectPending(error: Error): void {
     for (const pending of this.#pending.values()) {
-      clearTimeout(pending.timeout);
+      pending.cleanup();
       pending.reject(error);
     }
     this.#pending.clear();
@@ -392,6 +587,45 @@ export class SidecarSupervisor {
     if (this.#restartStabilityTimer) clearTimeout(this.#restartStabilityTimer);
     this.#restartStabilityTimer = null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function waitForSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => reject(new DOMException('MCP App request cancelled', 'AbortError'));
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    void promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
+function browserBridgeConfiguration(value: unknown): BrowserBridgeConfiguration | null {
+  if (!isRecord(value) || typeof value.enabled !== 'boolean' ||
+      typeof value.port !== 'number' || !Number.isSafeInteger(value.port) ||
+      value.port < 0 || value.port > 65535 || !Array.isArray(value.extension_ids) ||
+      !value.extension_ids.every((id): id is string => typeof id === 'string') ||
+      typeof value.full_cdp_access_enabled !== 'boolean') return null;
+  return Object.freeze({
+    enabled: value.enabled,
+    port: value.port,
+    extension_ids: Object.freeze([...value.extension_ids]),
+    full_cdp_access_enabled: value.full_cdp_access_enabled,
+  });
+}
+
+function configuredBrowserBridge(value: unknown): BrowserBridgeConfiguration | null {
+  return isRecord(value) && isRecord(value.config)
+    ? browserBridgeConfiguration(value.config.browser_bridge) : null;
+}
+
+function sameBrowserBridge(left: BrowserBridgeConfiguration, right: BrowserBridgeConfiguration): boolean {
+  return left.enabled === right.enabled && left.port === right.port &&
+    left.full_cdp_access_enabled === right.full_cdp_access_enabled &&
+    left.extension_ids.length === right.extension_ids.length &&
+    left.extension_ids.every((id, index) => id === right.extension_ids[index]);
 }
 
 function requireReadyMessage(value: unknown): SidecarReady {

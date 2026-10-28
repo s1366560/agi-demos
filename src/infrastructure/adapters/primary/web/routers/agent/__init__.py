@@ -11,6 +11,7 @@ from . import (
     binding_router,
     commands,
     computer_use_device,
+    computer_use_media,
     config,
     conversations,
     definitions_router,
@@ -87,6 +88,7 @@ router.include_router(hitl.router, prefix="/hitl")
 router.include_router(events.router)
 router.include_router(model_requests_v2.router)
 router.include_router(computer_use_device.router)
+router.include_router(computer_use_media.router)
 router.include_router(templates.router)
 router.include_router(plans.router)
 router.include_router(plans.approval_router)

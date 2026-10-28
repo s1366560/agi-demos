@@ -14,7 +14,8 @@ function deferred() {
   return { promise, resolve };
 }
 
-function harness(overrides = {}) {
+function harness(overrides = {}, initialAutomationMount) {
+  let automationMount = initialAutomationMount;
   const slots = [];
   let cursor = 0;
   let effects = [];
@@ -74,6 +75,12 @@ function harness(overrides = {}) {
       if (name === 'react') return react;
       if (name === '../../i18n') return { useI18n: () => ({ t: (key) => key }) };
       if (name.endsWith('.css')) return {};
+      if (name === './mcpAppAutomation' && initialAutomationMount) {
+        return {
+          ...load(new URL(`${name}.ts`, url)),
+          useMcpAppAutomation: () => automationMount,
+        };
+      }
       if (name.startsWith('.')) return load(new URL(`${name}.ts`, url));
       return new Proxy({}, { get: (_, property) => property });
     };
@@ -159,6 +166,7 @@ function harness(overrides = {}) {
     bridge,
     api,
     tab,
+    setAutomationMount(mount) { automationMount = mount; },
     unmount() {
       for (const slot of slots) slot?.cleanup?.();
     },
@@ -305,4 +313,100 @@ test('cancellation while acquiring a retry key cannot start an app tool call', a
   await assert.rejects(pending, { name: 'AbortError' });
   assert.deepEqual(h.calls.tools, []);
   assert.equal(completed, 0);
+});
+
+test('all native Canvas callbacks retain their captured mount across a queued IPC and remount', async (t) => {
+  const previousWindow = globalThis.window;
+  t.after(() => {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  });
+  const calls = [];
+  const pending = [];
+  let queued = true;
+  const response = { content: [], contents: [], resources: [], resourceTemplates: [], prompts: [] };
+  globalThis.window = { __MEMSTACK_DESKTOP__: { core: { invoke: async (command, args) => {
+    calls.push({ command, args });
+    const result = command === 'mcp_app_operation_prepare' ? { operationId: 'owned-operation' } : response;
+    if (queued && command !== 'mcp_app_operation_cancel') return new Promise(resolve => pending.push(() => resolve(result)));
+    return result;
+  } } } };
+  const tabId = 'mcpapp-12345678-1234-1234-1234-123456789012';
+  const oldController = new AbortController();
+  const oldMount = Object.freeze({ tabId, mountNonce: 'mcpapp-22345678-1234-1234-1234-123456789012', signal: oldController.signal });
+  const h = harness({}, oldMount);
+  const state = { tabs: [{ ...h.tab, automationTabId: tabId }], activeTabId: h.tab.id };
+  const old = h.render({ state });
+  const dispatch = current => [
+    current.onCallTool({ name: 'owned', arguments: { mountNonce: 'app-supplied' } }),
+    current.onReadResource({ uri: 'ui://owned/main' }),
+    current.onListResources(),
+    current.onListResourceTemplates(),
+    current.onListPrompts(),
+    current.onFallbackRequest({ method: 'prompts/get', params: { name: 'owned', mountNonce: 'app-supplied' } }),
+  ];
+  const outcomes = Promise.allSettled(dispatch(old));
+  assert.equal(calls.length, 6);
+  assert.ok(calls.every(call => call.args.mountNonce === oldMount.mountNonce && call.args.tabId === tabId));
+  oldController.abort();
+  const newMount = Object.freeze({ tabId, mountNonce: 'mcpapp-32345678-1234-1234-1234-123456789012', signal: new AbortController().signal });
+  h.setAutomationMount(newMount);
+  const current = h.render();
+  for (const complete of pending) complete();
+  for (const result of await outcomes) {
+    assert.equal(result.status, 'rejected');
+    assert.equal(result.reason.name, 'AbortError');
+  }
+  const before = calls.length;
+  for (const result of await Promise.allSettled(dispatch(old))) assert.equal(result.status, 'rejected');
+  assert.equal(calls.length, before, 'old callback closures cannot look up the new nonce');
+  queued = false;
+  await Promise.all(dispatch(current));
+  assert.ok(calls.slice(before).every(call => call.args.mountNonce === newMount.mountNonce));
+  assert.deepEqual(calls.slice(before).filter(call => call.command === 'mcp_app_operation').map(call => call.args.operation).sort(), [
+    'tools/call', 'resources/read', 'resources/list', 'resources/templates/list', 'prompts/list', 'prompts/get',
+  ].sort());
+  const prompt = calls.slice(before).find(call => call.args.operation === 'prompts/get');
+  assert.equal(prompt.args.arguments.mountNonce, 'app-supplied');
+  assert.equal(prompt.args.mountNonce, newMount.mountNonce);
+  h.unmount();
+});
+
+test('Canvas forwards SDK extra.signal through the native callback and cancels only that operation', async t => {
+  const previousWindow = globalThis.window;
+  t.after(() => { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; });
+  const calls = [], entered = deferred(), complete = deferred();
+  globalThis.window = { __MEMSTACK_DESKTOP__: { core: { invoke: async (command, args) => {
+    calls.push({ command, args });
+    if (command === 'mcp_app_operation_prepare') return { operationId: 'main-operation-id' };
+    if (command === 'mcp_app_operation') { entered.resolve(); return complete.promise; }
+    complete.resolve({ content: [] }); return { cancelled: true };
+  } } } };
+  const tabId = 'mcpapp-12345678-1234-1234-1234-123456789012';
+  const mount = Object.freeze({ tabId, mountNonce: 'mcpapp-22345678-1234-1234-1234-123456789012', signal: new AbortController().signal });
+  const h = harness({}, mount);
+  const current = h.render({ state: { tabs: [{ ...h.tab, automationTabId: tabId }], activeTabId: h.tab.id } });
+  const sdk = new AbortController();
+  const callback = current.onCallTool({ name: 'owned' }, { signal: sdk.signal });
+  const rejected = assert.rejects(callback, { name: 'AbortError' });
+  await entered.promise; sdk.abort(); await rejected;
+  assert.deepEqual(calls.at(-1), { command: 'mcp_app_operation_cancel', args: { tabId, mountNonce: mount.mountNonce, operationId: 'main-operation-id' } });
+  assert.equal(mount.signal.aborted, false);
+  const before = calls.length;
+  await assert.rejects(current.onCallTool({ name: 'no-dispatch' }, { signal: sdk.signal }), { name: 'AbortError' });
+  assert.equal(calls.length, before);
+  h.unmount();
+});
+
+
+test('Canvas preserves supported frame and base URI CSP metadata as declared string arrays', () => {
+  const h = harness();
+  const renderer = h.render({ state: { tabs: [{ ...h.tab, uiMetadata: { csp: {
+    connectDomains: ['https://api.example.test'], resourceDomains: ['https://cdn.example.test'],
+    frameDomains: ['https://frame.example.test'], baseUriDomains: ['https://base.example.test'],
+  } } }], activeTabId: h.tab.id } });
+  assert.deepEqual(renderer.sandbox.csp, { connectDomains: ['https://api.example.test'],
+    resourceDomains: ['https://cdn.example.test'], frameDomains: ['https://frame.example.test'],
+    baseUriDomains: ['https://base.example.test'] });
+  h.unmount();
 });

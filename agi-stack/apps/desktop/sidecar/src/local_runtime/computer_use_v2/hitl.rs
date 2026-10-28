@@ -1,8 +1,8 @@
 //! The model supplies semantic decisions; the host validates persisted request identity.
-use super::{Owner, PendingConsent, api::ManagementRequest, store};
+use super::{api::ManagementRequest, store, Owner, PendingConsent};
 use crate::local_runtime::{AuthenticatedContext, DesktopHitlRequest, LocalRuntimeState};
 use agistack_core::agent::types::HitlKind;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 pub(super) struct Binding<'a> {
     pub owner: &'a Owner,
@@ -201,6 +201,7 @@ pub(in crate::local_runtime) fn prepare(
             expected_revision: None,
             capability: None,
             enabled: None,
+            input_mode: None,
             request_id: Some(id.clone()),
             scope: Some(scope),
             grant_id: None,

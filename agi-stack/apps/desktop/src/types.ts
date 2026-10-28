@@ -983,6 +983,7 @@ export type ManagedLlmProvider = {
   api_key_masked?: string | null;
   health_last_check?: string | null;
   response_time_ms?: number | null;
+  request_timeout_ms?: number;
   error_message?: string | null;
   revision?: number;
   updated_at?: string | null;
@@ -995,6 +996,7 @@ export type LlmProviderMutationInput = {
   baseUrl: string;
   primaryModel: string;
   embeddingModel?: string;
+  requestTimeoutMs?: number;
   allowedModels: string[];
   active: boolean;
   expectedRevision: number;

@@ -1,17 +1,32 @@
 //! Durable recording receipts. Native file locations never appear in UI snapshots.
 use super::*;
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize)]
 pub(super) struct Record {
     pub owner: Owner,
+    #[serde(deserialize_with = "recording_context")]
     pub context: CuaCallContext,
     pub root: PathBuf,
     pub native: Value,
     pub receipt: Value,
     #[serde(default)]
     pub acknowledged: bool,
+}
+
+// IPC-2 recordings predate mode selection and used foreground input. This
+// compatibility read is limited to durable receipts; IPC-3 remains strict.
+fn recording_context<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<CuaCallContext, D::Error> {
+    let mut value = Value::deserialize(deserializer)?;
+    if let Some(object) = value.as_object_mut() {
+        object
+            .entry("input_mode")
+            .or_insert_with(|| json!("foreground"));
+    }
+    serde_json::from_value(value).map_err(serde::de::Error::custom)
 }
 
 pub(super) fn initialize(db: &rusqlite::Connection) -> Result<(), String> {
@@ -92,4 +107,24 @@ pub(super) fn list(state: &LocalRuntimeState, owner: &Owner) -> Result<Vec<Recor
         })
         .collect();
     records
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_recording_context_remains_readable_without_relaxing_the_native_context() {
+        let context = json!({"user_id":"u","tenant_id":"t","project_id":"p","device_id":"d","conversation_id":"c","run_id":"r","session_id":"s"});
+        assert!(serde_json::from_value::<CuaCallContext>(context.clone()).is_err());
+        let record = json!({"owner":{"user_id":"u","tenant_id":"t","project_id":"p","device_id":"d"},"context":context,"root":"/owned/recording","native":{},"receipt":{}});
+        let decoded: Record = serde_json::from_value(record.clone()).unwrap();
+        assert_eq!(
+            decoded.context.input_mode,
+            agistack_adapters_cua::CuaInputMode::Foreground
+        );
+        let mut invalid = record;
+        invalid["context"]["input_mode"] = json!("untrusted-backend");
+        assert!(serde_json::from_value::<Record>(invalid).is_err());
+    }
 }

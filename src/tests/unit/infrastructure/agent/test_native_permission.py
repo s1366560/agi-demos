@@ -17,6 +17,7 @@ from src.infrastructure.agent.native_computer_use.permission import (
     bind_native_permission,
     handle_native_permission,
 )
+from src.infrastructure.agent.native_computer_use.permission_result import input_digest
 from src.infrastructure.agent.tools import native_computer_use as native
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.tests.unit.infrastructure.agent.test_native_computer_use import context, setup_guard
@@ -69,6 +70,7 @@ def prepare(monkeypatch, *, change=None):
         "input_digest": "exact-arguments",
     }
     record = {
+        "request_id": "cloud-request",
         "status": "completed",
         "user_id": ctx.user_id,
         "tenant_id": ctx.tenant_id,
@@ -77,6 +79,10 @@ def prepare(monkeypatch, *, change=None):
         "run_id": guard.run_id,
         "session_id": session_id,
         "device_id": "device",
+        "connection_id": "connection",
+        "authorization_revision": 7,
+        "tool_name": "computer_get_app_state",
+        "input_json": '{"app":"fixture"}',
         "output_json": json.dumps(
             {
                 "error": "cua_permission_required",
@@ -84,6 +90,17 @@ def prepare(monkeypatch, *, change=None):
                 "scopes": ["once", "session", "always"],
             }
         ),
+    }
+    record["permission_required"] = {
+        "kind": "native_consent",
+        "binding": {
+            "tool_name": record["tool_name"],
+            "input_digest": input_digest(record["input_json"]),
+            "engine_session_id": session_id,
+            "cell_id": None,
+            "step_id": None,
+        },
+        "demand": json.loads(record["output_json"]),
     }
     if change:
         change(record)
@@ -126,7 +143,12 @@ async def test_actual_sidecar_consent_fixture_binds_distinct_engine_and_native_s
             Path(__file__).resolve().parents[5] / "shared/fixtures/computer-use-cloud-consent.json"
         ).read_text()
     )
-    ctx, _ = prepare(monkeypatch, change=lambda record: record.update(output_json=json.dumps(wire)))
+
+    def replace_demand(record):
+        record["output_json"] = json.dumps(wire)
+        record["permission_required"]["demand"] = wire
+
+    ctx, _ = prepare(monkeypatch, change=replace_demand)
     judgment = decision()
     judgment["target"]["id"] = wire["request"]["request_id"]
     binding, scopes = await bind_native_permission(ctx, judgment)
@@ -139,7 +161,7 @@ async def test_actual_sidecar_consent_fixture_binds_distinct_engine_and_native_s
 
 async def test_once_only_connector_consent_cannot_offer_remembered_permission(monkeypatch):
     def once_only(record):
-        output = json.loads(record["output_json"])
+        output = record["permission_required"]["demand"]
         output["scopes"] = ["once"]
         output["request"]["capability"] = "connector_action"
         record["output_json"] = json.dumps(output)
@@ -174,7 +196,7 @@ async def test_physical_and_logical_session_bindings_cannot_be_forged_or_omitted
     monkeypatch, changed
 ):
     def alter(record):
-        output = json.loads(record["output_json"])
+        output = record["permission_required"]["demand"]
         output["request"].update(changed)
         record["output_json"] = json.dumps(output)
 
@@ -190,7 +212,7 @@ async def test_physical_and_logical_session_bindings_cannot_be_forged_or_omitted
         lambda record: record.update({"run_id": "other-run"}),
         lambda record: record.update({"session_id": "other-session"}),
         lambda record: record.update({"status": "claimed"}),
-        lambda record: record.update({"output_json": "{invalid"}),
+        lambda record: record.update({"permission_required": None}),
     ],
 )
 async def test_forged_or_stale_pending_cannot_become_human_permission(monkeypatch, change):
@@ -334,3 +356,68 @@ def test_session_projection_preserves_full_decision_and_binding_for_native_ui():
         "once",
         "session",
     ]
+
+
+async def test_execution_step_consent_must_match_persisted_exact_step(monkeypatch):
+    from src.infrastructure.agent.native_computer_use.steps import ExecutionSteps
+
+    ctx, broker = prepare(monkeypatch)
+    record = broker.read.return_value
+    value = {
+        **{
+            key: record[key]
+            for key in (
+                "user_id",
+                "tenant_id",
+                "project_id",
+                "conversation_id",
+                "run_id",
+                "session_id",
+                "device_id",
+            )
+        },
+        "status": "pending",
+        "origin_request_id": "cloud-request",
+        "permission_id": "native-pending",
+        "cell_id": "cell",
+        "step_id": "step",
+        "step_key": "private-step",
+        "code_digest": "exact-code",
+        "catalog_digest": "catalog",
+        "target": {"kind": "browser", "id": "iab/1"},
+        "tool_name": "browser_write_operation",
+        "input_digest": "exact-input",
+        "permission_input_digest": input_digest('{"operation":"tab.claim","args":[]}'),
+        "current_request_id": "cloud-request",
+        "authorization_revision": 7,
+        "connection_id": "connection",
+    }
+    record["output_json"] = json.dumps(
+        {
+            "error": "cua_permission_required",
+            "request": ExecutionSteps.pending(value),
+            "scopes": ["once"],
+        }
+    )
+    record["tool_name"] = "cua_repl_js"
+    record["permission_required"] = {
+        "kind": "cloud_execution_step",
+        "binding": {
+            "tool_name": value["tool_name"],
+            "input_digest": value["permission_input_digest"],
+            "engine_session_id": value["session_id"],
+            "cell_id": "cell",
+            "step_id": "step",
+        },
+        "demand": json.loads(record["output_json"]),
+    }
+    broker.members.side_effect = (
+        lambda key: {"private-step"} if key.endswith(":steps") else {"cloud-request"}
+    )
+    broker.read.side_effect = lambda key: value if key == "private-step" else record
+    binding, scopes = await bind_native_permission(ctx, decision())
+    assert scopes == ["once"]
+    assert binding["execution_step"]["step_id"] == "step"
+    value["input_digest"] = "changed-input"
+    with pytest.raises(RuntimeV2Error, match="consent is invalid"):
+        await bind_native_permission(ctx, decision())

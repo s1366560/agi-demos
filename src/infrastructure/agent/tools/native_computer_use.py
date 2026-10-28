@@ -67,7 +67,7 @@ async def authorize_native_call(
 ) -> CallAuthorization:
     """Recover canonical authority and the exact already-claimed HITL receipt."""
     guard = current_approved_run_guard_v2() or current_chat_run_guard_v2()
-    if guard is None or tool_name not in TOOL_NAMES:
+    if guard is None:
         raise RuntimeV2Error("computer_use_authority_missing", "Native tool requires run authority")
     identity = (ctx.tenant_id, ctx.project_id, ctx.conversation_id, ctx.user_id)
     if guard.identity != identity or _identity(guard.operation) != identity:
@@ -134,6 +134,7 @@ async def authorize_native_call(
         child_owner_digest=child_owner_digest,
         run_kind=cast(Literal["chat", "plan"], row.run_kind),
         allowed_mcp_servers=_allowed_mcp_servers(ctx),
+        agent_id=ctx.runtime_context.get("selected_agent_id"),
     )
 
 
@@ -149,7 +150,11 @@ def _allowed_mcp_servers(ctx: ToolContext) -> tuple[str, ...]:
 async def _native_permission(
     ctx: ToolContext, tool_name: str, arguments: dict[str, Any], broker: NativeComputerBroker | None
 ) -> str:
-    if tool_name != "computer_connector_call":
+    from src.infrastructure.agent.native_computer_use.catalog import EXECUTE_TOOLS
+
+    if tool_name in EXECUTE_TOOLS:
+        return "conversation_progress"
+    if tool_name in TOOL_NAMES and tool_name != "computer_connector_call":
         return "read" if tool_name in READ_TOOL_NAMES else "mcp"
     broker = broker or current_native_computer_broker()
     if broker is None:
@@ -176,6 +181,8 @@ async def create_native_computer_tools(
     definitions = await broker.describe_tools(
         user_id=user_id, tenant_id=tenant_id, project_id=project_id
     )
+    from src.infrastructure.agent.native_computer_use.catalog import EXECUTE_TOOLS
+
     tools: dict[str, ToolInfo] = {}
     device_catalog = (
         await broker.devices.list(user_id=user_id, tenant_id=tenant_id, project_id=project_id)
@@ -185,7 +192,7 @@ async def create_native_computer_tools(
     for definition in definitions:
         name = definition.get("name")
         schema = definition.get("inputSchema")
-        if name not in TOOL_NAMES or not isinstance(schema, dict):
+        if not isinstance(name, str) or not isinstance(schema, dict):
             continue
         parameters = copy.deepcopy(argument_schema(schema))
         properties = parameters.setdefault("properties", {})
@@ -228,7 +235,9 @@ async def create_native_computer_tools(
             description=str(definition.get("description", name)),
             parameters=parameters,
             execute=bind_execute(name),
-            permission="read" if name in READ_TOOL_NAMES else "mcp",
+            permission="conversation_progress"
+            if name in EXECUTE_TOOLS
+            else ("read" if name in READ_TOOL_NAMES else "mcp"),
             repeatable_observation=name in READ_TOOL_NAMES,
             permission_resolver=(
                 lambda arguments: "read"

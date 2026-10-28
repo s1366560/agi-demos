@@ -101,7 +101,7 @@ test('MCP update rotates by submission while delete retries keep the dialog key'
 test('MCP toggle retries retain one key until canonical server state advances', () => {
   const toggleSource = callbackSource('toggleServer', 'remove');
   assert.match(managementSource, /const toggleAttemptKeysRef = useRef\(new Map/);
-  assert.match(toggleSource, /mcpToggleAttemptIdentity\(contextKey, server, config\.mode\)/);
+  assert.match(toggleSource, /mcpToggleAttemptIdentity\(contextKey, server, revisionMode\)/);
   assert.match(toggleSource, /resolveMCPMutationAttemptKey\(/);
   assert.match(toggleSource, /idempotency_key: `mcp-server-toggle:\$\{attemptKey\}`/);
   assert.doesNotMatch(toggleSource, /mcp-server-toggle:\$\{crypto\.randomUUID\(\)\}/);

@@ -68,6 +68,7 @@ pub(super) async fn pause_run(
         )
     })?;
     control.request_pause();
+    state.cua_repl.cancel_run(&run.id);
     Ok(Json(json!({
         "accepted": true,
         "status": "pause_requested",
@@ -135,7 +136,7 @@ pub(super) async fn resume_run(
                 })),
             ));
         }
-        let Some(control) = state.claim_agent_run(&conversation.id, Some(&run.id)) else {
+        let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
             return Err((
                 StatusCode::CONFLICT,
                 Json(json!({ "detail": "conversation already running" })),
@@ -183,7 +184,7 @@ pub(super) async fn resume_run(
         .agent_engine(&conversation, Some(&run))
         .await
         .map_err(execution_environment_error)?;
-    let Some(control) = state.claim_agent_run(&conversation.id, Some(&run.id)) else {
+    let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
         return Err((
             StatusCode::CONFLICT,
             Json(json!({ "detail": "conversation already running" })),
@@ -400,7 +401,7 @@ pub(super) async fn fork_recovery_run(
         .as_ref()
         .map(|run| run.id.clone())
         .unwrap_or_else(|| format!("local-run-{}", Uuid::new_v4()));
-    let Some(mut control) = state.claim_agent_run(&conversation.id, Some(&reserved_run_id)) else {
+    let Some(mut control) = state.claim_agent_run_owned(&conversation.id, Some(&reserved_run_id), &authenticated) else {
         return Err((
             StatusCode::CONFLICT,
             Json(json!({ "detail": "conversation already running" })),
@@ -474,7 +475,7 @@ pub(super) async fn fork_recovery_run(
         }
         if forked.id != reserved_run_id {
             state.release_agent_run_if_control(&conversation.id, &control);
-            let Some(reclaimed) = state.claim_agent_run(&conversation.id, Some(&forked.id)) else {
+            let Some(reclaimed) = state.claim_agent_run_owned(&conversation.id, Some(&forked.id), &authenticated) else {
                 return Err((
                     StatusCode::CONFLICT,
                     Json(json!({ "detail": "conversation already running" })),
@@ -690,6 +691,7 @@ pub(super) async fn cancel_run(
             )
         })?;
         control.request_cancel();
+        state.cua_repl.cancel_run(&run.id);
         state.computer_use.stop_run(&state, &run.id).await;
         return Ok(Json(json!({
             "accepted": true,
@@ -711,7 +713,7 @@ pub(super) async fn cancel_run(
         ));
     }
     if is_recovered_unstarted_run(&run) {
-        let Some(control) = state.claim_agent_run(&run.conversation_id, Some(&run.id)) else {
+        let Some(control) = state.claim_agent_run_owned(&run.conversation_id, Some(&run.id), &authenticated) else {
             return Err((
                 StatusCode::CONFLICT,
                 Json(json!({ "detail": "conversation already running" })),
@@ -762,7 +764,7 @@ pub(super) async fn cancel_run(
         .agent_engine(&conversation, Some(&run))
         .await
         .map_err(execution_environment_error)?;
-    let Some(control) = state.claim_agent_run(&conversation.id, Some(&run.id)) else {
+    let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
         return Err((
             StatusCode::CONFLICT,
             Json(json!({ "detail": "conversation already running" })),
@@ -901,7 +903,7 @@ pub(super) async fn review_run(
                 .agent_engine(&conversation, Some(&run))
                 .await
                 .map_err(execution_environment_error)?;
-            let Some(control) = state.claim_agent_run(&conversation.id, Some(&run.id)) else {
+            let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
                 return Err((
                     StatusCode::CONFLICT,
                     Json(json!({ "detail": "conversation already running" })),

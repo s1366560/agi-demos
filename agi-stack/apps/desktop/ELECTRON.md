@@ -29,13 +29,33 @@ empty vault has no other import path and cloud mode fails closed with the
 reachable: `agi-stack/scripts/ensure-desktop-grants.sh` mints 24-hour credentials through the
 development-only `scripts/bootstrap-local-desktop-grants.py` bootstrap (a temporary platform
 identity that is retired after issuance) and stores shell exports in the mode-`0600`
-`agi-stack/.local/desktop-grants/grants.env`, which the target sources before launch. Stored
+`agi-stack/.local/desktop-grants/grants.env`. The launcher parses its six exports as data and
+passes the validated in-memory pair to Electron without sourcing or rereading the file. Stored
 grants are revalidated against `/api/v1/platform-plugins/v2/distribution` and reprovisioned when
 the backend rejects them; `make -C agi-stack desktop-grants` forces a refresh. When the backend
 is unreachable or provisioning fails, the target continues without grants so local mode keeps
 working. The bootstrap is guarded to `environment == development` with loopback API and database
 hosts, and the grant directory is git-ignored, so this path cannot mint or leak production
 credentials.
+
+For an isolated backend with existing grants, set `AGISTACK_DESKTOP_GRANTS_REUSE_ONLY=1`,
+`AGISTACK_DESKTOP_GRANTS_API_BASE` to their original control-plane origin, and
+`AGISTACK_DESKTOP_GRANTS_DIR` to their private directory before the canonical launch. This mode
+stops before launch if either grant is missing, malformed or rejected, the origin differs, or
+the backend is unreachable. It never invokes bootstrap and rejects forced provisioning.
+Both tokens are checked independently; the distribution GET authenticates them but does not
+attest their individual data-plane roles. The normal receipt API enforces those roles.
+Changing only the API origin does not isolate bootstrap's database configuration.
+
+For local development without grant import or provisioning, set
+`AGISTACK_DESKTOP_GRANTS_LOCAL_ONLY=1` before the same canonical launch. This skips grant-file
+access, backend probes and bootstrap, and clears inherited data-plane grant variables before
+starting Electron. It conflicts with reuse-only or forced provisioning. Existing vault contents
+and the application's Cloud and plugin authorization checks remain in effect.
+
+Cloud sign-in exposes the server URL before authentication and preserves the entered value
+across Local/Cloud mode switches. The existing native authentication authority validates the
+origin and stores accepted credentials in the application vault.
 
 
 For native QA that must not read or mutate the normal application vault, create a private

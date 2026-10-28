@@ -72,7 +72,7 @@ enum NativeIntegrations {
             "calendar": state(calendarAllowed),
             "contacts": state(contactsAllowed),
             "messages": NativeMessages.capability(),
-            "locked_use": ["state": "unverified", "reason": "native lock continuity acceptance has not passed"]
+            "locked_use": LockedUseCoordinator.shared.probe()
         ]
         for (key, value) in AudioCapture.shared.capabilities() { result[key] = value }
         return ["platform": "macos", "protocol_version": ipcProtocolVersion, "capabilities": result]

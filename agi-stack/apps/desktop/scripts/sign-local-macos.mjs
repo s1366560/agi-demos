@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 const executeFile = promisify(execFile);
 
-export default async function signLocalMacos(context) {
+export default async function signLocalMacos(context, { identity = '-' } = {}) {
   if (context.electronPlatformName !== 'darwin') return;
 
   const appName = `${context.packager.appInfo.productFilename}.app`;
@@ -20,7 +20,7 @@ export default async function signLocalMacos(context) {
     '--force',
     '--deep',
     '--sign',
-    '-',
+    identity,
     '--options',
     'runtime',
     '--entitlements',

@@ -1495,6 +1495,7 @@ class SessionProcessor:
         # same generation-owned implementation contract.
         self._loop_selection = self._resolve_agent_loop()
         terminal_failure = False
+        audio_context_token = self._artifact_handler.bind_audio_context(session_id)
         try:
             async for loop_event in self._dispatch_external_loop(
                 self._loop_selection,
@@ -1509,9 +1510,14 @@ class SessionProcessor:
             terminal_failure = True
             raise
         finally:
+            from src.infrastructure.agent.native_computer_use.audio_messages import (
+                reset_audio_context,
+            )
             from src.infrastructure.agent.tools.native_computer_use import (
                 cancel_native_computer_run,
             )
+
+            reset_audio_context(audio_context_token)
 
             suspended = (
                 self._state
@@ -3308,8 +3314,49 @@ class SessionProcessor:
 
     @staticmethod
     def _tool_display_from_part(tool_part: ToolPart) -> dict[str, Any] | None:
+        host_display = tool_part.metadata.get("host_repl_display")
+        if isinstance(host_display, dict):
+            return dict(host_display)
         display = tool_part.metadata.get("display")
-        return dict(display) if isinstance(display, dict) else None
+        if isinstance(display, dict) and display.get("kind") != "repl_output":
+            return dict(display)
+        return None
+
+    async def _prepare_repl_observe(
+        self, tool_def: "ToolDefinition", result: object, tool_part: ToolPart, *, allowed: bool
+    ) -> AsyncIterator[ProcessorEvent]:
+        from src.infrastructure.agent.native_computer_use.repl_output import (
+            declared_repl,
+            repl_output_display,
+            select_repl_attachments,
+        )
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        if not declared_repl(tool_def.parameters):
+            return
+        tool_part.metadata["repl_attachments_handled"] = True
+        tool_part.metadata.pop("host_repl_display", None)
+        if not allowed or not isinstance(result, ToolResult):
+            return
+        try:
+            selected, omitted = select_repl_attachments(result.output, result.attachments)
+            events, references = await self._artifact_handler.persist_tool_attachments(
+                selected,
+                tool_name=tool_def.name,
+                tool_execution_id=tool_part.tool_execution_id,
+            )
+            if references:
+                tool_part.metadata["native_artifact_images"] = references
+            display = repl_output_display(tool_def.parameters, result.output, [*references, *omitted])
+            if display is not None:
+                tool_part.metadata["host_repl_display"] = display
+            for event in events:
+                self._artifact_count += 1
+                yield event
+        except Exception as error:
+            tool_part.status = ToolState.ERROR
+            tool_part.error = "computer_use_artifact_unavailable"
+            logger.error("REPL attachment persistence failed: %s", type(error).__name__)
 
     @staticmethod
     def _extract_file_metadata(value: Any) -> dict[str, Any] | None:
@@ -4101,6 +4148,10 @@ class SessionProcessor:
                 "project_id": _o_project_id,
             }
 
+        async for attachment_event in self._prepare_repl_observe(
+            tool_def, result, tool_part, allowed=not result_replaced and not failed and not control
+        ):
+            yield attachment_event
         tool_display = self._tool_display_from_part(tool_part)
         file_metadata = self._extract_file_metadata(sse_result)
         if file_metadata:
@@ -4185,7 +4236,9 @@ class SessionProcessor:
         self._last_sse_result = sse_result
         self._last_raw_result = raw_for_artifacts
         self._tool_attachments[call_id] = (
-            result.attachments if isinstance(result, ToolResult) else []
+            result.attachments
+            if isinstance(result, ToolResult) and not tool_part.metadata.get("repl_attachments_handled")
+            else []
         )
         self._last_output_str = output_str
 
@@ -4741,6 +4794,11 @@ class SessionProcessor:
                         "project_id": _o_project_id,
                     }
 
+                async for attachment_event in self._prepare_repl_observe(
+                    tool_def, raw_result, tool_part,
+                    allowed=not result_replaced and not failed and not control,
+                ):
+                    yield attachment_event
                 tool_display = self._tool_display_from_part(tool_part)
                 file_metadata = self._extract_file_metadata(sse_result)
                 if file_metadata:
@@ -4820,7 +4878,10 @@ class SessionProcessor:
                 self._last_sse_result = sse_result
                 self._last_raw_result = raw_for_artifacts
                 self._tool_attachments[call_id] = (
-                    raw_result.attachments if isinstance(raw_result, ToolResult) else []
+                    raw_result.attachments
+                    if isinstance(raw_result, ToolResult)
+                    and not tool_part.metadata.get("repl_attachments_handled")
+                    else []
                 )
                 self._last_output_str = output_str
 
@@ -5136,8 +5197,12 @@ class SessionProcessor:
                         f" Please verify tool names and try a different approach."
                     ),
                     call_id=call_id,
-                    tool_execution_id=error_tool_part.tool_execution_id if error_tool_part else None,
-                    display=self._tool_display_from_part(error_tool_part) if error_tool_part else None,
+                    tool_execution_id=error_tool_part.tool_execution_id
+                    if error_tool_part
+                    else None,
+                    display=self._tool_display_from_part(error_tool_part)
+                    if error_tool_part
+                    else None,
                 )
                 self._state = ProcessorState.OBSERVING
                 return

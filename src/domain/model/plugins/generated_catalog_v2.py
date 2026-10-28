@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:154dd1f853c215f070eece369815cecabd849127fc16ab89a262fe0721de31'
-    '05","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:3345f681916b4570a87450bdc2af4d35f737b1818c51d2092023a31ee692c8'
+    '77","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1968,8 +1968,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '_digest":"sha256:8d652e9172e2e7b2974e0d99ae18094a14d242fae94bcfb54786359738f18d3a","entr'
     'ypoint":"applyDesktopProjectMcpAppsAuthorityV2","module_ref":"builtin://memstack/desktop'
     '/project-mcp-apps-authority","plugin_id":"memstack-renderer-target-hosts","plugin_versio'
-    'n":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:60d2533a8b011c0134'
-    '826e6a5aabc7229c13ebaedfe380e7ed4eca226680ccfd","artifact_source":"repo+typescript://agi'
+    'n":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:3ca68967825a82beb0'
+    '3938e2b99ab8b3fabe505d15c9e42b5a67049d60b167b9","artifact_source":"repo+typescript://agi'
     '-stack/apps/desktop/src/plugins/desktopProjectMcpServersAuthorityModuleV2.ts","contract"'
     ':{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalP'
     'roperties":false,"properties":{"strategy":{"const":"desktop-api-fetch","type":"string"}}'
@@ -2930,7 +2930,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     ':"src.infrastructure.plugins.v2.builtin_agent_pool_http_routes:builtin_agent_pool_http_r'
     'outes_definition_v2","module_ref":"builtin://memstack/http/agent-pool-routes","plugin_id'
     '":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_di'
-    'gest":"sha256:b0bd5dd6a4d40440d00b021df25d1f39a9627a2265e84b0ca1172a96bcd584bf","artifac'
+    'gest":"sha256:20743c21758bf9e037e1a3ae3fc14b3bf74f6261291f14911a6f17fc3ea29d69","artifac'
     't_source":"repo+python://src/infrastructure/plugins/v2/builtin_agent_http_routes.py","co'
     'ntract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addi'
     'tionalProperties":false,"properties":{},"type":"object"},"events":{"emits":[],"handles":'
@@ -4788,7 +4788,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:154dd1f853c215f070eece369815cecabd849127fc16ab89a262fe0721de3105"
+    "sha256:3345f681916b4570a87450bdc2af4d35f737b1818c51d2092023a31ee692c877"
 )
 # fmt: on
 

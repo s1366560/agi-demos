@@ -19,6 +19,9 @@ from src.application.services import (
 from src.infrastructure.agent.core.llm_stream import StreamEventType
 from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.hitl.coordinator import HITLCoordinator, ResolveResult
+from src.infrastructure.agent.native_computer_use.permission_result import (
+    input_digest as permission_input_digest,
+)
 from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.tools import native_computer_use as native
 from src.tests.integration.agent.test_native_computer_bridge import PNG
@@ -155,6 +158,22 @@ async def test_native_permission_resume_keeps_session_and_next_model_receives_pn
                             "output_json": json.dumps(output),
                             "is_error": False,
                             "media": media,
+                            "authorization_revision": claim_data["authorization_revision"],
+                            "permission_required": {
+                                "kind": "native_consent",
+                                "binding": {
+                                    "tool_name": claim_data["tool_name"],
+                                    "input_digest": permission_input_digest(
+                                        claim_data["input_json"]
+                                    ),
+                                    "engine_session_id": claim_data["session_id"],
+                                    "cell_id": None,
+                                    "step_id": None,
+                                },
+                                "demand": output,
+                            }
+                            if attempt == 0
+                            else None,
                         }
                     )
                 )

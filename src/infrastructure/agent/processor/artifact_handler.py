@@ -24,7 +24,10 @@ from src.infrastructure.adapters.secondary.sandbox.artifact_integration import (
 )
 
 if TYPE_CHECKING:
+    from contextvars import Token
+
     from src.application.services.artifact_service import ArtifactService
+    from src.infrastructure.agent.native_computer_use.audio_messages import AudioContext
 
 logger = logging.getLogger(__name__)
 
@@ -285,6 +288,15 @@ class ArtifactHandler:
     def set_langfuse_context(self, ctx: dict[str, Any] | None) -> None:
         """Update langfuse context (set per-process call)."""
         self._langfuse_context = ctx
+
+    def bind_audio_context(self, session_id: str) -> Token[AudioContext | None]:
+        from src.infrastructure.agent.native_computer_use.audio_messages import bind_audio_context
+
+        return bind_audio_context(
+            self._artifact_service,
+            self._langfuse_context or {},
+            session_id,
+        )
 
     async def persist_tool_attachments(
         self, attachments: list[Any], *, tool_name: str, tool_execution_id: str | None

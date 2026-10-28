@@ -31,10 +31,11 @@ function harness(overrides = {}) {
     if (name === '../../i18n') return { useI18n: () => ({ t: (key) => key }) };
     if (name.endsWith('.css')) return {};
     if (name === './SettingsCorePages') return { SettingsPage: 'page' };
+    if (name === './MCPServerOAuth') return { MCPServerOAuth: 'oauth' };
     if (name === './ManagedResourceViews') return { SettingsState: 'state' };
     throw new Error(`Unexpected dependency ${name}`);
   }, module, module.exports);
-  return { calls, render: (canManage = true) => module.exports.MCPServerSettingsPage({ management, canManage }) };
+  return { calls, render: (canManage = true, props = {}) => module.exports.MCPServerSettingsPage({ management, canManage, ...props }) };
 }
 function nodes(tree) {
   if (!tree || typeof tree !== 'object') return [];
@@ -82,4 +83,20 @@ test('MCP supervisor status reflects observed health instead of enablement or ca
   }
   const disabled = harness({ servers: [{ id: 'plugin-mcp', name: 'Plugin tool', enabled: false, runtime_status: 'healthy' }] }).render();
   assert.ok(nodes(disabled).some((node) => node.props?.children === 'settings.mcpServers.runtime.disabled'));
+});
+
+
+test('cloud settings explicitly select device execution and keep disabled servers untestable', () => {
+  const h = harness();
+  const selections = [];
+  const tree = h.render(true, { location: 'device', onLocationChange: (location) => selections.push(location) });
+  const select = nodes(tree).find((node) => node.type === 'select');
+  assert.equal(select.props.value, 'device');
+  assert.deepEqual(nodes(select).filter((node) => node.type === 'option').map((node) => node.props.value), ['project', 'device']);
+  select.props.onChange({ target: { value: 'project' } });
+  assert.deepEqual(selections, ['project']);
+  assert.ok(nodes(tree).some((node) => node.props?.children === 'settings.mcpServers.deviceDescription'));
+  const disabledRow = nodes(tree).find((node) => node.type === 'article' && nodes(node).some((child) => child.props?.children === 'Search'));
+  assert.equal(nodes(disabledRow).find((node) => node.type === 'button' && Array.isArray(node.props.children) && node.props.children.includes('settings.mcpServers.test')).props.disabled, true);
+  assert.equal(nodes(h.render()).some((node) => node.type === 'select'), false);
 });

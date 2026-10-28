@@ -42,7 +42,15 @@ class DeviceConnection:
                         cursor = string(event_id)
                         fields = {string(key): string(value) for key, value in values.items()}
                         await self.websocket.send_json(
-                            {"type": fields["type"], "request_id": fields["request_id"]}
+                            {
+                                "type": fields["type"],
+                                "request_id": fields["request_id"],
+                                **(
+                                    {"expires_at": int(fields["expires_at"])}
+                                    if "expires_at" in fields
+                                    else {}
+                                ),
+                            }
                         )
         finally:
             try:

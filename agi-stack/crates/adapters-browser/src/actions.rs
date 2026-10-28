@@ -244,6 +244,10 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             .and_then(Value::as_bool)
             .unwrap_or(false);
         let run_id = run_id_of(input).unwrap_or(DEFAULT_GROUP_KEY);
+        let session_name = input.get("sessionName").and_then(Value::as_str).map(str::to_owned)
+            .or_else(||self.state.facade_sessions.lock().ok()?.get(&(backend,run_id.to_string())).cloned())
+            .unwrap_or_else(||AGENT_GROUP_TITLE.to_string());
+        crate::facade::validate_session_name(&session_name)?;
 
         let mut params = json!({ "active": activate });
         if let Some(url) = url {
@@ -261,7 +265,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             .backend_request(
                 backend,
                 METHOD_ENSURE_TAB_GROUP,
-                json!({ "key": run_id, "title": AGENT_GROUP_TITLE }),
+                json!({ "key": run_id, "title": session_name }),
             )
             .await?;
         let group_id = group
@@ -319,7 +323,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     }
 
     /// Send `Page.enable` once per tab (load/navigation events).
-    async fn ensure_page_enabled(&self, backend: Backend, tab_id: u64) -> CoreResult<()> {
+    pub(crate) async fn ensure_page_enabled(&self, backend: Backend, tab_id: u64) -> CoreResult<()> {
         if self
             .state
             .page_enabled

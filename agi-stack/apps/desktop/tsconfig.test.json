@@ -7,7 +7,9 @@
     "noEmit": false,
     "outDir": "/tmp/agistack-desktop-test-dist",
     "rootDir": "../..",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "src/features/workspace/WorkspaceDiscussionReplies.tsx",
@@ -35,7 +37,6 @@
     "electron/main/iab/backend.ts",
     "electron/main/iab/bridgeSocket.ts",
     "electron/main/iab/iabCursor.ts",
-    "electron/main/iab/iabInputTranslation.ts",
     "electron/main/iab/iabMessageRouter.ts",
     "electron/main/iab/iabNavigationPolicy.ts",
     "electron/main/iab/iabRegistry.ts",
@@ -95,6 +96,8 @@
     "src/components/skeletonModel.ts",
     "src/features/auth/authContextModel.ts",
     "src/features/auth/forcePasswordChangeModel.ts",
+    "src/features/auth/LoginScreen.tsx",
+    "src/hooks/useLocalCredentialAuth.ts",
     "src/features/auth/loginRuntimeModel.ts",
     "src/features/auth/loginScreenModel.ts",
     "src/features/auth/nativeOAuthSessionModel.ts",
@@ -126,6 +129,7 @@
     "src/features/chat/agentTaskSignalModel.ts",
     "src/features/chat/agentLifecyclePresentationModel.ts",
     "src/features/chat/agentStopResponseModel.ts",
+    "src/features/chat/composerStopResponse.ts",
     "src/features/chat/chatComposerModel.ts",
     "src/features/chat/voiceTranscriptionModel.ts",
     "src/features/chat/voiceTranscriptionRuntime.ts",
@@ -526,6 +530,9 @@
     "src/i18nContext.ts",
     "src/theme.tsx",
     "src/types.ts",
-    "src/plugins/desktopNativeKnowledgeProcessingHttpV2.ts"
+    "src/plugins/desktopNativeKnowledgeProcessingHttpV2.ts",
+    "src/api/deviceMcpClientV2.ts",
+    "src/features/settings/mcpManagementLocationModel.ts",
+    "electron/main/deviceMcpManagementPolicy.ts"
   ]
 }

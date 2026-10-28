@@ -19,6 +19,7 @@ impl ToolControlOutcome {
         ToolResult {
             output_json: serde_json::json!({"type":"computer_use_control","status":self.as_str(),"retry_allowed":false}).to_string(),
             media: Vec::new(), control_outcome: Some(self), control_generation: generation,
+            permission_required: None,
         }
     }
     pub fn matches_result(self, result: &ToolResult) -> bool {

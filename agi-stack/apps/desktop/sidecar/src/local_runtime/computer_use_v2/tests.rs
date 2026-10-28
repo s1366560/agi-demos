@@ -15,6 +15,7 @@ fn action(name: &str, revision: Option<u64>) -> ManagementRequest {
         expected_revision: revision,
         capability: None,
         enabled: None,
+        input_mode: None,
         request_id: None,
         scope: None,
         grant_id: None,
@@ -48,11 +49,9 @@ async fn device_management_defaults_disabled_and_scope_isolated() {
         api::snapshot(&state, &other).unwrap()["instance"]["installed"],
         true
     );
-    assert!(
-        api::operation(&state, &owner, action("install", Some(0)))
-            .await
-            .is_err()
-    );
+    assert!(api::operation(&state, &owner, action("install", Some(0)))
+        .await
+        .is_err());
 }
 
 #[tokio::test]
@@ -62,25 +61,21 @@ async fn renderer_cannot_create_grants_without_a_real_pending_request() {
     let mut input = action("grant", None);
     input.request_id = Some("invented".into());
     input.scope = Some(store::GrantScope::Always);
-    assert!(
-        api::operation(&state, &owner, input)
-            .await
-            .unwrap_err()
-            .contains("expired")
-    );
+    assert!(api::operation(&state, &owner, input)
+        .await
+        .unwrap_err()
+        .contains("expired"));
 }
 
 #[test]
 fn audio_and_locked_capabilities_require_separate_explicit_configuration() {
     let instance = Instance::default();
-    assert!(
-        capability_for(
-            "computer_audio_start",
-            &json!({"source":"microphone"}),
-            &instance
-        )
-        .is_err()
-    );
+    assert!(capability_for(
+        "computer_audio_start",
+        &json!({"source":"microphone"}),
+        &instance
+    )
+    .is_err());
     assert!(capability_for("computer_locked_use", &json!({}), &instance).is_err());
     assert_eq!(
         capability_for("computer_get_app_state", &json!({}), &instance).unwrap(),

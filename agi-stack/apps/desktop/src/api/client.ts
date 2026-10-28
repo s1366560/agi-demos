@@ -260,6 +260,23 @@ export type DesktopMCPServerSummary = {
   discovered_tools?: Array<{ name?: string }>;
 };
 
+export type DesktopMCPOAuthStatus = {
+  server_id: string;
+  status: 'not_connected' | 'authorizing' | 'connected' | 'expired' | 'error';
+  reason?: string | null;
+  expires_at?: number | null;
+  authorization_url?: string | null;
+};
+export type DesktopMCPOAuthAction = {
+  action: 'start' | 'cancel' | 'disconnect';
+  project_id: string;
+  expected_revision: number;
+  idempotency_key: string;
+  client_id?: string;
+  client_metadata_url?: string;
+  scopes?: string[];
+};
+
 export type DesktopMCPServerTestResult = {
   success: boolean;
   message: string;

@@ -1,5 +1,6 @@
 import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { ConversationToolbarItem } from './ConversationToolbar';
+import { BrowserAuthRequests } from './BrowserAuthRequests';
 import type { DesktopVoiceSessionOperationsV2 } from '../../plugins/desktopVoiceSessionAuthorityModuleV2';
 import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
 import {
@@ -209,12 +210,16 @@ import {
   agentStopResponseButtonDisabled,
   agentStopResponseButtonLabelKey,
   agentStopResponseButtonTitleKey,
+  agentStopTargetKey,
   applyAgentStopEvent,
+  applyAgentStopReceipt,
   beginAgentStopRequest,
   EMPTY_AGENT_STOP_REQUEST,
   reconcileAgentStopScope,
   type AgentStopErrorCode,
   type AgentStopRequestState,
+  type AgentStopReceipt,
+  type AgentStopTarget,
 } from './agentStopResponseModel';
 import './ChatPanel.css';
 import './ComposerMenus.css';
@@ -302,7 +307,9 @@ type ChatPanelProps = {
     onWorkspaceMessageSaved?: () => void,
   ) => void;
   onRegenerateConversationSummary?: (conversationId: string) => Promise<void>;
-  onStopResponse?: (conversationId: string) => boolean;
+  onStopResponse?: (conversationId: string) => boolean | Promise<AgentStopReceipt>;
+  stopResponseTarget?: AgentStopTarget;
+  stopResponseTransportConnected?: boolean;
   onSteerResponse?: (request: ChatSteerRequest) => boolean;
   subAgentControlAuthority?: SubAgentControlAuthority;
   onSubAgentControl?: (
@@ -451,6 +458,8 @@ export const ChatPanel = memo(function ChatPanel({
   onSend,
   onRegenerateConversationSummary,
   onStopResponse,
+  stopResponseTarget,
+  stopResponseTransportConnected,
   onSteerResponse,
   subAgentControlAuthority,
   onSubAgentControl,
@@ -527,6 +536,12 @@ export const ChatPanel = memo(function ChatPanel({
   const pinnedJumpTargetRef = useRef<HTMLElement | null>(null);
   const comparisonTriggerRef = useRef<HTMLButtonElement>(null);
   const stopEventHeadRef = useRef<AgentWsEvent | null>(null);
+  const stopRequestSequenceRef = useRef(0);
+  const stopScopeKey = JSON.stringify([
+    selectedConversationId, agentStopTargetKey(stopResponseTarget),
+  ]);
+  const stopScopeRef = useRef(stopScopeKey);
+  stopScopeRef.current = stopScopeKey;
   const agentControlEventsRef = useRef(agentControlEvents);
   agentControlEventsRef.current = agentControlEvents;
   const sendingRef = useRef(sending);
@@ -735,9 +750,9 @@ export const ChatPanel = memo(function ChatPanel({
   useEffect(() => {
     stopEventHeadRef.current = agentControlEventsRef.current[0] ?? null;
     setStopRequest((current) =>
-      reconcileAgentStopScope(current, selectedConversationId),
+      reconcileAgentStopScope(current, selectedConversationId, stopResponseTarget),
     );
-  }, [selectedConversationId]);
+  }, [stopScopeKey]);
   useEffect(() => {
     if (stopRequest.status !== 'stopping') return;
     const events = socketEventsSince(
@@ -765,14 +780,33 @@ export const ChatPanel = memo(function ChatPanel({
       return;
     }
     stopEventHeadRef.current = agentControlEvents[0] ?? null;
+    const requestId = ++stopRequestSequenceRef.current;
+    const target = stopResponseTarget;
+    const scope = stopScopeKey;
     setStopRequest(
-      beginAgentStopRequest(conversationId, onStopResponse(conversationId)),
+      beginAgentStopRequest(conversationId, true, target, requestId),
     );
+    const settle = (receipt: AgentStopReceipt) => {
+      if (stopScopeRef.current !== scope) return;
+      setStopRequest((current) => applyAgentStopReceipt(current, requestId, target, receipt));
+    };
+    try {
+      const result = onStopResponse(conversationId);
+      if (typeof result === 'boolean') {
+        if (!result) settle({ status: 'rejected', errorCode: 'socket_unavailable' });
+      } else {
+        void result.then(settle, () => settle({ status: 'rejected', errorCode: 'STOP_SESSION_FAILED' }));
+      }
+    } catch {
+      settle({ status: 'rejected', errorCode: 'STOP_SESSION_FAILED' });
+    }
   }, [
     agentControlEvents,
     onStopResponse,
     responseStreaming,
     selectedConversationId,
+    stopResponseTarget,
+    stopScopeKey,
     stopRequest.status,
   ]);
   const stopResponseError =
@@ -1648,6 +1682,7 @@ export const ChatPanel = memo(function ChatPanel({
               />
             ) : null}
             <div className="message-stack">
+              <BrowserAuthRequests config={desktopRuntimeConfig} conversationId={selectedConversationId ?? ''} />
               {timelineState ? (
                 <>
                   {activitySummary && activityPresence === 'live' ? (
@@ -1958,7 +1993,7 @@ export const ChatPanel = memo(function ChatPanel({
             composeAheadEnabled={composeAheadEnabled}
             responseStreaming={responseStreaming}
             stopResponseAvailable={Boolean(onStopResponse)}
-            stopResponseSocketConnected={agentSocketConnected}
+            stopResponseSocketConnected={stopResponseTransportConnected ?? agentSocketConnected}
             stopResponseStatus={stopRequest.status}
             desktopRuntimeConfig={desktopRuntimeConfig}
             voiceSessionOperations={voiceSessionOperations}

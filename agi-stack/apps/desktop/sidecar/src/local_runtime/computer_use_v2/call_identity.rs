@@ -18,9 +18,16 @@ pub(in crate::local_runtime) struct CallIdentity {
     tool: String,
 }
 impl CallIdentity {
-    pub(super) fn engine_session_id(&self) -> &str {
+    pub(in crate::local_runtime) fn engine_session_id(&self) -> &str {
         &self.session_id
     }
+    pub(in crate::local_runtime) fn round(&self) -> u64 { self.round }
+    pub(in crate::local_runtime) async fn for_tool<F: Future>(&self, tool: &str, future: F) -> F::Output {
+        scope(&ToolPolicyContext { session_id: &self.session_id, round: self.round, tool }, future).await
+    }
+}
+pub(in crate::local_runtime) fn active() -> CoreResult<CallIdentity> {
+    IDENTITY.try_with(Clone::clone).map_err(|_| CoreError::Tool("execution_engine_identity_required".into()))
 }
 tokio::task_local! {static IDENTITY:CallIdentity;}
 pub(in crate::local_runtime) async fn scope<F: Future>(
@@ -53,7 +60,11 @@ pub(super) fn initialize(db: &Connection) -> Result<(), String> {
         .map_err(|error|error.to_string())
 }
 pub(super) fn id(owner: &Owner, run_id: &str, identity: &CallIdentity) -> CoreResult<String> {
-    canonical_json_digest(&json!({"owner":owner,"run_id":run_id,"engine_session_id":identity.session_id,"round":identity.round}))
+    let mut binding = json!({"owner":owner,"run_id":run_id,"engine_session_id":identity.session_id,"round":identity.round});
+    if let Some(step_id) = crate::local_runtime::execution_authority::current_step_id() {
+        binding["step_id"] = json!(step_id);
+    }
+    canonical_json_digest(&binding)
         .map(|digest|format!("cua-call-{digest}")).map_err(|error|CoreError::Tool(error.to_string()))
 }
 pub(super) fn existing(
@@ -92,6 +103,7 @@ pub(super) fn existing(
     let media: Vec<MediaAttachment> = serde_json::from_value(result["media"].clone())
         .map_err(|_| CoreError::Storage("cua_completed_media_invalid".into()))?;
     Ok(Some(ToolResult {
+        permission_required: None,
         output_json,
         media,
         control_outcome: serde_json::from_value(result["control_outcome"].clone())
@@ -275,6 +287,7 @@ mod tests {
         };
         assert_eq!(id(&owner, "run", &changed_tool).unwrap(), second_id);
         let result = ToolResult {
+            permission_required: None,
             control_outcome: None,
             control_generation: None,
             output_json: "observed".into(),

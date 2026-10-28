@@ -23,6 +23,11 @@ pub(in crate::local_runtime) struct McpCatalogLease {
     scope: McpScope,
     ids: Vec<String>,
 }
+// Kept distinct from callable catalog leases: verification never grants tool or
+// resource execution against an unpublished generation.
+pub(super) struct MarketplaceVerificationLease {
+    _generation: McpCatalogLease,
+}
 impl Drop for McpCatalogLease {
     fn drop(&mut self) {
         if let Ok(mut catalog) = self.supervisor.marketplace_generations.lock() {
@@ -251,6 +256,36 @@ impl McpSupervisor {
             supervisor: self.clone(),
             scope: scope.clone(),
             ids: vec![id.into()],
+        })
+    }
+    pub(super) fn acquire_marketplace_verification(
+        &self,
+        scope: &McpScope,
+        id: &str,
+    ) -> McpResult<MarketplaceVerificationLease> {
+        let mut catalog = self
+            .marketplace_generations
+            .lock()
+            .map_err(|_| storage_error())?;
+        let entry = catalog
+            .entries
+            .get_mut(id)
+            .filter(|entry| {
+                entry.scope == *scope && matches!(entry.phase, Phase::Candidate | Phase::Active)
+            })
+            .ok_or_else(|| {
+                McpSupervisorError::new(
+                    "local_mcp_generation_inactive",
+                    "MCP plugin generation is not available for verification",
+                )
+            })?;
+        entry.leases += 1;
+        Ok(MarketplaceVerificationLease {
+            _generation: McpCatalogLease {
+                supervisor: self.clone(),
+                scope: scope.clone(),
+                ids: vec![id.into()],
+            },
         })
     }
     pub(in crate::local_runtime) async fn call_tool_pinned(

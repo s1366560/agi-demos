@@ -6,7 +6,7 @@ import asyncio
 import math
 import time
 from dataclasses import asdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from redis.asyncio import Redis
 
@@ -33,6 +33,9 @@ from src.infrastructure.agent.native_computer_use.store import (
 )
 from src.infrastructure.agent.tools.result import ToolResult
 
+if TYPE_CHECKING:
+    from redis.typing import EncodableT, FieldT
+
 
 class NativeComputerBroker(MediaTransport):
     def __init__(self, redis: Redis, *, timeout: float = 120) -> None:
@@ -52,6 +55,8 @@ class NativeComputerBroker(MediaTransport):
         conflicts: set[str] = set()
         for device in devices:
             for definition in device["tool_definitions"]:
+                if definition["inputSchema"].get("x-cua-step-only") is True:
+                    continue
                 name = definition["name"]
                 without_effects = {
                     **definition,
@@ -65,9 +70,7 @@ class NativeComputerBroker(MediaTransport):
     async def request(
         self, authorization: CallAuthorization, tool_name: str, arguments: dict[str, Any]
     ) -> ToolResult:
-        self._validate_authorization(
-            authorization, tool_name, check_effect=tool_name != "computer_connector_call"
-        )
+        self._validate_authorization(authorization, tool_name, check_effect=False)
         devices = await self._eligible_devices(authorization)
         if len(devices) != 1:
             return ToolResult(
@@ -109,8 +112,13 @@ class NativeComputerBroker(MediaTransport):
             pipe.expire(conversation_index, REQUEST_SECONDS)
             await pipe.execute()
         try:
-            await self.dispatch(payload["connection_id"], "computer_use_request", request_id)
-            return await self._wait_result(request_id)
+            await self.dispatch(
+                payload["connection_id"],
+                "computer_use_request",
+                request_id,
+                expires_at=payload["expires_at"],
+            )
+            return await self._wait_result(request_id, payload["expires_at"])
         except asyncio.CancelledError:
             await asyncio.shield(self.cancel_request(request_id))
             raise
@@ -128,11 +136,9 @@ class NativeComputerBroker(MediaTransport):
     ) -> None:
         from src.infrastructure.agent.native_computer_use.contracts import (
             READ_TOOL_NAMES,
-            TOOL_NAMES,
         )
 
-        if tool_name not in TOOL_NAMES:
-            raise DeviceBridgeError("computer_use_unknown_tool")
+        identifier(tool_name)
         for key in (
             "user_id",
             "tenant_id",
@@ -154,7 +160,7 @@ class NativeComputerBroker(MediaTransport):
             raise DeviceBridgeError("computer_use_run_authorization_invalid")
         if (
             check_effect
-            and effect != "read"
+            and effect not in {"read", "execute"}
             and tool_name not in READ_TOOL_NAMES
             and authorization.permission_profile != "full_access"
             and tool_name not in authorization.approved_tools
@@ -188,12 +194,17 @@ class NativeComputerBroker(MediaTransport):
         )
         if definition is None:
             raise DeviceBridgeError("computer_use_tool_unavailable")
+        if definition["inputSchema"].get("x-cua-step-only") is True:
+            raise DeviceBridgeError("computer_use_step_context_required")
         effect = tool_effect(tool_name, definition["inputSchema"], arguments)
         self._validate_authorization(authorization, tool_name, effect=effect)
         if tool_name == "computer_connector_call":
             require_connector_servers(
                 definition["inputSchema"], arguments, authorization.allowed_mcp_servers
             )
+        from src.infrastructure.agent.native_computer_use.catalog import require_mcp_server
+
+        require_mcp_server(definition["inputSchema"], authorization.allowed_mcp_servers)
         input_json = encoded(arguments)
         if len(input_json.encode()) > 256 * 1024:
             raise DeviceBridgeError("computer_use_input_too_large")
@@ -212,10 +223,20 @@ class NativeComputerBroker(MediaTransport):
             "connection_id": device["connection_id"],
             "tool_name": tool_name,
             "tool_effect": effect,
+            "display_kind": definition["inputSchema"].get("x-agistack-display-kind"),
+            "mcp_binding": definition["inputSchema"].get("x-cua-mcp-binding"),
             "input_json": input_json,
             "status": "requested",
-            "expires_at": math.ceil(time.time() + self.timeout),
+            "expires_at": math.ceil(time.time() + self._request_timeout(tool_name, arguments)),
         }
+
+    def _request_timeout(self, tool_name: str, arguments: dict[str, Any]) -> float:
+        if tool_name != "cua_repl_js":
+            return self.timeout
+        duration = arguments.get("timeout_ms", 30_000)
+        if not isinstance(duration, int) or isinstance(duration, bool):
+            raise DeviceBridgeError("computer_use_invalid_params")
+        return max(self.timeout, min(max(duration, 1), 300_000) / 1000 + 15)
 
     @staticmethod
     def _request_id(authorization: CallAuthorization) -> str:
@@ -246,6 +267,8 @@ class NativeComputerBroker(MediaTransport):
                 "authorization_revision",
                 "permission_profile",
                 "allowed_mcp_servers",
+                "mcp_binding",
+                "display_kind",
             )
         ):
             raise DeviceBridgeError("computer_use_call_identity_conflict")
@@ -255,8 +278,8 @@ class NativeComputerBroker(MediaTransport):
             return await self.result(previous)
         return unknown_result()
 
-    async def _wait_result(self, request_id: str) -> ToolResult:
-        deadline = asyncio.get_running_loop().time() + self.timeout
+    async def _wait_result(self, request_id: str, expires_at: float) -> ToolResult:
+        deadline = asyncio.get_running_loop().time() + max(0, expires_at - time.time())
         while asyncio.get_running_loop().time() < deadline:
             value = await self.read(request_key(request_id))
             if value is None or value["status"] == "unknown":
@@ -267,9 +290,14 @@ class NativeComputerBroker(MediaTransport):
         await self.cancel_request(request_id)
         return unknown_result()
 
-    async def dispatch(self, connection_id: str, kind: str, request_id: str) -> None:
+    async def dispatch(
+        self, connection_id: str, kind: str, request_id: str, *, expires_at: int | None = None
+    ) -> None:
         key = control_key(connection_id)
-        await self.redis.xadd(key, {"type": kind, "request_id": request_id}, maxlen=2048)
+        fields: dict[FieldT, EncodableT] = {"type": kind, "request_id": request_id}
+        if expires_at is not None:
+            fields["expires_at"] = expires_at
+        await self.redis.xadd(key, fields, maxlen=2048)
         await self.redis.expire(key, REQUEST_SECONDS)
 
     async def claim(self, request_id: str, *, user_id: str, device_id: str) -> dict[str, Any]:

@@ -10,6 +10,7 @@ pub(super) enum TimelineToolKind {
     Edit,
     Check,
     ComputerUse,
+    ReplOutput,
     Tool,
 }
 
@@ -22,13 +23,21 @@ impl TimelineToolKind {
             Self::Edit => "edit",
             Self::Check => "check",
             Self::ComputerUse => "computer_use",
+            Self::ReplOutput => "repl_output",
             Self::Tool => "tool",
         }
     }
 }
 
 pub(super) fn tool_kind(tool: &str) -> TimelineToolKind {
-    if SEARCH_TOOLS.contains(&tool) {
+    if super::cua_repl::definition(tool)
+        .and_then(|definition| definition.input_schema)
+        .and_then(|schema| schema.get("x-agistack-display-kind").cloned())
+        .and_then(|kind| kind.as_str().map(str::to_owned))
+        .as_deref() == Some("repl_output")
+    {
+        TimelineToolKind::ReplOutput
+    } else if SEARCH_TOOLS.contains(&tool) {
         TimelineToolKind::Search
     } else if READ_TOOLS.contains(&tool) {
         TimelineToolKind::Read

@@ -106,6 +106,7 @@ pub(super) fn listen(state: &Arc<LocalRuntimeState>, client: &Arc<CuaClient>) {
     {
         return;
     }
+    super::input::listen(state, client);
     let mut receiver = client.subscribe_native_status();
     let weak = Arc::downgrade(state);
     tokio::spawn(async move {
@@ -461,6 +462,7 @@ mod tests {
                 conversation_id: "c".into(),
                 run_id: "r".into(),
                 session_id: "s".into(),
+                input_mode: agistack_adapters_cua::CuaInputMode::default(),
             },
             revision: 1,
             stopped: AtomicBool::new(false),
@@ -500,6 +502,7 @@ mod tests {
                 conversation_id: conversation_id.into(),
                 run_id: run_id.into(),
                 session_id: "presentation-session".into(),
+                input_mode: agistack_adapters_cua::CuaInputMode::default(),
             },
             owner,
             resources: Default::default(),
@@ -588,20 +591,17 @@ mod tests {
             .await
             .unwrap();
         assert!(!session.paused.load(Ordering::SeqCst));
-        assert!(
-            host.call(
+        assert!(host
+            .call(
                 "computer_click",
                 r#"{"app":"pid:10","snapshot_id":"snapshot-round1","x":10,"y":20}"#
             )
             .await
-            .is_err()
-        );
-        assert!(
-            !helper
-                .requests()
-                .iter()
-                .any(|r| r["method"] == "audio_start" || r["method"] == "perform_action")
-        );
+            .is_err());
+        assert!(!helper
+            .requests()
+            .iter()
+            .any(|r| r["method"] == "audio_start" || r["method"] == "perform_action"));
         pause_resume(&state, &owner, &session.context.session_id, false)
             .await
             .unwrap();

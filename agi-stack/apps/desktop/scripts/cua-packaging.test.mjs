@@ -10,6 +10,15 @@ import signLocalCuaMacos from './sign-local-cua-macos.mjs';
 import { createCuaMacBundle, cuaMacBundleName, cuaMacExecutable } from './cua-layout.mjs';
 
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+async function stageNode(directory) {
+  const destination = join(directory, 'cua-repl/bin/node');
+  await mkdir(dirname(destination), { recursive: true });
+  await cp(process.execPath, destination);
+  const options = cuaOptionsForFile('/Fixture.app/Contents/Resources/sidecar/cua-repl/bin/node', '/Fixture.app');
+  execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', '--options', 'runtime',
+    '--identifier', 'ai.agistack.desktop.cua.repl-node', '--entitlements', options.entitlements, destination]);
+  return destination;
+}
 test('CUA checksums reject altered files and symbolic links', async () => {
   const root = await mkdtemp(join(tmpdir(), 'memstack-cua-package-'));
   try {
@@ -34,6 +43,10 @@ test('CUA signing adds exact identifiers and preserves Electron entitlements', (
   assert.equal(options.hardenedRuntime, true);
   assert.deepEqual(options.additionalArguments, ['--timestamp', '--identifier', 'ai.agistack.desktop.cua-helper']);
   assert.equal(cuaOptionsForFile('/Unrelated.app/Contents/MacOS/main', '/Fixture.app', prior), prior);
+  const node = cuaOptionsForFile('/Fixture.app/Contents/Resources/sidecar/cua-repl/bin/node', '/Fixture.app', prior);
+  assert.notEqual(node.entitlements, prior.entitlements);
+  assert.equal(node.hardenedRuntime, true);
+  assert.match(node.entitlements, /entitlements\.cua-node\.plist$/u);
 });
 test('macOS helper bundle has an accessory application identity and sealed resources', {
   skip: process.platform !== 'darwin',
@@ -52,6 +65,7 @@ test('macOS helper bundle has an accessory application identity and sealed resou
     assert.ok(property('NSMicrophoneUsageDescription'));
     assert.ok(property('NSAppleEventsUsageDescription'));
     await cp(join(desktop, '../../target/release/memstack-cua-cloud-connectors'), join(directory, 'memstack-cua-cloud-connectors'));
+    await stageNode(directory);
     await mkdir(join(directory, 'cua-plugin/skills/computer-use'), { recursive: true });
     await writeFile(join(directory, 'cua-plugin/skills/computer-use/SKILL.md'), 'fixture skill');
     await refreshCuaChecksums(directory, 'darwin');
@@ -68,6 +82,7 @@ test('macOS local signing refreshes checksums and seals actual CUA resources', {
   try {
     const appPath = prepared.bundle;
     await cp(join(desktop, 'build/sidecar'), join(appPath, 'Contents/Resources/sidecar'), { recursive: true });
+    const node = await stageNode(join(appPath, 'Contents/Resources/sidecar'));
     await createCuaMacBundle({ executable: join(desktop, 'cua-helper/bin/cua-helper'),
       lockedUse: join(desktop, 'cua-helper/bin/locked-use'), desktopRoot: desktop,
       destination: join(appPath, 'Contents/Resources/sidecar', cuaMacBundleName) });
@@ -75,6 +90,8 @@ test('macOS local signing refreshes checksums and seals actual CUA resources', {
       packager: { appInfo: { productFilename: 'ComputerUseFixture' }, projectDir: desktop } });
     await verifyCuaRuntime(join(appPath, 'Contents/Resources/sidecar'), { platform: 'darwin' });
     execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath]);
+    assert.equal(execFileSync(node, ['-e', 'process.stdout.write(String(new Function("return 6 * 7")()))'],
+      { encoding: 'utf8' }), '42');
     assert.ok((await readFile(join(appPath, 'Contents/Resources/sidecar/CUA_SHA256SUMS'), 'utf8')).includes('cua-helper'));
   } finally { await rm(prepared.owned_temporary_root, { recursive: true, force: true }); }
 });

@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.native_computer_use.broker import NativeComputerBroker
 
 from src.domain.events.agent_events import (
     AgentDomainEvent,
@@ -16,6 +19,10 @@ from src.domain.events.agent_events import (
 from src.domain.model.agent.hitl_types import HITLType
 from src.infrastructure.agent.core.message import ToolPart, ToolState
 from src.infrastructure.agent.hitl.coordinator import HITLCoordinator
+from src.infrastructure.agent.native_computer_use.permission_result import (
+    decode_record,
+    validate_claim,
+)
 from src.infrastructure.agent.native_computer_use.store import (
     DeviceBridgeError,
     request_key,
@@ -89,6 +96,21 @@ DECISION_SCHEMA = object_schema(
     ["action", "target", "data", "reason", "risk", "reversibility", "scope", "evidence"],
 )
 PERMISSION_SCHEMA = object_schema({"decision": DECISION_SCHEMA}, ["decision"])
+
+
+async def _target_permission(
+    broker: NativeComputerBroker, value: dict[str, Any], target_id: str
+) -> dict[str, Any] | None:
+    try:
+        permission = decode_record(value.get("permission_required"))
+        if permission is None or permission.demand["request"]["request_id"] != target_id:
+            return None
+        await validate_claim(broker, value, permission)
+        return permission.demand
+    except DeviceBridgeError as exc:
+        raise RuntimeV2Error(
+            "computer_use_pending_invalid", "Native pending consent is invalid"
+        ) from exc
 
 
 def native_permission_tool() -> ToolInfo:
@@ -171,17 +193,10 @@ async def bind_native_permission(
             )
         ):
             continue
-        try:
-            output = json.loads(value.get("output_json", ""))
-        except (ValueError, TypeError):
+        output = await _target_permission(broker, value, decision["target"]["id"])
+        if output is None:
             continue
-        pending = (
-            output.get("request")
-            if isinstance(output, dict) and output.get("error") == "cua_permission_required"
-            else None
-        )
-        if not isinstance(pending, dict) or pending.get("request_id") != decision["target"]["id"]:
-            continue
+        pending = output["request"]
         if pending.get("engine_session_id") != session_id or any(
             not isinstance(pending.get(k), str) or not pending[k]
             for k in (
@@ -232,6 +247,7 @@ async def bind_native_permission(
                 "native_session_id": pending["session_id"],
             }
         )
+        await _bind_execution_step(broker, pending, binding, scopes, cloud_id)
         found.append((binding, scopes))
     row = await _read_run(guard.sessions, guard.run_id, guard.identity, guard.child_run_id)
     if len(found) != 1:
@@ -278,6 +294,28 @@ async def handle_native_permission(
     granted = await coordinator.wait_for_response(
         request_id=request_id, hitl_type=HITLType.PERMISSION, timeout_seconds=300
     )
+    if "execution_step" in binding:
+        from src.application.services.approved_run_tool_permission_v2 import (
+            _read_run,
+            current_approved_run_guard_v2,
+        )
+        from src.application.services.chat_run_tool_permission_v2 import current_chat_run_guard_v2
+        from src.infrastructure.agent.native_computer_use.steps import ExecutionSteps
+        from src.infrastructure.agent.tools.native_computer_use import (
+            current_native_computer_broker,
+        )
+
+        guard = current_approved_run_guard_v2() or current_chat_run_guard_v2()
+        broker = current_native_computer_broker()
+        if guard is None or broker is None:
+            raise RuntimeV2Error(
+                "computer_use_authority_missing", "Execution step authority expired"
+            )
+        row = await _read_run(guard.sessions, guard.run_id, guard.identity, guard.child_run_id)
+        binding = {**binding, "authorization_revision": row.revision}
+        await ExecutionSteps(broker.redis).resolve_permission(
+            binding, bool(granted), hitl_request_id=request_id
+        )
     queue_tool_part_hitl_completion(tool_part, request_id)
     yield AgentPermissionRepliedEvent(request_id=request_id, granted=bool(granted))
     tool_part.status = ToolState.COMPLETED
@@ -289,3 +327,42 @@ async def handle_native_permission(
         call_id=ctx.call_id,
         tool_execution_id=tool_part.tool_execution_id,
     )
+
+
+async def _bind_execution_step(
+    broker: NativeComputerBroker,
+    pending: dict[str, Any],
+    binding: dict[str, Any],
+    scopes: list[str],
+    cloud_id: str,
+) -> None:
+    step = pending.get("execution_step")
+    if step is not None:
+        from src.infrastructure.agent.native_computer_use.steps import ExecutionSteps
+
+        if not isinstance(step, dict) or not isinstance(step.get("key"), str):
+            raise RuntimeV2Error("computer_use_pending_invalid", "Execution step is invalid")
+        stored_step = await broker.read(step["key"])
+        if (
+            stored_step is None
+            or stored_step.get("status") != "pending"
+            or stored_step.get("origin_request_id") != cloud_id
+            or ExecutionSteps.pending(stored_step) != pending
+            or scopes != ["once"]
+            or any(
+                stored_step.get(k) != binding.get(k)
+                for k in (
+                    "user_id",
+                    "tenant_id",
+                    "project_id",
+                    "conversation_id",
+                    "run_id",
+                    "session_id",
+                    "device_id",
+                    "tool_name",
+                    "input_digest",
+                )
+            )
+        ):
+            raise RuntimeV2Error("computer_use_pending_invalid", "Execution step is invalid")
+        binding["execution_step"] = step

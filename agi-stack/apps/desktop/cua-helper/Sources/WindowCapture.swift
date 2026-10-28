@@ -3,21 +3,6 @@ import CoreGraphics
 import ScreenCaptureKit
 
 enum WindowCapture {
-    static func matchWindowID(app: ResolvedApp, frame: CGRect, title: String) -> CGWindowID? {
-        guard let all = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return nil }
-        let matches = all.filter {
-            guard ($0[kCGWindowOwnerPID as String] as? Int32) == app.pid,
-                  ($0[kCGWindowLayer as String] as? Int) == 0,
-                  let bounds = $0[kCGWindowBounds as String] as? [String: Any],
-                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return false }
-            return abs(rect.minX - frame.minX) < 2 && abs(rect.minY - frame.minY) < 2
-                && abs(rect.width - frame.width) < 2 && abs(rect.height - frame.height) < 2
-                && (title.isEmpty || ($0[kCGWindowName as String] as? String) == title)
-        }
-        guard matches.count == 1 else { return nil }
-        return (matches[0][kCGWindowNumber as String] as? NSNumber)?.uint32Value
-    }
-
     static func capture(app: ResolvedApp, window: NativeWindow, session: NativeSession) throws -> [String: Any]? {
         try NativeScreenState.requireUnlocked()
         guard CGPreflightScreenCaptureAccess() else { return nil }

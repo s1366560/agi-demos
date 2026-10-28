@@ -61,3 +61,4 @@ pub use sync::{reconcile, Replica, SyncRecord, VersionVector};
 pub mod model_request;
 
 pub mod tool_control;
+pub mod tool_permission;

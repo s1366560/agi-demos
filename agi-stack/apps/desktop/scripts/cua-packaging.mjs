@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { cuaMacBundleName, cuaMacExecutable, cuaMacIdentifier, cuaMacLockedUse } from './cua-layout.mjs';
 
 export const cuaMacIdentities = new Map([
+  ['cua-repl/bin/node', 'ai.agistack.desktop.cua.repl-node'],
   [cuaMacBundleName, cuaMacIdentifier],
   [cuaMacExecutable, cuaMacIdentifier],
   ['memstack-cua-cloud-connectors', 'ai.agistack.desktop.cua.cloud-connectors'],
@@ -87,7 +88,27 @@ export function cuaOptionsForFile(filePath, appPath, prior = {}) {
   const root = join(appPath, 'Contents/Resources/sidecar');
   const relative = filePath.startsWith(root + '/') ? filePath.slice(root.length + 1) : '';
   const identifier = cuaMacIdentities.get(relative);
-  return identifier ? { ...prior, additionalArguments: [...(prior.additionalArguments ?? []), '--identifier', identifier] } : prior;
+  if (!identifier) return prior;
+  return { ...prior,
+    ...(relative === 'cua-repl/bin/node' ? { hardenedRuntime: true,
+      entitlements: fileURLToPath(new URL('../electron/resources/entitlements.cua-node.plist', import.meta.url)) } : {}),
+    additionalArguments: [...(prior.additionalArguments ?? []), '--identifier', identifier] };
+}
+export async function signCuaNodeRuntime(appPath, identity, { keychain, timestamp = true } = {}) {
+  const nodePath = join(appPath, 'Contents/Resources/sidecar/cua-repl/bin/node');
+  const metadata = await lstat(nodePath);
+  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size === 0) {
+    throw new Error('Packaged CUA Node runtime must be a regular executable');
+  }
+  await access(nodePath, constants.X_OK);
+  const args = ['--force', '--sign', identity, '--options', 'runtime', '--identifier',
+    'ai.agistack.desktop.cua.repl-node', '--entitlements',
+    fileURLToPath(new URL('../electron/resources/entitlements.cua-node.plist', import.meta.url))];
+  if (keychain) args.push('--keychain', keychain);
+  if (timestamp) args.push('--timestamp');
+  args.push(nodePath);
+  execFileSync('/usr/bin/codesign', args, { stdio: 'pipe' });
+  execFileSync('/usr/bin/codesign', ['--verify', '--strict', nodePath], { stdio: 'pipe' });
 }
 export async function sealCuaMacApp(appPath, identity, { keychain, timestamp = true } = {}) {
   await refreshCuaChecksums(join(appPath, 'Contents/Resources/sidecar'), 'darwin');

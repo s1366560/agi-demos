@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.provider_resolution_service import get_provider_resolution_service
+from src.domain.llm_providers.audio_input import validate_audio_input_declaration
 from src.domain.llm_providers.models import (
     CircuitBreakerState,
     LLMUsageLog,
@@ -106,6 +107,11 @@ class ProviderService:
             ValueError: If validation fails (excluding duplicate name)
         """
         logger.info(f"Creating provider: {config.name} ({config.provider_type})")
+        validate_audio_input_declaration(
+            config.provider_type.value,
+            config.config,
+            [config.llm_model, config.llm_small_model, *config.secondary_models],
+        )
         self._validate_persistent_auth(
             provider_type=config.provider_type,
             auth_method=config.auth_method,
@@ -245,6 +251,21 @@ class ProviderService:
 
         endpoint_fields = {"base_url", "provider_type"}
         target_provider_type = config.provider_type or existing.provider_type
+        validate_audio_input_declaration(
+            target_provider_type.value,
+            config.config if config.config is not None else existing.config,
+            [
+                config.llm_model if "llm_model" in config.model_fields_set else existing.llm_model,
+                config.llm_small_model
+                if "llm_small_model" in config.model_fields_set
+                else existing.llm_small_model,
+                *(
+                    config.secondary_models
+                    if config.secondary_models is not None
+                    else existing.secondary_models
+                ),
+            ],
+        )
         if not provider_persistent_auth_supported(target_provider_type):
             raise UnsupportedProviderAuthError(
                 "Persistent authentication is not available for this provider type"

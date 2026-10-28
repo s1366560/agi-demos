@@ -1,7 +1,9 @@
 import type { UiSlotKind } from './types';
+import type { ReplOutputPresentationV2, ToolResultMediaV2 } from './replOutputPresentationV2';
 
 /** Only a host-selected presentation crosses into an isolated result renderer. */
 export type ToolResultPresentationV2 =
+  | ReplOutputPresentationV2
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'summary'; readonly summary: string }
   | {
@@ -69,6 +71,10 @@ export interface SlotContextMapV2 {
     readonly toolName: string;
     readonly status: 'complete' | 'failed';
     readonly presentation: ToolResultPresentationV2;
+    readonly media?: readonly ToolResultMediaV2[] | undefined;
+    readonly mediaLabel?: string | undefined;
+    readonly mediaLoadingLabel?: string | undefined;
+    readonly mediaUnavailableLabel?: string | undefined;
   };
 }
 

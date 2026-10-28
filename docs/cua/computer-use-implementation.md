@@ -1,13 +1,17 @@
 # Desktop Computer Use implementation
 
-The first-party `memstack-computer-use` v2 plugin supplies 26 scoped tools, its
+The first-party `memstack-computer-use` v2 plugin supplies scoped native tools, its
 runtime skill, native services, settings, and structured results. The existing
 `computer_*` names remain supported. This document describes the implementation
 and the limits of the validation performed; it is not a release approval gate.
 
+The persistent Node facade, browser operations, MCP Apps, cloud step authorization,
+audio export and lock continuity added on 2026-10-22 are described in
+[Persistent Computer Use](computer-use-repl.md).
+
 ## Runtime and authorization
 
-- `agi-stack/crates/adapters-cua` owns authenticated `MemstackComputerUseIPC-2`
+- `agi-stack/crates/adapters-cua` owns authenticated `MemstackComputerUseIPC-3`
   inherited pipes, numbered concurrent requests, cancellation, helper supervision,
   observation coordinates, and typed media. Credentials do not use arguments,
   environment variables, or a shared RPC socket. A partially transmitted action
@@ -43,6 +47,12 @@ and the limits of the validation performed; it is not a release approval gate.
   the model. Fabricated, changed, foreign, or expired native requests produce a
   bounded model observation instead of an unanswerable approval card. Generic
   requests and already answered resumption remain compatible.
+
+## Background input and input presentation
+
+See [macOS background input](macos-background-input.md) for the trusted input modes,
+PID/window routing, generation and recovery rules, authenticated telemetry,
+native acceptance results, and verified compatibility limits.
 
 ## Cloud sessions
 
@@ -85,6 +95,15 @@ authorized, stopped on termination, and not reconstructed by replaying start.
 Each recording start requires a one-use grant. A recovered native session must
 obtain new consent for a new recording; its logical continuation cannot reuse a
 previous recording grant.
+
+Both cloud backends connect owned recording artifacts to model input under
+explicit audio capability and current execution authority. Python resolves durable
+artifact references after actual provider/model selection; the Rust server wraps
+its selected LLM with broker-bound audio authorization. Request and trace logs
+retain references or redacted metadata rather than inline audio bytes.
+Configuration, cancellation semantics and the 2026-10-22 controlled HTTP/SSE
+results (265 Python and 84 Rust tests) are documented in
+[Persistent Computer Use](computer-use-repl.md).
 
 ## Native implementations
 
@@ -190,11 +209,12 @@ Linux recording requires the reported GStreamer plugins and a Pulse-compatible
 audio service; device enumeration alone does not establish recording permission.
 
 The macOS Locked Use authorization plugin, installer, guardian, and run broker
-are included in the build/signing chain. Ordinary `locked_use` capability remains
-`unverified`: no authorization database installation or unlock was performed on
-this development host. The dedicated environment must verify authentication,
-all-display masking, physical takeover, expiry, crash relock, rollback, and
-uninstall restoration before that configuration can advertise availability.
+are included in the build/signing chain. Availability is determined from current
+OS permissions, matching signatures, installed configuration and the system
+authorization rule. The feature uses a full-screen cover with temporary session
+unlock and relocks on completion or revocation. It requires explicit per-run
+authorization; enabling the setting alone creates no lease. Current implementation
+and validation limits are documented in [Persistent Computer Use](computer-use-repl.md).
 
 Google Calendar/People and Microsoft Graph adapters run under the existing MCP
 supervisor and application encrypted vault. Native Calendar/Contacts writes,

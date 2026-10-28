@@ -3,13 +3,13 @@ use crate::{
     session::Sessions,
 };
 use hmac::{Hmac, Mac};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::Sha256;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 
-pub const VERSION: &str = "MemstackComputerUseIPC-2";
+pub const VERSION: &str = "MemstackComputerUseIPC-3";
 const MAX_FRAME: usize = 8 * 1024 * 1024;
 
 pub fn proof(secret: &str, nonce: &str) -> String {

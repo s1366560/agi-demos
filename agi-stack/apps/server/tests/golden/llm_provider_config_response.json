@@ -18,6 +18,7 @@
     "gpt-4o"
   ],
   "blocked_models": [],
+  "audio_input_models": [],
   "pool_weight": 1.0,
   "pool_enabled": true,
   "model_tier": "large",

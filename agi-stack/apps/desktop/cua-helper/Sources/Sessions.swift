@@ -27,6 +27,12 @@ struct NativeWindow {
     let frame: CGRect
     let title: String
     let captureID: CGWindowID?
+    let identity: NativeWindowIdentity?
+    init(id: String, element: AXUIElement, frame: CGRect, title: String,
+         captureID: CGWindowID?, identity: NativeWindowIdentity? = nil) {
+        self.id = id; self.element = element; self.frame = frame; self.title = title
+        self.captureID = captureID; self.identity = identity
+    }
     var payload: [String: Any] {
         ["window_id": id, "title": title,
          "bounds": ["x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height]]
@@ -37,19 +43,65 @@ struct Snapshot {
     let app: ResolvedApp
     let window: NativeWindow
     let records: [Int: ElementRecord]
+    var inputGeneration: String = ""
 }
 final class NativeSession {
     let id: String
     let owner: [String: String]
+    let inputMode: NativeInputMode
+    private var generation = UUID().uuidString
+    private var inputTarget: (pid_t, String, InputRectangle)?
     private let cancellationLock = NSLock()
     private var currentCancellation = Cancellation()
     private var lastStopSequence: UInt64 = 0
     private var paused = false
     private var terminal = false
+    private var observationRefreshRequired = false
+    func requestObservationRefresh() {
+        cancellationLock.lock(); observationRefreshRequired = true; cancellationLock.unlock()
+    }
+    func consumeObservationRefresh() -> Bool {
+        cancellationLock.lock(); defer { cancellationLock.unlock() }
+        let required = observationRefreshRequired; observationRefreshRequired = false; return required
+    }
     var ended = false // serial dispatcher owned; audio receipts may outlive this session
     var cancellation: Cancellation {
         cancellationLock.lock(); defer { cancellationLock.unlock() }
         return currentCancellation
+    }
+    var inputGeneration: String {
+        cancellationLock.lock(); defer { cancellationLock.unlock() }; return generation
+    }
+    var inputStopPhase: String? {
+        cancellationLock.lock(); defer { cancellationLock.unlock() }
+        return terminal ? "stopped" : paused ? "paused" : nil
+    }
+    var inputBinding: [String: Any] {
+        ["input_mode": inputMode.rawValue, "input_generation": inputGeneration]
+    }
+    func validateInputBinding(_ params: [String: Any]) throws {
+        guard params["input_mode"] as? String == inputMode.rawValue,
+              params["input_generation"] as? String == inputGeneration else {
+            throw ActionError.failure(kind: "stale_input_generation", message: "refresh the native session input binding")
+        }
+    }
+    func observeInputTarget(_ app: ResolvedApp, window: NativeWindow) throws {
+        cancellationLock.lock()
+        let previous = inputTarget
+        let bounds = InputRectangle(window.frame)
+        let changed = previous.map { $0.0 != app.pid || $0.1 != window.id || $0.2 != bounds } ?? false
+        cancellationLock.unlock()
+        if changed {
+            SyntheticInput.shared.releaseSession(id, phase: "released", reason: "target_changed")
+            HeldInput.shared.release(id)
+            SyntheticInput.shared.endInputLease(id)
+        }
+        try cancellation.check()
+        cancellationLock.lock()
+        if changed { generation = UUID().uuidString }
+        inputTarget = (app.pid, window.id, bounds)
+        cancellationLock.unlock()
+        if changed { snapshots.removeAll(); previousText.removeAll() }
     }
     var windows: [String: [NativeWindow]] = [:]
     var snapshots: [String: Snapshot] = [:]
@@ -57,9 +109,10 @@ final class NativeSession {
     var actionRequests = Set<String>()
     var appIcons: [String: [String: Any]] = [:]
     let artifactDirectory: URL
-    init(id: String, owner: [String: String]) throws {
+    init(id: String, owner: [String: String], inputMode: NativeInputMode = .background) throws {
         self.id = id
         self.owner = owner
+        self.inputMode = inputMode
         artifactDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("memstack-cua-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: artifactDirectory, withIntermediateDirectories: false,
@@ -84,7 +137,8 @@ final class NativeSession {
             cancellationLock.unlock()
             throw ActionError.failure(kind: "session_not_paused", message: "only a paused live session can resume")
         }
-        paused = false; currentCancellation = Cancellation(); cancellationLock.unlock()
+        paused = false; currentCancellation = Cancellation(); generation = UUID().uuidString
+        inputTarget = nil; cancellationLock.unlock()
         // Window handles identify a live AX window, not permission to reuse an
         // observation. selectWindow re-enumerates and verifies the AX identity.
         snapshots.removeAll(); previousText.removeAll()
@@ -101,6 +155,8 @@ final class NativeSession {
             throw ActionError.failure(kind: "cancelled", message: "a newer cancellation superseded reset")
         }
         currentCancellation = Cancellation()
+        generation = UUID().uuidString
+        inputTarget = nil
         cancellationLock.unlock()
         snapshots.removeAll(); windows.removeAll(); previousText.removeAll(); actionRequests.removeAll()
     }
@@ -122,7 +178,7 @@ final class Sessions {
         }
         return values
     }
-    func begin(_ id: String, owner: [String: String]) throws -> NativeSession {
+    func begin(_ id: String, owner: [String: String], inputMode: NativeInputMode = .background) throws -> NativeSession {
         guard !id.isEmpty, id.utf8.count <= 256 else {
             throw ActionError.failure(kind: "invalid_params", message: "invalid session_id")
         }
@@ -132,7 +188,7 @@ final class Sessions {
             throw ActionError.failure(kind: "session_owner_mismatch", message: "closed session context changed")
         }
         if let session = sessions[id] {
-            guard session.owner == owner else {
+            guard session.owner == owner, session.inputMode == inputMode else {
                 lock.unlock()
                 throw ActionError.failure(kind: "session_owner_mismatch", message: "session context changed")
             }
@@ -144,7 +200,10 @@ final class Sessions {
             throw ActionError.failure(kind: "session_limit", message: "too many live sessions")
         }
         let session: NativeSession
-        do { session = try NativeSession(id: id, owner: owner) }
+        do {
+            if inputMode == .background { try BackgroundInputSPI.requireAvailable() }
+            session = try NativeSession(id: id, owner: owner, inputMode: inputMode)
+        }
         catch { lock.unlock(); throw error }
         sessions[id] = session
         lock.unlock()
@@ -170,22 +229,28 @@ final class Sessions {
         return session
     }
     func stopAuthorized(_ id: String, params: [String: Any]) {
-        guard let owner = try? Self.owner(params), let session = try? require(id, owner: owner) else { return }
+        guard let owner = try? Self.owner(params), let session = try? require(id, owner: owner),
+              (try? session.validateInputBinding(params)) != nil else { return }
         let sequence = (params["_native_receive_sequence"] as? NSNumber)?.uint64Value ?? 0
+        LockedUseCoordinator.shared.end(sessionID: id)
         if params["_native_cancellation_only"] as? Bool == true { session.cancel(sequence: sequence) }
         else { session.stop(sequence: sequence); NativePresentation.shared.update(session, phase: "stopped") }
+        SyntheticInput.shared.releaseSession(id, phase: params["_native_cancellation_only"] as? Bool == true ? "released" : "stopped")
         HeldInput.shared.release(id)
         AudioCapture.shared.endSoon(id, reason: params["end_reason"] as? String ?? (params["_native_cancellation_only"] as? Bool == true ? "cancelled" : "session_ended"))
     }
     func stop(_ id: String, sequence: UInt64 = 0) {
+        LockedUseCoordinator.shared.end(sessionID: id)
         lock.lock(); let session = sessions[id]; lock.unlock()
-        session?.stop(sequence: sequence); HeldInput.shared.release(id)
+        session?.stop(sequence: sequence); SyntheticInput.shared.releaseSession(id, phase: "stopped"); HeldInput.shared.release(id)
         if let session = session { NativePresentation.shared.update(session, phase: "stopped") }
     }
-    func stopAll() {
-        lock.lock(); let values = Array(sessions.values); lock.unlock()
-        values.forEach { $0.stop(); AudioCapture.shared.endSoon($0.id, reason: "session_ended") }; HeldInput.shared.releaseAll()
+    @discardableResult func stopAll(reason: String = "session_ended") -> [NativeSession] {
+        LockedUseCoordinator.shared.revokeImmediately(reason: reason)
+        lock.lock(); let values = sessions.values.filter { $0.inputStopPhase != "stopped" }; lock.unlock()
+        values.forEach { $0.stop(); SyntheticInput.shared.releaseSession($0.id, phase: "stopped", reason: reason); AudioCapture.shared.endSoon($0.id, reason: reason) }; HeldInput.shared.releaseAll()
         values.forEach { NativePresentation.shared.update($0, phase: "stopped") }
+        return values
     }
     func cleanupAllStopped() {
         lock.lock(); let values = Array(sessions.values); lock.unlock()
@@ -193,11 +258,13 @@ final class Sessions {
     }
     /// Runs on the serial dispatcher after the reader has set cancellation.
     func cleanupStopped(_ session: NativeSession, preserveWindows: Bool = false, reason: String? = nil) {
+        NativeInputPresentation.shared.update(session, route: nil,
+            phase: preserveWindows ? "paused" : "stopped", reason: reason)
         NativeClipboard.end(session.id)
         session.appIcons.removeAll()
         session.snapshots.removeAll(); session.previousText.removeAll()
         if !preserveWindows { session.windows.removeAll() }
-        LockedUseCoordinator.shared.end()
+        LockedUseCoordinator.shared.end(sessionID: session.id)
         AudioCapture.shared.end(session.id, reason: reason ?? (preserveWindows ? "user_paused" : "session_ended"))
         SyntheticInput.shared.endInputLease(session.id)
         Self.removeTransientArtifacts(in: session.artifactDirectory,
@@ -214,7 +281,7 @@ final class Sessions {
     }
     func end(_ id: String) {
         lock.lock(); let session = sessions.removeValue(forKey: id); lock.unlock()
-        session?.stop(); HeldInput.shared.release(id)
+        session?.stop(); SyntheticInput.shared.releaseSession(id, phase: "stopped"); HeldInput.shared.release(id)
         if let session = session {
             session.ended = true
             cleanupStopped(session)
@@ -226,6 +293,7 @@ final class Sessions {
             SyntheticInput.shared.forgetDirectory(session.artifactDirectory)
             lock.lock(); closed[id] = session; lock.unlock()
             NativePresentation.shared.end(id)
+            NativeInputPresentation.shared.forget(id)
         }
     }
     func endAll() {

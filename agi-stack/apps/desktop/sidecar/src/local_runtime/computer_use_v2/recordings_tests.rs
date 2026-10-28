@@ -9,6 +9,46 @@ struct Fixture {
     context: CuaCallContext,
     receipt: Value,
 }
+
+#[tokio::test]
+async fn saved_recordings_attach_owned_audio_without_duplicate_persistence() {
+    let fixture = Fixture::new().await;
+    fixture.stop().await;
+    let native = fixture
+        .helper
+        .client
+        .request_existing_session(&fixture.context, "audio_status", json!({}))
+        .await
+        .unwrap();
+    let mut result = ToolResult::text(native.to_string());
+    recordings::tool_result(&fixture.state, &fixture.session(), &mut result)
+        .await
+        .unwrap();
+    assert_eq!(result.media.len(), 1);
+    assert_eq!(result.media[0].mime_type, "audio/wav");
+    let path = result.media[0].artifact_path.clone();
+    artifacts::persist(
+        &fixture.state,
+        &fixture.owner,
+        &fixture.context,
+        &mut result,
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.media[0].artifact_path, path);
+    let id = fixture.snapshot()[0]["artifacts"][0]["artifact_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        artifacts::attachment(&fixture.state, &fixture.owner, "other-conversation", &id).is_err()
+    );
+    assert_eq!(
+        artifacts::media_descriptors(&fixture.state, &fixture.owner, &result.media).unwrap()[0]["artifact_id"],
+        id
+    );
+    fixture.close().await;
+}
 impl Fixture {
     async fn new() -> Self {
         let helper = Helper::new(false);
@@ -29,6 +69,7 @@ impl Fixture {
             conversation_id: "recording-conversation".into(),
             run_id: "recording-run".into(),
             session_id: "recording-session".into(),
+            input_mode: agistack_adapters_cua::CuaInputMode::default(),
         };
         let source = helper.root.join("recording.wav");
         // A playable PCM WAV: mono, 16 kHz, 16-bit, 10 ms of silence.
@@ -385,6 +426,7 @@ async fn existing_resource_api_never_spawns_or_admits_and_rejects_input_methods(
         conversation_id: "conversation".into(),
         run_id: "run".into(),
         session_id: "session".into(),
+        input_mode: agistack_adapters_cua::CuaInputMode::default(),
     };
     assert!(
         helper

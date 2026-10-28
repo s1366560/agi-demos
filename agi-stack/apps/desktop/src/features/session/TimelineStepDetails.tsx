@@ -209,6 +209,7 @@ export function TimelineStepDetails({
                   kind: toolCallPresentationKind({call: items[0], result: resultItem}),
                   output: resultItem.toolOutput ?? resultItem.payload,
                   details: resultDisplay?.details,
+                  display: resultItem.display,
                   summary: resultDisplay?.summary,
                 })}
                 toolName={resultItem.toolName ?? items[0]?.toolName ?? ''}

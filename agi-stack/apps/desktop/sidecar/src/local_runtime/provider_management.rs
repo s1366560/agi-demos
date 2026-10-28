@@ -260,6 +260,8 @@ fn mutate_llm_provider(
         llm_model,
         allowed_models,
         embedding_model,
+        audio_input_models,
+        request_timeout_ms,
         is_active,
         expected_revision,
     } = request;
@@ -359,6 +361,8 @@ fn mutate_llm_provider(
             "llm_model": null,
             "allowed_models": [],
             "embedding_model": null,
+            "audio_input_models": [],
+            "request_timeout_ms": llm_request_timeout::DEFAULT_REQUEST_TIMEOUT_MS,
             "secondary_models": [],
             "health_status": "not_configured",
             "revision": 0,
@@ -409,9 +413,17 @@ fn mutate_llm_provider(
     }
     // The declaration is validated after the same mutation updates the allowed roster.
     provider_embedding_declaration::apply(&mut provider, embedding_model)?;
+    provider_audio_declaration::apply(&mut provider, audio_input_models)?;
+    if let Some(milliseconds) = request_timeout_ms {
+        provider["request_timeout_ms"] = json!(milliseconds);
+    }
+    llm_request_timeout::duration(&provider).map_err(provider_probe_request_error)?;
     let object = provider
         .as_object_mut()
         .ok_or_else(|| local_store_error("managed provider must be an object".to_string()))?;
+    object
+        .entry("request_timeout_ms")
+        .or_insert(json!(llm_request_timeout::DEFAULT_REQUEST_TIMEOUT_MS));
     let provider_type = object
         .get("provider_type")
         .and_then(Value::as_str)

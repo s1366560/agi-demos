@@ -39,6 +39,10 @@ fn public_receipt(context: &CuaCallContext, native: &Value) -> Result<Value, Str
         "end_reason",
         "error_code",
         "partial",
+        "sample_rate",
+        "channels",
+        "encoding",
+        "max_duration_ms",
     ] {
         if let Some(value) = native.get(field) {
             receipt[field] = value.clone();
@@ -222,6 +226,20 @@ pub(super) async fn tool_result(
             .collect::<Vec<_>>()
     );
     output["recordings"] = json!(receipts);
+    for artifact in output["artifacts"].as_array().into_iter().flatten() {
+        if let Some(id) = artifact["artifact_id"].as_str() {
+            let attachment =
+                artifacts::attachment(state, &session.owner, &session.context.conversation_id, id)
+                    .map_err(CoreError::Tool)?;
+            if !result
+                .media
+                .iter()
+                .any(|media| media.artifact_path == attachment.artifact_path)
+            {
+                result.media.push(attachment);
+            }
+        }
+    }
     result.output_json = output.to_string();
     Ok(())
 }

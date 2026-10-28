@@ -40,7 +40,7 @@ impl ToolControlResolution {
 pub(super) fn validate(result: ToolResult) -> CoreResult<ToolResult> {
     let valid = match result.control_outcome {
         Some(outcome) => {
-            outcome.matches_result(&result)
+            result.permission_required.is_none() && outcome.matches_result(&result)
                 && match outcome {
                     ToolControlOutcome::UserPaused => result
                         .control_generation

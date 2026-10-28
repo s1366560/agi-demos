@@ -1,7 +1,7 @@
 //! Scope limits come from declared capability metadata, never operation names.
 use super::store::GrantScope;
 use super::PendingConsent;
-use agistack_core::ports::ToolResult;
+use agistack_core::ports::{PermissionBinding, PermissionKind, PermissionRequired, ToolResult};
 use serde_json::{json, Value};
 
 /// Keep granted requests internally for exact once retries, but do not prompt again.
@@ -20,7 +20,7 @@ pub(super) fn needs_approval(pending: &PendingConsent, grants: &[super::store::G
 pub(super) fn scopes(capability: &str) -> &'static [GrantScope] {
     if matches!(
         capability,
-        "connector_action" | "microphone" | "system_audio" | "audio_mixed"
+        "connector_action" | "microphone" | "system_audio" | "audio_mixed" | "locked_use"
     ) {
         &[GrantScope::Once]
     } else {
@@ -32,7 +32,10 @@ fn object(properties: Value, required: &[&str]) -> Value {
     json!({"type":"object","properties":properties,"required":required,"additionalProperties":false})
 }
 
-pub(super) fn permission_required(pending: PendingConsent) -> ToolResult {
+pub(super) fn permission_required(
+    pending: PendingConsent,
+    binding: PermissionBinding,
+) -> ToolResult {
     let text = json!({"type":"string","minLength":1});
     let decision = object(
         json!({
@@ -56,12 +59,11 @@ pub(super) fn permission_required(pending: PendingConsent) -> ToolResult {
             "evidence",
         ],
     );
-    ToolResult {
-        control_outcome: None,
-        control_generation: None,
-        output_json:json!({"error":"cua_permission_required","scopes":scopes(&pending.capability),"request":pending,
+    PermissionRequired::new(
+        PermissionKind::NativeConsent,
+        binding,
+        json!({"error":"cua_permission_required","scopes":scopes(&pending.capability),"request":pending,
             "decision_context_schema":decision,
-            "hint":"Use the runtime's structured RequestHuman action (kind=request_human, request.kind=permission, request.id your approval id, request.prompt your question, request.decision the complete context) or its advertised request_permission tool (input.decision). Copy target.kind=computer_app and target.id=request.request_id exactly. Include ALL action, target, data, reason, risk, reversibility, scope, evidence fields using decision_context_schema; reversibility.mode is required. Judge risk.level/rationale and reversibility yourself from this exact proposed input; the schema supplies no verdict. Use genuine native request/artifact identities for evidence and scope. Offer only the returned scopes. Wait for the human before retrying this exact action."}).to_string(),
-        media:vec![],
-    }
+            "hint":"Use the runtime's structured RequestHuman action (kind=request_human, request.kind=permission, request.id your approval id, request.prompt your question, request.decision the complete context) or its advertised request_permission tool (input.decision). Copy target.kind=computer_app and target.id=request.request_id exactly. Include ALL action, target, data, reason, risk, reversibility, scope, evidence fields using decision_context_schema; reversibility.mode is required. Judge risk.level/rationale and reversibility yourself from this exact proposed input; the schema supplies no verdict. Use genuine native request/artifact identities for evidence and scope. Offer only the returned scopes. Wait for the human before retrying this exact action."}),
+    ).into_result()
 }

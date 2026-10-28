@@ -8,6 +8,8 @@ import type {
   DesktopMCPServerDeleteInput,
   DesktopMCPServerSummary,
   DesktopMCPServerTestResult,
+  DesktopMCPOAuthStatus,
+  DesktopMCPOAuthAction,
 } from '../api/client';
 import type { DesktopRuntimeConfig } from '../types';
 export interface McpServersArgumentsV2 {
@@ -18,6 +20,8 @@ export interface McpServersArgumentsV2 {
   setMCPServerEnabled: [serverId: string, input: DesktopMCPServerToggleInput];
   deleteMCPServer: [serverId: string, input: DesktopMCPServerDeleteInput];
   testMCPServer: [serverId: string];
+  getMCPOAuthStatus: [serverId: string];
+  mutateMCPOAuth: [serverId: string, input: DesktopMCPOAuthAction];
 }
 export interface McpServersResultsV2 {
   listMCPServers: DesktopMCPServerSummary[];
@@ -27,6 +31,8 @@ export interface McpServersResultsV2 {
   setMCPServerEnabled: DesktopMCPServerSummary;
   deleteMCPServer: void;
   testMCPServer: DesktopMCPServerTestResult;
+  getMCPOAuthStatus: DesktopMCPOAuthStatus;
+  mutateMCPOAuth: DesktopMCPOAuthStatus;
 }
 export type McpServersMethodV2 = keyof McpServersArgumentsV2;
 export const MCP_SERVERS_METHODS_V2: readonly McpServersMethodV2[] = Object.freeze([
@@ -37,6 +43,8 @@ export const MCP_SERVERS_METHODS_V2: readonly McpServersMethodV2[] = Object.free
   'setMCPServerEnabled',
   'deleteMCPServer',
   'testMCPServer',
+  'getMCPOAuthStatus',
+  'mutateMCPOAuth',
 ]);
 export type McpServersScopeV2 = Readonly<{
   authority: DesktopRuntimeConfig['mode'];
@@ -132,7 +140,7 @@ export function prepareMcpServersInputV2<K extends McpServersMethodV2>(
     throw mcpServersErrorV2('project_mcp_servers_signal_invalid');
   if (input.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const args = freezeMcpServersJsonV2(input.args);
-  const itemMutation = ['updateMCPServer', 'setMCPServerEnabled', 'deleteMCPServer'].includes(
+  const itemMutation = ['updateMCPServer', 'setMCPServerEnabled', 'deleteMCPServer', 'mutateMCPOAuth'].includes(
     method,
   );
   if (!Array.isArray(args) || args.length !== (itemMutation ? 2 : 1))
@@ -140,7 +148,7 @@ export function prepareMcpServersInputV2<K extends McpServersMethodV2>(
   if (method === 'listMCPServers') {
     if (mcpServersIdentifierV2(args[0]) !== projectId)
       throw mcpServersErrorV2('project_mcp_servers_scope_mismatch', 409);
-  } else if (method === 'testMCPServer') mcpServersIdentifierV2(args[0]);
+  } else if (method === 'testMCPServer' || method === 'getMCPOAuthStatus') mcpServersIdentifierV2(args[0]);
   else {
     if (itemMutation) mcpServersIdentifierV2(args[0]);
     const body: unknown = args[itemMutation ? 1 : 0];
@@ -154,7 +162,9 @@ export function prepareMcpServersInputV2<K extends McpServersMethodV2>(
     )
       throw mcpServersErrorV2('local_mcp_revision_required', 428);
     const keys =
-      method === 'provisionMCPServerCredential'
+      method === 'mutateMCPOAuth'
+        ? ['action', 'project_id', 'expected_revision', 'idempotency_key', 'client_id', 'client_metadata_url', 'scopes']
+        : method === 'provisionMCPServerCredential'
         ? [
             'project_id',
             'server_name',
@@ -182,6 +192,14 @@ export function prepareMcpServersInputV2<K extends McpServersMethodV2>(
               ];
     if (Object.keys(body).some((key) => !keys.includes(key)))
       throw mcpServersErrorV2('project_mcp_servers_mutation_fields_invalid');
+    if (method === 'mutateMCPOAuth') {
+      if (!['start', 'cancel', 'disconnect'].includes(String(body.action)) ||
+          (body.scopes !== undefined && (!Array.isArray(body.scopes) || body.scopes.some(scope => typeof scope !== 'string'))))
+        throw mcpServersErrorV2('project_mcp_oauth_request_invalid');
+      for (const key of ['client_id', 'client_metadata_url'])
+        if (body[key] !== undefined && typeof body[key] !== 'string')
+          throw mcpServersErrorV2('project_mcp_oauth_request_invalid');
+    }
     if (method === 'provisionMCPServerCredential') {
       if (
         typeof body.server_name !== 'string' ||

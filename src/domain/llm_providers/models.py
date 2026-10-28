@@ -13,6 +13,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.domain.llm_providers.audio_input import (
+    declared_audio_input_models,
+    validate_audio_input_models,
+)
 from src.domain.llm_providers.security_policy import (
     provider_persistent_auth_supported,
     validate_provider_base_url,
@@ -529,6 +533,12 @@ class _SafeProviderRequestConfig(BaseModel):
     retries: _SafeRetryConfig | None = None
     transport: _SafeTransportConfig | None = None
     embedding: EmbeddingConfig | None = None
+    audio_input_models: list[str] = Field(default_factory=list, max_length=100)
+
+    @field_validator("audio_input_models", mode="before")
+    @classmethod
+    def validate_audio_models(cls, value: object) -> list[str]:
+        return validate_audio_input_models(value)
 
     @field_validator("embedding")
     @classmethod
@@ -1172,6 +1182,8 @@ def _public_provider_response_config(value: object) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
     public: dict[str, Any] = _public_number_fields(value, _PUBLIC_PROVIDER_NUMBER_FIELDS)
+    if "audio_input_models" in value:
+        public["audio_input_models"] = declared_audio_input_models(value)
     region = value.get("region")
     if (
         isinstance(region, str)

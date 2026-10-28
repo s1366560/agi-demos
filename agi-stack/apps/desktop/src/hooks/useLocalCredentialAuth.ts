@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+
 import { useI18n } from '../i18n';
 import {
   DesktopApiClient,
@@ -92,6 +94,9 @@ export function useLocalCredentialAuth(
     refreshRuntime,
     applySectionSideEffects,
   } = params;
+  const cloudApiBaseUrlRef = useRef<string | undefined>(
+    config.mode === 'cloud' ? config.apiBaseUrl : undefined,
+  );
   const login = async (trustedDevice: boolean) => {
     supersedeWorkspaceSsoAttempt();
     const username = loginEmail.trim();
@@ -501,9 +506,14 @@ export function useLocalCredentialAuth(
   const changeLoginMode = (mode: RuntimeMode) => {
     const nextMode: RuntimeMode = mode;
     if (nextMode === configRef.current.mode) return;
+    if (configRef.current.mode === 'cloud') {
+      cloudApiBaseUrlRef.current = configRef.current.apiBaseUrl;
+    }
     setLoginEmail('');
     setLoginPassword('');
-    handleConfigChange(runtimeConfigForLoginMode(configRef.current, nextMode));
+    handleConfigChange(
+      runtimeConfigForLoginMode(configRef.current, nextMode, cloudApiBaseUrlRef.current),
+    );
   };
 
   const useApiKeyManually = () => {

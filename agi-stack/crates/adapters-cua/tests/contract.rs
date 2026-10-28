@@ -1,18 +1,23 @@
 //! Private-pipe protocol regressions. The mock never controls the desktop.
 use agistack_adapters_cua::{
-    CuaCallContext, CuaClient, CuaDispatchSignal, CuaError, CuaToolHost, scope_dispatch_signal,
-    tool_effects, tool_names,
+    scope_dispatch_signal, tool_effects, tool_names, CuaCallContext, CuaClient, CuaDispatchSignal,
+    CuaError, CuaToolHost,
 };
 use agistack_core::ports::ToolHost;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     path::PathBuf,
     sync::{
-        Arc,
         atomic::{AtomicU64, Ordering},
+        Arc,
     },
     time::Duration,
 };
+
+#[path = "contracts/input_generation.rs"]
+mod input_generation;
+#[path = "contracts/audio.rs"]
+mod audio;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Helper {
@@ -36,6 +41,9 @@ impl Helper {
         std::fs::write(&script,prefix.to_owned()+r#"
 import sys, json, struct, os, hmac, hashlib, time, zlib
 OBS=0
+GEN='fixture-generation'
+TARGET=None
+DEFERRED=None
 def png(width,height):
     def chunk(kind,data): return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
     return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,height,8,6,0,0,0))+chunk(b'IDAT',zlib.compress((b'\0'+b'\0'*width*4)*height))+chunk(b'IEND',b'')
@@ -49,6 +57,8 @@ while True:
     if len(header)!=4: break
     request=json.loads(sys.stdin.buffer.read(struct.unpack('<I',header)[0]))
     method=request['method']; params=request['params']; rid=request['id']
+    if MODE in ('target_switch','delayed_observation') and method in ('get_app_state','perform_action') and params.get('input_generation')!=GEN:
+        send({'jsonrpc':'2.0','id':rid,'error':{'code':-32000,'message':'generation changed','data':{'kind':'stale_input_generation'}}});continue
     if method=='initialize':
         if MODE=='stale':
             send({'jsonrpc':'2.0','id':0,'error':{'code':-32001,'message':'stale helper','data':{'kind':'incompatible_client_version','server_api_version':'old'}}})
@@ -59,18 +69,36 @@ while True:
     elif method=='begin_session':
         artifact_root=os.path.join(ROOT,'artifacts')
         os.makedirs(artifact_root,exist_ok=True)
-        result={'session_id':params['session_id'],'artifact_root':artifact_root}
+        result={'session_id':params['session_id'],'artifact_root':artifact_root,'input_mode':params['input_mode'],'input_generation':'fixture-generation'}
+        if MODE=='missing_generation':result.pop('input_generation')
+        if MODE=='wrong_input_mode':result['input_mode']='foreground'
+    elif method=='resume_session':
+        GEN='resumed-generation'
+        result={'ok':True,'input_mode':params['input_mode'],'input_generation':GEN}
+    elif method=='emit_input':
+        for event in params['events']:send({'jsonrpc':'2.0','method':'native_input_telemetry','params':event})
+        result={'ok':True}
     elif method=='perform_action':
         with open(os.path.join(ROOT,'actions'),'a') as f: f.write('executed\n')
         if MODE=='lost_action': os._exit(0)
-        result={'ok':True,'echo':params['action'],'session_id':params['session_id']}
+        result={'ok':True,'echo':params['action'],'session_id':params['session_id'],'input_mode':params['input_mode'],'input_generation':params['input_generation']}
+        if MODE=='action_generation':result['input_generation']='unauthorized-generation'
     elif method=='slow':
         with open(os.path.join(ROOT,'slow_started'),'w') as f: f.write('yes')
         time.sleep(2); result={'old':True}
     elif method=='list_apps': result={'apps':[{'id':'com.example.app','display_name':'Example','is_running':True}]}
     elif method=='get_app_state':
         OBS+=1
-        result={'app':params['app'],'snapshot_id':'observation-1','window_id':'window-1','text':'[0] Button'}
+        result={'app':params['app'],'snapshot_id':'observation-1','window_id':'window-1','text':'[0] Button','input_mode':params['input_mode'],'input_generation':params['input_generation']}
+        if MODE in ('target_switch','delayed_observation'):
+            target=(params['app'],params.get('window_id','window-1'))
+            if TARGET is not None and target!=TARGET:GEN='window-generation-'+str(OBS)
+            TARGET=target
+            result.update(input_generation=GEN,window_id=target[1],snapshot_id='observation-'+str(OBS))
+            if MODE=='delayed_observation' and OBS==2:
+                DEFERRED={'jsonrpc':'2.0','id':rid,'result':result}
+                with open(os.path.join(ROOT,'observation_waiting'),'w') as f:f.write('yes')
+                continue
         if MODE in ('ax_tree','invalid_ax_tree'):
             nodes=[{'element_index':0,'parent_index':None,'role':'frame','name':'Native fixture','description':None,'value':None,'value_redacted':False,'states':['active'],'actions':[],'supports_editable_text':False,'bounds':None},
                    {'element_index':1,'parent_index':0,'role':'password text','name':'Native label','description':None,'value':None,'value_redacted':True,'states':[],'actions':[],'supports_editable_text':True,'bounds':None}]
@@ -90,11 +118,17 @@ while True:
                 icon=os.path.join(ROOT,'artifacts','icon.png')
                 with open(icon,'wb') as f:f.write(png(64,64))
                 result['app_icon']={'url':'file://'+icon,'mime_type':'image/png','width':64,'height':64,'kind':'app_icon'}
+    elif MODE=='audio_contract' and method in ('audio_start','audio_status','audio_stop'):
+        result={'ok':True,'echo':params}
     elif method=='resolve_app': result={'app':'com.example.app','identity_digest':'fixed-code-identity','display_name':'Example'}
+    elif method=='flush_observation':
+        send(DEFERRED);DEFERRED=None;result={'ok':True}
+    elif method=='stop_session' and MODE=='cleanup_error':
+        send({'jsonrpc':'2.0','id':rid,'error':{'code':-32000,'message':'generation changed','data':{'kind':'stale_input_generation'}}});continue
     elif method=='error':
         send({'jsonrpc':'2.0','id':rid,'error':{'code':-32000,'message':'denied','data':{'kind':'permission_required'}}}); continue
     elif method=='notify':
-        context={key:params[key] for key in ('user_id','tenant_id','project_id','device_id','conversation_id','run_id','session_id')}
+        context={key:params[key] for key in ('user_id','tenant_id','project_id','device_id','conversation_id','run_id','session_id','input_mode')}
         if MODE=='foreign_status':context['device_id']='foreign-device'
         send({'jsonrpc':'2.0','method':'native_status' if MODE!='unknown_status' else 'arbitrary_event','params':{'context':context,'phase':'paused','updated_at':1,'user_initiated':True,'user_action':'pause'}})
         result={'ok':True}
@@ -132,6 +166,7 @@ fn context() -> CuaCallContext {
         conversation_id: "conversation".into(),
         run_id: "run".into(),
         session_id: "session".into(),
+        input_mode: agistack_adapters_cua::CuaInputMode::default(),
     }
 }
 
@@ -177,14 +212,12 @@ async fn existing_session_cannot_change_owner_or_device() {
         .unwrap();
     let mut other = context();
     other.device_id = "other-device".into();
-    assert!(
-        client
-            .request_in_session(&other, "perform_action", json!({"action":{"kind":"click"}}))
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("session_owner_mismatch")
-    );
+    assert!(client
+        .request_in_session(&other, "perform_action", json!({"action":{"kind":"click"}}))
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("session_owner_mismatch"));
     assert_eq!(helper.count("actions"), 0);
     client.shutdown().await;
 }
@@ -210,10 +243,8 @@ async fn owned_screenshot_is_typed_media_and_base64_never_enters_text() {
     assert_eq!(result.media.len(), 1);
     assert_eq!(result.media[0].mime_type, "image/png");
     assert!(!result.output_json.contains("base64"));
-    assert!(
-        PathBuf::from(&result.media[0].artifact_path)
-            .starts_with(helper.root.join("artifacts").canonicalize().unwrap())
-    );
+    assert!(PathBuf::from(&result.media[0].artifact_path)
+        .starts_with(helper.root.join("artifacts").canonicalize().unwrap()));
     client.shutdown().await;
 }
 
@@ -223,13 +254,12 @@ async fn escaped_and_symlink_screenshots_fail_closed() {
         let helper = Helper::new(mode);
         let client = Arc::new(helper.client(Duration::from_secs(2)));
         let host = CuaToolHost::new(client.clone()).with_context(context());
-        assert!(
-            host.call_with_content("computer_get_app_state", r#"{"app":"com.example.app"}"#)
-                .await
-                .unwrap_err()
-                .to_string()
-                .contains("artifact_not_owned")
-        );
+        assert!(host
+            .call_with_content("computer_get_app_state", r#"{"app":"com.example.app"}"#)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("artifact_not_owned"));
         client.shutdown().await;
     }
 }
@@ -243,7 +273,7 @@ async fn scoped_handshake_and_action_round_trip() {
         assert!(host.tool_definition(&tool).unwrap().input_schema.is_some());
         assert!(tool_effects().contains_key(tool.as_str()));
     }
-    assert_eq!(tool_names().len(), 26);
+    assert_eq!(tool_names().len(), 27);
     let apps: Value =
         serde_json::from_str(&host.call("computer_list_apps", "{}").await.unwrap()).unwrap();
     assert_eq!(apps.pointer("/apps/0/id"), Some(&json!("com.example.app")));
@@ -318,14 +348,12 @@ async fn cancellation_discards_partial_exchange() {
     assert!(helper.root.join("slow_started").exists());
     task.abort();
     let _ = task.await;
-    assert!(
-        client
-            .request("list_apps", json!({}))
-            .await
-            .unwrap()
-            .get("apps")
-            .is_some()
-    );
+    assert!(client
+        .request("list_apps", json!({}))
+        .await
+        .unwrap()
+        .get("apps")
+        .is_some());
     assert_eq!(helper.count("pids"), 2);
     client.shutdown().await;
 }
@@ -374,27 +402,24 @@ async fn invalid_arguments_fail_before_spawning_or_mutating() {
         json!({"app":"test","snapshot_id":"s","element_index":-1}),
         json!({"app":"test","snapshot_id":"s","x":1,"y":2,"mouse_button":"bogus"}),
     ] {
-        assert!(
-            host.call("computer_click", &input.to_string())
-                .await
-                .is_err()
-        );
+        assert!(host
+            .call("computer_click", &input.to_string())
+            .await
+            .is_err());
     }
-    assert!(
-        host.call(
+    assert!(host
+        .call(
             "computer_scroll",
             &json!({"app":"test","snapshot_id":"s","x":1,"y":2,"pages":1e100}).to_string()
         )
         .await
-        .is_err()
-    );
-    assert!(
-        host.call("computer_get_app_state", r#"{"app":"com.apple.passwords"}"#)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("target_forbidden")
-    );
+        .is_err());
+    assert!(host
+        .call("computer_get_app_state", r#"{"app":"com.apple.passwords"}"#)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("target_forbidden"));
     assert_eq!(helper.count("pids"), 0);
     assert_eq!(helper.count("actions"), 0);
     client.shutdown().await;
@@ -432,14 +457,12 @@ async fn screenshot_coordinates_survive_rebuilt_hosts_and_resized_snapshots() {
     assert_eq!(result["echo"]["x"], 200.0);
     assert_eq!(result["echo"]["y"], 100.0);
     assert!(result["echo"].get("coordinate_space").is_none());
-    assert!(
-        fresh
-            .call("computer_click", &input.to_string())
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("snapshot_missing")
-    );
+    assert!(fresh
+        .call("computer_click", &input.to_string())
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("snapshot_missing"));
     let error = fresh
         .validate_observed_action("computer_click", &input)
         .await
@@ -453,14 +476,12 @@ async fn screenshot_coordinates_survive_rebuilt_hosts_and_resized_snapshots() {
             .unwrap(),
     )
     .unwrap();
-    assert!(
-        fresh
-            .call("computer_click", &input.to_string())
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("snapshot_stale")
-    );
+    assert!(fresh
+        .call("computer_click", &input.to_string())
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("snapshot_stale"));
     let input = json!({"app":"com.example.app","snapshot_id":resized["snapshot_id"],"from_x":400,"from_y":200,"to_x":800,"to_y":600,"coordinate_space":"screenshot"});
     let result: Value = serde_json::from_str(
         &fresh
@@ -487,33 +508,29 @@ async fn coordinate_window_scope_and_stop_invalidate_before_native_input() {
     )
     .unwrap();
     let mut input = json!({"app":"com.example.app","snapshot_id":state["snapshot_id"],"window_id":"other-window","x":1,"y":2});
-    assert!(
-        host.call("computer_click", &input.to_string())
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("snapshot_window_mismatch")
-    );
+    assert!(host
+        .call("computer_click", &input.to_string())
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("snapshot_window_mismatch"));
     let mut other = context();
     other.device_id = "other-device".into();
     input["window_id"] = json!("window-1");
-    assert!(
-        CuaToolHost::new(client.clone())
-            .with_context(other)
-            .call("computer_click", &input.to_string())
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("snapshot_scope_mismatch")
-    );
+    assert!(CuaToolHost::new(client.clone())
+        .with_context(other)
+        .call("computer_click", &input.to_string())
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("snapshot_scope_mismatch"));
     client.stop_session(&context().session_id).await.unwrap();
-    assert!(
-        host.call("computer_click", &input.to_string())
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("snapshot_missing")
-    );
+    assert!(host
+        .call("computer_click", &input.to_string())
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("snapshot_missing"));
     assert_eq!(helper.count("actions"), 0);
     client.shutdown().await;
 }
@@ -587,21 +604,154 @@ async fn native_public_ax_tree_private_fields_are_rejected_before_observation_ca
     let helper = Helper::new("invalid_ax_tree");
     let client = Arc::new(helper.client(Duration::from_secs(2)));
     let host = CuaToolHost::new(client.clone()).with_context(context());
-    assert!(
-        host.call_with_content("computer_get_app_state", r#"{"app":"com.example.app"}"#)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("cua_ax_tree_invalid")
-    );
-    assert!(
-        host.call(
+    assert!(host
+        .call_with_content("computer_get_app_state", r#"{"app":"com.example.app"}"#)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("cua_ax_tree_invalid"));
+    assert!(host
+        .call(
             "computer_click",
             r#"{"app":"com.example.app","snapshot_id":"observation-1","x":1,"y":1}"#
         )
         .await
-        .is_err()
-    );
+        .is_err());
     assert_eq!(helper.count("actions"), 0);
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn input_binding_is_required_and_activation_cannot_escape_background_mode() {
+    for mode in ["missing_generation", "wrong_input_mode"] {
+        let helper = Helper::new(mode);
+        assert!(helper
+            .client(Duration::from_secs(2))
+            .request_in_session(&context(), "list_apps", json!({}))
+            .await
+            .is_err());
+    }
+    let helper = Helper::new("normal");
+    let client = helper.client(Duration::from_secs(2));
+    let error = client
+        .request_in_session(&context(), "activate_app", json!({"app":"fixture"}))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, CuaError::Request { kind, .. } if kind == "background_input_requires_foreground_mode")
+    );
+    assert_eq!(helper.count("pids"), 0);
+    let mut foreground = context();
+    foreground.input_mode = agistack_adapters_cua::CuaInputMode::Foreground;
+    client
+        .request_in_session(&foreground, "activate_app", json!({"app":"fixture"}))
+        .await
+        .unwrap();
+    let error = client
+        .request_in_session(&context(), "list_apps", json!({}))
+        .await
+        .unwrap_err();
+    assert!(matches!(error, CuaError::Request { kind, .. } if kind == "session_owner_mismatch"));
+}
+
+fn input_event(sequence: u64) -> Value {
+    json!({"context":context(),"input_generation":"fixture-generation","sequence":sequence,
+        "updated_at":1.0,"phase":"moving","evidence":"dispatched","target_pid":101,
+        "target_window_id":"window-1","virtual_cursor":{"x":10.0,"y":20.0,"width":100.0,"height":80.0,"window_id":"window-1"},
+        "held_keys":[],"held_buttons":[]})
+}
+
+#[tokio::test]
+async fn input_telemetry_coalesces_without_losing_pause_or_accepting_stale_bindings() {
+    let helper = Helper::new("normal");
+    let client = helper.client(Duration::from_secs(3));
+    let mut input = client.subscribe_input_telemetry();
+    let mut status = client.subscribe_native_status();
+    client
+        .request_in_session(&context(), "list_apps", json!({}))
+        .await
+        .unwrap();
+    let mut events = (1..=1024).map(input_event).collect::<Vec<_>>();
+    let mut foreign = input_event(1025);
+    foreign["context"]["run_id"] = json!("foreign");
+    events.push(foreign);
+    let mut stale = input_event(1026);
+    stale["input_generation"] = json!("old-generation");
+    events.push(stale);
+    events.push(input_event(512));
+    let mut invalid = input_event(1027);
+    invalid["virtual_cursor"]["width"] = json!(-1);
+    events.push(invalid);
+    client
+        .request("emit_input", json!({"events":events}))
+        .await
+        .unwrap();
+    input.changed().await.unwrap();
+    let latest = input.borrow_and_update().clone();
+    assert_eq!(latest.len(), 1);
+    assert_eq!(latest["session"].sequence, 1024);
+    assert_eq!(latest["session"].evidence, "dispatched");
+    client
+        .request_in_session(&context(), "notify", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(status.recv().await.unwrap().phase, "paused");
+    client
+        .request_in_session(&context(), "resume_session", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(
+        client.current_input_generation("session").as_deref(),
+        Some("resumed-generation")
+    );
+    assert!(input.borrow().is_empty());
+    client
+        .request("emit_input", json!({"events":[input_event(2048)]}))
+        .await
+        .unwrap();
+    assert!(input.borrow().is_empty());
+    let mut fresh = input_event(1);
+    fresh["input_generation"] = json!("resumed-generation");
+    client
+        .request("emit_input", json!({"events":[fresh]}))
+        .await
+        .unwrap();
+    assert_eq!(input.borrow()["session"].sequence, 1);
+}
+
+#[test]
+fn model_arguments_cannot_select_input_mode_generation_or_pid() {
+    for field in [
+        "input_mode",
+        "input_generation",
+        "target_pid",
+        "process_id",
+        "_cua_input_mode",
+    ] {
+        let mut input = json!({"app":"com.example.app"});
+        input[field] = json!("forged");
+        assert!(
+            agistack_adapters_cua::validate_tool_input("computer_get_app_state", &input).is_err()
+        );
+    }
+}
+
+#[tokio::test]
+async fn refused_cleanup_closes_the_owned_helper_instead_of_leaving_input_alive() {
+    let helper = Helper::new("cleanup_error");
+    let client = helper.client(Duration::from_secs(2));
+    client
+        .request_in_session(&context(), "list_apps", json!({}))
+        .await
+        .unwrap();
+    assert!(client.stop_session("session").await.is_err());
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !helper.root.join("closed").is_file() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(helper.count("pids"), 1);
     client.shutdown().await;
 }

@@ -300,6 +300,7 @@ export function formatToolResult(result: unknown): string {
  * ToolExecutionCardDisplay - Tool execution with live status
  */
 export interface ToolExecutionCardDisplayProps {
+  display?: { readonly kind?: string; readonly entries?: unknown } | undefined;
   /** Tool name */
   toolName: string;
   /** Execution status */
@@ -635,6 +636,7 @@ function getToolExecutionSummary(
 }
 
 export function ToolExecutionCardDisplay({
+  display,
   toolName,
   status,
   parameters,
@@ -828,6 +830,7 @@ export function ToolExecutionCardDisplay({
             {/* Success Result */}
             {status === 'success' && formattedResult && (
               <PluginToolResultRenderer
+                display={display}
                 toolName={toolName}
                 result={formattedResult}
                 fallback={<ToolResultDisplay result={formattedResult} isError={false} />}

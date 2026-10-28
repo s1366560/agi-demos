@@ -14,11 +14,12 @@ enum NativePermissions {
             if let detail = detail { result["detail"] = detail }
             return result
         }
-        let ax = record(AXIsProcessTrusted() ? "granted" : "denied",
+        let lockedUse = LockedUseCoordinator.shared.probe()
+        let ax = record(lockedUse["accessibility"] as? Bool == true ? "granted" : "denied",
             detail: "The Accessibility API reports granted versus not granted; it cannot distinguish an unrequested grant.")
         let screen = record(CGPreflightScreenCaptureAccess() ? "granted" : "denied",
             detail: "The screen-capture preflight reports granted versus not granted; it cannot distinguish an unrequested grant.")
-        let inputMonitoring = record(CGPreflightListenEventAccess() ? "granted" : "denied",
+        let inputMonitoring = record(lockedUse["input_monitoring"] as? Bool == true ? "granted" : "denied",
             detail: "Input Monitoring is required to distinguish owned injection from local input; this preflight never requests permission.")
         let microphone: String
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
@@ -51,6 +52,6 @@ enum NativePermissions {
         }
         return ["accessibility": ax, "input_monitoring": inputMonitoring, "screen_capture": screen, "microphone": record(microphone),
                 "system_audio": screen, "calendar": record(calendar), "contacts": record(contacts),
-                "messages": record(messages), "locked_use": record("unverified")]
+                "messages": record(messages), "locked_use": LockedUseProbe.permissionRecord(lockedUse)]
     }
 }

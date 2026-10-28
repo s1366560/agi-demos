@@ -35,6 +35,7 @@ export type ToolCallPresentationKind =
   | 'edit'
   | 'check'
   | 'computer_use'
+  | 'repl_output'
   | 'tool';
 
 export type ToolCallDiffStat = {
@@ -1506,7 +1507,8 @@ export function toolCallPresentationKind(pair: ToolCallPair): ToolCallPresentati
       kind === 'command' ||
       kind === 'edit' ||
       kind === 'check' ||
-      kind === 'computer_use'
+      kind === 'computer_use' ||
+      kind === 'repl_output'
     ) {
       return kind;
     }

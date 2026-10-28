@@ -24,15 +24,18 @@ import type {
 import {
   providerAuthMethodSupported,
   providerProbeInputIsValid,
+  providerRequestTimeoutIsValid,
   providerSetupOptions,
   providerValidationAccepted,
   type ProviderSetupOption,
 } from './providerManagementModel';
 import { useModalDialog } from './useModalDialog';
+import { ProviderRequestTimeoutField } from './ProviderRequestTimeoutField';
 
 const AUTH_METHOD_ORDER: LlmProviderAuthMethod[] = ['oauth', 'api_key', 'environment', 'none'];
 
 type AddProviderDialogProps = {
+  allowRequestTimeout?: boolean;
   onClose: () => void;
   onLoadTypes: () => Promise<LlmProviderTypeDescriptor[]>;
   onValidateDraft: (input: LlmProviderProbeInput) => Promise<LlmProviderValidationOutcome>;
@@ -44,6 +47,7 @@ type AddProviderDialogProps = {
 };
 
 export function AddProviderDialog({
+  allowRequestTimeout = false,
   onClose,
   onLoadTypes,
   onValidateDraft,
@@ -60,6 +64,7 @@ export function AddProviderDialog({
   const [environmentVariable, setEnvironmentVariable] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [primaryModel, setPrimaryModel] = useState('');
+  const [requestTimeoutMs, setRequestTimeoutMs] = useState(45_000);
   const [catalog, setCatalog] = useState<LlmProviderModelCatalog | null>(null);
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [validation, setValidation] = useState<LlmProviderValidationOutcome | null>(null);
@@ -155,6 +160,7 @@ export function AddProviderDialog({
       baseUrl: baseUrl.trim().replace(/\/$/, ''),
       primaryModel: primaryModel.trim(),
       allowedModels: [...selectedModels],
+      ...(allowRequestTimeout ? { requestTimeoutMs } : {}),
       active: true,
       ...(authMethod === 'api_key' && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
       ...(authMethod === 'environment' && environmentVariable.trim()
@@ -168,6 +174,8 @@ export function AddProviderDialog({
       environmentVariable,
       name,
       primaryModel,
+      allowRequestTimeout,
+      requestTimeoutMs,
       selectedModels,
       selectedType,
     ],
@@ -465,6 +473,13 @@ export function AddProviderDialog({
                     placeholder="https://api.example.com/v1"
                   />
                 </label>
+                {allowRequestTimeout ? (
+                  <ProviderRequestTimeoutField
+                    value={requestTimeoutMs}
+                    disabled={busy !== null}
+                    onChange={setRequestTimeoutMs}
+                  />
+                ) : null}
                 <button
                   className={`provider-wizard-test ${validationAccepted ? 'success' : ''}`}
                   type="button"
@@ -613,6 +628,7 @@ export function AddProviderDialog({
               type="button"
               disabled={
                 busy !== null ||
+                (allowRequestTimeout && !providerRequestTimeoutIsValid(requestTimeoutMs)) ||
                 (step === 1 && !selectedOptionId) ||
                 (step === 2 && !validationAccepted) ||
                 (step === 3 && selectedModels.size === 0)

@@ -40,23 +40,24 @@ class DeviceRegistry(BridgeStore):
     async def register(
         self, scope: DeviceScope, connection_id: str, definitions: list[dict[str, Any]]
     ) -> None:
-        from src.infrastructure.agent.native_computer_use.contracts import TOOL_NAMES
+        from src.infrastructure.agent.native_computer_use.catalog import validate_tool_definition
 
         identifier(connection_id)
-        if len(definitions) > len(TOOL_NAMES):
+        if len(definitions) > 2048:
             raise DeviceBridgeError("computer_use_invalid_catalog")
         names: set[str] = set()
         for definition in definitions:
             name = definition.get("name")
             schema = definition.get("inputSchema")
             if (
-                name not in TOOL_NAMES
+                not isinstance(name, str)
                 or name in names
                 or not isinstance(schema, dict)
                 or schema.get("type") != "object"
                 or not isinstance(definition.get("description"), str)
             ):
                 raise DeviceBridgeError("computer_use_invalid_catalog")
+            validate_tool_definition(name, schema)
             names.add(name)
             validator(argument_schema(schema))
         if len(encoded(definitions).encode()) > 256 * 1024:

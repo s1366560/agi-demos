@@ -185,3 +185,76 @@
   font-size: 11px;
   color: var(--desktop-red);
 }
+.computer-use-window-preview > .computer-use-virtual-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 21px;
+  pointer-events: none;
+  fill: var(--desktop-accent, #6366f1);
+  stroke: white;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 1px 2px #0008);
+  z-index: 1;
+}
+.computer-use-input-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--desktop-muted);
+}
+.computer-use-held-inputs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.computer-use-held-inputs kbd {
+  color: var(--desktop-text);
+  background: var(--desktop-panel-2);
+  border: 1px solid var(--desktop-border-strong);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: inherit;
+}
+.computer-use-input-mode {
+  margin: 10px 0;
+  min-width: 0;
+}
+.computer-use-activity > .computer-use-input-mode {
+  display: block;
+}
+.computer-use-input-mode label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.computer-use-input-mode select {
+  color: var(--desktop-text);
+  background: var(--desktop-panel-2);
+  border: 1px solid var(--desktop-border-strong);
+  border-radius: 5px;
+  padding: 4px 8px;
+}
+.computer-use-input-mode select:focus-visible {
+  outline: 2px solid var(--desktop-muted);
+  outline-offset: 2px;
+}
+.computer-use-input-mode p {
+  margin: 5px 0;
+  font-size: 12px;
+  color: var(--desktop-muted);
+}
+.computer-use-input-support code {
+  display: block;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.computer-use-session-mode {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--desktop-muted);
+}

@@ -1046,6 +1046,7 @@ pub(crate) struct ProviderCreateRequest {
     is_default: Option<bool>,
     is_enabled: Option<bool>,
     allowed_models: Option<Vec<String>>,
+    audio_input_models: Option<Vec<String>>,
     blocked_models: Option<Vec<String>>,
     pool_weight: Option<f64>,
     pool_enabled: Option<bool>,
@@ -1073,6 +1074,7 @@ struct ProviderProbeRequest {
     is_default: Option<bool>,
     is_enabled: Option<bool>,
     allowed_models: Option<Vec<String>>,
+    audio_input_models: Option<Vec<String>>,
     blocked_models: Option<Vec<String>>,
     pool_weight: Option<f64>,
     pool_enabled: Option<bool>,
@@ -1102,6 +1104,7 @@ pub(crate) struct ProviderUpdateRequest {
     is_default: Option<bool>,
     is_enabled: Option<bool>,
     allowed_models: Option<Vec<String>>,
+    audio_input_models: Option<Vec<String>>,
     blocked_models: Option<Vec<String>>,
     pool_weight: Option<f64>,
     pool_enabled: Option<bool>,
@@ -1264,7 +1267,7 @@ impl ProviderProbeConfig {
         let provider_type = normalize_provider_type(request.provider_type)?;
         validate_persisted_provider_base_url(&provider_type, request.base_url.as_deref())
             .map_err(LlmProvidersApiError::unprocessable)?;
-        let _operation_type = effective_operation_type(&provider_type, request.operation_type)?;
+        let operation_type = effective_operation_type(&provider_type, request.operation_type)?;
         let auth_method = validate_provider_auth_method(
             &provider_type,
             request.auth_method.as_deref(),
@@ -1325,6 +1328,16 @@ impl ProviderProbeConfig {
                 ));
             }
         };
+        crate::provider_audio_declaration::apply(
+            &mut json!({}),
+            request.audio_input_models,
+            &provider_type,
+            &operation_type,
+            request.llm_model.as_deref(),
+            request.allowed_models.as_deref().unwrap_or_default(),
+            request.blocked_models.as_deref().unwrap_or_default(),
+        )
+        .map_err(LlmProvidersApiError::unprocessable)?;
         let llm_model = request.llm_model;
         let _compatibility_fields = (
             request.llm_small_model,
@@ -1729,6 +1742,7 @@ pub(crate) struct ProviderConfigResponse {
     is_default: bool,
     is_enabled: bool,
     allowed_models: Vec<String>,
+    audio_input_models: Vec<String>,
     blocked_models: Vec<String>,
     pool_weight: f64,
     pool_enabled: bool,
@@ -1953,6 +1967,9 @@ fn provider_response_from_record(
             .last_check
             .to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
     });
+    let audio_input_models = crate::provider_audio_declaration::stored(&record.config)
+        .into_iter()
+        .collect();
     ProviderConfigResponse {
         id: record.id,
         tenant_id: Some("default".to_string()),
@@ -1970,6 +1987,7 @@ fn provider_response_from_record(
         is_default: record.is_default,
         is_enabled: record.is_enabled,
         allowed_models: record.allowed_models,
+        audio_input_models,
         blocked_models: record.blocked_models,
         pool_weight: record.pool_weight,
         pool_enabled: record.pool_enabled,
@@ -2938,6 +2956,16 @@ fn provider_create_record(
     });
     validate_model_tier(model_tier.as_deref())?;
     validate_pool_weight(request.pool_weight)?;
+    crate::provider_audio_declaration::apply(
+        &mut config,
+        request.audio_input_models,
+        &provider_type,
+        &operation_type,
+        llm_model.as_deref(),
+        request.allowed_models.as_deref().unwrap_or_default(),
+        request.blocked_models.as_deref().unwrap_or_default(),
+    )
+    .map_err(LlmProvidersApiError::unprocessable)?;
     Ok(LlmProviderCreateRecord {
         name,
         provider_type,
@@ -3229,6 +3257,16 @@ fn provider_update_record(
     });
     validate_model_tier(model_tier.as_deref())?;
     validate_pool_weight(request.pool_weight)?;
+    crate::provider_audio_declaration::apply(
+        &mut config,
+        request.audio_input_models,
+        &provider_type,
+        &operation_type,
+        llm_model.as_deref(),
+        request.allowed_models.as_deref().unwrap_or(&existing.allowed_models),
+        request.blocked_models.as_deref().unwrap_or(&existing.blocked_models),
+    )
+    .map_err(LlmProvidersApiError::unprocessable)?;
     let api_key_plaintext = if provider_type_changed && !provider_requires_api_key(&provider_type) {
         Some(LOCAL_NO_API_KEY_SENTINEL.to_string())
     } else {
@@ -4233,6 +4271,10 @@ impl IntoResponse for LlmProvidersApiError {
 }
 
 #[cfg(test)]
+#[path = "llm_provider_audio_tests.rs"]
+mod audio_tests;
+
+#[cfg(test)]
 mod tests {
     use std::sync::Mutex as StdMutex;
 
@@ -4489,6 +4531,7 @@ mod tests {
             is_default: None,
             is_enabled: None,
             allowed_models: None,
+            audio_input_models: None,
             blocked_models: None,
             pool_weight: None,
             pool_enabled: None,
@@ -6642,6 +6685,7 @@ mod tests {
             is_default: None,
             is_enabled: None,
             allowed_models: None,
+            audio_input_models: None,
             blocked_models: None,
             pool_weight: None,
             pool_enabled: None,
@@ -6669,6 +6713,7 @@ mod tests {
             is_default: None,
             is_enabled: None,
             allowed_models: None,
+            audio_input_models: None,
             blocked_models: None,
             pool_weight: None,
             pool_enabled: None,

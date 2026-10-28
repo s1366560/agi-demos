@@ -150,18 +150,28 @@ class Client:
             ),
             "native-fixture",
         )
+        self.context["input_mode"] = "foreground"
+        self.input_generation = None
         secret = "native-fixture-channel-secret-00000000"
         nonce = "native-fixture-nonce-0000"
         initialized = self.call(
             "initialize",
-            {"client_api_version": "MemstackComputerUseIPC-2", "secret": secret, "nonce": nonce},
+            {"client_api_version": "MemstackComputerUseIPC-3", "secret": secret, "nonce": nonce},
             bound=False,
         )
         assert (
             initialized["proof"]
             == hmac.new(secret.encode(), nonce.encode(), hashlib.sha256).hexdigest()
         )
+        assert initialized["server_api_version"] == "MemstackComputerUseIPC-3"
         self.root = Path(self.call("begin_session", {})["artifact_root"])
+        assert self.input_generation
+        support = self.call("capabilities", {}, bound=False)["input_support"]
+        assert support["background"] == {
+            "supported": False,
+            "reason": "background_input_unsupported",
+        }
+        assert isinstance(support["foreground"]["supported"], bool)
 
     def receive(self, count):
         result = bytearray()
@@ -181,6 +191,9 @@ class Client:
     def call(self, method, params, *, bound=True, expected_error=None):
         if bound:
             params = {**params, **self.context}
+            if method != "begin_session":
+                assert self.input_generation
+                params["input_generation"] = self.input_generation
         request_id = self.index
         self.index += 1
         body = json.dumps(
@@ -196,7 +209,12 @@ class Client:
             assert response["error"]["data"]["kind"] == expected_error, response
             return response
         assert "error" not in response, response
-        return response["result"]
+        result = response["result"]
+        if bound and "input_generation" in result:
+            assert result["input_mode"] == self.context["input_mode"]
+            assert isinstance(result["input_generation"], str) and result["input_generation"]
+            self.input_generation = result["input_generation"]
+        return result
 
     def close(self):
         try:
