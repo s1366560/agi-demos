@@ -7,7 +7,7 @@ use memstack_workspace_service_api::{
     WorkspaceScope,
 };
 use memstack_workspace_store::{
-    TaskSessionPolicyWrite, TaskSessionStore, TaskSessionStoreError, TaskSessionWorkspaceCreate,
+    TaskSessionPolicyWrite, TaskSessionReplay, TaskSessionStore, TaskSessionStoreError, TaskSessionWorkspaceCreate,
     TaskSessionWrite, WorkspacePolicyStore, WorkspacePolicyStoreError, WorkspaceProfileStore,
     WorkspaceProfileStoreError,
 };
@@ -191,6 +191,23 @@ impl<'a> CreateTaskSessionService<'a> {
     ) -> Result<CreateTaskSessionOutcome, CreateTaskSessionError> {
         validate_input(input)?;
         let scope = scope(input)?;
+        let payload_hash = canonical_hash(input)?;
+        if let Some(outcome) = TaskSessionStore::new(self.db, self.flavor)
+            .read_authorized_replay(&TaskSessionReplay {
+                tenant_id: &input.context.tenant_id,
+                project_id: &input.context.project_id,
+                workspace_id: scope.workspace_id().as_str(),
+                actor_id: &input.context.actor_id,
+                actor_is_superuser: input.context.actor_is_superuser,
+                idempotency_key: &input.context.idempotency_key,
+                payload_hash: &payload_hash,
+            }).await? {
+            return Ok(CreateTaskSessionOutcome {
+                receipt_id: outcome.receipt_id,
+                response: outcome.response,
+                replayed: outcome.replayed,
+            });
+        }
         let profile_store = WorkspaceProfileStore::new(self.db, self.flavor);
         let policy_store = WorkspacePolicyStore::new(self.db, self.flavor);
         let (workspace_create, workspace, expected_authority_revision) = match &input.workspace {
@@ -292,7 +309,6 @@ impl<'a> CreateTaskSessionService<'a> {
             "policy": policy_response,
             "capability_version": CAPABILITY_VERSION,
         });
-        let payload_hash = canonical_hash(input)?;
         let receipt_id = deterministic_id("receipt", input);
         let write = TaskSessionWrite {
             tenant_id: input.context.tenant_id.clone(),

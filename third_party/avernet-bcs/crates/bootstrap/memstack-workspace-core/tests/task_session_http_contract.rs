@@ -221,6 +221,19 @@ async fn task_session_create_is_atomic_and_replay_safe() -> Result<(), Box<dyn E
         serde_json::from_slice(&to_bytes(existing.into_body(), usize::MAX).await?)?;
     assert_eq!(existing["workspace"]["id"], "workspace-task-session-1");
     assert_eq!(existing["initial_message"]["id"], "message-task-session-2");
+    assert_eq!(existing["policy"]["revision"], 2);
+    let replay = workspace_router(state.clone())
+        .oneshot(task_session_request_for_existing("Follow-up objective")?).await?;
+    assert_eq!(replay.status(), StatusCode::OK);
+    let replay: Value = serde_json::from_slice(&to_bytes(replay.into_body(), usize::MAX).await?)?;
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(replay["receipt_id"], existing["receipt_id"]);
+    assert_eq!(replay["policy"], existing["policy"]);
+    let conflict = workspace_router(state.clone())
+        .oneshot(task_session_request_for_existing("Changed follow-up")?).await?;
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    let conflict: Value = serde_json::from_slice(&to_bytes(conflict.into_body(), usize::MAX).await?)?;
+    assert_eq!(conflict["code"], "TASK_SESSION_IDEMPOTENCY_CONFLICT");
     assert_eq!(table_count(db.as_ref(), "workspace_profiles").await?, 1);
     assert_eq!(table_count(db.as_ref(), "bcs_messages").await?, 2);
     assert_eq!(
@@ -229,7 +242,7 @@ async fn task_session_create_is_atomic_and_replay_safe() -> Result<(), Box<dyn E
     );
     assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 4);
 
-    let conflict = workspace_router(state)
+    let conflict = workspace_router(state.clone())
         .oneshot(task_session_request("Changed objective")?)
         .await?;
     assert_eq!(conflict.status(), StatusCode::CONFLICT);
@@ -241,6 +254,12 @@ async fn task_session_create_is_atomic_and_replay_safe() -> Result<(), Box<dyn E
         table_count(db.as_ref(), "workspace_task_receipts").await?,
         2
     );
+    db.execute(DbStatement::new(
+        "UPDATE workspace_profiles SET deleted_at = CURRENT_TIMESTAMP WHERE workspace_id = 'workspace-task-session-1'",
+    )).await?;
+    let denied = workspace_router(state)
+        .oneshot(task_session_request_for_existing("Follow-up objective")?).await?;
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
     Ok(())
 }
 
@@ -345,7 +364,12 @@ fn task_session_request_for_existing(content: &str) -> Result<Request<Body>, Box
                     "content": content,
                     "context_items": []
                 },
-                "workspace_policy": null,
+                "workspace_policy": {
+                    "expected_revision": 1,
+                    "route": {"provider_id": "provider-1", "model_id": "model-1"},
+                    "reasoning_effort": "medium",
+                    "permission_mode": "ask"
+                },
                 "capability_mode": "work"
             })
             .to_string(),

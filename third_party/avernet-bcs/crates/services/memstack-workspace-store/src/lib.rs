@@ -146,7 +146,7 @@ pub use task_dispatch::{
     WorkspaceTaskDispatchClaim, WorkspaceTaskDispatchFailureOutcome, WorkspaceTaskDispatchWrite,
 };
 pub use task_session::{
-    TaskSessionPolicyWrite, TaskSessionStore, TaskSessionStoreError, TaskSessionWorkspaceCreate,
+    TaskSessionPolicyWrite, TaskSessionReplay, TaskSessionStore, TaskSessionStoreError, TaskSessionWorkspaceCreate,
     TaskSessionWrite, TaskSessionWriteOutcome,
 };
 pub use topology::{

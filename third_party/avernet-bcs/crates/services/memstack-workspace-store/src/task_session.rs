@@ -54,6 +54,17 @@ pub struct TaskSessionWrite {
     pub policy: Option<TaskSessionPolicyWrite>,
 }
 
+/// Authenticated identity and immutable payload used before mutation preconditions.
+pub struct TaskSessionReplay<'a> {
+    pub tenant_id: &'a str,
+    pub project_id: &'a str,
+    pub workspace_id: &'a str,
+    pub actor_id: &'a str,
+    pub actor_is_superuser: bool,
+    pub idempotency_key: &'a str,
+    pub payload_hash: &'a str,
+}
+
 /// Committed or replayed Core task-session result.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TaskSessionWriteOutcome {
@@ -100,6 +111,22 @@ impl<'a> TaskSessionStore<'a> {
         Self { db, flavor }
     }
 
+    /// Read an exact committed response while rechecking current Workspace access.
+    ///
+    /// # Errors
+    /// Returns access denial, payload conflict, or a persistence failure.
+    pub async fn read_authorized_replay(
+        &self,
+        replay: &TaskSessionReplay<'_>,
+    ) -> Result<Option<TaskSessionWriteOutcome>, TaskSessionStoreError> {
+        let rows = self.db.query(receipt_lookup_identity(self.flavor, replay)).await?;
+        let Some(row) = rows.first() else { return Ok(None); };
+        if self.db.query(workspace_access_identity(self.flavor, replay, true)).await?.len() != 1 {
+            return Err(TaskSessionStoreError::AccessDenied);
+        }
+        outcome_from_row(row, replay.payload_hash, true).map(Some)
+    }
+
     /// Commit Workspace/Profile/Policy/Message/receipt/outbox state once, or replay it.
     ///
     /// # Errors
@@ -140,10 +167,7 @@ impl<'a> TaskSessionStore<'a> {
         &self,
         write: &TaskSessionWrite,
     ) -> Result<Option<TaskSessionWriteOutcome>, TaskSessionStoreError> {
-        let rows = self.db.query(receipt_lookup(self.flavor, write)).await?;
-        rows.first()
-            .map(|row| outcome_from_row(row, &write.payload_hash, true))
-            .transpose()
+        self.read_authorized_replay(&replay_identity(write)).await
     }
 }
 
@@ -304,15 +328,28 @@ fn workspace_absent(
         .build()
 }
 
+fn replay_identity(write: &TaskSessionWrite) -> TaskSessionReplay<'_> {
+    TaskSessionReplay {
+        tenant_id: &write.tenant_id, project_id: &write.project_id,
+        workspace_id: &write.workspace_id, actor_id: &write.actor_id,
+        actor_is_superuser: write.actor_is_superuser,
+        idempotency_key: &write.idempotency_key, payload_hash: &write.payload_hash,
+    }
+}
+
 fn workspace_access(flavor: DbSqlFlavor, write: &TaskSessionWrite, manager: bool) -> DbStatement {
+    workspace_access_identity(flavor, &replay_identity(write), manager)
+}
+
+fn workspace_access_identity(flavor: DbSqlFlavor, write: &TaskSessionReplay<'_>, manager: bool) -> DbStatement {
     if write.actor_is_superuser {
         return DbStatementBuilder::new(flavor)
             .push_static("SELECT workspace_id FROM workspace_profiles WHERE tenant_id = ")
-            .bind(write.tenant_id.as_str())
+            .bind(write.tenant_id)
             .push_static(" AND project_id = ")
-            .bind(write.project_id.as_str())
+            .bind(write.project_id)
             .push_static(" AND workspace_id = ")
-            .bind(write.workspace_id.as_str())
+            .bind(write.workspace_id)
             .push_static(" AND deleted_at IS NULL")
             .build();
     }
@@ -328,16 +365,16 @@ fn workspace_access(flavor: DbSqlFlavor, write: &TaskSessionWrite, manager: bool
     };
     DbStatementBuilder::new(flavor)
         .push_static("SELECT p.workspace_id FROM workspace_profiles p WHERE p.tenant_id = ")
-        .bind(write.tenant_id.as_str())
-        .push_static(" AND p.project_id = ").bind(write.project_id.as_str())
-        .push_static(" AND p.workspace_id = ").bind(write.workspace_id.as_str())
+        .bind(write.tenant_id)
+        .push_static(" AND p.project_id = ").bind(write.project_id)
+        .push_static(" AND p.workspace_id = ").bind(write.workspace_id)
         .push_static(" AND p.deleted_at IS NULL AND (p.created_by = ")
-        .bind(write.actor_id.as_str())
+        .bind(write.actor_id)
         .push_static(" OR EXISTS (SELECT 1 FROM workspace_members m WHERE m.tenant_id = p.tenant_id AND m.project_id = p.project_id AND m.workspace_id = p.workspace_id AND m.user_id = ")
-        .bind(write.actor_id.as_str())
+        .bind(write.actor_id)
         .push_static(workspace_roles)
         .push_static(") OR EXISTS (SELECT 1 FROM project_principal_memberships pm WHERE pm.tenant_id = p.tenant_id AND pm.project_id = p.project_id AND pm.user_id = ")
-        .bind(write.actor_id.as_str())
+        .bind(write.actor_id)
         .push_static(" AND pm.is_active = TRUE")
         .push_static(project_roles)
         .push_static("))")
@@ -529,12 +566,16 @@ fn receipt_insert(
 }
 
 fn receipt_lookup(flavor: DbSqlFlavor, write: &TaskSessionWrite) -> DbStatement {
+    receipt_lookup_identity(flavor, &replay_identity(write))
+}
+
+fn receipt_lookup_identity(flavor: DbSqlFlavor, write: &TaskSessionReplay<'_>) -> DbStatement {
     DbStatementBuilder::new(flavor)
         .push_static("SELECT receipt_id, payload_hash, committed_revision, result_json FROM workspace_task_receipts WHERE tenant_id = ")
-        .bind(write.tenant_id.as_str()).push_static(" AND project_id = ")
-        .bind(write.project_id.as_str()).push_static(" AND actor_id = ")
-        .bind(write.actor_id.as_str()).push_static(" AND idempotency_key = ")
-        .bind(write.idempotency_key.as_str()).push_static(" AND action = 'create_task_session'").build()
+        .bind(write.tenant_id).push_static(" AND project_id = ")
+        .bind(write.project_id).push_static(" AND actor_id = ")
+        .bind(write.actor_id).push_static(" AND idempotency_key = ")
+        .bind(write.idempotency_key).push_static(" AND action = 'create_task_session'").build()
 }
 
 fn outcome_from_results(
