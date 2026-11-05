@@ -7,6 +7,12 @@ impl Connection {
         value: &Value,
         native_status: &broadcast::Sender<crate::CuaNativeStatus>,
     ) -> bool {
+        if value["method"] == "audio_session_pcm" {
+            return value["jsonrpc"] == "2.0" && self.audio_pcm_update(&value["params"]);
+        }
+        if value["method"] == "audio_session_updated" {
+            return value["jsonrpc"] == "2.0" && self.audio_session_update(&value["params"]);
+        }
         if value["jsonrpc"] == "2.0" && value["method"] == "native_input_telemetry" {
             // Presentation is lossy and never blocks or invalidates lifecycle receipts.
             if let Ok(event) =

@@ -19,6 +19,13 @@ pub(super) struct Leases {
     status: Mutex<Option<Value>>,
 }
 impl Leases {
+    pub(super) fn invalidate(&self, session_id: &str) -> Option<String> {
+        let active = self.active.lock().expect("locked-use leases");
+        active.get(session_id).map(|(generation, live)| {
+            live.store(false, Ordering::SeqCst);
+            generation.clone()
+        })
+    }
     pub(super) fn status(&self) -> Option<Value> {
         let mut status = self.status.lock().ok()?.clone()?;
         // Device setup is shared, but another conversation's run identity is not.
@@ -208,6 +215,41 @@ pub(super) async fn probe(state: &LocalRuntimeState) -> Result<Value, String> {
     Ok(status)
 }
 
+pub(super) async fn release(
+    state: &LocalRuntimeState,
+    session: &Session,
+    generation: &str,
+    _reason: &str,
+) {
+    session.resources.clear_continuity();
+    if let Ok(client) = state.computer_use.client() {
+        let result = tokio::time::timeout(
+            Duration::from_secs(2),
+            client.request_in_session(
+                &session.context,
+                "locked_use_disable",
+                json!({"run_id":session.context.run_id,"generation":generation}),
+            ),
+        )
+        .await;
+        if let Ok(Ok(status)) = result {
+            state.computer_use.locked_use.record_status(&status);
+        }
+    }
+    let mut active = state
+        .computer_use
+        .locked_use
+        .active
+        .lock()
+        .expect("locked-use leases");
+    if active
+        .get(&session.context.session_id)
+        .is_some_and(|(issued, _)| issued == generation)
+    {
+        active.remove(&session.context.session_id);
+    }
+}
+
 /// Administrator setup is only exposed in device management, never as a model tool.
 pub(super) async fn manage(
     state: &Arc<LocalRuntimeState>,
@@ -281,6 +323,7 @@ pub(super) async fn call(
         .as_bool()
         .ok_or_else(|| CoreError::Tool("cua_locked_use_enabled_required".into()))?;
     if !enabled {
+        session.resources.clear_continuity();
         let generation = state
             .computer_use
             .locked_use
@@ -306,7 +349,13 @@ pub(super) async fn call(
                 .to_string(),
         ));
     }
-    let cell = crate::local_runtime::execution_authority::current_cell_lifetime();
+    // A completed cell cannot acquire authority, but a live run owns an acquired
+    // lease across ordinary cell returns and model requests.
+    if crate::local_runtime::execution_authority::current_cell_lifetime()
+        .is_some_and(|live| !live.load(Ordering::SeqCst))
+    {
+        return Err(CoreError::Tool("cua_locked_use_run_inactive".into()));
+    }
     let run = if session.cloud.is_none() {
         Some(
             state
@@ -318,7 +367,22 @@ pub(super) async fn call(
     } else {
         None
     };
-    if !current(state, session, native, factory, run.as_ref(), cell.as_ref()) {
+    let mut continuity = match native {
+        NativeIdentity::Cloud(lease) => Some(
+            cloud::locked_continuity::Continuity::acquire(state, session, lease)
+                .await
+                .map_err(CoreError::Tool)?,
+        ),
+        NativeIdentity::Local(_) => None,
+    };
+    if !current(
+        state,
+        session,
+        native,
+        factory,
+        run.as_ref(),
+        continuity.as_ref(),
+    ) {
         return Err(CoreError::Tool("cua_locked_use_run_inactive".into()));
     }
     let generation = Uuid::new_v4().to_string();
@@ -332,21 +396,22 @@ pub(super) async fn call(
             .expect("locked-use leases");
         // Use the same active -> display lock order as snapshot projection.
         // Every new attempt replaces old display attribution, including rejection.
+        if !leases.is_empty() {
+            return Err(CoreError::Tool("cua_locked_use_device_busy".into()));
+        }
         state.computer_use.locked_use.record_issued(
             &session.context.session_id,
             &session.context.run_id,
             &generation,
             &session.stopped,
         );
-        if leases.contains_key(&session.context.session_id) {
-            return Err(CoreError::Tool("cua_locked_use_already_active".into()));
-        }
         leases.insert(
             session.context.session_id.clone(),
             (generation.clone(), live.clone()),
         );
     }
-    let params = json!({"run_id":session.context.run_id,"generation":generation,"ttl_ms":5000});
+    let mut params = json!({"run_id":session.context.run_id,"generation":generation,
+        "ttl_ms":continuity.as_ref().map_or(Ok(5000), |value| value.ttl_ms()).map_err(CoreError::Tool)?});
     let result = client
         .request_in_session(&session.context, "locked_use_enable", params.clone())
         .await;
@@ -368,6 +433,24 @@ pub(super) async fn call(
             return Err(CoreError::Tool(error.to_string()));
         }
     };
+    if !live.load(Ordering::SeqCst)
+        || !current(
+            state,
+            session,
+            native,
+            factory,
+            run.as_ref(),
+            continuity.as_ref(),
+        )
+    {
+        release(state, session, &generation, "enable_revoked").await;
+        return Err(CoreError::Tool("cua_locked_use_run_inactive".into()));
+    }
+    if let Some(continuity) = &continuity {
+        session
+            .resources
+            .renew_continuity(continuity.resource_deadline());
+    }
     state.computer_use.locked_use.record_status(&result);
     let output = state.computer_use.locked_use.caller_status(
         &session.context.session_id,
@@ -396,10 +479,23 @@ pub(super) async fn call(
                     &native,
                     &factory,
                     run.as_ref(),
-                    cell.as_ref(),
+                    continuity.as_ref(),
                 )
             {
                 break;
+            }
+            if let Some(continuity) = &mut continuity {
+                if continuity.renew(&state, &session).await.is_err() || !live.load(Ordering::SeqCst)
+                {
+                    break;
+                }
+                session
+                    .resources
+                    .renew_continuity(continuity.resource_deadline());
+                match continuity.ttl_ms() {
+                    Ok(ttl) => params["ttl_ms"] = json!(ttl),
+                    Err(_) => break,
+                }
             }
             let renewal = tokio::time::timeout(
                 Duration::from_millis(900),
@@ -415,6 +511,7 @@ pub(super) async fn call(
             }
         }
         live.store(false, Ordering::SeqCst);
+        session.resources.clear_continuity();
         let disabled = tokio::time::timeout(
             Duration::from_secs(2),
             client.request_in_session(&session.context, "locked_use_disable", params),
@@ -455,12 +552,14 @@ fn current(
     native: &NativeIdentity,
     factory: &ActivePlatformPluginGenerationLeaseV2,
     expected: Option<&DesktopRun>,
-    cell: Option<&Arc<AtomicBool>>,
+    continuity: Option<&cloud::locked_continuity::Continuity>,
 ) -> bool {
     if session.stopped.load(Ordering::SeqCst)
         || session.paused.load(Ordering::SeqCst)
-        || !native.current(state)
-        || cell.is_some_and(|live| !live.load(Ordering::SeqCst))
+        || !continuity.map_or_else(
+            || native.current(state),
+            |value| value.current(state, session),
+        )
         || !cloud::factory_lease(state, &session.owner)
             .is_ok_and(|current| current.descriptor() == factory.descriptor())
     {
@@ -574,15 +673,13 @@ mod tests {
         assert_eq!(enabled["instance"]["locked_use"], true);
         assert_eq!(enabled["locked_use"]["enabled"], false);
         let before = helper.requests().len();
-        assert!(
-            api::operation(
-                &state,
-                &owner,
-                operation(json!({"action":"locked_use_uninstall","expected_revision":0}))
-            )
-            .await
-            .is_err()
-        );
+        assert!(api::operation(
+            &state,
+            &owner,
+            operation(json!({"action":"locked_use_uninstall","expected_revision":0}))
+        )
+        .await
+        .is_err());
         assert_eq!(helper.requests().len(), before);
         let removed = api::operation(
             &state,

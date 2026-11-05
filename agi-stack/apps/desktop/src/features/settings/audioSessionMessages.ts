@@ -1,0 +1,28 @@
+export const audioSessionEnUS: Record<string, string> = {
+  'audio.title': 'Meeting recordings',
+  'audio.description': 'Record for up to eight hours. Meetings continue when the agent finishes or you change screens. Stop at any time from the menu bar.',
+  'audio.private': 'Original audio stays on this device. A selected speech service receives audio for transcription; workspace audio synchronization is off.',
+  'audio.start': 'Start meeting', 'audio.pause': 'Pause', 'audio.resume': 'Resume', 'audio.stop': 'Stop meeting',
+  'audio.source': 'Audio source', 'audio.provider': 'Speech service', 'audio.recordOnly': 'Record only',
+  'audio.configure': 'Configure speech service', 'audio.appId': 'Speech application ID', 'audio.token': 'Speech access token',
+  'audio.saveProfile': 'Save to encrypted vault', 'audio.transcript': 'Transcript', 'audio.emptyTranscript': 'No transcript yet.',
+  'audio.summary': 'Meeting summary', 'audio.segments': '{count} audio segments saved locally',
+  'audio.state.starting': 'Starting', 'audio.state.recording': 'Recording', 'audio.state.paused': 'Paused',
+  'audio.state.interrupted': 'Interrupted — resume when ready', 'audio.state.stopped': 'Stopped',
+  'audio.state.completed': 'Completed', 'audio.state.failed': 'Failed', 'audio.failed': 'The audio operation could not finish.',
+  'audio.retry': 'Retry transcription',
+};
+export const audioSessionZhCN: Record<string, string> = {
+  'audio.title': '会议录音',
+  'audio.description': '最长录制八小时。智能体结束或切换界面后会议继续，可随时从菜单栏停止。',
+  'audio.private': '原始音频保存在本机。选择的语音服务会接收音频进行转写；默认不向工作区同步音频。',
+  'audio.start': '开始会议', 'audio.pause': '暂停', 'audio.resume': '继续录制', 'audio.stop': '停止会议',
+  'audio.source': '音频来源', 'audio.provider': '语音服务', 'audio.recordOnly': '仅录音',
+  'audio.configure': '配置语音服务', 'audio.appId': '语音应用 ID', 'audio.token': '语音访问令牌',
+  'audio.saveProfile': '保存至加密凭据库', 'audio.transcript': '转写', 'audio.emptyTranscript': '暂无转写。',
+  'audio.summary': '会议摘要', 'audio.segments': '已在本机保存 {count} 个音频片段',
+  'audio.state.starting': '正在开始', 'audio.state.recording': '正在录音', 'audio.state.paused': '已暂停',
+  'audio.state.interrupted': '录音已中断，可手动继续', 'audio.state.stopped': '已停止',
+  'audio.state.completed': '已完成', 'audio.state.failed': '失败', 'audio.failed': '音频操作未能完成。',
+  'audio.retry': '重试转写',
+};

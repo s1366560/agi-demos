@@ -1,3 +1,4 @@
+import { useBrowserContext } from './features/browser/useBrowserContext';
 import { TimelineInspectionProvider } from './features/session/TimelineInspectionContext';
 import { ComputerUseDeviceProvider, ComputerUseActivity } from './features/settings/ComputerUseDeviceProvider';
 import { DESKTOP_NAVIGATION_METADATA } from './features/navigation/desktopCanonicalNavigationCatalog';
@@ -543,6 +544,10 @@ import {
   supersedeWorkspaceConversationRequests,
   workspaceTreeRefreshFailed,
 } from './features/workspace/workspaceTreeModel';
+import {
+  selectRuntimeWorkspaceAfterCatalog,
+  workspaceCatalogFailureAllowsUnboundRuntime,
+} from './features/workspace/runtimeWorkspaceCatalogAdmission';
 import {
   readWorkspaceSelectionPreference,
   writeWorkspaceSelectionPreference,
@@ -1678,6 +1683,26 @@ export function App() {
       ? agentConversationSession.conversation
       : null;
   const scopedConversationId = scopedConversation?.id ?? '';
+  const scopedConversationTenantId = scopedConversation?.tenant_id ?? '';
+  const scopedConversationProjectId = scopedConversation?.project_id ?? '';
+  const scopedConversationWorkspaceId = scopedConversation?.workspace_id ?? null;
+  const sessionProjectionConversationIdentity = useMemo(
+    () =>
+      scopedConversationId
+        ? Object.freeze({
+            id: scopedConversationId,
+            tenant_id: scopedConversationTenantId,
+            project_id: scopedConversationProjectId,
+            workspace_id: scopedConversationWorkspaceId,
+          })
+        : null,
+    [
+      scopedConversationId,
+      scopedConversationTenantId,
+      scopedConversationProjectId,
+      scopedConversationWorkspaceId,
+    ],
+  );
   const rightPanelScope = JSON.stringify([agentConversationScopeKey(config), scopedConversationId]);
   rightPanels.scopeRef.current = rightPanelScope;
   const rightPanelState = rightPanels.sessions[rightPanelScope] ?? EMPTY_WORK_PANEL;
@@ -2238,7 +2263,7 @@ export function App() {
     setSessionProjectionRefreshRevision((revision) => revision + 1);
   }, [scopedConversationId]);
   useEffect(() => {
-    if (!scopedConversation) {
+    if (!sessionProjectionConversationIdentity) {
       sessionProjectionRequestRef.current += 1;
       setSessionProjectionState(emptySessionProjectionState);
       setSessionDisplayProjection(null);
@@ -2261,7 +2286,7 @@ export function App() {
       .then(() =>
         desktopSessionProjectionOperationsV2.getConversationSession({
           config: requestConfig,
-          conversation: scopedConversation,
+          conversation: sessionProjectionConversationIdentity,
           signal: controller.signal,
         }),
       )
@@ -2325,8 +2350,16 @@ export function App() {
       });
     return () => controller.abort();
   }, [
+    config.apiBaseUrl,
+    config.apiKey,
+    config.localApiToken,
+    config.mode,
+    config.projectId,
+    config.tenantId,
+    config.workspaceId,
+    desktopRendererGenerationV2.actions,
     desktopSessionProjectionOperationsV2,
-    scopedConversation,
+    sessionProjectionConversationIdentity,
     scopedConversationId,
     sessionProjectionRefreshRevision,
   ]);
@@ -3557,21 +3590,27 @@ export function App() {
                     workspaceId: '',
                   },
                 });
-              return { project, workspaces, error: null };
+              return { project, workspaces, error: null, failure: null };
             } catch (caught) {
               return {
                 project,
                 workspaces: [] as WorkspaceSummary[],
                 error: formatError(caught),
+                failure: caught,
               };
             }
           }),
         );
         if (!contextIsCurrent()) return false;
-        const selectedProjectError = workspaceResults.find(
+        const selectedProjectCatalog = workspaceResults.find(
           (result) => result.project.id === resolvedProjectId,
-        )?.error;
-        if (selectedProjectError) {
+        );
+        const selectedProjectError = selectedProjectCatalog?.error;
+        const workspaceCatalogUnavailable = Boolean(
+          selectedProjectError &&
+          workspaceCatalogFailureAllowsUnboundRuntime(runtimeConfig, selectedProjectCatalog?.failure),
+        );
+        if (selectedProjectError && !workspaceCatalogUnavailable) {
           throw new Error(selectedProjectError);
         }
 
@@ -3586,14 +3625,18 @@ export function App() {
         );
         const workspaces = workspaceResults.flatMap((result) => result.workspaces);
         const projectWorkspaces = workspacesByProject[resolvedProjectId] ?? [];
-        const workspaceId = resolveRuntimeWorkspaceId(
-          runtimeConfig.workspaceId,
-          resolvedProjectId,
-          projectWorkspaces,
-          agentConversationSessionRef.current?.conversation ?? null,
-          readWorkspaceSelectionPreference(
-            { ...runtimeConfig, tenantId: resolvedProject.tenant_id, projectId: resolvedProjectId },
-            selectionUserId,
+        const workspaceId = selectRuntimeWorkspaceAfterCatalog(
+          runtimeConfig,
+          selectedProjectCatalog?.failure,
+          () => resolveRuntimeWorkspaceId(
+            runtimeConfig.workspaceId,
+            resolvedProjectId,
+            projectWorkspaces,
+            agentConversationSessionRef.current?.conversation ?? null,
+            readWorkspaceSelectionPreference(
+              { ...runtimeConfig, tenantId: resolvedProject.tenant_id, projectId: resolvedProjectId },
+              selectionUserId,
+            ),
           ),
         );
         const nextExpandedWorkspaceIds = reconcileExpandedWorkspaceIds(
@@ -3788,6 +3831,12 @@ export function App() {
               result.requestGeneration,
             ),
         );
+        const unboundCatalogError = currentConversationResults.find(
+          (result) => result.workspaceId === UNBOUND_CONVERSATIONS_KEY,
+        )?.error;
+        if (workspaceCatalogUnavailable && unboundCatalogError) {
+          throw new Error(unboundCatalogError);
+        }
 
         if (!contextIsCurrent()) return false;
         const autonomyAttentionActorId = authRef.current.user?.user_id.trim() ?? '';
@@ -5161,6 +5210,7 @@ export function App() {
     onOpenEntry: (entry) => openMyWorkSessionRef.current(entry.item),
   });
   const selectedConversationId = selectedConversation?.id ?? null;
+  useBrowserContext(config, selectedConversationId, auth.status === 'signed_in' || auth.status === 'manual');
   // 打开会话即视为已读该会话的收件箱条目(硬验收:每个未读信号都可在应用内消除)。
   useEffect(() => {
     if (selectedConversationId) {

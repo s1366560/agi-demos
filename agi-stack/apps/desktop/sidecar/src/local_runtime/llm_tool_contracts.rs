@@ -113,8 +113,12 @@ impl LlmPort for FailoverLlm {
                 on_text(delta);
             }
         };
+        let audio_required = Self::requires_audio(transcript);
         let mut last_error = None;
         for candidate in &self.candidates {
+            if audio_required && !candidate.supports_audio_input() {
+                continue;
+            }
             let result = candidate
                 .decide_with_tools_stream(goal, round, transcript, tools, &forward)
                 .await;
@@ -125,9 +129,7 @@ impl LlmPort for FailoverLlm {
                 Err(error) => last_error = Some(error),
             }
         }
-        Err(last_error.unwrap_or_else(|| {
-            CoreError::Llm("model_unconfigured: no usable LLM routing targets".to_string())
-        }))
+        Err(last_error.unwrap_or_else(|| Self::unavailable_error(audio_required)))
     }
 
     async fn decide_with_tools(
@@ -137,7 +139,7 @@ impl LlmPort for FailoverLlm {
         transcript: &[TranscriptEntry],
         tools: &[agistack_core::ports::ToolDefinition],
     ) -> CoreResult<AgentAction> {
-        self.attempt(|candidate| async move {
+        self.attempt_with_media(Self::requires_audio(transcript), |candidate| async move {
             candidate
                 .decide_with_tools(goal, round, transcript, tools)
                 .await
@@ -152,7 +154,7 @@ impl LlmPort for FailoverLlm {
         transcript: &[TranscriptEntry],
         available_tools: &[String],
     ) -> CoreResult<AgentAction> {
-        self.attempt(|candidate| async move {
+        self.attempt_with_media(Self::requires_audio(transcript), |candidate| async move {
             candidate
                 .decide(goal, round, transcript, available_tools)
                 .await

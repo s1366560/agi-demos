@@ -14,6 +14,7 @@ function fixture(reply, platform = 'darwin') {
     rpc: async (method, params) => {
       assert.equal(method, 'computer.call');
       calls.push(structuredClone(params));
+      if (params.tool === 'computer_resolve_app') return { status: 'running', app: params.arguments.app, process_id: 42, identity_digest: 'a'.repeat(64) };
       return reply(params.tool, params.arguments);
     },
   });
@@ -199,7 +200,7 @@ test('authorized screenshot bytes stay separate from text and emit:false still r
   assert.equal(calls.at(-1).arguments.window_id, '42');
   assert.deepEqual(await app.getScreenshot(), bytes);
   assert.deepEqual(images, [{ bytes, mimeType: 'image/png' }]);
-  assert.equal(output.at(-1), 'State 3');
+  assert.equal(output.length, before, 'screenshot-only observation must not emit accessibility text');
   assert.equal(output.some(value => String(value).includes(dataBase64)), false);
   assert.equal(output.some(value => String(value).includes('/private/screenshot.png')), false);
 });

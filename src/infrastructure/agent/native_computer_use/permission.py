@@ -52,7 +52,7 @@ DECISION_SCHEMA = object_schema(
     {
         "action": object_schema({"name": IDENTITY, "label": TEXT}, ["name", "label"]),
         "target": object_schema(
-            {"kind": {"const": "computer_app"}, "id": IDENTITY}, ["kind", "id"]
+            {"kind": {"type": "string", "const": "computer_app"}, "id": IDENTITY}, ["kind", "id"]
         ),
         "data": object_schema(
             {
@@ -63,11 +63,14 @@ DECISION_SCHEMA = object_schema(
         ),
         "reason": TEXT,
         "risk": object_schema(
-            {"level": {"enum": ["low", "medium", "high"]}, "rationale": TEXT},
+            {"level": {"type": "string", "enum": ["low", "medium", "high"]}, "rationale": TEXT},
             ["level", "rationale"],
         ),
         "reversibility": object_schema(
-            {"mode": {"enum": ["reversible", "partial", "irreversible"]}, "recovery": TEXT},
+            {
+                "mode": {"type": "string", "enum": ["reversible", "partial", "irreversible"]},
+                "recovery": TEXT,
+            },
             ["mode"],
         ),
         "scope": object_schema(

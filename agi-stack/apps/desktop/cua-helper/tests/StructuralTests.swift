@@ -179,6 +179,7 @@ enum StructuralTests {
         precondition(AppIdentity.contentDigest(file) != firstDigest)
         try AudioMixingTests.run(root: session.artifactDirectory)
         try AudioCaptureTests.run()
+        try MeetingAudioTests.run()
         try ArtifactRetentionTests.run()
         let testBoard = NSPasteboard(name: NSPasteboard.Name("memstack-cua-test-" + UUID().uuidString))
         NativeClipboard.board = testBoard

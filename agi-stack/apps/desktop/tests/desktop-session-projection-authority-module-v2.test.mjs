@@ -983,7 +983,7 @@ test("the App projection load reaches error when an HMR generation operation thr
     desktopSessionProjectionOperationsV2:
       createDesktopSessionProjectionOperationsV2(() => null),
     requestConfig: runtimeConfig(),
-    scopedConversation: conversation(),
+    sessionProjectionConversationIdentity: conversation(),
     controller: new AbortController(),
     requestId: 1,
     sessionProjectionRequestRef: { current: 1 },

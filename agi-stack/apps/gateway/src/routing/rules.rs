@@ -1004,6 +1004,65 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         path: "/api/v1/agent/ws",
         match_kind: MethodMatchKind::Exact,
     },
+    // Device claims and receipts must share the Rust websocket broker.
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/agent/device/status",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/agent/conversations",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["session"],
+            excluded: &[],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/agent/hitl/respond",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/agent/device/requests",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["claim"],
+            excluded: &[],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/agent/device/requests",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["resume-authority"],
+            excluded: &[],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/agent/device/requests",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["continuity-authority"],
+            excluded: &[],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/agent/device/requests",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["steps", "*", "authorize"],
+            excluded: &[],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/agent/conversations",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["tool-media", "*"],
+            excluded: &[],
+        },
+    },
     // P3/F11 builtin slash-command catalog exact slice. Rollback by deleting
     // this one rule plus the Rust handler; command execution, agent tools,
     // workflow patterns, and conversation/message siblings remain Python-owned.

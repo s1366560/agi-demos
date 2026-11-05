@@ -87,6 +87,7 @@ const allowedCommands = new Set([
   'browser_bridge_uninstall',
   'browser_bridge_status',
   'computer_use_manage_v2',
+  'audio_sessions_manage_v2',
   'device_mcp_manage_v2',
   'mcp_app_guest_open',
   'mcp_app_guest_start',
@@ -106,6 +107,10 @@ const allowedCommands = new Set([
   'request_microphone_access',
   'focus_main_window',
   'window_controls',
+  'iab_activate_context',
+  'iab_navigate_tab',
+  'iab_navigate_history',
+  'iab_take_over',
   'iab_status',
   'iab_list_tabs',
   'iab_create_tab',
@@ -279,6 +284,10 @@ export type IabTabSnapshot = Readonly<{
   title: string;
   url: string;
   active: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  loading: boolean;
+  ownership?: { sessionId: string; origin: 'agent' | 'user'; controller: 'agent' | 'user'; callerId: string | null; mark: 'handoff' | 'deliverable' | null };
 }>;
 
 export type IabTabsChangedPayload = Readonly<{
@@ -306,7 +315,11 @@ function onIabVisibilityRequested(listener: (visible: boolean) => void): () => v
 }
 
 const iabBridge = Object.freeze({
-  status: (): Promise<{ status: string }> => invokeDesktopCommand('iab_status'),
+  activateContext: (context: { conversation_id: string | null; mode: string; credential?: string; tenant_id: string; project_id: string }): Promise<{ session_id: string | null }> => invokeDesktopCommand('iab_activate_context', context),
+  navigateTab: (tabId: number, url: string): Promise<void> => invokeDesktopCommand('iab_navigate_tab', { tabId, url }),
+  navigateHistory: (tabId: number, direction: 'back' | 'forward' | 'reload'): Promise<void> => invokeDesktopCommand('iab_navigate_history', { tabId, direction }),
+  takeOver: (tabId: number): Promise<void> => invokeDesktopCommand('iab_take_over', { tabId }),
+  status: (): Promise<{ status: string; contextReady?: boolean }> => invokeDesktopCommand('iab_status'),
   listTabs: (): Promise<IabTabsChangedPayload> => invokeDesktopCommand('iab_list_tabs'),
   createTab: (url?: string): Promise<{ tabId: number }> =>
     invokeDesktopCommand('iab_create_tab', url === undefined ? {} : { url }),

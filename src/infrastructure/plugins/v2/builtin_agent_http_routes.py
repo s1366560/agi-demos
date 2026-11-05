@@ -13,6 +13,7 @@ from src.infrastructure.adapters.primary.web.routers.agent import (
     agent_graph_router as graph,
     binding_router as binding,
     commands,
+    computer_use_continuity,
     computer_use_device,
     computer_use_media,
     computer_use_steps,
@@ -286,6 +287,12 @@ _AGENT_ROUTE_SPECS_V2: tuple[AgentRouteSpecV2, ...] = (
         "/conversations/{conversation_id}/tool-media/{artifact_id}",
     ),
     (computer_use_device.device_status, dict[str, Any], "GET", "/device/status"),
+    (
+        computer_use_continuity.continuity_authority,
+        dict[str, Any],
+        "POST",
+        "/device/requests/{request_id}/continuity-authority",
+    ),
     (
         computer_use_device.claim_device_request,
         dict[str, Any],

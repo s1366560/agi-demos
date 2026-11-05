@@ -25,6 +25,7 @@ async fn attach_receipt_bridge(
             port: 0,
             extension_ids: vec![],
             full_cdp_access_enabled: false,
+            ..Default::default()
         },
         path.clone(),
         None,

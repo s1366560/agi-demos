@@ -1,0 +1,116 @@
+{
+  "schema_version": 2,
+  "projection_kind": "workspace_session",
+  "authority_kind": "conversation_record",
+  "authority_id": "cloud-chat",
+  "conversation": {
+    "id": "cloud-chat",
+    "tenant_id": "tenant",
+    "project_id": "project",
+    "workspace_id": null,
+    "linked_workspace_task_id": null,
+    "workspace_name": null,
+    "user_id": "owner",
+    "title": "Owned cloud fixture",
+    "summary": null,
+    "status": "active",
+    "current_mode": "build",
+    "conversation_mode": null,
+    "capability_mode": "work",
+    "message_count": 0,
+    "participant_agents": [],
+    "coordinator_agent_id": null,
+    "focused_agent_id": null,
+    "created_at": "1970-01-01T00:00:01Z",
+    "updated_at": null
+  },
+  "execution": {
+    "current_run": {
+      "id": "chat-run",
+      "conversation_id": "cloud-chat",
+      "project_id": "project",
+      "plan_version_id": null,
+      "idempotency_key": "rust-chat:message",
+      "message_id": "message",
+      "request_message": "Neutral fixture",
+      "status": "running",
+      "revision": 3,
+      "created_at": "1970-01-01T00:00:02Z",
+      "updated_at": "1970-01-01T00:00:03Z",
+      "started_at": "1970-01-01T00:00:02Z",
+      "completed_at": null,
+      "last_heartbeat_at": null,
+      "error": null,
+      "environment": null,
+      "permission_profile": "read_only",
+      "authorization_snapshot": {
+        "conversation_id": "cloud-chat",
+        "project_id": "project",
+        "plan_version_id": null,
+        "permission_profile": "read_only",
+        "environment": null
+      }
+    },
+    "run_history": [
+      {
+        "id": "chat-run",
+        "conversation_id": "cloud-chat",
+        "project_id": "project",
+        "plan_version_id": null,
+        "idempotency_key": "rust-chat:message",
+        "message_id": "message",
+        "request_message": "Neutral fixture",
+        "status": "running",
+        "revision": 3,
+        "created_at": "1970-01-01T00:00:02Z",
+        "updated_at": "1970-01-01T00:00:03Z",
+        "started_at": "1970-01-01T00:00:02Z",
+        "completed_at": null,
+        "last_heartbeat_at": null,
+        "error": null,
+        "environment": null,
+        "permission_profile": "read_only",
+        "authorization_snapshot": {
+          "conversation_id": "cloud-chat",
+          "project_id": "project",
+          "plan_version_id": null,
+          "permission_profile": "read_only",
+          "environment": null
+        }
+      }
+    ],
+    "current_attempt": null,
+    "attempt_history": []
+  },
+  "current_plan": null,
+  "plan_history": [],
+  "conversation_tasks": [],
+  "workspace_plan_context": null,
+  "pending_hitl": [],
+  "artifact_records": [],
+  "tool_execution_records": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+  },
+  "evidence_summary": {
+    "candidate_artifact_ref_count": 0,
+    "candidate_verification_ref_count": 0,
+    "artifact_record_count": 0,
+    "tool_execution_record_count": 0,
+    "failed_tool_execution_count": 0
+  },
+  "capabilities": {
+    "can_send_message": true,
+    "can_respond_to_hitl": false,
+    "can_approve_plan": false,
+    "can_control_execution": false,
+    "can_review_artifacts": false,
+    "can_deliver_artifacts": false,
+    "allowed_actions": [
+      "send_message"
+    ]
+  },
+  "snapshot_revision": "fixture-cloud-chat-v1",
+  "updated_at": "1970-01-01T00:00:03Z"
+}

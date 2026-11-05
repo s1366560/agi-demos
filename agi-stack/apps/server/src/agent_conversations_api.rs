@@ -136,6 +136,13 @@ pub(crate) trait AgentConversationApiService: Send + Sync {
         request: CreateConversationRequest,
     ) -> Result<AgentConversationResponse, AgentConversationsApiError>;
 
+    async fn get_conversation(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        project_id: &str,
+    ) -> Result<AgentConversationResponse, AgentConversationsApiError>;
+
     async fn register_task_session_conversation(
         &self,
         registration: TaskSessionConversationRegistration,
@@ -157,12 +164,24 @@ pub(crate) trait AgentConversationApiService: Send + Sync {
     ) -> Result<ConversationMessagesResponse, AgentConversationsApiError>;
 
     async fn authorize_model_request_replay(
-        &self, user_id: &str, conversation_id: &str, project_id: &str,
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        project_id: &str,
     ) -> Result<(), AgentConversationsApiError> {
-        self.get_messages(user_id, conversation_id, ConversationMessagesQuery {
-            project_id: project_id.into(), limit: Some(1), from_time_us: None,
-            from_counter: None, before_time_us: None, before_counter: None,
-        }).await?;
+        self.get_messages(
+            user_id,
+            conversation_id,
+            ConversationMessagesQuery {
+                project_id: project_id.into(),
+                limit: Some(1),
+                from_time_us: None,
+                from_counter: None,
+                before_time_us: None,
+                before_counter: None,
+            },
+        )
+        .await?;
         Ok(())
     }
 
@@ -292,6 +311,41 @@ impl PgAgentConversationService {
 
 #[async_trait]
 impl AgentConversationApiService for PgAgentConversationService {
+    async fn get_conversation(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        project_id: &str,
+    ) -> Result<AgentConversationResponse, AgentConversationsApiError> {
+        let project_id = required_trimmed(project_id, "project_id")?;
+        match self
+            .authorize_event_subscription(user_id, conversation_id)
+            .await?
+        {
+            ConversationSocketAccess::Allowed => {}
+            ConversationSocketAccess::Denied => {
+                return Err(AgentConversationsApiError::forbidden(
+                    "Access denied to this conversation",
+                ))
+            }
+            ConversationSocketAccess::NotFound => {
+                return Err(AgentConversationsApiError::not_found(
+                    "Conversation not found",
+                ))
+            }
+        }
+        let record = self
+            .conversations
+            .get_conversation(conversation_id, project_id)
+            .await
+            .map_err(AgentConversationsApiError::internal)?
+            .ok_or_else(|| AgentConversationsApiError::not_found("Conversation not found"))?;
+        self.enrich_workspace_names(user_id, vec![record], None)
+            .await?
+            .pop()
+            .ok_or_else(|| AgentConversationsApiError::not_found("Conversation not found"))
+    }
+
     async fn authorize_event_subscription(
         &self,
         user_id: &str,
@@ -371,6 +425,7 @@ impl AgentConversationApiService for PgAgentConversationService {
             project_id: &validated.project_id,
             status: validated.status.as_deref(),
             workspace_id: validated.workspace_id.as_deref(),
+            unbound_only: validated.unbound_only,
             limit: validated.limit,
             offset: validated.offset,
         };
@@ -727,6 +782,33 @@ impl DevAgentConversationService {
 
 #[async_trait]
 impl AgentConversationApiService for DevAgentConversationService {
+    async fn get_conversation(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        project_id: &str,
+    ) -> Result<AgentConversationResponse, AgentConversationsApiError> {
+        let project_id = required_trimmed(project_id, "project_id")?;
+        let conversation = self
+            .conversations
+            .lock()
+            .map_err(|_| AgentConversationsApiError::internal("conversation lock poisoned"))?
+            .get(conversation_id)
+            .filter(|row| row.project_id == project_id)
+            .cloned()
+            .ok_or_else(|| AgentConversationsApiError::not_found("Conversation not found"))?;
+        if self
+            .authorize_event_subscription(user_id, conversation_id)
+            .await?
+            != ConversationSocketAccess::Allowed
+        {
+            return Err(AgentConversationsApiError::forbidden(
+                "Access denied to this conversation",
+            ));
+        }
+        Ok(conversation)
+    }
+
     async fn authorize_event_subscription(
         &self,
         user_id: &str,
@@ -786,7 +868,7 @@ impl AgentConversationApiService for DevAgentConversationService {
 
     async fn list_conversations(
         &self,
-        _user_id: &str,
+        user_id: &str,
         query: ConversationListRequest,
     ) -> Result<PaginatedConversationsResponse, AgentConversationsApiError> {
         let validated = query.validated()?;
@@ -803,6 +885,16 @@ impl AgentConversationApiService for DevAgentConversationService {
             .filter(|conversation| match validated.workspace_id.as_deref() {
                 Some(workspace_id) => conversation.workspace_id.as_deref() == Some(workspace_id),
                 None => true,
+            })
+            .filter(|conversation| {
+                !validated.unbound_only
+                    || (conversation.user_id == user_id
+                        && agistack_adapters_postgres::effective_conversation_workspace_id(
+                            &conversation.id,
+                            conversation.workspace_id.as_deref(),
+                            conversation.metadata.as_ref(),
+                        )
+                        .is_none())
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -942,12 +1034,22 @@ impl AgentConversationApiService for DevAgentConversationService {
     }
 
     async fn authorize_model_request_replay(
-        &self, user_id: &str, conversation_id: &str, project_id: &str,
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        project_id: &str,
     ) -> Result<(), AgentConversationsApiError> {
-        match self.authorize_message_send(user_id, conversation_id, project_id).await? {
+        match self
+            .authorize_message_send(user_id, conversation_id, project_id)
+            .await?
+        {
             ConversationSocketAccess::Allowed => Ok(()),
-            ConversationSocketAccess::Denied => Err(AgentConversationsApiError::forbidden("Access denied to this conversation")),
-            ConversationSocketAccess::NotFound => Err(AgentConversationsApiError::not_found("Conversation not found")),
+            ConversationSocketAccess::Denied => Err(AgentConversationsApiError::forbidden(
+                "Access denied to this conversation",
+            )),
+            ConversationSocketAccess::NotFound => Err(AgentConversationsApiError::not_found(
+                "Conversation not found",
+            )),
         }
     }
 
@@ -1061,6 +1163,10 @@ pub(crate) fn router() -> Router<AppState> {
             get(list_conversations).post(create_conversation),
         )
         .route(
+            "/api/v1/agent/conversations/:conversation_id",
+            get(get_conversation),
+        )
+        .route(
             "/api/v1/agent/conversations/:conversation_id/mode",
             patch(update_conversation_mode),
         )
@@ -1097,6 +1203,19 @@ async fn create_conversation(
         .create_conversation(&identity.user_id, request)
         .await?;
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+async fn get_conversation(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(conversation_id): Path<String>,
+    Query(query): Query<ModeProjectQuery>,
+) -> Result<Json<AgentConversationResponse>, AgentConversationsApiError> {
+    ensure_project_access(&app, &identity, &query.project_id).await?;
+    app.agent_conversations
+        .get_conversation(&identity.user_id, &conversation_id, &query.project_id)
+        .await
+        .map(Json)
 }
 
 async fn update_conversation_mode(
@@ -1174,6 +1293,8 @@ pub(crate) struct ConversationListRequest {
     limit: Option<i64>,
     offset: Option<i64>,
     workspace_id: Option<String>,
+    #[serde(default)]
+    unbound_only: bool,
 }
 
 impl ConversationListRequest {
@@ -1192,6 +1313,11 @@ impl ConversationListRequest {
             .filter(|value| !value.is_empty())
             .map(ToString::to_string);
         let limit = self.limit.unwrap_or(DEFAULT_CONVERSATION_LIMIT);
+        if self.unbound_only && workspace_id.is_some() {
+            return Err(AgentConversationsApiError::unprocessable(
+                "Workspace and unbound filters cannot be combined",
+            ));
+        }
         if !(1..=MAX_CONVERSATION_LIMIT).contains(&limit) {
             return Err(AgentConversationsApiError::unprocessable(
                 "limit must be between 1 and 500",
@@ -1207,6 +1333,7 @@ impl ConversationListRequest {
             project_id,
             status,
             workspace_id,
+            unbound_only: self.unbound_only,
             limit,
             offset,
         })
@@ -1218,6 +1345,7 @@ struct ValidatedConversationListQuery {
     project_id: String,
     status: Option<String>,
     workspace_id: Option<String>,
+    unbound_only: bool,
     limit: i64,
     offset: i64,
 }
@@ -2444,6 +2572,14 @@ fn tool_lookup_keys(
 
 #[cfg(test)]
 mod pg_tests;
+
+#[cfg(test)]
+#[path = "agent_conversations_api/unbound_tests.rs"]
+mod unbound_tests;
+
+#[cfg(test)]
+#[path = "agent_conversations_api/detail_tests.rs"]
+mod detail_tests;
 
 #[cfg(test)]
 mod tests {

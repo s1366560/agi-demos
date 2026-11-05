@@ -18,6 +18,8 @@ async fn fixture() -> (Fixture, Admission) {
     let claim: Claim =
         serde_json::from_value(fixture.authority.claim.lock().unwrap().clone()).unwrap();
     let lease = CloudLease {
+        request_id: claim.request_id.clone(),
+        authorization_revision: claim.authorization_revision,
         broker: fixture.broker.clone(),
         epoch: fixture.broker.snapshot().unwrap().epoch,
         expires_at: claim.expires_at,
@@ -230,16 +232,38 @@ async fn actual_claimed_cloud_cell_preserves_bindings_and_resumes_only_pending_n
         "1"
     );
     let calls = fixture.authority.step_calls.lock().unwrap().clone();
-    assert_eq!(calls.len(), 7);
-    assert_eq!(calls[0]["tool_name"], "browser_read_operation");
+    assert_eq!(
+        calls
+            .iter()
+            .map(|call| call["tool_name"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "browser_read_operation",
+            "browser_read_operation",
+            "computer_resolve_app",
+            "computer_resolve_app",
+            "computer_get_app_state",
+            "computer_get_app_state",
+            "computer_get_app_state",
+            "computer_get_app_state",
+            "computer_get_app_state",
+        ]
+    );
     assert_eq!(
         calls[0]["target"],
         json!({"kind":"browser","id":"inventory"})
     );
     assert_eq!(calls[1]["receipt"], "fixture-step-receipt");
-    assert_eq!(calls[4]["outcome"], "not_sent");
-    assert_eq!(calls[2]["_step_id"], calls[5]["_step_id"]);
-    assert_eq!(calls[2]["input_json"], calls[5]["input_json"]);
-    assert_eq!(calls[5]["parent_request_id"], "request");
+    assert!(calls[2].get("receipt").is_none());
+    assert_eq!(calls[3]["receipt"], "fixture-step-receipt");
+    assert_eq!(calls[2]["_step_id"], calls[3]["_step_id"]);
+    assert_eq!(calls[2]["input_json"], calls[3]["input_json"]);
+    let resolution: Value = serde_json::from_str(calls[2]["input_json"].as_str().unwrap()).unwrap();
+    assert_eq!(resolution["app"], "fixture");
+    assert_eq!(calls[6]["outcome"], "not_sent");
+    assert_eq!(calls[4]["_step_id"], calls[7]["_step_id"]);
+    assert_eq!(calls[4]["input_json"], calls[7]["input_json"]);
+    assert_eq!(calls[7]["parent_request_id"], "request");
+    assert_eq!(calls[8]["receipt"], "fixture-step-receipt");
     fixture.operation("cancel").await.unwrap();
 }

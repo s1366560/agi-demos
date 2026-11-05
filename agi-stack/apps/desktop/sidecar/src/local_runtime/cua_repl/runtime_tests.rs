@@ -8,6 +8,9 @@ use agistack_core::agent::tool_policy::ToolPolicyContext;
 use async_trait::async_trait;
 use std::sync::atomic::AtomicUsize;
 
+#[path = "runtime_continuation_tests.rs"]
+mod continuation_tests;
+
 struct Fixture {
     scope: ExecutionScope,
     active: AtomicBool,
@@ -34,6 +37,25 @@ impl ScopedExecution for Fixture {
     async fn call(&self, tool: &str, input: &str) -> CoreResult<ToolResult> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         let input: Value = serde_json::from_str(input).unwrap();
+        if tool == "computer_audio_start" || tool == "computer_audio_stop" {
+            return Ok(ToolResult::text(json!({"recording_id":"synthetic-long-audio","recordings":[{"recording_id":"synthetic-long-audio",
+                "status":if tool == "computer_audio_stop" {"saved"} else {"recording"},
+                "artifacts":[{"artifact_id":"synthetic-wave","mime_type":"audio/wav"}]}]}).to_string()));
+        }
+        if tool == "computer_audio_read" {
+            use base64::{engine::general_purpose::STANDARD, Engine};
+            let size = 28_800_044usize;
+            let offset = usize::try_from(input["offset"].as_u64().unwrap_or(0)).unwrap();
+            let count = (size - offset).min(128 * 1024);
+            let mut bytes = vec![0; count];
+            if offset == 0 {
+                bytes[..4].copy_from_slice(b"RIFF");
+                bytes[8..12].copy_from_slice(b"WAVE");
+            }
+            return Ok(ToolResult::text(json!({"recording_id":"synthetic-long-audio","artifact_id":"synthetic-wave",
+                "mime_type":"audio/wav","offset":offset,"next_offset":offset+count,"eof":offset+count==size,
+                "size_bytes":size,"data_base64":STANDARD.encode(bytes)}).to_string()));
+        }
         if tool == "computer_application_data" {
             return Ok(ToolResult::text(input.to_string()));
         }
@@ -48,13 +70,17 @@ impl ScopedExecution for Fixture {
         if tool == "computer_profile_write" && !self.granted.load(Ordering::SeqCst) {
             return Ok(agistack_core::ports::PermissionRequired::new(
                 PermissionKind::ToolStep,
-                crate::local_runtime::execution_authority::permission_binding(tool, &input.to_string())?,
+                crate::local_runtime::execution_authority::permission_binding(
+                    tool,
+                    &input.to_string(),
+                )?,
                 json!({
                     "error":"repl_tool_permission_required", "tool_name":tool,
                     "step_id":crate::local_runtime::execution_authority::current_step_id(),
                     "arguments":input,
                 }),
-            ).into_result());
+            )
+            .into_result());
         }
         if tool == "computer_write" || tool == "computer_profile_write" {
             if !self.granted.load(Ordering::SeqCst) {
@@ -98,10 +124,38 @@ fn fixture() -> Arc<Fixture> {
 }
 
 #[tokio::test]
+async fn real_node_long_audio_uses_authorized_chunks_and_private_file_output() {
+    let cfg = config(DesktopPermissionProfile::ReadOnly);
+    let root = cfg.sandbox.workspace.parent().unwrap().to_owned();
+    let runtime = ReplRuntime::default();
+    let owner = fixture();
+    let result=execute(&runtime,owner.clone(),cfg,
+        "await cua.computer.start_audio_recording({max_duration_ms:300000}); var longAudio = await cua.computer.stop_audio_recording(); await nodeRepl.emitAudio(longAudio); nodeRepl.write(longAudio.bytes.length);",30000).await.unwrap();
+    let output: Value = serde_json::from_str(&result.output_json).unwrap();
+    assert_eq!(output["ok"], true, "{output}");
+    assert!(result.output_json.len() < 4096);
+    assert_eq!(result.media.len(), 1);
+    assert_eq!(result.media[0].mime_type, "audio/wav");
+    assert_eq!(
+        std::fs::metadata(&result.media[0].artifact_path)
+            .unwrap()
+            .len(),
+        28_800_044
+    );
+    assert!(owner.calls.load(Ordering::SeqCst) > 200);
+    runtime.shutdown();
+    tokio::fs::remove_dir_all(root).await.unwrap();
+}
+
+#[tokio::test]
 async fn reserved_permission_error_fields_are_ordinary_application_data() {
     let errors = [
-        "cua_permission_required", "origin_consent_required", "full_cdp_consent_required",
-        "credential_fill_consent_required", "repl_policy_permission_required", "repl_tool_permission_required",
+        "cua_permission_required",
+        "origin_consent_required",
+        "full_cdp_consent_required",
+        "credential_fill_consent_required",
+        "repl_policy_permission_required",
+        "repl_tool_permission_required",
     ];
     let mut observed = Vec::new();
     for error in errors {
@@ -118,7 +172,10 @@ async fn reserved_permission_error_fields_are_ordinary_application_data() {
         observed.push((error, result, value));
     }
     for (error, result, value) in observed {
-        assert_eq!(result["ok"], true, "ordinary {error} data suspended: {result}");
+        assert_eq!(
+            result["ok"], true,
+            "ordinary {error} data suspended: {result}"
+        );
         assert_eq!(result["value"], value);
     }
 }
@@ -302,7 +359,9 @@ async fn profile_permission_is_bound_to_current_pending_cell() {
             .pending_permission_key(conversation, run, Some(engine), requested_step, tool)
             .is_none());
         if engine == "engine" {
-            assert!(runtime.pending_permission_scope(conversation, run, requested_step, tool).is_none());
+            assert!(runtime
+                .pending_permission_scope(conversation, run, requested_step, tool)
+                .is_none());
         }
     }
     owner.granted.store(true, Ordering::SeqCst);
@@ -310,7 +369,9 @@ async fn profile_permission_is_bound_to_current_pending_cell() {
         .await
         .unwrap();
     assert_eq!(owner.writes.load(Ordering::SeqCst), 1);
-    assert!(runtime.pending_permission_scope("conversation", "run", step, "computer_profile_write").is_none());
+    assert!(runtime
+        .pending_permission_scope("conversation", "run", step, "computer_profile_write")
+        .is_none());
     assert!(runtime
         .pending_permission_key("conversation", "run", None, step, "computer_profile_write")
         .is_none());
@@ -318,7 +379,14 @@ async fn profile_permission_is_bound_to_current_pending_cell() {
     let pending = execute(&runtime, owner, cfg, code, 5000).await.unwrap();
     let pending: Value = serde_json::from_str(&pending.output_json).unwrap();
     runtime.cancel_run("run");
-    assert!(runtime.pending_permission_scope("conversation", "run", pending["step_id"].as_str().unwrap(), "computer_profile_write").is_none());
+    assert!(runtime
+        .pending_permission_scope(
+            "conversation",
+            "run",
+            pending["step_id"].as_str().unwrap(),
+            "computer_profile_write"
+        )
+        .is_none());
     assert!(runtime
         .pending_permission_key(
             "conversation",
@@ -478,7 +546,7 @@ async fn external_permission_resumes_exact_step_and_keeps_callback_waiting() {
                         return Err(CoreError::Tool("frame_detached".into()));
                     }
                     let output = authority.call("computer_write", "{}").await?;
-        if output.permission_required.is_none() {
+                    if output.permission_required.is_none() {
                         owner.signal.notify_one();
                     }
                     Ok(output)
@@ -572,17 +640,21 @@ async fn abandoned_external_callback_never_dispatches_after_permission_resume() 
         async move { execute(&runtime, owner, cfg, code, 5000).await }
     });
     let context = wait_context(&runtime).await;
-    let dispatch: ExternalDispatch = Arc::new(|authority| {
-        Box::pin(async move { authority.call("computer_write", "{}").await })
-    });
+    let dispatch: ExternalDispatch =
+        Arc::new(|authority| Box::pin(async move { authority.call("computer_write", "{}").await }));
     let callback = tokio::spawn(async move { context.submit(dispatch).await });
     active.await.unwrap().unwrap();
     callback.abort();
     assert!(callback.await.unwrap_err().is_cancelled());
     owner.granted.store(true, Ordering::SeqCst);
     owner.signal.notify_one();
-    let result = execute(&runtime, owner.clone(), cfg, code, 5000).await.unwrap();
-    assert_eq!(serde_json::from_str::<Value>(&result.output_json).unwrap()["ok"], true);
+    let result = execute(&runtime, owner.clone(), cfg, code, 5000)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(&result.output_json).unwrap()["ok"],
+        true
+    );
     assert_eq!(owner.writes.load(Ordering::SeqCst), 0);
     drop(runtime);
     std::fs::remove_dir_all(root).unwrap();
@@ -692,7 +764,7 @@ async fn trusted_human_wait_excludes_only_prompt_time_and_still_observes_revocat
     }
 }
 
-#[path = "runtime_read_tests.rs"]
-mod read_suspension;
 #[path = "runtime_policy_permission_tests.rs"]
 mod policy_permissions;
+#[path = "runtime_read_tests.rs"]
+mod read_suspension;

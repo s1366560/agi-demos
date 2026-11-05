@@ -36,6 +36,8 @@ type NativeResult = {
   media: { artifact_id: string; mime_type: string; size_bytes: number }[];
   control_outcome?: "user_paused" | "user_stopped";
   control_generation?: string;
+  permission_required?: unknown;
+  authorization_revision?: unknown;
 };
 const MEDIA_MIMES = new Set([
   "image/png",
@@ -44,6 +46,53 @@ const MEDIA_MIMES = new Set([
   "audio/wav",
 ]);
 const REQUEST_ID = /^[A-Za-z0-9_-]{1,128}$/u;
+
+function validatePermissionResult(result: NativeResult): void {
+  const permission = result.permission_required;
+  if (permission === undefined || permission === null) return;
+  const object = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  const keys = (value: Record<string, unknown>, expected: string[]) =>
+    Object.keys(value).length === expected.length &&
+    expected.every((key) => Object.hasOwn(value, key));
+  const identity = (value: unknown): value is string =>
+    typeof value === "string" && value.length > 0 && value.length <= 256;
+  const invalid = () => { throw new Error("cua_cloud_permission_result_invalid"); };
+  if (
+    result.is_error || result.control_outcome !== undefined ||
+    result.control_generation !== undefined ||
+    !Number.isSafeInteger(result.authorization_revision) ||
+    (result.authorization_revision as number) < 1 ||
+    !object(permission) || !keys(permission, ["kind", "binding", "demand"])
+  ) return invalid();
+  const { kind, binding, demand } = permission;
+  if (
+    !["native_consent", "cloud_execution_step"].includes(kind as string) ||
+    !object(binding) ||
+    !keys(binding, ["tool_name", "input_digest", "engine_session_id", "cell_id", "step_id"]) ||
+    !identity(binding.tool_name) || !identity(binding.engine_session_id) ||
+    typeof binding.input_digest !== "string" || !/^[0-9a-f]{64}$/u.test(binding.input_digest) ||
+    (binding.cell_id === null) !== (binding.step_id === null) ||
+    (binding.cell_id !== null && (!identity(binding.cell_id) || !identity(binding.step_id))) ||
+    !object(demand) || demand.error !== "cua_permission_required" ||
+    !object(demand.request)
+  ) return invalid();
+  const request = demand.request;
+  if (
+    request.engine_session_id !== binding.engine_session_id ||
+    request.tool_name !== binding.tool_name ||
+    !["request_id", "session_id", "app", "identity_digest", "capability", "tool_name", "input_digest"]
+      .every((key) => typeof request[key] === "string" && request[key].length > 0) ||
+    !Array.isArray(demand.scopes) || demand.scopes.length === 0 ||
+    !demand.scopes.every((scope) => ["once", "session", "always"].includes(scope))
+  ) return invalid();
+  if (
+    (kind === "native_consent" && ["execution_step", "mcp_tool"].includes(request.capability as string)) ||
+    (kind === "cloud_execution_step" && (binding.cell_id === null ||
+      request.capability !== "execution_step" ||
+      demand.scopes.length !== 1 || demand.scopes[0] !== "once"))
+  ) invalid();
+}
 
 /** Only authenticated server frames reach this main-process bridge. */
 export function createComputerUseCloudDeviceBridge(
@@ -179,6 +228,9 @@ export function createComputerUseCloudDeviceBridge(
         !Array.isArray(result.media)
       )
         throw new Error("cua_cloud_result_invalid");
+      // Only the private host record carries provenance. The server separately
+      // binds it to the current owner, claim revision and persisted inner step.
+      validatePermissionResult(result);
       if (result.control_outcome !== undefined) {
         const output: unknown = JSON.parse(result.output_json);
         if (
@@ -233,6 +285,12 @@ export function createComputerUseCloudDeviceBridge(
         output_json: result.output_json,
         is_error: result.is_error === true,
         media: result.media,
+        ...(result.permission_required === undefined || result.permission_required === null
+          ? {}
+          : {
+              permission_required: result.permission_required,
+              authorization_revision: result.authorization_revision,
+            }),
         ...(result.control_outcome === undefined
           ? {}
           : { control_outcome: result.control_outcome }),

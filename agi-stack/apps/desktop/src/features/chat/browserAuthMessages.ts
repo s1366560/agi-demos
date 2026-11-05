@@ -1,4 +1,5 @@
 export const browserAuthEnUS = {
+  'chat.browserAuth.pollFailed': 'Could not refresh sign-in requests. The current request is kept; retry to reconnect.',
   'chat.browserAuth.title': 'Sign in to {origin}',
   'chat.browserAuth.description': 'These values are used for this sign-in and are not added to the chat.',
   'chat.browserAuth.method': 'Sign-in method',
@@ -13,6 +14,7 @@ export const browserAuthEnUS = {
 };
 
 export const browserAuthZhCN: Record<keyof typeof browserAuthEnUS, string> = {
+  'chat.browserAuth.pollFailed': '无法刷新登录请求。当前请求已保留，请重试连接。',
   'chat.browserAuth.title': '登录 {origin}',
   'chat.browserAuth.description': '填写的内容仅用于本次登录，不会加入聊天记录。',
   'chat.browserAuth.method': '登录方式',

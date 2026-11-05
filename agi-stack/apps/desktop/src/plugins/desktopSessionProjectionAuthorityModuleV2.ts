@@ -33,7 +33,7 @@ export type DesktopSessionProjectionIdentityV2 = Readonly<{
 
 export type DesktopSessionProjectionOperationInputV2 = Readonly<{
   config: DesktopRuntimeConfig;
-  conversation: AgentConversation;
+  conversation: Pick<AgentConversation, 'id' | 'tenant_id' | 'project_id' | 'workspace_id'>;
   signal: AbortSignal;
 }>;
 

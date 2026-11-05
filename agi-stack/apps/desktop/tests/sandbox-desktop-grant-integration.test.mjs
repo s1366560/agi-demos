@@ -50,6 +50,8 @@ function compileFunction(source, bindings, name) {
     bindings = {
       ...bindings,
       computerUseActivity: bindings.computerUseActivity ?? null,
+      mcpAppGuestHost: bindings.mcpAppGuestHost ?? { clear() {} },
+      mcpAppFrameHost: bindings.mcpAppFrameHost ?? { clear: async () => {} },
       rendererDeliveryAdmissionV2: new RendererDeliveryAdmissionV2(),
       rendererDeliveryOwnersV2: new Map(),
     };
@@ -335,6 +337,38 @@ test('password/OAuth vault replacement and logout callbacks await revocation bef
       assert.deepEqual(failedEvents, ['cua-clear', 'revoke-failed']);
     }
   }
+});
+test('authority replacement awaits MCP frame retirement before revoking grants and mutating the vault', async () => {
+  const frameRetirement = deferred();
+  const events = [];
+  const transition = compileFunction('', {
+    mcpAppGuestHost: { clear: () => events.push('mcp-guests-cleared') },
+    mcpAppFrameHost: {
+      clear: async () => {
+        events.push('mcp-frames-retiring');
+        await frameRetirement.promise;
+        events.push('mcp-frames-retired');
+      },
+    },
+    sandboxDesktopGrants: {
+      withAuthorityTransition: async (operation) => {
+        events.push('grants-revoked');
+        return operation();
+      },
+    },
+  }, 'withDesktopAuthorityTransitionV2');
+  const pending = transition(async () => events.push('vault-mutated'));
+  await new Promise(setImmediate);
+  assert.deepEqual(events, ['mcp-guests-cleared', 'mcp-frames-retiring']);
+  frameRetirement.resolve();
+  await pending;
+  assert.deepEqual(events, [
+    'mcp-guests-cleared',
+    'mcp-frames-retiring',
+    'mcp-frames-retired',
+    'grants-revoked',
+    'vault-mutated',
+  ]);
 });
 test('actual sidecar default branch revokes before local-session replacement clear and authority select', async () => {
   const clause = nodes(fn(mainAst, 'executeDesktopCommand'), ts.isDefaultClause)[0];

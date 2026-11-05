@@ -322,7 +322,7 @@ export function useConversationThreads(params: AgentConversationParams) {
   const createComposerThread = async (input: NewThreadComposerInput) => {
     const actorId = auth.user?.user_id.trim() ?? '';
     const workspaceId = input.workspaceId.trim();
-    const title = input.prompt.split(/\r?\n/, 1)[0].trim().slice(0, 96);
+    const title = input.prompt.split(/\r?\n/, 1)[0].trim().slice(0, 96).trimEnd();
     if (!actorId || !title) {
       setNewThreadError(t('task.creationContextUnavailable'));
       return;

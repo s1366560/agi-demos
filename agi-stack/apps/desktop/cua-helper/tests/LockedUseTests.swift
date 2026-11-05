@@ -219,13 +219,17 @@ enum LockedUseTests {
             "begin recorded readiness before publication")
         let pending = LockedUseCoverageReport(topologyMatches: true, complete: false, coveredDisplays: 0, failure: nil)
         let ready = LockedUseCoverageReport(topologyMatches: true, complete: true, coveredDisplays: 2, failure: nil)
-        _ = coverage.advance(token: UUID(), now: 10.1, report: ready, leaseValid: true, dependenciesHealthy: true)
-        _ = coverage.advance(token: token, now: 10.2, report: pending, leaseValid: true, dependenciesHealthy: true)
+        _ = coverage.advance(token: UUID(), now: 10.1, report: ready, leaseValid: true, dependenciesHealthy: true, systemLocked: true)
+        _ = coverage.advance(token: token, now: 10.2, report: pending, leaseValid: true, dependenciesHealthy: true, systemLocked: true)
         try expect(coverage.readyUptimeSeconds == nil && coverage.pending, "stale or incomplete publication became ready")
-        _ = coverage.advance(token: token, now: 10.5, report: ready, leaseValid: true, dependenciesHealthy: true)
-        try expect(coverage.active && coverage.readyUptimeSeconds == 10.5, "readiness did not retain its transition clock")
+        for now in [10.5, 10.75, 11.0, 11.25, 11.5] {
+            _ = coverage.advance(token: token, now: now, report: ready, leaseValid: true, dependenciesHealthy: true, systemLocked: true)
+        }
+        _ = coverage.commitReady(token: token, now: 11.5, report: ready,
+            leaseValid: true, dependenciesHealthy: true, systemLocked: true)
+        try expect(coverage.active && coverage.readyUptimeSeconds == 11.5, "readiness did not retain its transition clock")
         let observed = Input(sourcePID: 123, nsEventType: .mouseDown, cgEventType: .mouseDown,
-            receivedUptimeSeconds: 10.75, nsTimestampSeconds: 9.5, cgTimestampSeconds: 9.5,
+            receivedUptimeSeconds: 11.75, nsTimestampSeconds: 9.5, cgTimestampSeconds: 9.5,
             coverageBeginUptimeSeconds: coverage.beginUptimeSeconds, coverageReadyUptimeSeconds: coverage.readyUptimeSeconds)
         var trace = Trace()
         trace.record(.capturing(source: .globalMonitorInput, checks: coverage.diagnosticState, inputEvent: observed))
@@ -234,7 +238,7 @@ enum LockedUseTests {
         trace.record(.capturing(source: .eventTapInput, checks: coverage.diagnosticState, inputEvent: hid))
         try expect(coverage.suppressed && !coverage.active && !coverage.pending && !coverage.relocking,
             "diagnostics changed revoke or lock confirmation")
-        try expect(coverage.beginUptimeSeconds == 10 && coverage.readyUptimeSeconds == 10.5,
+        try expect(coverage.beginUptimeSeconds == 10 && coverage.readyUptimeSeconds == 11.5,
             "recovery destroyed the original coverage times")
         try expect(NSDictionary(dictionary: trace.first!.status).isEqual(to: first),
             "later event or recovery overwrote the first input cause")
@@ -289,7 +293,7 @@ enum LockedUseTests {
         let token = pending.begin(now: 10, expiresAt: 11)!
         var observed = pending.diagnosticState
         observed["old_claim_valid"] = false; observed["dependencies_healthy"] = true
-        _ = pending.advance(token: token, now: 11, report: partial, leaseValid: false, dependenciesHealthy: true)
+        _ = pending.advance(token: token, now: 11, report: partial, leaseValid: false, dependenciesHealthy: true, systemLocked: true)
         var pendingTrace = Trace()
         pendingTrace.record(.capturing(source: .publicationCheck, report: partial, checks: observed))
         let pendingFirst = pendingTrace.first!.status
@@ -306,7 +310,11 @@ enum LockedUseTests {
             "coverage diagnostics did not preserve the failed report")
         var active = LockedUseCoverageState()
         let activeToken = active.begin(now: 10, expiresAt: 15)!
-        _ = active.advance(token: activeToken, now: 10.1, report: good, leaseValid: true, dependenciesHealthy: true)
+        for now in [10.5, 10.75, 11.0, 11.25, 11.5] {
+            _ = active.advance(token: activeToken, now: now, report: good, leaseValid: true, dependenciesHealthy: true, systemLocked: true)
+        }
+        _ = active.commitReady(token: activeToken, now: 11.5, report: good,
+            leaseValid: true, dependenciesHealthy: true, systemLocked: true)
         let activeBefore = active.diagnosticState
         _ = active.validateActive(report: partial, leaseValid: true, dependenciesHealthy: true)
         let activeRecord = Record.capturing(source: .activeTick, report: partial, checks: activeBefore)

@@ -274,6 +274,15 @@ export function timelineItemFromSocketEvent(
       readStringField(data, 'answer') ??
       readStringField(payload, 'message') ??
       '';
+  } else if (type === 'review_decision' && data.action === 'request_changes') {
+    const role = readTextField(payload, 'role') ?? readTextField(data, 'role');
+    const content = readStringField(payload, 'content') ?? readStringField(data, 'content');
+    // Review feedback is a structured user event within the original run,
+    // rather than a new execution message. Approval-only events have no bubble.
+    if (role === 'user' && content !== undefined) {
+      item.role = role;
+      item.content = content;
+    }
   } else if (type === 'thought') {
     item.content =
       readStringField(data, 'thought') ??

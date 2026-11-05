@@ -11,6 +11,7 @@ enum LockedUseUnlockTests {
         var identifiers = [1: "UserPasswordTextField"]
         var descendants = [0: [1]]
         var settable = true
+        var unavailableChildren: Set<Int> = []
         var checks = 0
         var checkpointDeadlines: [Double] = []
         var reads: [String] = []
@@ -35,7 +36,9 @@ enum LockedUseUnlockTests {
                 root: { _ in 0 }, identical: ==, identifier: { element, timeout in
                     try self.read("identifier", element, timeout); return self.identifiers[element]
                 }, childCount: { element, timeout in
-                    try self.read("count", element, timeout); return self.descendants[element]?.count ?? 0
+                    try self.read("count", element, timeout)
+                    return LockedUseChildCount(count: self.descendants[element]?.count ?? 0,
+                        available: !self.unavailableChildren.contains(element))
                 }, children: { element, _, timeout in
                     try self.read("children", element, timeout); return self.descendants[element] ?? []
                 }, valueSettable: { element, timeout in
@@ -61,6 +64,7 @@ enum LockedUseUnlockTests {
         try deadlineCheckpoints()
         try maintenance()
         try readiness()
+        try structureDiagnostics()
         try bounds()
         try cancellation()
         try execution()
@@ -121,6 +125,42 @@ enum LockedUseUnlockTests {
         let wrongIdentifier = Fixture(); wrongIdentifier.identifiers[1] = "UserPasswordTextField-extra"
         _ = try rejected(.unlockFieldAbsent) { _ = try wrongIdentifier.locator().locate() }
         precondition(!wrongIdentifier.reads.contains("settable:1"))
+    }
+    private static func structureDiagnostics() throws {
+        let unavailable = Fixture(); unavailable.identifiers = [:]; unavailable.descendants = [:]
+        unavailable.unavailableChildren = [0]
+        let rootMissing = try rejected(.unlockFieldAbsent) { _ = try unavailable.locator(seconds: 0.05).locate() }
+        precondition(rootMissing.checks["scan_complete"] == true
+            && rootMissing.checks["scan_root_children_available"] == false
+            && rootMissing.checks["scan_root_has_children"] == false
+            && rootMissing.checks["scan_multiple_complete"] == false)
+        let empty = Fixture(); empty.identifiers = [:]; empty.descendants = [:]
+        let rootEmpty = try rejected(.unlockFieldAbsent) { _ = try empty.locator(seconds: 0.1).locate() }
+        precondition(rootEmpty.checks["scan_root_children_available"] == true
+            && rootEmpty.checks["scan_root_has_children"] == false
+            && rootEmpty.checks["scan_multiple_complete"] == true)
+        let deep = Fixture(); deep.identifiers = [:]
+        deep.descendants = [0: [1], 1: Array(2...10)]
+        deep.unavailableChildren = [2]
+        let tree = try rejected(.unlockFieldAbsent) { _ = try deep.locator(seconds: 0.05).locate() }
+        precondition(tree.checks["scan_root_children_available"] == true
+            && tree.checks["scan_root_has_children"] == true
+            && tree.checks["scan_has_grandchildren"] == true
+            && tree.checks["scan_has_at_least_ten_nodes"] == true
+            && tree.checks["scan_descendant_children_unavailable"] == true)
+        precondition(!deep.reads.contains { $0.hasPrefix("settable:") })
+        let interrupted = Fixture(); interrupted.onRead = { interrupted.time = 0.2 }
+        let incomplete = try rejected(.unlockReadinessTimeout) { _ = try interrupted.locator().locate() }
+        precondition(incomplete.checks["scan_complete"] == false
+            && incomplete.checks["scan_root_children_available"] == nil
+            && incomplete.checks["scan_has_grandchildren"] == nil
+            && incomplete.checks["scan_multiple_complete"] == nil)
+        let safe = LockedUseFailure(stage: .unlockField, reason: .unlockFieldAbsent, checks: [
+            "scan_root_children_available": true, "scan_root_has_children": false,
+            "scan_has_at_least_ten_nodes": 10, "unknown_identifier": "private-identifier"])
+        precondition(safe.checks == ["scan_root_children_available": true, "scan_root_has_children": false])
+        let json = String(data: try JSONSerialization.data(withJSONObject: safe.status), encoding: .utf8)!
+        precondition(!json.contains("private-identifier") && !json.contains("unknown_identifier"))
     }
     private static func bounds() throws {
         let repeated = Fixture(); repeated.descendants = [:]; repeated.identifiers = [:]

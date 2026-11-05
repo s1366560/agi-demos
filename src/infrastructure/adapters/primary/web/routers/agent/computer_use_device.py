@@ -35,6 +35,7 @@ from src.infrastructure.agent.native_computer_use.store import DeviceBridgeError
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
+from .computer_use_continuity import router as continuity_router
 from .computer_use_steps import router as execution_steps_router
 from .run_authority_common import _load_scoped_run
 
@@ -394,3 +395,4 @@ async def resume_device_authority(
 
 
 router.include_router(execution_steps_router)
+router.include_router(continuity_router)

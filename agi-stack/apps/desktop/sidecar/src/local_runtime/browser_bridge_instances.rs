@@ -94,8 +94,9 @@ impl BrowserBridgeServer {
         let sessions = self.backends.lock().expect("browser bridge instances");
         let mut result = sessions.values().filter(|session| !session.closed.load(Ordering::SeqCst))
             .map(|session| json!({
-                "id":session.browser_id,"type":family(&session.backend),"backend":family(&session.backend),
+                "userTabs":true,"id":session.browser_id,"type":family(&session.backend),"family":family(&session.backend),"backend":family(&session.backend),
                 "metadata":{
+                    "stableId":if session.backend == BACKEND_IAB { "iab".to_string() } else if let Some(profile) = &session.hello.profile_id { format!("{}:{profile}",family(&session.backend)) } else { family(&session.backend).to_string() },
                     "profileId":session.hello.profile_id,
                     "extensionInstanceId":session.hello.extension_instance_id,
                     "connectionGeneration":session.browser_id.rsplit(':').next(),

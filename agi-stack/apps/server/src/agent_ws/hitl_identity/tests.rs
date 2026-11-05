@@ -29,6 +29,7 @@ fn scope(conversation: &str) -> MessageScope {
         project_id: "project".into(),
         conversation_id: conversation.into(),
         execution: MessageExecution::Message("message".into()),
+        native: None,
     }
 }
 

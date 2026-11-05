@@ -78,10 +78,22 @@ impl ToolHost for ScopedComputerUseHost {
             .state
             .upgrade()
             .ok_or_else(|| CoreError::Tool("cua_runtime_stopped".into()))?;
-        if state.connected_browser_tool_host().is_some_and(|host| host.has_protected_auth())
-            && !matches!(tool, "computer_audio_stop" | "computer_key_up" | "computer_clipboard_release")
-            && !(tool == "computer_drag_step" && serde_json::from_str::<Value>(input).ok().is_some_and(|value|value["phase"]=="end"))
-            && !(tool == "computer_locked_use" && serde_json::from_str::<Value>(input).ok().is_some_and(|value|value["enabled"]==false)) {
+        if state
+            .connected_browser_tool_host()
+            .is_some_and(|host| host.has_protected_auth())
+            && !matches!(
+                tool,
+                "computer_audio_stop" | "computer_key_up" | "computer_clipboard_release"
+            )
+            && !(tool == "computer_drag_step"
+                && serde_json::from_str::<Value>(input)
+                    .ok()
+                    .is_some_and(|value| value["phase"] == "end"))
+            && !(tool == "computer_locked_use"
+                && serde_json::from_str::<Value>(input)
+                    .ok()
+                    .is_some_and(|value| value["enabled"] == false))
+        {
             return Err(CoreError::Tool("browser_auth_protected: finish authentication and explicitly navigate the browser before native observation or input".into()));
         }
         denials::ensure(
@@ -173,6 +185,11 @@ impl ToolHost for ScopedComputerUseHost {
             return Err(CoreError::Tool("cua_invalid_params".into()));
         }
         agistack_adapters_cua::validate_tool_input(tool, &input)?;
+        let releases_locked_use = tool == "computer_locked_use" && input["enabled"] == false;
+        if releases_locked_use {
+            // Releasing a session-owned lease retains the configured runtime capability check.
+            capability_for(tool, &input, &instance)?;
+        }
         let effect = if tool == "computer_connector_call" {
             let definition = self
                 .tool_definition(tool)
@@ -218,6 +235,37 @@ impl ToolHost for ScopedComputerUseHost {
                 local_control::retain(&state, &self.session, &self.native, tool, &result)?;
                 return Ok(result);
             }
+        }
+        if tool == "computer_audio_read" {
+            return recordings_read::read(
+                &state,
+                &self.session.owner,
+                &self.session.context,
+                &engine_session_id,
+                &input,
+            )
+            .map(|output| ToolResult::text(output.to_string()))
+            .map_err(CoreError::Tool);
+        }
+        if tool == "computer_resolve_app" {
+            let mut target = self
+                .client
+                .request_in_session(&self.session.context, "resolve_app", input)
+                .await
+                .map_err(|error| CoreError::Tool(error.to_string()))?;
+            let pid = target["process_id"]
+                .as_u64()
+                .ok_or_else(|| CoreError::Tool("cua_target_process_invalid".into()))?;
+            target["status"] = json!(if pid == 0 { "not_running" } else { "running" });
+            let mut result = ToolResult::text(target.to_string());
+            artifacts::persist(
+                &state,
+                &self.session.owner,
+                &self.session.context,
+                &mut result,
+            )
+            .await?;
+            return Ok(result);
         }
         let connector = if tool == "computer_connector_call" {
             let connector = connectors::select(&state, &self.session.owner, &input)?;
@@ -393,7 +441,8 @@ impl ToolHost for ScopedComputerUseHost {
                 | "computer_audio_status"
                 | "computer_audio_stop"
                 | "computer_clipboard_release"
-        ) {
+        ) && !releases_locked_use
+        {
             let capability = if tool == "computer_connector_call"
                 && effect != agistack_adapters_cua::CuaToolEffect::Read
             {
@@ -622,16 +671,14 @@ impl ToolHost for ScopedComputerUseHost {
                     status,
                 );
             }
-            output["connectors"] = json!(
-                connectors::scoped_list(
-                    &state,
-                    &self.session.owner,
-                    &self
-                        .native
-                        .allowed_mcp_servers(&state, &self.session.context.conversation_id)
-                )
-                .map_err(CoreError::Tool)?
-            );
+            output["connectors"] = json!(connectors::scoped_list(
+                &state,
+                &self.session.owner,
+                &self
+                    .native
+                    .allowed_mcp_servers(&state, &self.session.context.conversation_id)
+            )
+            .map_err(CoreError::Tool)?);
             output["native_connector_operations"] =
                 json!(agistack_adapters_cua::native_connector_operations());
             result.output_json = output.to_string();

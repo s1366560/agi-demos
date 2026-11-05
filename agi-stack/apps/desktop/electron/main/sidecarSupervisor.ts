@@ -82,6 +82,8 @@ type BrowserBridgeConfiguration = Readonly<{
   port: number;
   extension_ids: readonly string[];
   full_cdp_access_enabled: boolean;
+  cdp_endpoints: readonly Readonly<{ id: string; name: string; endpoint: string; enabled: boolean }>[];
+  default_browser_id: string;
 }>;
 
 export type SidecarSupervisorOptions = {
@@ -608,11 +610,21 @@ function browserBridgeConfiguration(value: unknown): BrowserBridgeConfiguration 
       value.port < 0 || value.port > 65535 || !Array.isArray(value.extension_ids) ||
       !value.extension_ids.every((id): id is string => typeof id === 'string') ||
       typeof value.full_cdp_access_enabled !== 'boolean') return null;
+  const endpoints = value.cdp_endpoints ?? [];
+  const defaultBrowser = value.default_browser_id ?? 'iab';
+  if (!Array.isArray(endpoints) || !endpoints.every(endpoint => isRecord(endpoint) &&
+      ['id', 'name', 'endpoint'].every(key => typeof endpoint[key] === 'string' && endpoint[key]) &&
+      typeof endpoint.enabled === 'boolean') || typeof defaultBrowser !== 'string' || !defaultBrowser) return null;
   return Object.freeze({
     enabled: value.enabled,
     port: value.port,
     extension_ids: Object.freeze([...value.extension_ids]),
     full_cdp_access_enabled: value.full_cdp_access_enabled,
+    cdp_endpoints: Object.freeze(endpoints.map(endpoint => Object.freeze({
+      id: endpoint.id as string, name: endpoint.name as string, endpoint: endpoint.endpoint as string,
+      enabled: endpoint.enabled as boolean,
+    }))),
+    default_browser_id: defaultBrowser,
   });
 }
 
@@ -624,6 +636,13 @@ function configuredBrowserBridge(value: unknown): BrowserBridgeConfiguration | n
 function sameBrowserBridge(left: BrowserBridgeConfiguration, right: BrowserBridgeConfiguration): boolean {
   return left.enabled === right.enabled && left.port === right.port &&
     left.full_cdp_access_enabled === right.full_cdp_access_enabled &&
+    left.default_browser_id === right.default_browser_id &&
+    left.cdp_endpoints.length === right.cdp_endpoints.length &&
+    left.cdp_endpoints.every((endpoint, index) => {
+      const other = right.cdp_endpoints[index];
+      return endpoint.id === other.id && endpoint.name === other.name &&
+        endpoint.endpoint === other.endpoint && endpoint.enabled === other.enabled;
+    }) &&
     left.extension_ids.length === right.extension_ids.length &&
     left.extension_ids.every((id, index) => id === right.extension_ids[index]);
 }

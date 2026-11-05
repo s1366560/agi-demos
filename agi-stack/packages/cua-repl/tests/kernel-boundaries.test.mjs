@@ -19,17 +19,20 @@ test('reset refuses active host work and starts a fresh variable and documentati
   const output = [];
   let complete;
   let started;
+  let first = true;
   const ready = new Promise(resolve => { started = resolve; });
   const repl = new ReplKernel({
     enabledSurfaces: ['computer'], send: value => output.push(value),
     rpc: async (method, params) => {
       assert.equal(method, 'computer.call');
       assert.equal(params.tool, 'computer_list_apps');
+      if (!first) return { apps: [] };
+      first = false;
       started();
       return new Promise(resolve => { complete = resolve; });
     },
   });
-  const active = repl.execute('before', 'let retained = 7; await cua.initialize(); await cua.listApps({emit:false});');
+  const active = repl.execute('before', 'let retained = 7; await cua.initialize({emit:false});');
   await ready;
   assert.throws(() => repl.reset(), /cannot reset an active execution/);
   await assert.rejects(repl.execute('overlap', 'retained'), /already active/);
@@ -38,7 +41,7 @@ test('reset refuses active host work and starts a fresh variable and documentati
   const before = output.filter(value => value.id === 'before');
   assert.equal(before.length, 1);
   assert.equal(repl.reset().generation, 2);
-  assert.equal(await repl.execute('after', 'await cua.initialize(); await cua.initialize(); typeof retained'), 'undefined');
+  assert.equal(await repl.execute('after', 'await cua.initialize({emit:false}); await cua.initialize({emit:false}); typeof retained'), 'undefined');
   const after = output.filter(value => value.id === 'after');
   assert.equal(after.length, 1);
   assert.equal(after[0].content.text, before[0].content.text);
@@ -76,23 +79,24 @@ test('in-process reset revokes a package-retained app while fresh and same-gener
     cwd: root, enabledSurfaces: ['computer'], send() {},
     rpc: async (method, params, id) => {
       calls.push({ method, params, id });
+      if (params.tool === 'computer_resolve_app') return { app: params.arguments.app, process_id: 42, identity_digest: 'a'.repeat(64) };
       if (params.tool === 'computer_get_app_state') return { snapshot_id: 'before-reset', window_id: '42', text: '[0] button Save' };
       if (params.tool === 'computer_click') return { ok: true };
       throw new Error('unexpected native call');
     },
   });
   await repl.execute('capture', 'import {remember} from "retained-app"; remember(await cua.getApp("fixture.app"));');
-  assert.equal(calls.length, 1);
-  await repl.execute('same-generation', 'import {recall} from "retained-app"; await recall().click(0);');
   assert.equal(calls.length, 2);
+  await repl.execute('same-generation', 'import {recall} from "retained-app"; await recall().click(0);');
+  assert.equal(calls.length, 3);
   repl.reset();
   await assert.rejects(
     repl.execute('after-reset', 'import {recall} from "retained-app"; await recall().click(0);'),
     /reset|expired|invalid|active/,
   );
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   await repl.execute('fresh', 'const freshApp = await cua.getApp("fixture.app"); await freshApp.click(0);');
-  assert.deepEqual(calls.slice(2).map(call => call.id), ['fresh', 'fresh']);
+  assert.deepEqual(calls.slice(3).map(call => call.id), ['fresh', 'fresh', 'fresh']);
 });
 
 test('in-process reset revokes retained output, direct RPC, process APIs and delayed dynamic imports', async t => {

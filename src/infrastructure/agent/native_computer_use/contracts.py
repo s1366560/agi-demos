@@ -16,6 +16,8 @@ READ_TOOL_NAMES = frozenset(
         "computer_list_windows",
         "computer_clipboard_read",
         "computer_audio_status",
+        "computer_audio_read",
+        "computer_resolve_app",
     }
 )
 TOOL_NAMES = READ_TOOL_NAMES | frozenset(
@@ -39,6 +41,7 @@ TOOL_NAMES = READ_TOOL_NAMES | frozenset(
         "computer_clipboard_release",
         "computer_audio_start",
         "computer_audio_stop",
+        "computer_locked_use",
         "computer_connector_call",
     }
 )

@@ -16,6 +16,7 @@ const {
   hitlDecisionView,
   hitlEnvVarView,
   hitlRequestExpiry,
+  isCloudExecutionStepApproval,
   toggleDecisionSelection,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/hitlResponseCardModel.js',
@@ -25,6 +26,18 @@ const cardSource = readFileSync(
   'utf8',
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+
+test('cloud execution steps use bound HITL continuation rather than device consent', () => {
+  const request = {
+    decision: { target: { kind: 'computer_app', id: 'step-request' } },
+    native_binding: { capability: 'execution_step', native_request_id: 'step-request', execution_step: {} },
+  };
+  assert.equal(isCloudExecutionStepApproval(request), true);
+  assert.equal(isCloudExecutionStepApproval({ ...request, native_binding: { ...request.native_binding, native_request_id: 'other' } }), false);
+  assert.equal(isCloudExecutionStepApproval({ ...request, native_binding: { ...request.native_binding, capability: 'screen' } }), false);
+  assert.equal(isCloudExecutionStepApproval({ ...request, native_binding: { ...request.native_binding, execution_step: null } }), false);
+  assert.match(cardSource, /!isCloudExecutionStepApproval\(approvalRequest\)/u);
+});
 
 function item(type, payload) {
   return {

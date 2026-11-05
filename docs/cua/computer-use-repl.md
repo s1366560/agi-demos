@@ -1,7 +1,12 @@
 # Persistent Computer Use
 
+See the [2026-10-29 implementation and validation update](computer-use-2026-10-29.md)
+for facade compatibility, local CDP providers, large-audio output and current
+native acceptance limits.
+
 This document describes the macOS implementation added on 2026-10-22. Browser
-support covers Chrome, Edge, the Electron in-app browser, and attached MCP Apps.
+support covers Chrome, Edge, the Electron in-app browser, attached MCP Apps, and
+explicitly configured loopback CDP browsers.
 It does not provide OpenAI's private browser services. MCP remains a structured
 host tool interface; there is no invented `cua.connectors` or `cua.mcp` namespace.
 

@@ -35,11 +35,14 @@ export function BrowserAuthRequests({ config, conversationId }: Readonly<{
   config: DesktopRuntimeConfig | undefined;
   conversationId: string;
 }>) {
+  const { t } = useI18n();
+  const [pollFailed, setPollFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [pending, setPending] = useState<AuthPrompt[]>([]);
   const latestConfig = useRef(config);
   latestConfig.current = config;
+  useEffect(() => { setPending([]); setPollFailed(false); }, [conversationId, config?.mode, config?.apiKey, config?.localApiToken]);
   useEffect(() => {
-    setPending([]);
     const activeConfig = latestConfig.current;
     if (!activeConfig || !conversationId) return;
     const controller = new AbortController();
@@ -47,15 +50,15 @@ export function BrowserAuthRequests({ config, conversationId }: Readonly<{
     const poll = async () => {
       try {
         const result = await invokeBrowserAuth('browser_auth_pending', { conversation_id: conversationId });
-        if (!controller.signal.aborted) setPending(prompts(result));
-      } catch { if (!controller.signal.aborted) setPending([]); }
+        if (!controller.signal.aborted) { setPending(prompts(result)); setPollFailed(false); }
+      } catch { if (!controller.signal.aborted) setPollFailed(true); }
       if (!controller.signal.aborted) timer = setTimeout(() => void poll(), 1000);
     };
     void poll();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [config?.mode, config?.apiBaseUrl, config?.apiKey, config?.localApiToken, conversationId]);
-  if (!config || pending.length === 0) return null;
-  return <>{pending.map(prompt => <BrowserAuthForm key={prompt.request_id} prompt={prompt} conversationId={conversationId}
+  }, [config?.mode, config?.apiBaseUrl, config?.apiKey, config?.localApiToken, conversationId, retry]);
+  if (!config || (pending.length === 0 && !pollFailed)) return null;
+  return <>{pollFailed ? <div role="alert" className="timeline-details"><Text>{t('chat.browserAuth.pollFailed')}</Text><Button type="button" onClick={() => setRetry(current => current + 1)}>{t('common.retry')}</Button></div> : null}{pending.map(prompt => <BrowserAuthForm key={prompt.request_id} prompt={prompt} conversationId={conversationId}
     onCompleted={() => setPending(current => current.filter(item => item.request_id !== prompt.request_id))} />)}</>;
 }
 

@@ -53,6 +53,7 @@ async fn agent_conversation_repo_creates_lists_and_links_workspace_session() {
             project_id: "conv_events_project",
             status: Some("active"),
             workspace_id: Some("conv_repo_workspace"),
+            unbound_only: false,
             limit: 10,
             offset: 0,
         })

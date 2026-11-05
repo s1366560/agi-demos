@@ -13,6 +13,7 @@ pub(super) async fn attach_dom_bridge(fixture: &FormalFixture) -> JoinHandle<()>
             port: 0,
             extension_ids: vec![],
             full_cdp_access_enabled: false,
+            ..Default::default()
         },
         path.clone(),
         None,

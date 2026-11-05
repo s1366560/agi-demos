@@ -46,7 +46,7 @@ test('session projection loading enters one session-scoped V2 read operation', (
   assert.match(loader, /const controller = new AbortController\(\)/u);
   assert.match(
     loader,
-    /desktopSessionProjectionOperationsV2\.getConversationSession\(\{[\s\S]*?config: requestConfig,[\s\S]*?conversation: scopedConversation,[\s\S]*?signal: controller\.signal,[\s\S]*?\}\)/u,
+    /desktopSessionProjectionOperationsV2\.getConversationSession\(\{[\s\S]*?config: requestConfig,[\s\S]*?conversation: sessionProjectionConversationIdentity,[\s\S]*?signal: controller\.signal,[\s\S]*?\}\)/u,
   );
   assert.match(loader, /sessionProjectionRequestRef\.current !== requestId/u);
   assert.match(loader, /signedSessionSnapshotRevision\(payload\)/u);

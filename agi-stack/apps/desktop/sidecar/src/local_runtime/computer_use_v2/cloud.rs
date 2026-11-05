@@ -4,10 +4,15 @@ use crate::trusted_session::{TrustedSessionBroker, TrustedSessionRuntimeMode};
 use serde::Deserialize;
 use std::collections::BTreeSet;
 
-#[path = "cloud_resume.rs"]
-mod resume;
+#[path = "cloud_locked_use.rs"]
+pub(super) mod locked_continuity;
+#[cfg(test)]
+#[path = "cloud_locked_use_tests.rs"]
+mod locked_use_tests;
 #[path = "cloud_repl.rs"]
 mod repl;
+#[path = "cloud_resume.rs"]
+mod resume;
 pub(super) use resume::{authorize_resume, resume_available};
 
 #[derive(Clone)]
@@ -34,6 +39,8 @@ pub(super) struct RequestBinding {
 }
 #[derive(Clone)]
 pub(super) struct CloudLease {
+    request_id: String,
+    authorization_revision: u64,
     broker: TrustedSessionBroker,
     epoch: u64,
     expires_at: i64,
@@ -109,8 +116,14 @@ struct Input {
     artifact_id: Option<String>,
     offset: Option<u64>,
 }
+#[path = "cloud_browser_identity.rs"]
+mod browser_identity;
 #[derive(Clone, Deserialize)]
 struct Claim {
+    #[serde(default)]
+    child_run_id: Option<String>,
+    #[serde(default)]
+    browser_scope: Option<browser_identity::BrowserScope>,
     request_id: String,
     user_id: String,
     tenant_id: String,
@@ -302,7 +315,10 @@ pub(in crate::local_runtime) async fn operation(
             project_id: input.scope.project_id,
             device_id: state.session_store.installation_id().into(),
         };
-        state.computer_use.cloud_cleanup.remember(broker, transport.epoch, &owner)?;
+        state
+            .computer_use
+            .cloud_cleanup
+            .remember(broker, transport.epoch, &owner)?;
         let instance = {
             let db = state.session_store.connection()?;
             store::instance(&db, &owner)?
@@ -336,7 +352,9 @@ pub(in crate::local_runtime) async fn operation(
         } else {
             vec![]
         };
-        if enabled { tools.extend(repl::catalog(state, &owner, broker, transport.epoch)?); }
+        if enabled {
+            tools.extend(repl::catalog(state, &owner, broker, transport.epoch)?);
+        }
         state
             .computer_use
             .cloud_connections
@@ -531,6 +549,7 @@ pub(in crate::local_runtime) async fn operation(
     {
         return Err("cua_cloud_run_authority_required".into());
     }
+    claim.browser_caller().map_err(|error| error.to_string())?;
     let instance = {
         let db = state.session_store.connection()?;
         store::instance(&db, &owner)?
@@ -633,6 +652,8 @@ pub(in crate::local_runtime) async fn operation(
         return Err("cua_cloud_request_cancelled".into());
     }
     let lease = CloudLease {
+        request_id: request_id.clone(),
+        authorization_revision: claim.authorization_revision,
         broker: broker.clone(),
         epoch: transport.epoch,
         expires_at: claim.expires_at,
@@ -662,16 +683,22 @@ pub(in crate::local_runtime) async fn operation(
         round: claim.round,
         tool: &claim.tool_name,
     };
-    let mut result = if crate::local_runtime::cua_repl::TOOLS.contains(&claim.tool_name.as_str()) || claim.mcp_binding.is_some() {
+    let mut result = if crate::local_runtime::cua_repl::TOOLS.contains(&claim.tool_name.as_str())
+        || claim.mcp_binding.is_some()
+    {
         repl::execute(state, &owner, claim.clone(), lease, session.clone()).await
-    } else { call_identity::scope(
-        &context,
-        host.call_with_content(&claim.tool_name, &claim.input_json),
-    )
-    .await }
+    } else {
+        call_identity::scope(
+            &context,
+            host.call_with_content(&claim.tool_name, &claim.input_json),
+        )
+        .await
+    }
     .map_err(|error| error.to_string())?;
     if crate::local_runtime::cua_repl::TOOLS.contains(&claim.tool_name.as_str()) {
-        artifacts::persist(state, &owner, &session.context, &mut result).await.map_err(|error|error.to_string())?;
+        artifacts::persist(state, &owner, &session.context, &mut result)
+            .await
+            .map_err(|error| error.to_string())?;
     }
     if let Some(binding) = &session.cloud {
         *binding
@@ -712,7 +739,10 @@ pub(in crate::local_runtime) async fn operation(
                     .as_str()
                     .ok_or("cua_cloud_audio_artifact_missing")?
                     .to_owned();
-                if !media.iter().any(|descriptor| descriptor["artifact_id"] == id) {
+                if !media
+                    .iter()
+                    .any(|descriptor| descriptor["artifact_id"] == id)
+                {
                     media.push(artifacts::descriptor(state, &owner, &id)?);
                 }
                 if let Some(object) = artifact.as_object_mut() {

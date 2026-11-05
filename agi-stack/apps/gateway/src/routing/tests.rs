@@ -1,4 +1,45 @@
 use super::*;
+
+#[test]
+fn computer_use_routes_follow_the_rust_websocket_broker() {
+    for (method, path) in [
+        (Method::GET, "/api/v1/agent/device/status"),
+        (Method::GET, "/api/v1/agent/conversations/c1/session"),
+        (Method::POST, "/api/v1/agent/hitl/respond"),
+        (Method::POST, "/api/v1/agent/device/requests/r1/claim"),
+        (
+            Method::POST,
+            "/api/v1/agent/device/requests/r1/resume-authority",
+        ),
+        (
+            Method::POST,
+            "/api/v1/agent/device/requests/r1/continuity-authority",
+        ),
+        (
+            Method::POST,
+            "/api/v1/agent/device/requests/r1/steps/s1/authorize",
+        ),
+        (Method::GET, "/api/v1/agent/conversations/c1/tool-media/a1"),
+    ] {
+        assert!(is_strangled_request(&method, path), "{method} {path}");
+    }
+    assert!(!is_strangled_request(
+        &Method::GET,
+        "/api/v1/agent/device/requests/r1/claim"
+    ));
+    assert!(!is_strangled_request(
+        &Method::POST,
+        "/api/v1/agent/device/requests/r1/steps/s1/delete"
+    ));
+    assert!(!is_strangled_request(
+        &Method::GET,
+        "/api/v1/agent/device/requests/r1/continuity-authority"
+    ));
+    assert!(!is_strangled_request(
+        &Method::POST,
+        "/api/v1/agent/device/requests/r1/continuity-authority/extra"
+    ));
+}
 use axum::http::{HeaderMap, HeaderName, Method};
 
 fn ups() -> Upstreams {

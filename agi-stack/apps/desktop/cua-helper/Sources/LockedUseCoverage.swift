@@ -261,11 +261,18 @@ struct LockedUseCoverageState {
     private enum Phase { case idle, pending, guarded, relocking, locked }
     private var phase = Phase.idle
     private var attempt: (token: UUID, deadline: Double)?
+    private var completeSince: Double?
+    private var lastPendingObservation: Double?
+    private var readyCandidate: UUID?
     private(set) var suppressed = false
     private(set) var beginUptimeSeconds: Double?
     private(set) var readyUptimeSeconds: Double?
     // Cold AppKit publication can overlap the system lock transition. Waiting
     // grants no authority and remains capped by the original supervision claim.
+    // Consecutive observations add a pre-unlock settling interval, not proof of future coverage.
+    static let requiredCompleteObservation = 1.0
+    // Polling targets 10ms. Large scheduler gaps must reset, never count as continuous samples.
+    static let maximumObservationGap = 0.25
     static let publicationTimeout = 2.0
     static let beginReplyTimeout = publicationTimeout + 0.5
     var active: Bool { phase == .guarded }
@@ -278,20 +285,44 @@ struct LockedUseCoverageState {
     mutating func begin(now: Double, expiresAt: Double) -> UUID? {
         guard phase == .idle, !suppressed, now.isFinite, expiresAt.isFinite, expiresAt > now else { return nil }
         let token = UUID()
-        attempt = (token, min(now + Self.publicationTimeout, expiresAt)); phase = .pending
-        beginUptimeSeconds = now
+        let deadline = min(now + Self.publicationTimeout, expiresAt)
+        attempt = (token, deadline); phase = .pending
+        beginUptimeSeconds = now; completeSince = nil; lastPendingObservation = now; readyCandidate = nil
         return token
     }
     mutating func advance(token: UUID, now: Double, report: LockedUseCoverageReport,
-                          leaseValid: Bool, dependenciesHealthy: Bool) -> Advance {
+                          leaseValid: Bool, dependenciesHealthy: Bool, systemLocked: Bool) -> Advance {
         guard phase == .pending, let attempt = attempt, attempt.token == token else { return .stale }
-        guard now.isFinite, now < attempt.deadline, leaseValid, dependenciesHealthy, report.topologyMatches else {
+        guard now.isFinite, let previous = lastPendingObservation, now >= previous,
+              now < attempt.deadline, leaseValid, dependenciesHealthy, systemLocked,
+              report.topologyMatches else {
             revoke(); return .revoked
         }
-        guard report.complete else { return .pending }
-        self.attempt = nil; phase = .guarded
+        lastPendingObservation = now
+        guard report.complete else { resetPendingCoverage(); return .pending }
+        guard let start = completeSince, now - previous <= Self.maximumObservationGap else {
+            completeSince = now; readyCandidate = nil; return .pending
+        }
+        guard now - start >= Self.requiredCompleteObservation else { return .pending }
+        // A ready candidate remains pending until a fresh check commits the same token.
+        readyCandidate = token
+        return .ready
+    }
+    mutating func commitReady(token: UUID, now: Double, report: LockedUseCoverageReport,
+                              leaseValid: Bool, dependenciesHealthy: Bool, systemLocked: Bool) -> Advance {
+        guard phase == .pending, let attempt = attempt, attempt.token == token else { return .stale }
+        guard readyCandidate == token else { return .pending }
+        let checked = advance(token: token, now: now, report: report, leaseValid: leaseValid,
+            dependenciesHealthy: dependenciesHealthy, systemLocked: systemLocked)
+        guard checked == .ready else { return checked }
+        self.attempt = nil; completeSince = nil; lastPendingObservation = nil; readyCandidate = nil; phase = .guarded
         readyUptimeSeconds = now
         return .ready
+    }
+    // Any independent pending observation of a coverage gap invalidates stability.
+    mutating func resetPendingCoverage() {
+        guard pending else { return }
+        completeSince = nil; readyCandidate = nil
     }
     mutating func validateActive(report: LockedUseCoverageReport, leaseValid: Bool,
                                  dependenciesHealthy: Bool) -> Bool {
@@ -300,7 +331,8 @@ struct LockedUseCoverageState {
         return true
     }
     mutating func revoke() {
-        suppressed = true; attempt = nil
+        suppressed = true; attempt = nil; completeSince = nil; lastPendingObservation = nil
+        readyCandidate = nil
         if phase != .idle { phase = .relocking }
     }
     mutating func confirmLocked() {

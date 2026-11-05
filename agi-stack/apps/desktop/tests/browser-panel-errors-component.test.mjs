@@ -67,6 +67,7 @@ for (const operation of ['listTabs', 'showPane', 'focusTab', 'createTab', 'close
     const tab = { tabId: 1, windowId: 1, title: 'Example', url: 'https://example.com', active: true };
     const bridge = {
       listTabs: async () => ({ tabs: [tab] }),
+      status: async () => ({ status: 'connected' }),
       onTabsChanged: () => () => {},
       showPane: async () => {}, setBounds: async () => {}, hidePane: async () => {},
       focusTab: async () => {}, createTab: async () => {}, closeTab: async () => {},

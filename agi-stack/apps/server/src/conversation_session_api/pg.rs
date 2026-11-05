@@ -13,16 +13,20 @@ use crate::workspace_authority::SharedWorkspaceAuthority;
 use super::{
     build_projection, sanitized_scalar, sanitized_text, string_list, ConversationSessionApiError,
     ConversationSessionAuthoritySnapshot, ConversationSessionProjectionResponse,
-    ConversationSessionQuery, SessionArtifactAuthority, SessionArtifactRecordResponse,
-    SessionCapabilityMode, SessionConversationResponse, SessionConversationTaskResponse,
-    SessionHitlKind, SessionMutationAuthority, SessionPendingHitlResponse,
-    SessionPermissionProfile, SessionPermissionRequestResponse, SessionPermissionRiskLevel,
-    SessionPlanRunResponse, SessionRunEnvironmentKind, SessionRunEnvironmentResponse,
-    SessionToolExecutionAuthority, SessionToolExecutionResponse, SessionWorkspaceAttemptResponse,
-    SessionWorkspacePlanContextResponse,
+    ConversationSessionQuery, SessionAgentPlanResponse, SessionArtifactAuthority,
+    SessionArtifactRecordResponse, SessionCapabilityMode, SessionConversationResponse,
+    SessionConversationTaskResponse, SessionHitlKind, SessionMutationAuthority,
+    SessionPendingHitlResponse, SessionPermissionProfile, SessionPermissionRequestResponse,
+    SessionPermissionRiskLevel, SessionPlanRunResponse, SessionRunEnvironmentKind,
+    SessionRunEnvironmentResponse, SessionToolExecutionAuthority, SessionToolExecutionResponse,
+    SessionWorkspaceAttemptResponse, SessionWorkspacePlanContextResponse,
 };
 
 const TOOL_RECORD_LIMIT: i64 = 200;
+
+#[cfg(test)]
+#[path = "chat_projection_tests.rs"]
+mod chat_projection_tests;
 const OPTION_KEYS: &[&str] = &["id", "label", "description", "recommended", "is_default"];
 const ENV_CONTEXT_KEYS: &[&str] = &[
     "help_url",
@@ -130,6 +134,7 @@ impl PgConversationSessionProjectionService {
         let (
             attempts,
             runs,
+            plans,
             conversation_tasks,
             workspace_plan_context,
             hitl,
@@ -138,13 +143,14 @@ impl PgConversationSessionProjectionService {
         ) = tokio::try_join!(
             self.load_attempts(&conversation),
             self.load_runs(&conversation),
+            self.load_plans(&conversation),
             self.load_conversation_tasks(&conversation.id),
             self.load_workspace_plan_context(&conversation),
             self.load_pending_hitl(&conversation, user_id),
             self.load_artifacts(&conversation),
             self.load_tool_executions(&conversation.id),
         )?;
-        build_projection(ConversationSessionAuthoritySnapshot {
+        let mut projection = build_projection(ConversationSessionAuthoritySnapshot {
             conversation,
             attempts,
             runs,
@@ -161,8 +167,17 @@ impl PgConversationSessionProjectionService {
             artifact_records,
             tool_executions,
         })
-        .map(Some)
-        .map_err(|error| sqlx::Error::Protocol(error.into_diagnostic()))
+        .map_err(|error| sqlx::Error::Protocol(error.into_diagnostic()))?;
+        for plan in &plans {
+            projection.updated_at = projection
+                .updated_at
+                .max(plan.approved_at.unwrap_or(plan.created_at));
+        }
+        projection.current_plan = plans.first().cloned();
+        projection.plan_history = plans;
+        projection.snapshot_revision = super::projection_revision(&projection)
+            .map_err(|error| sqlx::Error::Protocol(error.into_diagnostic()))?;
+        Ok(Some(projection))
     }
 
     async fn load_conversation(
@@ -210,23 +225,71 @@ impl PgConversationSessionProjectionService {
         conversation: &SessionConversationResponse,
     ) -> Result<Vec<SessionPlanRunResponse>, sqlx::Error> {
         let rows = sqlx::query_as::<_, AgentPlanRunRow>(
-            "SELECT run.id, run.conversation_id, run.project_id, run.plan_version_id, \
+            "SELECT * FROM (SELECT run.id, run.conversation_id, run.project_id, run.plan_version_id, \
                     run.idempotency_key, run.message_id, run.request_message, run.status, \
                     run.revision, run.permission_profile, run.authorization_snapshot, \
-                    run.created_at, run.updated_at, run.completed_at, run.error \
+                    run.created_at, run.updated_at, run.completed_at, run.error, NULL::timestamptz AS started_at \
              FROM agent_plan_runs AS run \
              INNER JOIN agent_plan_versions AS plan \
                ON plan.id = run.plan_version_id \
               AND plan.conversation_id = run.conversation_id \
              WHERE run.conversation_id = $1 \
                AND run.project_id = $2 \
-             ORDER BY run.created_at DESC, run.id DESC",
+             UNION ALL \
+             SELECT run.id, run.conversation_id, run.project_id, run.plan_version_id, \
+                    run.idempotency_key, run.message_id, run.request_message, run.status, \
+                    run.revision, run.permission_profile, run.authorization_snapshot, \
+                    run.created_at, run.updated_at, run.completed_at, run.error, run.started_at \
+             FROM agent_run_authorities AS run \
+             WHERE run.conversation_id = $1 AND run.project_id = $2 AND run.tenant_id = $3 \
+               AND run.run_kind = 'chat') AS runs ORDER BY created_at DESC, id DESC",
         )
         .bind(&conversation.id)
         .bind(&conversation.project_id)
+        .bind(&conversation.tenant_id)
         .fetch_all(&self.pool)
         .await?;
         project_plan_run_rows(rows)
+    }
+
+    async fn load_plans(
+        &self,
+        conversation: &SessionConversationResponse,
+    ) -> Result<Vec<SessionAgentPlanResponse>, sqlx::Error> {
+        let rows = sqlx::query_as::<_, PlanVersionRow>(
+            "SELECT id, conversation_id, version, status, tasks_json, created_at, approved_at \
+             FROM agent_plan_versions WHERE conversation_id=$1 ORDER BY version DESC, created_at DESC, id DESC")
+            .bind(&conversation.id).fetch_all(&self.pool).await?;
+        rows.into_iter()
+            .map(|row| {
+                let tasks =
+                    serde_json::from_value::<Vec<SessionConversationTaskResponse>>(row.tasks_json)
+                        .map_err(|_| {
+                            sqlx::Error::Protocol(
+                                "persisted plan task authority is malformed".into(),
+                            )
+                        })?;
+                if row.version < 1
+                    || !matches!(row.status.as_str(), "draft" | "approved")
+                    || tasks
+                        .iter()
+                        .any(|task| task.conversation_id != conversation.id)
+                {
+                    return Err(sqlx::Error::Protocol(
+                        "persisted plan authority is malformed".into(),
+                    ));
+                }
+                Ok(SessionAgentPlanResponse {
+                    id: row.id,
+                    conversation_id: row.conversation_id,
+                    version: row.version,
+                    status: row.status,
+                    tasks,
+                    created_at: row.created_at,
+                    approved_at: row.approved_at,
+                })
+            })
+            .collect()
     }
 
     async fn load_conversation_tasks(
@@ -424,7 +487,7 @@ struct AgentPlanRunRow {
     id: String,
     conversation_id: String,
     project_id: String,
-    plan_version_id: String,
+    plan_version_id: Option<String>,
     idempotency_key: String,
     message_id: String,
     request_message: String,
@@ -436,6 +499,18 @@ struct AgentPlanRunRow {
     updated_at: DateTime<Utc>,
     completed_at: Option<DateTime<Utc>>,
     error: Option<String>,
+    started_at: Option<DateTime<Utc>>,
+}
+
+#[derive(FromRow)]
+struct PlanVersionRow {
+    id: String,
+    conversation_id: String,
+    version: i32,
+    status: String,
+    tasks_json: Value,
+    created_at: DateTime<Utc>,
+    approved_at: Option<DateTime<Utc>>,
 }
 
 impl AgentPlanRunRow {
@@ -457,7 +532,9 @@ impl AgentPlanRunRow {
             ),
             (
                 "plan_version_id".to_string(),
-                Value::String(self.plan_version_id.clone()),
+                self.plan_version_id
+                    .as_ref()
+                    .map_or(Value::Null, |id| Value::String(id.clone())),
             ),
             (
                 "permission_profile".to_string(),
@@ -477,7 +554,7 @@ impl AgentPlanRunRow {
             revision: self.revision,
             created_at: self.created_at,
             updated_at: self.updated_at,
-            started_at: None,
+            started_at: self.started_at,
             completed_at: self.completed_at,
             last_heartbeat_at: None,
             error: self.error,
@@ -547,7 +624,7 @@ mod plan_run_tests {
             id: id.to_string(),
             conversation_id: "conversation-1".to_string(),
             project_id: "project-1".to_string(),
-            plan_version_id: "plan-version-1".to_string(),
+            plan_version_id: Some("plan-version-1".to_string()),
             idempotency_key: format!("approval-{id}"),
             message_id: format!("message-{id}"),
             request_message: "Implement the approved plan".to_string(),
@@ -559,6 +636,7 @@ mod plan_run_tests {
             updated_at: created_at,
             completed_at: None,
             error: None,
+            started_at: None,
         }
     }
 
@@ -640,9 +718,17 @@ impl PendingHitlRow {
         } else {
             Map::new()
         };
-        let decision=self.request_metadata.as_ref().and_then(|metadata|metadata.get("decision"))
-            .and_then(|value|serde_json::from_value::<agistack_core::agent::types::DecisionContext>(value.clone()).ok())
-            .filter(|decision|decision.is_complete());
+        let decision = self
+            .request_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("decision"))
+            .and_then(|value| {
+                serde_json::from_value::<agistack_core::agent::types::DecisionContext>(
+                    value.clone(),
+                )
+                .ok()
+            })
+            .filter(|decision| decision.is_complete());
         Some(SessionPendingHitlResponse {
             id: self.id,
             conversation_id: self.conversation_id,
@@ -659,7 +745,7 @@ impl PendingHitlRow {
             status: "pending",
             created_at: self.created_at,
             expires_at: self.expires_at,
-            authority_revision:1,
+            authority_revision: 1,
             decision,
         })
     }

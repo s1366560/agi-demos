@@ -17,7 +17,10 @@ pub fn effective_conversation_workspace_id<'a>(
         metadata
             .and_then(|value| value.get("workspace_id"))
             .and_then(Value::as_str),
-        conversation_id.strip_prefix("workspace-chat:"),
+        conversation_id
+            .strip_prefix("workspace-")
+            .and_then(|suffix| suffix.split_once(':'))
+            .and_then(|(_, suffix)| suffix.split(':').next()),
     ]
     .into_iter()
     .flatten()
@@ -38,6 +41,7 @@ pub struct ConversationListQuery<'a> {
     pub project_id: &'a str,
     pub status: Option<&'a str>,
     pub workspace_id: Option<&'a str>,
+    pub unbound_only: bool,
     pub limit: i64,
     pub offset: i64,
 }
@@ -121,6 +125,13 @@ impl PgAgentConversationRepository {
                     )) \
                     OR ($3::text IS NULL AND c.user_id = $4) \
                ) \
+               AND (NOT $7::boolean OR COALESCE( \
+                    NULLIF(TRIM(c.workspace_id), ''), \
+                    CASE WHEN jsonb_typeof(c.meta::jsonb -> 'workspace_id') = 'string' \
+                         THEN NULLIF(TRIM(c.meta->>'workspace_id'), '') END, \
+                    CASE WHEN c.id LIKE 'workspace-%:%' \
+                         THEN NULLIF(TRIM(SPLIT_PART(c.id, ':', 2)), '') END \
+               ) IS NULL) \
              ORDER BY COALESCE(la.last_event_time_us, 0) DESC, \
                       COALESCE(c.updated_at, c.created_at) DESC, \
                       c.created_at DESC, c.id ASC \
@@ -132,6 +143,7 @@ impl PgAgentConversationRepository {
         .bind(query.user_id)
         .bind(query.limit)
         .bind(query.offset)
+        .bind(query.unbound_only)
         .fetch_all(&self.pool)
         .await
         .map_err(storage)
@@ -151,12 +163,20 @@ impl PgAgentConversationRepository {
                         OR c.id LIKE ('workspace-%:' || $3 || ':%') \
                     )) \
                     OR ($3::text IS NULL AND c.user_id = $4) \
-               )",
+               ) \
+               AND (NOT $5::boolean OR COALESCE( \
+                    NULLIF(TRIM(c.workspace_id), ''), \
+                    CASE WHEN jsonb_typeof(c.meta::jsonb -> 'workspace_id') = 'string' \
+                         THEN NULLIF(TRIM(c.meta->>'workspace_id'), '') END, \
+                    CASE WHEN c.id LIKE 'workspace-%:%' \
+                         THEN NULLIF(TRIM(SPLIT_PART(c.id, ':', 2)), '') END \
+               ) IS NULL)",
         )
         .bind(query.project_id)
         .bind(query.status)
         .bind(query.workspace_id)
         .bind(query.user_id)
+        .bind(query.unbound_only)
         .fetch_one(&self.pool)
         .await
         .map(|(count,)| count)

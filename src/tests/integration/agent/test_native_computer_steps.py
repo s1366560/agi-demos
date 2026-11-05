@@ -393,6 +393,7 @@ def test_cell_transport_timeout_covers_requested_runtime(bridge):
 @pytest.mark.parametrize(
     ("operation", "args", "effect"),
     [
+        ("browsers.resolve", [{"url": "https://example.test"}], "read"),
         ("capability.management.bookmarks.search", ["fixture"], "read"),
         ("capability.visibility.set", [True], "mutate"),
         ("capability.browserAuth.request", [], "mutate"),

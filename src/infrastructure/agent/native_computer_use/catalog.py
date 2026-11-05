@@ -16,6 +16,7 @@ STEP_ONLY = "x-cua-step-only"
 READ_OPERATIONS = frozenset(
     {
         "browsers.list",
+        "browsers.resolve",
         "tabs.list",
         "tabs.selected",
         "tab.title",

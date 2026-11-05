@@ -1,8 +1,8 @@
 //! Structured browser facade operations. Effects are protocol metadata, never text inference.
 use agistack_core::ports::CoreResult;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, backend_of, tool_err};
+use crate::host::{backend_of, tool_err, Backend, BridgeEndpoint, BrowserToolHost};
 
 pub const TOOL_READ: &str = "browser_read_operation";
 pub const TOOL_WRITE: &str = "browser_write_operation";
@@ -32,7 +32,9 @@ pub fn operation_effect(input: &Value) -> CoreResult<FacadeEffect> {
         .ok_or_else(|| tool_err("missing browser operation"))?;
     match operation {
         "browsers.list"
+        | "browsers.resolve"
         | "tabs.list"
+        | "user.openTabs"
         | "tabs.selected"
         | "history"
         | "tab.title"
@@ -121,6 +123,7 @@ pub fn operation_effect(input: &Value) -> CoreResult<FacadeEffect> {
         | "playwright.focusLocator"
         | "tabs.new"
         | "tab.claim"
+        | "user.claimTab"
         | "tab.close"
         | "tab.goto"
         | "tab.back"
@@ -221,6 +224,15 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         if operation == "browsers.list" {
             return self.endpoint.browsers().await;
         }
+        if operation == "browsers.resolve" {
+            if args.len() > 1 {
+                return Err(tool_err("browser selection accepts one options object"));
+            }
+            return self
+                .endpoint
+                .select_browser(args.first().unwrap_or(&json!({})))
+                .await;
+        }
         let backend = backend_of(&input)?;
         if operation == "history" {
             if backend.family() == "iab" {
@@ -289,8 +301,14 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
                 )
                 .await;
         }
-        if operation == "tabs.list" || operation == "tabs.selected" {
-            let result = self.backend_request(backend, "getTabs", json!({})).await?;
+        if matches!(operation, "tabs.list" | "tabs.selected" | "user.openTabs") {
+            let method =
+                if operation == "user.openTabs" && matches!(backend.family(), "iab" | "dot") {
+                    "getUserTabs"
+                } else {
+                    "getTabs"
+                };
+            let result = self.backend_request(backend, method, json!({})).await?;
             if operation == "tabs.selected" {
                 return Ok(result["tabs"]
                     .as_array()
@@ -373,8 +391,13 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
                         .first()
                         .cloned()
                         .ok_or_else(|| tool_err("locator steps missing"))?;
-                    self.facade_frame_operation(backend, tab_id, "playwright.focusLocator", &[steps])
-                        .await?;
+                    self.facade_frame_operation(
+                        backend,
+                        tab_id,
+                        "playwright.focusLocator",
+                        &[steps],
+                    )
+                    .await?;
                     let key = args
                         .get(2)
                         .and_then(|values| values.get(0))
@@ -401,8 +424,13 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
                         .first()
                         .cloned()
                         .ok_or_else(|| tool_err("locator steps missing"))?;
-                    self.facade_frame_operation(backend, tab_id, "playwright.focusLocator", &[steps])
-                        .await?;
+                    self.facade_frame_operation(
+                        backend,
+                        tab_id,
+                        "playwright.focusLocator",
+                        &[steps],
+                    )
+                    .await?;
                     let text = args
                         .get(2)
                         .and_then(|args| args.get(0))
@@ -431,7 +459,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             | "cua.scroll" | "cua.type" => {
                 self.facade_input(backend, tab_id, operation, &args).await
             }
-            "tab.claim" => self.claim_tab(&input).await,
+            "tab.claim" | "user.claimTab" => self.claim_tab(&input).await,
             "tab.goto" => {
                 let mut params = input.clone();
                 params["url"] = args
@@ -580,10 +608,7 @@ mod tests {
         assert!(normalize_input(&json!({"tabId":"wrong"})).is_err());
         let expression = dom_expression("playwright.domSnapshot", &json!(["</script>\n"])).unwrap();
         assert!(expression.contains("memstackDomOperation"));
-        assert!(
-            expression.ends_with(
-                "\"args\":[\"</script>\\n\"],\"operation\":\"playwright.domSnapshot\"})"
-            )
-        );
+        assert!(expression
+            .ends_with("\"args\":[\"</script>\\n\"],\"operation\":\"playwright.domSnapshot\"})"));
     }
 }

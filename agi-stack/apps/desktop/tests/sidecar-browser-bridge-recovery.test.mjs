@@ -3,12 +3,28 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 
-const { SidecarSupervisor } =
-  await import('file:///tmp/agistack-desktop-test-dist/electron/main/sidecarSupervisor.js');
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
+const modules = new Map();
+function load(url) {
+  if (modules.has(url.href)) return modules.get(url.href);
+  const module = { exports: {} };
+  modules.set(url.href, module.exports);
+  const source = ts.transpileModule(readFileSync(url, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  new Function('require', 'exports', source)((name) => name.startsWith('.')
+    ? load(new URL(`${name}.ts`, url)) : require(name), module.exports);
+  return module.exports;
+}
+const { SidecarSupervisor } = load(new URL('../electron/main/sidecarSupervisor.ts', import.meta.url));
 
 const bridge = (enabled, fullCdp = false) => ({
   enabled, port: 9765, extension_ids: ['owned-extension'], full_cdp_access_enabled: fullCdp,
+  cdp_endpoints: [], default_browser_id: 'iab',
 });
 const source = String.raw`#!/usr/bin/env node
 const { createHmac } = require('node:crypto');
@@ -48,6 +64,8 @@ input.once('line', (line) => {
       const result = {generation, config};
       if (mode === 'mismatch') result.config = {...config,
         browser_bridge: {...config.browser_bridge, enabled: !config.browser_bridge.enabled}};
+      if (mode === 'provider-mismatch') result.config = {...config,
+        browser_bridge: {...config.browser_bridge, cdp_endpoints: []}};
       send({type: 'response', id: request.id, ok: true, result});
     };
     if (mode === 'timeout') return;
@@ -130,6 +148,21 @@ test('a supervisor with no confirmed bridge choice never enables or replays brid
   } finally {await f.close();}
 });
 
+test('acknowledged CDP endpoints and stable default survive restart without adopting caller mutations', async () => {
+  const f = await fixture();
+  try {
+    const config = bridge(true);
+    config.cdp_endpoints = [{ id: '23344bba-c174-42a5-a14d-0534978df6c2', name: 'Local', endpoint: 'ws://127.0.0.1:9222/devtools/browser/owned', enabled: true }];
+    config.default_browser_id = `cdp:${config.cdp_endpoints[0].id}`;
+    const expected = structuredClone(config);
+    const configured = f.configure(config);
+    config.cdp_endpoints[0].endpoint = 'http://127.0.0.1:3333';
+    await configured;
+    await crash(f.supervisor);
+    assert.deepEqual((await f.supervisor.invoke('local_runtime_status')).config.browser_bridge, expected);
+  } finally { await f.close(); }
+});
+
 test('an unsuccessful disable invalidates an older enable instead of replaying it after a crash', async () => {
   const f = await fixture();
   try {
@@ -191,13 +224,16 @@ test('readiness is hidden until restore finishes and a concurrent disable fences
   } finally {await f.close();}
 });
 
-for (const mode of ['fail', 'mismatch', 'timeout']) {
+for (const mode of ['fail', 'mismatch', 'timeout', 'provider-mismatch']) {
   test(`failed recovery never publishes an identity or recovery notification: ${mode}`, async () => {
     let recovered = 0;
     const f = await fixture({onRecovered: () => recovered++, maxRestartAttempts: 0, requestTimeoutMs: 60},
       {FIXTURE_RECOVERY_MODE: mode});
     try {
-      await f.configure(bridge(true));
+      const config = bridge(true);
+      config.cdp_endpoints = [{ id: '23344bba-c174-42a5-a14d-0534978df6c2', name: 'Local', endpoint: 'http://127.0.0.1:9222', enabled: true }];
+      config.default_browser_id = `cdp:${config.cdp_endpoints[0].id}`;
+      await f.configure(config);
       // Explicit stop/start isolates one recovery attempt without automatic retries.
       await f.supervisor.stop();
       await assert.rejects(f.supervisor.start(), /fixture rejected|not confirmed|timed out/);

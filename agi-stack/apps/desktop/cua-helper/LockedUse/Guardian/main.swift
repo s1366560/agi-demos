@@ -158,22 +158,43 @@ final class Guardian: NSObject {
         guard windows.present() else { relock(.windowPresentation); return }
         pollCoverage(token)
     }
-    private func pollCoverage(_ token: UUID) {
-        guard coverage.pending, pendingReply?.token == token else { return }
+    private func pendingObservation(_ token: UUID, committing: Bool)
+        -> (LockedUseCoverageState.Advance, LockedUseCoverageReport, [String: Bool]) {
         var checks = coverage.diagnosticState
         let report = windows.report()
-        let now = ProcessInfo.processInfo.systemUptime
-        let leaseValid = validClaim(); checks["old_claim_valid"] = leaseValid
         let dependenciesHealthy = dependenciesReady(&checks)
-        let result = coverage.advance(token: token, now: now,
-            report: report, leaseValid: leaseValid, dependenciesHealthy: dependenciesHealthy)
+        let systemLocked = LockedUseRelock.systemLocked()
+        // All potentially blocking observations precede the monotonic deadline check.
+        let now = ProcessInfo.processInfo.systemUptime
+        let leaseValid = claim?.valid(now: now) == true; checks["old_claim_valid"] = leaseValid
+        let result = committing
+            ? coverage.commitReady(token: token, now: now, report: report,
+                leaseValid: leaseValid, dependenciesHealthy: dependenciesHealthy, systemLocked: systemLocked)
+            : coverage.advance(token: token, now: now, report: report,
+                leaseValid: leaseValid, dependenciesHealthy: dependenciesHealthy, systemLocked: systemLocked)
+        return (result, report, checks)
+    }
+    private func scheduleCoverage(_ token: UUID) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [weak self] in self?.pollCoverage(token) }
+    }
+    private func pollCoverage(_ token: UUID) {
+        guard coverage.pending, pendingReply?.token == token else { return }
+        let (result, report, checks) = pendingObservation(token, committing: false)
         switch result {
-        case .pending:
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [weak self] in self?.pollCoverage(token) }
+        case .pending: scheduleCoverage(token)
         case .ready:
-            guard let reply = pendingReply, reply.token == token else { return }
-            pendingReply = nil
-            send(reply.id, coverageResponse(ready: true, report: report))
+            // Repeat every observation, including WindowServer and lock state, then
+            // recheck monotonic claim and publication deadlines before replying.
+            let (committed, finalReport, finalChecks) = pendingObservation(token, committing: true)
+            switch committed {
+            case .pending: scheduleCoverage(token)
+            case .ready:
+                guard let reply = pendingReply, reply.token == token else { return }
+                pendingReply = nil
+                send(reply.id, coverageResponse(ready: true, report: finalReport))
+            case .revoked: relock(.publicationCheck, report: finalReport, checks: finalChecks)
+            case .stale: return
+            }
         case .revoked: relock(.publicationCheck, report: report, checks: checks)
         case .stale: return
         }
@@ -198,8 +219,12 @@ final class Guardian: NSObject {
             func checkedClaim() -> Bool {
                 let valid = validClaim(); checks["old_claim_valid"] = valid; return valid
             }
-            if !report.topologyMatches || !checkedClaim() || !dependenciesReady(&checks) {
+            if !report.topologyMatches || !checkedClaim() || !dependenciesReady(&checks)
+                || !LockedUseRelock.systemLocked() {
                 relock(.pendingTick, report: report, checks: checks)
+            } else if !report.complete {
+                // A gap observed by the independent timer also invalidates stability.
+                coverage.resetPendingCoverage()
             }
         } else if active { _ = validateCoverage(.activeTick) }
         if relocking, recovery.step() {

@@ -112,6 +112,10 @@ fn default_extension_ids() -> Vec<String> {
     vec![DEFAULT_EXTENSION_ID.to_string()]
 }
 
+fn default_browser_id() -> String {
+    "iab".into()
+}
+
 /// `browser_bridge` section of [`LocalRuntimeConfig`](super::LocalRuntimeConfig).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -122,10 +126,13 @@ pub struct BrowserBridgeConfig {
     pub port: u16,
     #[serde(default = "default_extension_ids")]
     pub extension_ids: Vec<String>,
-    /// Gate for the full-CDP-access workstream; this milestone only carries
-    /// the flag, it does not consume it.
+    /// Explicit opt-in for operations outside the standard browser facade.
     #[serde(default)]
     pub full_cdp_access_enabled: bool,
+    #[serde(default)]
+    pub cdp_endpoints: Vec<super::browser_cdp::CdpEndpointConfig>,
+    #[serde(default = "default_browser_id")]
+    pub default_browser_id: String,
 }
 
 impl Default for BrowserBridgeConfig {
@@ -135,7 +142,27 @@ impl Default for BrowserBridgeConfig {
             port: DEFAULT_BROWSER_BRIDGE_PORT,
             extension_ids: default_extension_ids(),
             full_cdp_access_enabled: false,
+            cdp_endpoints: Vec::new(),
+            default_browser_id: default_browser_id(),
         }
+    }
+}
+
+impl BrowserBridgeConfig {
+    pub(super) fn validate(&self) -> Result<(), String> {
+        super::browser_cdp::validate_configs(&self.cdp_endpoints)?;
+        let id = self.default_browser_id.as_str();
+        if matches!(id, "iab" | "chrome" | "edge" | "mcpapps") {
+            return Ok(());
+        }
+        if let Some((family, profile)) = id.split_once(':') {
+            if matches!(family, "chrome" | "edge" | "cdp")
+                && uuid::Uuid::parse_str(profile).is_ok_and(|uuid| uuid.to_string() == profile)
+            {
+                return Ok(());
+            }
+        }
+        Err("browser_default_reference_invalid".into())
     }
 }
 
@@ -147,6 +174,8 @@ pub struct BrowserBridgeStatus {
     pub broker_connected: bool,
     /// Backend ids with a live broker session (sorted; empty when offline).
     pub connected_backends: Vec<String>,
+    pub browser_instances: Vec<Value>,
+    pub cdp_endpoints: Vec<Value>,
     pub extension_ids: Vec<String>,
     pub extension_id: Option<String>,
     pub extension_version: Option<String>,
@@ -407,7 +436,11 @@ struct ResponseWaiter {
 }
 impl Drop for ResponseWaiter {
     fn drop(&mut self) {
-        self.session.waiters.lock().expect("browser bridge waiters").remove(&self.id);
+        self.session
+            .waiters
+            .lock()
+            .expect("browser bridge waiters")
+            .remove(&self.id);
     }
 }
 
@@ -533,7 +566,13 @@ impl BrowserBridgeServer {
         self.backends
             .lock()
             .expect("browser bridge backends")
-            .values().any(|session| matches!(session.backend.as_str(), BACKEND_CHROME_EXTENSION | BACKEND_EDGE_EXTENSION))
+            .values()
+            .any(|session| {
+                matches!(
+                    session.backend.as_str(),
+                    BACKEND_CHROME_EXTENSION | BACKEND_EDGE_EXTENSION
+                )
+            })
     }
 
     /// Backend ids with a live session, sorted for a stable status payload.
@@ -554,7 +593,13 @@ impl BrowserBridgeServer {
         self.backends
             .lock()
             .expect("browser bridge backends")
-            .values().find(|session| matches!(session.backend.as_str(), BACKEND_CHROME_EXTENSION | BACKEND_EDGE_EXTENSION))
+            .values()
+            .find(|session| {
+                matches!(
+                    session.backend.as_str(),
+                    BACKEND_CHROME_EXTENSION | BACKEND_EDGE_EXTENSION
+                )
+            })
             .map(|session| session.hello.clone())
     }
 
@@ -579,11 +624,16 @@ impl BrowserBridgeServer {
         {
             let mut waiters = session.waiters.lock().expect("browser bridge waiters");
             if self.is_stopped() || session.closed.load(Ordering::SeqCst) {
-                return Err(CoreError::Tool("browser bridge connection is closed".into()));
+                return Err(CoreError::Tool(
+                    "browser bridge connection is closed".into(),
+                ));
             }
             waiters.insert(id, tx);
         }
-        let _waiter = ResponseWaiter { session: session.clone(), id };
+        let _waiter = ResponseWaiter {
+            session: session.clone(),
+            id,
+        };
         let frame = jsonrpc::encode_request(id, method, params);
         if session.outbound.send(frame).await.is_err() {
             session
@@ -596,9 +646,9 @@ impl BrowserBridgeServer {
             ));
         }
         match rx.await {
-            Ok(Ok(_)) if self.is_stopped() => {
-                Err(CoreError::Tool("browser bridge connection is closed".into()))
-            }
+            Ok(Ok(_)) if self.is_stopped() => Err(CoreError::Tool(
+                "browser bridge connection is closed".into(),
+            )),
             Ok(Ok(result)) => Ok(result),
             Ok(Err(message)) => Err(CoreError::Tool(format!("browser bridge error: {message}"))),
             Err(_) => Err(CoreError::Tool(
@@ -624,9 +674,19 @@ impl BrowserBridgeServer {
                 }
             }
             Ok(JsonRpcMessage::Notification { method, mut params }) => {
-                if session.closed.load(Ordering::SeqCst) { return; }
+                if session.closed.load(Ordering::SeqCst) {
+                    return;
+                }
                 if let Some(params) = params.as_object_mut() {
                     params.insert("backend".into(), json!(session.browser_id));
+                }
+                if session.backend == BACKEND_IAB {
+                    let mut dot = params.clone();
+                    dot["backend"] = json!(session.browser_id.replacen("iab:", "dot:", 1));
+                    let _ = self.notifications.send(BridgeNotification {
+                        method: method.clone(),
+                        params: dot,
+                    });
                 }
                 let _ = self
                     .notifications
@@ -694,10 +754,13 @@ impl BrowserBridgeServer {
         let sessions = self.backends.lock().expect("browser bridge backends");
         if self.is_stopped()
             || session.closed.load(Ordering::SeqCst)
-            || !sessions.get(&session.browser_id)
+            || !sessions
+                .get(&session.browser_id)
                 .is_some_and(|current| std::ptr::eq(current.as_ref(), session))
         {
-            return Err(BrokerRequestError::denied("browser bridge connection is closed"));
+            return Err(BrokerRequestError::denied(
+                "browser bridge connection is closed",
+            ));
         }
         if session.transport != BridgeTransport::Unix {
             return Err(BrokerRequestError::denied(
@@ -971,6 +1034,12 @@ async fn serve_broker_session(
         method: "onBrowserDisconnected".into(),
         params: json!({"backend":session.browser_id}),
     });
+    if session.backend == BACKEND_IAB {
+        let _ = server.notifications.send(BridgeNotification {
+            method: "onBrowserDisconnected".into(),
+            params: json!({"backend":session.browser_id.replacen("iab:", "dot:", 1)}),
+        });
+    }
     session.fail_waiters("browser bridge broker disconnected");
 }
 
@@ -979,6 +1048,43 @@ async fn serve_broker_session(
 #[derive(Clone)]
 pub(crate) struct BrowserBridgeEndpoint {
     server: Arc<BrowserBridgeServer>,
+    cdp: Arc<super::browser_cdp::CdpRegistry>,
+    default_browser_id: String,
+}
+
+impl BrowserBridgeEndpoint {
+    fn inventory(&self) -> Value {
+        let mut browsers = self
+            .server
+            .browser_inventory()
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        if agistack_adapters_browser::caller::current().is_some_and(|caller| caller.allow_dot) {
+            let dot = browsers
+                .iter()
+                .filter(|browser| browser["family"] == "iab")
+                .map(|browser| {
+                    let mut dot = browser.clone();
+                    dot["id"] = json!(browser["id"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .replacen("iab:", "dot:", 1));
+                    dot["type"] = json!("iab");
+                    dot["family"] = json!("dot");
+                    dot["backend"] = json!("dot");
+                    dot["metadata"]["stableId"] = json!("dot");
+                    dot["metadata"]["name"] = json!("Main conversation browser");
+                    dot["userTabs"] = json!(true);
+                    dot
+                })
+                .collect::<Vec<_>>();
+            browsers.extend(dot);
+        }
+        browsers.extend(self.cdp.inventory());
+        browsers.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
+        json!(browsers)
+    }
 }
 
 #[async_trait]
@@ -988,15 +1094,66 @@ impl BridgeEndpoint for BrowserBridgeEndpoint {
     }
 
     /// Multi-backend override of the trait's single-backend default.
-    async fn request_on(&self, backend: &str, method: &str, params: Value) -> CoreResult<Value> {
+    async fn request_on(
+        &self,
+        backend: &str,
+        method: &str,
+        mut params: Value,
+    ) -> CoreResult<Value> {
+        if backend == "dot" || backend.starts_with("dot:") {
+            // Cleanup is host-owned and may run after the caller task has ended.
+            if method != "turnEnded"
+                && !agistack_adapters_browser::caller::current()
+                    .is_some_and(|caller| caller.allow_dot)
+            {
+                return Err(CoreError::Tool("main_browser_child_scope_required".into()));
+            }
+            params["_browserSurface"] = json!("dot");
+            return self
+                .server
+                .request_on(&backend.replacen("dot", "iab", 1), method, params)
+                .await;
+        }
+        if backend == "cdp" || backend.starts_with("cdp:") {
+            return self
+                .cdp
+                .request(backend, method, params)
+                .await
+                .map_err(CoreError::Tool);
+        }
         self.server.request_on(backend, method, params).await
     }
 
     async fn resolve_browser(&self, selector: &str) -> CoreResult<String> {
-        self.server.resolve_session(selector).map(|session| session.browser_id.clone())
+        if selector == "dot" || selector.starts_with("dot:") {
+            if !agistack_adapters_browser::caller::current().is_some_and(|caller| caller.allow_dot)
+            {
+                return Err(CoreError::Tool("main_browser_child_scope_required".into()));
+            }
+            return self
+                .server
+                .resolve_session(&selector.replacen("dot", "iab", 1))
+                .map(|session| session.browser_id.replacen("iab:", "dot:", 1));
+        }
+        if selector == "cdp" || selector.starts_with("cdp:") {
+            return self.cdp.resolve(selector).map_err(CoreError::Tool);
+        }
+        self.server
+            .resolve_session(selector)
+            .map(|session| session.browser_id.clone())
     }
 
-    fn scoped_browsers(&self) -> Option<Value> { Some(self.server.browser_inventory()) }
+    fn scoped_browsers(&self) -> Option<Value> {
+        Some(self.inventory())
+    }
+
+    async fn select_browser(&self, options: &Value) -> CoreResult<Value> {
+        agistack_adapters_browser::browser_selection::select_browser(
+            &self.inventory(),
+            &self.default_browser_id,
+            options,
+        )
+    }
 
     fn subscribe_notifications(&self) -> broadcast::Receiver<BridgeNotification> {
         self.server.notifications.subscribe()
@@ -1007,6 +1164,7 @@ impl BridgeEndpoint for BrowserBridgeEndpoint {
 /// agent engine fans out to. Dropped/aborted on stop.
 pub(crate) struct BrowserBridgeRuntime {
     server: Arc<BrowserBridgeServer>,
+    cdp: Arc<super::browser_cdp::CdpRegistry>,
     tool_host: Arc<BrowserToolHost<BrowserBridgeEndpoint>>,
     config: BrowserBridgeConfig,
     registry_path: PathBuf,
@@ -1050,6 +1208,7 @@ impl BrowserBridgeRuntime {
         minter: Option<SidePanelSessionMinter>,
         heartbeat_interval: Duration,
     ) -> Result<Self, String> {
+        config.validate()?;
         let (listener, port) = bind_bridge_listener(config.port)?;
         let token = super::generate_capability_token();
 
@@ -1087,8 +1246,14 @@ impl BrowserBridgeRuntime {
             minter,
             heartbeat_interval,
         ));
+        let cdp = super::browser_cdp::CdpRegistry::start(
+            &config.cdp_endpoints,
+            server.notifications.clone(),
+        )?;
         let tool_host = Arc::new(BrowserToolHost::new(BrowserBridgeEndpoint {
             server: Arc::clone(&server),
+            cdp: cdp.clone(),
+            default_browser_id: config.default_browser_id.clone(),
         }));
         let app = Router::new()
             .route("/api/v1/browser-bridge/ws", get(browser_bridge_ws))
@@ -1111,6 +1276,7 @@ impl BrowserBridgeRuntime {
         });
         Ok(Self {
             server,
+            cdp,
             tool_host,
             config: config.clone(),
             registry_path,
@@ -1136,11 +1302,31 @@ impl BrowserBridgeRuntime {
     }
 
     pub(crate) fn broker_connected(&self) -> bool {
-        self.server.broker_connected()
+        self.server.broker_connected() || !self.cdp.inventory().is_empty()
     }
 
     pub(crate) fn connected_backends(&self) -> Vec<String> {
-        self.server.connected_backends()
+        let mut backends = self.server.connected_backends();
+        if !self.cdp.inventory().is_empty() {
+            backends.push("cdp".into());
+        }
+        backends.sort();
+        backends
+    }
+
+    pub(crate) fn browser_instances(&self) -> Vec<Value> {
+        let mut instances = self
+            .server
+            .browser_inventory()
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        instances.extend(self.cdp.inventory());
+        instances
+    }
+
+    pub(crate) fn cdp_statuses(&self) -> Vec<Value> {
+        self.cdp.statuses()
     }
 
     pub(crate) fn extension_identity(&self) -> Option<(String, Option<String>)> {
@@ -1172,6 +1358,7 @@ impl BrowserBridgeRuntime {
     }
 
     pub(crate) fn stop(self) {
+        self.cdp.stop();
         self.server.stop();
         self.server_task.abort();
         #[cfg(unix)]
@@ -1567,6 +1754,8 @@ mod tests {
         assert_eq!(config.port, DEFAULT_BROWSER_BRIDGE_PORT);
         assert_eq!(config.extension_ids, vec![DEFAULT_EXTENSION_ID.to_string()]);
         assert!(!config.full_cdp_access_enabled);
+        assert!(config.cdp_endpoints.is_empty());
+        assert_eq!(config.default_browser_id, "iab");
         assert_eq!(BrowserBridgeConfig::default(), config);
 
         let config: BrowserBridgeConfig =
@@ -1671,6 +1860,7 @@ mod tests {
             port: 0,
             extension_ids: default_extension_ids(),
             full_cdp_access_enabled: false,
+            ..Default::default()
         };
         let runtime = BrowserBridgeRuntime::start_with_heartbeat(
             &config,
@@ -1811,6 +2001,7 @@ mod tests {
             port: 0,
             extension_ids: default_extension_ids(),
             full_cdp_access_enabled: false,
+            ..Default::default()
         };
         let runtime = BrowserBridgeRuntime::start_with_registry_path(
             &config,

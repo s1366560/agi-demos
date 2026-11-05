@@ -6,6 +6,11 @@ const controlSource = readFileSync(
   new URL('../sidecar/src/control.rs', import.meta.url),
   'utf8',
 );
+const localControlSource = readFileSync(
+  new URL('../sidecar/src/control_local_requests.rs', import.meta.url),
+  'utf8',
+);
+const controlDispatchSource = `${controlSource}\n${localControlSource}`;
 const electronMainSource = readFileSync(
   new URL('../electron/main/index.ts', import.meta.url),
   'utf8',
@@ -16,7 +21,8 @@ const electronPreloadSource = readFileSync(
 );
 
 test('the private sidecar command surface exposes only local-runtime capabilities', () => {
-  assert.match(controlSource, /local_runtime_status/u);
+  assert.match(controlSource, /local_requests\.dispatch\(&state\.runtime, &request, &output_tx\)/u);
+  assert.match(localControlSource, /local_runtime_status[\s\S]*runtime\.status\(\)/u);
   assert.match(controlSource, /local_runtime_configure/u);
   assert.match(controlSource, /trusted_session_(?:save|load|clear)/u);
   assert.match(controlSource, /local_trusted_session_(?:save|load|clear)/u);
@@ -41,16 +47,16 @@ test('the private sidecar command surface exposes only local-runtime capabilitie
     /platform_plugin_renderer_distribution_current_v2[\s\S]*authorizedCloudRequestOwner\(event\)[\s\S]*sidecarSupervisor\.invoke/u,
   );
 
-  assert.doesNotMatch(controlSource, /open_device_authorization_url/u);
-  assert.doesNotMatch(controlSource, /pub struct DesktopCore/u);
-  assert.doesNotMatch(controlSource, /async fn (?:ingest|search|semantic_search)\b/u);
+  assert.doesNotMatch(controlDispatchSource, /open_device_authorization_url/u);
+  assert.doesNotMatch(controlDispatchSource, /pub struct DesktopCore/u);
+  assert.doesNotMatch(controlDispatchSource, /async fn (?:ingest|search|semantic_search)\b/u);
 });
 
 test('device authorization remains an Electron-owned validated external action', () => {
   assert.match(electronMainSource, /validateDeviceAuthorizationUrl/u);
   assert.match(electronMainSource, /open_device_authorization_url/u);
   assert.match(electronMainSource, /shell\.openExternal/u);
-  assert.doesNotMatch(controlSource, /shell\.openExternal/u);
+  assert.doesNotMatch(controlDispatchSource, /shell\.openExternal/u);
 });
 
 test('renderer deliveries bind main-owned sessions and retire on document or identity changes', () => {

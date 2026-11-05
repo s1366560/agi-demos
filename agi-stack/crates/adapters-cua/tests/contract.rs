@@ -14,10 +14,10 @@ use std::{
     time::Duration,
 };
 
-#[path = "contracts/input_generation.rs"]
-mod input_generation;
 #[path = "contracts/audio.rs"]
 mod audio;
+#[path = "contracts/input_generation.rs"]
+mod input_generation;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Helper {
@@ -273,7 +273,7 @@ async fn scoped_handshake_and_action_round_trip() {
         assert!(host.tool_definition(&tool).unwrap().input_schema.is_some());
         assert!(tool_effects().contains_key(tool.as_str()));
     }
-    assert_eq!(tool_names().len(), 27);
+    assert_eq!(tool_names().len(), 29);
     let apps: Value =
         serde_json::from_str(&host.call("computer_list_apps", "{}").await.unwrap()).unwrap();
     assert_eq!(apps.pointer("/apps/0/id"), Some(&json!("com.example.app")));

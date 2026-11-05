@@ -48,8 +48,8 @@ fn schema_v2_projection_uses_persisted_authority_and_capabilities() {
         created_at: timestamp(25),
     };
     let hitl = SessionPendingHitlResponse {
-        authority_revision:1,
-        decision:None,
+        authority_revision: 1,
+        decision: None,
         id: "hitl-1".to_string(),
         conversation_id: "conversation-1".to_string(),
         message_id: Some("message-1".to_string()),
@@ -97,7 +97,7 @@ fn schema_v2_projection_uses_persisted_authority_and_capabilities() {
             id: "run-cloud-1".to_string(),
             conversation_id: "conversation-1".to_string(),
             project_id: "project-1".to_string(),
-            plan_version_id: "plan-version-1".to_string(),
+            plan_version_id: Some("plan-version-1".to_string()),
             idempotency_key: "approval-1".to_string(),
             message_id: "message-run-1".to_string(),
             request_message: "Implement the approved plan".to_string(),
@@ -224,8 +224,8 @@ fn schema_v2_projection_uses_persisted_authority_and_capabilities() {
 #[test]
 fn read_only_projection_never_grants_mutation_capabilities() {
     let hitl = SessionPendingHitlResponse {
-        authority_revision:1,
-        decision:None,
+        authority_revision: 1,
+        decision: None,
         id: "hitl-read-only".to_string(),
         conversation_id: "conversation-1".to_string(),
         message_id: None,
@@ -274,8 +274,8 @@ fn read_only_projection_never_grants_mutation_capabilities() {
 #[test]
 fn pending_hitl_without_expiry_serializes_null_expiration() {
     let response = SessionPendingHitlResponse {
-        authority_revision:1,
-        decision:None,
+        authority_revision: 1,
+        decision: None,
         id: "hitl-no-expiry".to_string(),
         conversation_id: "conversation-1".to_string(),
         message_id: None,
@@ -479,6 +479,8 @@ fn standalone_projection_keeps_current_mode_and_stable_revision() {
     assert_eq!(first["conversation"]["current_mode"], "explore");
     assert_eq!(first["conversation"]["capability_mode"], "work");
     assert_eq!(first["snapshot_revision"], second["snapshot_revision"]);
+    assert_eq!(first.get("current_plan"), Some(&Value::Null));
+    assert_eq!(first.get("plan_history"), Some(&json!([])));
 }
 
 #[tokio::test]

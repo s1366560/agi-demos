@@ -3342,7 +3342,7 @@
       "module_ref": "builtin://memstack/desktop/session-projection-authority",
       "entrypoint": "applyDesktopSessionProjectionAuthorityV2",
       "artifact": {
-        "digest": "sha256:fe9b67ec306df988549f4d780d015149b63de298f78497646de9193c3ec211ef",
+        "digest": "sha256:cbd06430215035e773369af627c40b0b7b44e0fc62d812026d796e38569dd9b7",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionProjectionAuthorityModuleV2.ts"
       },
       "targets": [
@@ -3958,7 +3958,7 @@
       "entrypoint": "applyDesktopBrowserBridgeManagementAuthorityV2",
       "artifact": {
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopBrowserBridgeManagementAuthorityModuleV2.ts",
-        "digest": "sha256:4374bf4192e55fd099a1c170cb0c32de57761edf6de5717dc340277df94103bd"
+        "digest": "sha256:5f17d6c08026d6023f8e0d2ce599a7a537e2aa28783b5fb56fcc217cf7436416"
       },
       "targets": [
         "desktop-renderer"

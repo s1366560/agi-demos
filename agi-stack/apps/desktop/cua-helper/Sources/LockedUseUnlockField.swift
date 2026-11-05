@@ -2,6 +2,12 @@ import AppKit
 import ApplicationServices
 import Foundation
 
+/// Availability distinguishes a missing AXChildren attribute from a successful empty array.
+struct LockedUseChildCount {
+    let count: Int
+    let available: Bool
+}
+
 /// This interface deliberately has no value, title, description, or input reader.
 struct LockedUseFieldAccess<Element> {
     let processes: () throws -> [LockedUseProcessIdentity]
@@ -9,7 +15,7 @@ struct LockedUseFieldAccess<Element> {
     let root: (LockedUseProcessIdentity) -> Element
     let identical: (Element, Element) -> Bool
     let identifier: (Element, Float) throws -> String?
-    let childCount: (Element, Float) throws -> Int
+    let childCount: (Element, Float) throws -> LockedUseChildCount
     let children: (Element, Int, Float) throws -> [Element]
     let valueSettable: (Element, Float) throws -> Bool
 }
@@ -49,6 +55,7 @@ struct LockedUseFieldLocator<Element> {
     func locate() throws -> LockedUseLocatedField<Element> {
         let until = now() + readinessSeconds
         var remaining = nodeBudget
+        var completedScans = 0
         var reason = LockedUseFailure.Reason.unlockReadinessTimeout
         var stage = LockedUseFailure.Stage.unlockLoginwindow
         var checks: [String: Bool] = [:]
@@ -104,6 +111,10 @@ struct LockedUseFieldLocator<Element> {
                 var pending = [(access.root(process), 0)]
                 var visited: [Element] = []
                 var candidate: Element?
+                var rootChildrenAvailable: Bool?
+                var rootHasChildren = false
+                var hasGrandchildren = false
+                var descendantChildrenUnavailable = false
                 checks["scan_complete"] = false
                 checks["field_identifier_found"] = false
                 checks["field_unique"] = false
@@ -119,7 +130,15 @@ struct LockedUseFieldLocator<Element> {
                         guard candidate == nil else { throw failure(.unlockFieldAmbiguous) }
                         candidate = element
                     }
-                    let count = try read(process) { try access.childCount(element, $0) }
+                    let childInfo = try read(process) { try access.childCount(element, $0) }
+                    let count = childInfo.count
+                    if depth == 0 {
+                        rootChildrenAvailable = childInfo.available
+                        rootHasChildren = count > 0
+                    } else {
+                        if !childInfo.available { descendantChildrenUnavailable = true }
+                        if count > 0 { hasGrandchildren = true }
+                    }
                     guard count >= 0, count <= remaining, count == 0 || depth + 1 < depthLimit else {
                         throw failure(.unlockScanBudgetExceeded)
                     }
@@ -132,6 +151,13 @@ struct LockedUseFieldLocator<Element> {
                     }
                 }
                 checks["scan_complete"] = true
+                completedScans += 1
+                checks["scan_multiple_complete"] = completedScans > 1
+                checks["scan_root_children_available"] = rootChildrenAvailable
+                checks["scan_root_has_children"] = rootHasChildren
+                checks["scan_has_grandchildren"] = hasGrandchildren
+                checks["scan_has_at_least_ten_nodes"] = visited.count >= 10
+                checks["scan_descendant_children_unavailable"] = descendantChildrenUnavailable
                 guard let candidate = candidate else {
                     throw LockedUseFieldReadFailure(reason: .unlockFieldAbsent, retryable: true)
                 }
@@ -172,9 +198,11 @@ extension LockedUseFieldAccess where Element == AXUIElement {
             try messagingTimeout(element, timeout)
             var count = CFIndex(0)
             let error = AXUIElementGetAttributeValueCount(element, kAXChildrenAttribute as CFString, &count)
-            if error == .attributeUnsupported || error == .noValue { return 0 }
+            if error == .attributeUnsupported || error == .noValue {
+                return LockedUseChildCount(count: 0, available: false)
+            }
             guard error == .success else { throw LockedUseFieldReadFailure.ax(error) }
-            return count
+            return LockedUseChildCount(count: count, available: true)
         }, children: { element, count, timeout in
             try messagingTimeout(element, timeout)
             var value: CFArray?

@@ -1,6 +1,6 @@
 //! Additional declared capabilities; runtime support is reported by the helper.
 use crate::host::CuaToolEffect;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 fn contract(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
     json!({"name":name,"description":description,"inputSchema":{
@@ -162,6 +162,28 @@ pub(super) fn contracts() -> Vec<(&'static str, CuaToolEffect, Value)> {
             ),
         ),
         (
+            "computer_audio_read",
+            Read,
+            contract(
+                "computer_audio_read",
+                "Read a bounded WAV chunk from an exact recording owned by the active run, native session and engine. Returns base64 data with offset, next_offset and eof; never accepts a filesystem path.",
+                json!({"recording_id":{"type":"string","minLength":1},
+                    "artifact_id":{"type":"string","minLength":1},
+                    "offset":{"type":"integer","minimum":0}}),
+                &["recording_id"],
+            ),
+        ),
+        (
+            "computer_resolve_app",
+            Read,
+            contract(
+                "computer_resolve_app",
+                "Resolve a native app's exact installed or running identity before observation or an independently authorized background launch. Resolution does not launch the app.",
+                json!({"app":{"type":"string","minLength":1}}),
+                &["app"],
+            ),
+        ),
+        (
             "computer_audio_stop",
             Mutate,
             contract(
@@ -186,6 +208,7 @@ pub(super) fn contracts() -> Vec<(&'static str, CuaToolEffect, Value)> {
 pub(super) fn method(tool: &str) -> Option<&'static str> {
     Some(match tool {
         "computer_capabilities" => "capabilities",
+        "computer_resolve_app" => "resolve_app",
         "computer_list_windows" => "list_windows",
         "computer_launch_app" => "launch_app",
         "computer_activate_app" => "activate_app",

@@ -244,9 +244,19 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             .and_then(Value::as_bool)
             .unwrap_or(false);
         let run_id = run_id_of(input).unwrap_or(DEFAULT_GROUP_KEY);
-        let session_name = input.get("sessionName").and_then(Value::as_str).map(str::to_owned)
-            .or_else(||self.state.facade_sessions.lock().ok()?.get(&(backend,run_id.to_string())).cloned())
-            .unwrap_or_else(||AGENT_GROUP_TITLE.to_string());
+        let session_name = input
+            .get("sessionName")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| {
+                self.state
+                    .facade_sessions
+                    .lock()
+                    .ok()?
+                    .get(&(backend, run_id.to_string()))
+                    .cloned()
+            })
+            .unwrap_or_else(|| AGENT_GROUP_TITLE.to_string());
         crate::facade::validate_session_name(&session_name)?;
 
         let mut params = json!({ "active": activate });
@@ -297,6 +307,10 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             )));
         }
         let run_id = run_id_of(input).unwrap_or(DEFAULT_GROUP_KEY);
+        if matches!(backend.family(), "iab" | "dot") {
+            self.backend_request(backend, "claimUserTab", json!({"tabId":tab_id}))
+                .await?;
+        }
         self.record_lease(run_id, backend, tab_id, LeaseOrigin::User);
         Ok(json!({ "tabId": tab_id }))
     }
@@ -319,11 +333,19 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
                 "no lease for tab {tab_id}; call browser_new_tab or browser_claim_tab first"
             )));
         }
+        if matches!(backend.family(), "iab" | "dot") {
+            self.backend_request(backend, "markTab", json!({"tabId":tab_id,"mark":mark}))
+                .await?;
+        }
         Ok(json!({ "tabId": tab_id, "mark": mark }))
     }
 
     /// Send `Page.enable` once per tab (load/navigation events).
-    pub(crate) async fn ensure_page_enabled(&self, backend: Backend, tab_id: u64) -> CoreResult<()> {
+    pub(crate) async fn ensure_page_enabled(
+        &self,
+        backend: Backend,
+        tab_id: u64,
+    ) -> CoreResult<()> {
         if self
             .state
             .page_enabled
@@ -1670,13 +1692,13 @@ mod tests {
         assert_eq!(host.endpoint.count(METHOD_TURN_ENDED), 2);
         assert_eq!(
             host.endpoint.backend_params_of("iab", METHOD_TURN_ENDED),
-            vec![json!({"leases": [{"tabId": 7, "origin": "agent"}]})]
+            vec![json!({"leases": [{"tabId": 7, "origin": "agent"}], "turnId":"run-1"})]
         );
         let all = host.endpoint.params_of(METHOD_TURN_ENDED);
         assert_eq!(all.len(), 2);
         assert!(all
             .iter()
-            .all(|p| p == &json!({"leases": [{"tabId": 7, "origin": "agent"}]})));
+            .all(|p| p["leases"] == json!([{"tabId": 7, "origin": "agent"}])));
         assert!(host.state.leases.lock().unwrap().is_empty());
     }
 

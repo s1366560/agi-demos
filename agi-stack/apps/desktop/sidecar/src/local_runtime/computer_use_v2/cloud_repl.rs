@@ -4,14 +4,14 @@ use crate::local_runtime::{
     browser_run_tool_host::{BrowserStepAuthority, CloudBrowserToolHost},
     cua_repl,
     execution_authority::{
-        current_step_id, current_step_origin, permission_binding, ExecutionAuthority, ExecutionScope,
-        ScopedExecution,
+        current_step_id, current_step_origin, permission_binding, ExecutionAuthority,
+        ExecutionScope, ScopedExecution,
     },
     mcp_agent_tool_host::McpAgentToolHost,
     mcp_supervisor::McpScope,
 };
-use async_trait::async_trait;
 use agistack_core::ports::{PermissionKind, PermissionRequired};
+use async_trait::async_trait;
 use sha2::{Digest, Sha256};
 use std::sync::Weak;
 #[path = "cloud_continuation.rs"]
@@ -48,7 +48,8 @@ impl Admission {
             let request = &ready["request"];
             let code: Value = serde_json::from_str(&self.claim.input_json)
                 .map_err(|_| CoreError::Tool("cua_cloud_step_parent_invalid".into()))?;
-            let code = code["code"].as_str()
+            let code = code["code"]
+                .as_str()
                 .ok_or_else(|| CoreError::Tool("cua_cloud_step_parent_invalid".into()))?;
             if ready["scopes"] != json!(["once"])
                 || request["capability"] != "execution_step"
@@ -58,12 +59,17 @@ impl Admission {
                 || request["input_digest"] != expected_digest
                 || request["app"] != target["id"]
                 || request["request_id"].as_str().is_none_or(str::is_empty)
-                || request["identity_digest"].as_str().is_none_or(str::is_empty)
-                || request["execution_step"]["key"].as_str().is_none_or(str::is_empty)
+                || request["identity_digest"]
+                    .as_str()
+                    .is_none_or(str::is_empty)
+                || request["execution_step"]["key"]
+                    .as_str()
+                    .is_none_or(str::is_empty)
                 || request["execution_step"]["cell_id"] != origin.cell_id
                 || request["execution_step"]["step_id"] != step
                 || request["execution_step"]["target"] != *target
-                || request["execution_step"]["code_digest"] != format!("{:x}", Sha256::digest(code.as_bytes()))
+                || request["execution_step"]["code_digest"]
+                    != format!("{:x}", Sha256::digest(code.as_bytes()))
             {
                 return Err(CoreError::Tool("cua_cloud_pending_step_invalid".into()));
             }
@@ -156,11 +162,15 @@ impl Admission {
         let Some(permission) = result.permission_required.as_ref() else {
             return Ok(false);
         };
-        if result.control_outcome.is_some() || result.control_generation.is_some() || !result.media.is_empty()
+        if result.control_outcome.is_some()
+            || result.control_generation.is_some()
+            || !result.media.is_empty()
             || permission.kind() != PermissionKind::NativeConsent
             || permission.binding() != &permission_binding(tool, input)?
         {
-            return Err(CoreError::Tool("cua_cloud_native_permission_binding_invalid".into()));
+            return Err(CoreError::Tool(
+                "cua_cloud_native_permission_binding_invalid".into(),
+            ));
         }
         Ok(true)
     }
@@ -168,7 +178,11 @@ impl Admission {
 #[derive(Debug)]
 enum Permit {
     Pending(PermissionRequired),
-    Authorized { step: String, body: Value, continuation: Option<ExecutionScope> },
+    Authorized {
+        step: String,
+        body: Value,
+        continuation: Option<ExecutionScope>,
+    },
 }
 
 #[async_trait]
@@ -287,13 +301,24 @@ impl ScopedExecution for CloudExecution {
                 if let Permit::Pending(permission) = permit {
                     return Ok(permission.into_result());
                 }
-                if let Permit::Authorized { continuation: Some(previous), .. } = &permit {
-                    let handle = arguments["tabId"].as_str()
-                        .ok_or_else(|| CoreError::Tool("cua_cloud_app_continuation_target_required".into()))?;
+                if let Permit::Authorized {
+                    continuation: Some(previous),
+                    ..
+                } = &permit
+                {
+                    let handle = arguments["tabId"].as_str().ok_or_else(|| {
+                        CoreError::Tool("cua_cloud_app_continuation_target_required".into())
+                    })?;
                     let authority = ExecutionAuthority::CloudClaim(Arc::new(self.clone()));
-                    state.mcp_app_automation.resume_cloud_permission(previous, &authority, handle)?;
+                    state
+                        .mcp_app_automation
+                        .resume_cloud_permission(previous, &authority, handle)?;
                 }
-                state.mcp_app_automation.validate_operation_for_run(&state, &self.scope.run_id, &arguments)?;
+                state.mcp_app_automation.validate_operation_for_run(
+                    &state,
+                    &self.scope.run_id,
+                    &arguments,
+                )?;
                 let result = state
                     .mcp_app_automation
                     .operation_for_run(&state, &self.scope.run_id, &arguments)
@@ -355,14 +380,27 @@ impl ScopedExecution for CloudExecution {
         let state = self.admission.current()?;
         if !native {
             let authority = ExecutionAuthority::CloudClaim(Arc::new(self.clone()));
-            if let Some((captured, handle)) = state.mcp_app_automation.cloud_callback_target(&state, &authority, tool)? {
-                if let Permit::Authorized { continuation: Some(previous), .. } = &permit {
+            if let Some((captured, handle)) = state
+                .mcp_app_automation
+                .cloud_callback_target(&state, &authority, tool)?
+            {
+                if let Permit::Authorized {
+                    continuation: Some(previous),
+                    ..
+                } = &permit
+                {
                     if &captured != previous {
-                        return Err(CoreError::Tool("cua_cloud_callback_continuation_changed".into()));
+                        return Err(CoreError::Tool(
+                            "cua_cloud_callback_continuation_changed".into(),
+                        ));
                     }
-                    state.mcp_app_automation.resume_cloud_permission(previous, &authority, &handle)?;
+                    state
+                        .mcp_app_automation
+                        .resume_cloud_permission(previous, &authority, &handle)?;
                 }
-                state.mcp_app_automation.validate_cloud_callback(&state, &authority)?;
+                state
+                    .mcp_app_automation
+                    .validate_cloud_callback(&state, &authority)?;
             }
         }
         let result = if native {
@@ -397,7 +435,12 @@ impl ScopedExecution for CloudExecution {
     }
 }
 
-pub(super) fn catalog(state: &Arc<LocalRuntimeState>, owner: &Owner, broker: &TrustedSessionBroker, epoch: u64) -> Result<Vec<Value>, String> {
+pub(super) fn catalog(
+    state: &Arc<LocalRuntimeState>,
+    owner: &Owner,
+    broker: &TrustedSessionBroker,
+    epoch: u64,
+) -> Result<Vec<Value>, String> {
     let mut tools = cua_repl::TOOLS
         .iter()
         .filter_map(|tool| cua_repl::definition(tool))
@@ -423,8 +466,14 @@ pub(super) fn catalog(state: &Arc<LocalRuntimeState>, owner: &Owner, broker: &Tr
     }
     let mcp = McpAgentToolHost::new(
         state.mcp_supervisor.clone(),
-        crate::local_runtime::device_mcp::claim_scope(broker, epoch, &owner.user_id,
-            &owner.tenant_id, &owner.project_id, &owner.device_id)?,
+        crate::local_runtime::device_mcp::claim_scope(
+            broker,
+            epoch,
+            &owner.user_id,
+            &owner.tenant_id,
+            &owner.project_id,
+            &owner.device_id,
+        )?,
         "device-catalog".into(),
         None,
     )?;
@@ -468,6 +517,7 @@ pub(super) async fn execute(
         connection_epoch: Some(lease.epoch),
         generation: lease.factory.descriptor().generation,
     };
+    let browser_caller = claim.browser_caller()?;
     let claim = Arc::new(claim);
     let admission = Admission {
         state: Arc::downgrade(state),
@@ -475,9 +525,14 @@ pub(super) async fn execute(
         lease,
     };
     let mcp_scope = crate::local_runtime::device_mcp::claim_scope(
-        &admission.lease.broker, admission.lease.epoch, &owner.user_id,
-        &owner.tenant_id, &owner.project_id, &owner.device_id,
-    ).map_err(CoreError::Tool)?;
+        &admission.lease.broker,
+        admission.lease.epoch,
+        &owner.user_id,
+        &owner.tenant_id,
+        &owner.project_id,
+        &owner.device_id,
+    )
+    .map_err(CoreError::Tool)?;
     let mcp = Arc::new(
         McpAgentToolHost::new(
             state.mcp_supervisor.clone(),
@@ -508,6 +563,7 @@ pub(super) async fn execute(
             state.site_credentials.clone(),
             Arc::new(admission.clone()),
         )
+        .with_browser_caller(browser_caller.clone())
         .with_file_roots(vec![workspace.clone()])
         .with_browser_auth(
             state.browser_auth.clone(),

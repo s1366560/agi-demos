@@ -38,6 +38,11 @@ export function createBrowserBridgeManagementClientQaV2(): DesktopBrowserBridgeM
       runtimeStatus.config.browser_bridge!.full_cdp_access_enabled = enabled;
       return structuredClone(runtimeStatus);
     },
+    async setProviders(providers, signal) {
+      signal?.throwIfAborted();
+      Object.assign(runtimeStatus.config.browser_bridge!, structuredClone(providers));
+      return structuredClone(runtimeStatus);
+    },
     async install(signal) {
       signal?.throwIfAborted();
       return { installed: [], skipped: ['qa-fixture'] };

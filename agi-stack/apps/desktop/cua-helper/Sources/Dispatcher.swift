@@ -67,6 +67,9 @@ func performAction(app: ResolvedApp, action: [String: Any]) throws {
 func dispatch(_ method: String, _ params: [String: Any]) -> Result<Any, JsonRpcError> {
     var presentationSession: NativeSession?
     do {
+        if MeetingAudioSessions.methods.contains(method) {
+            return .success(try MeetingAudioSessions.shared.perform(method, params: params))
+        }
         if method == "capabilities" {
             var value = NativeIntegrations.status()
             value["input_support"] = BackgroundInputSPI.support

@@ -117,16 +117,28 @@ async fn ingest_inner(
     }
     let mut accepted = Vec::new();
     for native in receipts {
+        let started_engine = call_identity::current("computer_audio_start")
+            .ok()
+            .map(|identity| identity.engine_session_id().to_owned());
         let receipt = public_receipt(context, native)?;
         let id = receipt["recording_id"]
             .as_str()
             .expect("validated recording id");
-        let previous = recordings_store::get(state, id)?;
+        let mut previous = recordings_store::get(state, id)?;
         if previous
             .as_ref()
             .is_some_and(|previous| previous.owner != *owner || previous.context != *context)
         {
             return Err("cua_recording_scope_mismatch".into());
+        }
+        // A native terminal notification can beat the start reply, including
+        // a failed export. Bind that delayed trusted reply before any terminal
+        // branch returns, without replacing an already assigned engine.
+        if let Some(previous) = previous.as_mut() {
+            if previous.engine_session_id.is_none() && started_engine.is_some() {
+                previous.engine_session_id = started_engine.clone();
+                recordings_store::save(state, previous)?;
+            }
         }
         if let Some(previous) = previous
             .as_ref()
@@ -161,17 +173,20 @@ async fn ingest_inner(
             accepted.push(previous.receipt.clone());
             continue;
         }
-        let root = if let Some(previous) = previous {
-            previous.root
+        let (root, engine_session_id) = if let Some(previous) = previous {
+            (previous.root, previous.engine_session_id.or(started_engine))
         } else {
-            state
-                .computer_use
-                .client
-                .get()
-                .ok_or("cua_recording_owner_unavailable")?
-                .existing_session_artifact_root(&context.session_id)
-                .await
-                .ok_or("cua_recording_owner_unavailable")?
+            (
+                state
+                    .computer_use
+                    .client
+                    .get()
+                    .ok_or("cua_recording_owner_unavailable")?
+                    .existing_session_artifact_root(&context.session_id)
+                    .await
+                    .ok_or("cua_recording_owner_unavailable")?,
+                started_engine,
+            )
         };
         let mut record = Record {
             owner: owner.clone(),
@@ -180,6 +195,7 @@ async fn ingest_inner(
             native: native.clone(),
             receipt,
             acknowledged: false,
+            engine_session_id,
         };
         if record.native.get("artifacts").is_none() {
             record.native["artifacts"] = json!([]);
@@ -215,16 +231,14 @@ pub(super) async fn tool_result(
     let receipts = ingest(state, &session.owner, &session.context, &output)
         .await
         .map_err(CoreError::Tool)?;
-    output["artifacts"] = json!(
-        receipts
-            .iter()
-            .flat_map(|receipt| receipt["artifacts"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .cloned())
-            .collect::<Vec<_>>()
-    );
+    output["artifacts"] = json!(receipts
+        .iter()
+        .flat_map(|receipt| receipt["artifacts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .cloned())
+        .collect::<Vec<_>>());
     output["recordings"] = json!(receipts);
     for artifact in output["artifacts"].as_array().into_iter().flatten() {
         if let Some(id) = artifact["artifact_id"].as_str() {

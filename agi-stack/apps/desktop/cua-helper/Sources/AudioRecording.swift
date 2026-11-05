@@ -18,6 +18,7 @@ final class AudioRecording: NSObject, SCStreamOutput, SCStreamDelegate {
     let maximumSeconds: Double
     var engine: AVAudioEngine?
     var stream: SCStream?
+    var captureLease: AudioCaptureCoordinator.Lease?
     init(url: URL, source: String, maximumSeconds: Double = AudioMixing.maxSeconds) {
         self.url = url; self.source = source; self.maximumSeconds = maximumSeconds
     }
@@ -37,9 +38,7 @@ final class AudioRecording: NSObject, SCStreamOutput, SCStreamDelegate {
             Int64((AudioMixing.maxBytes - 4096) / sampleBytes))
         let remaining = max(0, min(budgetFrames, maximumFrames ?? budgetFrames) - frames)
         guard remaining > 0 else { signal("byte_limit", error: nil); return }
-        if Int64(buffer.frameLength) > remaining {
-            buffer.frameLength = AVAudioFrameCount(remaining)
-        }
+        let frameCount = AVAudioFrameCount(min(Int64(buffer.frameLength), remaining))
         do {
             if file == nil {
                 guard let storage = AVAudioFormat(commonFormat: .pcmFormatInt16,
@@ -49,9 +48,26 @@ final class AudioRecording: NSObject, SCStreamOutput, SCStreamDelegate {
                 file = try AVAudioFile(forWriting: url, settings: storage.settings,
                     commonFormat: buffer.format.commonFormat, interleaved: buffer.format.isInterleaved)
             }
-            try file?.write(from: buffer)
-            frames += AVAudioFramePosition(buffer.frameLength)
-            if Int64(buffer.frameLength) == remaining {
+            // A shared device buffer belongs to all consumers. Do not shorten it.
+            if frameCount == buffer.frameLength { try file?.write(from: buffer) }
+            else {
+                guard let prefix = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: frameCount) else {
+                    throw ActionError.failure(kind: "audio_conversion_failed", message: "cannot allocate bounded audio buffer")
+                }
+                prefix.frameLength = frameCount
+                let source = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+                let target = UnsafeMutableAudioBufferListPointer(prefix.mutableAudioBufferList)
+                for index in target.indices {
+                    guard let input = source[index].mData, let output = target[index].mData,
+                          target[index].mDataByteSize <= source[index].mDataByteSize else {
+                        throw ActionError.failure(kind: "audio_conversion_failed", message: "invalid audio buffer")
+                    }
+                    memcpy(output, input, Int(target[index].mDataByteSize))
+                }
+                try file?.write(from: prefix)
+            }
+            frames += AVAudioFramePosition(frameCount)
+            if Int64(frameCount) == remaining {
                 signal(frames >= durationFrames ? "duration_limit" : "byte_limit", error: nil)
             }
         } catch { signal("capture_error", error: "audio_write_failed") }
@@ -94,7 +110,9 @@ final class AudioRecording: NSObject, SCStreamOutput, SCStreamDelegate {
         let engine = self.engine; self.engine = nil
         let stream = self.stream; self.stream = nil
         let observer = configurationObserver; configurationObserver = nil
+        let captureLease = self.captureLease; self.captureLease = nil
         lock.unlock()
+        captureLease?.release()
         if let observer = observer { NotificationCenter.default.removeObserver(observer) }
         if let engine = engine { engine.stop(); engine.inputNode.removeTap(onBus: 0) }
         if let stream = stream {

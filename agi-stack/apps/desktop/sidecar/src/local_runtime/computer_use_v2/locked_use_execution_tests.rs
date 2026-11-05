@@ -146,15 +146,14 @@ impl Fixture {
         let count = self.requests("locked_use_renew").len();
         tokio::time::sleep(Duration::from_millis(1100)).await;
         assert_eq!(self.requests("locked_use_renew").len(), count);
-        assert!(
-            self.state
-                .computer_use
-                .locked_use
-                .active
-                .lock()
-                .unwrap()
-                .is_empty()
-        );
+        assert!(self
+            .state
+            .computer_use
+            .locked_use
+            .active
+            .lock()
+            .unwrap()
+            .is_empty());
     }
 
     async fn replace_factory(&self, enabled: bool) {
@@ -260,7 +259,7 @@ fn running_local_lease_stops_renewing_after_run_invalidation() {
 }
 
 #[test]
-fn running_local_lease_stops_renewing_after_cell_revocation() {
+fn running_local_lease_survives_cell_completion_until_explicit_run_release() {
     bounded(async {
         let fixture = Fixture::new().await;
         let cell = Arc::new(AtomicBool::new(true));
@@ -271,9 +270,48 @@ fn running_local_lease_stops_renewing_after_cell_revocation() {
         .await;
         fixture.wait_for("locked_use_renew", 1).await;
         cell.store(false, Ordering::SeqCst);
+        fixture.wait_for("locked_use_renew", 3).await;
+        assert!(fixture.requests("locked_use_disable").is_empty());
+        fixture
+            .state
+            .computer_use
+            .release_locked_run(&fixture.state, &fixture.run.id, "awaiting_human")
+            .await;
         fixture.assert_renewal_stopped().await;
         fixture.close().await;
     });
+}
+
+#[test]
+fn lease_is_revoked_for_every_non_running_run_state() {
+    for status in [
+        DesktopRunStatus::NeedsApproval,
+        DesktopRunStatus::NeedsInput,
+        DesktopRunStatus::Paused,
+        DesktopRunStatus::ReadyReview,
+        DesktopRunStatus::Disconnected,
+    ] {
+        bounded(async move {
+            let fixture = Fixture::new().await;
+            fixture.enable().await;
+            let result = fixture
+                .state
+                .persist_authoritative_run_outcome(
+                    &fixture.run,
+                    status,
+                    None,
+                    &crate::local_runtime::now_iso(),
+                )
+                .await;
+            // The fixture has no final checkpoint; ReadyReview quarantines the
+            // run as disconnected, and must still revoke continuity immediately.
+            if status != DesktopRunStatus::ReadyReview {
+                result.unwrap();
+            }
+            fixture.assert_renewal_stopped().await;
+            fixture.close().await;
+        });
+    }
 }
 
 #[test]
@@ -299,7 +337,8 @@ fn running_local_lease_stops_when_factory_is_replaced_or_removed() {
                 fixture.factory.descriptor()
             );
             assert_eq!(
-                api::snapshot(&fixture.state, &fixture.session.owner).unwrap()["instance"]["revision"],
+                api::snapshot(&fixture.state, &fixture.session.owner).unwrap()["instance"]
+                    ["revision"],
                 fixture.session.revision
             );
             assert_eq!(
@@ -332,16 +371,14 @@ fn captured_scope_does_not_keep_revoked_session_authorized() {
         let fixture = Fixture::new().await;
         fixture.enable().await;
         fixture.wait_for("locked_use_renew", 1).await;
-        assert!(
-            fixture
-                .state
-                .session_store
-                .revoke_session(
-                    "locked-use-execution",
-                    chrono::Utc::now().timestamp_millis()
-                )
-                .unwrap()
-        );
+        assert!(fixture
+            .state
+            .session_store
+            .revoke_session(
+                "locked-use-execution",
+                chrono::Utc::now().timestamp_millis()
+            )
+            .unwrap());
         fixture.assert_renewal_stopped().await;
         fixture.close().await;
     });
@@ -360,16 +397,14 @@ fn disable_tool_reply_does_not_expose_another_sessions_revoked_binding() {
             foreign.to_string(),
         )
         .unwrap();
-        assert!(
-            fixture
-                .state
-                .computer_use
-                .locked_use
-                .active
-                .lock()
-                .unwrap()
-                .is_empty()
-        );
+        assert!(fixture
+            .state
+            .computer_use
+            .locked_use
+            .active
+            .lock()
+            .unwrap()
+            .is_empty());
         let output = agent_access::scope(Some(fixture.authorization.clone()), async {
             call(
                 &fixture.state,
@@ -450,16 +485,14 @@ fn disable_tool_reply_preserves_its_own_latest_host_issued_terminal_identity() {
         let returned: Value = serde_json::from_str(&output.output_json).unwrap();
         assert_eq!(returned, terminal);
         assert!(returned.get("generation").is_none());
-        assert!(
-            fixture
-                .state
-                .computer_use
-                .locked_use
-                .active
-                .lock()
-                .unwrap()
-                .is_empty()
-        );
+        assert!(fixture
+            .state
+            .computer_use
+            .locked_use
+            .active
+            .lock()
+            .unwrap()
+            .is_empty());
         fixture.close().await;
         std::fs::remove_dir_all(&fixture.helper.root).unwrap();
     });

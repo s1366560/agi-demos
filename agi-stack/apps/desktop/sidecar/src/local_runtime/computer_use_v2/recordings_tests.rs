@@ -2,6 +2,9 @@
 use super::management_lifecycle_tests::Helper;
 use super::*;
 
+#[path = "recordings_engine_tests.rs"]
+mod engine_tests;
+
 struct Fixture {
     state: Arc<LocalRuntimeState>,
     helper: Helper,
@@ -44,7 +47,8 @@ async fn saved_recordings_attach_owned_audio_without_duplicate_persistence() {
         artifacts::attachment(&fixture.state, &fixture.owner, "other-conversation", &id).is_err()
     );
     assert_eq!(
-        artifacts::media_descriptors(&fixture.state, &fixture.owner, &result.media).unwrap()[0]["artifact_id"],
+        artifacts::media_descriptors(&fixture.state, &fixture.owner, &result.media).unwrap()[0]
+            ["artifact_id"],
         id
     );
     fixture.close().await;
@@ -150,6 +154,105 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn repl_audio_read_is_chunked_and_bound_to_owner_session_engine_and_receipt() {
+    let fixture = Fixture::new().await;
+    fixture.stop().await;
+    let mut record = recordings_store::get(&fixture.state, fixture.id())
+        .unwrap()
+        .unwrap();
+    record.engine_session_id = Some("engine-owned".into());
+    recordings_store::save(&fixture.state, &record).unwrap();
+    let input = json!({"recording_id":fixture.id(),"offset":0});
+    let chunk = recordings_read::read(
+        &fixture.state,
+        &fixture.owner,
+        &fixture.context,
+        "engine-owned",
+        &input,
+    )
+    .unwrap();
+    assert_eq!(chunk["offset"], 0);
+    assert_eq!(chunk["mime_type"], "audio/wav");
+    assert_eq!(chunk["recording_id"], fixture.id());
+    assert_eq!(chunk["eof"], true);
+    assert!(chunk.get("filepath").is_none());
+    assert!(chunk.get("path").is_none());
+    let mut foreign = fixture.owner.clone();
+    foreign.user_id = "foreign".into();
+    assert!(recordings_read::read(
+        &fixture.state,
+        &foreign,
+        &fixture.context,
+        "engine-owned",
+        &input
+    )
+    .is_err());
+    for field in ["conversation_id", "run_id", "session_id"] {
+        let mut context = serde_json::to_value(&fixture.context).unwrap();
+        context[field] = json!("foreign");
+        assert!(recordings_read::read(
+            &fixture.state,
+            &fixture.owner,
+            &serde_json::from_value(context).unwrap(),
+            "engine-owned",
+            &input
+        )
+        .is_err());
+    }
+    assert!(recordings_read::read(
+        &fixture.state,
+        &fixture.owner,
+        &fixture.context,
+        "other-engine",
+        &input
+    )
+    .is_err());
+    for input in [
+        json!({"recording_id":fixture.id(),"artifact_id":"foreign"}),
+        json!({"recording_id":fixture.id(),"offset":-1}),
+        json!({"recording_id":fixture.id(),"offset":999999}),
+    ] {
+        assert!(recordings_read::read(
+            &fixture.state,
+            &fixture.owner,
+            &fixture.context,
+            "engine-owned",
+            &input
+        )
+        .is_err());
+    }
+    let artifact = chunk["artifact_id"].as_str().unwrap();
+    let attachment = artifacts::attachment(
+        &fixture.state,
+        &fixture.owner,
+        &fixture.context.conversation_id,
+        artifact,
+    )
+    .unwrap();
+    let size = 28_800_044;
+    let mut large = std::fs::OpenOptions::new()
+        .write(true)
+        .open(&attachment.artifact_path)
+        .unwrap();
+    use std::io::{Seek, SeekFrom, Write};
+    large.set_len(size).unwrap();
+    large.seek(SeekFrom::Start(size - 1)).unwrap();
+    large.write_all(&[1]).unwrap();
+    let chunk = recordings_read::read(
+        &fixture.state,
+        &fixture.owner,
+        &fixture.context,
+        "engine-owned",
+        &json!({"recording_id":fixture.id(),"offset":size-10}),
+    )
+    .unwrap();
+    assert_eq!(chunk["eof"], true);
+    assert_eq!(chunk["size_bytes"], size);
+    assert!(chunk["data_base64"].as_str().unwrap().len() < 128 * 1024);
+    fixture.close().await;
+}
+
+#[tokio::test]
 async fn independent_stop_saves_once_and_is_available_with_disabled_plugin_and_closed_parent() {
     let fixture = Fixture::new().await;
     assert!(
@@ -170,12 +273,10 @@ async fn independent_stop_saves_once_and_is_available_with_disabled_plugin_and_c
     let receipt = fixture.snapshot()[0].clone();
     assert_eq!(receipt["status"], "saved");
     assert_eq!(receipt["conversation_id"], fixture.context.conversation_id);
-    assert!(
-        receipt["artifacts"][0]["artifact_id"]
-            .as_str()
-            .unwrap()
-            .starts_with("cua-audio-")
-    );
+    assert!(receipt["artifacts"][0]["artifact_id"]
+        .as_str()
+        .unwrap()
+        .starts_with("cua-audio-"));
     assert!(!receipt.to_string().contains("file:"));
     fixture.stop().await;
     assert_eq!(fixture.snapshot()[0], receipt);
@@ -211,11 +312,9 @@ async fn foreign_owner_session_and_unknown_recording_never_dispatch_native_stop(
     let fixture = Fixture::new().await;
     let mut other = fixture.owner.clone();
     other.user_id = "other-user".into();
-    assert!(
-        recordings::snapshot(&fixture.state, &other)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(recordings::snapshot(&fixture.state, &other)
+        .unwrap()
+        .is_empty());
     for (owner, session, id) in [
         (&other, fixture.context.session_id.as_str(), fixture.id()),
         (&fixture.owner, "other-session", fixture.id()),
@@ -232,13 +331,11 @@ async fn foreign_owner_session_and_unknown_recording_never_dispatch_native_stop(
             "cua_recording_not_found"
         );
     }
-    assert!(
-        !fixture
-            .helper
-            .requests()
-            .iter()
-            .any(|call| call["method"] == "audio_stop")
-    );
+    assert!(!fixture
+        .helper
+        .requests()
+        .iter()
+        .any(|call| call["method"] == "audio_stop"));
     fixture.close().await;
 }
 
@@ -252,13 +349,11 @@ async fn failed_export_retains_source_and_retry_only_exports_without_restarting_
     assert_eq!(fixture.snapshot()[0]["status"], "failed");
     assert_eq!(fixture.snapshot()[0]["can_retry_export"], true);
     assert!(fixture.helper.root.join("recording.wav").is_file());
-    assert!(
-        !fixture
-            .helper
-            .requests()
-            .iter()
-            .any(|call| call["method"] == "audio_ack")
-    );
+    assert!(!fixture
+        .helper
+        .requests()
+        .iter()
+        .any(|call| call["method"] == "audio_ack"));
     std::fs::remove_file(app_data).unwrap();
     fixture.stop().await;
     assert_eq!(fixture.snapshot()[0]["status"], "saved");
@@ -428,35 +523,29 @@ async fn existing_resource_api_never_spawns_or_admits_and_rejects_input_methods(
         session_id: "session".into(),
         input_mode: agistack_adapters_cua::CuaInputMode::default(),
     };
-    assert!(
-        helper
-            .client
-            .request_existing_session(&context, "audio_stop", json!({}))
-            .await
-            .is_err()
-    );
+    assert!(helper
+        .client
+        .request_existing_session(&context, "audio_stop", json!({}))
+        .await
+        .is_err());
     assert!(!helper.root.join("requests").exists());
     helper
         .client
         .request_in_session(&context, "audio_status", json!({}))
         .await
         .unwrap();
-    assert!(
-        helper
-            .client
-            .request_existing_session(&context, "perform_action", json!({}))
-            .await
-            .is_err()
-    );
+    assert!(helper
+        .client
+        .request_existing_session(&context, "perform_action", json!({}))
+        .await
+        .is_err());
     let mut foreign = context.clone();
     foreign.user_id = "foreign".into();
-    assert!(
-        helper
-            .client
-            .request_existing_session(&foreign, "audio_stop", json!({}))
-            .await
-            .is_err()
-    );
+    assert!(helper
+        .client
+        .request_existing_session(&foreign, "audio_stop", json!({}))
+        .await
+        .is_err());
     helper.client.shutdown().await;
     std::fs::remove_dir_all(&helper.root).unwrap();
 }
@@ -472,13 +561,11 @@ async fn stop_releases_native_recording_before_waiting_on_export_gate() {
             .await
             .is_err()
     );
-    assert!(
-        fixture
-            .helper
-            .requests()
-            .iter()
-            .any(|call| call["method"] == "audio_stop")
-    );
+    assert!(fixture
+        .helper
+        .requests()
+        .iter()
+        .any(|call| call["method"] == "audio_stop"));
     let native: Value = serde_json::from_slice(
         &std::fs::read(fixture.helper.root.join("audio_receipts.json")).unwrap(),
     )
@@ -589,15 +676,13 @@ async fn pause_lease_expiry_and_parent_close_finalize_and_preserve_playable_rece
                 _ => "session_ended",
             }
         );
-        assert!(
-            artifacts::audio_chunk(
-                &fixture.state,
-                &fixture.owner,
-                receipt["artifacts"][0]["artifact_id"].as_str().unwrap(),
-                0
-            )
-            .is_ok()
-        );
+        assert!(artifacts::audio_chunk(
+            &fixture.state,
+            &fixture.owner,
+            receipt["artifacts"][0]["artifact_id"].as_str().unwrap(),
+            0
+        )
+        .is_ok());
         assert_eq!(
             fixture
                 .helper
@@ -651,15 +736,13 @@ async fn receipt_and_owned_export_retry_survive_store_reopen_without_starting_a_
     .unwrap();
     let saved = recordings::snapshot(&restored, &owner).unwrap();
     assert_eq!(saved[0]["status"], "saved");
-    assert!(
-        artifacts::audio_chunk(
-            &restored,
-            &owner,
-            saved[0]["artifacts"][0]["artifact_id"].as_str().unwrap(),
-            0
-        )
-        .is_ok()
-    );
+    assert!(artifacts::audio_chunk(
+        &restored,
+        &owner,
+        saved[0]["artifacts"][0]["artifact_id"].as_str().unwrap(),
+        0
+    )
+    .is_ok());
     assert!(restored.computer_use.client.get().is_none());
     assert_eq!(helper.requests().len(), before);
     drop(restored);

@@ -581,6 +581,14 @@ async def test_child_claim_requires_live_owner_bound_to_completed_parent(
             assert (await asyncio.wait_for(task, 3)).is_error
         else:
             assert response.status_code == 200 and response.json()["child_run_id"] == "child-run"
+            assert response.json()["browser_scope"] == {
+                "execution_id": "child-run",
+                "main_conversation_id": auth.conversation_id,
+                "parent_run_id": auth.run_id,
+                "engine_session_id": auth.session_id,
+                "is_child": True,
+            }
+            assert "child_owner_digest" not in response.json()
             await complete(websocket, request_id)
             assert not (await asyncio.wait_for(task, 3)).is_error
 

@@ -274,7 +274,7 @@ export function DesktopRightSidebar({
         aria-labelledby={active ? `work-panel-tab-${active}` : undefined}
       >
         {active === 'browser' ? (
-          <BrowserPanel />
+          <BrowserPanel conversationId={viewModel?.id} />
         ) : active === 'run-details' && viewModel ? (
           <SessionContextRail
             viewModel={viewModel}

@@ -96,6 +96,7 @@ test('browser instances with matching tab ids remain independently selectable an
   const cua = createFacade({ write() {}, emitImage() {}, enabledSurfaces: ['browser'], platform: 'darwin', rpc: async (_method, params) => {
     calls.push(params);
     if (params.operation === 'browsers.list') return structuredClone(available);
+    if (params.operation === 'browsers.resolve') throw new Error('browser URL selection is ambiguous');
     if (!available.some(browser => browser.id === params.browserId)) throw new Error('browser instance expired');
     if (params.operation === 'tabs.list') return { tabs: [{ id: '7', title: 'Same title', url: 'https://example.test/same' }] };
     if (params.operation === 'ax.get') return { text: '[0] button Save' };
@@ -139,6 +140,7 @@ test('opaque IAB and Edge identities preserve their provider-specific facade met
   const cua = createFacade({ write() {}, emitImage() {}, enabledSurfaces: ['browser'], platform: 'darwin', rpc: async (_method, params) => {
     calls.push(params);
     if (params.operation === 'browsers.list') return browsers;
+    if (params.operation === 'capabilities.list') return ['visibility'];
     if (params.operation === 'tabs.new') return { id: '7' };
     if (params.operation === 'ax.get') return { text: 'Fixture' };
     return {};

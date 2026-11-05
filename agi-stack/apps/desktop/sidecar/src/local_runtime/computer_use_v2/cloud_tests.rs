@@ -11,12 +11,12 @@ use axum::{
 };
 use tokio::sync::Semaphore;
 
+#[path = "cloud_audio_cleanup_tests.rs"]
+mod audio_cleanup_tests;
 #[path = "consent_presentation_tests.rs"]
 mod consent_presentation_tests;
 #[path = "cloud_resume_tests.rs"]
 mod resume_tests;
-#[path = "cloud_audio_cleanup_tests.rs"]
-mod audio_cleanup_tests;
 
 #[derive(Default)]
 struct MemoryCredential(Mutex<Option<String>>);
@@ -41,7 +41,7 @@ pub(super) struct Authority {
     pub(super) claim: Arc<Mutex<Value>>,
     entered: Arc<Semaphore>,
     pub(super) release: Arc<Semaphore>,
-    resume_response: Arc<Mutex<Option<Value>>>,
+    pub(super) resume_response: Arc<Mutex<Option<Value>>>,
     resume_entered: Arc<Semaphore>,
     resume_release: Arc<Semaphore>,
     pub(super) step_mode: Arc<Mutex<String>>,
@@ -121,8 +121,10 @@ impl Fixture {
             Json(json!({"id":"cloud-project","tenant_id":*authority.tenant_id.lock().unwrap()}))
         }
         async fn workspace_context(State(authority): State<Authority>) -> Json<Value> {
-            Json(json!({"context":{"tenant_id":*authority.tenant_id.lock().unwrap(),
-                "project_id":"cloud-project","revision":1},"membership_role":"owner"}))
+            Json(
+                json!({"context":{"tenant_id":*authority.tenant_id.lock().unwrap(),
+                "project_id":"cloud-project","revision":1},"membership_role":"owner"}),
+            )
         }
         async fn status(State(authority): State<Authority>) -> Json<Value> {
             Json(
@@ -167,28 +169,57 @@ impl Fixture {
                 Json(value),
             )
         }
+        async fn continuity_authority(
+            State(authority): State<Authority>,
+            Json(input): Json<Value>,
+        ) -> (axum::http::StatusCode, Json<Value>) {
+            assert_eq!(input["device_id"], authority.device_id);
+            assert_eq!(input["session_id"], "engine-session");
+            let mut value = authority
+                .resume_response
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| authority.claim.lock().unwrap().clone());
+            value["expires_at_ms"] = json!(chrono::Utc::now().timestamp_millis() + 5000);
+            (
+                if value["denied"] == true {
+                    axum::http::StatusCode::CONFLICT
+                } else {
+                    axum::http::StatusCode::OK
+                },
+                Json(value),
+            )
+        }
         async fn step_authority(
             State(authority): State<Authority>,
-            axum::extract::Path((request, step)): axum::extract::Path<(String,String)>,
+            axum::extract::Path((request, step)): axum::extract::Path<(String, String)>,
             headers: axum::http::HeaderMap,
             Json(input): Json<Value>,
         ) -> Json<Value> {
-            use sha2::{Digest,Sha256};
-            assert_eq!(headers.get("authorization").unwrap(), "Bearer fixture-credential");
-            assert_eq!(request,authority.claim.lock().unwrap()["request_id"]);
-            let mut recorded = input.clone(); recorded["_step_id"] = json!(step);
+            use sha2::{Digest, Sha256};
+            assert_eq!(
+                headers.get("authorization").unwrap(),
+                "Bearer fixture-credential"
+            );
+            assert_eq!(request, authority.claim.lock().unwrap()["request_id"]);
+            let mut recorded = input.clone();
+            recorded["_step_id"] = json!(step);
             authority.step_calls.lock().unwrap().push(recorded);
             let mode = authority.step_mode.lock().unwrap().clone();
             if matches!(mode.as_str(), "pending" | "pending-mismatch") {
                 let claim = authority.claim.lock().unwrap().clone();
-                let parent: Value = serde_json::from_str(claim["input_json"].as_str().unwrap()).unwrap();
+                let parent: Value =
+                    serde_json::from_str(claim["input_json"].as_str().unwrap()).unwrap();
                 let mut pending = json!({"status":"pending","error":"cua_permission_required","scopes":["once"],"request":{
                     "request_id":"fixture-pending","session_id":input["cell_id"],"engine_session_id":claim["session_id"],
                     "app":input["target"]["id"],"identity_digest":"fixture-catalog","capability":"execution_step",
                     "tool_name":input["tool_name"],"input_digest":format!("{:x}",Sha256::digest(input["input_json"].as_str().unwrap().as_bytes())),
                     "execution_step":{"key":"fixture-step","cell_id":input["cell_id"],"step_id":step,"target":input["target"],
                         "code_digest":format!("{:x}",Sha256::digest(parent["code"].as_str().unwrap().as_bytes()))}}});
-                if mode == "pending-mismatch" { pending["request"]["execution_step"]["step_id"] = json!("foreign"); }
+                if mode == "pending-mismatch" {
+                    pending["request"]["execution_step"]["step_id"] = json!("foreign");
+                }
                 return Json(pending);
             }
             let consumed = input.get("receipt").is_some();
@@ -199,14 +230,19 @@ impl Fixture {
             if let Some(proof) = authority.step_continuation.lock().unwrap().as_ref() {
                 if proof["step_id"] == step {
                     result["continuation"] = proof.clone();
-                    if mode == "changed-continuation" && consumed { result["continuation"]["hitl_request_id"] = json!("changed"); }
+                    if mode == "changed-continuation" && consumed {
+                        result["continuation"]["hitl_request_id"] = json!("changed");
+                    }
                 }
             }
             Json(result)
         }
         let router = Router::new()
             .route("/api/v1/auth/me", get(me))
-            .route("/api/v1/agent/device/requests/:request_id/steps/:step_id/authorize",post(step_authority))
+            .route(
+                "/api/v1/agent/device/requests/:request_id/steps/:step_id/authorize",
+                post(step_authority),
+            )
             .route("/api/v1/projects/cloud-project", get(project))
             .route("/api/v1/workspace-context", get(workspace_context))
             .route("/api/v1/agent/device/status", get(status))
@@ -217,6 +253,10 @@ impl Fixture {
             .route(
                 "/api/v1/agent/device/requests/:request_id/resume-authority",
                 post(resume_authority),
+            )
+            .route(
+                "/api/v1/agent/device/requests/:request_id/continuity-authority",
+                post(continuity_authority),
             )
             .with_state(authority.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -738,7 +778,7 @@ async fn connector_refusal_blocks_new_rounds_and_desktop_fallback_for_the_same_r
         revision: instance.revision,
         stopped: AtomicBool::new(false),
         paused: AtomicBool::new(false),
-            user_control: Default::default(),
+        user_control: Default::default(),
         presentation: Mutex::new(json!({"phase":"idle","can_resume":false})),
         child: None,
         cloud: None,

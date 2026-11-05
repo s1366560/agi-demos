@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Cross2Icon, GlobeIcon, PlusIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, ArrowRightIcon, Cross2Icon, GlobeIcon, PlusIcon, ReloadIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
 import './BrowserPanel.css';
@@ -11,6 +11,10 @@ type IabTab = Readonly<{
   title: string;
   url: string;
   active: boolean;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  loading?: boolean;
+  ownership?: { sessionId: string; origin: 'agent' | 'user'; controller: 'agent' | 'user'; callerId: string | null; mark: 'handoff' | 'deliverable' | null };
 }>;
 
 function tabLabel(tab: IabTab, untitled: string): string {
@@ -30,7 +34,7 @@ function tabLabel(tab: IabTab, untitled: string): string {
  * the active tab's WebContentsView onto it. Hiding (unmount) zeroes the view
  * bounds main-side; the tab keeps running for the agent.
  */
-export function BrowserPanel() {
+export function BrowserPanel({ conversationId }: Readonly<{ conversationId?: string }> = {}) {
   const { t } = useI18n();
   const bridge = window.__MEMSTACK_DESKTOP__?.iab;
   const [tabs, setTabs] = useState<readonly IabTab[]>([]);
@@ -40,6 +44,14 @@ export function BrowserPanel() {
   const [loaded, setLoaded] = useState(false);
   const [failure, setFailure] = useState<{ key: string; retry: () => Promise<unknown> } | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [connection, setConnection] = useState('connecting');
+  const [contextReady, setContextReady] = useState(false);
+  const [group, setGroup] = useState('all');
+  const [address, setAddress] = useState<string | null>(null);
+  const activeTab = tabs.find(tab => tab.active) ?? null;
+  const sessions = [...new Set(tabs.flatMap(tab => tab.ownership ? [tab.ownership.sessionId] : []))];
+  const shownTabs = group === 'all' ? tabs : tabs.filter(tab => tab.ownership?.sessionId === group);
+  useEffect(() => { setAddress(null); }, [activeTab?.tabId, activeTab?.url]);
   const perform = useCallback(async (action: () => Promise<unknown>, key: string) => {
     try {
       await action();
@@ -68,7 +80,17 @@ export function BrowserPanel() {
         if (!disposed && requestRevision === revision) throw error;
       }
     };
-    void perform(load, 'browserPanel.loadFailed');
+    const refresh = async () => {
+      await load();
+      const status = await bridge.status();
+      if (!disposed) {
+        setConnection(status.status);
+        setContextReady(status.contextReady !== false);
+        setFailure(current => current?.key === 'browserPanel.loadFailed' ? null : current);
+      }
+    };
+    void perform(refresh, 'browserPanel.loadFailed');
+    const timer = window.setInterval(() => void perform(refresh, 'browserPanel.loadFailed'), 3000);
     const unsubscribe = bridge.onTabsChanged((payload) => {
       if (disposed) return;
       revision += 1;
@@ -80,6 +102,7 @@ export function BrowserPanel() {
       mounted.current = false;
       disposed = true;
       unsubscribe();
+      window.clearInterval(timer);
     };
   }, [bridge, perform]);
 
@@ -131,12 +154,22 @@ export function BrowserPanel() {
     );
   }
 
-  const activeTab = tabs.find((tab) => tab.active) ?? null;
-
   return (
     <div className="browser-panel">
+      <div className="browser-panel-session">
+        <select aria-label={t('browserPanel.session')} value={group} onChange={event => {
+          const next = event.target.value;
+          setGroup(next);
+          const first = tabs.find(tab => next === 'all' || tab.ownership?.sessionId === next);
+          if (first) void perform(() => bridge.focusTab(first.tabId), 'browserPanel.actionFailed');
+        }}>
+          <option value="all">{t('browserPanel.allSessions')}</option>
+          {sessions.map(id => <option key={id} value={id}>{id === conversationId ? t('browserPanel.currentSession') : t('browserPanel.sessionName', { id: id.slice(0, 12) })}</option>)}
+        </select>
+        <span role="status">{t(!contextReady ? 'browserPanel.contextPending' : connection === 'connected' ? 'browserPanel.connected' : 'browserPanel.reconnecting')}</span>
+      </div>
       <div className="browser-panel-tabs" role="tablist" aria-label={t('rightbar.browser')}>
-        {tabs.map((tab) => (
+        {shownTabs.map((tab) => (
           <button
             key={tab.tabId}
             type="button"
@@ -174,6 +207,7 @@ export function BrowserPanel() {
         <button
           type="button"
           className="browser-panel-new-tab"
+          disabled={!contextReady}
           aria-label={t('browserPanel.newTab')}
           title={t('browserPanel.newTab')}
           onClick={() => void perform(() => bridge.createTab(), 'browserPanel.actionFailed')}
@@ -195,10 +229,29 @@ export function BrowserPanel() {
           }}>{t('common.retry')}</button>
         </div>
       ) : null}
-      <div className="browser-panel-address" title={activeTab?.url ?? ''}>
-        <GlobeIcon />
-        <span>{activeTab?.url ?? 'about:blank'}</span>
-      </div>
+      <form className="browser-panel-address" onSubmit={event => {
+        event.preventDefault();
+        if (!activeTab) return;
+        const value = (address ?? activeTab.url).trim();
+        if (!value) return;
+        const url = URL.canParse(value) ? value : `https://${value}`;
+        void perform(() => bridge.navigateTab(activeTab.tabId, url), 'browserPanel.actionFailed');
+      }}>
+        <button type="button" aria-label={t('browserPanel.back')} disabled={!activeTab?.canGoBack}
+          onClick={() => activeTab && void perform(() => bridge.navigateHistory(activeTab.tabId, 'back'), 'browserPanel.actionFailed')}><ArrowLeftIcon /></button>
+        <button type="button" aria-label={t('browserPanel.forward')} disabled={!activeTab?.canGoForward}
+          onClick={() => activeTab && void perform(() => bridge.navigateHistory(activeTab.tabId, 'forward'), 'browserPanel.actionFailed')}><ArrowRightIcon /></button>
+        <button type="button" aria-label={t('browserPanel.reload')} disabled={!activeTab}
+          onClick={() => activeTab && void perform(() => bridge.navigateHistory(activeTab.tabId, 'reload'), 'browserPanel.actionFailed')}><ReloadIcon /></button>
+        <input aria-label={t('browserPanel.address')} value={address ?? activeTab?.url ?? ''} disabled={!activeTab}
+          onChange={event => setAddress(event.target.value)} onFocus={event => event.target.select()} />
+        <button type="submit" disabled={!activeTab}>{t('browserPanel.go')}</button>
+      </form>
+      {activeTab?.ownership ? <div className="browser-panel-ownership">
+        <span>{t(activeTab.ownership.controller === 'agent' ? 'browserPanel.agentControl' : 'browserPanel.userControl')}</span>
+        {activeTab.ownership.mark ? <span>{t(`browserPanel.${activeTab.ownership.mark}`)}</span> : null}
+        {activeTab.ownership.controller === 'agent' ? <button type="button" onClick={() => void perform(() => bridge.takeOver(activeTab.tabId), 'browserPanel.actionFailed')}>{t('browserPanel.takeOver')}</button> : null}
+      </div> : null}
       </div>
       <div className="browser-panel-viewport" ref={viewportRef}>
         {!loaded && !failure ? <p role="status">{t('common.loading')}</p> : null}

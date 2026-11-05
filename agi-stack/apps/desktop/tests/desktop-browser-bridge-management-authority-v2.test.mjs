@@ -78,6 +78,10 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+const cdpEndpoint = {
+  id: 'e46cf0d6-a97c-4d29-b01b-5c5941b1fae8', name: 'Test browser',
+  endpoint: 'http://127.0.0.1:9222', enabled: true,
+};
 function fixture(invoke, options = {}) {
   global.window = { __MEMSTACK_DESKTOP__: { runtime: 'electron', core: { invoke } } };
   let service;
@@ -209,6 +213,48 @@ test('independent clients and generations serialize config read modify write pre
     'local_runtime_status',
     'local_runtime_configure',
   ]);
+});
+test('provider changes preserve bridge flags and survive the projected response and later toggles', async () => {
+  let current = status();
+  const f = fixture(async (command, args) => {
+    if (command === 'browser_bridge_status') return bridge;
+    if (command === 'local_runtime_configure') current = { ...current, config: args.config };
+    return structuredClone(current);
+  });
+  const providers = { cdp_endpoints: [cdpEndpoint], default_browser_id: `cdp:${cdpEndpoint.id}` };
+  const result = await f.client.setProviders(providers);
+  assert.deepEqual(result.config.browser_bridge.cdp_endpoints, [cdpEndpoint]);
+  assert.equal(result.config.browser_bridge.default_browser_id, providers.default_browser_id);
+  await f.client.setEnabled(true);
+  const loaded = await f.client.loadSnapshot();
+  assert.deepEqual(loaded.runtimeStatus.config.browser_bridge.cdp_endpoints, [cdpEndpoint]);
+  assert.equal(current.config.browser_bridge.enabled, true);
+  assert.equal(current.config.preserved_kernel_field, 'keep');
+  assert.deepEqual(f.events, ['acquire', 'release', 'acquire', 'release', 'acquire', 'release']);
+});
+test('invalid provider input cannot acquire a native lease', async () => {
+  let calls = 0;
+  const f = fixture(async () => { calls++; return status(); });
+  for (const providers of [null, {}, { cdp_endpoints: [], default_browser_id: '' },
+    { cdp_endpoints: [{ ...cdpEndpoint, enabled: 'true' }], default_browser_id: 'iab' }]) {
+    await assert.rejects(f.client.setProviders(providers), /contract_invalid/);
+  }
+  assert.equal(calls, 0);
+  assert.deepEqual(f.events, []);
+});
+test('caller changes cannot replace provider arguments while a native lease is pending', async () => {
+  let current = status();
+  const gate = deferred();
+  const f = fixture(async (command, args) => {
+    if (command === 'local_runtime_configure') current = { ...current, config: args.config };
+    return structuredClone(current);
+  }, { acquire: gate.promise });
+  const providers = { cdp_endpoints: [{ ...cdpEndpoint }], default_browser_id: `cdp:${cdpEndpoint.id}` };
+  const pending = f.client.setProviders(providers);
+  providers.cdp_endpoints[0].endpoint = 'http://127.0.0.1:3333';
+  gate.resolve();
+  await pending;
+  assert.equal(current.config.browser_bridge.cdp_endpoints[0].endpoint, cdpEndpoint.endpoint);
 });
 test('install and uninstall share queue and cancelled queued operation emits no command', async () => {
   const wait = deferred(),

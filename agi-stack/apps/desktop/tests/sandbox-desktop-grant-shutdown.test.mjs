@@ -133,6 +133,9 @@ async function fixture(trustedDevice) {
   const bindings = {
     DesktopCloudAuthenticationAuthority,
     computerUseActivity,
+    computerUseInput: null,
+    mcpAppGuestHost: { clear() {} },
+    mcpAppFrameHost: { clear: async () => {} },
     rendererDeliveryAdmissionV2: new RendererDeliveryAdmissionV2(),
     rendererDeliveryOwnersV2: new Map(),
     supervisor,

@@ -301,6 +301,8 @@ class NativeComputerBroker(MediaTransport):
         await self.redis.expire(key, REQUEST_SECONDS)
 
     async def claim(self, request_id: str, *, user_id: str, device_id: str) -> dict[str, Any]:
+        from src.infrastructure.agent.native_computer_use.browser_scope import browser_scope
+
         identifier(device_id)
 
         def change(value: dict[str, Any] | None) -> dict[str, Any]:
@@ -308,11 +310,21 @@ class NativeComputerBroker(MediaTransport):
                 raise DeviceBridgeError("computer_use_request_access_denied")
             if value["status"] != "requested" or value["expires_at"] <= time.time():
                 raise DeviceBridgeError("computer_use_request_already_claimed")
+            browser_scope(value)
             return {**value, "status": "claimed"}
 
         value = await self.update(request_key(request_id), change)
-        # Internal connection and status fields are never client authority.
-        return {key: item for key, item in value.items() if key not in {"status", "connection_id"}}
+
+        # The owner witness remains server-side; the authenticated claim supplies
+        # only the identity whose lease the route has just revalidated.
+        return {
+            **{
+                key: item
+                for key, item in value.items()
+                if key not in {"status", "connection_id", "child_owner_digest"}
+            },
+            "browser_scope": browser_scope(value),
+        }
 
     async def cancel_request(self, request_id: str) -> None:
         value = await self.read(request_key(request_id))

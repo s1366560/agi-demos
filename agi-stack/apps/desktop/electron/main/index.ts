@@ -141,6 +141,7 @@ const SIDECAR_COMMANDS = new Set([
   'browser_auth_pending',
   'browser_auth_respond',
   'computer_use_manage_v2',
+  'audio_sessions_manage_v2',
 ]);
 const captureAuthorizationGate = new DisplayCaptureAuthorizationGate();
 const mcpAppFrames: McpAppFrames = new McpAppFrames(owner => mcpAppGuestHost.ownsVisibleSurface(owner));
@@ -197,6 +198,7 @@ let sidecarShutdownComplete = false;
 let automaticUpdates: AutomaticUpdateController | null = null;
 let unsubscribeUpdateState: (() => void) | null = null;
 let iabPool: IabViewPool | null = null;
+let iabContextGeneration = 0;
 let iabBackend: IabBackend | null = null;
 let computerUseActivity: ComputerUseActivityMonitor | null = null;
 let computerUseInput: ComputerUseInputMonitor | null = null;
@@ -610,11 +612,34 @@ async function executeIabCommand(
   const backend = iabBackend;
   if (!pool || !backend) throw new Error('in-app browser is unavailable');
   switch (command) {
+    case 'iab_activate_context': {
+      const generation = ++iabContextGeneration;
+      pool.ownership.activateSession(null);
+      if (args?.conversation_id === null) return { session_id: null };
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      const context = await sidecarSupervisor.invoke('browser_context', args) as { session_id: string };
+      if (typeof context.session_id !== 'string' || !context.session_id) throw new Error('browser context is unavailable');
+      if (generation !== iabContextGeneration) throw new Error('browser context selection changed');
+      pool.ownership.activateSession(context.session_id);
+      return context;
+    }
+    case 'iab_navigate_tab':
+      if (typeof args?.url !== 'string') throw new Error('browser URL is required');
+      await pool.navigateTab(iabTabIdArg(args), args.url);
+      return undefined;
+    case 'iab_navigate_history':
+      if (!['back', 'forward', 'reload'].includes(String(args?.direction))) throw new Error('invalid browser navigation');
+      pool.navigateHistory(iabTabIdArg(args), args!.direction as 'back' | 'forward' | 'reload');
+      return undefined;
+    case 'iab_take_over':
+      pool.takeOver(iabTabIdArg(args));
+      return undefined;
     case 'iab_status':
-      return { status: backend.status };
+      return { status: backend.status, contextReady: pool.ownership.activeSession !== null };
     case 'iab_list_tabs':
       return { tabs: pool.getTabs(), activeTabId: pool.activeTabId };
     case 'iab_create_tab': {
+      if (!pool.ownership.activeSession) throw new Error('browser conversation context is unavailable');
       const url = typeof args?.url === 'string' ? args.url : null;
       return { tabId: await pool.createTab(url) };
     }
@@ -677,6 +702,7 @@ async function executeDesktopCommand(
     throw new Error('desktop command is not authorized');
   }
   if (command.startsWith('iab_')) {
+    void authorizedCloudRequestOwner(event);
     return executeIabCommand(command, args);
   }
   switch (command) {
@@ -748,6 +774,11 @@ async function executeDesktopCommand(
         () => authorizedCloudRequestOwner(event),
         (request) => supervisor.invoke(command, request),
       );
+    }
+    case 'audio_sessions_manage_v2': {
+      void authorizedCloudRequestOwner(event);
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      return sidecarSupervisor.invoke(command, args);
     }
     case 'computer_use_manage_v2': {
       void authorizedCloudRequestOwner(event);

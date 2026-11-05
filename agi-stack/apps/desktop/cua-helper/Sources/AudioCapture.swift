@@ -111,41 +111,12 @@ final class AudioCapture {
         }
     }
     private func startTrack(_ recording: AudioRecording, session: NativeSession) throws {
-        if recording.source == "microphone" {
-            guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
-                throw ActionError.failure(kind: "permission_required", message: "Microphone permission is required")
-            }
-            let engine = AVAudioEngine()
-            let input = engine.inputNode
-            let format = input.outputFormat(forBus: 0)
-            guard format.sampleRate > 0, format.channelCount > 0 else {
-                throw ActionError.failure(kind: "audio_device_unavailable", message: "microphone has no active format")
-            }
-            input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, when in
-                recording.write(buffer, hostTime: when.isHostTimeValid ? AVAudioTime.seconds(forHostTime: when.hostTime) : nil)
-            }
-            recording.engine = engine
-            recording.configurationObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange,
-                object: engine, queue: nil) { [weak recording] _ in recording?.onFailure?("device_lost", "audio_device_changed") }
-            try engine.start()
-        } else {
-            guard CGPreflightScreenCaptureAccess() else {
-                throw ActionError.failure(kind: "permission_required", message: "Screen Recording permission is required")
-            }
-            let content: SCShareableContent = try WindowCapture.wait(session: session) { done in
-                SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { done($0, $1) }
-            }
-            guard let display = content.displays.first else {
-                throw ActionError.failure(kind: "audio_device_unavailable", message: "no display is available for system audio")
-            }
-            let configuration = SCStreamConfiguration()
-            configuration.width = 2; configuration.height = 2
-            configuration.capturesAudio = true; configuration.excludesCurrentProcessAudio = true
-            let stream = SCStream(filter: SCContentFilter(display: display, excludingWindows: []), configuration: configuration, delegate: recording)
-            recording.stream = stream
-            try stream.addStreamOutput(recording, type: .audio, sampleHandlerQueue: sampleQueue)
-            let _: Bool = try WindowCapture.wait(session: session) { done in stream.startCapture { done($0 == nil ? true : nil, $0) } }
-        }
+        try session.cancellation.check()
+        recording.captureLease = try AudioCaptureCoordinator.shared.acquire(source: recording.source,
+            consumer: "cua-recording:" + recording.url.lastPathComponent,
+            sample: { [weak recording] buffer, time in recording?.write(buffer, hostTime: time) },
+            failure: { [weak recording] reason, error in recording?.onFailure?(reason, error) })
+        try session.cancellation.check()
     }
     private func response(_ values: [Recording]) -> [String: Any] {
         var result: [String: Any] = ["recordings": values.map { $0.receipt },

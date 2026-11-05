@@ -21,6 +21,7 @@ pub(in crate::local_runtime) struct CloudBrowserToolHost<E: BridgeEndpoint> {
     run_id: String,
     authority: Arc<dyn BrowserStepAuthority>,
     auth_owner: Option<(String, u64)>,
+    browser_caller: Option<agistack_adapters_browser::caller::BrowserCaller>,
 }
 
 impl<E: BridgeEndpoint> CloudBrowserToolHost<E> {
@@ -45,6 +46,7 @@ impl<E: BridgeEndpoint> CloudBrowserToolHost<E> {
             run_id,
             authority,
             auth_owner: None,
+            browser_caller: None,
         }
     }
 
@@ -69,6 +71,14 @@ impl<E: BridgeEndpoint> CloudBrowserToolHost<E> {
     ) -> Self {
         self.local.browser_auth = Some(broker);
         self.auth_owner = Some((conversation_id, revision));
+        self
+    }
+
+    pub(in crate::local_runtime) fn with_browser_caller(
+        mut self,
+        caller: agistack_adapters_browser::caller::BrowserCaller,
+    ) -> Self {
+        self.browser_caller = Some(caller);
         self
     }
 
@@ -113,6 +123,8 @@ impl<E: BridgeEndpoint> CloudBrowserToolHost<E> {
             .ok_or_else(|| CoreError::Tool("browser input must be an object".into()))?;
         for key in [
             "_run_id",
+            "_browserCaller",
+            "_browserSurface",
             "_authorized_file_roots",
             "_blocked_file_roots",
             "_artifact_root",
@@ -225,7 +237,12 @@ impl<E: BridgeEndpoint> ToolHost for CloudBrowserToolHost<E> {
     async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<ToolResult> {
         let started = Instant::now();
         let input = serde_json::from_str::<Value>(input_json).ok();
-        let result = self.dispatch(tool, input_json).await;
+        let dispatch = self.dispatch(tool, input_json);
+        let result = if let Some(caller) = &self.browser_caller {
+            agistack_adapters_browser::caller::scope(caller.clone(), dispatch).await
+        } else {
+            dispatch.await
+        };
         let origin = self.local.audit_origin(tool, input.as_ref()).await;
         let _ = self.local.session_store.insert_browser_action_audit(
             Some(&self.run_id),
@@ -251,10 +268,14 @@ mod tests {
         url: Arc<Mutex<String>>,
         actions: Arc<AtomicUsize>,
         tx: broadcast::Sender<BridgeNotification>,
+        seen_params: Option<Arc<Mutex<Vec<Value>>>>,
     }
     #[async_trait]
     impl BridgeEndpoint for Endpoint {
-        async fn request(&self, method: &str, _: Value) -> CoreResult<Value> {
+        async fn request(&self, method: &str, params: Value) -> CoreResult<Value> {
+            if let Some(seen) = &self.seen_params {
+                seen.lock().unwrap().push(params);
+            }
             if method == "getTabs" {
                 return Ok(json!({"tabs":[{"tabId":7,"url":self.url.lock().unwrap().clone()}]}));
             }
@@ -327,6 +348,7 @@ mod tests {
                 url: url.clone(),
                 actions: actions.clone(),
                 tx: broadcast::channel(8).0,
+                seen_params: None,
             })),
             store,
             "cloud-run".into(),
@@ -355,6 +377,8 @@ mod tests {
     async fn private_authority_fields_are_rejected_before_admission_or_dispatch() {
         for key in [
             "_run_id",
+            "_browserCaller",
+            "_browserSurface",
             "_authorized_file_roots",
             "_blocked_file_roots",
             "_artifact_root",
@@ -400,5 +424,60 @@ mod tests {
         assert!(result.is_ok());
         assert!(result.unwrap().permission_required.is_none());
         assert_eq!(actions, 2); // attach and reload
+    }
+    #[tokio::test]
+    async fn verified_cloud_child_scope_reaches_bridge_and_forged_scope_is_rejected() {
+        let store = DesktopSessionStore::in_memory().unwrap();
+        let credentials =
+            super::super::super::provider_credentials::ProviderCredentialBroker::in_memory(
+                store.installation_id(),
+            )
+            .unwrap()
+            .site_credential_broker();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let host = CloudBrowserToolHost::new(
+            Arc::new(BrowserToolHost::new(Endpoint {
+                url: Arc::new(Mutex::new("https://example.test/".into())),
+                actions: Arc::new(AtomicUsize::new(0)),
+                tx: broadcast::channel(8).0,
+                seen_params: Some(seen.clone()),
+            })),
+            store,
+            "parent-run".into(),
+            false,
+            credentials,
+            Arc::new(Authority {
+                pending: false,
+                change: None,
+                seen: Default::default(),
+            }),
+        )
+        .with_browser_caller(agistack_adapters_browser::caller::BrowserCaller {
+            session_id: "child-execution".into(),
+            main_session_id: "main-conversation".into(),
+            caller_id: "child-execution".into(),
+            turn_id: "parent-run".into(),
+            allow_dot: true,
+        });
+        let input = json!({"browserId":"iab","operation":"tabs.list","args":[]});
+        host.call_with_content(facade::TOOL_READ, &input.to_string())
+            .await
+            .unwrap();
+        let calls = seen.lock().unwrap().clone();
+        assert!(!calls.is_empty());
+        assert!(calls.iter().all(
+            |value| value["_browserCaller"]["callerId"] == "child-execution"
+                && value["_browserCaller"]["mainSessionId"] == "main-conversation"
+                && value["_browserCaller"]["turnId"] == "parent-run"
+                && value["_browserCaller"]["allowDot"] == true
+        ));
+        let mut forged = input;
+        forged["_browserCaller"] = json!({"callerId":"parent-run"});
+        assert!(host
+            .call_with_content(facade::TOOL_READ, &forged.to_string())
+            .await
+            .is_err());
+        assert_eq!(seen.lock().unwrap().len(), calls.len());
+        assert!(agistack_adapters_browser::caller::current().is_none());
     }
 }

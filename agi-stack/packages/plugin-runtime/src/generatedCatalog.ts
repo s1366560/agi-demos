@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:3345f681916b4570a87450bdc2af4d35f737b1818c51d2092023a31ee6',
-  '92c877","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:a117dcaf7f51b7e35f65a80ee415101bb54cb2337c401fc71343b95d6d',
+  '6cdb45","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1813,8 +1813,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'digest":"sha256:9719fcebc65a9e91084db30c9814545c4fba536fc97d9d8c49f3c7a66484c0cb","e',
   'ntrypoint":"applyDesktopBackendStoresAuthorityV2","module_ref":"builtin://memstack/d',
   'esktop/backend-stores-authority","plugin_id":"memstack-renderer-target-hosts","plugi',
-  'n_version":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:4374bf',
-  '4192e55fd099a1c170cb0c32de57761edf6de5717dc340277df94103bd","artifact_source":"repo+',
+  'n_version":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:5f17d6',
+  'c08026d6023f8e0d2ce599a7a537e2aa28783b5fb56fcc217cf7436416","artifact_source":"repo+',
   'typescript://agi-stack/apps/desktop/src/plugins/desktopBrowserBridgeManagementAuthor',
   'ityModuleV2.ts","contract":{"config_schema":{"$schema":"https://json-schema.org/draf',
   't/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"na',
@@ -2340,8 +2340,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '7cef1df427814b6e85f2b2f753533f4fc5ee31a0afb624589e108edccd18db","entrypoint":"applyD',
   'esktopSessionArtifactActionAuthorityV2","module_ref":"builtin://memstack/desktop/ses',
   'sion-artifact-action-authority","plugin_id":"memstack-renderer-target-hosts","plugin',
-  '_version":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:fe9b67e',
-  'c306df988549f4d780d015149b63de298f78497646de9193c3ec211ef","artifact_source":"repo+t',
+  '_version":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:cbd0643',
+  '0215035e773369af627c40b0b7b44e0fc62d812026d796e38569dd9b7","artifact_source":"repo+t',
   'ypescript://agi-stack/apps/desktop/src/plugins/desktopSessionProjectionAuthorityModu',
   'leV2.ts","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-',
   '12/schema","additionalProperties":false,"properties":{"strategy":{"const":"desktop-a',
@@ -3086,8 +3086,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'rypoint":"src.infrastructure.plugins.v2.builtin_agent_pool_http_routes:builtin_agent',
   '_pool_http_routes_definition_v2","module_ref":"builtin://memstack/http/agent-pool-ro',
   'utes","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["pyt',
-  'hon"]},{"artifact_digest":"sha256:20743c21758bf9e037e1a3ae3fc14b3bf74f6261291f14911a',
-  '6f17fc3ea29d69","artifact_source":"repo+python://src/infrastructure/plugins/v2/built',
+  'hon"]},{"artifact_digest":"sha256:fc46c593b1dc5f8648321030f06f1de05a0944a60ebc091435',
+  'f43b260a653ffb","artifact_source":"repo+python://src/infrastructure/plugins/v2/built',
   'in_agent_http_routes.py","contract":{"config_schema":{"$schema":"https://json-schema',
   '.org/draft/2020-12/schema","additionalProperties":false,"properties":{},"type":"obje',
   'ct"},"events":{"emits":[],"handles":[]},"services":{"provides":[],"requires":[{"alia',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:3345f681916b4570a87450bdc2af4d35f737b1818c51d2092023a31ee692c877' as const;
+  'sha256:a117dcaf7f51b7e35f65a80ee415101bb54cb2337c401fc71343b95d6d6cdb45' as const;

@@ -54,7 +54,9 @@ struct LockedUseFailure: Error {
                     "event_tap_created", "event_tap_valid", "event_tap_enabled",
                     "has_covered_display", "covered_all_displays", "topology_matches", "source_alive", "watchdog_alive",
                     "loginwindow_found", "loginwindow_unique", "scan_complete", "field_identifier_found",
-                    "field_unique", "field_value_settable", "readiness_deadline_reached"] {
+                    "field_unique", "field_value_settable", "readiness_deadline_reached",
+                    "scan_multiple_complete", "scan_root_children_available", "scan_root_has_children",
+                    "scan_has_grandchildren", "scan_has_at_least_ten_nodes", "scan_descendant_children_unavailable"] {
             if let value = raw[key] as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() {
                 safe[key] = value.boolValue
             }

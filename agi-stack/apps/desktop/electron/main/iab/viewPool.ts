@@ -26,6 +26,7 @@ import {
   isIabPermissionAllowed,
 } from './iabNavigationPolicy';
 import { IabTabRegistry, type IabTurnEndedLease } from './iabTabRegistry';
+import { IabOwnership, type BrowserCaller, type BrowserSurface } from './iabOwnership';
 
 export const IAB_SESSION_PARTITION = 'persist:memstack-iab';
 export const IAB_CDP_TIMEOUT_MS = 20_000;
@@ -38,6 +39,10 @@ export type IabTabSnapshot = Readonly<{
   title: string;
   url: string;
   active: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  loading: boolean;
+  ownership?: ReturnType<IabOwnership['metadata']>;
 }>;
 
 export type IabPaneBounds = Readonly<{
@@ -81,6 +86,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 export class IabViewPool {
   readonly registry = new IabTabRegistry();
+  readonly ownership = new IabOwnership();
   readonly cursor: IabCursorController;
   readonly #options: IabViewPoolOptions;
   readonly #tabs = new Map<number, IabTabEntry>();
@@ -88,6 +94,7 @@ export class IabViewPool {
   #hostWindow: BrowserWindow | null = null;
   #paneVisible = false;
   #paneBounds: IabPaneBounds = Object.freeze({ x: 0, y: 0, width: 0, height: 0 });
+  readonly #sessionViewports = new Map<string, { width: number; height: number }>();
   #viewport: { width: number; height: number } | null = null;
 
   constructor(options: IabViewPoolOptions) {
@@ -119,7 +126,7 @@ export class IabViewPool {
     return this.#entry(tabId).view.webContents;
   }
 
-  async createTab(url?: string | null): Promise<number> {
+  async createTab(url?: string | null, caller: BrowserCaller | null = null, surface: BrowserSurface = 'iab', parentTabId?: number): Promise<number> {
     const target = url ?? 'about:blank';
     const navigation = evaluateIabNavigation(target);
     if (!navigation.allowed) {
@@ -138,13 +145,16 @@ export class IabViewPool {
     view.setBounds(IAB_INITIAL_BOUNDS);
     view.setVisible(false);
     const tabId = this.registry.createTab();
+    if (parentTabId === undefined) this.ownership.created(tabId, caller, caller ? 'agent' : 'user', surface);
+    else this.ownership.createdFrom(tabId, parentTabId);
     const entry: IabTabEntry = { view, debuggerAttached: false };
     this.#tabs.set(tabId, entry);
     this.#installPolicy(tabId, view);
     if (this.#activeTabId === null) this.#activeTabId = tabId;
     this.#layoutActiveView();
     this.#emitTabsChanged();
-    if (this.#viewport) await this.#applyViewport(tabId, this.#viewport);
+    const viewport = this.#sessionViewports.get(this.ownership.metadata(tabId)!.sessionId) ?? this.#viewport;
+    if (viewport) await this.#applyViewport(tabId, viewport);
     try {
       await view.webContents.loadURL(target);
     } catch (error) {
@@ -169,6 +179,7 @@ export class IabViewPool {
     this.#detachFromWindow(entry);
     this.#tabs.delete(tabId);
     this.registry.removeTab(tabId);
+    this.ownership.remove(tabId);
     this.cursor.discardTab(tabId);
     if (!entry.view.webContents.isDestroyed()) {
       entry.view.webContents.close();
@@ -199,10 +210,52 @@ export class IabViewPool {
           title: webContents.isDestroyed() ? '' : webContents.getTitle(),
           url: webContents.isDestroyed() ? 'about:blank' : webContents.getURL(),
           active: tabId === this.#activeTabId,
+          canGoBack: !webContents.isDestroyed() && webContents.navigationHistory.canGoBack(),
+          canGoForward: !webContents.isDestroyed() && webContents.navigationHistory.canGoForward(),
+          loading: !webContents.isDestroyed() && webContents.isLoading(),
+          ownership: this.ownership.metadata(tabId),
         }),
       );
     }
     return snapshots;
+  }
+
+  scopedTabs(caller: BrowserCaller, surface: BrowserSurface, includeUserTabs = false): IabTabSnapshot[] {
+    const ids = new Set(this.ownership.list(caller, surface, includeUserTabs));
+    return this.getTabs().filter(tab => ids.has(tab.tabId));
+  }
+
+  takeOver(tabId: number): void {
+    this.ownership.takeOver(tabId);
+    this.detachDebugger(tabId);
+    this.focusTab(tabId);
+  }
+
+  async navigateTab(tabId: number, url: string): Promise<void> {
+    const navigation = evaluateIabNavigation(url);
+    if (!navigation.allowed) throw new Error(`iab navigation denied: ${navigation.reasonCode}`);
+    this.takeOver(tabId);
+    await this.#entry(tabId).view.webContents.loadURL(url);
+  }
+
+  navigateHistory(tabId: number, direction: 'back' | 'forward' | 'reload'): void {
+    this.takeOver(tabId);
+    const contents = this.#entry(tabId).view.webContents;
+    if (direction === 'reload') contents.reload();
+    else if (direction === 'back' && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack();
+    else if (direction === 'forward' && contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward();
+  }
+
+  releaseTurn(turnId: string): { closed: number; ungrouped: number } {
+    const closed = this.ownership.finishTurn(turnId);
+    for (const id of closed) if (this.#tabs.has(id)) this.closeTab(id);
+    this.#emitTabsChanged();
+    return { closed: closed.length, ungrouped: 0 };
+  }
+
+  releaseBridge(): void {
+    for (const id of this.ownership.disconnect()) if (this.#tabs.has(id)) this.closeTab(id);
+    this.#emitTabsChanged();
   }
 
   get browserVisible(): boolean {
@@ -225,6 +278,15 @@ export class IabViewPool {
     if (size && (!Number.isSafeInteger(size.width) || !Number.isSafeInteger(size.height) || size.width < 1 || size.height < 1 || size.width > 8192 || size.height > 8192)) throw new Error('viewport dimensions must be integers from 1 to 8192');
     for (const tabId of this.#tabs.keys()) await this.#applyViewport(tabId, size);
     this.#viewport = size;
+  }
+
+  async setScopedViewport(caller: BrowserCaller, surface: BrowserSurface, size: { width: number; height: number } | null): Promise<void> {
+    if (size && (!Number.isSafeInteger(size.width) || !Number.isSafeInteger(size.height) || size.width < 1 || size.height < 1 || size.width > 8192 || size.height > 8192)) throw new Error('viewport dimensions must be integers from 1 to 8192');
+    const sessionId = this.ownership.sessionId(caller, surface);
+    // A presentation change only affects pages owned by this conversation.
+    for (const tab of this.scopedTabs(caller, surface, true)) await this.#applyViewport(tab.tabId, size);
+    if (size) this.#sessionViewports.set(sessionId, size);
+    else this.#sessionViewports.delete(sessionId);
   }
 
   async #applyViewport(tabId: number, size: { width: number; height: number } | null): Promise<void> {
@@ -395,7 +457,7 @@ export class IabViewPool {
     webContents.setWindowOpenHandler(({ url }) => {
       const decision = evaluateIabWindowOpen(url);
       if (decision.action === 'new-tab' && decision.url !== null) {
-        void this.createTab(decision.url).catch(() => undefined);
+        void this.createTab(decision.url, null, 'iab', tabId).catch(() => undefined);
       }
       return { action: 'deny' };
     });
@@ -408,11 +470,14 @@ export class IabViewPool {
     webContents.on('console-message', (details) => {
       this.cursor.handleConsoleMessage(tabId, details.message);
     });
+    webContents.on('did-start-loading', () => this.#emitTabsChanged());
+    webContents.on('did-stop-loading', () => this.#emitTabsChanged());
     webContents.on('did-navigate', () => this.#emitTabsChanged());
     webContents.on('did-navigate-in-page', () => this.#emitTabsChanged());
     webContents.on('page-title-updated', () => this.#emitTabsChanged());
     webContents.on('destroyed', () => {
       if (this.#tabs.delete(tabId)) {
+        this.ownership.remove(tabId);
         this.registry.removeTab(tabId);
         this.cursor.discardTab(tabId);
         if (this.#activeTabId === tabId) {

@@ -144,7 +144,10 @@ impl ReplRuntime {
             {
                 return None;
             }
-            Some((cell.execution_scope.clone(), cell.identity.engine_session_id().into()))
+            Some((
+                cell.execution_scope.clone(),
+                cell.identity.engine_session_id().into(),
+            ))
         })
     }
 
@@ -247,6 +250,31 @@ impl ReplRuntime {
             .state
             .try_lock()
             .map_err(|_| CoreError::Tool("repl_cell_busy".into()))?;
+        // A rejected source correction is not an execution failure. Preserve
+        // only the same authorized scope and engine's suspended operation;
+        // unrelated execution identities retain the destructive error path.
+        if tool == "cua_repl_js"
+            && !slot.cancelled.load(Ordering::SeqCst)
+            && input["code"].as_str().is_some_and(|code| {
+                code.len() <= 1024 * 1024
+                    && session.cell.as_ref().is_some_and(|cell| {
+                        // Match the existing MCP App continuation identity rule:
+                        // authenticated revisions may advance, other scope facts cannot.
+                        let mut expected = cell.execution_scope.clone();
+                        expected.run_revision = authority.scope().run_revision;
+                        cell.pending.is_some()
+                            && expected == *authority.scope()
+                            && authority.scope().run_revision >= cell.execution_scope.run_revision
+                            && cell.identity.engine_session_id() == identity.engine_session_id()
+                            && cell.code != code
+                    })
+            })
+        {
+            return Err(CoreError::Tool(format!(
+                "repl_pending_cell_requires_exact_code_and_run: cell {} is retained; retry with byte-identical original code, including comments and whitespace",
+                session.cell.as_ref().expect("pending cell").id,
+            )));
+        }
         if tool == "cua_repl_js" && session.kernel.is_none() {
             let sessions = self.sessions.lock().expect("REPL sessions");
             let active = sessions
@@ -375,12 +403,15 @@ impl Session {
         }
         self.ensure_kernel().await?;
         if let Some(cell) = &self.cell {
-            if cell.code != code || cell.run_id != authority.scope().run_id {
+            if cell.code != code
+                || cell.run_id != authority.scope().run_id
+                || cell.identity.engine_session_id() != identity.engine_session_id()
+            {
                 return Err("repl_pending_cell_requires_exact_code_and_run".into());
             }
         } else {
             let id = uuid::Uuid::new_v4().to_string();
-            self.kernel.as_mut().expect("kernel").send(&json!({"type":"execute","id":id,"code":code,"context":{"cwd":self.config.sandbox.workspace,"enabledSurfaces":["browser","computer"],"platform":"darwin"}})).await?;
+            self.kernel.as_mut().expect("kernel").send(&json!({"type":"execute","id":id,"code":code,"context":{"cwd":self.config.sandbox.workspace,"temporaryDirectory":self.config.sandbox.temporary,"enabledSurfaces":["browser","computer"],"platform":"darwin","requestMeta":{"engine_session_id":identity.engine_session_id(),"conversation_id":authority.scope().conversation_id,"run_id":authority.scope().run_id,"cell_id":id}}})).await?;
             let (external_tx, external_rx) = mpsc::channel(32);
             self.cell = Some(Cell {
                 external_tx,
@@ -544,16 +575,35 @@ impl Session {
                     if cell.bytes > FRAME_LIMIT * 2 {
                         return Err("repl_output_budget_exceeded".into());
                     }
-                    if let Some(media) = media::from_output(
-                        &self.config.artifact_root.join(&cell.id),
-                        &frame["content"],
-                    )
-                    .await?
-                    {
-                        cell.output_order.push(json!({"source":"media","index":cell.media.len()}));
+                    let emitted = if frame["content"].get("filename").is_some() {
+                        let (media, bytes) = super::file_media::materialize(
+                            &self.config.artifact_root.join(&cell.id),
+                            &self.config.sandbox.temporary,
+                            &frame["content"],
+                        )
+                        .await?;
+                        cell.bytes = cell
+                            .bytes
+                            .checked_add(bytes)
+                            .ok_or("repl_output_budget_exceeded")?;
+                        if cell.bytes > FRAME_LIMIT * 2 {
+                            return Err("repl_output_budget_exceeded".into());
+                        }
+                        Some(media)
+                    } else {
+                        media::from_output(
+                            &self.config.artifact_root.join(&cell.id),
+                            &frame["content"],
+                        )
+                        .await?
+                    };
+                    if let Some(media) = emitted {
+                        cell.output_order
+                            .push(json!({"source":"media","index":cell.media.len()}));
                         cell.media.push(media);
                     } else {
-                        cell.output_order.push(json!({"source":"text","index":cell.outputs.len()}));
+                        cell.output_order
+                            .push(json!({"source":"text","index":cell.outputs.len()}));
                         cell.outputs.push(frame["content"].clone());
                     }
                 }
@@ -562,7 +612,11 @@ impl Session {
                     if frame["id"] != cell.id {
                         return Err("repl_result_stale".into());
                     }
-                    if !cell.jobs.is_empty() || cell.pending.is_some() || !cell.suspended_reads.is_empty() || cell.resume_reads_after.is_some() {
+                    if !cell.jobs.is_empty()
+                        || cell.pending.is_some()
+                        || !cell.suspended_reads.is_empty()
+                        || cell.resume_reads_after.is_some()
+                    {
                         return Err("repl_result_before_operations_settled".into());
                     }
                     return Ok(ToolResult { output_json: json!({"cell_id":cell.id,"ok":frame["ok"],"value":frame["value"],"error":frame["error"],"outputs":cell.outputs,"output_order":cell.output_order}).to_string(), media: std::mem::take(&mut cell.media), control_outcome: None, control_generation: None, permission_required: None });
@@ -582,10 +636,14 @@ impl Session {
         let reads = std::mem::take(&mut cell.suspended_reads);
         for pending in reads {
             if let Some(failure) = failure {
-                self.kernel.as_mut().expect("kernel").send(&json!({
-                    "type":"rpc_response","id":pending.frame["id"],
-                    "error":{"code":"repl_operation_failed","message":failure}
-                })).await?;
+                self.kernel
+                    .as_mut()
+                    .expect("kernel")
+                    .send(&json!({
+                        "type":"rpc_response","id":pending.frame["id"],
+                        "error":{"code":"repl_operation_failed","message":failure}
+                    }))
+                    .await?;
             } else {
                 // The exact pending operation has succeeded through fresh policy
                 // admission. Re-admit each read independently with current scope.
@@ -595,7 +653,12 @@ impl Session {
         Ok(())
     }
 
-    fn enqueue(&mut self, authority: Arc<ExecutionAuthority>, pending: Pending, continuation_scope: Option<super::super::execution_authority::ExecutionScope>) {
+    fn enqueue(
+        &mut self,
+        authority: Arc<ExecutionAuthority>,
+        pending: Pending,
+        continuation_scope: Option<super::super::execution_authority::ExecutionScope>,
+    ) {
         let cell = self.cell.as_mut().expect("cell");
         let identity = cell.identity.clone();
         let config = self.config.clone();
@@ -620,7 +683,9 @@ impl Session {
                     if external.response.is_closed() {
                         return Err("repl_callback_cancelled_before_dispatch".into());
                     }
-                    let result = (external.dispatch)(authority.clone()).await.map_err(|error|error.to_string())?;
+                    let result = (external.dispatch)(authority.clone())
+                        .await
+                        .map_err(|error| error.to_string())?;
                     RpcOutput::from_tool(result).await
                 } else {
                     dispatch(&config, &authority, &pending.frame).await

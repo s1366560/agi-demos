@@ -1,5 +1,21 @@
 import type { AgentTimelineItem, DesktopApprovalRequest } from '../../types';
 
+/** Cloud execution-step approvals are resolved by the server's bound HITL broker. */
+export function isCloudExecutionStepApproval(request: DesktopApprovalRequest | undefined): boolean {
+  const binding = request?.native_binding;
+  if (!binding || binding.capability !== 'execution_step') return false;
+  const step = binding.execution_step;
+  return (
+    request.decision?.target.kind === 'computer_app' &&
+    typeof binding.native_request_id === 'string' &&
+    binding.native_request_id.length > 0 &&
+    binding.native_request_id === request.decision.target.id &&
+    typeof step === 'object' &&
+    step !== null &&
+    !Array.isArray(step)
+  );
+}
+
 export type HitlDecisionOptionView = {
   value: string;
   label: string;

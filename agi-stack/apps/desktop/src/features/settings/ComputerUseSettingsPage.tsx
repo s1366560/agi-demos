@@ -1,3 +1,4 @@
+import { AudioSessionsPanel } from './AudioSessionsPanel';
 import { useI18n } from '../../i18n';
 import { useComputerUseDevice } from './ComputerUseDeviceProvider';
 import './ComputerUseSettingsPage.css';
@@ -8,7 +9,7 @@ import { ComputerUseLockedUse } from './ComputerUseLockedUse';
 
 export function ComputerUseSettingsPage() {
   const { t } = useI18n();
-  const { snapshot, manage, error, busy, stopping, mode, client } = useComputerUseDevice();
+  const { snapshot, manage, error, busy, stopping, mode, client, audioClient } = useComputerUseDevice();
   const [provider, setProvider] = useState<'google' | 'microsoft365'>('google');
   const [clientId, setClientId] = useState('');
   if (!snapshot)
@@ -35,6 +36,7 @@ export function ComputerUseSettingsPage() {
         )}
       </p>
       <p>{t('cua.description')}</p>
+      <AudioSessionsPanel client={audioClient} />
       <ComputerUseInputModeControl snapshot={snapshot} busy={busy} manage={manage} />
       <ComputerUseRecordings recordings={snapshot.recordings ?? []} client={client}
         manage={manage} stopping={stopping} />

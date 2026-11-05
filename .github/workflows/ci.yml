@@ -211,6 +211,38 @@ jobs:
           rustup component add rustfmt clippy
           rustup target add wasm32-unknown-unknown
 
+      - name: Set up Python for cloud contract validation
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Install cloud contract Python dependencies
+        working-directory: .
+        run: uv sync --frozen --no-dev
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          version: 11.15.1
+
+      - name: Set up Node for Electron bridge validation
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: agi-stack/apps/desktop/pnpm-lock.yaml
+
+      - name: Install Electron bridge contract dependencies
+        run: pnpm --dir apps/desktop install --frozen-lockfile --ignore-scripts
+
+      - name: Validate native catalog against Python cloud admission
+        run: cargo test -p agistack-adapters-cua --test cloud_catalog --test cloud_permission_bridge
+
       - name: Run strangler gate
         run: make strangler-gate
 

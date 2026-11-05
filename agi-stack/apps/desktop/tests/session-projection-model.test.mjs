@@ -678,6 +678,18 @@ test('cloud session projection preserves only the structured permission review c
   );
 });
 
+test('cloud projection exposes only the binding needed to route an execution-step approval', () => {
+  const payload = validCloudProjection();
+  payload.pending_hitl[0].native_binding = {
+    capability: 'execution_step', native_request_id: 'native-1',
+    execution_step: { key: 'private-broker-key' }, user_id: 'private-user',
+  };
+  const projection = decodeConversationSessionProjection(payload, 'conversation-1');
+  assert.deepEqual(projection?.pendingHitl[0]?.native_binding, {
+    capability: 'execution_step', native_request_id: 'native-1', execution_step: {},
+  });
+});
+
 test('cloud session projection rejects message capability while HITL blocks the turn', () => {
   const payload = validCloudProjection();
   payload.capabilities.can_send_message = true;

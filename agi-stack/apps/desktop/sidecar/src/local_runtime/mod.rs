@@ -1,8 +1,8 @@
 mod llm_tool_contracts;
-mod visual_input_llm;
 mod plan_tool_contract;
 #[cfg(test)]
 mod tool_contract_tests;
+mod visual_input_llm;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     path::{Path as FsPath, PathBuf},
@@ -79,57 +79,61 @@ mod automation_store;
 mod automation_worker;
 #[cfg(test)]
 mod automation_worker_tests;
-pub(crate) mod browser_bridge;
-mod browser_run_tool_host;
 mod browser_auth;
 mod browser_auth_routes;
+pub(crate) mod browser_bridge;
+mod browser_caller;
+pub(crate) mod browser_cdp;
+mod browser_context;
+mod browser_preferences;
+mod browser_run_tool_host;
 mod changes;
 mod composer_context;
 mod computer_use_v2;
-pub(crate) mod execution_authority;
-mod conversation_llm_route;
 mod conversation_history;
-mod model_request_replay_v2;
-mod message_display;
+mod conversation_llm_route;
+mod cua_repl;
+mod device_mcp;
+pub(crate) mod execution_authority;
 mod execution_profile;
 mod execution_selection;
 mod execution_selection_patch;
 mod fan_out_tool_host;
 mod hitl_model_response;
 mod knowledge_authority_v2;
+mod local_feature_authority_v2;
+mod local_plugin_instances_v2;
+mod local_plugin_routes_v2;
+mod local_plugin_tool_host_v2;
 #[cfg(test)]
 mod local_route_parity_tests;
 #[cfg(test)]
 mod managed_resource_tests;
 mod mcp_agent_tool_host;
 mod mcp_app_automation;
-mod cua_repl;
 mod mcp_app_static;
 #[cfg(test)]
 mod mcp_remote_transport_tests;
 mod mcp_supervisor;
 #[cfg(test)]
 mod mcp_supervisor_tests;
+mod message_display;
+mod model_request_replay_v2;
 mod parity_routes;
-mod device_mcp;
 mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
-mod plugin_marketplace_v3;
-mod local_plugin_routes_v2;
-mod local_plugin_instances_v2;
-mod local_feature_authority_v2;
-mod local_plugin_tool_host_v2;
 mod platform_plugin_route_admission_v2;
 #[cfg(test)]
 mod platform_plugin_route_admission_v2_tests;
 mod platform_plugin_sync_v2;
+mod plugin_marketplace_v3;
 pub(crate) use platform_plugin_sync_v2::{
     PlatformPluginAuthorityModeV2, PlatformPluginControlPlaneReconcilerV2,
 };
+mod llm_request_timeout;
+mod provider_audio_declaration;
 mod provider_credentials;
 mod provider_embedding_declaration;
-mod provider_audio_declaration;
-mod llm_request_timeout;
 mod provider_management;
 mod provider_probe;
 mod provider_usage_store;
@@ -138,15 +142,16 @@ mod run_control;
 mod run_owner_control;
 mod runtime_config_patch;
 pub(crate) use runtime_config_patch::LocalRuntimeConfigPatch;
+mod agent_boundary_v2;
+mod audio_sessions;
+mod local_tool_control;
 mod search_projection;
 mod session_projection;
 mod session_store;
-mod agent_boundary_v2;
-mod tool_result_events_v2;
-mod steering;
-mod subagent_control;
-mod subagent_agent_tool_host;
 mod skill_discovery_tool_host;
+mod steering;
+mod subagent_agent_tool_host;
+mod subagent_control;
 mod subagent_runtime;
 mod subagent_scope;
 mod task_session;
@@ -154,8 +159,8 @@ mod task_session;
 mod terminal_generation_v2_tests;
 mod terminal_pty_v2;
 mod timeline_presentation;
-mod local_tool_control;
 mod tool_authority;
+mod tool_result_events_v2;
 mod workspace_core_bridge;
 mod workspace_task_run;
 mod workspace_terminal_recovery;
@@ -233,6 +238,7 @@ impl LocalRuntimeService {
         }
         std::fs::create_dir_all(&app_data_dir).map_err(|error| error.to_string())?;
         std::fs::create_dir_all(&workspace_root).map_err(|error| error.to_string())?;
+        let browser_preferences = browser_preferences::load(&app_data_dir)?;
         let checkpoint_path = app_data_dir.join("agistack-local-agent-checkpoints.db");
         let session_store_path = app_data_dir.join("agistack-desktop-sessions.db");
         let checkpoints = Arc::new(
@@ -249,6 +255,7 @@ impl LocalRuntimeService {
         if let Err(error) = session_store.delete_browser_action_audit_older_than(audit_cutoff) {
             eprintln!("failed to sweep expired browser action audit rows: {error}");
         }
+        let speech_credential_vault = credential_vault.clone();
         let mcp_credential_vault = credential_vault.clone();
         let provider_credentials =
             ProviderCredentialBroker::native(credential_vault, session_store.installation_id())
@@ -261,8 +268,18 @@ impl LocalRuntimeService {
             session_store,
             provider_credentials,
         )?;
+        *state
+            .audio_sessions
+            .vault
+            .lock()
+            .map_err(|_| "speech_vault_unavailable")? = Some(speech_credential_vault);
         state.app_data_dir = Some(app_data_dir.clone());
         state.local_knowledge_acceptance = local_knowledge_acceptance;
+        state
+            .config
+            .lock()
+            .expect("local runtime config")
+            .browser_bridge = browser_preferences;
         let state = Arc::new(state);
         if crate::workspace_core_cutover::load_cutover_marker(&app_data_dir.join("workspace-core"))
             .await?
@@ -289,6 +306,14 @@ impl LocalRuntimeService {
             .map_err(|error| error.to_string())?;
         let addr = listener.local_addr().map_err(|error| error.to_string())?;
         let api_base_url = format!("http://{addr}");
+        state.reconcile_browser_bridge(
+            &state
+                .config
+                .lock()
+                .expect("local runtime config")
+                .browser_bridge,
+            &api_base_url,
+        )?;
         state
             .mcp_supervisor
             .recover_all_enabled()
@@ -313,16 +338,32 @@ impl LocalRuntimeService {
         self.state.stop_browser_bridge();
     }
 
-    pub(crate) async fn computer_use_manage_v2(&self, broker: &crate::trusted_session::TrustedSessionBroker, input: Value) -> Result<Value, String> {
+    pub(crate) async fn computer_use_manage_v2(
+        &self,
+        broker: &crate::trusted_session::TrustedSessionBroker,
+        input: Value,
+    ) -> Result<Value, String> {
         computer_use_v2::native_operation(&self.state, broker, input).await
     }
-    pub(crate) async fn device_mcp_manage_v2(&self, broker: &crate::trusted_session::TrustedSessionBroker, input: Value) -> Result<Value, String> {
+    pub(crate) async fn device_mcp_manage_v2(
+        &self,
+        broker: &crate::trusted_session::TrustedSessionBroker,
+        input: Value,
+    ) -> Result<Value, String> {
         device_mcp::native_operation(&self.state, broker, input).await
     }
-    pub(crate) fn subscribe_computer_use_input(&self) -> tokio::sync::watch::Receiver<std::collections::BTreeMap<String, Value>> {
+    pub(crate) fn subscribe_computer_use_input(
+        &self,
+    ) -> tokio::sync::watch::Receiver<std::collections::BTreeMap<String, Value>> {
         self.state.computer_use.input_events.subscribe()
     }
-    pub(crate) async fn computer_use_cloud_v2(&self,broker:&crate::trusted_session::TrustedSessionBroker,input:Value)->Result<Value,String>{computer_use_v2::cloud::operation(&self.state,broker,input).await}
+    pub(crate) async fn computer_use_cloud_v2(
+        &self,
+        broker: &crate::trusted_session::TrustedSessionBroker,
+        input: Value,
+    ) -> Result<Value, String> {
+        computer_use_v2::cloud::operation(&self.state, broker, input).await
+    }
 
     pub(crate) fn install_workspace_core_authority(
         &self,
@@ -513,7 +554,15 @@ impl LocalRuntimeState {
             .lock()
             .expect("local runtime config update");
         let current = self.config.lock().expect("local runtime config").clone();
+        let previous_browser = current.browser_bridge.clone();
         let mut config = patch.into().apply_to(current);
+        config.browser_bridge.validate()?;
+        let prepared = self
+            .app_data_dir
+            .as_deref()
+            .filter(|_| previous_browser != config.browser_bridge)
+            .map(|root| browser_preferences::Prepared::new(root, &config.browser_bridge))
+            .transpose()?;
         if !config.workspace_root.trim().is_empty() {
             let root = PathBuf::from(config.workspace_root.trim());
             if let Some(qualification) = &self.local_knowledge_acceptance {
@@ -532,6 +581,17 @@ impl LocalRuntimeState {
             *self.tool_host.lock().expect("local tool host") = host;
         }
         self.reconcile_browser_bridge(&config.browser_bridge, api_base_url)?;
+        if let Some(prepared) = prepared {
+            if let Err(error) = prepared.commit() {
+                if self
+                    .reconcile_browser_bridge(&previous_browser, api_base_url)
+                    .is_err()
+                {
+                    self.stop_browser_bridge();
+                }
+                return Err(error);
+            }
+        }
         let mut current = self.config.lock().expect("local runtime config");
         *current = config;
         Ok(())
@@ -609,6 +669,14 @@ impl LocalRuntimeState {
                 .as_ref()
                 .map(|runtime| runtime.connected_backends())
                 .unwrap_or_default(),
+            browser_instances: runtime
+                .as_ref()
+                .map(|runtime| runtime.browser_instances())
+                .unwrap_or_default(),
+            cdp_endpoints: runtime
+                .as_ref()
+                .map(|runtime| runtime.cdp_statuses())
+                .unwrap_or_default(),
             extension_ids: config.extension_ids.clone(),
             extension_id: connected_extension
                 .as_ref()
@@ -642,11 +710,14 @@ impl LocalRuntimeState {
         if !status.is_terminal() {
             return;
         }
-        if status != DesktopRunStatus::Completed { self.cua_repl.cancel_run(run_id); }
+        if status != DesktopRunStatus::Completed {
+            self.cua_repl.cancel_run(run_id);
+        }
         self.clear_run_capabilities(run_id);
-        self.run_owners.lock().expect("local run owners").retain(|_, owner| {
-            owner.run_id.as_deref() != Some(run_id)
-        });
+        self.run_owners
+            .lock()
+            .expect("local run owners")
+            .retain(|_, owner| owner.run_id.as_deref() != Some(run_id));
         self.computer_use.stop_run(self, run_id).await;
         if let Some(host) = self.connected_browser_tool_host() {
             host.turn_ended(run_id).await;
@@ -821,8 +892,17 @@ impl PlanModeToolHost {
         }
     }
 
-    fn with_dynamic_metadata(mut self, metadata: &std::collections::BTreeMap<String, tool_authority::ToolMetadata>) -> Self {
-        self.dynamic_reads = metadata.iter().filter(|(name, item)| item.name == **name && item.effect == tool_authority::ToolEffect::Read).map(|(name, _)| name.clone()).collect();
+    fn with_dynamic_metadata(
+        mut self,
+        metadata: &std::collections::BTreeMap<String, tool_authority::ToolMetadata>,
+    ) -> Self {
+        self.dynamic_reads = metadata
+            .iter()
+            .filter(|(name, item)| {
+                item.name == **name && item.effect == tool_authority::ToolEffect::Read
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
         self
     }
 
@@ -830,7 +910,9 @@ impl PlanModeToolHost {
         PLAN_MODE_TOOL_NAMES.contains(&tool) || tool == SUBMIT_PLAN_TOOL_NAME
     }
     fn accepts_tool(&self, tool: &str) -> bool {
-        Self::is_allowed(tool) || self.dynamic_reads.contains(tool) || computer_use_v2::has_read_operation(&*self.inner,tool)
+        Self::is_allowed(tool)
+            || self.dynamic_reads.contains(tool)
+            || computer_use_v2::has_read_operation(&*self.inner, tool)
     }
 
     fn submit_plan(&self, input_json: &str) -> CoreResult<String> {
@@ -910,15 +992,14 @@ struct LocalRuntimeState {
     workspace_core_generation: AtomicU64,
     workspace_core_authority: Mutex<Option<Arc<workspace_core_bridge::WorkspaceCoreAuthority>>>,
     platform_plugin_authority_v2: platform_plugin_authority_v2::PlatformPluginAuthorityV2,
-    local_plugin_signing_keys: Result<
-        Vec<agistack_plugin_host::protocol_v2::signed_archive::TrustedEd25519KeyV2>,
-        String,
-    >,
+    local_plugin_signing_keys:
+        Result<Vec<agistack_plugin_host::protocol_v2::signed_archive::TrustedEd25519KeyV2>, String>,
     local_plugin_changes: tokio::sync::Notify,
     local_plugin_activation_error: Mutex<Option<String>>,
     automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     browser_bridge: Mutex<Option<browser_bridge::BrowserBridgeRuntime>>,
     computer_use: computer_use_v2::ComputerUseRuntimeV2,
+    audio_sessions: audio_sessions::Runtime,
     browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
     run_once_tool_permissions: RunOnceToolPermissions,
     site_credentials: provider_credentials::SiteCredentialBroker,
@@ -1035,9 +1116,16 @@ impl LocalRunControl {
 
     fn request_pause(&self) {
         // Cancellation is final; a racing pause must never restore a revoked run.
-        if self.directive.compare_exchange(
-            Self::CONTINUE, Self::PAUSE, Ordering::AcqRel, Ordering::Acquire,
-        ).is_ok() {
+        if self
+            .directive
+            .compare_exchange(
+                Self::CONTINUE,
+                Self::PAUSE,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
+        {
             self.interrupted.notify_waiters();
         }
     }
@@ -1057,7 +1145,9 @@ impl LocalRunControl {
             let notified = self.release_notification.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            if self.released.load(Ordering::Acquire) { return; }
+            if self.released.load(Ordering::Acquire) {
+                return;
+            }
             notified.await;
         }
     }
@@ -1268,6 +1358,7 @@ impl LocalRuntimeState {
             automation_worker: Mutex::new(None),
             browser_bridge: Mutex::new(None),
             computer_use: computer_use_v2::ComputerUseRuntimeV2::default(),
+            audio_sessions: audio_sessions::Runtime::default(),
             browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
             run_once_tool_permissions: Arc::new(Mutex::new(BTreeSet::new())),
             site_credentials,
@@ -1469,7 +1560,9 @@ impl LocalRuntimeState {
         run_id: Option<&str>,
     ) -> Option<Arc<LocalRunControl>> {
         self.claim_agent_run_with_owner(
-            conversation_id, run_id, knowledge_authority_v2::agent_access::current_auth(),
+            conversation_id,
+            run_id,
+            knowledge_authority_v2::agent_access::current_auth(),
         )
     }
 
@@ -1506,13 +1599,17 @@ impl LocalRuntimeState {
             self.record_run_owner(conversation_id, run_id, &control, auth);
         } else {
             // A service-principal execution must not inherit a prior browser owner.
-            self.run_owners.lock().expect("local run owners").remove(conversation_id);
+            self.run_owners
+                .lock()
+                .expect("local run owners")
+                .remove(conversation_id);
         }
         Some(control)
     }
 
     fn release_agent_run(&self, conversation_id: &str) {
-        let released = self.agent_runs
+        let released = self
+            .agent_runs
             .lock()
             .expect("local agent runs")
             .remove(conversation_id);
@@ -1738,6 +1835,11 @@ impl LocalRuntimeState {
         error: Option<String>,
         now: &str,
     ) -> Result<DesktopRun, String> {
+        if status != DesktopRunStatus::Running {
+            self.computer_use
+                .release_locked_run(self, &run.id, "run_not_running")
+                .await;
+        }
         let checkpoint_status = match status {
             DesktopRunStatus::ReadyReview => Some(SessionStatus::Finished),
             DesktopRunStatus::Failed => Some(SessionStatus::Failed),
@@ -2190,7 +2292,13 @@ impl LocalRuntimeState {
             message.clone(),
         ));
         let (engine, plugin_metadata) = match self
-            .agent_engine_for_role_with_boundary(&conversation, authoritative_run.as_ref(), workload_role, &message_id, plugin_generation.clone())
+            .agent_engine_for_role_with_boundary(
+                &conversation,
+                authoritative_run.as_ref(),
+                workload_role,
+                &message_id,
+                plugin_generation.clone(),
+            )
             .await
         {
             Ok(engine) => engine,
@@ -2242,7 +2350,10 @@ impl LocalRuntimeState {
         let checkpoint_cleanup = match checkpoint_cleanup {
             Ok(()) => match self.checkpoints.load(&conversation_id).await {
                 Ok(None) => match self.conversation_turn_checkpoint(
-                    &conversation_id, &project_id, &message_id, &message,
+                    &conversation_id,
+                    &project_id,
+                    &message_id,
+                    &message,
                 ) {
                     Ok(checkpoint) => self.checkpoints.save(&checkpoint).await,
                     Err(error) => Err(CoreError::Checkpoint(error)),
@@ -2285,7 +2396,11 @@ impl LocalRuntimeState {
                 Err(error.to_string())
             }
         };
-        if authoritative_run.is_none() && run_result.as_ref().is_ok_and(|state| state.status == SessionStatus::Cancelled) {
+        if authoritative_run.is_none()
+            && run_result
+                .as_ref()
+                .is_ok_and(|state| state.status == SessionStatus::Cancelled)
+        {
             let item = self.timeline_item(
                 "cancelled", conversation_id.clone(), Some(message_id.clone()), None, None,
                 json!({"status":"cancelled", "conversation_id":conversation_id, "message_id":message_id}),
@@ -2308,8 +2423,15 @@ impl LocalRuntimeState {
             run_result = Err(format!("failed to persist HITL request: {error}"));
             self.clear_suspended_operation_v2(&conversation_id, authoritative_run_id.as_deref());
         }
-        if run_result.as_ref().map_or(true,|state|matches!(state.status,SessionStatus::Finished|SessionStatus::Failed|SessionStatus::Cancelled)) {
-            self.computer_use.stop_conversation(&self,&conversation_id).await;
+        if run_result.as_ref().map_or(true, |state| {
+            matches!(
+                state.status,
+                SessionStatus::Finished | SessionStatus::Failed | SessionStatus::Cancelled
+            )
+        }) {
+            self.computer_use
+                .stop_conversation(&self, &conversation_id)
+                .await;
         }
         if let (Some(run), Some(expected_revision)) =
             (authoritative_run.as_ref(), authoritative_revision)
@@ -2410,7 +2532,8 @@ impl LocalRuntimeState {
         workload_role: Option<LlmWorkloadRole>,
     ) -> Result<ReActEngine, String> {
         self.agent_engine_for_role_with_plugin_metadata(conversation, run, workload_role)
-            .await.map(|(engine, _)| engine)
+            .await
+            .map(|(engine, _)| engine)
     }
 
     async fn agent_engine_for_role_with_plugin_metadata(
@@ -2418,9 +2541,22 @@ impl LocalRuntimeState {
         conversation: &LocalConversation,
         run: Option<&DesktopRun>,
         workload_role: Option<LlmWorkloadRole>,
-    ) -> Result<(ReActEngine, local_plugin_tool_host_v2::PluginTimelineMetadataV2), String> {
-        self.agent_engine_for_role_with_boundary(conversation, run, workload_role,
-            run.map(|run| run.message_id.as_str()).unwrap_or(&conversation.id), None).await
+    ) -> Result<
+        (
+            ReActEngine,
+            local_plugin_tool_host_v2::PluginTimelineMetadataV2,
+        ),
+        String,
+    > {
+        self.agent_engine_for_role_with_boundary(
+            conversation,
+            run,
+            workload_role,
+            run.map(|run| run.message_id.as_str())
+                .unwrap_or(&conversation.id),
+            None,
+        )
+        .await
     }
 
     async fn agent_engine_for_role_with_boundary(
@@ -2430,12 +2566,26 @@ impl LocalRuntimeState {
         workload_role: Option<LlmWorkloadRole>,
         message_id: &str,
         plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
-    ) -> Result<(ReActEngine, local_plugin_tool_host_v2::PluginTimelineMetadataV2), String> {
+    ) -> Result<
+        (
+            ReActEngine,
+            local_plugin_tool_host_v2::PluginTimelineMetadataV2,
+        ),
+        String,
+    > {
         #[cfg(test)]
         self.agent_engine_attempts.fetch_add(1, Ordering::SeqCst);
-        let boundary = plugin_generation.map(|generation| agent_boundary_v2::AgentBoundaryV2::new(
-            self, conversation, message_id, run.map(|run| run.id.as_str()).unwrap_or(message_id), generation,
-        )).transpose()?;
+        let boundary = plugin_generation
+            .map(|generation| {
+                agent_boundary_v2::AgentBoundaryV2::new(
+                    self,
+                    conversation,
+                    message_id,
+                    run.map(|run| run.id.as_str()).unwrap_or(message_id),
+                    generation,
+                )
+            })
+            .transpose()?;
         let mut profile = self.execution_profile(conversation)?;
         let local_tool_host: Arc<dyn ToolHost> = match run.and_then(|run| run.environment.as_ref())
         {
@@ -2456,22 +2606,25 @@ impl LocalRuntimeState {
             tool_hosts.push(cua_host);
         }
         if let Some(browser_host) = self.connected_browser_tool_host() {
-            tool_hosts.push(Arc::new(browser_run_tool_host::BrowserRunToolHost::new(
-                browser_host,
-                self.session_store.clone(),
-                run.cloned(),
-                Arc::clone(&self.browser_once_consents),
-                self.config
-                    .lock()
-                    .expect("local runtime config")
-                    .browser_bridge
-                    .full_cdp_access_enabled,
-                self.site_credentials.clone(),
-                self.app_data_dir
-                    .as_ref()
-                    .map(|dir| dir.join("browser-screenshots")),
-            ).with_browser_auth(self.browser_auth.clone())
-                .with_blocked_file_roots(self.app_data_dir.iter().cloned().collect())));
+            tool_hosts.push(Arc::new(
+                browser_run_tool_host::BrowserRunToolHost::new(
+                    browser_host,
+                    self.session_store.clone(),
+                    run.cloned(),
+                    Arc::clone(&self.browser_once_consents),
+                    self.config
+                        .lock()
+                        .expect("local runtime config")
+                        .browser_bridge
+                        .full_cdp_access_enabled,
+                    self.site_credentials.clone(),
+                    self.app_data_dir
+                        .as_ref()
+                        .map(|dir| dir.join("browser-screenshots")),
+                )
+                .with_browser_auth(self.browser_auth.clone())
+                .with_blocked_file_roots(self.app_data_dir.iter().cloned().collect()),
+            ));
         }
         let child_base_tool_hosts = tool_hosts.clone();
         if let Some(host) = knowledge_authority_v2::agent_access::tool_host(
@@ -2485,8 +2638,22 @@ impl LocalRuntimeState {
         let mut dynamic_metadata =
             std::collections::BTreeMap::<String, tool_authority::ToolMetadata>::new();
         let mut permission_request_tools = Vec::new();
-        for (name, effect) in [("browser_read_operation", tool_authority::ToolEffect::Read), ("browser_write_operation", tool_authority::ToolEffect::Mutate), ("browser_cdp_operation", tool_authority::ToolEffect::Mutate)] {
-            dynamic_metadata.insert(name.into(), tool_authority::ToolMetadata { name: name.into(), effect, sensitive_input_fields: Default::default() });
+        for (name, effect) in [
+            ("browser_read_operation", tool_authority::ToolEffect::Read),
+            (
+                "browser_write_operation",
+                tool_authority::ToolEffect::Mutate,
+            ),
+            ("browser_cdp_operation", tool_authority::ToolEffect::Mutate),
+        ] {
+            dynamic_metadata.insert(
+                name.into(),
+                tool_authority::ToolMetadata {
+                    name: name.into(),
+                    effect,
+                    sensitive_input_fields: Default::default(),
+                },
+            );
         }
         for (name, effect) in agistack_adapters_cua::tool_effects() {
             dynamic_metadata.insert(
@@ -2507,8 +2674,14 @@ impl LocalRuntimeState {
         }
         let mut plugin_metadata = local_plugin_tool_host_v2::PluginTimelineMetadataV2::default();
         let plugin_host = match run {
-            Some(run) => local_plugin_tool_host_v2::LocalPluginToolHostV2::new(self, conversation, run).await?,
-            None => local_plugin_tool_host_v2::LocalPluginToolHostV2::new_plan(self, conversation).await?,
+            Some(run) => {
+                local_plugin_tool_host_v2::LocalPluginToolHostV2::new(self, conversation, run)
+                    .await?
+            }
+            None => {
+                local_plugin_tool_host_v2::LocalPluginToolHostV2::new_plan(self, conversation)
+                    .await?
+            }
         };
         if let Some(host) = plugin_host {
             let host = Arc::new(host);
@@ -2537,7 +2710,11 @@ impl LocalRuntimeState {
         }
         let combined_tool_host: Arc<dyn ToolHost> =
             Arc::new(fan_out_tool_host::FanOutToolHost::new(tool_hosts));
-        let combined_tool_host = if let Some(run) = run { mcp_app_automation::wrap_tools(combined_tool_host, Arc::downgrade(self), run.id.clone()) } else { combined_tool_host };
+        let combined_tool_host = if let Some(run) = run {
+            mcp_app_automation::wrap_tools(combined_tool_host, Arc::downgrade(self), run.id.clone())
+        } else {
+            combined_tool_host
+        };
         let profiled_tool_host: Arc<dyn ToolHost> = Arc::new(
             execution_profile::ProfiledToolHost::new(combined_tool_host, &profile),
         );
@@ -2574,9 +2751,21 @@ impl LocalRuntimeState {
         let role = workload_role
             .unwrap_or_else(|| workload_role_for_capability(conversation.capability_mode));
         let base_llm = self.llm_for_role(conversation, role).await?;
-        let vision_llm = self.llm_for_role(conversation, LlmWorkloadRole::Vision).await?;
-        let base_llm: Arc<dyn LlmPort> = Arc::new(visual_input_llm::VisualInputLlm::new(self, conversation, run, boundary.clone(), base_llm, vision_llm));
-        let base_llm = boundary.as_ref().map_or_else(|| base_llm.clone(), |boundary| boundary.wrap_llm(base_llm.clone()));
+        let vision_llm = self
+            .llm_for_role(conversation, LlmWorkloadRole::Vision)
+            .await?;
+        let base_llm: Arc<dyn LlmPort> = Arc::new(visual_input_llm::VisualInputLlm::new(
+            self,
+            conversation,
+            run,
+            boundary.clone(),
+            base_llm,
+            vision_llm,
+        ));
+        let base_llm = boundary.as_ref().map_or_else(
+            || base_llm.clone(),
+            |boundary| boundary.wrap_llm(base_llm.clone()),
+        );
         let max_rounds = policy
             .as_ref()
             .and_then(|policy| {
@@ -2591,12 +2780,29 @@ impl LocalRuntimeState {
             })
             .unwrap_or(8);
         let skill_available: Arc<dyn ToolHost> = if run.is_none() {
-            Arc::new(PlanModeToolHost::new(profiled_tool_host.clone(), self.session_store.clone(), conversation.id.clone()).with_dynamic_metadata(&dynamic_metadata))
-        } else { profiled_tool_host.clone() };
+            Arc::new(
+                PlanModeToolHost::new(
+                    profiled_tool_host.clone(),
+                    self.session_store.clone(),
+                    conversation.id.clone(),
+                )
+                .with_dynamic_metadata(&dynamic_metadata),
+            )
+        } else {
+            profiled_tool_host.clone()
+        };
         let mut profiled_tool_hosts = vec![profiled_tool_host];
-        if let Some(host) = skill_discovery_tool_host::SkillDiscoveryToolHost::new(self, conversation, run, &profile, skill_available)? {
+        if let Some(host) = skill_discovery_tool_host::SkillDiscoveryToolHost::new(
+            self,
+            conversation,
+            run,
+            &profile,
+            skill_available,
+        )? {
             for name in ["skill_list", "skill_loader"] {
-                if let Some(metadata) = authorized_tool_host::tool_metadata(name) { dynamic_metadata.insert(name.into(),metadata); }
+                if let Some(metadata) = authorized_tool_host::tool_metadata(name) {
+                    dynamic_metadata.insert(name.into(), metadata);
+                }
             }
             profiled_tool_hosts.push(Arc::new(host));
         }
@@ -2604,15 +2810,18 @@ impl LocalRuntimeState {
             let run = run.ok_or_else(|| {
                 "build mode requires an authoritative run for tool execution".to_string()
             })?;
-            if let Some(subagent_host) = self.subagent_agent_tool_host_with_boundary(
-                conversation,
-                run,
-                &profile,
-                &child_base_tool_hosts,
-                Arc::clone(&base_llm),
-                max_rounds,
-                boundary.clone(),
-            ).await? {
+            if let Some(subagent_host) = self
+                .subagent_agent_tool_host_with_boundary(
+                    conversation,
+                    run,
+                    &profile,
+                    &child_base_tool_hosts,
+                    Arc::clone(&base_llm),
+                    max_rounds,
+                    boundary.clone(),
+                )
+                .await?
+            {
                 dynamic_metadata.extend(subagent_host.authority_metadata_by_name());
                 profiled_tool_hosts.push(Arc::new(subagent_host));
             }
@@ -2620,11 +2829,14 @@ impl LocalRuntimeState {
         let combined_tool_host: Arc<dyn ToolHost> =
             Arc::new(fan_out_tool_host::FanOutToolHost::new(profiled_tool_hosts));
         let tool_host: Arc<dyn ToolHost> = match conversation.current_mode {
-            ConversationRunMode::Plan => Arc::new(PlanModeToolHost::new(
-                combined_tool_host,
-                self.session_store.clone(),
-                conversation.id.clone(),
-            ).with_dynamic_metadata(&dynamic_metadata)),
+            ConversationRunMode::Plan => Arc::new(
+                PlanModeToolHost::new(
+                    combined_tool_host,
+                    self.session_store.clone(),
+                    conversation.id.clone(),
+                )
+                .with_dynamic_metadata(&dynamic_metadata),
+            ),
             ConversationRunMode::Build => Arc::new(
                 AuthorizedRunToolHost::with_dynamic_metadata(
                     combined_tool_host,
@@ -2638,23 +2850,54 @@ impl LocalRuntimeState {
                 .with_once_permissions(Arc::clone(&self.run_once_tool_permissions)),
             ),
         };
-        let tool_host = if let Some(run) = run { cua_repl::wrap_tools(self, tool_host, conversation, run, &profile, boundary.clone()) } else { tool_host };
-        let llm: Arc<dyn LlmPort> =
-            {computer_use_v2::apply_guidance(&mut profile,&*tool_host);
-            Arc::new(execution_profile::ProfiledLlm::new(base_llm, &profile))};
+        let tool_host = if let Some(run) = run {
+            cua_repl::wrap_tools(
+                self,
+                tool_host,
+                conversation,
+                run,
+                &profile,
+                boundary.clone(),
+            )
+        } else {
+            tool_host
+        };
+        let llm: Arc<dyn LlmPort> = {
+            computer_use_v2::apply_guidance(&mut profile, &*tool_host);
+            Arc::new(execution_profile::ProfiledLlm::new(base_llm, &profile))
+        };
         let plugin_metadata = plugin_metadata.restrict_to(&tool_host.list_tools());
         let marketplace_hooks = plugin_marketplace_v3::hooks::Hooks::capture(
-            self, &conversation.tenant_id, &conversation.project_id,
+            self,
+            &conversation.tenant_id,
+            &conversation.project_id,
         )?;
-        marketplace_hooks.run("session_start").await.map_err(|error| error.to_string())?;
+        marketplace_hooks
+            .run("session_start")
+            .await
+            .map_err(|error| error.to_string())?;
         let llm = marketplace_hooks.wrap_llm(llm);
         let tool_host = marketplace_hooks.wrap_tools(tool_host);
         let engine = ReActEngine::new(llm, tool_host, self.checkpoints.clone(), self.clock.clone())
-            .with_hitl_validation(computer_use_v2::hitl_validation::NativeHitlValidation::capture(
-                self, conversation, run, message_id, None))
+            .with_hitl_validation(
+                computer_use_v2::hitl_validation::NativeHitlValidation::capture(
+                    self,
+                    conversation,
+                    run,
+                    message_id,
+                    None,
+                ),
+            )
             .with_max_rounds(max_rounds)
-            .with_terminal_tools((conversation.current_mode == ConversationRunMode::Plan).then_some(SUBMIT_PLAN_TOOL_NAME));
-        let engine = if let Some(boundary) = boundary { boundary.wrap_engine(engine) } else { engine };
+            .with_terminal_tools(
+                (conversation.current_mode == ConversationRunMode::Plan)
+                    .then_some(SUBMIT_PLAN_TOOL_NAME),
+            );
+        let engine = if let Some(boundary) = boundary {
+            boundary.wrap_engine(engine)
+        } else {
+            engine
+        };
         Ok((engine, plugin_metadata))
     }
 
@@ -2754,8 +2997,21 @@ impl LocalRuntimeState {
             return Err("session is awaiting input without a pending HITL request".to_string());
         };
         validate_pending_hitl_authority(pending)?;
-        computer_use_v2::hitl::validate_creation(self, conversation_id, run_id, &state.session_id, pending)?;
-        cua_repl::permission_for_request(&self.cua_repl,conversation_id,run_id,Some(&state.session_id),pending.kind,pending.decision.as_deref())?;
+        computer_use_v2::hitl::validate_creation(
+            self,
+            conversation_id,
+            run_id,
+            &state.session_id,
+            pending,
+        )?;
+        cua_repl::permission_for_request(
+            &self.cua_repl,
+            conversation_id,
+            run_id,
+            Some(&state.session_id),
+            pending.kind,
+            pending.decision.as_deref(),
+        )?;
         let request = DesktopHitlRequest {
             id: pending.id.clone(),
             conversation_id: conversation_id.to_string(),
@@ -2869,7 +3125,13 @@ impl LocalRuntimeState {
             goal.clone(),
         ));
         let (engine, plugin_metadata) = match self
-            .agent_engine_for_role_with_boundary(&conversation, authoritative_run.as_ref(), None, &message_id, plugin_generation.clone())
+            .agent_engine_for_role_with_boundary(
+                &conversation,
+                authoritative_run.as_ref(),
+                None,
+                &message_id,
+                plugin_generation.clone(),
+            )
             .await
         {
             Ok(engine) => engine,
@@ -2932,7 +3194,11 @@ impl LocalRuntimeState {
                 Err(message)
             }
         };
-        if authoritative_run.is_none() && run_result.as_ref().is_ok_and(|state| state.status == SessionStatus::Cancelled) {
+        if authoritative_run.is_none()
+            && run_result
+                .as_ref()
+                .is_ok_and(|state| state.status == SessionStatus::Cancelled)
+        {
             let item = self.timeline_item(
                 "cancelled", conversation_id.clone(), Some(message_id.clone()), None, None,
                 json!({"status":"cancelled", "conversation_id":conversation_id, "message_id":message_id}),
@@ -3140,7 +3406,12 @@ impl LocalRuntimeState {
     }
 
     fn conversation_value(&self, conversation: &LocalConversation) -> Value {
-        let execution_selection = self.session_store.execution_selection(&conversation.id).ok().flatten().unwrap_or_default();
+        let execution_selection = self
+            .session_store
+            .execution_selection(&conversation.id)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
         let selected_agent_id = self
             .session_store
             .execution_selection(&conversation.id)
@@ -3939,10 +4210,18 @@ async fn require_active_scope(
         )
             .into_response();
     }
-    if let Some(owner) = request.extensions().get::<axum::extract::MatchedPath>()
-        .and_then(|path| local_feature_authority_v2::owner(path.as_str())) {
-        if let Err(code) = local_feature_authority_v2::require_feature(&state, authenticated, owner) {
-            return (StatusCode::FORBIDDEN, Json(json!({"code":code,"detail":"Feature is unavailable in this project"}))).into_response();
+    if let Some(owner) = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .and_then(|path| local_feature_authority_v2::owner(path.as_str()))
+    {
+        if let Err(code) = local_feature_authority_v2::require_feature(&state, authenticated, owner)
+        {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({"code":code,"detail":"Feature is unavailable in this project"})),
+            )
+                .into_response();
         }
     }
     next.run(request).await
@@ -4195,7 +4474,9 @@ async fn switch_workspace_context(
         .switch_workspace_context(&authenticated, &request, Utc::now().timestamp_millis())
         .map_err(auth_context_error)?;
     if outcome.changed {
-        state.revoke_stale_context_runs(&authenticated.user.user_id).await;
+        state
+            .revoke_stale_context_runs(&authenticated.user.user_id)
+            .await;
     }
     serde_json::to_value(outcome)
         .map(Json)
@@ -5261,13 +5542,25 @@ fn provider_probe_catalog(
     } else {
         None
     };
-    let audio_input = if outcome.healthy() { provider.map(provider_audio_declaration::models).unwrap_or_default() } else { BTreeSet::new() };
-    let source = outcome.healthy().then_some(if embedding.is_some() || !audio_input.is_empty() {
-        "provider-api+explicit-configuration"
+    let audio_input = if outcome.healthy() {
+        provider
+            .map(provider_audio_declaration::models)
+            .unwrap_or_default()
     } else {
-        "provider-api"
-    });
-    let chat = outcome.models.iter().map(|model| model.id.as_str()).collect::<Vec<_>>();
+        BTreeSet::new()
+    };
+    let source = outcome
+        .healthy()
+        .then_some(if embedding.is_some() || !audio_input.is_empty() {
+            "provider-api+explicit-configuration"
+        } else {
+            "provider-api"
+        });
+    let chat = outcome
+        .models
+        .iter()
+        .map(|model| model.id.as_str())
+        .collect::<Vec<_>>();
     json!({
         "provider_type": provider_type,
         "provider_id": provider_id,
@@ -5516,17 +5809,24 @@ fn normalized_provider_environment_variable(
     // or to a loopback provider used by the local runtime. Other custom endpoints must use an
     // explicit credential stored in the provider vault.
     let value = normalized_environment_variable_name(value)?;
-    let official_credential = match provider_type {
-        "openai" => Some(("OPENAI_API_KEY", "api.openai.com", None)),
-        "anthropic" => Some(("ANTHROPIC_API_KEY", "api.anthropic.com", None)),
-        "openai_compatible" => Some(("KIMI_API_KEY", "api.kimi.com", Some("/coding/v1"))),
+    let official_credential = match (provider_type, value.as_str()) {
+        ("openai", "OPENAI_API_KEY") => Some(("api.openai.com", None, true)),
+        ("anthropic", "ANTHROPIC_API_KEY") => Some(("api.anthropic.com", None, true)),
+        ("openai_compatible", "KIMI_API_KEY") => Some(("api.kimi.com", Some("/coding/v1"), true)),
+        ("openai_compatible", "ARK_API_KEY" | "VOLCENGINE_API_KEY") => {
+            Some(("ark.cn-beijing.volces.com", Some("/api/v3"), false))
+        }
         _ => None,
     };
     let credential_destination = Url::parse(base_url).ok().is_some_and(|url| {
-        let Some((expected_variable, expected_host, expected_path)) = official_credential else {
+        let Some((expected_host, expected_path, allow_loopback)) = official_credential else {
             return false;
         };
-        if value != expected_variable {
+        if !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
             return false;
         }
         let official_origin = url.scheme() == "https"
@@ -5535,7 +5835,10 @@ fn normalized_provider_environment_variable(
                 .is_some_and(|host| host.eq_ignore_ascii_case(expected_host))
             && url.port_or_known_default() == Some(443)
             && expected_path.map_or(true, |path| url.path().trim_end_matches('/') == path);
-        official_origin || (matches!(url.scheme(), "http" | "https") && local_provider_host(&url))
+        official_origin
+            || (allow_loopback
+                && matches!(url.scheme(), "http" | "https")
+                && local_provider_host(&url))
     });
     if !credential_destination {
         return Err(provider_probe_request_error(concat!(
@@ -5757,7 +6060,8 @@ fn llm_from_runtime_binding(
         "openai" | "openai_compatible"
     ) {
         let audio_input_supported = binding.audio_input_models.contains(&binding.model);
-        let llm = HttpLlm::new(binding.base_url, binding.model).with_audio_input_support(audio_input_supported);
+        let llm = HttpLlm::new(binding.base_url, binding.model)
+            .with_audio_input_support(audio_input_supported);
         let llm = if let Some(credential) = credential {
             llm.with_api_key(credential)
         } else {
@@ -6361,7 +6665,10 @@ struct ConversationModeBody {
 
 #[derive(Default, Deserialize)]
 struct ConversationConfigBody {
-    #[serde(default, deserialize_with = "execution_selection_patch::deserialize_patch")]
+    #[serde(
+        default,
+        deserialize_with = "execution_selection_patch::deserialize_patch"
+    )]
     execution_selection: Option<execution_selection_patch::ExecutionSelectionPatch>,
     #[serde(default)]
     selected_agent_id: Option<String>,
@@ -6431,10 +6738,15 @@ async fn update_conversation_config(
     Json(body): Json<ConversationConfigBody>,
 ) -> LocalJsonResult {
     if let Some(patch) = body.execution_selection {
-        if body.selected_agent_id.is_some() || body.llm_model_override.is_some() || body.llm_route_override.is_some() {
-            return Err(local_bad_request("execution_selection must be updated independently".into()));
+        if body.selected_agent_id.is_some()
+            || body.llm_model_override.is_some()
+            || body.llm_route_override.is_some()
+        {
+            return Err(local_bad_request(
+                "execution_selection must be updated independently".into(),
+            ));
         }
-        return execution_selection_patch::update(&state,&authenticated,&conversation_id,patch);
+        return execution_selection_patch::update(&state, &authenticated, &conversation_id, patch);
     }
     let llm_route =
         normalized_conversation_llm_route(body.llm_model_override, body.llm_route_override)
@@ -6750,9 +7062,17 @@ async fn run_conversation_message(
         None => format!("local-message-{}", Uuid::new_v4()),
     };
     let conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
-    local_feature_authority_v2::require_feature(&state, &authenticated,
-        "builtin-desktop-feature-agent-workspace-tenant-agent-workspace")
-        .map_err(|code| (StatusCode::CONFLICT, Json(json!({"code":code,"detail":"Agent workspace is unavailable"}))))?;
+    local_feature_authority_v2::require_feature(
+        &state,
+        &authenticated,
+        "builtin-desktop-feature-agent-workspace-tenant-agent-workspace",
+    )
+    .map_err(|code| {
+        (
+            StatusCode::CONFLICT,
+            Json(json!({"code":code,"detail":"Agent workspace is unavailable"})),
+        )
+    })?;
     if let Some(project_id) = body.project_id.as_deref() {
         ensure_active_project(&authenticated, project_id)?;
     }
@@ -6892,9 +7212,17 @@ async fn approve_plan_and_start(
     let prepared = if existing_run.is_some() {
         None
     } else {
-        local_feature_authority_v2::require_feature(&state, &authenticated,
-            "builtin-desktop-feature-agent-workspace-tenant-agent-workspace")
-            .map_err(|code| (StatusCode::CONFLICT, Json(json!({"code":code,"detail":"Agent workspace is unavailable"}))))?;
+        local_feature_authority_v2::require_feature(
+            &state,
+            &authenticated,
+            "builtin-desktop-feature-agent-workspace-tenant-agent-workspace",
+        )
+        .map_err(|code| {
+            (
+                StatusCode::CONFLICT,
+                Json(json!({"code":code,"detail":"Agent workspace is unavailable"})),
+            )
+        })?;
         let kind = body
             .environment
             .as_ref()
@@ -7533,7 +7861,8 @@ async fn promote_run_input_to_plan(
                         None,
                     )
                     .await;
-            }).await;
+            })
+            .await;
         });
     }
     Ok(Json(json!({
@@ -7714,7 +8043,9 @@ async fn review_artifact_version(
                 .agent_engine(&conversation, Some(&run))
                 .await
                 .map_err(execution_environment_error)?;
-            let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
+            let Some(control) =
+                state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated)
+            else {
                 return Err((
                     StatusCode::CONFLICT,
                     Json(json!({ "detail": "conversation already running" })),
@@ -7772,13 +8103,14 @@ async fn review_artifact_version(
             let runtime = Arc::clone(&state);
             let running_for_task = running.clone();
             let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
-            let native_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
-                authenticated.clone(),
-                plugin_generation.clone(),
-                &conversation,
-                &message_id,
-                Some(&running.id),
-            );
+            let native_authorization =
+                knowledge_authority_v2::agent_access::RunAuthorization::capture(
+                    authenticated.clone(),
+                    plugin_generation.clone(),
+                    &conversation,
+                    &message_id,
+                    Some(&running.id),
+                );
             tokio::spawn(async move {
                 knowledge_authority_v2::agent_access::scope(native_authorization, async move {
                     runtime
@@ -7791,7 +8123,8 @@ async fn review_artifact_version(
                             plugin_generation,
                         )
                         .await;
-                }).await;
+                })
+                .await;
             });
             Ok(Json(json!({
                 "accepted": true,
@@ -8300,7 +8633,9 @@ async fn respond_to_hitl(
         &body.response_data,
     )?;
     let browser_origin_consent = browser_origin_grant_from_hitl(&request, &body.response_data)?;
-    let computer_use_consent = computer_use_v2::hitl::prepare(&state,&authenticated,&request,&body.response_data).map_err(local_bad_request)?;
+    let computer_use_consent =
+        computer_use_v2::hitl::prepare(&state, &authenticated, &request, &body.response_data)
+            .map_err(local_bad_request)?;
     let browser_capability_consent =
         browser_capability_grant_from_hitl(&request, &body.response_data)?;
     let engine = state
@@ -8308,7 +8643,9 @@ async fn respond_to_hitl(
         .await
         .map_err(execution_environment_error)?;
 
-    let Some(control) = state.claim_agent_run_owned(&conversation.id, request.run_id.as_deref(), &authenticated) else {
+    let Some(control) =
+        state.claim_agent_run_owned(&conversation.id, request.run_id.as_deref(), &authenticated)
+    else {
         return wait_for_competing_hitl_response(
             &state,
             &request.id,
@@ -8343,21 +8680,47 @@ async fn respond_to_hitl(
     };
     let Some(pending_checkpoint) = pending_checkpoint else {
         state.release_agent_run_if_control(&conversation.id, &control);
-        return Err(hitl_response_commit_error(HitlResponseCommitError::RunNotWaiting));
-    };
-    let repl_tool_permission=match cua_repl::permission_for_request(&state.cua_repl,&request.conversation_id,request.run_id.as_deref(),None,request.kind,request.decision.as_ref()) {
-        Ok(permission)=>permission,
-        Err(error)=>{state.release_agent_run_if_control(&conversation.id,&control);return Err(local_bad_request(error));}
-    };
-    let pending_mcp_continuation = request.run_id.as_deref().zip(request.decision.as_ref())
-        .filter(|(_, decision)| request.kind == HitlKind::Permission && decision.target.kind == "repl_step"
-            && hitl_response_approves(request.kind, &body.response_data))
-        .and_then(|(run, decision)| state.cua_repl.pending_permission_scope(
-            &request.conversation_id, run, &decision.target.id, &decision.action.name,
+        return Err(hitl_response_commit_error(
+            HitlResponseCommitError::RunNotWaiting,
         ));
+    };
+    let repl_tool_permission = match cua_repl::permission_for_request(
+        &state.cua_repl,
+        &request.conversation_id,
+        request.run_id.as_deref(),
+        None,
+        request.kind,
+        request.decision.as_ref(),
+    ) {
+        Ok(permission) => permission,
+        Err(error) => {
+            state.release_agent_run_if_control(&conversation.id, &control);
+            return Err(local_bad_request(error));
+        }
+    };
+    let pending_mcp_continuation = request
+        .run_id
+        .as_deref()
+        .zip(request.decision.as_ref())
+        .filter(|(_, decision)| {
+            request.kind == HitlKind::Permission
+                && decision.target.kind == "repl_step"
+                && hitl_response_approves(request.kind, &body.response_data)
+        })
+        .and_then(|(run, decision)| {
+            state.cua_repl.pending_permission_scope(
+                &request.conversation_id,
+                run,
+                &decision.target.id,
+                &decision.action.name,
+            )
+        });
     let pending_mcp_surfaces = engine_run.as_ref().and_then(|waiting| {
         state.mcp_app_automation.capture_local_human_response(
-            waiting, &request, &conversation.tenant_id, &pending_checkpoint.session_id,
+            waiting,
+            &request,
+            &conversation.tenant_id,
+            &pending_checkpoint.session_id,
         )
     });
     let response_commit = state.session_store.mark_hitl_responded(
@@ -8392,9 +8755,9 @@ async fn respond_to_hitl(
             .expect("run once tool permissions")
             .insert(repl_tool_permission.unwrap_or((run_id, canonical_tool_name)));
     }
-    if let Some((owner,input))=computer_use_consent {
-        if let Err(error)=computer_use_v2::apply_management(&state,&owner,input).await {
-            state.release_agent_run_if_control(&conversation.id,&control);
+    if let Some((owner, input)) = computer_use_consent {
+        if let Err(error) = computer_use_v2::apply_management(&state, &owner, input).await {
+            state.release_agent_run_if_control(&conversation.id, &control);
             return Err(local_bad_request(error));
         }
     }
@@ -8539,7 +8902,12 @@ async fn respond_to_hitl(
     };
 
     if let (Some(waiting), Some(resumed)) = (engine_run.as_ref(), authoritative_run.as_ref()) {
-        state.mcp_app_automation.resume_local_permission(waiting, resumed, &committed_request, pending_mcp_continuation.as_ref());
+        state.mcp_app_automation.resume_local_permission(
+            waiting,
+            resumed,
+            &committed_request,
+            pending_mcp_continuation.as_ref(),
+        );
     }
     let mut response = hitl_response_receipt(&committed_request, false);
     response["execution_status"] = json!("running");
@@ -8558,12 +8926,19 @@ async fn respond_to_hitl(
         plugin_generation.map(|Extension(generation)| generation),
     );
     if let (Some(waiting), Some(resumed), Some(captured), Some(generation)) = (
-        engine_run.as_ref(), authoritative_run.as_ref(), pending_mcp_surfaces.as_ref(),
+        engine_run.as_ref(),
+        authoritative_run.as_ref(),
+        pending_mcp_surfaces.as_ref(),
         plugin_generation.as_ref(),
     ) {
         state.mcp_app_automation.resume_local_human_response(
-            &state, waiting, resumed, &committed_request, captured,
-            &accepted.session_id, generation,
+            &state,
+            waiting,
+            resumed,
+            &committed_request,
+            captured,
+            &accepted.session_id,
+            generation,
         );
     }
     let native_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
@@ -8585,7 +8960,8 @@ async fn respond_to_hitl(
                     plugin_generation,
                 )
                 .await;
-        }).await;
+        })
+        .await;
     });
     Ok(Json(response))
 }
@@ -8739,13 +9115,20 @@ fn valid_permission_response(request: &DesktopHitlRequest, response_data: &Value
     let Some(granted) = object.get("granted").and_then(Value::as_bool) else {
         return false;
     };
-    if request.decision.as_ref().is_some_and(|decision| decision.target.kind == "repl_step") {
+    if request
+        .decision
+        .as_ref()
+        .is_some_and(|decision| decision.target.kind == "repl_step")
+    {
         return !object.contains_key("tool")
             && !object.contains_key("tool_name")
             && !object.contains_key("canonical_tool_name")
             && matches!(
-                (object.get("action").and_then(Value::as_str), granted,
-                    object.get("scope").and_then(Value::as_str)),
+                (
+                    object.get("action").and_then(Value::as_str),
+                    granted,
+                    object.get("scope").and_then(Value::as_str)
+                ),
                 (Some("allow"), true, Some("once")) | (Some("deny"), false, Some("once"))
             );
     }
@@ -8760,7 +9143,10 @@ fn valid_permission_response(request: &DesktopHitlRequest, response_data: &Value
     }
     let scope = object.get("scope").and_then(Value::as_str);
     if computer_use_v2::hitl::is_permission(request) {
-        return matches!((action,granted,scope),("allow",true,Some("once"|"session"|"always"))|("deny",false,Some("once")));
+        return matches!(
+            (action, granted, scope),
+            ("allow", true, Some("once" | "session" | "always")) | ("deny", false, Some("once"))
+        );
     }
     if is_browser_origin_permission(request) {
         // Browser-origin consent: allow with once/site/all scopes; deny maps
@@ -10106,12 +10492,18 @@ impl LocalTimelineObserver {
     }
 
     fn set_plugin_metadata(&self, metadata: local_plugin_tool_host_v2::PluginTimelineMetadataV2) {
-        if let Ok(mut current) = self.plugin_metadata.lock() { *current = metadata; }
+        if let Ok(mut current) = self.plugin_metadata.lock() {
+            *current = metadata;
+        }
     }
 
     fn redact_tool_payload(&self, tool: &str, payload: &str) -> String {
-        let Ok(metadata) = self.plugin_metadata.lock() else { return "[UNAVAILABLE]".into(); };
-        if let Some(redacted) = metadata.redact(tool, payload) { return redacted; }
+        let Ok(metadata) = self.plugin_metadata.lock() else {
+            return "[UNAVAILABLE]".into();
+        };
+        if let Some(redacted) = metadata.redact(tool, payload) {
+            return redacted;
+        }
         let Some(metadata) = self.mcp_metadata.get(tool) else {
             return authorized_tool_host::redact_tool_payload(tool, payload);
         };
@@ -10199,10 +10591,15 @@ impl LocalTimelineObserver {
 #[async_trait]
 impl ReActObserver for LocalTimelineObserver {
     async fn on_tool_control(
-        &self, session: &str, round: u64, tool: &str, input: &str,
+        &self,
+        session: &str,
+        round: u64,
+        tool: &str,
+        input: &str,
         result: &agistack_core::ports::ToolResult,
     ) -> CoreResult<agistack_core::agent::ToolControlResolution> {
-        self.observe_control(session, round, tool, input, result).await
+        self.observe_control(session, round, tool, input, result)
+            .await
     }
 
     fn on_text_end(&self, _session_id: &str, round: u64) {
@@ -10266,7 +10663,8 @@ impl ReActObserver for LocalTimelineObserver {
         item["toolInput"] = json!(redacted_input);
         item["round"] = json!(round);
         item["display"] = timeline_presentation::display(tool);
-        if let Some(extra) = timeline_presentation::computer_use_display(tool, &redacted_input, "") {
+        if let Some(extra) = timeline_presentation::computer_use_display(tool, &redacted_input, "")
+        {
             if let Some(display_object) = item["display"].as_object_mut() {
                 if let Some(extra_object) = extra.as_object() {
                     for (key, value) in extra_object {
@@ -10356,14 +10754,22 @@ impl ReActObserver for LocalTimelineObserver {
             item["payload"]["file_metadata"] = metadata.clone();
             item["data"]["file_metadata"] = metadata;
         }
-        if let Some(computer_metadata) = timeline_presentation::computer_use_metadata(&redacted_output) {
+        if let Some(computer_metadata) =
+            timeline_presentation::computer_use_metadata(&redacted_output)
+        {
             item["computerUse"] = computer_metadata.clone();
             item["payload"]["computer_use"] = computer_metadata.clone();
             item["data"]["computer_use"] = computer_metadata;
         }
         if let Some(file_metadata) = timeline_presentation::file_metadata(&redacted_output) {
             if let Some(metadata) = item["fileMetadata"].as_object_mut() {
-                metadata.extend(file_metadata.as_object().into_iter().flatten().map(|(key, value)| (key.clone(), value.clone())));
+                metadata.extend(
+                    file_metadata
+                        .as_object()
+                        .into_iter()
+                        .flatten()
+                        .map(|(key, value)| (key.clone(), value.clone())),
+                );
             } else {
                 item["fileMetadata"] = file_metadata;
             }
@@ -10450,10 +10856,8 @@ impl ReActObserver for LocalTimelineObserver {
         error: &CoreError,
     ) -> CoreResult<()> {
         let redacted_input = self.redact_tool_payload(tool, input_json);
-        let redacted_error = self.redact_tool_payload(
-            tool,
-            &json!({ "error": error.to_string() }).to_string(),
-        );
+        let redacted_error =
+            self.redact_tool_payload(tool, &json!({ "error": error.to_string() }).to_string());
         let mut item = self.state.timeline_item(
             "observe",
             self.conversation_id.clone(),
@@ -10595,21 +10999,49 @@ impl FailoverLlm {
         Arc::new(Self { candidates })
     }
 
-    async fn attempt<T, F, Fut>(&self, mut operation: F) -> CoreResult<T>
+    fn requires_audio(transcript: &[TranscriptEntry]) -> bool {
+        transcript
+            .iter()
+            .flat_map(|entry| &entry.media)
+            .any(|media| media.mime_type.starts_with("audio/"))
+    }
+
+    fn unavailable_error(audio_required: bool) -> CoreError {
+        CoreError::Llm(if audio_required {
+            "audio_input_unsupported: no routing target declares audio input support".to_string()
+        } else {
+            "model_unconfigured: no usable LLM routing targets".to_string()
+        })
+    }
+
+    async fn attempt<T, F, Fut>(&self, operation: F) -> CoreResult<T>
+    where
+        F: FnMut(Arc<dyn LlmPort>) -> Fut,
+        Fut: std::future::Future<Output = CoreResult<T>>,
+    {
+        self.attempt_with_media(false, operation).await
+    }
+
+    async fn attempt_with_media<T, F, Fut>(
+        &self,
+        audio_required: bool,
+        mut operation: F,
+    ) -> CoreResult<T>
     where
         F: FnMut(Arc<dyn LlmPort>) -> Fut,
         Fut: std::future::Future<Output = CoreResult<T>>,
     {
         let mut last_error = None;
         for candidate in &self.candidates {
+            if audio_required && !candidate.supports_audio_input() {
+                continue;
+            }
             match operation(Arc::clone(candidate)).await {
                 Ok(value) => return Ok(value),
                 Err(error) => last_error = Some(error),
             }
         }
-        Err(last_error.unwrap_or_else(|| {
-            CoreError::Llm("model_unconfigured: no usable LLM routing targets".to_string())
-        }))
+        Err(last_error.unwrap_or_else(|| Self::unavailable_error(audio_required)))
     }
 }
 
@@ -10736,6 +11168,14 @@ mod tests {
     mod provider_audio_declaration_tests {
         use super::*;
         include!("provider_audio_declaration_tests.rs");
+    }
+
+    mod provider_ark_environment_tests {
+        include!("provider_ark_environment_tests.rs");
+    }
+
+    mod provider_audio_failover_tests {
+        include!("provider_audio_failover_tests.rs");
     }
 
     mod provider_request_timeout_tests {
@@ -16148,9 +16588,23 @@ mod tests {
         .iter()
         .enumerate()
         {
-            observer.on_tool_call(conversation_id, round as u64, "read", r#"{"file_path":"README.md","limit":50}"#).await.unwrap();
             observer
-                .on_tool_result(conversation_id, round as u64, "read", r#"{"file_path":"README.md","limit":50}"#, output)
+                .on_tool_call(
+                    conversation_id,
+                    round as u64,
+                    "read",
+                    r#"{"file_path":"README.md","limit":50}"#,
+                )
+                .await
+                .unwrap();
+            observer
+                .on_tool_result(
+                    conversation_id,
+                    round as u64,
+                    "read",
+                    r#"{"file_path":"README.md","limit":50}"#,
+                    output,
+                )
                 .await
                 .unwrap();
         }
@@ -16163,8 +16617,14 @@ mod tests {
         let calls: Vec<_> = events.iter().filter(|item| item["type"] == "act").collect();
         assert_eq!(calls.len(), 2);
         for (round, (call, result)) in calls.iter().zip(&observations).enumerate() {
-            assert_eq!(call["payload"]["tool_call_id"], format!("structured-result:tool:{round}"));
-            assert_eq!(call["payload"]["tool_call_id"], result["payload"]["tool_call_id"]);
+            assert_eq!(
+                call["payload"]["tool_call_id"],
+                format!("structured-result:tool:{round}")
+            );
+            assert_eq!(
+                call["payload"]["tool_call_id"],
+                result["payload"]["tool_call_id"]
+            );
             assert_eq!(call["payload"]["conversation_id"], conversation_id);
             assert_eq!(result["payload"]["message_id"], "structured-result");
             for event in [*call, *result] {
@@ -16173,12 +16633,19 @@ mod tests {
                 assert_eq!(event["payload"]["file_metadata"], expected);
                 assert_eq!(event["data"]["file_metadata"], expected);
                 assert_eq!(event["data"]["tool_name"], "read");
-                assert_eq!(event["data"]["tool_call_id"], event["payload"]["tool_call_id"]);
-                let input: Value = serde_json::from_str(event["data"]["tool_input"].as_str().unwrap()).unwrap();
+                assert_eq!(
+                    event["data"]["tool_call_id"],
+                    event["payload"]["tool_call_id"]
+                );
+                let input: Value =
+                    serde_json::from_str(event["data"]["tool_input"].as_str().unwrap()).unwrap();
                 assert_eq!(input, json!({"file_path":"README.md","limit":50}));
             }
         }
-        assert_ne!(calls[0]["payload"]["tool_call_id"], calls[1]["payload"]["tool_call_id"]);
+        assert_ne!(
+            calls[0]["payload"]["tool_call_id"],
+            calls[1]["payload"]["tool_call_id"]
+        );
         assert_eq!(observations[0]["isError"], true);
         assert_eq!(observations[0]["payload"]["is_error"], true);
         assert_eq!(observations[1]["isError"], false);
@@ -16242,9 +16709,18 @@ mod tests {
             .iter()
             .find(|event| event["type"] == "observe")
             .expect("terminal observe");
-        let call = timeline.iter().find(|event| event["type"] == "act").unwrap();
-        assert_eq!(call["payload"]["tool_call_id"], observe["payload"]["tool_call_id"]);
-        assert_eq!(observe["payload"]["tool_call_id"], "message-tool-failure-observer:tool:0");
+        let call = timeline
+            .iter()
+            .find(|event| event["type"] == "act")
+            .unwrap();
+        assert_eq!(
+            call["payload"]["tool_call_id"],
+            observe["payload"]["tool_call_id"]
+        );
+        assert_eq!(
+            observe["payload"]["tool_call_id"],
+            "message-tool-failure-observer:tool:0"
+        );
         assert_eq!(observe["isError"], true);
         assert_eq!(observe["payload"]["is_error"], true);
         assert_eq!(observe["toolName"], "read");
@@ -19391,8 +19867,11 @@ mod tests {
             .await
             .expect("load checkpoint")
             .expect("checkpoint");
-        let human_answer = saved.hitl_answer("permission-hitl").expect("recorded answer");
-        let receipt: Value = serde_json::from_str(human_answer).expect("structured permission receipt");
+        let human_answer = saved
+            .hitl_answer("permission-hitl")
+            .expect("recorded answer");
+        let receipt: Value =
+            serde_json::from_str(human_answer).expect("structured permission receipt");
         assert_eq!(receipt["type"], "permission_response");
         assert_eq!(receipt["request_id"], "permission-hitl");
         assert_eq!(receipt["run_id"], running.id);
@@ -19403,9 +19882,10 @@ mod tests {
             json!({ "action": "allow", "granted": true, "scope": "once" })
         );
         assert!(
-            saved.transcript.iter().any(|entry| {
-                entry.role == Role::Human && entry.content == human_answer
-            }),
+            saved
+                .transcript
+                .iter()
+                .any(|entry| { entry.role == Role::Human && entry.content == human_answer }),
             "the next model round receives the exact committed response"
         );
         assert_eq!(
@@ -21930,8 +22410,8 @@ mod tests {
                         base_url: "http://127.0.0.1:1/v1".to_string(),
                         model: model.to_string(),
                         auth_method: "api_key".to_string(),
-                    audio_input_models: BTreeSet::new(),
-                    request_timeout: std::time::Duration::from_millis(45_000),
+                        audio_input_models: BTreeSet::new(),
+                        request_timeout: std::time::Duration::from_millis(45_000),
                     },
                 );
                 runtime.credentials.insert(key, "llm-secret".to_string());

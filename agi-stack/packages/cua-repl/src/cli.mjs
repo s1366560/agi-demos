@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import { ReplKernel } from './kernel.mjs';
+import { resultPreview } from './result-preview.mjs';
 
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 const write = process.stdout.write.bind(process.stdout);
@@ -39,7 +40,7 @@ async function handle(message) {
     else if (message.type === 'reset') value = kernel.reset();
     else if (message.type === 'add_module_dir') value = await kernel.addModuleDirectory(message.path);
     else throw new TypeError('unknown request type');
-    send({ type: 'result', id: message.id, ok: true, ...(value === undefined ? {} : { value }) });
+    send({ type: 'result', id: message.id, ok: true, ...(value === undefined ? {} : { value: resultPreview(value) }) });
   } catch (error) { send({ type: 'result', id: message.id, ok: false, error: errorValue(error) }); }
   finally { busy = false; }
 }

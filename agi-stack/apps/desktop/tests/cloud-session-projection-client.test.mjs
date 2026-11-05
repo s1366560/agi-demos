@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { afterEach, test } from 'node:test';
 
@@ -9,6 +10,28 @@ const compiledModule =
 
 afterEach(() => {
   delete globalThis.window;
+});
+
+test('Rust current-user response supports native password-login session projection', () => {
+  const { decodeCloudSessionProjection } = require(compiledModule);
+  const user = JSON.parse(
+    readFileSync(
+      new URL('../../server/tests/golden/current_user_response.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  const payload = { ...projectionPayload(), user };
+  const projection = decodeCloudSessionProjection(payload);
+  assert.ok(projection);
+  assert.equal(projection.user.userId, user.user_id);
+  assert.deepEqual(projection.user.roles, ['admin', 'user']);
+  assert.deepEqual(projection.user.globalRoles, ['user']);
+  assert.equal(projection.user.superuser, false);
+  for (const field of ['global_roles', 'is_superuser']) {
+    const incomplete = structuredClone(payload);
+    delete incomplete.user[field];
+    assert.equal(decodeCloudSessionProjection(incomplete), null);
+  }
 });
 
 test('renderer decodes a credential-free Cloud identity and workspace projection', () => {

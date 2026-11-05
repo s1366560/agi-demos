@@ -2,7 +2,6 @@
 pub(in crate::local_runtime) mod accounts;
 mod api;
 mod artifacts;
-pub(super) mod repl_media;
 pub(in crate::local_runtime) mod call_identity;
 pub(in crate::local_runtime) mod cloud;
 mod cloud_cleanup;
@@ -14,21 +13,23 @@ mod consent;
 mod consent_tests;
 pub(in crate::local_runtime) mod denials;
 mod host;
-mod locked_use;
 pub(super) mod local_control;
+mod locked_use;
+pub(super) mod repl_media;
 mod user_control;
-use host::ScopedComputerUseHost;
 #[cfg(test)]
 use host::capability_for;
+use host::ScopedComputerUseHost;
 pub(super) mod hitl;
 pub(super) mod hitl_validation;
+mod input;
 #[cfg(test)]
 mod management_lifecycle_tests;
 mod module;
 mod presentation;
-mod input;
 mod recordings;
 mod recordings_export;
+mod recordings_read;
 mod recordings_store;
 #[cfg(test)]
 mod recordings_tests;
@@ -108,20 +109,20 @@ pub(super) fn migrate_schema(db: &rusqlite::Connection) -> Result<(), String> {
 }
 
 use super::{
-    DesktopRun, LocalConversation, LocalRuntimeState,
-    knowledge_authority_v2::agent_access::PluginNativeIdentityV2,
+    knowledge_authority_v2::agent_access::PluginNativeIdentityV2, DesktopRun, LocalConversation,
+    LocalRuntimeState,
 };
 use agistack_adapters_cua::{CuaCallContext, CuaClient, CuaToolHost};
 use agistack_core::ports::{CoreError, CoreResult, ToolDefinition, ToolHost, ToolResult};
 use agistack_plugin_host::protocol_v2::{ScopeKindV2, ScopeV2};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
     sync::{
-        Arc, Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
+        Arc, Mutex, OnceLock,
     },
 };
 use store::{Instance, Owner};
@@ -297,7 +298,7 @@ impl ComputerUseRuntimeV2 {
         };
         if close {
             if let Some(client) = self.client.get() {
-                client.shutdown().await;
+                client.shutdown_if_audio_idle().await;
             }
             self.helper_closing.store(false, Ordering::SeqCst);
         }
@@ -344,7 +345,7 @@ impl ComputerUseRuntimeV2 {
         sessions.insert(session.context.session_id.clone(), session.clone());
         Ok(session)
     }
-    fn client(&self) -> Result<Arc<CuaClient>, String> {
+    pub(super) fn client(&self) -> Result<Arc<CuaClient>, String> {
         if self.shutting_down.load(Ordering::SeqCst) {
             return Err("cua_device_stopping".into());
         }
@@ -373,9 +374,39 @@ impl ComputerUseRuntimeV2 {
             .filter(|(_, session)| session.context.run_id == run_id)
             .map(|(id, session)| {
                 session.stopped.store(true, Ordering::SeqCst);
+                self.locked_use.invalidate(id);
                 id.clone()
             })
             .collect()
+    }
+
+    /// Revoke continuity without destroying a suspended REPL/HITL session.
+    pub(super) async fn release_locked_run(
+        &self,
+        state: &LocalRuntimeState,
+        run_id: &str,
+        reason: &str,
+    ) {
+        let sessions: Vec<_> = self
+            .sessions
+            .lock()
+            .expect("computer-use sessions")
+            .values()
+            .filter(|session| session.context.run_id == run_id)
+            .cloned()
+            .collect();
+        // Revoke every binding before performing any native I/O.
+        let releases: Vec<_> = sessions
+            .into_iter()
+            .filter_map(|session| {
+                self.locked_use
+                    .invalidate(&session.context.session_id)
+                    .map(|generation| (session, generation))
+            })
+            .collect();
+        for (session, generation) in releases {
+            locked_use::release(state, &session, &generation, reason).await;
+        }
     }
 
     pub(super) async fn stop_run(&self, state: &LocalRuntimeState, run_id: &str) {
@@ -485,6 +516,7 @@ impl ComputerUseRuntimeV2 {
         if let Some(session) = session {
             input::terminal(self, id, reason);
             session.stopped.store(true, Ordering::SeqCst);
+            self.locked_use.invalidate(id);
             self.locked_use.forget_display(id);
             presentation::update(&session, "stopped", None);
             presentation::record(state, &session);

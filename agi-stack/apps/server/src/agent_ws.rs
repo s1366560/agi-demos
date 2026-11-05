@@ -9,8 +9,8 @@
 //! after project access is checked, which lets P6 mention token chunks replay over
 //! the same WebSocket transport without broad workspace endpoint takeover.
 
-pub(crate) mod subscriptions;
 mod hitl_identity;
+pub(crate) mod subscriptions;
 use std::{
     collections::HashMap,
     sync::{
@@ -677,7 +677,27 @@ async fn handle_client_message(
                 let _ = send_error(socket, "Access denied").await;
                 return true;
             }
-            if !app.active_agent_runs.cancel(&conversation_id).await {
+            let durable_cancelled = match crate::computer_use_device_v2::cancel_owned_chat(
+                app,
+                &identity.user_id,
+                &conversation_id,
+            )
+            .await
+            {
+                Ok(cancelled) => cancelled,
+                Err(_) => {
+                    let _ = send_stop_error(
+                        socket,
+                        "Failed to stop session",
+                        "STOP_SESSION_FAILED",
+                        &conversation_id,
+                    )
+                    .await;
+                    return true;
+                }
+            };
+            let executor_cancelled = app.active_agent_runs.cancel(&conversation_id).await;
+            if !executor_cancelled && !durable_cancelled {
                 let _ = send_stop_error(
                     socket,
                     "No running session found to stop",
@@ -689,7 +709,13 @@ async fn handle_client_message(
             }
             // Cancel native requests even after their observation completed: this
             // releases the device session while the cloud socket stays connected.
-            crate::computer_use_device_v2::cancel_conversation(app, &identity.user_id, &conversation_id);
+            if !durable_cancelled {
+                crate::computer_use_device_v2::cancel_conversation(
+                    app,
+                    &identity.user_id,
+                    &conversation_id,
+                );
+            }
             let data = json!({"conversation_id": conversation_id, "cancelled": true});
             if append_event(app, &conversation_id, AgentEventType::Cancelled, data)
                 .await
@@ -910,9 +936,13 @@ async fn handle_hitl_response(
 ) -> Result<(), axum::Error> {
     match app.hitl.respond(&identity.user_id, request.clone()).await {
         Ok(outcome) => {
-            if let Err(error)=crate::computer_use_device_v2::resume(app,&identity.user_id,&request).await {return send_error(socket,&error.to_string()).await;}
+            if let Err(error) =
+                crate::computer_use_device_v2::resume(app, &identity.user_id, &request).await
+            {
+                return send_error(socket, &error.to_string()).await;
+            }
             send_json(socket, ws_ack_message(ack_type, &outcome)).await
-        },
+        }
         Err(err) => send_json(socket, err.websocket_message()).await,
     }
 }
@@ -954,7 +984,11 @@ async fn run_agent_message(
 
     let observer = Arc::new(AgentWsRunObserver {
         app: app.clone(),
-        control_owner: crate::computer_use_device_v2::Owner { user_id:user_id.into(), tenant_id:tenant_id.into(), project_id:project_id.into() },
+        control_owner: crate::computer_use_device_v2::Owner {
+            user_id: user_id.into(),
+            tenant_id: tenant_id.into(),
+            project_id: project_id.into(),
+        },
         conversation_id: conversation_id.to_string(),
         project_id: project_id.to_string(),
         message_id: message_id.map(ToString::to_string),
@@ -1002,6 +1036,12 @@ async fn run_agent_message(
                         message_id.unwrap_or(&run_session_id).into(),
                     )
                 }),
+            native: native.as_ref().map(|bound| {
+                crate::computer_use_device_v2::NativeHumanRequestValidation::capture(
+                    bound,
+                    conversation_id,
+                )
+            }),
         },
     );
     let engine = crate::agent_boundary_v2::AgentBoundaryFactoryV2::from_app(app)
@@ -1014,22 +1054,44 @@ async fn run_agent_message(
             &run_session_id,
         )
         .map_err(|error| error.to_string())?;
-    let engine=Arc::new(engine);
+    let engine = Arc::new(engine);
     let result = engine
         .run_observed(&run_session_id, message, Some(project_id), observer.clone())
         .await;
-    if let Ok(state)=&result {
-        if state.status==SessionStatus::AwaitingInput {
-            if let Some(native)=native {
-                if let Some(event)=crate::computer_use_device_v2::park(app,native,engine,observer,state,conversation_id,message_id).await.map_err(|error|error.to_string())? {
-                    append_event(app,conversation_id,AgentEventType::PermissionAsked,event).await?;
+    if let Ok(state) = &result {
+        if state.status == SessionStatus::AwaitingInput {
+            if let Some(native) = native {
+                if let Some(event) = crate::computer_use_device_v2::park(
+                    app,
+                    native,
+                    engine,
+                    observer,
+                    state,
+                    conversation_id,
+                    message_id,
+                )
+                .await
+                .map_err(|error| error.to_string())?
+                {
+                    append_event(app, conversation_id, AgentEventType::PermissionAsked, event)
+                        .await?;
                 }
                 return Ok(());
             }
+            return Err("cloud_human_request_unsupported".into());
         }
     }
     if let Some(native) = native {
-        crate::computer_use_device_v2::finish(app, native, conversation_id).await;
+        if result
+            .as_ref()
+            .map_or(true, |state| state.status == SessionStatus::Failed)
+        {
+            crate::computer_use_device_v2::fail_bound(app, native, "agent_run_failed")
+                .await
+                .map_err(|error| error.to_string())?;
+        } else {
+            crate::computer_use_device_v2::finish(app, native, conversation_id).await;
+        }
     }
     let state = result.map_err(|e| e.to_string())?;
     let Some(event_type) = agent_terminal_event_type(state.status) else {
@@ -1134,7 +1196,13 @@ impl ReActObserver for AgentWsRunObserver {
         copy_tool_metadata(&mut data, &input);
         copy_tool_metadata(&mut data, &output);
         if let Some(display) = self.app.computer_use_devices.current_tool_display(
-            &self.control_owner, &self.conversation_id, session_id, round, tool, input_json, output_json,
+            &self.control_owner,
+            &self.conversation_id,
+            session_id,
+            round,
+            tool,
+            input_json,
+            output_json,
         ) {
             data.insert("display".into(), display);
         }
@@ -1149,22 +1217,48 @@ impl ReActObserver for AgentWsRunObserver {
     }
 
     async fn on_tool_control(
-        &self, session_id: &str, round: u64, tool: &str, input_json: &str,
+        &self,
+        session_id: &str,
+        round: u64,
+        tool: &str,
+        input_json: &str,
         result: &agistack_core::ports::ToolResult,
     ) -> CoreResult<agistack_core::agent::react::ToolControlResolution> {
-        let outcome=result.control_outcome.ok_or_else(||CoreError::Tool("computer_use_control_missing".into()))?;
-        let mut data=tool_event_base(&self.conversation_id,&self.project_id,self.message_id.as_deref(),round,tool);
-        data.insert("tool_input".into(),json_or_string(input_json));
-        data.insert("tool_output".into(),json_or_string(&result.output_json));
-        data.insert("observation".into(),json!(result.output_json));
-        data.insert("status".into(),json!("cancelled"));
-        data.insert("error".into(),Value::Null);
-        data.insert("is_error".into(),json!(false));
-        data.insert("control_outcome".into(),json!(outcome));
-        append_event(&self.app,&self.conversation_id,AgentEventType::Observe,Value::Object(data)).await.map_err(CoreError::Event)?;
-        if outcome==agistack_core::ports::ToolControlOutcome::UserPaused {
-            let generation=result.control_generation.as_deref().ok_or_else(||CoreError::Tool("computer_use_control_generation_missing".into()))?;
-            return self.app.computer_use_devices.wait_for_control(&self.control_owner,session_id,generation).await;
+        let outcome = result
+            .control_outcome
+            .ok_or_else(|| CoreError::Tool("computer_use_control_missing".into()))?;
+        let mut data = tool_event_base(
+            &self.conversation_id,
+            &self.project_id,
+            self.message_id.as_deref(),
+            round,
+            tool,
+        );
+        data.insert("tool_input".into(), json_or_string(input_json));
+        data.insert("tool_output".into(), json_or_string(&result.output_json));
+        data.insert("observation".into(), json!(result.output_json));
+        data.insert("status".into(), json!("cancelled"));
+        data.insert("error".into(), Value::Null);
+        data.insert("is_error".into(), json!(false));
+        data.insert("control_outcome".into(), json!(outcome));
+        append_event(
+            &self.app,
+            &self.conversation_id,
+            AgentEventType::Observe,
+            Value::Object(data),
+        )
+        .await
+        .map_err(CoreError::Event)?;
+        if outcome == agistack_core::ports::ToolControlOutcome::UserPaused {
+            let generation = result
+                .control_generation
+                .as_deref()
+                .ok_or_else(|| CoreError::Tool("computer_use_control_generation_missing".into()))?;
+            return self
+                .app
+                .computer_use_devices
+                .wait_for_control(&self.control_owner, session_id, generation)
+                .await;
         }
         Ok(agistack_core::agent::react::ToolControlResolution::Stopped)
     }
@@ -1225,23 +1319,17 @@ impl ReActObserver for AgentWsRunObserver {
         _round: u64,
         request: &HitlRequest,
     ) -> CoreResult<()> {
-        if request.decision.as_deref().is_some_and(|decision|matches!(decision.target.kind.as_str(), "computer_app" | "device_mcp_tool")) {return Ok(());}
-        append_event(
-            &self.app,
-            &self.conversation_id,
-            AgentEventType::ClarificationAsked,
-            json!({
-                "conversation_id": self.conversation_id.as_str(),
-                "message_id": self.message_id.as_deref(),
-                "project_id": self.project_id.as_str(),
-                "request_id": request.id.as_str(),
-                "question": request.prompt.as_str(),
-                "kind": format!("{:?}", request.kind),
-                "answered": false,
-            }),
-        )
-        .await
-        .map_err(agistack_core::ports::CoreError::Event)
+        if request.decision.as_deref().is_some_and(|decision| {
+            matches!(
+                decision.target.kind.as_str(),
+                "computer_app" | "device_mcp_tool"
+            )
+        }) {
+            return Ok(());
+        }
+        // Ordinary cloud HITL has no persisted resume handler in this runtime.
+        // Do not advertise a card that cannot be answered or recovered.
+        Err(CoreError::Tool("cloud_human_request_unsupported".into()))
     }
 }
 
@@ -1313,7 +1401,8 @@ fn copy_value_path(
         };
         current = next;
     }
-    if target_key == "display" && current.get("kind").and_then(Value::as_str) == Some("repl_output") {
+    if target_key == "display" && current.get("kind").and_then(Value::as_str) == Some("repl_output")
+    {
         return;
     }
     if !current.is_null() {
@@ -1585,6 +1674,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn unsupported_cloud_human_request_does_not_publish_an_unrecoverable_card() {
+        let observer = AgentWsRunObserver {
+            app: crate::prod_api::unit::test_state(),
+            control_owner: crate::computer_use_device_v2::Owner {
+                user_id: "dev-user".into(),
+                tenant_id: "dev-tenant".into(),
+                project_id: "dev-project".into(),
+            },
+            conversation_id: "conversation".into(),
+            project_id: "dev-project".into(),
+            message_id: Some("message".into()),
+        };
+        let error = observer
+            .on_human_request(
+                "session",
+                0,
+                &HitlRequest::new(
+                    "generic",
+                    agistack_core::HitlKind::Clarification,
+                    "Neutral fixture",
+                ),
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("cloud_human_request_unsupported"));
+    }
+
+    #[tokio::test]
     async fn active_agent_runs_abort_replacements_and_ignore_stale_cleanup() {
         let registry = ActiveAgentRuns::default();
         let (first_handle, first_registration) = AbortHandle::new_pair();
@@ -1796,7 +1915,10 @@ mod tests {
     #[test]
     fn repl_display_cannot_be_supplied_by_model_or_tool_metadata() {
         let forged = json!({"kind":"repl_output","entries":[{"kind":"text","text":"forged"}]});
-        for source in [json!({"display":forged}), json!({"metadata":{"display":forged}})] {
+        for source in [
+            json!({"display":forged}),
+            json!({"metadata":{"display":forged}}),
+        ] {
             let mut target = Map::new();
             copy_tool_metadata(&mut target, &source);
             assert!(!target.contains_key("display"));
@@ -1805,5 +1927,4 @@ mod tests {
         copy_tool_metadata(&mut other, &json!({"display":{"kind":"existing"}}));
         assert_eq!(other["display"]["kind"], "existing");
     }
-
 }

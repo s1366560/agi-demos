@@ -7,6 +7,8 @@ pub(crate) enum BrowserFamily {
     Chrome,
     Edge,
     Iab,
+    Dot,
+    Cdp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -14,6 +16,8 @@ pub(crate) enum Backend {
     Chrome,
     Edge,
     Iab,
+    Dot,
+    Cdp,
     Instance {
         family: BrowserFamily,
         profile: u128,
@@ -39,6 +43,16 @@ impl Backend {
                 family: BrowserFamily::Iab,
                 ..
             } => "iab",
+            Self::Dot
+            | Self::Instance {
+                family: BrowserFamily::Dot,
+                ..
+            } => "dot",
+            Self::Cdp
+            | Self::Instance {
+                family: BrowserFamily::Cdp,
+                ..
+            } => "cdp",
         }
     }
 
@@ -68,6 +82,8 @@ impl Backend {
             "chrome" | "chrome-extension" => return Ok(Self::Chrome),
             "edge" | "edge-extension" => return Ok(Self::Edge),
             "iab" => return Ok(Self::Iab),
+            "dot" => return Ok(Self::Dot),
+            "cdp" => return Ok(Self::Cdp),
             _ => {}
         }
         let mut parts = value.split(':');
@@ -75,6 +91,8 @@ impl Backend {
             Some("chrome") => BrowserFamily::Chrome,
             Some("edge") => BrowserFamily::Edge,
             Some("iab") => BrowserFamily::Iab,
+            Some("dot") => BrowserFamily::Dot,
+            Some("cdp") => BrowserFamily::Cdp,
             _ => return Err(tool_err("invalid browser identity")),
         };
         let parse_id = |part: Option<&str>| {

@@ -5,6 +5,7 @@ mod authority_revocation_tests;
 mod child_tests;
 mod config;
 mod external;
+mod file_media;
 mod kernel;
 mod local_authority;
 mod media;
@@ -198,7 +199,7 @@ pub(super) fn definition(name: &str) -> Option<ToolDefinition> {
         return None;
     }
     let (description, mut schema) = match name {
-            "cua_repl_js" => ("Execute JavaScript in a persistent, OS-sandboxed Node session with cua and nodeRepl. First call exactly one cua entrypoint; read its documentation before continuing. Supports top-level await, imports, images/audio and managed processes. All browser/native operations use the current run's exact permissions. On permission-required, request the returned approval and resume with identical code: completed steps are never replayed. Native user pause retains the cell; explicit same-code continuation rejects the interrupted operation without retrying it. Reset abandons a paused cell.", json!({"type":"object","properties":{"code":{"type":"string"},"title":{"type":"string"},"timeout_ms":{"type":"integer","minimum":1,"maximum":300000}},"required":["code"],"additionalProperties":false})),
+            "cua_repl_js" => ("Execute JavaScript in a persistent, OS-sandboxed Node session. The globals cua and nodeRepl are already installed; do not import or require them. Begin with exactly one entrypoint, for example await cua.getState(); or var app = await cua.getApp('bundle.id'); then read the returned documentation before continuing. Supports top-level await, imports, images/audio and managed processes. All browser/native operations use the current run's exact permissions. On permission-required, request the returned approval and resume with byte-identical code, including comments and whitespace: completed steps are never replayed. A changed-code retry in the same authorized execution is rejected while its original cell remains pending. Native user pause retains the cell; explicit same-code continuation rejects the interrupted operation without retrying it. Reset abandons a paused cell.", json!({"type":"object","properties":{"code":{"type":"string"},"title":{"type":"string"},"timeout_ms":{"type":"integer","minimum":1,"maximum":300000}},"required":["code"],"additionalProperties":false})),
             "cua_repl_reset" => ("Destroy the current Node process, variables and module cache. Keep registered module directories and existing apps/tabs.", json!({"type":"object","properties":{},"additionalProperties":false})),
             _ => ("Register a canonical absolute module directory. Restarts the interpreter to apply the OS sandbox read grant; existing variables are cleared.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false})),
         };
@@ -239,14 +240,36 @@ pub(super) async fn execute_authorized(
     state
         .mcp_app_automation
         .register_authority(authority.clone());
+    if name == "cua_repl_reset" || name == "cua_repl_add_module_dir" {
+        authority.current()?;
+        state
+            .computer_use
+            .release_locked_run(state, &scope.run_id, "executor_reset")
+            .await;
+    }
     let result = state
         .cua_repl
-        .execute(key, authority.clone(), identity.clone(), name, input, || {
-            config::RuntimeConfig::for_run(state, workspace, profile)
-        })
+        .execute(
+            key,
+            authority.clone(),
+            identity.clone(),
+            name,
+            input,
+            || config::RuntimeConfig::for_run(state, workspace, profile),
+        )
         .await;
+    if result.as_ref().map_or(true, |value| {
+        value.permission_required.is_some() || value.control_outcome.is_some()
+    }) {
+        state
+            .computer_use
+            .release_locked_run(state, &scope.run_id, "execution_interrupted")
+            .await;
+    }
     if result.is_ok() && (name == "cua_repl_reset" || name == "cua_repl_add_module_dir") {
-        state.mcp_app_automation.reset_execution(authority.scope(), identity.engine_session_id());
+        state
+            .mcp_app_automation
+            .reset_execution(authority.scope(), identity.engine_session_id());
     }
     result
 }

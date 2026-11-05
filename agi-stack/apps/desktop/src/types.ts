@@ -10,18 +10,9 @@ export type AuthStatus =
   | 'signed_in'
   | 'manual';
 
-export type CredentialKind =
-  | 'cloud_session'
-  | 'manual_api_key'
-  | 'local_session';
+export type CredentialKind = 'cloud_session' | 'manual_api_key' | 'local_session';
 
-export type WorkbenchSection =
-  | 'workspace'
-  | 'home'
-  | 'chat'
-  | 'board'
-  | 'activity'
-  | 'settings';
+export type WorkbenchSection = 'workspace' | 'home' | 'chat' | 'board' | 'activity' | 'settings';
 
 export type DesktopRuntimeConfig = {
   apiBaseUrl: string;
@@ -53,6 +44,26 @@ export type BrowserBridgeConfig = {
   port: number;
   extension_ids: string[];
   full_cdp_access_enabled?: boolean;
+  cdp_endpoints?: BrowserCdpEndpointConfig[];
+  default_browser_id?: string;
+};
+
+export type BrowserCdpEndpointConfig = {
+  id: string;
+  name: string;
+  endpoint: string;
+  enabled: boolean;
+};
+
+export type BrowserProviderConfiguration = Required<
+  Pick<BrowserBridgeConfig, 'cdp_endpoints' | 'default_browser_id'>
+>;
+
+export type BrowserProviderInstance = {
+  id: string;
+  type?: string;
+  family?: string;
+  metadata?: { stableId?: string; name?: string; [key: string]: unknown };
 };
 
 export type BrowserBridgeRuntimeStatus = {
@@ -67,6 +78,13 @@ export type BrowserBridgeStatus = {
   enabled: boolean;
   port: number;
   brokerConnected: boolean;
+  browserInstances?: BrowserProviderInstance[];
+  cdpEndpoints?: {
+    id: string;
+    name: string;
+    status: 'disabled' | 'connecting' | 'connected' | 'disconnected';
+    error: string | null;
+  }[];
   extensionId: string | null;
   extensionVersion: string | null;
   hostVersion: string;
@@ -113,7 +131,7 @@ export type LocalRuntimeStatus = {
 
 export function mergeLocalRuntimeStatus(
   config: DesktopRuntimeConfig,
-  status: LocalRuntimeStatus,
+  status: LocalRuntimeStatus
 ): DesktopRuntimeConfig {
   return {
     ...config,
@@ -125,12 +143,7 @@ export function mergeLocalRuntimeStatus(
   };
 }
 
-export type HitlType =
-  | 'clarification'
-  | 'decision'
-  | 'env_var'
-  | 'permission'
-  | 'a2ui_action';
+export type HitlType = 'clarification' | 'decision' | 'env_var' | 'permission' | 'a2ui_action';
 
 export type HitlResponseSubmission = {
   requestId: string;
@@ -321,11 +334,7 @@ export type WorkspaceAutonomyAttentionResolveResponse = {
   replayed: boolean;
 };
 
-export type WorkspaceAuthorityStatus =
-  | 'unavailable'
-  | 'loading'
-  | 'ready'
-  | 'error';
+export type WorkspaceAuthorityStatus = 'unavailable' | 'loading' | 'ready' | 'error';
 
 export type WorkspaceAuthorityCollection<T> = {
   status: WorkspaceAuthorityStatus;
@@ -457,17 +466,8 @@ export type TaskSessionWorkspaceCreateInput = {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  use_case:
-    | 'general'
-    | 'programming'
-    | 'conversation'
-    | 'research'
-    | 'operations';
-  collaboration_mode:
-    | 'single_agent'
-    | 'multi_agent_shared'
-    | 'multi_agent_isolated'
-    | 'autonomous';
+  use_case: 'general' | 'programming' | 'conversation' | 'research' | 'operations';
+  collaboration_mode: 'single_agent' | 'multi_agent_shared' | 'multi_agent_isolated' | 'autonomous';
   sandbox_code_root?: string;
 };
 
@@ -478,9 +478,7 @@ export type TaskSessionWorkspaceExistingInput = {
 
 export type CreateTaskSessionRequest = {
   idempotency_key: string;
-  workspace:
-    | TaskSessionWorkspaceCreateInput
-    | TaskSessionWorkspaceExistingInput;
+  workspace: TaskSessionWorkspaceCreateInput | TaskSessionWorkspaceExistingInput;
   conversation: {
     title: string;
     capability_mode: AgentCapabilityMode;
@@ -566,10 +564,7 @@ export type DesktopRunStatus =
   | 'cancelled';
 
 export type DesktopExecutionEnvironmentKind = 'local' | 'worktree';
-export type DesktopPermissionProfile =
-  | 'read_only'
-  | 'workspace_write'
-  | 'full_access';
+export type DesktopPermissionProfile = 'read_only' | 'workspace_write' | 'full_access';
 
 export type DesktopExecutionEnvironment = {
   id: string;
@@ -604,11 +599,7 @@ export type DesktopRun = {
   authorization_snapshot: Record<string, unknown>;
 };
 
-export type ChangeSnapshotStatus =
-  | 'ready'
-  | 'unattributed'
-  | 'unavailable'
-  | 'failed';
+export type ChangeSnapshotStatus = 'ready' | 'unattributed' | 'unavailable' | 'failed';
 export type ChangeLineKind = 'context' | 'addition' | 'deletion';
 
 export type ChangeLine = {
@@ -754,11 +745,7 @@ export type PromoteRunInputResponse = {
   source_run: DesktopRun;
 };
 
-export type MyWorkGroup =
-  | 'needs_input'
-  | 'needs_approval'
-  | 'running'
-  | 'ready_review';
+export type MyWorkGroup = 'needs_input' | 'needs_approval' | 'running' | 'ready_review';
 export type MyWorkAuthorityKind =
   | 'desktop_run'
   | 'agent_run'
@@ -954,11 +941,7 @@ export type ReviewRunRequest = {
   feedback?: string;
 };
 
-export type LlmProviderAuthMethod =
-  | 'api_key'
-  | 'oauth'
-  | 'environment'
-  | 'none';
+export type LlmProviderAuthMethod = 'api_key' | 'oauth' | 'environment' | 'none';
 
 export type ManagedLlmProvider = {
   id: string;
@@ -1844,10 +1827,7 @@ export type AgentTimelineItem = {
 };
 
 export type DecisionRiskLevel = 'low' | 'medium' | 'high';
-export type DecisionReversibilityMode =
-  | 'reversible'
-  | 'partial'
-  | 'irreversible';
+export type DecisionReversibilityMode = 'reversible' | 'partial' | 'irreversible';
 
 export type DecisionContext = {
   action: { name: string; label: string };
@@ -1903,6 +1883,7 @@ export type DesktopApprovalRequest = {
   prompt: string;
   decision?: DecisionContext | null;
   permission?: PermissionRequestContext | null;
+  native_binding?: Record<string, unknown> | null;
   a2ui_action?: {
     surface_id: string;
     block_id: string;
@@ -1923,12 +1904,7 @@ export type DesktopApprovalRequest = {
   idempotency_key?: string | null;
 };
 
-export type DesktopArtifactStatus =
-  | 'draft'
-  | 'ready'
-  | 'approved'
-  | 'delivered'
-  | 'superseded';
+export type DesktopArtifactStatus = 'draft' | 'ready' | 'approved' | 'delivered' | 'superseded';
 
 export type DesktopArtifactVersion = {
   id: string;
@@ -2004,15 +1980,7 @@ export type ToolDisplayData = {
 };
 
 export type ToolFileMetadata = {
-  operation?:
-    | 'read'
-    | 'write'
-    | 'edit'
-    | 'list'
-    | 'search'
-    | 'create'
-    | 'delete'
-    | string;
+  operation?: 'read' | 'write' | 'edit' | 'list' | 'search' | 'create' | 'delete' | string;
   paths?: ToolFilePathMetadata[];
   diffStat?: { filesChanged?: number; additions?: number; deletions?: number };
   matches?: Array<{ path?: string; lineNumber?: number; preview?: string }>;
@@ -2104,12 +2072,7 @@ export type TerminalServiceResponse = {
   environment?: DesktopExecutionEnvironment | null;
 };
 
-export type TerminalConnectionStatus =
-  | 'idle'
-  | 'connecting'
-  | 'connected'
-  | 'closed'
-  | 'error';
+export type TerminalConnectionStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error';
 
 export type AutomationConfig = {
   kind: string;

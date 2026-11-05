@@ -45,8 +45,15 @@ export function createDesktopBrowserBridgeManagementNativeProjectionV2(
       if (method === 'loadSnapshot') {
         const runtimeStatus = requireBridgeRuntimeStatusV2(await call('local_runtime_status'));
         const bridgeStatus = requireBridgeStatusV2(await call('browser_bridge_status'));
-        result = { runtimeStatus: projectBridgeRuntimeStatusV2(runtimeStatus), bridgeStatus };
-      } else if (method === 'setEnabled' || method === 'setFullCdpEnabled') {
+        result = {
+          runtimeStatus: projectBridgeRuntimeStatusV2(runtimeStatus),
+          bridgeStatus,
+        };
+      } else if (
+        method === 'setEnabled' ||
+        method === 'setFullCdpEnabled' ||
+        method === 'setProviders'
+      ) {
         result = await serializeConfigurationV2(async () => {
           const current = requireBridgeRuntimeStatusV2(await call('local_runtime_status'));
           const field = method === 'setEnabled' ? 'enabled' : 'full_cdp_access_enabled';
@@ -54,7 +61,7 @@ export function createDesktopBrowserBridgeManagementNativeProjectionV2(
             ...current.config,
             browser_bridge: {
               ...current.config.browser_bridge,
-              [field]: input.enabled,
+              ...(method === 'setProviders' ? input.providers : { [field]: input.enabled }),
             },
           };
           return projectBridgeRuntimeStatusV2(

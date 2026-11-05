@@ -23,8 +23,8 @@ use crate::{
     application_vault::ApplicationCredentialVault,
     data_migration::migrate_legacy_data,
     local_runtime::{
-        browser_bridge, LocalRuntimeConfigPatch, LocalRuntimeService, PlatformPluginAuthorityModeV2,
-        PlatformPluginControlPlaneReconcilerV2,
+        browser_bridge, LocalRuntimeConfigPatch, LocalRuntimeService,
+        PlatformPluginAuthorityModeV2, PlatformPluginControlPlaneReconcilerV2,
     },
     native_host,
     oauth_pending_attempt::{OAuthPendingAttemptBroker, OAuthPendingAttemptRecord},
@@ -284,7 +284,10 @@ pub(crate) async fn run() -> Result<(), String> {
                     continue;
                 }
             }
-            Ok(request) => match local_requests.dispatch(&state.runtime, &request, &output_tx).await {
+            Ok(request) => match local_requests
+                .dispatch(&state.runtime, &request, &output_tx)
+                .await
+            {
                 local_requests::Dispatch::Response(response) => response,
                 local_requests::Dispatch::Unhandled => execute_request(&state, request).await,
                 local_requests::Dispatch::Pending => continue,
@@ -419,8 +422,21 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
         return failure(id, "sidecar control request is invalid");
     }
     let result = match request.command.as_str() {
-        "browser_auth_pending" => state.runtime.browser_auth_pending(request.args.clone().unwrap_or(Value::Null)),
-        "browser_auth_respond" => state.runtime.browser_auth_respond(request.args.clone().unwrap_or(Value::Null)),
+        "browser_context" => {
+            state
+                .runtime
+                .browser_context(
+                    &state.trusted_sessions,
+                    request.args.clone().unwrap_or(Value::Null),
+                )
+                .await
+        }
+        "browser_auth_pending" => state
+            .runtime
+            .browser_auth_pending(request.args.clone().unwrap_or(Value::Null)),
+        "browser_auth_respond" => state
+            .runtime
+            .browser_auth_respond(request.args.clone().unwrap_or(Value::Null)),
         "computer_use_cloud_v2" => match request.args.as_ref().and_then(|args| args.get("input")) {
             Some(input) => {
                 state
@@ -430,10 +446,24 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
             }
             None => Err("cua_cloud_request_required".into()),
         },
-        "device_mcp_manage_v2" => {
+        "device_mcp_manage_v2" => match request.args.as_ref().and_then(|args| args.get("input")) {
+            Some(input) => {
+                state
+                    .runtime
+                    .device_mcp_manage_v2(&state.trusted_sessions, input.clone())
+                    .await
+            }
+            None => Err("device_mcp_request_invalid".into()),
+        },
+        "audio_sessions_manage_v2" => {
             match request.args.as_ref().and_then(|args| args.get("input")) {
-                Some(input) => state.runtime.device_mcp_manage_v2(&state.trusted_sessions, input.clone()).await,
-                None => Err("device_mcp_request_invalid".into()),
+                Some(input) => {
+                    state
+                        .runtime
+                        .audio_sessions_manage_v2(&state.trusted_sessions, input.clone())
+                        .await
+                }
+                None => Err("audio_session_request_invalid".into()),
             }
         }
         "computer_use_manage_v2" => {
@@ -723,6 +753,8 @@ fn browser_bridge_status_payload(runtime: &LocalRuntimeService) -> Result<Value,
         "manifests": native_host::manifest_statuses(),
         "registryPath": registry_path,
         "extensionIds": status.browser_bridge.extension_ids,
+        "browserInstances": status.browser_bridge.browser_instances,
+        "cdpEndpoints": status.browser_bridge.cdp_endpoints,
     }))
 }
 

@@ -38,6 +38,8 @@ use agistack_core::ports::{CoreError, CoreResult, ToolHost};
 use crate::actions::{
     TOOL_CLAIM_TAB, TOOL_CLICK, TOOL_MARK_TAB, TOOL_NAVIGATE, TOOL_NEW_TAB, TOOL_SCROLL, TOOL_TYPE,
 };
+pub use crate::browser_identity::browser_family;
+pub(crate) use crate::browser_identity::Backend;
 use crate::cdp_policy::{check_cdp_allowed_with_mode, CdpPolicyMode};
 use crate::protocol::{
     BridgeNotification, LeaseOrigin, OnCdpDetachParams, OnCdpEventParams, TabMark, METHOD_ATTACH,
@@ -45,8 +47,6 @@ use crate::protocol::{
     NOTIFY_ON_CDP_DETACH, NOTIFY_ON_CDP_EVENT,
 };
 use crate::snapshot::{self, PLACEHOLDER_CONTEXT_ID, PLACEHOLDER_FRAME_ID, SNAPSHOT_WORLD_NAME};
-pub(crate) use crate::browser_identity::Backend;
-pub use crate::browser_identity::browser_family;
 
 /// Registered tool names (exact — the agent engine matches on these strings).
 pub const TOOL_LIST_TABS: &str = "browser_list_tabs";
@@ -89,17 +89,26 @@ pub trait BridgeEndpoint: Send + Sync + 'static {
     async fn resolve_browser(&self, selector: &str) -> CoreResult<String> {
         Backend::parse(selector).map(|backend| backend.as_str())
     }
-    fn scoped_browsers(&self) -> Option<Value> { None }
+    /// Select from the current inventory using an explicit identity or default.
+    async fn select_browser(&self, options: &Value) -> CoreResult<Value> {
+        crate::browser_selection::select_browser(&self.browsers().await?, "iab", options)
+    }
+    fn scoped_browsers(&self) -> Option<Value> {
+        None
+    }
     /// Connected browser instances. Single-provider transports keep their legacy
     /// family identity; the desktop bridge overrides this with scoped identities.
     async fn browsers(&self) -> CoreResult<Value> {
-        if let Some(browsers) = self.scoped_browsers() { return Ok(browsers); }
+        if let Some(browsers) = self.scoped_browsers() {
+            return Ok(browsers);
+        }
         let mut browsers = Vec::new();
         for backend in [Backend::Chrome, Backend::Edge, Backend::Iab] {
             let result = if backend == Backend::Chrome {
                 self.request("getTabs", json!({})).await
             } else {
-                self.request_on(&backend.wire_name(), "getTabs", json!({})).await
+                self.request_on(&backend.wire_name(), "getTabs", json!({}))
+                    .await
             };
             match result {
                 Ok(_) => browsers.push(json!({"id":backend.as_str(),"type":backend.family(),"backend":backend.family()})),
@@ -157,7 +166,9 @@ pub(crate) struct TabLease {
 /// per-tab dimension is keyed by `(backend, tabId)`: the same tab id on two
 /// backends refers to different tabs.
 pub(crate) struct HostState {
-    pub(crate) input_states: Mutex<HashMap<(Backend, u64), Arc<tokio::sync::Mutex<crate::input_visibility::InputState>>>>,
+    pub(crate) input_states: Mutex<
+        HashMap<(Backend, u64), Arc<tokio::sync::Mutex<crate::input_visibility::InputState>>>,
+    >,
     /// Tabs we have already sent `attach` for (attach is idempotent, but the
     /// memo avoids a round trip per tool call).
     pub(crate) attached: Mutex<HashSet<(Backend, u64)>>,
@@ -188,18 +199,57 @@ impl HostState {
     fn handle_notification(&self, notification: &BridgeNotification) {
         match notification.method.as_str() {
             "onBrowserDisconnected" => {
-                let Some(identity) = notification.params["backend"].as_str() else { return; };
-                let Ok(backend) = Backend::parse(identity) else { return; };
-                self.attached.lock().unwrap().retain(|(owner, _)| *owner != backend);
-                self.console_enabled.lock().unwrap().retain(|(owner, _)| *owner != backend);
-                self.page_enabled.lock().unwrap().retain(|(owner, _)| *owner != backend);
-                self.console_buffers.lock().unwrap().retain(|(owner, _), _| *owner != backend);
-                self.tab_urls.lock().unwrap().retain(|(owner, _), _| *owner != backend);
-                self.facade_events.lock().unwrap().retain(|(owner, _), _| *owner != backend);
-                self.browser_auth.lock().unwrap().retain(|(owner, _), _| *owner != backend);
-                self.worlds.lock().unwrap().retain(|(owner, _, _), _| *owner != backend);
-                self.facade_sessions.lock().unwrap().retain(|(owner, _), _| *owner != backend);
-                self.leases.lock().unwrap().values_mut().for_each(|leases| leases.retain(|lease| lease.backend != backend));
+                let Some(identity) = notification.params["backend"].as_str() else {
+                    return;
+                };
+                let Ok(backend) = Backend::parse(identity) else {
+                    return;
+                };
+                self.attached
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _)| *owner != backend);
+                self.console_enabled
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _)| *owner != backend);
+                self.page_enabled
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _)| *owner != backend);
+                self.console_buffers
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _), _| *owner != backend);
+                self.tab_urls
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _), _| *owner != backend);
+                self.facade_events
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _), _| *owner != backend);
+                self.browser_auth
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _), _| *owner != backend);
+                self.input_states
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _), _| *owner != backend);
+                self.worlds
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _, _), _| *owner != backend);
+                self.facade_sessions
+                    .lock()
+                    .unwrap()
+                    .retain(|(owner, _), _| *owner != backend);
+                self.leases
+                    .lock()
+                    .unwrap()
+                    .values_mut()
+                    .for_each(|leases| leases.retain(|lease| lease.backend != backend));
             }
             NOTIFY_ON_CDP_EVENT => {
                 let Ok(event) =
@@ -209,7 +259,10 @@ impl HostState {
                 };
                 let backend = Backend::from_wire(event.backend.as_deref());
                 if let Ok(mut buffers) = self.facade_events.lock() {
-                    buffers.entry((backend, event.tab_id)).or_default().push(&event);
+                    buffers
+                        .entry((backend, event.tab_id))
+                        .or_default()
+                        .push(&event);
                 }
                 if let Some(entry) = console_entry(&event) {
                     let mut buffers = self.console_buffers.lock().unwrap();
@@ -409,12 +462,28 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         &self,
         backend: Backend,
         method: &str,
-        params: Value,
+        mut params: Value,
     ) -> CoreResult<Value> {
-        let _input_lock = self.serialize_input_request(backend, method, &params).await?;
+        let _input_lock = self
+            .serialize_input_request(backend, method, &params)
+            .await?;
+        if matches!(backend.family(), "iab" | "dot") {
+            crate::caller::attach(&mut params);
+            // Persistent handles re-claim on first use in a fresh turn. Remember
+            // every tab-bound request so cleanup also covers read-only re-use.
+            if let (Some(caller), Some(tab_id)) =
+                (crate::caller::current(), params["tabId"].as_u64())
+            {
+                self.record_lease(&caller.turn_id, backend, tab_id, LeaseOrigin::User);
+            }
+        }
         match backend {
             Backend::Chrome => self.endpoint.request(method, params).await,
-            Backend::Iab | Backend::Edge | Backend::Instance { .. } => {
+            Backend::Iab
+            | Backend::Dot
+            | Backend::Edge
+            | Backend::Cdp
+            | Backend::Instance { .. } => {
                 self.endpoint
                     .request_on(&backend.wire_name(), method, params)
                     .await
@@ -425,12 +494,17 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     /// Pin the target before looking up its URL or requesting permission. A
     /// connection replacement must fail rather than select another profile.
     pub async fn bind_input(&self, tool: &str, input: &Value) -> CoreResult<Value> {
-        if input["operation"] == "browsers.list"
-            || (tool == TOOL_LIST_TABS && input.get("backend").is_none()) {
+        if matches!(
+            input["operation"].as_str(),
+            Some("browsers.list" | "browsers.resolve")
+        ) || (tool == TOOL_LIST_TABS && input.get("backend").is_none())
+        {
             return Ok(input.clone());
         }
         let mut bound = input.clone();
-        let object = bound.as_object_mut().ok_or_else(|| tool_err("browser input must be an object"))?;
+        let object = bound
+            .as_object_mut()
+            .ok_or_else(|| tool_err("browser input must be an object"))?;
         let selector = match object.get("browserId").or_else(|| object.get("backend")) {
             None | Some(Value::Null) => "chrome",
             Some(Value::String(selector)) => selector.as_str(),
@@ -439,18 +513,23 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         let identity = self.endpoint.resolve_browser(selector).await?;
         Backend::parse(&identity)?;
         object.insert("backend".into(), json!(identity));
-        if object.contains_key("browserId") { object.insert("browserId".into(), json!(identity)); }
+        if object.contains_key("browserId") {
+            object.insert("browserId".into(), json!(identity));
+        }
         Ok(bound)
     }
 
     /// Send `attach` for `tab_id` unless already attached.
     pub(crate) async fn ensure_attached(&self, backend: Backend, tab_id: u64) -> CoreResult<()> {
-        if self
-            .state
-            .attached
-            .lock()
-            .unwrap()
-            .contains(&(backend, tab_id))
+        // IAB and Dot share native pages across callers. Even a cached read
+        // must revalidate the current claim before exposing cached page data.
+        if !matches!(backend.family(), "iab" | "dot")
+            && self
+                .state
+                .attached
+                .lock()
+                .unwrap()
+                .contains(&(backend, tab_id))
         {
             return Ok(());
         }
@@ -541,7 +620,10 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             .iter_mut()
             .find(|l| l.backend == backend && l.tab_id == tab_id)
         {
-            existing.origin = origin;
+            // Binding a freshly created tab must not turn it into a user tab.
+            if origin == LeaseOrigin::Agent {
+                existing.origin = origin;
+            }
             return;
         }
         run.push(TabLease {
@@ -637,7 +719,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     /// any per-run cached consent here; M2 holds none.)
     pub async fn turn_ended(&self, run_id: &str) {
         if let Ok(mut sessions) = self.state.facade_sessions.lock() {
-            sessions.retain(|(_, owner),_|owner!=run_id);
+            sessions.retain(|(_, owner), _| owner != run_id);
         }
         let leases = self
             .state
@@ -665,8 +747,12 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             }
         }
         for (backend, payloads) in by_backend {
+            let mut params = json!({ "leases": payloads });
+            if matches!(backend.family(), "iab" | "dot") {
+                params["turnId"] = json!(run_id);
+            }
             if let Err(e) = self
-                .backend_request(backend, METHOD_TURN_ENDED, json!({ "leases": payloads }))
+                .backend_request(backend, METHOD_TURN_ENDED, params)
                 .await
             {
                 tracing::warn!(
@@ -691,10 +777,21 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         if tab_id <= 0 {
             return Err(tool_err("tab id must be a positive integer"));
         }
-        let result = self.backend_request(backend, METHOD_GET_TABS, json!({})).await?;
-        let url = result.get("tabs").and_then(Value::as_array)
-            .and_then(|tabs| tabs.iter().find(|tab| tab.get("tabId").and_then(Value::as_i64) == Some(tab_id)))
-            .and_then(|tab| tab.get("url")).and_then(Value::as_str)
+        let method = if matches!(backend.family(), "iab" | "dot") {
+            "getUserTabs"
+        } else {
+            METHOD_GET_TABS
+        };
+        let result = self.backend_request(backend, method, json!({})).await?;
+        let url = result
+            .get("tabs")
+            .and_then(Value::as_array)
+            .and_then(|tabs| {
+                tabs.iter()
+                    .find(|tab| tab.get("tabId").and_then(Value::as_i64) == Some(tab_id))
+            })
+            .and_then(|tab| tab.get("url"))
+            .and_then(Value::as_str)
             .ok_or_else(|| tool_err(format!("tab {tab_id} not found on {}", backend.as_str())))?;
         self.set_tab_url(backend, tab_id as u64, url);
         Ok(url.to_owned())
@@ -712,7 +809,15 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             return Ok(url.clone());
         }
         let tabs = self
-            .backend_request(backend, METHOD_GET_TABS, json!({}))
+            .backend_request(
+                backend,
+                if matches!(backend.family(), "iab" | "dot") {
+                    "getUserTabs"
+                } else {
+                    METHOD_GET_TABS
+                },
+                json!({}),
+            )
             .await?;
         let url = tabs
             .get("tabs")
@@ -738,10 +843,15 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         let aggregate = matches!(input.get("backend"), None | Some(Value::Null));
         let backends = if aggregate {
             if let Some(browsers) = self.endpoint.scoped_browsers() {
-                browsers.as_array().ok_or_else(|| tool_err("invalid browser inventory"))?
-                    .iter().map(|browser| Backend::parse(browser["id"].as_str().unwrap_or_default()))
+                browsers
+                    .as_array()
+                    .ok_or_else(|| tool_err("invalid browser inventory"))?
+                    .iter()
+                    .map(|browser| Backend::parse(browser["id"].as_str().unwrap_or_default()))
                     .collect::<CoreResult<Vec<_>>>()?
-            } else { vec![Backend::Chrome, Backend::Iab] }
+            } else {
+                vec![Backend::Chrome, Backend::Iab]
+            }
         } else {
             vec![backend_of(input)?]
         };
@@ -1037,7 +1147,9 @@ impl<E: BridgeEndpoint> ToolHost for BrowserToolHost<E> {
             TOOL_CLAIM_TAB => self.claim_tab(&input).await?,
             TOOL_MARK_TAB => self.mark_tab(&input).await?,
             TOOL_CDP_RAW => self.cdp_raw(&input).await?,
-            crate::facade::TOOL_READ | crate::facade::TOOL_WRITE | crate::facade::TOOL_CDP => self.facade_operation(tool, &input).await?,
+            crate::facade::TOOL_READ | crate::facade::TOOL_WRITE | crate::facade::TOOL_CDP => {
+                self.facade_operation(tool, &input).await?
+            }
             other => return Err(tool_err(format!("unknown browser tool: {other}"))),
         };
         if let Some((backend, tab, previous)) = navigation {
@@ -1059,7 +1171,7 @@ pub fn list_tool_metadata() -> Vec<Value> {
             "type": "string",
             "default": "chrome",
             "description": "Exact browser instance id from the inventory. Family selectors \
-                chrome, edge and iab are accepted only when exactly one instance is connected.",
+                chrome, edge, iab and cdp are accepted only when exactly one instance is connected.",
         })
     };
     let mut tools = vec![
@@ -1285,7 +1397,11 @@ pub fn list_tool_metadata() -> Vec<Value> {
             },
         }),
     ]);
-    for name in [crate::facade::TOOL_READ, crate::facade::TOOL_WRITE, crate::facade::TOOL_CDP] {
+    for name in [
+        crate::facade::TOOL_READ,
+        crate::facade::TOOL_WRITE,
+        crate::facade::TOOL_CDP,
+    ] {
         tools.push(json!({"name":name,"description":"Execute a structured browser facade operation with validated authority effects.","inputSchema":{"type":"object","properties":{"browserId":{"type":"string"},"tabId":{"oneOf":[{"type":"string"},{"type":"integer"}]},"operation":{"type":"string"},"args":{"type":"array"}},"required":["operation","args"]}}));
     }
     tools

@@ -299,7 +299,8 @@ def test_actual_provider_media_is_redacted_without_changing_transmitted_body():
 
 
 def test_roster_has_all_declared_tools_and_sessions_are_separate():
-    assert len(TOOL_NAMES) == 26 and len(READ_TOOL_NAMES) == 6
+    assert len(TOOL_NAMES) == 29 and len(READ_TOOL_NAMES) == 8
+    assert "computer_audio_read" in READ_TOOL_NAMES
     assert "computer_connector_call" not in READ_TOOL_NAMES
     assert native.native_session_id("same-conversation", "parent") != native.native_session_id(
         "same-conversation", "child"
@@ -392,19 +393,25 @@ async def test_processor_termination_releases_completed_native_session(monkeypat
 async def test_hitl_pause_preserves_native_session_and_resume_uses_same_identity(monkeypatch):
     cleanup = AsyncMock()
     monkeypatch.setattr(native, "cancel_native_computer_run", cleanup)
-    monkeypatch.setattr("src.infrastructure.plugins.v2.boundary.attach_current_generation_v2", lambda _ctx: None)
+    monkeypatch.setattr(
+        "src.infrastructure.plugins.v2.boundary.attach_current_generation_v2", lambda _ctx: None
+    )
     processor = SessionProcessor(config=ProcessorConfig(model="test"), tools=[])
     processor._resolve_agent_loop = lambda: None
+
     async def paused(*_args):
         processor._state = ProcessorState.WAITING_PERMISSION
-        yield {"type":"permission_asked"}
+        yield {"type": "permission_asked"}
+
     processor._dispatch_external_loop = paused
     _ = [event async for event in processor.process("engine-session", [])]
     cleanup.assert_not_awaited()
     first_identity = native.native_session_id("engine-session", "run")
+
     async def resumed(*_args):
         processor._state = ProcessorState.COMPLETED
-        yield {"type":"done"}
+        yield {"type": "done"}
+
     processor._dispatch_external_loop = resumed
     _ = [event async for event in processor.process("engine-session", [])]
     assert native.native_session_id("engine-session", "run") == first_identity

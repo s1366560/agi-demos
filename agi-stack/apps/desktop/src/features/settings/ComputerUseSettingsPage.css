@@ -192,7 +192,7 @@
   width: 18px;
   height: 21px;
   pointer-events: none;
-  fill: var(--desktop-accent, #6366f1);
+  fill: var(--desktop-accent);
   stroke: white;
   stroke-width: 1.5;
   filter: drop-shadow(0 1px 2px #0008);

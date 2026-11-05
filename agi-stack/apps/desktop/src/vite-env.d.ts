@@ -100,6 +100,10 @@ type DesktopFileIngestResult = Readonly<{
 }>;
 
 type DesktopIabTabSnapshot = Readonly<{
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  loading?: boolean;
+  ownership?: { sessionId: string; origin: 'agent' | 'user'; controller: 'agent' | 'user'; callerId: string | null; mark: 'handoff' | 'deliverable' | null };
   tabId: number;
   windowId: number;
   title: string;
@@ -172,7 +176,11 @@ interface Window {
       onStateChanged(listener: (state: DesktopUpdateLifecycleState) => void): () => void;
     }>;
     iab?: Readonly<{
-      status(): Promise<{ status: string }>;
+      activateContext(context: { conversation_id: string | null; mode: string; credential?: string; tenant_id: string; project_id: string }): Promise<{ session_id: string | null }>;
+      navigateTab(tabId: number, url: string): Promise<void>;
+      navigateHistory(tabId: number, direction: 'back' | 'forward' | 'reload'): Promise<void>;
+      takeOver(tabId: number): Promise<void>;
+      status(): Promise<{ status: string; contextReady?: boolean }>;
       listTabs(): Promise<DesktopIabTabsPayload>;
       createTab(url?: string): Promise<{ tabId: number }>;
       closeTab(tabId: number): Promise<void>;

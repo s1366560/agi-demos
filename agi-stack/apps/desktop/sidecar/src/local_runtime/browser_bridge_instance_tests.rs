@@ -45,7 +45,11 @@ async fn instance_url(
     let input = json!({"backend":browser,"tabId":7});
     let pending = tokio::spawn(async move { host.current_url_for_input(&input, 7).await });
     let (id, method, _) = broker_next_request(socket).await;
-    assert_eq!(method, "getTabs");
+    let expected_method = match agistack_adapters_browser::host::browser_family(browser).unwrap() {
+        "iab" | "dot" => "getUserTabs",
+        _ => "getTabs",
+    };
+    assert_eq!(method, expected_method);
     broker_respond(socket, id, json!({"tabs":[{"tabId":7,"url":expected}]})).await;
     assert_eq!(pending.await.unwrap().unwrap(), expected);
 }

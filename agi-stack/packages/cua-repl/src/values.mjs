@@ -16,7 +16,13 @@ export function index(value, nullable = false) {
   return value;
 }
 
+export function stringValue(value) {
+  if (typeof value !== 'string') throw new TypeError('value must be a string');
+  return value;
+}
+
 export function point(value) {
+  if (Array.isArray(value) && value.length === 2) value = { x: value[0], y: value[1] };
   if (!value || !Number.isFinite(value.x) || !Number.isFinite(value.y)) throw new TypeError('point requires finite x and y');
   return { x: value.x, y: value.y };
 }
@@ -32,9 +38,19 @@ export function duration(value, platform) {
   return { duration_ms: value };
 }
 
+export function selectionCursor(value = 'text') {
+  const mapping = { text: 'select', cursor_before: 'before', cursor_after: 'after', select: 'select', before: 'before', after: 'after' };
+  if (!Object.hasOwn(mapping, value)) throw new TypeError('invalid selection type');
+  return mapping[value];
+}
+
 export function imageBytes(value) {
   if (!value) return undefined;
-  const data = value.dataBase64 ?? value.data;
+  let data = value.dataBase64 ?? value.data;
+  if (data === undefined && typeof value.url === 'string' && value.url.startsWith('data:image/')) {
+    const comma = value.url.indexOf(',');
+    if (comma > 0 && value.url.slice(0, comma).endsWith(';base64')) data = value.url.slice(comma + 1);
+  }
   if (typeof data !== 'string') throw new Error('host did not provide authorized screenshot bytes');
   return Uint8Array.from(Buffer.from(data, 'base64'));
 }

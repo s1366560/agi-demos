@@ -198,6 +198,8 @@ pub(crate) struct ConversationSessionProjectionResponse {
     authority_id: String,
     conversation: SessionConversationResponse,
     execution: SessionExecutionResponse,
+    current_plan: Option<SessionAgentPlanResponse>,
+    plan_history: Vec<SessionAgentPlanResponse>,
     conversation_tasks: Vec<SessionConversationTaskResponse>,
     workspace_plan_context: Option<SessionWorkspacePlanContextResponse>,
     pending_hitl: Vec<SessionPendingHitlResponse>,
@@ -302,7 +304,7 @@ pub(super) struct SessionPlanRunResponse {
     pub(super) id: String,
     pub(super) conversation_id: String,
     pub(super) project_id: String,
-    pub(super) plan_version_id: String,
+    pub(super) plan_version_id: Option<String>,
     pub(super) idempotency_key: String,
     pub(super) message_id: String,
     pub(super) request_message: String,
@@ -340,7 +342,7 @@ pub(super) struct SessionWorkspaceAttemptResponse {
     pub(super) completed_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct SessionConversationTaskResponse {
     pub(super) id: String,
     pub(super) conversation_id: String,
@@ -350,6 +352,17 @@ pub(super) struct SessionConversationTaskResponse {
     pub(super) order_index: i32,
     pub(super) created_at: DateTime<Utc>,
     pub(super) updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(super) struct SessionAgentPlanResponse {
+    id: String,
+    conversation_id: String,
+    version: i32,
+    status: String,
+    tasks: Vec<SessionConversationTaskResponse>,
+    created_at: DateTime<Utc>,
+    approved_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -396,7 +409,7 @@ pub(super) struct SessionPendingHitlResponse {
     pub(super) created_at: DateTime<Utc>,
     pub(super) expires_at: Option<DateTime<Utc>>,
     pub(super) authority_revision: u64,
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) decision: Option<agistack_core::agent::types::DecisionContext>,
 }
 
@@ -604,6 +617,8 @@ pub(super) fn build_projection(
             current_attempt,
             attempt_history: snapshot.attempts,
         },
+        current_plan: None,
+        plan_history: Vec::new(),
         conversation_tasks: snapshot.conversation_tasks,
         workspace_plan_context: snapshot.workspace_plan_context,
         pending_hitl: snapshot.pending_hitl,

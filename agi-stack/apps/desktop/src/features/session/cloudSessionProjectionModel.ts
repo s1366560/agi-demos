@@ -779,7 +779,18 @@ function readCloudHitl(
     expires_at: expiresAt,
     ...(permission ? { permission } : {}),
     ...(decision ? { decision } : {}),
+    ...(recordValue(request.native_binding) ? { native_binding: readCloudNativeBinding(request.native_binding) } : {}),
   };
+}
+
+function readCloudNativeBinding(value: unknown): Record<string, unknown> {
+  const binding = recordValue(value);
+  if (!binding) return {};
+  const result: Record<string, unknown> = {};
+  if (typeof binding.capability === 'string') result.capability = binding.capability;
+  if (typeof binding.native_request_id === 'string') result.native_request_id = binding.native_request_id;
+  if (recordValue(binding.execution_step)) result.execution_step = {};
+  return result;
 }
 
 function readCloudPermissionRequest(

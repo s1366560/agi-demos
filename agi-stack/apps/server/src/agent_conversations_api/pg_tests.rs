@@ -165,6 +165,7 @@ async fn postgres_list_authorizes_legacy_metadata_and_identifier_workspace() {
                         limit: None,
                         offset: None,
                         workspace_id: None,
+                        unbound_only: false,
                     },
                 )
                 .await;

@@ -13,6 +13,9 @@ pub(super) struct Record {
     pub receipt: Value,
     #[serde(default)]
     pub acknowledged: bool,
+    /// Issued by the engine at audio_start; never accepted from a native receipt.
+    #[serde(default)]
+    pub engine_session_id: Option<String>,
 }
 
 // IPC-2 recordings predate mode selection and used foreground input. This

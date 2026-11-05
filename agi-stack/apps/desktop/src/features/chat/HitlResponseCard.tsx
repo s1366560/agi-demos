@@ -35,6 +35,7 @@ import {
   hitlDecisionView,
   hitlEnvVarView,
   hitlRequestExpiry,
+  isCloudExecutionStepApproval,
   permissionParameterPreview,
   toggleDecisionSelection,
 } from './hitlResponseCardModel';
@@ -171,7 +172,7 @@ export function HitlResponseCard({
     setSubmitError(null);
     try {
       const expectedRevision = approvalRequest?.authority_revision;
-      if (computerUseConsent && device.mode === 'cloud') {
+      if (computerUseConsent && device.mode === 'cloud' && !isCloudExecutionStepApproval(approvalRequest)) {
         if (!device.client) throw new Error('cua_native_unavailable');
         const id = approvalRequest?.decision?.target.id;
         if (!id) throw new Error('cua_request_expired');

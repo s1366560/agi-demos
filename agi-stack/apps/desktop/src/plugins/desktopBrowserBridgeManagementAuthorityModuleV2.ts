@@ -4,7 +4,7 @@ import {
   type ContextV2,
   type PluginDefinitionV2,
 } from '@agistack/plugin-runtime';
-import type { DesktopRuntimeConfig } from '../types';
+import type { BrowserProviderConfiguration, DesktopRuntimeConfig } from '../types';
 import type { DesktopRendererGenerationActionsV2 } from './desktopRendererGenerationContextV2';
 import { createDesktopBrowserBridgeManagementNativeProjectionV2 } from './desktopBrowserBridgeManagementNativeProjectionV2';
 import {
@@ -40,6 +40,10 @@ export interface DesktopBrowserBridgeManagementClientV2 {
     enabled: boolean,
     signal?: AbortSignal,
   ): Promise<BrowserBridgeManagementResultsV2['setFullCdpEnabled']>;
+  setProviders(
+    providers: BrowserProviderConfiguration,
+    signal?: AbortSignal,
+  ): Promise<BrowserBridgeManagementResultsV2['setProviders']>;
   install(signal?: AbortSignal): Promise<BrowserBridgeManagementResultsV2['install']>;
   uninstall(signal?: AbortSignal): Promise<BrowserBridgeManagementResultsV2['uninstall']>;
 }
@@ -54,7 +58,9 @@ export function applyDesktopBrowserBridgeManagementAuthorityV2(
     );
   context.provide(
     DESKTOP_BROWSER_BRIDGE_MANAGEMENT_AUTHORITY_SERVICE_V2,
-    Object.freeze({ bindOperation: createDesktopBrowserBridgeManagementNativeProjectionV2 }),
+    Object.freeze({
+      bindOperation: createDesktopBrowserBridgeManagementNativeProjectionV2,
+    }),
   );
 }
 export const desktopBrowserBridgeManagementAuthorityDefinitionV2: PluginDefinitionV2 =
@@ -130,6 +136,8 @@ export function createDesktopBrowserBridgeManagementClientV2(
     setEnabled: (enabled, signal) => operations.setEnabled({ config: frozen, enabled, signal }),
     setFullCdpEnabled: (enabled, signal) =>
       operations.setFullCdpEnabled({ config: frozen, enabled, signal }),
+    setProviders: (providers, signal) =>
+      operations.setProviders({ config: frozen, providers, signal }),
     install: (signal) => operations.install({ config: frozen, signal }),
     uninstall: (signal) => operations.uninstall({ config: frozen, signal }),
   };

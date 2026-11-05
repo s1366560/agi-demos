@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:3345f681916b4570a87450bdc2af4d35f737b1818c51d2092023a31ee692c8'
-    '77","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:a117dcaf7f51b7e35f65a80ee415101bb54cb2337c401fc71343b95d6d6cdb'
+    '45","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1715,8 +1715,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'fcebc65a9e91084db30c9814545c4fba536fc97d9d8c49f3c7a66484c0cb","entrypoint":"applyDesktop'
     'BackendStoresAuthorityV2","module_ref":"builtin://memstack/desktop/backend-stores-author'
     'ity","plugin_id":"memstack-renderer-target-hosts","plugin_version":"2.0.0","targets":["d'
-    'esktop-renderer"]},{"artifact_digest":"sha256:4374bf4192e55fd099a1c170cb0c32de57761edf6d'
-    'e5717dc340277df94103bd","artifact_source":"repo+typescript://agi-stack/apps/desktop/src/'
+    'esktop-renderer"]},{"artifact_digest":"sha256:5f17d6c08026d6023f8e0d2ce599a7a537e2aa2878'
+    '3b5fb56fcc217cf7436416","artifact_source":"repo+typescript://agi-stack/apps/desktop/src/'
     'plugins/desktopBrowserBridgeManagementAuthorityModuleV2.ts","contract":{"config_schema":'
     '{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"'
     'properties":{"strategy":{"const":"native-browser-bridge","type":"string"}},"required":["'
@@ -2218,8 +2218,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '85f2b2f753533f4fc5ee31a0afb624589e108edccd18db","entrypoint":"applyDesktopSessionArtifac'
     'tActionAuthorityV2","module_ref":"builtin://memstack/desktop/session-artifact-action-aut'
     'hority","plugin_id":"memstack-renderer-target-hosts","plugin_version":"2.0.0","targets":'
-    '["desktop-renderer"]},{"artifact_digest":"sha256:fe9b67ec306df988549f4d780d015149b63de29'
-    '8f78497646de9193c3ec211ef","artifact_source":"repo+typescript://agi-stack/apps/desktop/s'
+    '["desktop-renderer"]},{"artifact_digest":"sha256:cbd06430215035e773369af627c40b0b7b44e0f'
+    'c62d812026d796e38569dd9b7","artifact_source":"repo+typescript://agi-stack/apps/desktop/s'
     'rc/plugins/desktopSessionProjectionAuthorityModuleV2.ts","contract":{"config_schema":{"$'
     'schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"pro'
     'perties":{"strategy":{"const":"desktop-api-client","type":"string"}},"required":["strate'
@@ -2930,7 +2930,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     ':"src.infrastructure.plugins.v2.builtin_agent_pool_http_routes:builtin_agent_pool_http_r'
     'outes_definition_v2","module_ref":"builtin://memstack/http/agent-pool-routes","plugin_id'
     '":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_di'
-    'gest":"sha256:20743c21758bf9e037e1a3ae3fc14b3bf74f6261291f14911a6f17fc3ea29d69","artifac'
+    'gest":"sha256:fc46c593b1dc5f8648321030f06f1de05a0944a60ebc091435f43b260a653ffb","artifac'
     't_source":"repo+python://src/infrastructure/plugins/v2/builtin_agent_http_routes.py","co'
     'ntract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addi'
     'tionalProperties":false,"properties":{},"type":"object"},"events":{"emits":[],"handles":'
@@ -4788,7 +4788,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:3345f681916b4570a87450bdc2af4d35f737b1818c51d2092023a31ee692c877"
+    "sha256:a117dcaf7f51b7e35f65a80ee415101bb54cb2337c401fc71343b95d6d6cdb45"
 )
 # fmt: on
 

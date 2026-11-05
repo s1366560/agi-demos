@@ -6,6 +6,7 @@ import type {
   BrowserBridgeStatus,
   BrowserBridgeUninstallResult,
   DesktopRuntimeConfig,
+  BrowserProviderConfiguration,
 } from '../../types';
 const POLL_MS = 5000;
 const empty = () => ({
@@ -22,6 +23,8 @@ const empty = () => ({
   loadError: null as string | null,
   installResult: null as BrowserBridgeInstallResult | null,
   uninstallResult: null as BrowserBridgeUninstallResult | null,
+  providerBusy: false,
+  providerError: null as string | null,
 });
 type State = ReturnType<typeof empty>;
 export function useBrowserBridgeManagementV2(
@@ -49,7 +52,10 @@ export function useBrowserBridgeManagementV2(
     (change: Partial<State>) => {
       setStored((previous) => ({
         lifetime,
-        value: { ...(previous.lifetime === lifetime ? previous.value : empty()), ...change },
+        value: {
+          ...(previous.lifetime === lifetime ? previous.value : empty()),
+          ...change,
+        },
       }));
     },
     [lifetime],
@@ -107,7 +113,11 @@ export function useBrowserBridgeManagementV2(
       const mutation = {};
       lifetime.mutating = mutation;
       if (kind === 'enabled')
-        patch({ optimisticEnabled: next ?? false, toggleBusy: true, toggleError: null });
+        patch({
+          optimisticEnabled: next ?? false,
+          toggleBusy: true,
+          toggleError: null,
+        });
       else if (kind === 'fullCdp')
         patch({
           optimisticFullCdpEnabled: next ?? false,
@@ -162,6 +172,40 @@ export function useBrowserBridgeManagementV2(
     },
     [active, client, enqueue, lifetime, patch],
   );
+  const saveProviders = useCallback(
+    (providers: BrowserProviderConfiguration) => {
+      const signal = lifetime.controller.signal;
+      if (!active(signal) || lifetime.mutating) return Promise.resolve(false);
+      const mutation = {};
+      lifetime.mutating = mutation;
+      patch({ providerBusy: true, providerError: null });
+      let saved = false;
+      return enqueue(async (operationSignal) => {
+        try {
+          const runtimeStatus = await client.setProviders(providers, operationSignal);
+          if (active(operationSignal)) {
+            patch({ runtimeStatus });
+            saved = true;
+            try {
+              const snapshot = await client.loadSnapshot(operationSignal);
+              if (active(operationSignal)) patch({ ...snapshot, loadError: null });
+            } catch (error) {
+              if (active(operationSignal)) patch({ loadError: formatError(error) });
+            }
+          }
+        } catch (error) {
+          if (active(operationSignal)) patch({ providerError: formatError(error) });
+        } finally {
+          if (active(operationSignal)) patch({ providerBusy: false });
+        }
+      })
+        .then(() => saved)
+        .finally(() => {
+          if (lifetime.mutating === mutation) lifetime.mutating = null;
+        });
+    },
+    [active, client, enqueue, lifetime, patch],
+  );
   return {
     ...value,
     enabled:
@@ -176,6 +220,7 @@ export function useBrowserBridgeManagementV2(
     toggleBridge: (next: boolean) => mutate('enabled', next),
     toggleFullCdp: (next: boolean) => mutate('fullCdp', next),
     runRegistration: (action: 'install' | 'uninstall') => mutate(action),
+    saveProviders,
   };
 }
 function formatError(error: unknown): string {

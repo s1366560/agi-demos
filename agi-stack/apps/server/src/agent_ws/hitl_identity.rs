@@ -22,6 +22,7 @@ pub(super) struct MessageScope {
     pub project_id: String,
     pub conversation_id: String,
     pub execution: MessageExecution,
+    pub native: Option<crate::computer_use_device_v2::NativeHumanRequestValidation>,
 }
 
 pub(super) fn bind_engine(engine: ReActEngine, scope: MessageScope) -> ReActEngine {
@@ -57,10 +58,12 @@ impl HitlValidationPort for MessageScope {
 
     async fn validate(
         &self,
-        _context: &HitlValidationContext<'_>,
-        _request: &HitlRequest,
+        context: &HitlValidationContext<'_>,
+        request: &HitlRequest,
     ) -> CoreResult<()> {
-        // Native consent remains validated by the existing park/resume boundary.
+        if let Some(native) = self.native.as_ref() {
+            native.validate(context, request).await?;
+        }
         Ok(())
     }
 }

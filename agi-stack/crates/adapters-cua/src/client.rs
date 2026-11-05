@@ -18,6 +18,8 @@ use tokio::{
     time::{timeout, Duration},
 };
 
+#[path = "client_audio_sessions.rs"]
+mod audio_sessions;
 #[path = "client_bindings.rs"]
 mod bindings;
 #[path = "client_lifecycle.rs"]
@@ -82,6 +84,9 @@ impl CuaClientBuilder {
             input_telemetry: watch::channel(BTreeMap::new()).0,
             input_bindings: Arc::new(bindings::Bindings::default()),
             shutting_down: AtomicBool::new(false),
+            audio_gate: Mutex::new(()),
+            audio_events: broadcast::channel(256).0,
+            audio_pcm: broadcast::channel(256).0,
         }
     }
 }
@@ -101,6 +106,9 @@ struct Connection {
     observations: Mutex<BTreeMap<String, crate::coordinates::ObservationCoordinates>>,
     alive: AtomicBool,
     input_telemetry: watch::Sender<BTreeMap<String, crate::CuaInputTelemetry>>,
+    audio_sessions: SyncMutex<BTreeMap<String, audio_sessions::Binding>>,
+    audio_events: broadcast::Sender<Value>,
+    audio_pcm: broadcast::Sender<Value>,
 }
 /// Dropping a partially dispatched future must not leave a usable poisoned pipe.
 struct ExchangeGuard {
@@ -111,6 +119,17 @@ struct ExchangeGuard {
 impl Drop for ExchangeGuard {
     fn drop(&mut self) {
         if !self.completed {
+            // Run cancellation is scoped by stop_session/cancel. An independent
+            // user recording must not lose its device when that future drops.
+            // Keep the sender until the late reply is drained by the reader.
+            if self
+                .connection
+                .audio_sessions
+                .lock()
+                .is_ok_and(|sessions| sessions.values().any(|value| value.active))
+            {
+                return;
+            }
             if let Ok(mut pending) = self.connection.pending.lock() {
                 pending.remove(&self.id);
             }
@@ -120,6 +139,9 @@ impl Drop for ExchangeGuard {
 }
 
 pub struct CuaClient {
+    audio_gate: Mutex<()>,
+    audio_events: broadcast::Sender<Value>,
+    audio_pcm: broadcast::Sender<Value>,
     shutting_down: AtomicBool,
     input_bindings: Arc<bindings::Bindings>,
     native_status: broadcast::Sender<crate::CuaNativeStatus>,
@@ -230,6 +252,9 @@ impl CuaClient {
             observations: Mutex::new(BTreeMap::new()),
             alive: AtomicBool::new(true),
             input_telemetry: self.input_telemetry.clone(),
+            audio_sessions: SyncMutex::new(BTreeMap::new()),
+            audio_events: self.audio_events.clone(),
+            audio_pcm: self.audio_pcm.clone(),
         });
         let weak = Arc::downgrade(&connection);
         let native_status = self.native_status.clone();
@@ -298,9 +323,11 @@ impl CuaClient {
             id,
             completed: false,
         };
-        let request_timeout = if matches!(method,"locked_use_install" | "locked_use_uninstall") {
+        let request_timeout = if matches!(method, "locked_use_install" | "locked_use_uninstall") {
             self.request_timeout.max(Duration::from_secs(300))
-        } else { self.request_timeout };
+        } else {
+            self.request_timeout
+        };
         let exchange = timeout(request_timeout, async {
             let mut writer = connection.writer.lock().await;
             self.allow_during_shutdown(method)?;

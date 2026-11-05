@@ -36,6 +36,34 @@ test('unknown bare image bytes fail before output and explicit declarations rema
   assert.equal(output[0].content.mimeType, 'image/png');
 });
 
+test('image data URLs and inline artifact receipts preserve encoded bytes and MIME', async () => {
+  for (const [mimeType, bytes] of signatures) {
+    const output = [];
+    const repl = new ReplKernel({ send: value => output.push(value), rpc() { throw new Error('unexpected RPC'); } });
+    const data = bytes.toString('base64');
+    const dataUrl = `data:${mimeType};base64,${data}`;
+    for (const value of [dataUrl, { data_url: dataUrl }, { url: dataUrl },
+      { artifact_id: 'owned-inline-image', data_base64: data, mime_type: mimeType }]) {
+      await repl.execute('inline', `nodeRepl.emitImage(${JSON.stringify(value)});`);
+    }
+    assert.equal(output.length, 4);
+    assert.ok(output.every(value => value.content.type === 'image'
+      && value.content.mimeType === mimeType && value.content.data === data));
+  }
+});
+
+test('malformed image data URLs fail before output without reading paths or remote URLs', async () => {
+  const output = [];
+  const repl = new ReplKernel({ send: value => output.push(value), rpc() { throw new Error('unexpected RPC'); } });
+  for (const value of ['data:image/png,raw', 'data:image/png;base64,not base64',
+    'data:audio/wav;base64,AQID', { data_url: 'data:image/png;base64,AQID', mimeType: 'image/jpeg' },
+    { artifact_id: 'opaque-image', filepath: '/private/image.png', mime_type: 'image/png' },
+    { url: 'https://example.test/private-image.png' }]) {
+    await assert.rejects(repl.execute('invalid', `nodeRepl.emitImage(${JSON.stringify(value)});`), /image|data URL/);
+  }
+  assert.deepEqual(output, []);
+});
+
 test('public browser screenshot bytes retain JPEG encoding through the bare emitImage API', async () => {
   const output = [];
   const jpeg = signatures[1][1].toString('base64');

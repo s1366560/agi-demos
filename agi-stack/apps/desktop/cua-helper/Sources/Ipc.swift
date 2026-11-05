@@ -80,6 +80,19 @@ final class IpcServer {
         // with replies. Only high-frequency input telemetry is coalesced.
         active.output.enqueue(["jsonrpc": "2.0", "method": "native_status", "params": value])
     }
+    static func notifyAudioSession(_ value: [String: Any]) {
+        guard let active = active, active.sendsNotifications else { return }
+        active.output.enqueue(["jsonrpc": "2.0", "method": "audio_session_updated", "params": value])
+    }
+    static func notifyAudioPCM(_ value: [String: Any]) {
+        guard let active = active, active.sendsNotifications else { return }
+        let id = value["audio_session_id"] as? String ?? ""
+        let source = value["source"] as? String ?? ""
+        // Under backpressure retain the latest packet; sequence gaps are explicit
+        // and the host repairs the transcript from durable audio segments.
+        active.output.enqueue(["jsonrpc": "2.0", "method": "audio_session_pcm", "params": value],
+            notificationKey: "audio:" + id + ":" + source)
+    }
     static func notifyInput(_ value: [String: Any]) {
         guard let active = active else { return }
         active.notificationLock.lock(); let enabled = active.inputNotificationsEnabled; active.notificationLock.unlock()
@@ -141,6 +154,7 @@ final class IpcServer {
         }
     }
     static func stopEverything(quit: Bool = false) {
+        if quit { MeetingAudioSessions.shared.interruptAll(reason: "client_exited") }
         if quit { active?.enableNotifications(false) }
         Sessions.shared.stopAll()
         guard let active = active else { if quit { exit(0) }; return }
@@ -185,6 +199,7 @@ final class IpcServer {
             } catch { break }
         }
         enableNotifications(false)
+        MeetingAudioSessions.shared.interruptAll(reason: "host_disconnected")
         LockedUseCoordinator.shared.revokeImmediately(reason: "host_disconnected")
         Sessions.shared.stopAll()
         executionQueue.async { Sessions.shared.endAll(); exit(0) }
@@ -238,7 +253,7 @@ final class IpcServer {
             NativePresentation.shared.update(session, phase: "paused")
         }
         let queuedParams = boundParams
-        let queue = ["audio_status", "audio_stop", "audio_ack"].contains(method) ? audioControlQueue : executionQueue
+        let queue = (["audio_status", "audio_stop", "audio_ack"].contains(method) || MeetingAudioSessions.methods.contains(method)) ? audioControlQueue : executionQueue
         queue.async { [self] in
             switch dispatch(method, queuedParams) {
             case .success(let result): respond(resultPayload(id: id, result))

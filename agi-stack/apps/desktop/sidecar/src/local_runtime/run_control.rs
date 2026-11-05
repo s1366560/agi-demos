@@ -69,6 +69,10 @@ pub(super) async fn pause_run(
     })?;
     control.request_pause();
     state.cua_repl.cancel_run(&run.id);
+    state
+        .computer_use
+        .release_locked_run(&state, &run.id, "paused")
+        .await;
     Ok(Json(json!({
         "accepted": true,
         "status": "pause_requested",
@@ -136,7 +140,9 @@ pub(super) async fn resume_run(
                 })),
             ));
         }
-        let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
+        let Some(control) =
+            state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated)
+        else {
             return Err((
                 StatusCode::CONFLICT,
                 Json(json!({ "detail": "conversation already running" })),
@@ -148,13 +154,14 @@ pub(super) async fn resume_run(
             "run": run,
         });
         let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
-        let native_authorization = super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
-            authenticated.clone(),
-            plugin_generation.clone(),
-            &conversation,
-            &run.message_id,
-            Some(&run.id),
-        );
+        let native_authorization =
+            super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
+                authenticated.clone(),
+                plugin_generation.clone(),
+                &conversation,
+                &run.message_id,
+                Some(&run.id),
+            );
         let runtime = Arc::clone(&state);
         let conversation_id = conversation.id;
         let project_id = conversation.project_id;
@@ -176,7 +183,8 @@ pub(super) async fn resume_run(
                         None,
                     )
                     .await;
-            }).await;
+            })
+            .await;
         });
         return Ok(Json(response));
     }
@@ -184,7 +192,9 @@ pub(super) async fn resume_run(
         .agent_engine(&conversation, Some(&run))
         .await
         .map_err(execution_environment_error)?;
-    let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
+    let Some(control) =
+        state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated)
+    else {
         return Err((
             StatusCode::CONFLICT,
             Json(json!({ "detail": "conversation already running" })),
@@ -233,13 +243,14 @@ pub(super) async fn resume_run(
         None,
         plugin_generation.map(|Extension(generation)| generation),
     );
-    let native_authorization = super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
-        authenticated.clone(),
-        plugin_generation.clone(),
-        &conversation,
-        &message_id,
-        Some(&running.id),
-    );
+    let native_authorization =
+        super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
+            authenticated.clone(),
+            plugin_generation.clone(),
+            &conversation,
+            &message_id,
+            Some(&running.id),
+        );
     tokio::spawn(async move {
         super::knowledge_authority_v2::agent_access::scope(native_authorization, async move {
             runtime
@@ -252,7 +263,8 @@ pub(super) async fn resume_run(
                     plugin_generation,
                 )
                 .await;
-        }).await;
+        })
+        .await;
     });
     Ok(Json(response))
 }
@@ -401,7 +413,9 @@ pub(super) async fn fork_recovery_run(
         .as_ref()
         .map(|run| run.id.clone())
         .unwrap_or_else(|| format!("local-run-{}", Uuid::new_v4()));
-    let Some(mut control) = state.claim_agent_run_owned(&conversation.id, Some(&reserved_run_id), &authenticated) else {
+    let Some(mut control) =
+        state.claim_agent_run_owned(&conversation.id, Some(&reserved_run_id), &authenticated)
+    else {
         return Err((
             StatusCode::CONFLICT,
             Json(json!({ "detail": "conversation already running" })),
@@ -475,7 +489,9 @@ pub(super) async fn fork_recovery_run(
         }
         if forked.id != reserved_run_id {
             state.release_agent_run_if_control(&conversation.id, &control);
-            let Some(reclaimed) = state.claim_agent_run_owned(&conversation.id, Some(&forked.id), &authenticated) else {
+            let Some(reclaimed) =
+                state.claim_agent_run_owned(&conversation.id, Some(&forked.id), &authenticated)
+            else {
                 return Err((
                     StatusCode::CONFLICT,
                     Json(json!({ "detail": "conversation already running" })),
@@ -631,13 +647,14 @@ pub(super) async fn fork_recovery_run(
     let running_for_task = running.clone();
     let message_id = running.message_id.clone();
     let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
-    let native_authorization = super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
-        authenticated.clone(),
-        plugin_generation.clone(),
-        &conversation,
-        &message_id,
-        Some(&running.id),
-    );
+    let native_authorization =
+        super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
+            authenticated.clone(),
+            plugin_generation.clone(),
+            &conversation,
+            &message_id,
+            Some(&running.id),
+        );
     tokio::spawn(async move {
         super::knowledge_authority_v2::agent_access::scope(native_authorization, async move {
             runtime
@@ -650,7 +667,8 @@ pub(super) async fn fork_recovery_run(
                     plugin_generation,
                 )
                 .await;
-        }).await;
+        })
+        .await;
     });
     Ok(Json(json!({
         "accepted": true,
@@ -713,7 +731,9 @@ pub(super) async fn cancel_run(
         ));
     }
     if is_recovered_unstarted_run(&run) {
-        let Some(control) = state.claim_agent_run_owned(&run.conversation_id, Some(&run.id), &authenticated) else {
+        let Some(control) =
+            state.claim_agent_run_owned(&run.conversation_id, Some(&run.id), &authenticated)
+        else {
             return Err((
                 StatusCode::CONFLICT,
                 Json(json!({ "detail": "conversation already running" })),
@@ -764,7 +784,9 @@ pub(super) async fn cancel_run(
         .agent_engine(&conversation, Some(&run))
         .await
         .map_err(execution_environment_error)?;
-    let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
+    let Some(control) =
+        state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated)
+    else {
         return Err((
             StatusCode::CONFLICT,
             Json(json!({ "detail": "conversation already running" })),
@@ -903,7 +925,9 @@ pub(super) async fn review_run(
                 .agent_engine(&conversation, Some(&run))
                 .await
                 .map_err(execution_environment_error)?;
-            let Some(control) = state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated) else {
+            let Some(control) =
+                state.claim_agent_run_owned(&conversation.id, Some(&run.id), &authenticated)
+            else {
                 return Err((
                     StatusCode::CONFLICT,
                     Json(json!({ "detail": "conversation already running" })),
@@ -957,26 +981,31 @@ pub(super) async fn review_run(
             let message_id = running.message_id.clone();
             let runtime = Arc::clone(&state);
             let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
-            let native_authorization = super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
-                authenticated.clone(),
-                plugin_generation.clone(),
-                &conversation,
-                &message_id,
-                Some(&running.id),
-            );
+            let native_authorization =
+                super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
+                    authenticated.clone(),
+                    plugin_generation.clone(),
+                    &conversation,
+                    &message_id,
+                    Some(&running.id),
+                );
             tokio::spawn(async move {
-                super::knowledge_authority_v2::agent_access::scope(native_authorization, async move {
-                    runtime
-                        .continue_after_hitl_with_generation(
-                            conversation,
-                            message_id,
-                            goal,
-                            Some(running),
-                            control,
-                            plugin_generation,
-                        )
-                        .await;
-                }).await;
+                super::knowledge_authority_v2::agent_access::scope(
+                    native_authorization,
+                    async move {
+                        runtime
+                            .continue_after_hitl_with_generation(
+                                conversation,
+                                message_id,
+                                goal,
+                                Some(running),
+                                control,
+                                plugin_generation,
+                            )
+                            .await;
+                    },
+                )
+                .await;
             });
             Ok(Json(response))
         }

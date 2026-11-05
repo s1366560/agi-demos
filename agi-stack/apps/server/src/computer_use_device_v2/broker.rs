@@ -35,7 +35,19 @@ pub(super) struct Claim {
     pub plan_version_id: String,
     pub allowed_mcp_servers: Vec<String>,
     pub mcp_binding: Option<Value>,
+    pub browser_scope: BrowserScope,
 }
+/// This Rust runtime has only a root execution. Child scopes must be issued by
+/// an executor with an actual child authority; tool arguments cannot enable Dot.
+#[derive(Clone, PartialEq, Serialize)]
+pub(super) struct BrowserScope {
+    execution_id: String,
+    main_conversation_id: String,
+    parent_run_id: String,
+    engine_session_id: String,
+    is_child: bool,
+}
+
 pub(super) struct Request {
     pub connection_id: String,
     pub owner: Owner,
@@ -89,9 +101,13 @@ pub(super) fn digest(input: &str) -> String {
     format!("{:x}", Sha256::digest(input.as_bytes()))
 }
 fn operation_effect(device: &Device, tool: &str, input: &str) -> CoreResult<catalog::Effect> {
-    let definition = device.tools.iter().find(|definition| definition.name == tool)
+    let definition = device
+        .tools
+        .iter()
+        .find(|definition| definition.name == tool)
         .ok_or_else(|| fail("computer_use_tool_unavailable"))?;
-    let input: Value = serde_json::from_str(input).map_err(|_| fail("computer_use_input_invalid"))?;
+    let input: Value =
+        serde_json::from_str(input).map_err(|_| fail("computer_use_input_invalid"))?;
     catalog::effect(definition, &input)
 }
 fn validate_connector_access(
@@ -101,10 +117,15 @@ fn validate_connector_access(
     allowed: &[String],
 ) -> CoreResult<()> {
     if tool != "computer_connector_call" {
-        if let Some(definition) = device.tools.iter().find(|definition| definition.name == tool) {
+        if let Some(definition) = device
+            .tools
+            .iter()
+            .find(|definition| definition.name == tool)
+        {
             if let Some(schema) = &definition.input_schema {
                 if catalog::mcp_binding(schema)?.is_some() {
-                    let input: Value = serde_json::from_str(input).map_err(|_| fail("computer_use_input_invalid"))?;
+                    let input: Value = serde_json::from_str(input)
+                        .map_err(|_| fail("computer_use_input_invalid"))?;
                     catalog::validate_call(definition, &input, allowed)?;
                 }
             }
@@ -139,20 +160,36 @@ impl Broker {
         }
     }
     pub(crate) fn current_tool_display(
-        &self, owner: &Owner, conversation: &str, session: &str, round: u64,
-        tool: &str, input: &str, output: &str,
+        &self,
+        owner: &Owner,
+        conversation: &str,
+        session: &str,
+        round: u64,
+        tool: &str,
+        input: &str,
+        output: &str,
     ) -> Option<Value> {
         let requests = self.requests.lock().expect("CUA requests");
         let mut matching = requests.values().filter(|request| {
-            request.owner == *owner && request.claim.conversation_id == conversation
-                && request.claim.session_id == session && request.claim.round == round
-                && request.claim.tool_name == tool && request.claim.input_json == input
-                && request.status == "completed" && !request.failed && !request.cancelled
-                && request.result.as_ref().is_some_and(|result| result.output_json == output
-                    && result.control_outcome.is_none() && result.permission_required.is_none())
+            request.owner == *owner
+                && request.claim.conversation_id == conversation
+                && request.claim.session_id == session
+                && request.claim.round == round
+                && request.claim.tool_name == tool
+                && request.claim.input_json == input
+                && request.status == "completed"
+                && !request.failed
+                && !request.cancelled
+                && request.result.as_ref().is_some_and(|result| {
+                    result.output_json == output
+                        && result.control_outcome.is_none()
+                        && result.permission_required.is_none()
+                })
         });
         let request = matching.next()?;
-        if matching.next().is_some() { return None; }
+        if matching.next().is_some() {
+            return None;
+        }
         request.display.clone()
     }
     pub(super) fn device(&self, owner: &Owner) -> CoreResult<Device> {
@@ -186,8 +223,13 @@ impl Broker {
         if !run.agent_profile.permits(&context.tool) {
             return Err(fail("computer_use_tool_not_allowed_by_agent"));
         }
-        if device.tools.iter().find(|tool| tool.name == context.tool)
-            .and_then(|tool| tool.input_schema.as_ref()).is_some_and(|schema| schema[catalog::STEP_ONLY] == true) {
+        if device
+            .tools
+            .iter()
+            .find(|tool| tool.name == context.tool)
+            .and_then(|tool| tool.input_schema.as_ref())
+            .is_some_and(|schema| schema[catalog::STEP_ONLY] == true)
+        {
             return Err(fail("computer_use_step_context_required"));
         }
         let effect = operation_effect(&device, &context.tool, input)?;
@@ -207,6 +249,13 @@ impl Broker {
             .unwrap(),
         );
         let mut claim = Claim {
+            browser_scope: BrowserScope {
+                execution_id: run.run_id.clone(),
+                main_conversation_id: conversation.into(),
+                parent_run_id: run.run_id.clone(),
+                engine_session_id: context.session_id.clone(),
+                is_child: false,
+            },
             request_id: id.clone(),
             user_id: owner.user_id.clone(),
             tenant_id: owner.tenant_id.clone(),
@@ -225,28 +274,47 @@ impl Broker {
             authorization_revision: run.authorization_revision,
             plan_version_id: run.plan_version_id.clone(),
             allowed_mcp_servers: run.allowed_mcp_servers.clone(),
-            mcp_binding: device.tools.iter().find(|definition|definition.name == context.tool)
-                .and_then(|definition|definition.input_schema.as_ref())
-                .and_then(|schema|schema.get(catalog::MCP_BINDING)).cloned(),
+            mcp_binding: device
+                .tools
+                .iter()
+                .find(|definition| definition.name == context.tool)
+                .and_then(|definition| definition.input_schema.as_ref())
+                .and_then(|schema| schema.get(catalog::MCP_BINDING))
+                .cloned(),
         };
         {
             let requests = self.requests.lock().expect("CUA requests");
             if let Some(previous) = requests.get(&id) {
-                if previous.claim.input_json != input || previous.claim.tool_name != context.tool
-                    || previous.owner != *owner {
+                if previous.claim.input_json != input
+                    || previous.claim.tool_name != context.tool
+                    || previous.owner != *owner
+                {
                     return Err(fail("computer_use_call_identity_conflict"));
                 }
-                if previous.cancelled { return Err(fail("cua_outcome_unknown")); }
-                if previous.failed {
-                    return Err(CoreError::ToolObservation(previous.result.as_ref()
-                        .map(|result|result.output_json.clone()).unwrap_or_else(||"cua_outcome_unknown".into())));
+                if previous.cancelled {
+                    return Err(fail("cua_outcome_unknown"));
                 }
-                return previous.result.clone().ok_or_else(||fail("cua_outcome_unknown"));
+                if previous.failed {
+                    return Err(CoreError::ToolObservation(
+                        previous
+                            .result
+                            .as_ref()
+                            .map(|result| result.output_json.clone())
+                            .unwrap_or_else(|| "cua_outcome_unknown".into()),
+                    ));
+                }
+                return previous
+                    .result
+                    .clone()
+                    .ok_or_else(|| fail("cua_outcome_unknown"));
             }
         }
-        let pending = if effect == catalog::Effect::Mutate && run.permission_profile != "full_access" {
-            self.authorize_outer_mcp(&device, run, &mut claim).await?
-        } else { None };
+        let pending =
+            if effect == catalog::Effect::Mutate && run.permission_profile != "full_access" {
+                self.authorize_outer_mcp(&device, run, &mut claim).await?
+            } else {
+                None
+            };
         let request_expires_at = claim.expires_at;
         let notify = {
             let mut requests = self.requests.lock().expect("CUA requests");
@@ -279,9 +347,17 @@ impl Broker {
                     owner: owner.clone(),
                     run: run.clone(),
                     claim,
-                    definition: device.tools.iter().find(|tool| tool.name == context.tool)
-                        .cloned().ok_or_else(||fail("computer_use_tool_unavailable"))?,
-                    status: if pending.is_some() { "completed" } else { "requested" },
+                    definition: device
+                        .tools
+                        .iter()
+                        .find(|tool| tool.name == context.tool)
+                        .cloned()
+                        .ok_or_else(|| fail("computer_use_tool_unavailable"))?,
+                    status: if pending.is_some() {
+                        "completed"
+                    } else {
+                        "requested"
+                    },
                     result: pending.clone(),
                     display: None,
                     failed: false,
@@ -293,7 +369,9 @@ impl Broker {
             );
             notify
         };
-        if let Some(pending) = pending { return Ok(pending); }
+        if let Some(pending) = pending {
+            return Ok(pending);
+        }
         let mut guard = RequestGuard {
             broker: self.clone(),
             id: id.clone(),
@@ -373,18 +451,33 @@ impl Broker {
         if !request.run.agent_profile.permits(&request.claim.tool_name) {
             return Err(fail("computer_use_tool_not_allowed_by_agent"));
         }
-        if registered.tools.iter().find(|definition| definition.name == request.claim.tool_name)
-            != Some(&request.definition) {
+        if registered
+            .tools
+            .iter()
+            .find(|definition| definition.name == request.claim.tool_name)
+            != Some(&request.definition)
+        {
             return Err(fail("computer_use_catalog_changed"));
         }
-        if registered.tools.iter().find(|definition| definition.name == request.claim.tool_name)
-            .and_then(|definition| definition.input_schema.as_ref()).is_some_and(|schema| schema[catalog::STEP_ONLY] == true) {
+        if registered
+            .tools
+            .iter()
+            .find(|definition| definition.name == request.claim.tool_name)
+            .and_then(|definition| definition.input_schema.as_ref())
+            .is_some_and(|schema| schema[catalog::STEP_ONLY] == true)
+        {
             return Err(fail("computer_use_step_context_required"));
         }
-        let current_binding = registered.tools.iter().find(|definition|definition.name == request.claim.tool_name)
-            .and_then(|definition|definition.input_schema.as_ref())
-            .and_then(|schema|schema.get(catalog::MCP_BINDING)).cloned();
-        if current_binding != request.claim.mcp_binding { return Err(fail("computer_use_mcp_binding_changed")); }
+        let current_binding = registered
+            .tools
+            .iter()
+            .find(|definition| definition.name == request.claim.tool_name)
+            .and_then(|definition| definition.input_schema.as_ref())
+            .and_then(|schema| schema.get(catalog::MCP_BINDING))
+            .cloned();
+        if current_binding != request.claim.mcp_binding {
+            return Err(fail("computer_use_mcp_binding_changed"));
+        }
         let effect = operation_effect(
             &registered,
             &request.claim.tool_name,
@@ -511,8 +604,16 @@ impl Broker {
         control_outcome: Option<agistack_core::ports::ToolControlOutcome>,
         control_generation: Option<String>,
     ) -> CoreResult<bool> {
-        self.receive_result_with_permission(connection, id, output, is_error, descriptors,
-            control_outcome, control_generation, None)
+        self.receive_result_with_permission(
+            connection,
+            id,
+            output,
+            is_error,
+            descriptors,
+            control_outcome,
+            control_generation,
+            None,
+        )
     }
     pub(super) fn receive_result_with_permission(
         &self,
@@ -526,8 +627,12 @@ impl Broker {
         permission: Option<permission::ValidatedPermission>,
     ) -> CoreResult<bool> {
         let mut result = ToolResult::text(output.clone());
-        if permission.is_some() && (is_error || !descriptors.is_empty() || control_outcome.is_some()
-            || control_generation.is_some()) {
+        if permission.is_some()
+            && (is_error
+                || !descriptors.is_empty()
+                || control_outcome.is_some()
+                || control_generation.is_some())
+        {
             return Err(fail("computer_use_permission_result_invalid"));
         }
         if let Some(outcome) = control_outcome {
@@ -564,15 +669,23 @@ impl Broker {
         let repl = repl_output::declared(&request.definition);
         if output.len() > 1024 * 1024
             || descriptors.len() > if repl { 256 } else { 21 }
-            || (!repl && descriptors
-                .iter()
-                .filter(|d| d.mime_type != "audio/wav")
-                .count()
-                > 20)
+            || (!repl
+                && descriptors
+                    .iter()
+                    .filter(|d| d.mime_type != "audio/wav")
+                    .count()
+                    > 20)
             || descriptors
                 .iter()
                 .try_fold(0u64, |total, d| total.checked_add(d.size_bytes))
-                .is_none_or(|total| total > if repl { 32 * 1024 * 1024 } else { 64 * 1024 * 1024 })
+                .is_none_or(|total| {
+                    total
+                        > if repl {
+                            32 * 1024 * 1024
+                        } else {
+                            64 * 1024 * 1024
+                        }
+                })
         {
             return Err(fail("computer_use_result_invalid"));
         }
@@ -589,9 +702,11 @@ impl Broker {
                     } else {
                         8 * 1024 * 1024
                     }
-                || !(matches!(descriptor.mime_type.as_str(),
-                    "image/png" | "image/jpeg" | "image/webp" | "audio/wav")
-                    || (repl && matches!(descriptor.mime_type.as_str(), "audio/x-wav" | "audio/mpeg")))
+                || !(matches!(
+                    descriptor.mime_type.as_str(),
+                    "image/png" | "image/jpeg" | "image/webp" | "audio/wav"
+                ) || (repl
+                    && matches!(descriptor.mime_type.as_str(), "audio/x-wav" | "audio/mpeg")))
             {
                 return Err(fail("computer_use_media_invalid"));
             }
@@ -620,9 +735,14 @@ impl Broker {
             })
             .collect();
         if is_error || request.media.is_empty() {
-            request.display = if !is_error && result.control_outcome.is_none() && result.permission_required.is_none() {
+            request.display = if !is_error
+                && result.control_outcome.is_none()
+                && result.permission_required.is_none()
+            {
                 repl_output::display(&request.definition, &output, &[])
-            } else { None };
+            } else {
+                None
+            };
             request.result = Some(result);
             request.status = "completed";
             request.notify.notify_one();
@@ -714,18 +834,30 @@ impl Broker {
             .recheck(&owner, &claim.conversation_id, &run)
             .await?;
         let admitted = repl_output::admitted_media(
-            &definition, &output, &media.iter().map(|(descriptor, _)| descriptor.clone()).collect::<Vec<_>>(),
-        ).unwrap_or_default();
+            &definition,
+            &output,
+            &media
+                .iter()
+                .map(|(descriptor, _)| descriptor.clone())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap_or_default();
         let mut attachments = vec![];
         let mut bindings = vec![];
         for (descriptor, bytes) in media {
-            if !media_storage::valid_bytes(&bytes, &descriptor.mime_type, repl_output::declared(&definition)) {
+            if !media_storage::valid_bytes(
+                &bytes,
+                &descriptor.mime_type,
+                repl_output::declared(&definition),
+            ) {
                 return Err(fail("computer_use_media_invalid"));
             }
             if repl_output::declared(&definition) && !admitted.contains(&descriptor.artifact_id) {
                 bindings.push(media_storage::Binding {
-                    native_id: descriptor.artifact_id.clone(), artifact_id: None,
-                    mime_type: descriptor.mime_type.clone(), size_bytes: descriptor.size_bytes,
+                    native_id: descriptor.artifact_id.clone(),
+                    artifact_id: None,
+                    mime_type: descriptor.mime_type.clone(),
+                    size_bytes: descriptor.size_bytes,
                 });
                 continue;
             }
@@ -738,7 +870,8 @@ impl Broker {
                     })
                     .clone()
             };
-            std::fs::create_dir_all(&root).map_err(|_| fail("computer_use_artifact_save_failed"))?;
+            std::fs::create_dir_all(&root)
+                .map_err(|_| fail("computer_use_artifact_save_failed"))?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -757,14 +890,23 @@ impl Broker {
                 .put(&key, bytes.clone(), Some(&descriptor.mime_type))
                 .await?;
             if repl_output::declared(&definition) {
-                bindings.push(media_storage::save(
-                    self.objects.as_ref().ok_or_else(||fail("computer_use_artifact_store_unavailable"))?.as_ref(),
-                    &owner, &claim.conversation_id, id, &descriptor, &bytes,
-                ).await?);
+                bindings.push(
+                    media_storage::save(
+                        self.objects
+                            .as_ref()
+                            .ok_or_else(|| fail("computer_use_artifact_store_unavailable"))?
+                            .as_ref(),
+                        &owner,
+                        &claim.conversation_id,
+                        id,
+                        &descriptor,
+                        &bytes,
+                    )
+                    .await?,
+                );
             }
             let path = root.join(digest(&key));
-            std::fs::write(&path, bytes)
-                .map_err(|_| fail("computer_use_artifact_save_failed"))?;
+            std::fs::write(&path, bytes).map_err(|_| fail("computer_use_artifact_save_failed"))?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;

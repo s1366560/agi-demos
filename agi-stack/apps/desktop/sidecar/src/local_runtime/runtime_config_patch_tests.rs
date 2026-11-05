@@ -42,6 +42,42 @@ struct Fixture {
     runtime: LocalRuntimeService,
 }
 
+#[test]
+fn invalid_default_browser_reference_does_not_mutate_workspace_or_configuration() {
+    let fixture = Fixture::new();
+    let workspace = fixture.root.join("not-created");
+    for invalid in [
+        "",
+        "cdp:connection-generation",
+        "chrome:profile:old",
+        "unknown",
+    ] {
+        let result = fixture
+            .runtime
+            .configure(patch(json!({"workspace_root":workspace,
+            "browser_bridge":{"default_browser_id":invalid}})));
+        assert_eq!(result.unwrap_err(), "browser_default_reference_invalid");
+        assert!(!workspace.exists());
+        assert_eq!(
+            fixture
+                .runtime
+                .status()
+                .config
+                .browser_bridge
+                .default_browser_id,
+            "iab"
+        );
+    }
+    let stable = "cdp:23344bba-c174-42a5-a14d-0534978df6c2";
+    let status = fixture
+        .runtime
+        .configure(patch(
+            json!({"browser_bridge":{"default_browser_id":stable}}),
+        ))
+        .unwrap();
+    assert_eq!(status.config.browser_bridge.default_browser_id, stable);
+}
+
 impl Fixture {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
@@ -120,6 +156,7 @@ async fn workspace_only_sync_preserves_the_live_bridge_and_explicit_false_stops_
         port: 9877,
         full_cdp_access_enabled: false,
         extension_ids: vec!["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()],
+        ..Default::default()
     };
     let status = fixture
         .runtime

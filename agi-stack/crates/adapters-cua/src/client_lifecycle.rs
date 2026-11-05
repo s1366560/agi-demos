@@ -11,7 +11,14 @@ impl CuaClient {
         if self.shutting_down.load(Ordering::Acquire)
             && !matches!(
                 method,
-                "stop_session" | "end_session" | "audio_status" | "audio_stop" | "audio_ack"
+                "stop_session"
+                    | "end_session"
+                    | "audio_status"
+                    | "audio_stop"
+                    | "audio_ack"
+                    | "audio_session_status"
+                    | "audio_session_stop"
+                    | "audio_session_pause"
             )
         {
             return Err(CuaError::Unreachable("helper is shutting down".into()));

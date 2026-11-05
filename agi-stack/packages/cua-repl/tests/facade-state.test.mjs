@@ -68,7 +68,7 @@ test('surface restrictions prevent native discovery and documentation can be rep
   assert.equal(cua.getApp, undefined);
   await cua.rewriteDocumentation();
   const core = output[0];
-  await cua.initialize();
+  assert.deepEqual(await cua.initialize({ emit: false }), { apps: [], browsers: [{ id: 'iab', type: 'iab', tabs: [] }] });
   assert.deepEqual(output, [core]);
   await cua.getBrowser({ id: 'iab' });
   const browser = output[1];
@@ -86,4 +86,17 @@ test('surface restrictions prevent native discovery and documentation can be rep
   for (const enabledSurfaces of [[], ['unknown'], ['browser', 'unknown'], 'browser']) {
     assert.throws(() => createFacade({ enabledSurfaces }), /enabledSurfaces/);
   }
+});
+
+test('one disconnected browser retains its identity and does not erase other browser inventories', async () => {
+  const browsers = [{ id: 'offline', type: 'cdp' }, { id: 'online', type: 'iab' }];
+  const cua = createFacade({ enabledSurfaces: ['browser'], platform: 'darwin', write() {}, emitImage() {}, rpc: async (_method, params) => {
+    if (params.operation === 'browsers.list') return browsers;
+    if (params.operation === 'tabs.list' && params.browserId === 'offline') throw new Error('Disconnected');
+    if (params.operation === 'tabs.list') return [{ id: 'owned', title: 'Ready' }];
+    throw new Error('unexpected operation');
+  } });
+  const state = await cua.getState({ emit: false });
+  assert.deepEqual(state.browsers.map(browser => [browser.id, browser.tabs.length]), [['offline', 0], ['online', 1]]);
+  assert.deepEqual(state.errors, ['browser offline: Disconnected']);
 });

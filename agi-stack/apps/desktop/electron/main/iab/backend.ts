@@ -42,6 +42,7 @@ import {
   requireIabTabId,
 } from './iabMessageRouter';
 import type { IabViewPool } from './viewPool';
+import { browserCaller, browserSurface } from './iabOwnership';
 
 export type IabBackendStatus = 'disabled' | 'connecting' | 'connected';
 
@@ -111,6 +112,7 @@ export class IabBackend {
     this.#socket = null;
     socket?.close();
     this.#status = 'disabled';
+    this.#options.pool.releaseBridge?.();
   }
 
   #sendNotification(method: string, params: unknown): void {
@@ -172,6 +174,7 @@ export class IabBackend {
           const socket = await connectBridgeSocket(transport, registry.token, {
             onMessage: (text) => void this.#handleMessage(text),
             onClose: (reason) => {
+              if (this.#socket === activeSocket) this.#options.pool.releaseBridge?.();
               if (activeSocket !== null && this.#socket === activeSocket) {
                 this.#socket = null;
               }
@@ -228,7 +231,7 @@ export class IabBackend {
 
   #buildHandlers(): Record<string, (params: unknown) => unknown | Promise<unknown>> {
     const pool = this.#options.pool;
-    return {
+    const handlers: Record<string, (params: unknown) => unknown | Promise<unknown>> = {
       hello: () => buildIabHelloResult(),
       ping: () => ({}),
       mcpAppsExecute: (params) => {
@@ -253,7 +256,19 @@ export class IabBackend {
         const result = await pool.executeCdp(tabId, method, record.params, sessionId);
         return { result: result === undefined ? null : result };
       },
-      getTabs: () => ({ tabs: pool.getTabs() }),
+      getTabs: params => ({ tabs: pool.scopedTabs(browserCaller(params), browserSurface(params)) }),
+      getUserTabs: params => ({ tabs: pool.scopedTabs(browserCaller(params), browserSurface(params), true) }),
+      claimUserTab: params => {
+        const tabId = requireIabTabId(requireIabParamsRecord(params, 'claimUserTab'), 'claimUserTab');
+        pool.ownership.claim(tabId, browserCaller(params), browserSurface(params));
+        return { tabId };
+      },
+      markTab: params => {
+        const record = requireIabParamsRecord(params, 'markTab');
+        if (record.mark !== 'handoff' && record.mark !== 'deliverable') throw new IabInvalidParamsError('invalid tab mark');
+        pool.ownership.mark(requireIabTabId(record, 'markTab'), browserCaller(params), browserSurface(params), record.mark);
+        return {};
+      },
       facadeCapabilities: () => ({ browser: ['visibility', 'viewport'], tab: ['cdp', 'pageAssets', 'webmcp'] }),
       browserPresentation: async (params) => {
         const record = requireIabParamsRecord(params, 'browserPresentation');
@@ -266,16 +281,16 @@ export class IabBackend {
           }
           case 'capability.viewport.set': {
             const size = requireIabParamsRecord(args[0], 'viewport.set');
-            await pool.setViewport({ width: Number(size.width), height: Number(size.height) }); return null;
+            await pool.setScopedViewport(browserCaller(params), browserSurface(params), { width: Number(size.width), height: Number(size.height) }); return null;
           }
-          case 'capability.viewport.reset': await pool.setViewport(null); return null;
+          case 'capability.viewport.reset': await pool.setScopedViewport(browserCaller(params), browserSurface(params), null); return null;
           default: throw new IabInvalidParamsError('unsupported browser presentation operation');
         }
       },
       createTab: async (params) => {
         const record = params === undefined || params === null ? {} : requireIabParamsRecord(params, 'createTab');
         const url = optionalIabString(record, 'url', 'createTab');
-        const tabId = await pool.createTab(url);
+        const tabId = await pool.createTab(url, browserCaller(params), browserSurface(params));
         return { tabId };
       },
       closeTab: (params) => {
@@ -329,8 +344,22 @@ export class IabBackend {
         }
         return {};
       },
-      turnEnded: (params) => pool.turnEnded(parseIabTurnEndedLeases(params)),
+      turnEnded: (params) => {
+        const record = requireIabParamsRecord(params, 'turnEnded');
+        return typeof record.turnId === 'string' ? pool.releaseTurn(record.turnId) : pool.turnEnded(parseIabTurnEndedLeases(params));
+      },
     };
+    // Every operation entering native browser state is scoped by the trusted host.
+    // The main process UI has its own authenticated IPC path and can take control.
+    return Object.fromEntries(Object.entries(handlers).map(([method, handler]) => [method, async (params: unknown) => {
+      if (['hello', 'ping', 'mcpAppsExecute', 'turnEnded'].includes(method)) return handler(params);
+      const caller = browserCaller(params);
+      const surface = browserSurface(params);
+      pool.ownership.observe(caller, surface);
+      const record = requireIabParamsRecord(params, method);
+      if (typeof record.tabId === 'number') pool.ownership.claim(record.tabId, caller, surface);
+      return handler(params);
+    }]));
   }
 
   #log(message: string): void {

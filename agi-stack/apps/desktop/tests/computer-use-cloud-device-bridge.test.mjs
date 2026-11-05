@@ -490,3 +490,103 @@ test('server claim deadline reaches the private supervisor without changing nati
     assert.equal(invocations.filter(item => item.args.input.action === 'call').length, 1);
   } finally { bridge.closed('deadline', scope); }
 });
+
+function permissionRecord(kind = 'cloud_execution_step') {
+  return {
+    kind,
+    binding: {
+      tool_name: 'computer_click', input_digest: 'a'.repeat(64),
+      engine_session_id: 'engine-session', cell_id: 'cell', step_id: 'step',
+    },
+    demand: {
+      error: 'cua_permission_required', scopes: ['once'],
+      request: {
+        request_id: 'inner-permission-request', session_id: 'native-session',
+        engine_session_id: 'engine-session', tool_name: 'computer_click',
+        app: 'fixture-app', identity_digest: 'native-identity',
+        capability: kind === 'cloud_execution_step' ? 'execution_step' : 'control',
+        input_digest: 'legacy-native-digest',
+      },
+    },
+  };
+}
+
+async function bridgeResult(fields) {
+  const messages = [];
+  const bridge = createComputerUseCloudDeviceBridge(async (_command, { input }) => {
+    if (input.action === 'describe') return { device_id: 'device', tool_definitions: [], scope };
+    if (input.action === 'call') return {
+      request_id: input.request_id, output_json: '{}', is_error: false, media: [], ...fields,
+    };
+    return {};
+  });
+  await bridge.opened('permission-connection', scope, async (message) => messages.push(message));
+  try {
+    bridge.receive('permission-connection', scope, JSON.stringify({
+      type: 'computer_use_request', request_id: 'outer-request',
+    }), async () => {});
+    await tick(); await tick();
+    return messages.find((message) => message.type === 'computer_use_result');
+  } finally { bridge.closed('permission-connection', scope); }
+}
+
+test('trusted native permission and its exact authorization revision cross the private bridge', async () => {
+  for (const kind of ['native_consent', 'cloud_execution_step']) {
+    const permission = permissionRecord(kind);
+    const result = await bridgeResult({ permission_required: permission, authorization_revision: 7 });
+    assert.equal(result.is_error, false);
+    assert.deepEqual(result.permission_required, permission);
+    assert.equal(result.authorization_revision, 7);
+    assert.notEqual(permission.binding.input_digest, permission.demand.request.input_digest);
+    assert.notEqual(result.request_id, permission.demand.request.request_id);
+  }
+});
+
+test('normal results and output text cannot manufacture permission provenance', async () => {
+  for (const permission_required of [undefined, null]) {
+    const result = await bridgeResult({
+      permission_required, authorization_revision: 7,
+      output_json: JSON.stringify({ permission_required: permissionRecord() }),
+    });
+    assert.equal(result.is_error, false);
+    assert.equal(result.permission_required, undefined);
+  }
+});
+
+test('malformed private permission records or revisions fail closed without leaking the record', async () => {
+  const mutate = (change) => { const record = permissionRecord(); change(record); return record; };
+  const invalid = [
+    { permission_required: 'untrusted' },
+    { permission_required: mutate((v) => { v.extra = true; }) },
+    { permission_required: mutate((v) => { v.kind = 'arbitrary'; }) },
+    { permission_required: mutate((v) => { v.binding.extra = true; }) },
+    { permission_required: mutate((v) => { v.binding.input_digest = 'not-a-digest'; }) },
+    { permission_required: mutate((v) => { v.binding.engine_session_id = ''; }) },
+    { permission_required: mutate((v) => { v.binding.step_id = null; }) },
+    { permission_required: mutate((v) => { v.demand.request.engine_session_id = 'different'; }) },
+    { permission_required: mutate((v) => { v.demand.request.tool_name = 'different'; }) },
+    { permission_required: mutate((v) => { v.demand.request.request_id = ''; }) },
+    { permission_required: mutate((v) => { v.demand.error = 'different'; }) },
+    { permission_required: mutate((v) => { v.demand.scopes = []; }) },
+    { permission_required: mutate((v) => { v.demand.scopes = ['unknown']; }) },
+    { permission_required: mutate((v) => { v.demand.scopes = ['session']; }) },
+    { permission_required: mutate((v) => { v.demand.request.capability = 'control'; }) },
+    { permission_required: mutate((v) => { v.binding.cell_id = null; v.binding.step_id = null; }) },
+    ...[undefined, null, 0, -1, 1.5, '7', Number.MAX_SAFE_INTEGER + 1].map(
+      (authorization_revision) => ({ authorization_revision }),
+    ),
+    { is_error: true },
+    { control_outcome: 'user_stopped', output_json: JSON.stringify({
+      type: 'computer_use_control', status: 'user_stopped', retry_allowed: false,
+    }) },
+  ];
+  for (const fields of invalid) {
+    const result = await bridgeResult({
+      permission_required: permissionRecord(), authorization_revision: 7, ...fields,
+    });
+    assert.equal(result.is_error, true, JSON.stringify(fields));
+    assert.equal(result.permission_required, undefined);
+    assert.equal(result.authorization_revision, undefined);
+    assert.equal(result.output_json.includes('native-identity'), false);
+  }
+});

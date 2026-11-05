@@ -1,5 +1,29 @@
 # ChatGPT.app Computer Use analysis
 
+## Facade and local browser follow-up: 2026-10-29
+
+The newly inspected installation is ChatGPT.app **26.1023.50603**, with
+`@oai/cua-repl` **0.1.2**, `@oai/cua` **0.2.6**, `@oai/sky` **0.7.13**, and native
+service **26.1022.1001641**. REA setup returned `ready` without configuration
+changes. No native decompilation engine was available; REA semantic recovery
+remained partial. The earlier dated sections below describe older installations.
+
+Readable shipped declarations and JavaScript establish raw computer entrypoints
+alongside bound app/tab objects, fresh inventory initialization, documentation
+output identities, host request metadata, browser capabilities/events, and the
+system-audio start/stop facade. Audio stop returns a private file path, bytes and
+a data URL. MCP connectors remain separate host tools rather than a general
+namespace inside `cua`. Native symbols and declarations continue to support a
+cover plus temporary-unlock interpretation; no successful reference unlock,
+recording, connector mutation or fault-recovery run was observed in this round.
+
+MemStack implements these capabilities with its own scoped hosts. The added
+local CDP provider and bounded large-audio artifact path are implementation
+choices tested in this repository; static package findings do not establish
+equivalence to every private reference service. See the
+[2026-10-29 implementation and validation update](computer-use-2026-10-29.md)
+for executable results and the still-pending native acceptance work.
+
 ## Facade, browser, MCP, audio and lock investigation: 2026-10-22
 
 The inspected installation remains ChatGPT.app 26.1016.51333, with `@oai/sky`

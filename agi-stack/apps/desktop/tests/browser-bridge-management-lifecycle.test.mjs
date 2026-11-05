@@ -120,6 +120,10 @@ function client() {
       calls.push(['full', signal, value]);
       return { config: { browser_bridge: { full_cdp_access_enabled: value } } };
     },
+    setProviders: async (providers, signal) => {
+      calls.push(['providers', signal, providers]);
+      return { config: { browser_bridge: { ...providers } } };
+    },
     install: async (signal) => {
       calls.push(['install', signal]);
       return { installed: true };
@@ -215,6 +219,37 @@ test('queued toggle behind status load cannot execute after unmount', async () =
   await toggle;
   assert.equal(c.calls.filter((v) => v[0] === 'enabled').length, 0);
 });
+test('a stale status read queued before enable cannot disable the acknowledged bridge', async () => {
+  const h = harness(), c = client(), initial = deferred();
+  let current = false;
+  let loads = 0;
+  c.loadSnapshot = async (signal) => {
+    c.calls.push(['load', signal]);
+    loads++;
+    return loads === 1 ? initial.promise : snapshot(current);
+  };
+  c.setEnabled = async (enabled, signal) => {
+    c.calls.push(['enabled', signal, enabled]);
+    current = enabled;
+    return snapshot(current).runtimeStatus;
+  };
+  h.render(c);
+  await tick();
+  const enabling = h.render(c).toggleBridge(true);
+  assert.equal(h.render(c).enabled, true);
+  h.poll();
+  await tick();
+  assert.equal(loads, 1);
+  initial.resolve(snapshot(false));
+  await enabling;
+  assert.equal(h.render(c).enabled, true);
+  assert.deepEqual(c.calls.filter(call => call[0] === 'enabled').map(call => call[2]), [true]);
+  h.poll();
+  await tick();
+  assert.equal(h.render(c).enabled, true);
+  assert.equal(current, true);
+  h.unmount();
+});
 test('toggle and installation work share a lane with polling and reject duplicate pending mutations', async () => {
   const h = harness(),
     c = client(),
@@ -264,4 +299,25 @@ test('page requires V2 bridge management and has no direct command dispatch', ()
     /core\?\.invoke|\binvoke\s*<?|local_runtime_configure|browser_bridge_install|setInterval/,
   );
   assert.match(page, /useBrowserIntegrationManagementV2\(browserIntegrationClientV2, config\)/);
+});
+
+test('provider updates share the mutation lane and refresh after acknowledgement without queue deadlock', async () => {
+  const h = harness(), c = client(), gate = deferred();
+  h.render(c);
+  await tick();
+  c.setProviders = async (providers, signal) => {
+    c.calls.push(['providers', signal, providers]);
+    return gate.promise;
+  };
+  const providers = { cdp_endpoints: [], default_browser_id: 'iab' };
+  const saving = h.render(c).saveProviders(providers);
+  await tick();
+  assert.equal(h.render(c).providerBusy, true);
+  await h.render(c).toggleBridge(true);
+  assert.equal(c.calls.filter(call => call[0] === 'enabled').length, 0);
+  gate.resolve({ config: { browser_bridge: providers } });
+  assert.equal(await saving, true);
+  assert.equal(c.calls.filter(call => call[0] === 'load').length, 2);
+  assert.equal(h.render(c).providerBusy, false);
+  h.unmount();
 });

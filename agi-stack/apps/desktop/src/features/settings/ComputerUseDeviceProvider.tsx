@@ -1,3 +1,4 @@
+import { createAudioSessionsClient, type AudioSessionsClient } from '../../api/audioSessionsClient';
 import {
   createContext,
   useContext,
@@ -29,6 +30,7 @@ import './ComputerUseSettingsPage.css';
 type DeviceContext = {
   mode: DesktopRuntimeConfig['mode'];
   client: ComputerUseClientV2 | null;
+  audioClient: AudioSessionsClient | null;
   inputStore: ComputerUseInputStore | null;
   snapshot: ComputerUseSnapshot | null;
   busy: boolean;
@@ -39,6 +41,7 @@ type DeviceContext = {
 const DeviceContext = createContext<DeviceContext>({
   mode: 'local',
   client: null,
+  audioClient: null,
   inputStore: null,
   snapshot: null,
   busy: false,
@@ -59,6 +62,7 @@ export function ComputerUseDeviceProvider({
     () => createComputerUseClientV2(config),
     [config.mode, config.apiKey, config.localApiToken, config.apiBaseUrl, config.tenantId, config.projectId, config.workspaceId]
   );
+  const audioClient = useMemo(() => createAudioSessionsClient(config), [config.mode, config.apiKey, config.tenantId, config.projectId]);
   const [state, setState] = useState<{
     client: ComputerUseClientV2;
     snapshot: ComputerUseSnapshot | null;
@@ -170,6 +174,7 @@ export function ComputerUseDeviceProvider({
       value={{
         mode: config.mode,
         client,
+        audioClient,
         inputStore,
         snapshot: state.client === client ? state.snapshot : null,
         error: state.client === client ? state.error : null,

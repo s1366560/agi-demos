@@ -61,6 +61,16 @@ pub(super) trait Authority: Send + Sync {
         expected: &RunAuthority,
     ) -> CoreResult<()>;
     async fn finish(&self, _owner: &Owner, _run: &RunAuthority) {}
+    async fn fail(&self, _owner: &Owner, _run: &RunAuthority, _code: &str) -> CoreResult<()> {
+        Ok(())
+    }
+    async fn cancel_owned_chat(
+        &self,
+        _user: &str,
+        _conversation: &str,
+    ) -> CoreResult<Vec<super::cancellation::CancelledChatRun>> {
+        Ok(vec![])
+    }
 }
 pub(super) struct PgAuthority {
     pub pool: Option<PgPool>,
@@ -221,6 +231,16 @@ impl PgAuthority {
 }
 #[async_trait]
 impl Authority for PgAuthority {
+    async fn fail(&self, owner: &Owner, run: &RunAuthority, code: &str) -> CoreResult<()> {
+        self.fail_chat(owner, run, code).await
+    }
+    async fn cancel_owned_chat(
+        &self,
+        user: &str,
+        conversation: &str,
+    ) -> CoreResult<Vec<super::cancellation::CancelledChatRun>> {
+        self.cancel_chat(user, conversation).await
+    }
     async fn prepare(
         &self,
         owner: &Owner,

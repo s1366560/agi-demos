@@ -3,6 +3,7 @@ import { Badge, Button } from '@radix-ui/themes';
 import type { DesktopBrowserIntegrationClientV2 } from '../../plugins/desktopBrowserIntegrationAuthorityModuleV2';
 import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
 import { useBrowserBridgeManagementV2 } from './useBrowserBridgeManagementV2';
+import { BrowserProviderSettings } from './BrowserProviderSettings';
 import { useBrowserIntegrationManagementV2 } from './useBrowserIntegrationManagementV2';
 import { useI18n } from '../../i18n';
 import type { BrowserAuditEntry, BrowserOriginGrant, DesktopRuntimeConfig } from '../../types';
@@ -42,6 +43,10 @@ export function BrowserIntegrationSettingsPage({
   const { t } = useI18n();
   const {
     bridgeStatus,
+    runtimeStatus,
+    providerBusy,
+    providerError,
+    saveProviders,
     enabled,
     fullCdpEnabled,
     toggleBusy,
@@ -121,6 +126,10 @@ export function BrowserIntegrationSettingsPage({
           </p>
         ) : null}
       </section>
+
+      <BrowserProviderSettings config={runtimeStatus?.config.browser_bridge} status={bridgeStatus}
+        busy={!runtimeStatus || providerBusy || toggleBusy || fullCdpToggleBusy || actionBusy !== null}
+        error={providerError} save={saveProviders} />
 
       <section
         className="settings-panel settings-browser-status-panel"

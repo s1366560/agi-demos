@@ -1,22 +1,35 @@
 //! Deadline cleanup releases native resources while retaining the logical HITL session.
 use super::*;
 use std::sync::atomic::{AtomicI64, AtomicU64};
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 #[derive(Default)]
 pub(super) struct ResourceLease {
     generation: AtomicU64,
     expired: AtomicBool,
     deadline: AtomicI64,
+    continuity_deadline_ms: AtomicI64,
     pub(super) gate: tokio::sync::Mutex<()>,
 }
 impl ResourceLease {
     pub(super) fn invalidate(&self) {
+        self.continuity_deadline_ms.store(0, Ordering::SeqCst);
         self.generation.fetch_add(1, Ordering::SeqCst);
     }
     pub(super) fn current(&self) -> bool {
         !self.expired.load(Ordering::SeqCst)
-            && self.deadline.load(Ordering::SeqCst) > chrono::Utc::now().timestamp()
+            && (self.deadline.load(Ordering::SeqCst) > chrono::Utc::now().timestamp()
+                || self.continuity_current())
+    }
+    pub(super) fn renew_continuity(&self, expires_at_ms: i64) {
+        self.continuity_deadline_ms
+            .store(expires_at_ms, Ordering::SeqCst);
+    }
+    pub(super) fn clear_continuity(&self) {
+        self.continuity_deadline_ms.store(0, Ordering::SeqCst);
+    }
+    fn continuity_current(&self) -> bool {
+        self.continuity_deadline_ms.load(Ordering::SeqCst) > chrono::Utc::now().timestamp_millis()
     }
     pub(super) fn released(&self) -> bool {
         self.expired.load(Ordering::SeqCst)
@@ -96,8 +109,9 @@ async fn renew_inner(
                 return;
             }
             if expires <= chrono::Utc::now().timestamp() || !lease.current(&state) {
-                expire(&state, &session, generation).await;
-                return;
+                if expire(&state, &session, generation).await {
+                    return;
+                }
             }
             drop(state);
             sleep(Duration::from_millis(250)).await;
@@ -105,17 +119,26 @@ async fn renew_inner(
     });
     Ok(())
 }
-async fn expire(state: &LocalRuntimeState, session: &Arc<Session>, generation: u64) {
+async fn expire(state: &LocalRuntimeState, session: &Arc<Session>, generation: u64) -> bool {
     let _gate = session.resources.gate.lock().await;
     if session.stopped.load(Ordering::SeqCst)
         || session.resources.generation.load(Ordering::SeqCst) != generation
     {
-        return;
+        return true;
+    }
+    if session.resources.continuity_current() {
+        return false;
     }
     release_native(state, session).await;
+    true
 }
 // The caller holds resources.gate so teardown cannot race an implicit begin_session.
 pub(super) async fn release_native(state: &LocalRuntimeState, session: &Arc<Session>) {
+    session.resources.clear_continuity();
+    state
+        .computer_use
+        .locked_use
+        .invalidate(&session.context.session_id);
     session.resources.expired.store(true, Ordering::SeqCst);
     if let Some(client) = state.computer_use.client.get() {
         let _ = client

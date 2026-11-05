@@ -27,11 +27,11 @@ use std::{
 };
 
 use agistack_adapters_browser::{
-    facade::{self, TOOL_CDP as TOOL_FACADE_CDP, TOOL_WRITE as TOOL_FACADE_WRITE},
     actions::{
         TOOL_CLAIM_TAB, TOOL_CLICK, TOOL_MARK_TAB, TOOL_NAVIGATE, TOOL_NEW_TAB, TOOL_SCROLL,
         TOOL_TYPE,
     },
+    facade::{self, TOOL_CDP as TOOL_FACADE_CDP, TOOL_WRITE as TOOL_FACADE_WRITE},
     host::{BridgeEndpoint, BrowserToolHost, TOOL_CDP_RAW, TOOL_SCREENSHOT},
 };
 use agistack_core::ports::{
@@ -51,10 +51,10 @@ use super::{
     session_store::DesktopSessionStore,
 };
 
-#[path = "cloud_browser_tool_host.rs"]
-mod cloud;
 #[path = "browser_auth_host.rs"]
 mod auth;
+#[path = "cloud_browser_tool_host.rs"]
+mod cloud;
 pub(super) use cloud::{BrowserStepAuthority, CloudBrowserToolHost};
 
 /// The wrapper-composed credential fill tool (M3). Implemented here (not in
@@ -135,14 +135,21 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
         site_credentials: SiteCredentialBroker,
         screenshot_dir: Option<PathBuf>,
     ) -> Self {
-        let file_roots = run.as_ref().and_then(|run| run.environment.as_ref())
-            .map(|environment| vec![PathBuf::from(&environment.workspace_path)]).unwrap_or_default();
-        let artifact_root = screenshot_dir.as_ref().and_then(|path| path.parent())
+        let file_roots = run
+            .as_ref()
+            .and_then(|run| run.environment.as_ref())
+            .map(|environment| vec![PathBuf::from(&environment.workspace_path)])
+            .unwrap_or_default();
+        let artifact_root = screenshot_dir
+            .as_ref()
+            .and_then(|path| path.parent())
             .map(|parent| parent.join("browser-downloads"));
         Self {
             inner,
             session_store,
-            owner: run.as_ref().and_then(|_| super::knowledge_authority_v2::agent_access::current_auth()),
+            owner: run
+                .as_ref()
+                .and_then(|_| super::knowledge_authority_v2::agent_access::current_auth()),
             run,
             once_consents,
             full_cdp_enabled,
@@ -155,34 +162,76 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
         }
     }
 
-    pub(super) fn with_file_roots(mut self, roots: Vec<PathBuf>) -> Self { self.file_roots = roots; self }
-    pub(super) fn with_blocked_file_roots(mut self, roots: Vec<PathBuf>) -> Self { self.blocked_file_roots = roots; self }
-    pub(super) fn with_artifact_root(mut self, root: PathBuf) -> Self { self.artifact_root = Some(root); self }
-    pub(super) fn with_browser_auth(mut self, broker: super::browser_auth::BrowserAuthBroker) -> Self { self.browser_auth = Some(broker); self }
+    pub(super) fn with_file_roots(mut self, roots: Vec<PathBuf>) -> Self {
+        self.file_roots = roots;
+        self
+    }
+    pub(super) fn with_blocked_file_roots(mut self, roots: Vec<PathBuf>) -> Self {
+        self.blocked_file_roots = roots;
+        self
+    }
+    pub(super) fn with_artifact_root(mut self, root: PathBuf) -> Self {
+        self.artifact_root = Some(root);
+        self
+    }
+    pub(super) fn with_browser_auth(
+        mut self,
+        broker: super::browser_auth::BrowserAuthBroker,
+    ) -> Self {
+        self.browser_auth = Some(broker);
+        self
+    }
 
     fn validate_owner(&self) -> CoreResult<()> {
-        if self.owner.as_ref().is_some_and(|owner| !self.session_store
-            .session_context_is_current(owner, chrono::Utc::now().timestamp_millis())
-            .unwrap_or(false)) {
-            return Err(CoreError::Tool("browser owner session is no longer current".into()));
+        if self.owner.as_ref().is_some_and(|owner| {
+            !self
+                .session_store
+                .session_context_is_current(owner, chrono::Utc::now().timestamp_millis())
+                .unwrap_or(false)
+        }) {
+            return Err(CoreError::Tool(
+                "browser owner session is no longer current".into(),
+            ));
         }
         Ok(())
     }
 
     fn inject_file_authority(&self, input: &mut Value, run_id: &str) -> CoreResult<()> {
-        let object = input.as_object_mut().ok_or_else(|| CoreError::Tool("browser input must be an object".into()))?;
-        for key in ["_authorized_file_roots", "_blocked_file_roots", "_artifact_root"] { object.remove(key); }
-        let configured = super::execution_authority::current_file_roots().unwrap_or_else(|| self.file_roots.clone());
-        let roots: Vec<_> = configured.iter().filter_map(|root| root.canonicalize().ok()).collect();
-        let blocked: Vec<_> = self.blocked_file_roots.iter().filter_map(|root| root.canonicalize().ok()).collect();
+        let object = input
+            .as_object_mut()
+            .ok_or_else(|| CoreError::Tool("browser input must be an object".into()))?;
+        for key in [
+            "_authorized_file_roots",
+            "_blocked_file_roots",
+            "_artifact_root",
+        ] {
+            object.remove(key);
+        }
+        let configured = super::execution_authority::current_file_roots()
+            .unwrap_or_else(|| self.file_roots.clone());
+        let roots: Vec<_> = configured
+            .iter()
+            .filter_map(|root| root.canonicalize().ok())
+            .collect();
+        let blocked: Vec<_> = self
+            .blocked_file_roots
+            .iter()
+            .filter_map(|root| root.canonicalize().ok())
+            .collect();
         object.insert("_authorized_file_roots".into(), json!(roots));
         object.insert("_blocked_file_roots".into(), json!(blocked));
-        let root = super::execution_authority::current_download_root().or_else(|| self.artifact_root.clone());
+        let root = super::execution_authority::current_download_root()
+            .or_else(|| self.artifact_root.clone());
         if let Some(root) = root {
             // UUID v5 makes the trusted run id an opaque path component.
-            let directory = root.join(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, run_id.as_bytes()).to_string());
-            std::fs::create_dir_all(&directory).map_err(|_| CoreError::Tool("browser artifact directory is unavailable".into()))?;
-            let directory = directory.canonicalize().map_err(|_| CoreError::Tool("browser artifact directory is unavailable".into()))?;
+            let directory = root.join(
+                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, run_id.as_bytes()).to_string(),
+            );
+            std::fs::create_dir_all(&directory)
+                .map_err(|_| CoreError::Tool("browser artifact directory is unavailable".into()))?;
+            let directory = directory
+                .canonicalize()
+                .map_err(|_| CoreError::Tool("browser artifact directory is unavailable".into()))?;
             object.insert("_artifact_root".into(), json!(directory));
         }
         Ok(())
@@ -193,13 +242,30 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
     /// tab-bound tools gate on the tab's current URL. `None` means the call
     /// carries no consent origin (about:blank, non-http(s), no url arg).
     async fn resolve_origin(&self, tool: &str, input: &Value) -> CoreResult<Option<String>> {
-        if matches!(tool, TOOL_FACADE_WRITE | TOOL_FACADE_CDP) && input.get("tabId").is_none()
-            && input.get("operation").and_then(Value::as_str).is_some_and(|operation| operation == "nameSession" || operation.starts_with("capability.management.") || operation.starts_with("capability.visibility.") || operation.starts_with("capability.viewport.")) {
+        if matches!(tool, TOOL_FACADE_WRITE | TOOL_FACADE_CDP)
+            && input.get("tabId").is_none()
+            && input
+                .get("operation")
+                .and_then(Value::as_str)
+                .is_some_and(|operation| {
+                    operation == "nameSession"
+                        || operation.starts_with("capability.management.")
+                        || operation.starts_with("capability.visibility.")
+                        || operation.starts_with("capability.viewport.")
+                })
+        {
             return Ok(None);
         }
         if matches!(tool, TOOL_FACADE_WRITE | TOOL_FACADE_CDP)
-            && matches!(input.get("operation").and_then(Value::as_str), Some("tabs.new" | "tab.goto")) {
-            let url = input.pointer("/args/0").and_then(Value::as_str).ok_or_else(|| CoreError::Tool("navigation requires a URL".into()))?;
+            && matches!(
+                input.get("operation").and_then(Value::as_str),
+                Some("tabs.new" | "tab.goto")
+            )
+        {
+            let url = input
+                .pointer("/args/0")
+                .and_then(Value::as_str)
+                .ok_or_else(|| CoreError::Tool("navigation requires a URL".into()))?;
             return Ok(origin_host(url));
         }
         match tool {
@@ -430,10 +496,15 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
     /// Called only after the local or authenticated cloud authority has admitted
     /// this exact credential-fill step. The vault and page checks stay local.
     async fn fill_credentials_after_consent(&self, input: &Value) -> CoreResult<String> {
-        let tab_id = input.get("tabId").and_then(Value::as_i64)
+        let tab_id = input
+            .get("tabId")
+            .and_then(Value::as_i64)
             .ok_or_else(|| CoreError::Tool("credential fill requires a numeric tabId".into()))?;
-        let origin = input.get("origin").and_then(Value::as_str)
-            .map(|origin| origin.trim().to_lowercase()).filter(|origin| !origin.is_empty())
+        let origin = input
+            .get("origin")
+            .and_then(Value::as_str)
+            .map(|origin| origin.trim().to_lowercase())
+            .filter(|origin| !origin.is_empty())
             .ok_or_else(|| CoreError::Tool("credential fill requires a bare-host origin".into()))?;
         let username = input.get("username").and_then(Value::as_str);
         let current_url = self.inner.current_url_for_input(input, tab_id).await?;
@@ -788,9 +859,13 @@ impl<E: BridgeEndpoint> ToolHost for BrowserRunToolHost<E> {
         };
         let mut bound_input = None;
         let mut resolved_origin = None;
-        let result = self
-            .dispatch(tool, input_json, &mut bound_input, &mut resolved_origin)
-            .await;
+        let dispatch = self.dispatch(tool, input_json, &mut bound_input, &mut resolved_origin);
+        let result = if let Some(run) = &self.run {
+            let caller = super::browser_caller::for_run(run)?;
+            agistack_adapters_browser::caller::scope(caller, dispatch).await
+        } else {
+            dispatch.await
+        };
         let origin = match resolved_origin {
             Some(origin) => origin,
             None => self.audit_origin(tool, bound_input.as_ref()).await,
@@ -829,9 +904,14 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
                 }
             }
         };
-        if matches!(tool, facade::TOOL_READ | TOOL_FACADE_WRITE | TOOL_FACADE_CDP) {
+        if matches!(
+            tool,
+            facade::TOOL_READ | TOOL_FACADE_WRITE | TOOL_FACADE_CDP
+        ) {
             if facade::operation_effect(&input)?.tool() != tool {
-                return Err(CoreError::Tool("browser operation authority does not match its effect".into()));
+                return Err(CoreError::Tool(
+                    "browser operation authority does not match its effect".into(),
+                ));
             }
             input = facade::normalize_input(&input)?;
         }
@@ -841,7 +921,13 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
         if let (Some(run), Value::Object(map)) = (self.run.as_ref(), &mut input) {
             map.insert("_run_id".to_string(), json!(run.id));
         }
-        self.inject_file_authority(&mut input, self.run.as_ref().map(|run|run.id.as_str()).unwrap_or("unbound"))?;
+        self.inject_file_authority(
+            &mut input,
+            self.run
+                .as_ref()
+                .map(|run| run.id.as_str())
+                .unwrap_or("unbound"),
+        )?;
         if tool == TOOL_FILL_CREDENTIALS {
             return self.fill_credentials(&input, input_json).await;
         }
@@ -862,7 +948,8 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
             }
         }
         if input["operation"] == "capability.browserAuth.request" {
-            return self.request_browser_auth(&input)
+            return self
+                .request_browser_auth(&input)
                 .await
                 .map(ToolResult::text);
         }
@@ -881,9 +968,16 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
             output.output_json = self.deliver_screenshot(&input, &output.output_json);
             return Ok(output);
         }
-        if input["operation"] == "capabilities.list" && input.get("tabId").is_some() && self.browser_auth.is_some() && self.run.is_some() {
-            let mut capabilities: Value = serde_json::from_str(&output.output_json).map_err(|_| CoreError::Tool("invalid browser capabilities".into()))?;
-            if let Some(capabilities) = capabilities.as_array_mut() { capabilities.push(json!("browserAuth")); }
+        if input["operation"] == "capabilities.list"
+            && input.get("tabId").is_some()
+            && self.browser_auth.is_some()
+            && self.run.is_some()
+        {
+            let mut capabilities: Value = serde_json::from_str(&output.output_json)
+                .map_err(|_| CoreError::Tool("invalid browser capabilities".into()))?;
+            if let Some(capabilities) = capabilities.as_array_mut() {
+                capabilities.push(json!("browserAuth"));
+            }
             output.output_json = capabilities.to_string();
         }
         Ok(output)
@@ -1010,7 +1104,12 @@ mod tests {
             MockRequests(Arc::clone(&self.requests))
         }
 
-        fn scripted_request(&self, backend: &str, method: &str, params: Value) -> CoreResult<Value> {
+        fn scripted_request(
+            &self,
+            backend: &str,
+            method: &str,
+            params: Value,
+        ) -> CoreResult<Value> {
             self.requests
                 .lock()
                 .unwrap()
@@ -1031,7 +1130,12 @@ mod tests {
             self.scripted_request("chrome", method, params)
         }
 
-        async fn request_on(&self, backend: &str, method: &str, params: Value) -> CoreResult<Value> {
+        async fn request_on(
+            &self,
+            backend: &str,
+            method: &str,
+            params: Value,
+        ) -> CoreResult<Value> {
             self.scripted_request(backend, method, params)
         }
 

@@ -57,6 +57,11 @@ Cloud sign-in exposes the server URL before authentication and preserves the ent
 across Local/Cloud mode switches. The existing native authentication authority validates the
 origin and stores accepted credentials in the application vault.
 
+For an isolated native server test, a debug build accepts `AGISTACK_DEV_DATABASE_ENV` pointing
+to a temporary configuration file containing `DATABASE_URL`. The file must resolve under the
+system temporary directory, and the PostgreSQL host must be loopback. Release builds reject this
+override; without it the server reads the repository `.env` as usual. Keep the test file private.
+
 
 For native QA that must not read or mutate the normal application vault, create a private
 temporary directory whose basename starts with `agistack-desktop-qa-`, then launch through the
