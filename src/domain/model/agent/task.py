@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
+MAX_TASK_TITLE_LENGTH = 500
+
 
 class TaskStatus(str, Enum):
     """Status of a task."""
@@ -62,7 +64,9 @@ class AgentTask:
 
     def __post_init__(self) -> None:
         if not self.title.strip():
-            self.title = self.content
+            self.title = self.content[:MAX_TASK_TITLE_LENGTH]
+        elif len(self.title) > MAX_TASK_TITLE_LENGTH:
+            raise ValueError("Task title exceeds the maximum length")
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -98,7 +102,7 @@ class AgentTask:
             id=data.get("id", str(uuid.uuid4())),
             conversation_id=data["conversation_id"],
             content=data["content"],
-            title=data.get("title") or data["content"],
+            title=data.get("title") or "",
             description=data.get("description"),
             estimated_duration_seconds=data.get("estimated_duration_seconds"),
             started_at=_optional_datetime(data.get("started_at")),

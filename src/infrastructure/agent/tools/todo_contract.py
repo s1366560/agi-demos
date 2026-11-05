@@ -7,6 +7,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from src.domain.model.agent.task import MAX_TASK_TITLE_LENGTH
 from src.infrastructure.agent.tools.result import ToolResult
 
 TODO_UPDATE_INSTRUCTION = (
@@ -44,7 +45,11 @@ TODOWRITE_PARAMETERS: dict[str, Any] = {
                             "Task description; required for add/replace, omit for status-only updates"
                         ),
                     },
-                    "title": {"type": "string", "description": "Short step title"},
+                    "title": {
+                        "type": "string",
+                        "maxLength": MAX_TASK_TITLE_LENGTH,
+                        "description": "Short step title",
+                    },
                     "description": {
                         "type": "string",
                         "description": "Optional detailed step description",
@@ -105,7 +110,10 @@ TODOWRITE_PARAMETERS: dict[str, Any] = {
     ),
     "allOf": [
         {
-            "if": {"properties": {"action": {"const": "update"}}, "required": ["action"]},
+            "if": {
+                "properties": {"action": {"type": "string", "const": "update"}},
+                "required": ["action"],
+            },
             "then": {
                 "required": ["todo_id", "todos"],
                 "properties": {
@@ -121,7 +129,10 @@ TODOWRITE_PARAMETERS: dict[str, Any] = {
             },
         },
         {
-            "if": {"properties": {"action": {"enum": ["add", "replace"]}}, "required": ["action"]},
+            "if": {
+                "properties": {"action": {"type": "string", "enum": ["add", "replace"]}},
+                "required": ["action"],
+            },
             "then": {
                 "properties": {
                     "todos": {
