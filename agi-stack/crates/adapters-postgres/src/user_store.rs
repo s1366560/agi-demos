@@ -50,7 +50,9 @@ pub struct CurrentUserRecord {
     pub email: String,
     pub full_name: Option<String>,
     pub roles: Vec<String>,
+    pub global_roles: Vec<String>,
     pub is_active: bool,
+    pub is_superuser: bool,
     pub created_at: DateTime<Utc>,
     pub profile: Value,
     pub preferred_language: Option<String>,
@@ -179,17 +181,22 @@ impl PgUserStore {
             String,
             Option<String>,
             bool,
+            bool,
             DateTime<Utc>,
             Value,
             Option<String>,
             Vec<String>,
+            Vec<String>,
         );
 
         let row = sqlx::query_as::<_, Row>(
-            "SELECT u.id, u.email, u.full_name, u.is_active, u.created_at, u.profile, \
+            "SELECT u.id, u.email, u.full_name, u.is_active, u.is_superuser, u.created_at, u.profile, \
              u.preferred_language, \
              COALESCE(array_agg(r.name ORDER BY r.name) \
-                FILTER (WHERE r.name IS NOT NULL), ARRAY[]::text[]) AS roles \
+                FILTER (WHERE r.name IS NOT NULL), ARRAY[]::text[]) AS roles, \
+             COALESCE(array_agg(r.name ORDER BY r.name) \
+                FILTER (WHERE r.name IS NOT NULL AND ur.tenant_id IS NULL \
+                        AND ur.project_id IS NULL), ARRAY[]::text[]) AS global_roles \
              FROM users u \
              LEFT JOIN user_roles ur ON ur.user_id = u.id \
              LEFT JOIN roles r ON r.id = ur.role_id \
@@ -202,13 +209,26 @@ impl PgUserStore {
         .map_err(|e| CoreError::Storage(e.to_string()))?;
 
         Ok(row.map(
-            |(id, email, full_name, is_active, created_at, profile, preferred_language, roles)| {
+            |(
+                id,
+                email,
+                full_name,
+                is_active,
+                is_superuser,
+                created_at,
+                profile,
+                preferred_language,
+                roles,
+                global_roles,
+            )| {
                 CurrentUserRecord {
                     id,
                     email,
                     full_name,
                     roles,
+                    global_roles,
                     is_active,
+                    is_superuser,
                     created_at,
                     profile,
                     preferred_language,

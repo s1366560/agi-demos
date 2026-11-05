@@ -493,7 +493,9 @@ fn sample_current_user_record() -> CurrentUserRecord {
         email: "admin@memstack.ai".into(),
         full_name: Some("Admin User".into()),
         roles: vec!["admin".into(), "user".into()],
+        global_roles: vec!["user".into()],
         is_active: true,
+        is_superuser: false,
         created_at: chrono::DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
         profile: json!({
             "department": "Platform",
@@ -519,6 +521,24 @@ fn current_user_profile_null_normalizes_to_object() {
     record.profile = Value::Null;
     let view = CurrentUserView::from(record);
     assert_eq!(view.profile, json!({}));
+}
+
+#[test]
+fn current_user_global_roles_and_superuser_are_independent_stored_fields() {
+    let mut record = sample_current_user_record();
+    record.global_roles.clear();
+    let view = CurrentUserView::from(record.clone());
+    assert_eq!(view.roles, vec!["admin", "user"]);
+    assert!(view.global_roles.is_empty());
+    assert!(!view.is_superuser);
+
+    record.roles.clear();
+    record.global_roles = vec!["auditor".into()];
+    record.is_superuser = true;
+    let view = CurrentUserView::from(record);
+    assert!(view.roles.is_empty());
+    assert_eq!(view.global_roles, vec!["auditor"]);
+    assert!(view.is_superuser);
 }
 
 #[test]
@@ -783,8 +803,12 @@ async fn dev_device_code_flow_matches_python_states() {
     );
     assert_eq!(code.expires_in, DEVICE_CODE_TTL_SECS);
     assert_eq!(code.interval, DEVICE_CODE_INTERVAL_SECS);
-    assert!(crate::response_assertions::is_urlsafe_token_32(&code.device_code));
-    assert!(crate::response_assertions::is_device_user_code(&code.user_code));
+    assert!(crate::response_assertions::is_urlsafe_token_32(
+        &code.device_code
+    ));
+    assert!(crate::response_assertions::is_device_user_code(
+        &code.user_code
+    ));
 
     let pending = svc.poll_device_token(&code.device_code).await.unwrap_err();
     assert_eq!(pending.status, StatusCode::PRECONDITION_REQUIRED);

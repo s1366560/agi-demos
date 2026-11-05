@@ -130,7 +130,9 @@ function App() {
                       <Route
                         path="*"
                         element={
-                          isAuthenticated && status !== 'ready' ? (
+                          !isAuthenticated ? (
+                            <RedirectToLogin />
+                          ) : status !== 'ready' ? (
                             <WebPluginBootstrapBoundaryV2 unavailable={status === 'unavailable'} />
                           ) : (
                             <Suspense fallback={<PageLoader />}>

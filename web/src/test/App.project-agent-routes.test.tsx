@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
-import { MemoryRouter, Outlet } from 'react-router-dom';
+import { MemoryRouter, Outlet, useLocation } from 'react-router-dom';
 
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from '@/App';
@@ -48,7 +48,7 @@ const routeAuthority = vi.hoisted(() => ({
 vi.mock('@/stores/auth', () => ({
   useAuthStore: Object.assign(
     (selector: (state: typeof authState) => unknown) => selector(authState),
-    { getState: () => authState, subscribe: () => () => undefined },
+    { getState: () => authState, subscribe: () => () => undefined }
   ),
 }));
 
@@ -111,8 +111,14 @@ function renderAppAt(entry: string) {
   return render(
     <MemoryRouter initialEntries={[entry]}>
       <App />
+      <LocationDisplay />
     </MemoryRouter>
   );
+}
+
+function LocationDisplay() {
+  const location = useLocation();
+  return <div data-testid="route-location">{location.pathname + location.search}</div>;
 }
 
 describe('App project Agent production routes', () => {
@@ -136,7 +142,10 @@ describe('App project Agent production routes', () => {
     };
     activateWebPluginGenerationRootV2();
   });
-  afterEach(async () => deactivateWebPluginGenerationRootV2());
+  afterEach(async () => {
+    cleanup();
+    await deactivateWebPluginGenerationRootV2();
+  });
 
   it.each([
     ['/tenant/tenant-1/project/project-1/agent', 'dashboard'],
@@ -176,6 +185,28 @@ describe('App project Agent production routes', () => {
 
     expect(await screen.findByTestId('login-route')).toBeInTheDocument();
     expect(authenticatedShellRender).not.toHaveBeenCalled();
+  });
+
+  it('returns an expired protected session to login when its generation has retired', async () => {
+    authState.isAuthenticated = false;
+    authState.user = null;
+    routeAuthority.state = { routeArtifacts: [], routeArtifactIds: [], status: 'disabled' };
+
+    renderAppAt('/tenant?tab=overview');
+
+    expect(await screen.findByTestId('login-route')).toBeInTheDocument();
+    expect(screen.getByTestId('route-location')).toHaveTextContent(
+      '/login?redirect=%2Ftenant%3Ftab%3Doverview'
+    );
+    expect(screen.queryByTestId('not-found-route')).not.toBeInTheDocument();
+    expect(authenticatedShellRender).not.toHaveBeenCalled();
+  });
+
+  it('keeps an authenticated unknown route as not found after authority is ready', async () => {
+    renderAppAt('/unknown-route');
+
+    expect(await screen.findByTestId('not-found-route')).toBeInTheDocument();
+    expect(screen.queryByTestId('login-route')).not.toBeInTheDocument();
   });
 
   it('shows the generation loader for an authenticated business URL during bootstrap', async () => {

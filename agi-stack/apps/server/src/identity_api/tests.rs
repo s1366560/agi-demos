@@ -12,6 +12,62 @@ use agistack_core::ports::{
     ContainerRuntime, ContainerSpec, ContainerStatus, CoreError, CoreResult,
 };
 
+#[tokio::test]
+async fn password_login_current_user_supplies_native_cloud_identity_fields() {
+    use axum::{
+        body::{to_bytes, Body},
+        http::Request,
+        middleware,
+    };
+    use tower::ServiceExt;
+
+    let app = crate::prod_api::unit::test_state();
+    let router = router_public()
+        .merge(router_authed().layer(middleware::from_fn_with_state(
+            app.clone(),
+            crate::auth::require_api_key,
+        )))
+        .with_state(app);
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/token")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .body(Body::from("username=dev%40example.test&password=fixture"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let token: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 16 * 1024).await.unwrap()).unwrap();
+    let credential = token["access_token"].as_str().unwrap();
+    for path in ["/api/v1/auth/me", "/api/v1/users/me"] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header("Authorization", format!("Bearer {credential}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let user: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 16 * 1024).await.unwrap())
+                .unwrap();
+        assert_eq!(user["user_id"], "dev-user");
+        assert_eq!(user["roles"], json!(["admin"]));
+        assert_eq!(user["global_roles"], json!([]));
+        assert_eq!(user["is_superuser"], false);
+        assert!(user.get("access_token").is_none());
+    }
+}
+
 struct FailingCleanupRuntime;
 
 #[async_trait]

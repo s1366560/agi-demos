@@ -1,7 +1,9 @@
 {
   "created_at": "2023-11-14T22:13:20Z",
   "email": "admin@memstack.ai",
+  "global_roles": ["user"],
   "is_active": true,
+  "is_superuser": false,
   "name": "Admin User",
   "preferred_language": "zh-CN",
   "profile": {

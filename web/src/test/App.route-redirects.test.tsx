@@ -285,8 +285,7 @@ describe('App route redirects', () => {
   it('keeps the App shell free of business route definitions', () => {
     const appSource = readFileSync('src/App.tsx', 'utf8');
 
-    expect(appSource).toContain('routeArtifacts.map((artifact)');
-    expect(appSource).toContain('artifact.createRouteElements()');
+    expect(appSource).toContain('composeWebRouteArtifactsV2(routeArtifacts)');
     expect(appSource).not.toContain('path="/tenants/new"');
     expect(appSource).not.toContain('path="/tenant"');
     expect(appSource).not.toContain('path="/project/:projectId/*"');
