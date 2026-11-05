@@ -86,7 +86,7 @@ def execution_context():
 @pytest.fixture
 def mock_tool_def():
     """Create mock tool definition."""
-    tool = MagicMock()
+    tool = MagicMock(permission_resolver=None)
     tool.name = "test_tool"
     tool.permission = None
     tool.execute = AsyncMock(return_value={"output": "Tool executed successfully"})
@@ -548,7 +548,7 @@ class TestDoomLoopDetection:
         )
         mock_doom_loop_detector.should_intervene.return_value = False
 
-        tool_def = MagicMock()
+        tool_def = MagicMock(permission_resolver=None)
         tool_def.permission = None
         tool_def.execute = AsyncMock(return_value="ok")
 
@@ -582,7 +582,7 @@ class TestDoomLoopDetection:
         mock_doom_loop_detector.should_intervene.return_value = True
         mock_permission_manager.ask = AsyncMock(return_value="approve")
 
-        tool_def = MagicMock()
+        tool_def = MagicMock(permission_resolver=None)
         tool_def.permission = None
         tool_def.execute = AsyncMock(return_value="ok")
 
@@ -616,7 +616,7 @@ class TestDoomLoopDetection:
         mock_doom_loop_detector.should_intervene.return_value = True
         mock_permission_manager.ask = AsyncMock(return_value="reject")
 
-        tool_def = MagicMock()
+        tool_def = MagicMock(permission_resolver=None)
         tool_def.permission = None
         tool_def.execute = AsyncMock(return_value="ok")
 
@@ -668,7 +668,7 @@ class TestPermissionChecking:
         )
         mock_permission_manager.evaluate.return_value = MagicMock(action=PermissionAction.ALLOW)
 
-        tool_def = MagicMock()
+        tool_def = MagicMock(permission_resolver=None)
         tool_def.permission = "write"
         tool_def.execute = AsyncMock(return_value="ok")
 
@@ -702,7 +702,7 @@ class TestPermissionChecking:
         )
         mock_permission_manager.evaluate.return_value = MagicMock(action=PermissionAction.DENY)
 
-        tool_def = MagicMock()
+        tool_def = MagicMock(permission_resolver=None)
         tool_def.permission = "admin"
         tool_def.execute = AsyncMock(return_value="ok")
 

@@ -384,23 +384,24 @@ class ToolPipeline:
         from src.infrastructure.agent.tools.executor import PermissionAction
         from src.infrastructure.agent.tools.result import ToolEvent
 
-        if not tool.permission:
+        permission = resolve_tool_permission_v2(tool, args)
+        if not permission:
             return None
 
-        rule = self._permission_manager.evaluate(tool.permission, tool.name)
+        rule = self._permission_manager.evaluate(permission, tool.name)
 
         action = getattr(rule.action, "value", rule.action)
         if action == PermissionAction.DENY.value:
             logger.warning(
                 "Permission denied: tool=%s permission=%s",
                 tool.name,
-                tool.permission,
+                permission,
             )
             return ToolEvent.denied(tool.name)
 
         if action == PermissionAction.ASK.value and not approved_once:
             result_str = await self._permission_manager.ask(
-                permission=tool.permission,
+                permission=permission,
                 patterns=[tool.name],
                 session_id=ctx.session_id,
                 metadata={"tool": tool.name, "input": args},

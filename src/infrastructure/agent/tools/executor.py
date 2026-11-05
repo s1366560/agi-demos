@@ -29,6 +29,7 @@ from src.domain.events.agent_events import (
     AgentObserveEvent,
     AgentPermissionAskedEvent,
 )
+from src.infrastructure.agent.tools.permission_metadata_v2 import resolve_tool_permission_v2
 
 logger = logging.getLogger(__name__)
 
@@ -425,16 +426,18 @@ class ToolExecutor:
         call_id: str,
     ) -> AsyncIterator[AgentDomainEvent]:
         """Check tool permission and handle ASK flow."""
-        if not tool_def.permission:
+        permission = resolve_tool_permission_v2(tool_def, arguments)
+        if not permission:
             return
 
         permission_rule = self._permission_manager.evaluate(
-            permission=tool_def.permission,
+            permission=permission,
             pattern=tool_name,
         )
+        action = getattr(permission_rule.action, "value", permission_rule.action)
 
-        if permission_rule.action == PermissionAction.DENY:
-            error = f"Permission denied: {tool_def.permission}"
+        if action == PermissionAction.DENY.value:
+            error = f"Permission denied: {permission}"
             self._mark_tool_error(tool_part, error)
             yield AgentObserveEvent(
                 tool_name=tool_name,
@@ -444,11 +447,11 @@ class ToolExecutor:
             )
             return
 
-        if permission_rule.action == PermissionAction.ASK:
+        if action == PermissionAction.ASK.value:
             # Request permission
             yield AgentPermissionAskedEvent(
                 request_id=f"perm_{uuid.uuid4().hex[:8]}",
-                permission=tool_def.permission,
+                permission=permission,
                 patterns=[tool_name],
                 metadata={"tool": tool_name, "input": arguments},
             )
@@ -456,7 +459,7 @@ class ToolExecutor:
             try:
                 permission_result = await asyncio.wait_for(
                     self._permission_manager.ask(
-                        permission=tool_def.permission,
+                        permission=permission,
                         patterns=[tool_name],
                         session_id=context.session_id,
                         metadata={"tool": tool_name, "input": arguments},

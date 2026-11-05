@@ -3540,23 +3540,24 @@ class SessionProcessor:
         Returns ``None`` to proceed, or an async iterator of error events to
         yield-and-return.
         """
-        if not tool_def.permission:
+        permission = resolve_tool_permission_v2(tool_def, arguments)
+        if not permission:
             return None
 
         permission_rule = self.permission_manager.evaluate(
-            permission=tool_def.permission,
+            permission=permission,
             pattern=tool_name,
         )
 
         if permission_rule.action == PermissionAction.DENY:
             tool_part.status = ToolState.ERROR
-            tool_part.error = f"Permission denied: {tool_def.permission}"
+            tool_part.error = f"Permission denied: {permission}"
             tool_part.end_time = time.time()
             return _iter_events(
                 [
                     AgentObserveEvent(
                         tool_name=tool_name,
-                        error=f"Permission denied: {tool_def.permission}",
+                        error=f"Permission denied: {permission}",
                         call_id=call_id,
                         tool_execution_id=tool_part.tool_execution_id,
                     )
@@ -3586,7 +3587,7 @@ class SessionProcessor:
     ) -> AsyncIterator[ProcessorEvent]:
         """Publish the persisted request before waiting for the human response."""
         self._state = ProcessorState.WAITING_PERMISSION
-        permission = tool_def.permission or "tool_policy"
+        permission = resolve_tool_permission_v2(tool_def, arguments) or "tool_policy"
         error: str | None = None
         try:
             coordinator = self._get_hitl_coordinator()

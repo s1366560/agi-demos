@@ -429,7 +429,7 @@ class TestProcessorPermissionBackwardCompatibility:
         mock_coordinator.wait_for_response.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_no_hitl_coordinator_falls_back_gracefully(self):
+    async def test_no_hitl_coordinator_falls_back_gracefully(self, monkeypatch):
         """Should handle missing HITLCoordinator gracefully (edge case)."""
         config = ProcessorConfig(model="test-model")
         permission_manager = create_ask_permission_manager("bash")
@@ -442,6 +442,9 @@ class TestProcessorPermissionBackwardCompatibility:
 
         processor._langfuse_context = None
         processor._hitl_coordinator = None
+        monkeypatch.setattr(
+            processor, "_get_hitl_coordinator", MagicMock(side_effect=ValueError("No HITL context"))
+        )
 
         processor._pending_tool_calls["call-no-coord"] = ToolPart(
             call_id="call-no-coord",
@@ -460,6 +463,10 @@ class TestProcessorPermissionBackwardCompatibility:
             events.append(event)
 
         assert len(events) > 0
+        assert any(
+            getattr(event, "error", None) == "Permission request failed: no HITL context"
+            for event in events
+        )
 
 
 @pytest.mark.unit
