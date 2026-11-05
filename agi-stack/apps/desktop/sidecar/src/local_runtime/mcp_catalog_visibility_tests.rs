@@ -31,6 +31,8 @@ for line in sys.stdin:
  elif method=='tools/call':
   with open(audit,'a') as output: output.write(request['params']['name']+'\n')
   result={'content':[{'type':'text','text':'fixture result'}]}
+  if request['params']['name']=='inspect_counts':
+   result={'content':[],'structuredContent':{'counts':[2,3],'total':5},'_meta':{'uiPrivate':'not-model-visible'}}
  elif method=='resources/read':
   result={'contents':[{'uri':'ui://catalog/main.html','mimeType':'text/html','text':'<main>catalog</main>'}]}
  else: result={}
@@ -337,4 +339,47 @@ async fn assembled_mcp_catalog_respects_agent_roster_and_server_revocation() {
     let error = previous.call(&canonical, "{}").await.unwrap_err();
     assert!(error.to_string().contains("local_mcp_server_disabled"));
     fixture.no_calls();
+}
+
+#[tokio::test]
+async fn generic_mcp_tool_dispatch_does_not_require_a_computer_connector_capability() {
+    let fixture = Fixture::new(DesktopPermissionProfile::WorkspaceWrite).await;
+    let server = fixture
+        .state
+        .mcp_supervisor
+        .server(&scope("local-project"), &fixture.server_id)
+        .unwrap()
+        .unwrap();
+    assert!(!local::computer_use_v2::declared_connector_tool(
+        &server,
+        "inspect_counts"
+    ));
+    let host = McpAgentToolHost::new(
+        fixture.state.mcp_supervisor.clone(),
+        scope("local-project"),
+        fixture.run.id.clone(),
+        Some(&[fixture.server_id.clone()]),
+    )
+    .unwrap();
+    let tool = host
+        .list_tools()
+        .into_iter()
+        .find(|tool| tool.contains("inspect_counts"))
+        .unwrap();
+    let result: Value = serde_json::from_str(&host.call(&tool, "{}").await.unwrap()).unwrap();
+    assert_eq!(result["tool_name"], "inspect_counts");
+    assert_eq!(result["content"], json!([]));
+    assert_eq!(
+        result["structuredContent"],
+        json!({"counts":[2,3],"total":5})
+    );
+    assert!(result.get("_meta").is_none());
+    let replay: Value = serde_json::from_str(&host.call(&tool, "{}").await.unwrap()).unwrap();
+    assert_eq!(replay["structuredContent"], result["structuredContent"]);
+    assert_eq!(replay["duplicate"], true);
+    assert!(replay.get("_meta").is_none());
+    assert_eq!(
+        fs::read_to_string(fixture.root.join("calls.txt")).unwrap(),
+        "inspect_counts\n"
+    );
 }

@@ -28,6 +28,13 @@ struct Grant {
 fn default_send_resource() -> bool {
     true
 }
+fn token_expiry(tokens: &Value) -> McpResult<i64> {
+    tokens["expires_in"]
+        .as_i64()
+        .filter(|ttl| *ttl > 0)
+        .and_then(|ttl| chrono::Utc::now().timestamp().checked_add(ttl))
+        .ok_or_else(unavailable)
+}
 impl McpSupervisor {
     fn oauth_grant(
         &self,
@@ -75,10 +82,7 @@ impl McpSupervisor {
         {
             return Err(unavailable());
         }
-        let expires = tokens["expires_in"]
-            .as_i64()
-            .filter(|ttl| *ttl > 0)
-            .ok_or_else(unavailable)?;
+        let expires_at = token_expiry(tokens)?;
         let mut grant = Grant {
             client_id: client_id.into(),
             resource: resource.into(),
@@ -89,7 +93,7 @@ impl McpSupervisor {
             revocation_endpoint: metadata["revocation_endpoint"].as_str().map(str::to_owned),
             refresh_token: tokens["refresh_token"].as_str().map(str::to_owned),
             access_token: access.into(),
-            expires_at: chrono::Utc::now().timestamp() + expires,
+            expires_at,
             headers: BTreeMap::new(),
             send_resource: metadata["_memstack_send_resource"] != false,
         };
@@ -272,11 +276,7 @@ impl McpSupervisor {
             .ok_or_else(unavailable)?;
         grant = serde_json::from_str(&current).map_err(|_| unavailable())?;
         grant.access_token = access.into();
-        grant.expires_at = chrono::Utc::now().timestamp()
-            + tokens["expires_in"]
-                .as_i64()
-                .filter(|ttl| *ttl > 0)
-                .ok_or_else(unavailable)?;
+        grant.expires_at = token_expiry(&tokens)?;
         if let Some(refresh) = tokens["refresh_token"].as_str() {
             grant.refresh_token = Some(refresh.into());
         }
@@ -355,5 +355,47 @@ impl McpSupervisor {
         }
         vault.clear(&binding(id)).map_err(|_| unavailable())?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_oauth_lifetimes_are_rejected_before_grant_attachment() {
+        let root = std::env::temp_dir().join(format!("mcp-oauth-expiry-{}", uuid::Uuid::new_v4()));
+        let supervisor = McpSupervisor::new(
+            DesktopSessionStore::in_memory().unwrap(),
+            root.clone(),
+            None,
+            SupervisorLimits::default(),
+        )
+        .unwrap();
+        let scope = McpScope {
+            tenant_id: "expiry-test".into(),
+            project_id: "expiry-test".into(),
+        };
+        for ttl in [
+            json!(0),
+            json!(-1),
+            json!(i64::MAX),
+            json!("3600"),
+            Value::Null,
+        ] {
+            let result = supervisor.oauth_connect(
+                &scope,
+                "unattached-server",
+                &json!({}),
+                "fixture-client",
+                "https://fixture.test/mcp",
+                &json!({"access_token":"fixture-only","token_type":"Bearer","expires_in":ttl}),
+            );
+            assert!(result.is_err());
+        }
+        let now = chrono::Utc::now().timestamp();
+        let expires = token_expiry(&json!({"expires_in":3600})).unwrap();
+        assert!((now + 3600..=chrono::Utc::now().timestamp() + 3600).contains(&expires));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -6,13 +6,14 @@ use agistack_core::{
     model::Episode,
     ports::{CoreResult, LlmPort, MemoryDraft, ToolDefinition},
 };
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 #[derive(Default)]
 struct ContinuationLlm {
     saw_catalog: AtomicBool,
     saw_marker: AtomicBool,
     executed: AtomicBool,
+    model_requests: AtomicUsize,
     signout_before_dispatch: Option<std::sync::Weak<LocalRuntimeState>>,
 }
 #[async_trait::async_trait]
@@ -36,6 +37,7 @@ impl LlmPort for ContinuationLlm {
         transcript: &[TranscriptEntry],
         tools: &[ToolDefinition],
     ) -> CoreResult<AgentAction> {
+        self.model_requests.fetch_add(1, Ordering::SeqCst);
         let first = !self.saw_catalog.swap(true, Ordering::SeqCst);
         let marker = tools.iter().find(|tool| {
             tool.description
@@ -150,8 +152,67 @@ async fn signed_plugin_resume_uses_current_request_identity_and_current_approval
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         wait_continuation(&state, &conversation.id, &llm).await;
-        assert_eq!(llm.saw_marker.load(Ordering::SeqCst), mode == "valid");
-        assert_eq!(llm.executed.load(Ordering::SeqCst), mode == "valid");
+        // Signout happens inside the first model request, after its catalog was
+        // observed. Cancellation must prevent dispatch and another model request.
+        assert_eq!(
+            llm.saw_marker.load(Ordering::SeqCst),
+            !revoked,
+            "mode={mode}"
+        );
+        assert_eq!(
+            llm.executed.load(Ordering::SeqCst),
+            mode == "valid",
+            "mode={mode}"
+        );
+        assert_eq!(
+            llm.model_requests.load(Ordering::SeqCst),
+            if mode == "valid" { 2 } else { 1 },
+            "mode={mode}"
+        );
+        let invocations = state
+            .session_store
+            .list_tool_invocations(&conversation.id)
+            .unwrap();
+        let plugin_invocations = invocations
+            .iter()
+            .filter(|invocation| invocation.tool_name.starts_with("plugin__"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            plugin_invocations.len(),
+            usize::from(mode == "valid"),
+            "mode={mode}"
+        );
+        if let Some(invocation) = plugin_invocations.first() {
+            assert_eq!(invocation.run_id, run.id, "mode={mode}");
+            assert_eq!(
+                invocation.status,
+                local_runtime::tool_authority::InvocationStatus::Completed,
+                "mode={mode}"
+            );
+        }
+        let timeline = state.session_store.timeline(&conversation.id, 100).unwrap();
+        let plugin_outputs = timeline
+            .iter()
+            .filter(|item| {
+                item["type"] == "observe"
+                    && item["toolName"]
+                        .as_str()
+                        .is_some_and(|name| name.starts_with("plugin__"))
+                    && item["isError"] == false
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            plugin_outputs.len(),
+            usize::from(mode == "valid"),
+            "mode={mode}"
+        );
+        if let Some(output) = plugin_outputs.first() {
+            assert_eq!(
+                serde_json::from_str::<Value>(output["toolOutput"].as_str().unwrap()).unwrap(),
+                json!({"score":20260914,"input_bytes":15}),
+                "mode={mode}"
+            );
+        }
     }
 }
 

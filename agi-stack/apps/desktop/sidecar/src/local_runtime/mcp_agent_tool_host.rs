@@ -71,7 +71,9 @@ impl McpAgentToolHost {
         let apps = supervisor
             .apps_pinned(&catalog_lease, &scope)
             .map_err(|error| error.to_string())?;
-        let computer_use_accounts=supervisor.computer_use_managed_servers(&scope).map_err(|error|error.to_string())?;
+        let computer_use_accounts = supervisor
+            .computer_use_managed_servers(&scope)
+            .map_err(|error| error.to_string())?;
         for server in servers.into_iter().filter(|server| {
             server.enabled
                 && server.runtime_status == "healthy"
@@ -104,7 +106,9 @@ impl McpAgentToolHost {
                 tools.insert(
                     exposed_name.clone(),
                     McpAgentTool {
-                        computer_use_capability:super::computer_use_v2::declared_connector_tool(&server,tool_name),
+                        computer_use_capability: super::computer_use_v2::declared_connector_tool(
+                            &server, tool_name,
+                        ),
                         agent_visible: agent_visible(definition),
                         server_id: server.id.clone(),
                         server_name: server.name.clone(),
@@ -156,20 +160,32 @@ impl McpAgentToolHost {
     pub(super) fn device_tool_definitions(&self) -> CoreResult<Vec<ToolDefinition>> {
         let mut definitions = BTreeMap::new();
         for (name, tool) in &self.tools {
-            let binding = self.supervisor.resolve_tool(&self.scope, &tool.server_id, &tool.tool_name)
+            let binding = self
+                .supervisor
+                .resolve_tool(&self.scope, &tool.server_id, &tool.tool_name)
                 .map_err(|error| CoreError::Tool(error.reason_code().into()))?;
             let mut definition = tool.definition.clone();
             if definition.description.is_none() {
-                definition.description = Some(format!("Call MCP tool {} on {}", tool.tool_name, tool.server_name));
+                definition.description = Some(format!(
+                    "Call MCP tool {} on {}",
+                    tool.tool_name, tool.server_name
+                ));
             }
-            let mut schema = binding.definition.get("inputSchema").cloned()
+            let mut schema = binding
+                .definition
+                .get("inputSchema")
+                .cloned()
                 .unwrap_or_else(|| json!({"type":"object"}));
-            let object = schema.as_object_mut()
+            let object = schema
+                .as_object_mut()
                 .ok_or_else(|| CoreError::Tool("local_mcp_input_schema_invalid".into()))?;
-            object.insert("x-cua-mcp-binding".into(), json!({
-                "server_id": binding.server_id, "server_name": tool.server_name,
-                "revision": binding.server_revision, "catalog_digest": binding.catalog_digest,
-            }));
+            object.insert(
+                "x-cua-mcp-binding".into(),
+                json!({
+                    "server_id": binding.server_id, "server_name": tool.server_name,
+                    "revision": binding.server_revision, "catalog_digest": binding.catalog_digest,
+                }),
+            );
             if tool.agent_visible {
                 object.remove("x-cua-step-only");
             } else {
@@ -282,10 +298,16 @@ impl McpAgentToolHost {
                     .flatten()
             })
             .ok_or_else(|| "local_mcp_app_html_unavailable".to_string())?;
-        let automation_tab_id = self.app_events.as_ref().and_then(|(state, conversation, _)| {
-            let state = state.upgrade()?;
-            state.mcp_app_automation.open(&state, &self.run_id, conversation, app).ok()
-        });
+        let automation_tab_id = self
+            .app_events
+            .as_ref()
+            .and_then(|(state, conversation, _)| {
+                let state = state.upgrade()?;
+                state
+                    .mcp_app_automation
+                    .open(&state, &self.run_id, conversation, app)
+                    .ok()
+            });
         Ok(Some(json!({
             "app_id": app.id,
             "project_id": self.app_project_id,
@@ -314,9 +336,17 @@ impl ToolHost for McpAgentToolHost {
     fn list_tools(&self) -> Vec<String> {
         self.tools
             .iter()
-            .filter(|(_,tool)| tool.agent_visible)
-            .map(|(name,_)| name.clone())
-            .chain(self.advertised_aliases.iter().filter(|alias| self.tool_by_exposed_name(alias).is_some_and(|tool|tool.agent_visible)).cloned())
+            .filter(|(_, tool)| tool.agent_visible)
+            .map(|(name, _)| name.clone())
+            .chain(
+                self.advertised_aliases
+                    .iter()
+                    .filter(|alias| {
+                        self.tool_by_exposed_name(alias)
+                            .is_some_and(|tool| tool.agent_visible)
+                    })
+                    .cloned(),
+            )
             .collect()
     }
 
@@ -332,9 +362,15 @@ impl ToolHost for McpAgentToolHost {
             return Err(CoreError::Tool("mcp_app_callback_required".into()));
         }
         if definition.computer_use_capability {
-            if let Some((state,conversation,_))=&self.app_events {
-                let state = state.upgrade().ok_or_else(|| CoreError::Tool("local_mcp_runtime_stopped".into()))?;
-                super::computer_use_v2::denials::ensure_mcp_run(&state,conversation,&self.run_id)?;
+            if let Some((state, conversation, _)) = &self.app_events {
+                let state = state
+                    .upgrade()
+                    .ok_or_else(|| CoreError::Tool("local_mcp_runtime_stopped".into()))?;
+                super::computer_use_v2::denials::ensure_mcp_run(
+                    &state,
+                    conversation,
+                    &self.run_id,
+                )?;
             }
         }
         let arguments: Value = serde_json::from_str(input_json)
@@ -368,13 +404,18 @@ impl ToolHost for McpAgentToolHost {
             .map_err(|error| {
                 CoreError::Tool(format!("{}: {}", error.reason_code(), error.detail()))
             })?;
-        let result = json!({
+        let mut result = json!({
             "server_name": definition.server_name,
             "tool_name": definition.tool_name,
             "content": outcome.content,
             "is_error": outcome.is_error,
             "duplicate": outcome.duplicate,
         });
+        // Structured results are model-visible MCP output. App-only metadata
+        // remains on the supervisor receipt and is never copied into this view.
+        if let Some(content) = outcome.result.get("structuredContent") {
+            result["structuredContent"] = content.clone();
+        }
         if !outcome.is_error {
             let fields = &definition.metadata.sensitive_input_fields;
             publish_app_result(
@@ -393,10 +434,16 @@ impl ToolHost for McpAgentToolHost {
 // MCP Apps visibility is declared protocol metadata, never inferred from tool text.
 fn agent_visible(definition: &Value) -> bool {
     let metadata = &definition["_meta"];
-    metadata.get("ui").and_then(|ui| ui.get("visibility"))
+    metadata
+        .get("ui")
+        .and_then(|ui| ui.get("visibility"))
         .or_else(|| metadata.get("visibility"))
         .or_else(|| metadata.get("mcp/visibility"))
-        .map_or(true, |visibility| visibility.as_array().is_some_and(|values| values.iter().any(|value| value == "model")))
+        .map_or(true, |visibility| {
+            visibility
+                .as_array()
+                .is_some_and(|values| values.iter().any(|value| value == "model"))
+        })
 }
 
 fn server_allowed(allowed: Option<&[String]>, server_id: &str, server_name: &str) -> bool {
@@ -417,7 +464,9 @@ async fn publish_app_result(
     let Some((state, conversation_id, message_id)) = host.app_events.as_ref() else {
         return;
     };
-    let Some(state) = state.upgrade() else { return; };
+    let Some(state) = state.upgrade() else {
+        return;
+    };
     match host.app_result(tool, input, output).await {
         Ok(Some(mut payload)) => {
             payload["message_id"] = json!(message_id);
@@ -612,8 +661,8 @@ mod tests {
         let tools = BTreeMap::from([(
             canonical.clone(),
             McpAgentTool {
-                computer_use_capability:false,
-                agent_visible:true,
+                computer_use_capability: false,
+                agent_visible: true,
                 server_id: server_id.to_string(),
                 server_name: server_name.to_string(),
                 tool_name: tool_name.to_string(),
@@ -650,8 +699,8 @@ mod tests {
         let tools = BTreeMap::from([(
             exposed_name.clone(),
             McpAgentTool {
-                computer_use_capability:false,
-                agent_visible:true,
+                computer_use_capability: false,
+                agent_visible: true,
                 server_id: "server-a".to_string(),
                 server_name: "Same".to_string(),
                 tool_name: "tool-a".to_string(),
