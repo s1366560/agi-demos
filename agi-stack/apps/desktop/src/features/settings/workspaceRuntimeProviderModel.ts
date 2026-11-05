@@ -7,10 +7,7 @@ import type {
   RuntimeMode,
   WorkspaceRuntimeProvider,
 } from '../../types';
-import {
-  localRuntimeRoutingModelIds,
-  providerEnabledModelIds,
-} from './providerManagementModel';
+import { localRuntimeRoutingModelIds, providerEnabledModelIds } from './providerManagementModel';
 
 export type WorkspaceRuntimeModelOption = {
   value: string;
@@ -40,7 +37,7 @@ export function conversationRuntimeModelSelection(
   options: readonly WorkspaceRuntimeModelOption[],
   workspaceSelectedValue: string | null,
   workspaceDisplayLabel: string,
-  eventOverride: string | null | undefined = undefined,
+  eventOverride: string | null | undefined = undefined
 ): ConversationRuntimeModelSelection {
   const rawOverride = agentConfig?.llm_model_override;
   const persistedOverride =
@@ -63,14 +60,14 @@ export function conversationRuntimeModelSelection(
   const matches = options.filter((option) => option.modelId === overrideModel);
   return {
     overrideModel,
-    selectedValue: matches.length === 1 ? matches[0]?.value ?? null : null,
+    selectedValue: matches.length === 1 ? (matches[0]?.value ?? null) : null,
     displayLabel: overrideModel,
     canReset: true,
   };
 }
 
 export function latestConversationRuntimeModelEvent(
-  items: readonly unknown[],
+  items: readonly unknown[]
 ): { overrideModel: string | null; revision: string } | null {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = recordValue(items[index]);
@@ -117,18 +114,13 @@ export function workspaceRuntimeModelOptions(
   policy: LlmProviderRoutingPolicy,
   providers: readonly ManagedLlmProvider[],
   role: LlmRoutingRole = 'default',
-  mode: RuntimeMode = 'local',
+  mode: RuntimeMode = 'local'
 ): WorkspaceRuntimeModelOption[] {
   const selected = policy.roles[role] ?? policy.roles.default;
   return providers.flatMap((provider) =>
     workspaceRoutingModelIds(provider, mode).map((modelId) => {
-      const roles = (Object.entries(policy.roles) as Array<
-        [LlmRoutingRole, typeof selected]
-      >)
-        .filter(
-          ([, target]) =>
-            target?.provider_id === provider.id && target.model_id === modelId,
-        )
+      const roles = (Object.entries(policy.roles) as Array<[LlmRoutingRole, typeof selected]>)
+        .filter(([, target]) => target?.provider_id === provider.id && target.model_id === modelId)
         .map(([routingRole]) => routingRole);
       const providerLabel = provider.name.trim() || provider.provider_type;
       return {
@@ -142,13 +134,13 @@ export function workspaceRuntimeModelOptions(
         description: `${providerLabel} · ${provider.provider_type}`,
         contextWindow: null,
       };
-    }),
+    })
   );
 }
 
 export function projectRuntimeModelOptions(
   providers: readonly ManagedLlmProvider[],
-  mode: RuntimeMode = 'local',
+  mode: RuntimeMode = 'local'
 ): WorkspaceRuntimeModelOption[] {
   const seenModelIds = new Set<string>();
   const options: WorkspaceRuntimeModelOption[] = [];
@@ -172,10 +164,7 @@ export function projectRuntimeModelOptions(
   return options;
 }
 
-function workspaceRoutingModelIds(
-  provider: ManagedLlmProvider,
-  mode: RuntimeMode,
-): string[] {
+function workspaceRoutingModelIds(provider: ManagedLlmProvider, mode: RuntimeMode): string[] {
   if (mode === 'local') return localRuntimeRoutingModelIds(provider);
   const operationType = provider.operation_type?.trim().toLowerCase();
   if (
@@ -185,14 +174,14 @@ function workspaceRoutingModelIds(
   ) {
     return [];
   }
-  return providerEnabledModelIds(provider);
+  return providerEnabledModelIds(provider, mode);
 }
 
 export function workspaceRuntimeRoutingMutation(
   config: DesktopRuntimeConfig,
   policy: LlmProviderRoutingPolicy,
   option: WorkspaceRuntimeModelOption,
-  role: LlmRoutingRole = 'default',
+  role: LlmRoutingRole = 'default'
 ): LlmProviderRoutingPolicyMutationInput | null {
   if (
     policy.tenant_id !== config.tenantId.trim() ||
@@ -219,7 +208,7 @@ export function workspaceRuntimeProviderFromAuthority(
   config: DesktopRuntimeConfig,
   policy: LlmProviderRoutingPolicy,
   providers: readonly ManagedLlmProvider[],
-  role: LlmRoutingRole = 'default',
+  role: LlmRoutingRole = 'default'
 ): WorkspaceRuntimeProvider | null {
   const tenantId = config.tenantId.trim();
   const projectId = config.projectId.trim();
@@ -240,7 +229,7 @@ export function workspaceRuntimeProviderFromAuthority(
   const provider = providers.find(
     (item) =>
       item.id === target.provider_id &&
-      (!item.operation_type || item.operation_type.trim().toLowerCase() === 'llm'),
+      (!item.operation_type || item.operation_type.trim().toLowerCase() === 'llm')
   );
   if (!provider) return null;
 

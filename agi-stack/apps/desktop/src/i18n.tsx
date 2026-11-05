@@ -1840,6 +1840,10 @@ const enUS: Record<string, string> = {
   'providers.savingModels': 'Saving models…',
   'providers.saveModels': 'Save models',
   'providers.embeddingDeclaration': 'Model to use for embeddings',
+  'providers.audioInputDeclaration': 'Audio input',
+  'providers.audioInputDeclarationToggle': 'Declare audio input for {model}',
+  'providers.audioInputDeclarationHelp':
+    'Confirm that the enabled model accepts audio input using this provider. Save models to apply the declaration; it does not verify the model’s understanding.',
   'providers.noEmbeddingDeclaration': 'No embedding model declared',
   'providers.embeddingDeclarationHelp':
     'Choose an enabled model to declare its embedding role. Save models to apply this provider revision. Knowledge configuration verifies the actual embedding API.',
@@ -6164,6 +6168,10 @@ const zhCN: Record<string, string> = {
   'providers.savingModels': '正在保存模型…',
   'providers.saveModels': '保存模型',
   'providers.embeddingDeclaration': '用于向量生成的模型',
+  'providers.audioInputDeclaration': '音频输入',
+  'providers.audioInputDeclarationToggle': '声明 {model} 支持音频输入',
+  'providers.audioInputDeclarationHelp':
+    '请确认已启用模型通过此供应商支持音频输入，保存模型后生效。此声明本身不验证模型的音频理解能力。',
   'providers.noEmbeddingDeclaration': '未声明向量模型',
   'providers.embeddingDeclarationHelp': '从已启用模型中明确选择向量用途，保存模型后随提供方版本生效。知识配置会验证实际向量 API。',
   'providers.loadingModels': '正在发现…',

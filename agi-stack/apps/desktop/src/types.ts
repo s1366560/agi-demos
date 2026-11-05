@@ -975,6 +975,8 @@ export type ManagedLlmProvider = {
   embedding_model?: string | null;
   reranker_model?: string | null;
   allowed_models?: string[] | null;
+  audio_input_models?: string[];
+  config?: LlmProviderPublicConfig;
   secondary_models?: string[] | null;
   health_status?: string | null;
   credential_source?: string | null;
@@ -995,7 +997,11 @@ export type LlmProviderMutationInput = {
   authMethod: LlmProviderAuthMethod;
   baseUrl: string;
   primaryModel: string;
+  smallModel?: string | null;
+  secondaryModels?: string[];
   embeddingModel?: string;
+  audioInputModels?: string[];
+  providerConfig?: LlmProviderPublicConfig;
   requestTimeoutMs?: number;
   allowedModels: string[];
   active: boolean;
@@ -1004,10 +1010,46 @@ export type LlmProviderMutationInput = {
   environmentVariable?: string;
 };
 
-export type LlmProviderCreateInput = Omit<
-  LlmProviderMutationInput,
-  'expectedRevision'
->;
+export type LlmProviderCreateInput = Omit<LlmProviderMutationInput, 'expectedRevision'>;
+
+export type LlmProviderPublicConfig = Readonly<{
+  temperature?: number;
+  max_tokens?: number;
+  top_p?: number;
+  timeout?: number;
+  timeout_seconds?: number;
+  request_timeout_seconds?: number;
+  connect_timeout_seconds?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  seed?: number;
+  max_retries?: number;
+  region?: string;
+  audio_input_models?: string[];
+  retries?: Readonly<{
+    max_attempts?: number;
+    base_delay?: number;
+    max_delay?: number;
+    backoff_factor?: number;
+  }>;
+  transport?: Readonly<{
+    connect_timeout_seconds?: number;
+    request_timeout_seconds?: number;
+    idle_timeout_seconds?: number;
+  }>;
+  embedding?: Readonly<{
+    model?: string;
+    dimensions?: number;
+    encoding_format?: 'float' | 'base64';
+    user?: string;
+    timeout?: number;
+    provider_options?: Readonly<{
+      batch_size?: number;
+      input_type?: 'search_document' | 'search_query' | 'classification' | 'clustering';
+      truncate?: 'NONE' | 'START' | 'END';
+    }>;
+  }>;
+}>;
 
 export type LlmProviderProbeInput = {
   name: string;

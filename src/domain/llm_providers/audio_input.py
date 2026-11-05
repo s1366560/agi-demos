@@ -4,7 +4,23 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-OPENAI_AUDIO_INPUT_ADAPTERS = frozenset({"openai", "openrouter", "lmstudio", "kimi"})
+OPENAI_AUDIO_INPUT_ADAPTERS = frozenset({"openai", "openrouter", "lmstudio", "kimi", "volcengine"})
+ARK_CHAT_AUDIO_MAX_FILE_BYTES = 25_000_000
+
+
+class AudioInputLimitError(ValueError):
+    """A protocol limit must stop the request rather than trigger provider failover."""
+
+    status_code: int = 400
+
+
+def validate_audio_input_size(provider_type: str, size_bytes: int) -> None:
+    """Ark Chat accepts at most 25 MB of decoded audio in each inline input."""
+    if provider_type == "volcengine" and size_bytes > ARK_CHAT_AUDIO_MAX_FILE_BYTES:
+        raise AudioInputLimitError(
+            "Invalid parameter: Ark Chat audio exceeds the 25 MB decoded file limit. "
+            + "Use a shorter recording; the original recording remains available."
+        )
 
 
 def validate_audio_input_models(value: object) -> list[str]:

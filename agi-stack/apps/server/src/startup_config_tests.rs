@@ -2,10 +2,11 @@ use std::{
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
-    sync::{atomic::AtomicU64, atomic::Ordering, Mutex, MutexGuard},
+    sync::{Mutex, MutexGuard, atomic::AtomicU64, atomic::Ordering},
 };
 
 use super::*;
+use crate::select_llm_and_embedding_from;
 
 const FILE_DATABASE_URL: &str = "postgresql://file.example/memstack";
 const AMBIENT_DATABASE_URL: &str = "postgresql://ambient.example/other";
@@ -93,6 +94,25 @@ fn repository_env_database_url_is_loaded() {
         database_url_from_path(env_file.path()).expect("DATABASE_URL should load from file");
 
     assert_eq!(database_url.0, FILE_DATABASE_URL);
+}
+
+#[test]
+fn isolated_override_is_debug_only_and_loopback_only() {
+    let local = TempEnvFile::new("DATABASE_URL=postgresql://127.0.0.1:15432/qa\n");
+    assert!(isolated_database_url(local.path(), true).is_ok());
+    assert_eq!(
+        isolated_database_url(local.path(), false),
+        Err(DatabaseUrlConfigError::InvalidDevOverride)
+    );
+    let remote = TempEnvFile::new("DATABASE_URL=postgresql://example.com/qa\n");
+    assert_eq!(
+        isolated_database_url(remote.path(), true),
+        Err(DatabaseUrlConfigError::InvalidDevOverride)
+    );
+    assert_eq!(
+        isolated_database_url(Path::new(REPOSITORY_ENV_PATH), true),
+        Err(DatabaseUrlConfigError::InvalidDevOverride)
+    );
 }
 
 #[test]
@@ -214,4 +234,43 @@ fn run_server_recipe_delegates_database_loading_to_rust() {
     assert!(!recipe.contains("POSTGRES_"));
     assert!(!recipe.contains("DEV_ENV"));
     assert!(!recipe.contains("RUN_SERVER_DEV_STUB"));
+}
+
+#[test]
+fn server_llm_audio_support_requires_exact_startup_configuration() {
+    let configured = |models: Option<&str>, model: &str| {
+        select_llm_and_embedding_from(&|name| match name {
+            "AGISTACK_LLM_BASE_URL" => Some("https://ark.cn-beijing.volces.com/api/v3".into()),
+            "AGISTACK_LLM_MODEL" => Some(model.into()),
+            "AGISTACK_LLM_API_KEY" => Some("owned-test-credential".into()),
+            "AGISTACK_LLM_AUDIO_INPUT_MODELS" => models.map(str::to_string),
+            _ => None,
+        })
+    };
+    let model = "operator-declared-audio-model";
+    let declared = format!("[\"{model}\"]");
+    assert!(
+        configured(Some(&declared), model)
+            .unwrap()
+            .0
+            .supports_audio_input()
+    );
+    assert!(!configured(None, model).unwrap().0.supports_audio_input());
+    assert!(
+        !configured(Some(&declared), "doubao-seed-2-1-lite-260915")
+            .unwrap()
+            .0
+            .supports_audio_input()
+    );
+    let error = match configured(Some("[\"*\"]"), model) {
+        Ok(_) => panic!("wildcard audio capability must fail at startup"),
+        Err(error) => error,
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("invalid audio input model identifiers")
+    );
+    let stub = select_llm_and_embedding_from(&|_| None).unwrap();
+    assert!(!stub.0.supports_audio_input());
 }

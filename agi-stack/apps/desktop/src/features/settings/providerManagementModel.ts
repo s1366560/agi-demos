@@ -4,6 +4,7 @@ import type {
   LlmProviderCreateInput,
   LlmProviderMutationInput,
   LlmProviderProbeInput,
+  LlmProviderPublicConfig,
   LlmProviderRoutingPolicy,
   LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
@@ -11,15 +12,24 @@ import type {
   ManagedLlmProvider,
   RuntimeMode,
 } from '../../types';
+import {
+  copyProviderPublicConfigV2,
+  providerAudioProtocolSupportedV2,
+} from '../../plugins/desktopProviderPublicConfigV2';
 
 export type ProviderEditorDraft = {
+  mode?: RuntimeMode;
   id: string;
   name: string;
   providerType: string;
   authMethod: LlmProviderAuthMethod;
   baseUrl: string;
   primaryModel: string;
+  smallModel?: string | null;
+  secondaryModels?: string[];
   allowedModels: string;
+  audioInputModels?: string[];
+  providerConfig?: LlmProviderPublicConfig;
   active: boolean;
   apiKey: string;
   environmentVariable: string;
@@ -73,6 +83,7 @@ const providerTypeLabels: Readonly<Record<string, string>> = {
   openai: 'OpenAI',
   openai_compatible: 'OpenAI-compatible',
   openrouter: 'OpenRouter',
+  volcengine: 'Volcengine Ark',
   xai: 'xAI',
 };
 
@@ -83,16 +94,25 @@ const providerDefaultBaseUrls: Readonly<Record<string, string>> = {
   ollama: 'http://127.0.0.1:11434',
   openai: 'https://api.openai.com/v1',
   openai_compatible: 'http://127.0.0.1:11434/v1',
+  volcengine: 'https://ark.cn-beijing.volces.com/api/v3',
 };
 
-const KIMI_PROVIDER_PRESET = Object.freeze({
-  id: 'preset:kimi',
-  name: 'Kimi',
-  providerType: 'openai_compatible',
-  authMethod: 'environment' as const,
-  environmentVariable: 'KIMI_API_KEY',
-  baseUrl: 'https://api.kimi.com/coding/v1',
-});
+const OPENAI_COMPATIBLE_PROVIDER_PRESETS = Object.freeze([
+  Object.freeze({
+    id: 'preset:kimi',
+    name: 'Kimi',
+    authMethod: 'environment' as const,
+    environmentVariable: 'KIMI_API_KEY',
+    baseUrl: 'https://api.kimi.com/coding/v1',
+  }),
+  Object.freeze({
+    id: 'preset:volcengine-ark',
+    name: 'Volcengine Ark',
+    authMethod: 'environment' as const,
+    environmentVariable: 'ARK_API_KEY',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+  }),
+]);
 
 export function providerTypeDisplayName(providerType: string): string {
   const normalized = providerType.trim().toLowerCase();
@@ -107,7 +127,7 @@ export function providerTypeDisplayName(providerType: string): string {
 }
 
 export function providerSetupOptions(
-  descriptors: readonly LlmProviderTypeDescriptor[],
+  descriptors: readonly LlmProviderTypeDescriptor[]
 ): readonly ProviderSetupOption[] {
   return Object.freeze(
     descriptors.flatMap((descriptor) => {
@@ -120,33 +140,32 @@ export function providerSetupOptions(
         environmentVariable: '',
         baseUrl: providerDefaultBaseUrls[descriptor.providerType] ?? '',
       });
-      if (!supportsKimiProviderPreset(descriptor)) return [genericOption];
+      if (!supportsOpenAiCompatiblePresets(descriptor)) return [genericOption];
       return [
-        providerSetupOption({
-          ...KIMI_PROVIDER_PRESET,
-          descriptor,
-        }),
+        ...OPENAI_COMPATIBLE_PROVIDER_PRESETS.map((preset) =>
+          providerSetupOption({ ...preset, descriptor })
+        ),
         genericOption,
       ];
-    }),
+    })
   );
 }
 
 export function providerAuthMethodSupported(
   descriptor: LlmProviderTypeDescriptor,
-  method: LlmProviderAuthMethod,
+  method: LlmProviderAuthMethod
 ): boolean {
   return (
     descriptor.authMethods.includes(method) && !descriptor.unavailableAuthMethods.includes(method)
   );
 }
 
-function supportsKimiProviderPreset(descriptor: LlmProviderTypeDescriptor): boolean {
+function supportsOpenAiCompatiblePresets(descriptor: LlmProviderTypeDescriptor): boolean {
   return (
     descriptor.source === 'local_runtime' &&
     descriptor.operationType === 'llm' &&
-    descriptor.providerType === KIMI_PROVIDER_PRESET.providerType &&
-    providerAuthMethodSupported(descriptor, KIMI_PROVIDER_PRESET.authMethod)
+    descriptor.providerType === 'openai_compatible' &&
+    providerAuthMethodSupported(descriptor, 'environment')
   );
 }
 
@@ -156,14 +175,14 @@ function providerSetupOption(option: ProviderSetupOption): ProviderSetupOption {
 
 export function providerTogglePendingIdForScope(
   pending: ProviderToggleRequest | null,
-  scopeKey: string,
+  scopeKey: string
 ): string | null {
   return pending?.scopeKey === scopeKey ? pending.providerId : null;
 }
 
 export function providerToggleRequestMatches(
   pending: ProviderToggleRequest | null,
-  request: ProviderToggleRequest,
+  request: ProviderToggleRequest
 ): boolean {
   return (
     pending?.scopeKey === request.scopeKey &&
@@ -174,7 +193,7 @@ export function providerToggleRequestMatches(
 
 export function settleProviderToggleRequest(
   pending: ProviderToggleRequest | null,
-  completed: ProviderToggleRequest,
+  completed: ProviderToggleRequest
 ): ProviderToggleRequest | null {
   return providerToggleRequestMatches(pending, completed) ? null : pending;
 }
@@ -186,16 +205,32 @@ export function providerManagementAllowed(mode: RuntimeMode, roles: readonly str
     : normalized.has('admin');
 }
 
-export function providerDraftFromProvider(provider: ManagedLlmProvider): ProviderEditorDraft {
+export function providerDraftFromProvider(
+  provider: ManagedLlmProvider,
+  mode: RuntimeMode = 'local'
+): ProviderEditorDraft {
   const authMethod = provider.auth_method ?? 'api_key';
   return {
+    mode,
     id: provider.id,
     name: provider.name || provider.provider_type,
     providerType: provider.provider_type,
     authMethod,
     baseUrl: provider.base_url ?? '',
     primaryModel: provider.llm_model ?? '',
+    ...(mode === 'cloud'
+      ? {
+          smallModel: provider.llm_small_model ?? null,
+          secondaryModels: [...(provider.secondary_models ?? [])],
+        }
+      : {}),
     allowedModels: (provider.allowed_models ?? []).join('\n'),
+    ...(provider.audio_input_models === undefined
+      ? {}
+      : { audioInputModels: [...provider.audio_input_models] }),
+    ...(mode === 'cloud'
+      ? { providerConfig: copyProviderPublicConfigV2(provider.config ?? {}) }
+      : {}),
     active: provider.is_active !== false,
     apiKey: '',
     environmentVariable:
@@ -211,13 +246,35 @@ export function providerMutationFromDraft(draft: ProviderEditorDraft): LlmProvid
   const apiKey = draft.authMethod === 'api_key' ? draft.apiKey.trim() : '';
   const environmentVariable =
     draft.authMethod === 'environment' ? draft.environmentVariable.trim() : '';
+  const primaryModel = draft.primaryModel.trim();
+  const allowedModels = normalizedModelIds(draft.allowedModels);
+  const secondaryModels = normalizedModelSequence(draft.secondaryModels ?? []);
+  const configuredModels =
+    draft.mode === 'cloud'
+      ? [primaryModel, draft.smallModel ?? '', ...secondaryModels]
+      : [primaryModel, ...allowedModels];
   return {
     name: draft.name.trim(),
     providerType: draft.providerType.trim(),
     authMethod: draft.authMethod,
     baseUrl: draft.baseUrl.trim().replace(/\/$/, ''),
-    primaryModel: draft.primaryModel.trim(),
-    allowedModels: normalizedModelIds(draft.allowedModels),
+    primaryModel,
+    ...(draft.mode === 'cloud'
+      ? { smallModel: draft.smallModel?.trim() || null, secondaryModels }
+      : {}),
+    allowedModels,
+    ...(draft.providerConfig === undefined
+      ? {}
+      : { providerConfig: copyProviderPublicConfigV2(draft.providerConfig) }),
+    ...(draft.audioInputModels === undefined
+      ? {}
+      : {
+          audioInputModels: providerAudioInputDeclarationSupported(draft.providerType)
+            ? normalizedModelSequence(draft.audioInputModels).filter((model) =>
+                configuredModels.includes(model)
+              )
+            : [],
+        }),
     active: draft.active,
     expectedRevision: draft.expectedRevision,
     ...(draft.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: draft.requestTimeoutMs }),
@@ -232,8 +289,10 @@ export function providerCreateInputFromDraft(draft: ProviderEditorDraft): LlmPro
 }
 
 export function providerRequestTimeoutIsValid(milliseconds: number | undefined): boolean {
-  return milliseconds === undefined ||
-    (Number.isSafeInteger(milliseconds) && milliseconds >= 1 && milliseconds <= 300_000);
+  return (
+    milliseconds === undefined ||
+    (Number.isSafeInteger(milliseconds) && milliseconds >= 1 && milliseconds <= 300_000)
+  );
 }
 
 export function providerProbeInputFromDraft(draft: ProviderEditorDraft): LlmProviderProbeInput {
@@ -253,7 +312,7 @@ export function providerProbeInputFromDraft(draft: ProviderEditorDraft): LlmProv
 
 export function providerProbeInputIsValid(
   input: LlmProviderProbeInput,
-  credentialConfigured = false,
+  credentialConfigured = false
 ): boolean {
   if (!input.name || !input.providerType || !input.baseUrl) return false;
   if (input.authMethod === 'oauth') return false;
@@ -264,7 +323,7 @@ export function providerProbeInputIsValid(
 
 export function providerConnectionStatus(
   provider: ManagedLlmProvider,
-  probeSupported = true,
+  probeSupported = true
 ): ProviderConnectionStatus {
   if (
     provider.is_active === false ||
@@ -291,7 +350,7 @@ export function filterProviders(
   providers: readonly ManagedLlmProvider[],
   query: string,
   filter: ProviderListFilter,
-  providerTypes: readonly LlmProviderTypeDescriptor[] = [],
+  providerTypes: readonly LlmProviderTypeDescriptor[] = []
 ): ManagedLlmProvider[] {
   const needle = query.trim().toLowerCase();
   return providers.filter((provider) => {
@@ -308,7 +367,7 @@ export function filterProviders(
 }
 
 export function providerModelsFromProvider(
-  provider: ManagedLlmProvider,
+  provider: ManagedLlmProvider
 ): LlmProviderCatalogModel[] {
   const operationType = provider.operation_type?.trim().toLowerCase();
   const capability =
@@ -316,8 +375,26 @@ export function providerModelsFromProvider(
   return providerEnabledModelIds(provider).map((id) => ({ id, capability }));
 }
 
-export function providerEnabledModelIds(provider: ManagedLlmProvider): string[] {
-  return normalizedModelSequence([...(provider.allowed_models ?? []), provider.llm_model ?? '']);
+export function providerEnabledModelIds(
+  provider: ManagedLlmProvider,
+  mode: RuntimeMode = 'local'
+): string[] {
+  return normalizedModelSequence(
+    mode === 'cloud'
+      ? [
+          provider.llm_model ?? '',
+          provider.llm_small_model ?? '',
+          ...(provider.secondary_models ?? []),
+        ]
+      : [...(provider.allowed_models ?? []), provider.llm_model ?? '']
+  );
+}
+
+export function providerAudioInputDeclarationSupported(providerType: string): boolean {
+  return (
+    providerAudioProtocolSupportedV2(providerType, 'local') ||
+    providerAudioProtocolSupportedV2(providerType, 'cloud')
+  );
 }
 
 export function localRuntimeRoutingModelIds(provider: ManagedLlmProvider): string[] {
@@ -350,7 +427,7 @@ function routingTargetKey(target: LlmRouteTarget): string {
 export function routingFallbackCanAdd(
   fallbacks: readonly LlmRouteTarget[],
   availableTargets: readonly LlmRouteTarget[],
-  maxFallbacks: number,
+  maxFallbacks: number
 ): boolean {
   if (fallbacks.length >= maxFallbacks) return false;
   const used = new Set(fallbacks.map(routingTargetKey));
@@ -359,7 +436,7 @@ export function routingFallbackCanAdd(
 
 export function providerRoutingOverview(
   provider: ManagedLlmProvider,
-  policy: LlmProviderRoutingPolicy | null,
+  policy: LlmProviderRoutingPolicy | null
 ): ProviderRoutingOverview {
   if (policy) {
     return {
@@ -385,7 +462,7 @@ export function providerRoutingOverview(
 
 export function routingPolicyReferencesProvider(
   policy: LlmProviderRoutingPolicy,
-  providerId: string,
+  providerId: string
 ): boolean {
   return (
     Object.values(policy.roles).some((target) => target?.provider_id === providerId) ||
@@ -395,14 +472,14 @@ export function routingPolicyReferencesProvider(
 
 export function routingPolicyWithoutProvider(
   policy: LlmProviderRoutingPolicy,
-  providerId: string,
+  providerId: string
 ): ProviderRoutingOverview {
   return {
     roles: Object.fromEntries(
       Object.entries(policy.roles).map(([role, target]) => [
         role,
         target?.provider_id === providerId ? null : target,
-      ]),
+      ])
     ) as LlmProviderRoutingPolicy['roles'],
     fallbacks: policy.fallbacks.filter((target) => target.provider_id !== providerId),
   };
@@ -416,8 +493,9 @@ export function providerModelCanBeDisabled(provider: ManagedLlmProvider, modelId
 export function providerMutationForActiveState(
   provider: ManagedLlmProvider,
   active: boolean,
+  mode: RuntimeMode = 'local'
 ): LlmProviderMutationInput {
-  const draft = providerDraftFromProvider(provider);
+  const draft = providerDraftFromProvider(provider, mode);
   draft.active = active;
   return providerMutationFromDraft(draft);
 }
@@ -425,13 +503,19 @@ export function providerMutationForActiveState(
 export function providerMutationForEnabledModels(
   provider: ManagedLlmProvider,
   enabledModelIds: Iterable<string>,
+  mode: RuntimeMode = 'local'
 ): LlmProviderMutationInput {
-  const draft = providerDraftFromProvider(provider);
+  const draft = providerDraftFromProvider(provider, mode);
   const enabled = normalizedModelSequence(enabledModelIds);
   const primaryModel = draft.primaryModel.trim();
   if (primaryModel && !enabled.includes(primaryModel)) enabled.push(primaryModel);
   if (!primaryModel && enabled[0]) draft.primaryModel = enabled[0];
-  draft.allowedModels = enabled.join('\n');
+  if (mode === 'cloud') {
+    if (draft.smallModel && !enabled.includes(draft.smallModel)) draft.smallModel = null;
+    draft.secondaryModels = enabled.filter(
+      (id) => id !== draft.primaryModel && id !== draft.smallModel
+    );
+  } else draft.allowedModels = enabled.join('\n');
   return providerMutationFromDraft(draft);
 }
 
@@ -440,12 +524,12 @@ export function providerDraftIsValid(draft: ProviderEditorDraft): boolean {
     draft.name.trim() &&
     draft.providerType.trim() &&
     draft.baseUrl.trim() &&
-    draft.primaryModel.trim(),
+    draft.primaryModel.trim()
   );
 }
 
 export function providerValidationSignal(
-  outcome: LlmProviderValidationOutcome,
+  outcome: LlmProviderValidationOutcome
 ): ProviderValidationSignal {
   return {
     kind: outcome.probed ? 'external_probe' : 'configuration_only',
@@ -459,14 +543,14 @@ export function providerValidationSucceeded(outcome: LlmProviderValidationOutcom
 
 export function providerValidationAccepted(
   outcome: LlmProviderValidationOutcome | null,
-  probeSupported: boolean,
+  probeSupported: boolean
 ): boolean {
   if (probeSupported) return providerValidationSucceeded(outcome);
   return outcome?.probed === false && outcome.status === 'configuration_valid';
 }
 
 export function providerConfigurationValidationOutcome(
-  _provider: ManagedLlmProvider,
+  _provider: ManagedLlmProvider
 ): LlmProviderValidationOutcome {
   return {
     provider: null,

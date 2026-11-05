@@ -31,6 +31,7 @@ import {
 } from './providerManagementModel';
 import { useModalDialog } from './useModalDialog';
 import { ProviderRequestTimeoutField } from './ProviderRequestTimeoutField';
+import { ProviderCatalogPicker } from './ProviderCatalogPicker';
 
 const AUTH_METHOD_ORDER: LlmProviderAuthMethod[] = ['oauth', 'api_key', 'environment', 'none'];
 
@@ -42,7 +43,7 @@ type AddProviderDialogProps = {
   onCreate: (
     input: LlmProviderCreateInput,
     validation: LlmProviderValidationOutcome,
-    idempotencyKey: string,
+    idempotencyKey: string
   ) => Promise<ManagedLlmProvider>;
 };
 
@@ -71,7 +72,7 @@ export function AddProviderDialog({
   const [busy, setBusy] = useState<'types' | 'test' | 'create' | null>('types');
   const [error, setError] = useState<string | null>(null);
   const [providerCreateIdempotencyKey, setProviderCreateIdempotencyKey] = useState(() =>
-    crypto.randomUUID(),
+    crypto.randomUUID()
   );
   const validationRequestId = useRef(0);
   const onLoadTypesRef = useRef(onLoadTypes);
@@ -98,7 +99,7 @@ export function AddProviderDialog({
       .then((nextTypes) => {
         if (cancelled) return;
         const chatProviderOptions = providerSetupOptions(
-          nextTypes.filter((descriptor) => descriptor.operationType === 'llm'),
+          nextTypes.filter((descriptor) => descriptor.operationType === 'llm')
         );
         setOptions(chatProviderOptions);
         if (chatProviderOptions[0]) chooseOption(chatProviderOptions[0]);
@@ -137,6 +138,9 @@ export function AddProviderDialog({
     invalidateValidation();
   };
 
+  const selectedDescriptor = options.find((option) => option.id === selectedOptionId)?.descriptor;
+  const cloudProvider = selectedDescriptor?.source === 'cloud_api';
+
   const probeInput = useMemo<LlmProviderProbeInput>(
     () => ({
       name: name.trim(),
@@ -149,7 +153,7 @@ export function AddProviderDialog({
         ? { environmentVariable: environmentVariable.trim() }
         : {}),
     }),
-    [apiKey, authMethod, baseUrl, environmentVariable, name, selectedType],
+    [apiKey, authMethod, baseUrl, environmentVariable, name, selectedType]
   );
 
   const input = useMemo<LlmProviderCreateInput>(
@@ -160,6 +164,11 @@ export function AddProviderDialog({
       baseUrl: baseUrl.trim().replace(/\/$/, ''),
       primaryModel: primaryModel.trim(),
       allowedModels: [...selectedModels],
+      ...(cloudProvider
+        ? {
+            secondaryModels: [...selectedModels].filter((id) => id !== primaryModel.trim()),
+          }
+        : {}),
       ...(allowRequestTimeout ? { requestTimeoutMs } : {}),
       active: true,
       ...(authMethod === 'api_key' && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
@@ -171,6 +180,7 @@ export function AddProviderDialog({
       apiKey,
       authMethod,
       baseUrl,
+      cloudProvider,
       environmentVariable,
       name,
       primaryModel,
@@ -178,18 +188,17 @@ export function AddProviderDialog({
       requestTimeoutMs,
       selectedModels,
       selectedType,
-    ],
+    ]
   );
 
   useEffect(() => {
     setProviderCreateIdempotencyKey(() => crypto.randomUUID());
   }, [input]);
 
-  const selectedDescriptor = options.find((option) => option.id === selectedOptionId)?.descriptor;
   const unavailableAuthMethods = selectedDescriptor?.unavailableAuthMethods ?? [];
   const wizardAuthOptions = AUTH_METHOD_ORDER.filter(
     (method) =>
-      selectedDescriptor?.authMethods.includes(method) || unavailableAuthMethods.includes(method),
+      selectedDescriptor?.authMethods.includes(method) || unavailableAuthMethods.includes(method)
   );
   const authMethodUnavailable = (method: LlmProviderAuthMethod) =>
     unavailableAuthMethods.includes(method) ||
@@ -338,7 +347,7 @@ export function AddProviderDialog({
                           {t(
                             option.descriptor.authMethods.includes('none')
                               ? 'providers.localRuntime'
-                              : 'providers.cloudApi',
+                              : 'providers.cloudApi'
                           )}
                         </small>
                       </div>
@@ -504,7 +513,7 @@ export function AddProviderDialog({
                           : 'providers.configurationValidated'
                         : probeSupported
                           ? 'providers.testConnection'
-                          : 'providers.validateConfiguration',
+                          : 'providers.validateConfiguration'
                   )}
                 </button>
                 {validation && !validationAccepted ? (
@@ -526,7 +535,7 @@ export function AddProviderDialog({
                       ? 'providers.enableSuggestedModels'
                       : catalogUnavailable
                         ? 'providers.confirmManualModel'
-                        : 'providers.enableModels',
+                        : 'providers.enableModels'
                   )}
                 </h3>
                 <p>
@@ -535,27 +544,18 @@ export function AddProviderDialog({
                       ? 'providers.enableSuggestedModelsDescription'
                       : catalogUnavailable
                         ? 'providers.confirmManualModelDescription'
-                        : 'providers.enableModelsDescription',
+                        : 'providers.enableModelsDescription'
                   )}
                 </p>
               </header>
-              <div className="provider-wizard-models">
+              <div>
                 {(catalog?.models ?? []).length > 0 ? (
-                  catalog?.models.map((model) => (
-                    <label key={model.id}>
-                      <input
-                        type="checkbox"
-                        checked={selectedModels.has(model.id)}
-                        disabled={model.id === primaryModel}
-                        onChange={() => toggleCatalogModel(model.id)}
-                      />
-                      <CubeIcon />
-                      <span>
-                        <b>{model.id}</b>
-                        <small>{t(`providers.capability.${model.capability}`)}</small>
-                      </span>
-                    </label>
-                  ))
+                  <ProviderCatalogPicker
+                    models={catalog?.models ?? []}
+                    selectedModels={selectedModels}
+                    primaryModel={primaryModel}
+                    onToggle={toggleCatalogModel}
+                  />
                 ) : (
                   <div className="provider-wizard-form">
                     <label>
@@ -566,7 +566,7 @@ export function AddProviderDialog({
                           const nextModel = event.target.value;
                           setPrimaryModel(nextModel);
                           setSelectedModels(
-                            nextModel.trim() ? new Set([nextModel.trim()]) : new Set(),
+                            nextModel.trim() ? new Set([nextModel.trim()]) : new Set()
                           );
                         }}
                         placeholder="provider/exact-model-id"
@@ -584,7 +584,7 @@ export function AddProviderDialog({
                         ? 'providers.addMoreSuggestedModelsLater'
                         : catalogUnavailable
                           ? 'providers.addMoreManualModelsLater'
-                          : 'providers.addMoreModelsLater',
+                          : 'providers.addMoreModelsLater'
                     )}
                   </b>
                   <small>
@@ -593,7 +593,7 @@ export function AddProviderDialog({
                         ? 'providers.addMoreSuggestedModelsLaterDescription'
                         : catalogUnavailable
                           ? 'providers.addMoreManualModelsLaterDescription'
-                          : 'providers.addMoreModelsLaterDescription',
+                          : 'providers.addMoreModelsLaterDescription'
                     )}
                   </small>
                 </span>
@@ -642,7 +642,7 @@ export function AddProviderDialog({
                   ? 'providers.addingProvider'
                   : step === 3
                     ? 'providers.addProvider'
-                    : 'providers.continue',
+                    : 'providers.continue'
               )}
               {busy === 'create' ? <ReloadIcon className="spin" /> : <ArrowRightIcon />}
             </button>
@@ -650,6 +650,6 @@ export function AddProviderDialog({
         </div>
       </section>
     </div>,
-    document.body,
+    document.body
   );
 }

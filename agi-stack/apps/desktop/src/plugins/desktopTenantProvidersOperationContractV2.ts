@@ -1,4 +1,8 @@
 import { DesktopApiError } from '../api/client';
+import {
+  copyProviderPublicConfigV2,
+  providerAudioProtocolSupportedV2,
+} from './desktopProviderPublicConfigV2';
 import type {
   DesktopRuntimeConfig,
   ManagedLlmProvider,
@@ -136,7 +140,7 @@ export function freezeProviderConfigV2(config: DesktopRuntimeConfig): DesktopRun
 }
 export function prepareProviderInputV2<K extends ProviderMethodV2>(
   method: K,
-  input: ProviderInputV2<K>,
+  input: ProviderInputV2<K>
 ): ProviderInputV2<K> {
   if (
     !PROVIDER_METHODS_V2.includes(method) ||
@@ -190,7 +194,7 @@ export function prepareProviderInputV2<K extends ProviderMethodV2>(
     revision(args[1]);
   if (method === 'updateLlmProviderRoutingPolicy') validateRouting(args[0]);
   if (['createLlmProvider', 'testLlmProviderDraft', 'updateLlmProvider'].includes(method))
-    validateMutation(args[method === 'updateLlmProvider' ? 1 : 0], method);
+    validateMutation(args[method === 'updateLlmProvider' ? 1 : 0], method, config.mode);
   return Object.freeze({
     config,
     scope: Object.freeze({ authority: config.mode, tenantId }),
@@ -198,7 +202,11 @@ export function prepareProviderInputV2<K extends ProviderMethodV2>(
     ...(input.signal === undefined ? {} : { signal: input.signal }),
   });
 }
-function validateMutation(value: unknown, method: ProviderMethodV2): void {
+function validateMutation(
+  value: unknown,
+  method: ProviderMethodV2,
+  mode: DesktopRuntimeConfig['mode']
+): void {
   if (
     !providerRecordV2(value) ||
     typeof value.name !== 'string' ||
@@ -232,6 +240,68 @@ function validateMutation(value: unknown, method: ProviderMethodV2): void {
     )
       throw providerErrorV2('tenant_provider_embedding_model_invalid');
   }
+  for (const key of ['smallModel', 'secondaryModels']) {
+    if (value[key] === undefined) continue;
+    if (
+      method === 'testLlmProviderDraft' ||
+      mode !== 'cloud' ||
+      (key === 'smallModel'
+        ? value[key] !== null && !canonicalModelId(value[key])
+        : !Array.isArray(value[key]) ||
+          (value[key] as unknown[]).some((id) => !canonicalModelId(id)))
+    )
+      throw providerErrorV2('tenant_provider_models_invalid');
+  }
+  let nestedAudioInputModels: readonly string[] | undefined;
+  if (value.providerConfig !== undefined) {
+    if (method === 'testLlmProviderDraft' || mode !== 'cloud')
+      throw providerErrorV2('tenant_provider_public_config_invalid');
+    try {
+      nestedAudioInputModels = copyProviderPublicConfigV2(
+        value.providerConfig,
+        true
+      ).audio_input_models;
+    } catch {
+      throw providerErrorV2('tenant_provider_public_config_invalid');
+    }
+  }
+  const audioInputModels =
+    value.audioInputModels !== undefined ? value.audioInputModels : nestedAudioInputModels;
+  if (
+    mode === 'cloud' &&
+    method === 'updateLlmProvider' &&
+    value.audioInputModels !== undefined &&
+    value.providerConfig === undefined
+  )
+    throw providerErrorV2('tenant_provider_public_config_snapshot_required');
+  const configuredModels =
+    mode === 'cloud'
+      ? [
+          value.primaryModel,
+          value.smallModel,
+          ...((value.secondaryModels as string[] | undefined) ?? []),
+        ]
+      : [value.primaryModel, ...((value.allowedModels as string[] | undefined) ?? [])];
+  if (audioInputModels !== undefined) {
+    if (
+      method === 'testLlmProviderDraft' ||
+      !Array.isArray(audioInputModels) ||
+      audioInputModels.length > (mode === 'cloud' ? 100 : 2_000) ||
+      (mode === 'cloud' && new Set(audioInputModels).size !== audioInputModels.length) ||
+      (audioInputModels.length > 0 &&
+        !providerAudioProtocolSupportedV2(value.providerType, mode)) ||
+      audioInputModels.some(
+        (model) =>
+          typeof model !== 'string' ||
+          !model ||
+          model !== model.trim() ||
+          model.length > 256 ||
+          /[\u0000-\u001f\u007f-\u009f]/u.test(model) ||
+          !configuredModels.includes(model)
+      )
+    )
+      throw providerErrorV2('tenant_provider_audio_input_models_invalid');
+  }
   if (
     value.requestTimeoutMs !== undefined &&
     (method === 'testLlmProviderDraft' ||
@@ -241,6 +311,15 @@ function validateMutation(value: unknown, method: ProviderMethodV2): void {
   )
     throw providerErrorV2('tenant_provider_request_timeout_invalid');
   if (method === 'updateLlmProvider') revision(value.expectedRevision);
+}
+function canonicalModelId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 256 &&
+    value === value.trim() &&
+    !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
+  );
 }
 function validateRouting(value: unknown): void {
   if (!providerRecordV2(value) || !providerRecordV2(value.roles) || !Array.isArray(value.fallbacks))
@@ -260,7 +339,7 @@ function routeTarget(value: unknown, nullable: boolean): void {
 export function requireProviderResultV2<K extends ProviderMethodV2>(
   method: K,
   raw: unknown,
-  input: ProviderInputV2<K>,
+  input: ProviderInputV2<K>
 ): ProviderResultsV2[K] {
   const args = input.args;
   let result: unknown;
@@ -283,7 +362,7 @@ export function requireProviderResultV2<K extends ProviderMethodV2>(
   switch (method) {
     case 'listLlmProviders':
       result = readProviderArrayV2(raw, ['providers', 'items', 'data']).map((v) =>
-        checkProvider(v),
+        checkProvider(v)
       );
       break;
     case 'createLlmProvider':
@@ -295,7 +374,7 @@ export function requireProviderResultV2<K extends ProviderMethodV2>(
     case 'listLlmProviderTypes':
       result = normalizeProviderTypeDescriptorsV2(
         raw,
-        input.config.mode === 'local' ? 'local_runtime' : 'cloud_api',
+        input.config.mode === 'local' ? 'local_runtime' : 'cloud_api'
       );
       break;
     case 'getLlmProviderRoutingPolicy':
@@ -319,7 +398,7 @@ export function requireProviderResultV2<K extends ProviderMethodV2>(
       const catalog = normalizeProviderCatalogV2(
         raw,
         method === 'listLlmProviderModels' ? (args[0] as string) : '',
-        method === 'discoverLlmProviderModels' ? (args[0] as string) : '',
+        method === 'discoverLlmProviderModels' ? (args[0] as string) : ''
       );
       if (
         method === 'discoverLlmProviderModels'
@@ -347,12 +426,12 @@ export function requireProviderResultV2<K extends ProviderMethodV2>(
     case 'checkLlmProvider': {
       const outcome = normalizeProviderValidationOutcomeV2(
         raw,
-        method === 'testLlmProviderDraft' ? (args[0] as LlmProviderProbeInput).providerType : '',
+        method === 'testLlmProviderDraft' ? (args[0] as LlmProviderProbeInput).providerType : ''
       );
       if (outcome.provider)
         checkProvider(
           outcome.provider,
-          method === 'checkLlmProvider' ? (args[0] as string) : undefined,
+          method === 'checkLlmProvider' ? (args[0] as string) : undefined
         );
       result = outcome;
       break;

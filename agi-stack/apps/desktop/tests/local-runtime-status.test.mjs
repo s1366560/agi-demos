@@ -258,6 +258,7 @@ test('project model selector exposes one structural option for duplicate model i
       is_enabled: true,
       llm_model: 'shared-model',
       allowed_models: ['shared-model', 'unique-a'],
+      secondary_models: ['unique-a'],
     },
     {
       id: 'provider-b',
@@ -270,6 +271,7 @@ test('project model selector exposes one structural option for duplicate model i
       is_enabled: true,
       llm_model: 'shared-model',
       allowed_models: ['shared-model', 'unique-b'],
+      secondary_models: ['unique-b'],
     },
   ];
 
@@ -433,6 +435,7 @@ test('cloud workspace model selector includes enabled cloud provider models', ()
       is_enabled: true,
       llm_model: 'gemini-2.5-pro',
       allowed_models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+      llm_small_model: 'gemini-2.5-flash',
       health_status: 'healthy',
     },
   ];

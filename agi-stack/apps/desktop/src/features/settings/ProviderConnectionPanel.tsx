@@ -43,11 +43,11 @@ type ProviderConnectionPanelProps = {
   canManage: boolean;
   onSave: (
     provider: ManagedLlmProvider,
-    mutation: LlmProviderMutationInput,
+    mutation: LlmProviderMutationInput
   ) => Promise<ManagedLlmProvider>;
   onValidate: (
     providerId: string,
-    expectedRevision: number,
+    expectedRevision: number
   ) => Promise<LlmProviderValidationOutcome>;
   onValidateDraft: (input: LlmProviderProbeInput) => Promise<LlmProviderValidationOutcome>;
 };
@@ -66,7 +66,7 @@ export function ProviderConnectionPanel({
   const [advanced, setAdvanced] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [draft, setDraft] = useState<ProviderEditorDraft>(() =>
-    providerDraftFromProvider(provider),
+    providerDraftFromProvider(provider, mode)
   );
   const [validation, setValidation] = useState<LlmProviderValidationOutcome | null>(null);
   const [busy, setBusy] = useState<'test' | 'save' | null>(null);
@@ -82,7 +82,7 @@ export function ProviderConnectionPanel({
     setEditing(false);
     setAdvanced(false);
     setShowSecret(false);
-    setDraft(providerDraftFromProvider(provider));
+    setDraft(providerDraftFromProvider(provider, mode));
     setValidation(null);
     setBusy(null);
     setError(null);
@@ -92,7 +92,7 @@ export function ProviderConnectionPanel({
     };
     // Provider identity is the reset and request-cancellation boundary.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider.id]);
+  }, [provider.id, mode]);
 
   const mutation = useMemo(() => providerMutationFromDraft(draft), [draft]);
   const requestTimeoutValid = providerRequestTimeoutIsValid(draft.requestTimeoutMs);
@@ -105,11 +105,11 @@ export function ProviderConnectionPanel({
     draft.authMethod === 'api_key' && endpointChanged && !probeInput.apiKey;
   const probeInputValid = providerProbeInputIsValid(
     probeInput,
-    provider.credential_configured === true && !endpointChanged,
+    provider.credential_configured === true && !endpointChanged
   );
   const updateDraft = <Key extends keyof ProviderEditorDraft>(
     key: Key,
-    value: ProviderEditorDraft[Key],
+    value: ProviderEditorDraft[Key]
   ) => {
     if (busy === 'save') return;
     validationRequestId.current += 1;
@@ -190,7 +190,7 @@ export function ProviderConnectionPanel({
         return;
       }
       setEditing(false);
-      setDraft(providerDraftFromProvider(updated));
+      setDraft(providerDraftFromProvider(updated, mode));
       setShowSecret(false);
     } catch (caught) {
       if (requestId !== saveRequestId.current || providerId !== activeProviderIdRef.current) {
@@ -208,7 +208,7 @@ export function ProviderConnectionPanel({
 
   const cancelEdit = () => {
     validationRequestId.current += 1;
-    setDraft(providerDraftFromProvider(provider));
+    setDraft(providerDraftFromProvider(provider, mode));
     setEditing(false);
     setValidation(null);
     setError(null);
@@ -217,7 +217,7 @@ export function ProviderConnectionPanel({
 
   const startEdit = () => {
     validationRequestId.current += 1;
-    setDraft(providerDraftFromProvider(provider));
+    setDraft(providerDraftFromProvider(provider, mode));
     setEditing(true);
     setValidation(null);
     setError(null);
@@ -228,7 +228,7 @@ export function ProviderConnectionPanel({
   const authMethods = providerTypeDescriptor?.authMethods ?? [];
   const unavailableAuthMethods = providerTypeDescriptor?.unavailableAuthMethods ?? [];
   const authOptions = AUTH_METHOD_ORDER.filter(
-    (authMethod) => authMethods.includes(authMethod) || unavailableAuthMethods.includes(authMethod),
+    (authMethod) => authMethods.includes(authMethod) || unavailableAuthMethods.includes(authMethod)
   );
   const authMethodUnavailable = (authMethod: LlmProviderAuthMethod) =>
     unavailableAuthMethods.includes(authMethod) || !authMethods.includes(authMethod);
@@ -310,7 +310,7 @@ export function ProviderConnectionPanel({
             t(
               probeSupported
                 ? 'providers.connectionTestDescription'
-                : 'providers.configurationValidationDescription',
+                : 'providers.configurationValidationDescription'
             ));
 
   return (
@@ -367,7 +367,7 @@ export function ProviderConnectionPanel({
                 disabled={!editing || busy === 'save' || unavailable}
                 aria-pressed={draft.authMethod === authMethod}
                 aria-label={`${t(`providers.auth.${authMethod}`)} · ${t(
-                  unavailable ? 'providers.authUnavailable' : 'providers.authAvailable',
+                  unavailable ? 'providers.authUnavailable' : 'providers.authAvailable'
                 )}`}
                 key={authMethod}
                 onClick={() => selectAuthMethod(authMethod)}
@@ -577,7 +577,7 @@ export function ProviderConnectionPanel({
                         : 'providers.configurationValidationFailed'
                       : probeSupported
                         ? 'providers.testBeforeSaving'
-                        : 'providers.validateBeforeSaving',
+                        : 'providers.validateBeforeSaving'
               )}
             </b>
             <small>{validationDetail}</small>

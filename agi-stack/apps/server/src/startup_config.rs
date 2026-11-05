@@ -20,6 +20,7 @@ pub(crate) enum DatabaseUrlConfigError {
     MissingDatabaseUrl { path: PathBuf },
     EmptyDatabaseUrl { path: PathBuf },
     InvalidDatabaseUrl { path: PathBuf },
+    InvalidDevOverride,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -48,6 +49,10 @@ impl fmt::Debug for DatabaseUrl {
 impl fmt::Display for DatabaseUrlConfigError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidDevOverride => write!(
+                formatter,
+                "invalid isolated development database configuration"
+            ),
             Self::EnvFileUnavailable { path } => {
                 write!(
                     formatter,
@@ -90,7 +95,31 @@ struct EnvValue {
 }
 
 pub(crate) fn repository_database_url() -> Result<DatabaseUrl, DatabaseUrlConfigError> {
-    database_url_from_path(Path::new(REPOSITORY_ENV_PATH))
+    match std::env::var_os("AGISTACK_DEV_DATABASE_ENV") {
+        None => database_url_from_path(Path::new(REPOSITORY_ENV_PATH)),
+        Some(path) => isolated_database_url(Path::new(&path), cfg!(debug_assertions)),
+    }
+}
+
+fn isolated_database_url(
+    path: &Path,
+    debug_build: bool,
+) -> Result<DatabaseUrl, DatabaseUrlConfigError> {
+    let invalid = || DatabaseUrlConfigError::InvalidDevOverride;
+    if !debug_build {
+        return Err(invalid());
+    }
+    let canonical = path.canonicalize().map_err(|_| invalid())?;
+    let temp = std::env::temp_dir().canonicalize().map_err(|_| invalid())?;
+    if !canonical.starts_with(temp) || !canonical.is_file() {
+        return Err(invalid());
+    }
+    let database = database_url_from_path(&canonical)?;
+    let url = Url::parse(database.expose()).map_err(|_| invalid())?;
+    if !matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")) {
+        return Err(invalid());
+    }
+    Ok(database)
 }
 
 fn database_url_from_path(path: &Path) -> Result<DatabaseUrl, DatabaseUrlConfigError> {

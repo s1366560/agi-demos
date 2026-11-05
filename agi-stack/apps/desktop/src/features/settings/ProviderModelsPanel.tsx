@@ -14,9 +14,11 @@ import type {
   LlmProviderModelCatalog,
   LlmProviderMutationInput,
   ManagedLlmProvider,
+  RuntimeMode,
 } from '../../types';
 import {
   providerEnabledModelIds,
+  providerAudioInputDeclarationSupported,
   providerModelCanBeDisabled,
   providerMutationForEnabledModels,
 } from './providerManagementModel';
@@ -24,12 +26,14 @@ import { ProviderEmbeddingDeclarationField } from './ProviderEmbeddingDeclaratio
 
 type ProviderModelsPanelProps = {
   provider: ManagedLlmProvider;
+  mode?: RuntimeMode;
   canManage: boolean;
   allowEmbeddingDeclaration?: boolean;
+  allowAudioInputDeclaration?: boolean;
   onLoadCatalog: (provider: ManagedLlmProvider) => Promise<LlmProviderModelCatalog>;
   onSave: (
     provider: ManagedLlmProvider,
-    mutation: LlmProviderMutationInput,
+    mutation: LlmProviderMutationInput
   ) => Promise<ManagedLlmProvider>;
 };
 
@@ -41,8 +45,10 @@ type VisibleModel = {
 
 export function ProviderModelsPanel({
   provider,
+  mode = 'local',
   canManage,
   allowEmbeddingDeclaration = false,
+  allowAudioInputDeclaration = false,
   onLoadCatalog,
   onSave,
 }: ProviderModelsPanelProps) {
@@ -55,7 +61,10 @@ export function ProviderModelsPanel({
   const [query, setQuery] = useState('');
   const [manualModel, setManualModel] = useState('');
   const [enabled, setEnabled] = useState<Set<string>>(
-    () => new Set(providerEnabledModelIds(provider)),
+    () => new Set(providerEnabledModelIds(provider, mode))
+  );
+  const [audioInputModels, setAudioInputModels] = useState<Set<string>>(
+    () => new Set(provider.audio_input_models ?? [])
   );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -91,7 +100,8 @@ export function ProviderModelsPanel({
     setManualModel('');
     catalogRequestId.current += 1;
     saveRequestId.current += 1;
-    setEnabled(new Set(providerEnabledModelIds(provider)));
+    setEnabled(new Set(providerEnabledModelIds(provider, mode)));
+    setAudioInputModels(new Set(provider.audio_input_models ?? []));
     setSaving(false);
     setError(null);
     void loadCatalog();
@@ -101,7 +111,7 @@ export function ProviderModelsPanel({
     };
     // A new persisted revision invalidates catalog results and unsaved selections.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider.id, provider.revision]);
+  }, [provider.id, provider.revision, mode]);
 
   const catalogIsStaticFallback = catalog?.source === 'static-fallback';
 
@@ -114,7 +124,7 @@ export function ProviderModelsPanel({
         source: model.id === provider.embedding_model ? 'configured' : catalogSource,
       });
     }
-    for (const id of provider.allowed_models ?? []) {
+    for (const id of providerEnabledModelIds(provider, mode)) {
       if (!byId.has(id)) byId.set(id, { id, capability: 'chat', source: 'configured' });
     }
     if (provider.llm_model && !byId.has(provider.llm_model)) {
@@ -134,7 +144,10 @@ export function ProviderModelsPanel({
     enabled,
     provider.allowed_models,
     provider.llm_model,
+    provider.llm_small_model,
+    provider.secondary_models,
     provider.embedding_model,
+    mode,
   ]);
 
   const visibleModels = useMemo(() => {
@@ -143,14 +156,25 @@ export function ProviderModelsPanel({
     return models.filter((model) => model.id.toLowerCase().includes(normalized));
   }, [models, query]);
 
-  const configuredModels = provider.allowed_models ?? [];
+  const configuredModels = providerEnabledModelIds(provider, mode);
+  const canDeclareAudioInput =
+    allowAudioInputDeclaration && providerAudioInputDeclarationSupported(provider.provider_type);
   const dirty =
     [...enabled].sort().join('\n') !== [...configuredModels].sort().join('\n') ||
-    (allowEmbeddingDeclaration && embeddingModel !== (provider.embedding_model ?? ''));
+    (allowEmbeddingDeclaration && embeddingModel !== (provider.embedding_model ?? '')) ||
+    (canDeclareAudioInput &&
+      [...audioInputModels].sort().join('\n') !==
+        [...(provider.audio_input_models ?? [])].sort().join('\n'));
 
   const toggleModel = (modelId: string) => {
     if (!canManage || !providerModelCanBeDisabled(provider, modelId)) return;
     if (enabled.has(modelId) && embeddingModel === modelId) setEmbeddingModel('');
+    if (enabled.has(modelId))
+      setAudioInputModels((current) => {
+        const next = new Set(current);
+        next.delete(modelId);
+        return next;
+      });
     setEnabled((current) => {
       const next = new Set(current);
       if (next.has(modelId)) next.delete(modelId);
@@ -174,8 +198,13 @@ export function ProviderModelsPanel({
     setError(null);
     try {
       await onSave(provider, {
-        ...providerMutationForEnabledModels(provider, enabled),
+        ...providerMutationForEnabledModels(provider, enabled, mode),
         ...(allowEmbeddingDeclaration ? { embeddingModel } : {}),
+        ...(canDeclareAudioInput
+          ? {
+              audioInputModels: [...audioInputModels].filter((model) => enabled.has(model)),
+            }
+          : {}),
       });
     } catch (caught) {
       if (requestId !== saveRequestId.current || providerId !== activeProviderIdRef.current) {
@@ -201,7 +230,7 @@ export function ProviderModelsPanel({
             {t(
               catalogIsStaticFallback
                 ? 'providers.staticCatalogDescription'
-                : 'providers.modelCatalogDescription',
+                : 'providers.modelCatalogDescription'
             )}
           </p>
         </div>
@@ -225,7 +254,7 @@ export function ProviderModelsPanel({
                   : 'providers.reloadStaticCatalog'
                 : loading
                   ? 'providers.loadingModels'
-                  : 'providers.refreshModels',
+                  : 'providers.refreshModels'
             )}
           </button>
         )}
@@ -238,6 +267,12 @@ export function ProviderModelsPanel({
           disabled={!canManage || saving}
           onChange={setEmbeddingModel}
         />
+      ) : null}
+
+      {canDeclareAudioInput ? (
+        <p className="provider-audio-declaration-help">
+          {t('providers.audioInputDeclarationHelp')}
+        </p>
       ) : null}
 
       <div className="provider-model-tools">
@@ -292,6 +327,29 @@ export function ProviderModelsPanel({
               </div>
               <div className="provider-capabilities">
                 <span>{t(`providers.capability.${model.capability}`)}</span>
+                {canDeclareAudioInput ? (
+                  <label className="provider-audio-declaration">
+                    <input
+                      type="checkbox"
+                      aria-label={t('providers.audioInputDeclarationToggle', {
+                        model: model.id,
+                      })}
+                      checked={audioInputModels.has(model.id)}
+                      disabled={!canManage || saving || !enabled.has(model.id)}
+                      onChange={(event) => {
+                        if (!canManage || saving || !enabled.has(model.id)) return;
+                        const checked = event.target.checked;
+                        setAudioInputModels((current) => {
+                          const next = new Set(current);
+                          if (checked) next.add(model.id);
+                          else next.delete(model.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    {t('providers.audioInputDeclaration')}
+                  </label>
+                ) : null}
               </div>
               <span>{t(`providers.source.${model.source}`)}</span>
               <button
@@ -322,7 +380,7 @@ export function ProviderModelsPanel({
                 ? 'providers.discoveryUnavailable'
                 : catalogIsStaticFallback
                   ? 'providers.noSuggestedModels'
-                  : 'providers.noModelsReturned',
+                  : 'providers.noModelsReturned'
             )}
           </b>
           <span>
@@ -331,7 +389,7 @@ export function ProviderModelsPanel({
                 ? 'providers.discoveryUnavailableDescription'
                 : catalogIsStaticFallback
                   ? 'providers.noSuggestedModelsDescription'
-                  : 'providers.noModelsReturnedDescription',
+                  : 'providers.noModelsReturnedDescription'
             )}
           </span>
         </div>
@@ -346,7 +404,7 @@ export function ProviderModelsPanel({
               {t(
                 catalogIsStaticFallback
                   ? 'providers.addManualModelStaticDescription'
-                  : 'providers.addManualModelDescription',
+                  : 'providers.addManualModelDescription'
               )}
             </small>
           </span>

@@ -392,7 +392,8 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         for field_name, orm_attr in simple_fields:
             value = getattr(config, field_name, None)
             if value is not None or (
-                field_name == "base_url" and field_name in config.model_fields_set
+                field_name in {"base_url", "llm_small_model"}
+                and field_name in config.model_fields_set
             ):
                 setattr(orm, orm_attr or field_name, value)
 

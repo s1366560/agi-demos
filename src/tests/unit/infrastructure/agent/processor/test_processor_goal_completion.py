@@ -577,10 +577,7 @@ class TestProcessorGoalCompletion:
         assert result.source == "llm_self_check"
 
         call = evaluator._llm_client.generate.await_args.kwargs
-        assert call["tool_choice"] == {
-            "type": "function",
-            "function": {"name": GOAL_COMPLETION_JUDGE_TOOL_V2},
-        }
+        assert call["tool_choice"] == "auto"
         assert call["tools"][0]["function"]["name"] == GOAL_COMPLETION_JUDGE_TOOL_V2
 
     async def test_nested_provider_goal_judgment_tool_call_is_accepted(

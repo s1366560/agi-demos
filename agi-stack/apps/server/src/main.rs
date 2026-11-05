@@ -544,20 +544,26 @@ type SelectedLlmAndEmbedding = (
 /// network or keys; setting `AGISTACK_LLM_BASE_URL` swaps in the HTTP adapter
 /// (optionally `AGISTACK_LLM_MODEL`, `AGISTACK_EMBED_MODEL`, `AGISTACK_LLM_API_KEY`).
 fn select_llm_and_embedding() -> ServerResult<SelectedLlmAndEmbedding> {
+    select_llm_and_embedding_from(&|name| std::env::var(name).ok())
+}
+
+fn select_llm_and_embedding_from(
+    environment: &impl Fn(&str) -> Option<String>,
+) -> ServerResult<SelectedLlmAndEmbedding> {
     let audio_models = provider_audio_declaration::parse(
-        std::env::var("AGISTACK_LLM_AUDIO_INPUT_MODELS").ok().as_deref(),
+        environment("AGISTACK_LLM_AUDIO_INPUT_MODELS").as_deref(),
     )
     .map_err(std::io::Error::other)?;
-    Ok(match std::env::var("AGISTACK_LLM_BASE_URL") {
-        Ok(base) if !base.is_empty() => {
+    Ok(match environment("AGISTACK_LLM_BASE_URL") {
+        Some(base) if !base.is_empty() => {
             let chat_model =
-                std::env::var("AGISTACK_LLM_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
-            let embed_model = std::env::var("AGISTACK_EMBED_MODEL")
-                .unwrap_or_else(|_| "text-embedding-3-small".into());
-            let key = std::env::var("AGISTACK_LLM_API_KEY").ok();
+                environment("AGISTACK_LLM_MODEL").unwrap_or_else(|| "gpt-4o-mini".into());
+            let embed_model = environment("AGISTACK_EMBED_MODEL")
+                .unwrap_or_else(|| "text-embedding-3-small".into());
+            let key = environment("AGISTACK_LLM_API_KEY");
             let audio_supported = audio_models.contains(&chat_model);
-            let mut llm = HttpLlm::new(base.clone(), chat_model)
-                .with_audio_input_support(audio_supported);
+            let mut llm =
+                HttpLlm::new(base.clone(), chat_model).with_audio_input_support(audio_supported);
             let mut emb = HttpEmbedding::new(base, embed_model);
             if let Some(k) = key {
                 llm = llm.with_api_key(k.clone());

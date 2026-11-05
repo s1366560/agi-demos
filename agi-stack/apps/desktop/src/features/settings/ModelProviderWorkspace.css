@@ -260,6 +260,9 @@
 .provider-model-row small { overflow: hidden; color: var(--desktop-gray-19); font: 10.5px Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .provider-capabilities { display: flex; flex-wrap: wrap; gap: 4px; }
 .provider-capabilities span { padding: 3px 5px; color: var(--desktop-gray-26); font-size: 10px; background: var(--desktop-surface-25); border: 1px solid var(--desktop-border-12); border-radius: 4px; }
+.provider-audio-declaration { display: inline-flex; align-items: center; gap: 4px; color: var(--desktop-gray-26); font-size: 11px; }
+.provider-audio-declaration input { accent-color: var(--desktop-steel-text); }
+.provider-audio-declaration-help { color: var(--desktop-gray-19); font-size: 11px; line-height: 1.5; }
 .provider-switch { position: relative; width: 31px; height: 17px; padding: 0; background: var(--desktop-surface-30); border: 1px solid var(--desktop-border-6); border-radius: 9px; }
 .provider-switch i { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; background: var(--desktop-gray-7); border-radius: 50%; transition: transform 150ms var(--ease-out); }
 .provider-switch.on { background: var(--desktop-surface-cyan-4); border-color: var(--desktop-border-cyan-5); }

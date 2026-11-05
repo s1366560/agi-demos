@@ -1,7 +1,12 @@
 import { DesktopApiError } from '../api/client';
+import {
+  copyProviderPublicConfigV2,
+  providerAudioProtocolSupportedV2,
+} from './desktopProviderPublicConfigV2';
 import type {
   LlmProviderAuthMethod,
   LlmProviderModelCatalog,
+  LlmProviderPublicConfig,
   LlmProviderRoutingPolicy,
   LlmProviderTypeDescriptor,
   LlmProviderUsage,
@@ -21,15 +26,60 @@ export function normalizeManagedLlmProviderV2(payload: unknown): ManagedLlmProvi
   }
 
   const authMethod = readProviderAuthMethod(
-    readCompatString(payload, 'auth_method', 'authMethod').toLowerCase(),
+    readCompatString(payload, 'auth_method', 'authMethod').toLowerCase()
   );
   const maskedCredential = readCompatString(payload, 'api_key_masked', 'apiKeyMasked');
   const credentialConfigured = readCompatBoolean(
     payload,
     'credential_configured',
-    'credentialConfigured',
+    'credentialConfigured'
   );
   const revision = readCompatInteger(payload, 'revision', 'version') ?? 0;
+  let publicConfig: LlmProviderPublicConfig | undefined;
+  if (payload.config !== undefined && payload.config !== null) {
+    try {
+      publicConfig = copyProviderPublicConfigV2(payload.config);
+    } catch {
+      throw new DesktopApiError('Invalid provider public configuration', 502, null);
+    }
+  }
+  const topLevelAudioInputModels = payload.audio_input_models ?? payload.audioInputModels;
+  const hasTopLevelAudioInputModels =
+    'audio_input_models' in payload || 'audioInputModels' in payload;
+  const hasNestedAudioInputModels = publicConfig?.audio_input_models !== undefined;
+  const audioInputModels = hasNestedAudioInputModels
+    ? publicConfig?.audio_input_models
+    : topLevelAudioInputModels;
+  const hasAudioInputModels = hasTopLevelAudioInputModels || hasNestedAudioInputModels;
+  const allowedModels = readCompatStringArray(payload, 'allowed_models', 'allowedModels');
+  const primaryModel = readCompatNullableString(payload, 'llm_model', 'llmModel');
+  const smallModel = readCompatNullableString(payload, 'llm_small_model', 'llmSmallModel');
+  const secondaryModels = readCompatStringArray(payload, 'secondary_models', 'secondaryModels');
+  const configuredModels = hasNestedAudioInputModels
+    ? [primaryModel, smallModel, ...(secondaryModels ?? [])]
+    : [primaryModel, ...(allowedModels ?? [])];
+  if (
+    hasAudioInputModels &&
+    (!Array.isArray(audioInputModels) ||
+      audioInputModels.length > 2_000 ||
+      (providerType === 'volcengine' && hasTopLevelAudioInputModels) ||
+      (hasNestedAudioInputModels && hasTopLevelAudioInputModels) ||
+      (audioInputModels.length > 0 &&
+        !providerAudioProtocolSupportedV2(
+          providerType,
+          hasNestedAudioInputModels ? 'cloud' : 'local'
+        )) ||
+      audioInputModels.some(
+        (model) =>
+          typeof model !== 'string' ||
+          !model ||
+          model !== model.trim() ||
+          model.length > 256 ||
+          /[\u0000-\u001f\u007f-\u009f]/u.test(model) ||
+          !configuredModels.includes(model)
+      ))
+  )
+    throw new DesktopApiError('Invalid provider audio input declaration', 502, null);
   const requestTimeoutMs = payload.request_timeout_ms;
   if (
     requestTimeoutMs !== undefined &&
@@ -50,12 +100,14 @@ export function normalizeManagedLlmProviderV2(payload: unknown): ManagedLlmProvi
     is_active: readCompatBoolean(payload, 'is_active', 'isActive'),
     is_enabled: readCompatBoolean(payload, 'is_enabled', 'isEnabled'),
     base_url: readCompatNullableString(payload, 'base_url', 'baseUrl'),
-    llm_model: readCompatNullableString(payload, 'llm_model', 'llmModel'),
-    llm_small_model: readCompatNullableString(payload, 'llm_small_model', 'llmSmallModel'),
+    llm_model: primaryModel,
+    llm_small_model: smallModel,
     embedding_model: readCompatNullableString(payload, 'embedding_model', 'embeddingModel'),
     reranker_model: readCompatNullableString(payload, 'reranker_model', 'rerankerModel'),
-    allowed_models: readCompatStringArray(payload, 'allowed_models', 'allowedModels'),
-    secondary_models: readCompatStringArray(payload, 'secondary_models', 'secondaryModels'),
+    allowed_models: allowedModels,
+    ...(hasAudioInputModels ? { audio_input_models: [...(audioInputModels as string[])] } : {}),
+    ...(publicConfig === undefined ? {} : { config: publicConfig }),
+    secondary_models: secondaryModels,
     health_status: readCompatNullableString(payload, 'health_status', 'healthStatus'),
     credential_source:
       readCompatString(payload, 'credential_source', 'credentialSource') || undefined,
@@ -110,7 +162,7 @@ export function normalizeLlmProviderRoutingPolicyV2(payload: unknown): LlmProvid
 
 function normalizeLlmRouteTarget(
   value: unknown,
-  payload: unknown,
+  payload: unknown
 ): LlmProviderRoutingPolicy['roles']['default'] {
   if (value === null) return null;
   if (!isRecord(value)) {
@@ -126,7 +178,7 @@ function normalizeLlmRouteTarget(
 
 export function normalizeProviderValidationOutcomeV2(
   payload: unknown,
-  fallbackProviderType = '',
+  fallbackProviderType = ''
 ): LlmProviderValidationOutcome {
   if (!isRecord(payload)) {
     throw new DesktopApiError('Invalid provider validation response', 502, null);
@@ -156,7 +208,7 @@ export function normalizeProviderValidationOutcomeV2(
 function readCompatString(
   record: Record<string, unknown>,
   snakeCaseKey: string,
-  camelCaseKey?: string,
+  camelCaseKey?: string
 ): string {
   const value = record[snakeCaseKey] ?? (camelCaseKey ? record[camelCaseKey] : undefined);
   return typeof value === 'string' ? value.trim() : '';
@@ -171,7 +223,7 @@ function readProviderAuthMethod(value: string): LlmProviderAuthMethod | undefine
 function readCompatBoolean(
   record: Record<string, unknown>,
   snakeCaseKey: string,
-  camelCaseKey?: string,
+  camelCaseKey?: string
 ): boolean | undefined {
   const value = record[snakeCaseKey] ?? (camelCaseKey ? record[camelCaseKey] : undefined);
   return typeof value === 'boolean' ? value : undefined;
@@ -180,7 +232,7 @@ function readCompatBoolean(
 function readCompatInteger(
   record: Record<string, unknown>,
   snakeCaseKey: string,
-  camelCaseKey?: string,
+  camelCaseKey?: string
 ): number | undefined {
   const value = record[snakeCaseKey] ?? (camelCaseKey ? record[camelCaseKey] : undefined);
   return Number.isInteger(value) && typeof value === 'number' ? value : undefined;
@@ -189,7 +241,7 @@ function readCompatInteger(
 function readCompatStringArray(
   record: Record<string, unknown>,
   snakeCaseKey: string,
-  camelCaseKey?: string,
+  camelCaseKey?: string
 ): string[] | null {
   const value = record[snakeCaseKey] ?? (camelCaseKey ? record[camelCaseKey] : undefined);
   if (!Array.isArray(value)) return null;
@@ -202,7 +254,7 @@ function readCompatStringArray(
 function readCompatNullableString(
   record: Record<string, unknown>,
   snakeCaseKey: string,
-  camelCaseKey?: string,
+  camelCaseKey?: string
 ): string | null {
   const value = record[snakeCaseKey] ?? (camelCaseKey ? record[camelCaseKey] : undefined);
   return typeof value === 'string' ? value : null;
@@ -211,7 +263,7 @@ function readCompatNullableString(
 function readCompatNullableNumber(
   record: Record<string, unknown>,
   snakeCaseKey: string,
-  camelCaseKey?: string,
+  camelCaseKey?: string
 ): number | null {
   const value = record[snakeCaseKey] ?? (camelCaseKey ? record[camelCaseKey] : undefined);
   return typeof value === 'number' ? value : null;
@@ -219,7 +271,7 @@ function readCompatNullableNumber(
 
 export function normalizeProviderTypeDescriptorsV2(
   payload: unknown,
-  source: LlmProviderTypeDescriptor['source'],
+  source: LlmProviderTypeDescriptor['source']
 ): LlmProviderTypeDescriptor[] {
   const descriptors: LlmProviderTypeDescriptor[] = [];
   const seen = new Set<string>();
@@ -243,7 +295,7 @@ export function normalizeProviderTypeDescriptorsV2(
       new Set<LlmProviderAuthMethod>([
         ...explicitlyUnavailableAuthMethods,
         ...authMethods.filter((method) => method === 'oauth'),
-      ]),
+      ])
     );
     const explicitOperationType =
       value && typeof value === 'object' && !Array.isArray(value)
@@ -270,7 +322,7 @@ export function normalizeProviderTypeDescriptorsV2(
 
 function providerOperationType(
   providerType: string,
-  explicitOperationType: string,
+  explicitOperationType: string
 ): LlmProviderTypeDescriptor['operationType'] {
   if (explicitOperationType === 'embedding' || explicitOperationType === 'rerank') {
     return explicitOperationType;
@@ -301,7 +353,7 @@ function readTrimmedString(record: Record<string, unknown>, key: string): string
 function unavailableProviderCatalog(
   providerType: string,
   providerId = '',
-  detail: string | null = null,
+  detail: string | null = null
 ): LlmProviderModelCatalog {
   return {
     providerType,
@@ -317,7 +369,7 @@ function unavailableProviderCatalog(
 export function normalizeProviderCatalogV2(
   payload: unknown,
   fallbackProviderType: string,
-  fallbackProviderId = '',
+  fallbackProviderId = ''
 ): LlmProviderModelCatalog {
   if (!payload || typeof payload !== 'object') {
     return unavailableProviderCatalog(fallbackProviderType, fallbackProviderId);

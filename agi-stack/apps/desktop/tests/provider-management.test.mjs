@@ -40,6 +40,10 @@ const addProviderDialogSource = readFileSync(
   new URL('../src/features/settings/AddProviderDialog.tsx', import.meta.url),
   'utf8',
 );
+const providerCatalogPickerSource = readFileSync(
+  new URL('../src/features/settings/ProviderCatalogPicker.tsx', import.meta.url),
+  'utf8',
+);
 const providerConnectionPanelSource = readFileSync(
   new URL('../src/features/settings/ProviderConnectionPanel.tsx', import.meta.url),
   'utf8',
@@ -90,7 +94,7 @@ test('provider type labels preserve public brand spelling', () => {
   assert.equal(providerTypeDisplayName('custom_gateway'), 'Custom Gateway');
 });
 
-test('local OpenAI-compatible capability expands into a distinct Kimi environment preset', () => {
+test('local OpenAI-compatible capability exposes distinct Kimi and Ark environment presets', () => {
   const descriptor = {
     providerType: 'openai_compatible',
     authMethods: ['api_key', 'environment', 'none'],
@@ -119,6 +123,14 @@ test('local OpenAI-compatible capability expands into a distinct Kimi environmen
         authMethod: 'environment',
         environmentVariable: 'KIMI_API_KEY',
         baseUrl: 'https://api.kimi.com/coding/v1',
+      },
+      {
+        id: 'preset:volcengine-ark',
+        name: 'Volcengine Ark',
+        providerType: 'openai_compatible',
+        authMethod: 'environment',
+        environmentVariable: 'ARK_API_KEY',
+        baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
       },
       {
         id: 'type:openai_compatible',
@@ -738,7 +750,8 @@ test('provider wizard creates only active providers with an enabled model', () =
   assert.doesNotMatch(addProviderDialogSource, /providers\.testModelId/);
   assert.doesNotMatch(addProviderDialogSource, /onLoadCatalog/);
   assert.match(addProviderDialogSource, /if \(modelId === primaryModel\) return/);
-  assert.match(addProviderDialogSource, /disabled=\{model\.id === primaryModel\}/);
+  assert.match(addProviderDialogSource, /primaryModel=\{primaryModel\}/);
+  assert.match(providerCatalogPickerSource, /disabled=\{model\.id === primaryModel\}/);
   assert.match(addProviderDialogSource, /descriptor\.authMethods\.includes\('none'\)/);
   assert.match(addProviderDialogSource, /providerSetupOptions/);
   assert.match(addProviderDialogSource, /key=\{option\.id\}/);
@@ -956,7 +969,7 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
   assert.doesNotMatch(providerOverviewPanelsSource, /fast: null, vision: null/);
   assert.match(
     providerOverviewPanelsSource,
-    /mode === 'local'[\s\S]{0,100}localRuntimeRoutingModelIds\(item\)[\s\S]{0,100}providerEnabledModelIds\(item\)/,
+    /mode === 'local'[\s\S]{0,100}localRuntimeRoutingModelIds\(item\)[\s\S]{0,100}providerEnabledModelIds\(item, mode\)/,
   );
   assert.match(
     providerOverviewPanelsSource,

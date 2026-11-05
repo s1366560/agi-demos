@@ -126,7 +126,7 @@ async def test_real_litellm_tool_call_objects_reach_structured_goal_judge(
         )
         responses = [truncated, late_truncation, raw if valid_retry else late_truncation]
 
-    async def execute(operation):
+    async def execute(operation, **_kwargs):
         return await operation()
 
     with (
@@ -144,7 +144,8 @@ async def test_real_litellm_tool_call_objects_reach_structured_goal_judge(
         expected_budgets = [192, 192, 4096]
     assert [call.kwargs["max_tokens"] for call in completion.call_args_list] == expected_budgets
     assert all(
-        call.kwargs["tool_choice"]["function"]["name"] == GOAL_COMPLETION_JUDGE_TOOL_V2
+        call.kwargs["tool_choice"] == "auto"
+        and call.kwargs["tools"][0]["function"]["name"] == GOAL_COMPLETION_JUDGE_TOOL_V2
         for call in completion.call_args_list
     )
     if not valid_retry:
@@ -196,7 +197,8 @@ async def test_second_attempt_truncation_gets_one_expanded_budget(last_result):
         4096,
     ]
     assert all(
-        call.kwargs["tool_choice"]["function"]["name"] == GOAL_COMPLETION_JUDGE_TOOL_V2
+        call.kwargs["tool_choice"] == "auto"
+        and call.kwargs["tools"][0]["function"]["name"] == GOAL_COMPLETION_JUDGE_TOOL_V2
         for call in client.generate.call_args_list
     )
     assert (result is not None) == (last_result == "tool_calls")

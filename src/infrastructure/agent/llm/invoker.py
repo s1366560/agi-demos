@@ -34,6 +34,10 @@ from src.domain.events.agent_events import (
     AgentThoughtStartEvent,
 )
 from src.infrastructure.agent.core.message import ToolState
+from src.infrastructure.llm.completion_finish import (
+    ProviderCompletionError,
+    check_completion_error_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +329,7 @@ class LLMInvoker:
                 # Step completed successfully
                 break
 
-            except asyncio.CancelledError:
+            except (asyncio.CancelledError, ProviderCompletionError):
                 self._state = InvokerState.ERROR
                 raise
 
@@ -502,6 +506,9 @@ class LLMInvoker:
         """
         # Lazy import to avoid circular dependency
         from src.infrastructure.agent.core.llm_stream import StreamEventType
+
+        if event.type == StreamEventType.ERROR:
+            check_completion_error_code(event.data.get("code"))
 
         if event.type in (
             StreamEventType.TEXT_START,

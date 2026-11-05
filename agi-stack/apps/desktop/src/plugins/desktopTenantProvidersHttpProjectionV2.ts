@@ -1,5 +1,6 @@
 import { DesktopApiError, desktopApiCredential, desktopLaunchCapability } from '../api/client';
 import { desktopApiAuthenticationAvailable, desktopApiFetch } from '../api/cloudRequestBroker';
+import { copyProviderPublicConfigV2 } from './desktopProviderPublicConfigV2';
 import type {
   DesktopRuntimeConfig,
   LlmProviderCreateInput,
@@ -17,7 +18,7 @@ import {
 } from './desktopTenantProvidersOperationContractV2';
 
 export function createDesktopTenantProvidersHttpProjectionV2(
-  config: DesktopRuntimeConfig,
+  config: DesktopRuntimeConfig
 ): DesktopTenantProvidersAuthorityV2 {
   const runtime = freezeProviderConfigV2(config);
   return Object.freeze({
@@ -73,21 +74,21 @@ export function createDesktopTenantProvidersHttpProjectionV2(
         }
         case 'createLlmProvider':
           verb = 'POST';
-          body = providerBody(args[0] as LlmProviderCreateInput);
+          body = providerBody(args[0] as LlmProviderCreateInput, runtime.mode);
           idempotencyKey = args[1] as string;
           break;
         case 'updateLlmProvider':
           path = item(args[0]);
           verb = 'PUT';
           body = {
-            ...providerBody(args[1] as LlmProviderMutationInput),
+            ...providerBody(args[1] as LlmProviderMutationInput, runtime.mode),
             expected_revision: (args[1] as LlmProviderMutationInput).expectedRevision,
           };
           break;
         case 'testLlmProviderDraft':
           path += 'test-connection';
           verb = 'POST';
-          body = providerBody(args[0] as LlmProviderProbeInput, false);
+          body = providerBody(args[0] as LlmProviderProbeInput, runtime.mode, false);
           break;
         case 'checkLlmProvider':
           path = item(args[0]) + '/health-check';
@@ -98,7 +99,10 @@ export function createDesktopTenantProvidersHttpProjectionV2(
           path = item(args[0]);
           verb = 'DELETE';
           idempotencyKey = args[2] as string;
-          body = { expected_revision: args[1], idempotency_key: idempotencyKey };
+          body = {
+            expected_revision: args[1],
+            idempotency_key: idempotencyKey,
+          };
           break;
       }
       return requestProviderJsonV2(runtime, path, {
@@ -112,7 +116,8 @@ export function createDesktopTenantProvidersHttpProjectionV2(
 }
 function providerBody(
   input: LlmProviderCreateInput | LlmProviderMutationInput | LlmProviderProbeInput,
-  includeModels = true,
+  mode: DesktopRuntimeConfig['mode'],
+  includeModels = true
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     name: input.name,
@@ -124,7 +129,25 @@ function providerBody(
   if (includeModels && 'primaryModel' in input) {
     body.llm_model = input.primaryModel;
     body.allowed_models = input.allowedModels;
+    if (mode === 'cloud') {
+      if (input.smallModel !== undefined) body.llm_small_model = input.smallModel;
+      if (input.secondaryModels !== undefined) body.secondary_models = input.secondaryModels;
+    }
     if (input.embeddingModel !== undefined) body.embedding_model = input.embeddingModel;
+    if (
+      mode === 'cloud' &&
+      (input.providerConfig !== undefined || input.audioInputModels !== undefined)
+    ) {
+      body.config = {
+        ...(input.providerConfig === undefined
+          ? {}
+          : copyProviderPublicConfigV2(input.providerConfig, true)),
+        ...(input.audioInputModels === undefined
+          ? {}
+          : { audio_input_models: input.audioInputModels }),
+      };
+    } else if (input.audioInputModels !== undefined)
+      body.audio_input_models = input.audioInputModels;
     if (input.requestTimeoutMs !== undefined) body.request_timeout_ms = input.requestTimeoutMs;
   }
   // Keys remain transient request data. Local sidecar stores them in ApplicationCredentialVault;
@@ -142,7 +165,7 @@ async function requestProviderJsonV2(
     body?: unknown;
     idempotencyKey?: string;
     signal?: AbortSignal;
-  }>,
+  }>
 ): Promise<unknown> {
   if (!desktopApiAuthenticationAvailable(config))
     throw providerErrorV2('desktop_trusted_session_required', 401);

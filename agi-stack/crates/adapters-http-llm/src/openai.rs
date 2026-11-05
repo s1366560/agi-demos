@@ -97,11 +97,14 @@ struct ChatResponse {
 #[derive(Deserialize)]
 struct ChatChoice {
     message: ChatResponseMessage,
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct ChatResponseMessage {
-    content: String,
+    #[serde(default)]
+    content: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -114,12 +117,40 @@ struct ChatStreamChunk {
 struct ChatStreamChoice {
     #[serde(default)]
     delta: ChatStreamDelta,
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 #[derive(Default, Deserialize)]
 struct ChatStreamDelta {
     #[serde(default)]
     content: Option<String>,
+}
+
+fn check_finish_reason(reason: Option<&str>) -> CoreResult<()> {
+    match reason {
+        Some("length") => Err(CoreError::Llm(
+            "provider_response_incomplete: finish_reason=length".into(),
+        )),
+        Some("content_filter") => Err(CoreError::Llm(
+            "provider_response_filtered: finish_reason=content_filter".into(),
+        )),
+        // Old providers omit this field; future provider-specific values remain compatible.
+        _ => Ok(()),
+    }
+}
+
+fn response_content(response: ChatResponse) -> CoreResult<String> {
+    let choice = response
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))?;
+    check_finish_reason(choice.finish_reason.as_deref())?;
+    choice
+        .message
+        .content
+        .ok_or_else(|| CoreError::Llm("no content in chat response".into()))
 }
 
 const EXTRACT_SYSTEM: &str = "You distill an episode into a memory. Respond with ONLY a JSON object: \
@@ -235,11 +266,7 @@ impl HttpLlm {
                 .ep
                 .post_json("/chat/completions", &body, CoreError::Llm)
                 .await?;
-            resp.choices
-                .into_iter()
-                .next()
-                .map(|c| c.message.content)
-                .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))
+            response_content(resp)
         })
         .await
     }
@@ -287,9 +314,7 @@ impl HttpLlm {
                 .send()
                 .await
                 .map_err(|e| CoreError::Llm(e.to_string()))?;
-            let resp = resp
-                .error_for_status()
-                .map_err(|e| CoreError::Llm(e.to_string()))?;
+            let resp = self.ep.checked_response(resp, CoreError::Llm).await?;
             // Some compatible providers ignore the stream flag and return a JSON
             // completion. Preserve their response while exposing native SSE where supported.
             if resp
@@ -303,17 +328,8 @@ impl HttpLlm {
                         .is_some_and(|mime| mime.trim() == "application/json")
                 })
             {
-                let response: ChatResponse = resp
-                    .json()
-                    .await
-                    .map_err(|error| CoreError::Llm(error.to_string()))?;
-                let content = response
-                    .choices
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))?
-                    .message
-                    .content;
+                let response: ChatResponse = self.ep.decode_json(resp, CoreError::Llm).await?;
+                let content = response_content(response)?;
                 on_delta(&content);
                 return Ok(content);
             }
@@ -327,7 +343,12 @@ impl HttpLlm {
                 line_buffer.extend_from_slice(&chunk);
                 while let Some(newline_index) = line_buffer.iter().position(|b| *b == b'\n') {
                     let line: Vec<u8> = line_buffer.drain(..=newline_index).collect();
-                    if handle_openai_stream_line(&line, &mut content, &mut on_delta)? {
+                    if handle_openai_stream_line(
+                        &line,
+                        &mut content,
+                        &mut on_delta,
+                        self.ep.api_key.as_deref(),
+                    )? {
                         done = true;
                         break;
                     }
@@ -338,7 +359,12 @@ impl HttpLlm {
             }
 
             if !done && !line_buffer.is_empty() {
-                handle_openai_stream_line(&line_buffer, &mut content, &mut on_delta)?;
+                handle_openai_stream_line(
+                    &line_buffer,
+                    &mut content,
+                    &mut on_delta,
+                    self.ep.api_key.as_deref(),
+                )?;
             }
 
             Ok(content)
@@ -402,6 +428,7 @@ fn handle_openai_stream_line<F>(
     line: &[u8],
     content: &mut String,
     on_delta: &mut F,
+    credential: Option<&str>,
 ) -> CoreResult<bool>
 where
     F: FnMut(&str),
@@ -419,9 +446,15 @@ where
     if payload.is_empty() {
         return Ok(false);
     }
-    let chunk: ChatStreamChunk = serde_json::from_str(payload)
+    let value: serde_json::Value = serde_json::from_str(payload)
+        .map_err(|e| CoreError::Llm(format!("bad stream json: {e}")))?;
+    if let Some(detail) = crate::provider_error::detail(&value, credential) {
+        return Err(CoreError::Llm(format!("provider_stream_error: {detail}")));
+    }
+    let chunk: ChatStreamChunk = serde_json::from_value(value)
         .map_err(|e| CoreError::Llm(format!("bad stream json: {e}")))?;
     for choice in chunk.choices {
+        check_finish_reason(choice.finish_reason.as_deref())?;
         let Some(delta) = choice.delta.content.filter(|s| !s.is_empty()) else {
             continue;
         };

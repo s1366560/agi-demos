@@ -41,6 +41,10 @@ from src.infrastructure.agent.native_computer_use.audio_messages import (
     prepare_audio_input,
 )
 from src.infrastructure.agent.native_computer_use.store import DeviceBridgeError
+from src.infrastructure.llm.completion_finish import (
+    ProviderCompletionError,
+    check_completion_finish_reason,
+)
 from src.infrastructure.llm.model_catalog import ModelCatalogService
 from src.infrastructure.llm.model_registry import (
     clamp_max_tokens as _clamp_max_tokens,
@@ -58,6 +62,19 @@ from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
+
+_ASSISTANT_PAYLOAD_FIELDS = (
+    "content",
+    "tool_calls",
+    "function_call",
+    "reasoning_content",
+    "reasoning",
+    "reasoning_details",
+    "thinking_blocks",
+    "refusal",
+    "audio",
+    "annotations",
+)
 
 
 def _sanitize_tool_call_adjacency(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -85,7 +102,15 @@ def _sanitize_tool_call_adjacency(messages: list[dict[str, Any]]) -> list[dict[s
             continue
         sanitized.append(message)
         index += 1
-    return sanitized
+    # Failed/interrupted turns and stripped incomplete tool groups can leave an
+    # assistant placeholder with no model-visible payload. Do not invent content
+    # for it or send it back as an empty assistant turn on a later retry.
+    return [
+        message
+        for message in sanitized
+        if message.get("role") != "assistant"
+        or any(message.get(field) for field in _ASSISTANT_PAYLOAD_FIELDS)
+    ]
 
 
 def _sanitize_assistant_tool_group(
@@ -232,9 +257,11 @@ class LiteLLMClient(LLMClient):
 
     def supports_audio_input(self, model: str) -> bool:
         """Only explicit exact model declarations on an OpenAI-wire adapter enable audio."""
-        if self.provider_config.provider_type.value not in OPENAI_AUDIO_INPUT_ADAPTERS:
+        provider_type = self.provider_config.provider_type.value
+        if provider_type not in OPENAI_AUDIO_INPUT_ADAPTERS:
             return False
-        if "/" in model and not model.startswith("openai/"):
+        adapter_prefix = "volcengine/" if provider_type == "volcengine" else "openai/"
+        if "/" in model and not model.startswith(adapter_prefix):
             return False
         return model in {
             self._qualify_model_for_provider(item)
@@ -861,12 +888,9 @@ class LiteLLMClient(LLMClient):
                 "role": m.get("role", "user"),
                 "content": LiteLLMClient._normalize_message_content(m.get("content", "")),
             }
-            if "tool_calls" in m:
-                msg["tool_calls"] = m["tool_calls"]
-            if "tool_call_id" in m:
-                msg["tool_call_id"] = m["tool_call_id"]
-            if "name" in m:
-                msg["name"] = m["name"]
+            for field in (*_ASSISTANT_PAYLOAD_FIELDS[1:], "tool_call_id", "name", "cache_control"):
+                if field in m:
+                    msg[field] = m[field]
             return msg
         return {"role": m.role, "content": LiteLLMClient._normalize_message_content(m.content)}
 
@@ -923,6 +947,7 @@ class LiteLLMClient(LLMClient):
             cache = get_response_cache()
             cached = await cache.get(litellm_messages, model=model, temperature=effective_temp)
             if cached is not None:
+                check_completion_finish_reason(cached.get("finish_reason"))
                 return cached
 
         completion_kwargs = self._build_completion_kwargs(
@@ -949,6 +974,8 @@ class LiteLLMClient(LLMClient):
             raise ValueError("No choices in response")
 
         choice = response.choices[0]
+        finish_reason = _get_attr(choice, "finish_reason", None)
+        check_completion_finish_reason(finish_reason)
         message = _get_attr(choice, "message", {})
 
         content = _get_attr(message, "content", "") or ""
@@ -958,8 +985,6 @@ class LiteLLMClient(LLMClient):
             call.model_dump(mode="json") if isinstance(call, BaseModel) else call
             for call in (tool_calls or [])
         ]
-        finish_reason = _get_attr(choice, "finish_reason", None)
-
         result = {
             "content": content,
             "tool_calls": tool_calls or [],
@@ -1056,9 +1081,14 @@ class LiteLLMClient(LLMClient):
                 )
                 async with aclosing(source):
                     async for chunk in audio.stream(source):
+                        choices = getattr(chunk, "choices", None)
+                        if choices:
+                            check_completion_finish_reason(
+                                getattr(choices[0], "finish_reason", None)
+                            )
                         yield chunk
             circuit_breaker.record_success()
-        except (RuntimeV2Error, DeviceBridgeError):
+        except (RuntimeV2Error, DeviceBridgeError, ProviderCompletionError):
             raise
         except Exception as e:
             if not self._is_client_error(e):
@@ -1139,7 +1169,9 @@ class LiteLLMClient(LLMClient):
             if not response.choices:
                 raise ValueError("No choices in response")
 
-            content = response.choices[0].message["content"]
+            choice = response.choices[0]
+            check_completion_finish_reason(getattr(choice, "finish_reason", None))
+            content = choice.message["content"]
 
             if response_model:
                 try:

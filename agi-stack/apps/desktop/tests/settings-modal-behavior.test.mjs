@@ -120,7 +120,7 @@ test('provider connection state and requests reset at the provider identity boun
   assert.match(providerConnectionSource, /saveRequestId/);
   assert.match(
     providerConnectionSource,
-    /useEffect\(\(\) => \{[\s\S]*providerDraftFromProvider\(provider\)[\s\S]*\}, \[provider\.id\]\)/
+    /useEffect\(\(\) => \{[\s\S]*providerDraftFromProvider\(provider, mode\)[\s\S]*\}, \[provider\.id, mode\]\)/
   );
   const saveConnection = providerConnectionSource.match(
     /const saveConnection = async \(\) => \{[\s\S]*?\n  \};/

@@ -8,11 +8,12 @@ judgment tool call.
 from __future__ import annotations
 
 import asyncio
+import copy
 import inspect
 import json
 import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.agent.processor.goal_judgment import (
@@ -36,6 +37,10 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_CONTRACT,
     WORKSPACE_ROLE_WORKER,
     WORKSPACE_SESSION_ROLE_KEY,
+)
+from src.infrastructure.llm.completion_finish import (
+    ProviderCompletionError,
+    check_completion_finish_reason,
 )
 from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
@@ -72,12 +77,14 @@ class GoalEvaluator:
         tools: dict[str, Any],
         runtime_context: dict[str, Any] | None = None,
         audit_sink: GoalJudgmentAuditSinkV2 | None = None,
+        generation_parameters: Callable[[], Mapping[str, Any]] | None = None,
     ) -> None:
         self._llm_client = llm_client
         self._tools = tools
         self._current_message: Message | None = None
         self._runtime_context = dict(runtime_context or {})
         self._audit_sink = audit_sink or log_goal_judgment_audit
+        self._generation_parameters = generation_parameters
         self._native_control_outcome: ToolControlOutcome | None = None
 
     # ------------------------------------------------------------------
@@ -584,6 +591,7 @@ class GoalEvaluator:
         if allow_handoff:
             input_json["native_control_outcome"] = ToolControlOutcome.USER_STOPPED.value
         started_at = time.perf_counter()
+        generation_parameters, use_completion_tokens = self._generation_parameters_snapshot()
         # Retry only this structured judge; never ask the main Agent to repair it.
         max_tokens = 192
         expanded_budget_used = False
@@ -593,6 +601,9 @@ class GoalEvaluator:
             if attempt == 2 and (max_tokens != 4096 or expanded_budget_used):
                 break
             expanded_budget_used = expanded_budget_used or max_tokens == 4096
+            attempt_parameters = copy.deepcopy(generation_parameters)
+            if use_completion_tokens:
+                attempt_parameters["max_completion_tokens"] = max_tokens
             try:
                 response = await self._llm_client.generate(  # type: ignore[union-attr]
                     messages=[
@@ -612,13 +623,19 @@ class GoalEvaluator:
                         },
                     ],
                     tools=[goal_completion_judgment_tool_v2(allow_handoff=allow_handoff)],
-                    tool_choice={
-                        "type": "function",
-                        "function": {"name": GOAL_COMPLETION_JUDGE_TOOL_V2},
-                    },
-                    temperature=0.0,
+                    # Thinking providers may reject forced named selection. The sole
+                    # declared tool and strict exact-call parser still define the verdict.
+                    tool_choice="auto",
                     max_tokens=max_tokens,
+                    **attempt_parameters,
                 )
+                self._check_response_finish_reason(response)
+            except ProviderCompletionError as exc:
+                logger.warning("[GoalEvaluator] Structured goal judgment rejected: %s", exc.code)
+                if exc.finish_reason != "length":
+                    break
+                max_tokens = 4096
+                continue
             except Exception as exc:
                 logger.warning(
                     "[GoalEvaluator] Structured goal judgment failed with %s",
@@ -630,11 +647,6 @@ class GoalEvaluator:
                     "[GoalEvaluator] Structured goal judgment returned an invalid envelope"
                 )
                 continue
-            # Reasoning-capable providers may exhaust the compact budget before
-            # emitting the forced call. Only an explicit truncation signal permits
-            # one larger, bounded retry; the structured verdict remains mandatory.
-            if response.get("finish_reason") == "length":
-                max_tokens = 4096
             output_json = extract_goal_judgment_tool_call_v2(response)
             if output_json is None:
                 logger.warning(
@@ -668,6 +680,50 @@ class GoalEvaluator:
                 await audit_result
             return judgment
         return None
+
+    @staticmethod
+    def _check_response_finish_reason(response: object) -> None:
+        if isinstance(response, Mapping):
+            check_completion_finish_reason(response.get("finish_reason"))
+            if not _object_list(response.get("tool_calls")):
+                choices = _object_list(response.get("choices"))
+                if choices and isinstance(choices[0], Mapping):
+                    check_completion_finish_reason(choices[0].get("finish_reason"))
+
+    def _generation_parameters_snapshot(self) -> tuple[dict[str, Any], bool]:
+        """Inherit current validated sampling metadata; retain the judge's protocol budget."""
+        supplied = self._generation_parameters() if self._generation_parameters else {}
+        options = supplied.get("provider_options", {})
+        options = options if isinstance(options, Mapping) else {}
+        protected = {
+            "model",
+            "temperature",
+            "messages",
+            "tools",
+            "tool_choice",
+            "stream",
+            "stream_options",
+            "max_tokens",
+            "max_completion_tokens",
+            "_omit_temperature",
+            "_request_recorder_v2",
+            "api_key",
+            "api_base",
+            "base_url",
+            "extra_headers",
+        }
+        result = {
+            key: copy.deepcopy(value)
+            for key, value in options.items()
+            if isinstance(key, str) and not key.startswith("__") and key not in protected
+        }
+        if supplied.get("model") is not None:
+            result["model"] = supplied["model"]
+        if options.get("__omit_temperature") is True:
+            result["_omit_temperature"] = True
+        elif supplied.get("temperature") is not None:
+            result["temperature"] = supplied["temperature"]
+        return result, options.get("__use_max_completion_tokens") is True
 
     def _goal_judge_agent_id(self) -> str:
         selected_agent_id = str(self._runtime_context.get("selected_agent_id", "")).strip()

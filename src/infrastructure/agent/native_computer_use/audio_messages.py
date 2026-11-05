@@ -11,6 +11,7 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+from src.domain.llm_providers.audio_input import AudioInputLimitError, validate_audio_input_size
 from src.domain.model.artifact.artifact import ArtifactStatus
 from src.infrastructure.agent.native_computer_use.audio_authority import (
     require_audio_authority,
@@ -186,6 +187,18 @@ def _omission(reason: str) -> dict[str, str]:
     }
 
 
+def _require_request_budget(provider_type: str, files: int, total_bytes: int) -> None:
+    if files < MAX_AUDIO_INPUT_FILES and total_bytes <= MAX_AUDIO_INPUT_BYTES:
+        return
+    if provider_type == "volcengine":
+        raise AudioInputLimitError(
+            "Invalid parameter: Ark recording input exceeds the native request "
+            + "audio count or byte budget. Use fewer or shorter recordings; "
+            + "the original recordings remain available."
+        )
+    raise _invalid()
+
+
 def _valid_audio(content: bytes, mime: str) -> bool:
     if mime == "audio/wav":
         return (
@@ -236,10 +249,12 @@ async def prepare_audio_input(
             try:
                 await require_current_audio_provider(provider)
                 artifact = await _owned_artifact(context, part)
-                if len(prepared.references) >= MAX_AUDIO_INPUT_FILES or (
-                    total + artifact.size_bytes > MAX_AUDIO_INPUT_BYTES
-                ):
-                    raise _invalid()
+                validate_audio_input_size(provider.provider_type.value, artifact.size_bytes)
+                _require_request_budget(
+                    provider.provider_type.value,
+                    len(prepared.references),
+                    total + artifact.size_bytes,
+                )
                 content_bytes = await context.service.get_artifact_bytes(artifact.id)
                 if (
                     content_bytes is None

@@ -53,7 +53,7 @@ export function ProviderOverviewPanel({
   ] as string[];
   const providerNames = useMemo(
     () => new Map(providers.map((item) => [item.id, item.name || item.provider_type])),
-    [providers],
+    [providers]
   );
   const routeLabel = (target: LlmRouteTarget | null | undefined): string | null =>
     target
@@ -146,7 +146,7 @@ export function ProviderOverviewPanel({
               </div>
               <em>
                 {t(
-                  model === provider.llm_model ? 'providers.defaultRole' : 'providers.enabledRole',
+                  model === provider.llm_model ? 'providers.defaultRole' : 'providers.enabledRole'
                 )}
               </em>
             </article>
@@ -186,9 +186,7 @@ export function ProviderOverviewPanel({
             <b>{fastRoute || t('providers.notConfigured')}</b>
             <em>
               {t(
-                policyBacked
-                  ? 'providers.workspaceRoutingPolicy'
-                  : 'providers.readOnlyFromServer',
+                policyBacked ? 'providers.workspaceRoutingPolicy' : 'providers.readOnlyFromServer'
               )}
             </em>
           </div>
@@ -197,9 +195,7 @@ export function ProviderOverviewPanel({
             <b>{fallbackRoute || t('providers.notConfigured')}</b>
             <em>
               {t(
-                policyBacked
-                  ? 'providers.workspaceRoutingPolicy'
-                  : 'providers.readOnlyFromServer',
+                policyBacked ? 'providers.workspaceRoutingPolicy' : 'providers.readOnlyFromServer'
               )}
             </em>
           </div>
@@ -255,10 +251,7 @@ function sameRouteTarget(left: LlmRouteTarget | null, right: LlmRouteTarget | nu
   );
 }
 
-function routingDraftFromPolicy(
-  policyKey: string,
-  policy: LlmProviderRoutingPolicy,
-): RoutingDraft {
+function routingDraftFromPolicy(policyKey: string, policy: LlmProviderRoutingPolicy): RoutingDraft {
   return {
     policyKey,
     roles: { ...policy.roles },
@@ -266,10 +259,7 @@ function routingDraftFromPolicy(
   };
 }
 
-function routingDraftChanged(
-  policy: LlmProviderRoutingPolicy,
-  draft: RoutingDraft,
-): boolean {
+function routingDraftChanged(policy: LlmProviderRoutingPolicy, draft: RoutingDraft): boolean {
   if (ROUTING_ROLES.some((role) => !sameRouteTarget(policy.roles[role], draft.roles[role]))) {
     return true;
   }
@@ -314,7 +304,7 @@ export function ProviderRoutingPanel({
   const { t } = useI18n();
   const effectivePolicy = useMemo(
     () => policy ?? (mode === 'cloud' ? cloudRoutingProjection(provider) : null),
-    [mode, policy, provider],
+    [mode, policy, provider]
   );
   const policyKey = effectivePolicy
     ? [
@@ -332,9 +322,7 @@ export function ProviderRoutingPanel({
     const providerNames = new Map(providers.map((item) => [item.id, item.name || item.provider_type]));
     for (const item of providers) {
       const modelCandidates =
-        mode === 'local'
-          ? localRuntimeRoutingModelIds(item)
-          : providerEnabledModelIds(item);
+        mode === 'local' ? localRuntimeRoutingModelIds(item) : providerEnabledModelIds(item, mode);
       for (const model of modelCandidates) {
         const modelId = model.trim();
         if (!modelId) continue;
@@ -373,7 +361,7 @@ export function ProviderRoutingPanel({
   const enabledOptions = modelOptions.filter((option) => option.available);
   const optionByKey = useMemo(
     () => new Map(modelOptions.map((option) => [option.key, option])),
-    [modelOptions],
+    [modelOptions]
   );
   const [storedDraft, setStoredDraft] = useState<RoutingDraft | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -424,7 +412,7 @@ export function ProviderRoutingPanel({
       return {
         ...base,
         fallbacks: base.fallbacks.map((item, currentIndex) =>
-          currentIndex === index ? target : item,
+          currentIndex === index ? target : item
         ),
       };
     });
@@ -580,7 +568,7 @@ export function ProviderRoutingPanel({
                 const usedElsewhere = new Set(
                   draft.fallbacks
                     .filter((_, currentIndex) => currentIndex !== index)
-                    .map(routeTargetKey),
+                    .map(routeTargetKey)
                 );
                 return (
                   <div key={`${currentKey}-${index}`}>
@@ -603,7 +591,9 @@ export function ProviderRoutingPanel({
                     {editable ? (
                       <button
                         type="button"
-                        aria-label={t('providers.removeFallback', { count: index + 1 })}
+                        aria-label={t('providers.removeFallback', {
+                          count: index + 1,
+                        })}
                         onClick={() => removeFallback(index)}
                       >
                         {t('providers.remove')}
@@ -627,7 +617,7 @@ export function ProviderRoutingPanel({
                   !routingFallbackCanAdd(
                     draft.fallbacks,
                     enabledOptions.map((option) => option.target),
-                    MAX_ROUTING_FALLBACKS,
+                    MAX_ROUTING_FALLBACKS
                   )
                 }
                 onClick={addFallback}
@@ -654,10 +644,7 @@ type ProviderUsagePanelProps = {
   onLoadUsage: (providerId: string, signal?: AbortSignal) => Promise<LlmProviderUsage>;
 };
 
-export function ProviderUsagePanel({
-  provider,
-  onLoadUsage,
-}: ProviderUsagePanelProps) {
+export function ProviderUsagePanel({ provider, onLoadUsage }: ProviderUsagePanelProps) {
   const { locale, t } = useI18n();
   const [usage, setUsage] = useState<LlmProviderUsage | null>(null);
   const [loading, setLoading] = useState(false);
@@ -690,7 +677,7 @@ export function ProviderUsagePanel({
     const cost = statistics.reduce((sum, item) => sum + (item.total_cost_usd ?? 0), 0);
     const latencyNumerator = statistics.reduce(
       (sum, item) => sum + (item.avg_response_time_ms ?? 0) * item.total_requests,
-      0,
+      0
     );
     return {
       requests,

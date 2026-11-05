@@ -34,6 +34,10 @@ if TYPE_CHECKING:
 
 # Import sampling utilities from llm package
 from src.infrastructure.agent.llm.token_sampler import BatchLogBuffer, TokenDeltaSampler
+from src.infrastructure.llm.completion_finish import (
+    ProviderCompletionError,
+    check_completion_finish_reason,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -538,6 +542,9 @@ class LLMStream:
             elapsed = time.time() - start_time
             logger.debug(f"LLM stream completed: request_id={request_id}, elapsed={elapsed:.2f}s")
 
+        except ProviderCompletionError as e:
+            logger.error("LLM completion rejected code=%s", e.code)
+            yield StreamEvent.error(str(e), code=e.code)
         except Exception as e:
             logger.error(f"LLM stream error: {e}", exc_info=True)
             yield StreamEvent.error(str(e), code=type(e).__name__)
@@ -875,6 +882,10 @@ class LLMStream:
             return
 
         choice = choices[0]
+        finish_reason = getattr(choice, "finish_reason", None)
+        if isinstance(finish_reason, str) and finish_reason:
+            self._finish_reason = finish_reason
+        check_completion_finish_reason(self._finish_reason)
         delta = getattr(choice, "delta", None)
         if delta is None:
             logger.debug("[LLMStream] choice has no delta")
@@ -917,10 +928,6 @@ class LLMStream:
                 yield event
             async for event in self._process_tool_calls(tool_calls):
                 yield event
-
-        finish_reason = getattr(choice, "finish_reason", None)
-        if finish_reason:
-            self._finish_reason = finish_reason
 
     async def _process_tool_calls(
         self,
@@ -1043,6 +1050,7 @@ class LLMStream:
 
     def _parse_tool_arguments(self, tracker: ToolCallChunk) -> dict[str, Any]:
         """Parse tool call arguments with error recovery."""
+        check_completion_finish_reason(self._finish_reason)
         if not tracker.arguments:
             return {}
 
@@ -1123,6 +1131,7 @@ class LLMStream:
         Yields:
             Final StreamEvent objects
         """
+        check_completion_finish_reason(self._finish_reason)
         for event in self._finalize_streams():
             yield event
         for event in self._complete_pending_tool_calls():

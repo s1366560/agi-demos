@@ -111,13 +111,13 @@ export function ModelProviderWorkspace({
   const { locale, t } = useI18n();
   const routingScope = useMemo(
     () => activeRoutingScope(config),
-    [config.projectId, config.tenantId, config.workspaceId],
+    [config.projectId, config.tenantId, config.workspaceId]
   );
   const [providers, setProviders] = useState<ManagedLlmProvider[]>([]);
   const [providerTypes, setProviderTypes] = useState<LlmProviderTypeDescriptor[]>([]);
   const [routingPolicy, setRoutingPolicy] = useState<LlmProviderRoutingPolicy | null>(null);
   const [routingLoading, setRoutingLoading] = useState(
-    config.mode === 'local' && routingScope !== null,
+    config.mode === 'local' && routingScope !== null
   );
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -128,7 +128,7 @@ export function ModelProviderWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [providerTogglePending, setProviderTogglePending] = useState<ProviderToggleRequest | null>(
-    null,
+    null
   );
   const [providerDeletePending, setProviderDeletePending] =
     useState<ProviderDeleteRequest | null>(null);
@@ -188,7 +188,7 @@ export function ModelProviderWorkspace({
       setError(null);
       setRoutingLoading(config.mode === 'local' && routingScope !== null);
       setRoutingError(
-        config.mode === 'local' && !routingScope ? t('providers.routingScopeRequired') : null,
+        config.mode === 'local' && !routingScope ? t('providers.routingScopeRequired') : null
       );
       try {
         const policyRequest =
@@ -197,7 +197,7 @@ export function ModelProviderWorkspace({
                 .getLlmProviderRoutingPolicy(
                   routingScope.projectId,
                   routingScope.workspaceId,
-                  signal,
+                  signal
                 )
                 .then((policy) => {
                   if (!routingPolicyMatchesScope(policy, routingScope)) {
@@ -228,7 +228,7 @@ export function ModelProviderWorkspace({
           return;
         }
         const modelProviders = items.filter(
-          (item) => !item.operation_type || item.operation_type === 'llm',
+          (item) => !item.operation_type || item.operation_type === 'llm'
         );
         setProviders(modelProviders);
         setProviderTypes(types);
@@ -238,7 +238,7 @@ export function ModelProviderWorkspace({
         setSelectedId((current) =>
           current && modelProviders.some((item) => item.id === current)
             ? current
-            : (modelProviders[0]?.id ?? null),
+            : (modelProviders[0]?.id ?? null)
         );
       } catch (caught) {
         if (
@@ -267,7 +267,7 @@ export function ModelProviderWorkspace({
         }
       }
     },
-    [client, config.mode, onCountChange, routingScope, scopeKey, t],
+    [client, config.mode, onCountChange, routingScope, scopeKey, t]
   );
 
   useEffect(() => {
@@ -278,20 +278,20 @@ export function ModelProviderWorkspace({
 
   const filteredProviders = useMemo(
     () => filterProviders(providers, query, filter, providerTypes),
-    [filter, providerTypes, providers, query],
+    [filter, providerTypes, providers, query]
   );
   const providerProbeSupport = useMemo(
     () => new Map(providerTypes.map((item) => [item.providerType, item.probeSupported])),
-    [providerTypes],
+    [providerTypes]
   );
   const provider = providers.find((item) => item.id === selectedId) ?? providers[0] ?? null;
   const providerTypeDescriptor = providerTypes.find(
-    (descriptor) => descriptor.providerType === provider?.provider_type,
+    (descriptor) => descriptor.providerType === provider?.provider_type
   );
 
   const replaceProvider = useCallback((nextProvider: ManagedLlmProvider) => {
     setProviders((current) =>
-      current.map((item) => (item.id === nextProvider.id ? nextProvider : item)),
+      current.map((item) => (item.id === nextProvider.id ? nextProvider : item))
     );
   }, []);
 
@@ -316,13 +316,13 @@ export function ModelProviderWorkspace({
         }
       }
     },
-    [onRuntimeStatusRefresh, showToast, t],
+    [onRuntimeStatusRefresh, showToast, t]
   );
 
   const updateProvider = useCallback(
     async (
       currentProvider: ManagedLlmProvider,
-      mutation: LlmProviderMutationInput,
+      mutation: LlmProviderMutationInput
     ): Promise<ManagedLlmProvider> => {
       const requestScope = scopeKey;
       const requestClient = client;
@@ -338,13 +338,13 @@ export function ModelProviderWorkspace({
       showToast(t('providers.providerSaved', { provider: updated.name }));
       return updated;
     },
-    [client, replaceProvider, scopeKey, showToast, t],
+    [client, replaceProvider, scopeKey, showToast, t]
   );
 
   const saveProvider = useCallback(
     async (
       currentProvider: ManagedLlmProvider,
-      mutation: LlmProviderMutationInput,
+      mutation: LlmProviderMutationInput
     ): Promise<ManagedLlmProvider> => {
       const requestScope = scopeKey;
       const requestClient = client;
@@ -352,7 +352,7 @@ export function ModelProviderWorkspace({
       await refreshRuntimeProjection(requestScope, requestClient);
       return updated;
     },
-    [client, refreshRuntimeProjection, scopeKey, updateProvider],
+    [client, refreshRuntimeProjection, scopeKey, updateProvider]
   );
 
   const setProviderActive = useCallback(
@@ -376,7 +376,7 @@ export function ModelProviderWorkspace({
       try {
         const updated = await saveProvider(
           currentProvider,
-          providerMutationForActiveState(currentProvider, nextActive),
+          providerMutationForActiveState(currentProvider, nextActive, config.mode)
         );
         if (
           !mountedRef.current ||
@@ -389,7 +389,7 @@ export function ModelProviderWorkspace({
         showToast(
           t(nextActive ? 'providers.providerEnabled' : 'providers.providerDisabled', {
             provider: updated.name,
-          }),
+          })
         );
       } catch {
         if (
@@ -404,13 +404,13 @@ export function ModelProviderWorkspace({
         if (mountedRef.current) {
           providerTogglePendingRef.current = settleProviderToggleRequest(
             providerTogglePendingRef.current,
-            request,
+            request
           );
           setProviderTogglePending((current) => settleProviderToggleRequest(current, request));
         }
       }
     },
-    [canManage, client, saveProvider, scopeKey, showToast, t],
+    [canManage, client, config.mode, saveProvider, scopeKey, showToast, t]
   );
 
   const saveRoutingPolicy = useCallback(
@@ -431,7 +431,7 @@ export function ModelProviderWorkspace({
           requestClient.listLlmProviders(),
           requestClient.getLlmProviderRoutingPolicy(
             routingScope.projectId,
-            routingScope.workspaceId,
+            routingScope.workspaceId
           ),
         ]);
         if (
@@ -445,13 +445,13 @@ export function ModelProviderWorkspace({
           throw new Error(t('providers.routingScopeMismatch'));
         }
         const modelProviders = latestItems.filter(
-          (item) => !item.operation_type || item.operation_type === 'llm',
+          (item) => !item.operation_type || item.operation_type === 'llm'
         );
         setProviders(modelProviders);
         setSelectedId((current) =>
           current && modelProviders.some((item) => item.id === current)
             ? current
-            : (modelProviders[0]?.id ?? null),
+            : (modelProviders[0]?.id ?? null)
         );
         onCountChange?.(modelProviders.length);
         setRoutingPolicy(latestPolicy);
@@ -476,7 +476,7 @@ export function ModelProviderWorkspace({
       await refreshRuntimeProjection(requestScope, requestClient);
       return updated;
     },
-    [client, onCountChange, refreshRuntimeProjection, routingScope, scopeKey, showToast, t],
+    [client, onCountChange, refreshRuntimeProjection, routingScope, scopeKey, showToast, t]
   );
 
   const deleteProvider = useCallback(
@@ -521,7 +521,7 @@ export function ModelProviderWorkspace({
         await requestClient.deleteLlmProvider(
           currentProvider.id,
           attempt.expectedRevision,
-          attempt.idempotencyKey,
+          attempt.idempotencyKey
         );
         if (
           !mountedRef.current ||
@@ -534,7 +534,7 @@ export function ModelProviderWorkspace({
         const remainingProviders = providers.filter((item) => item.id !== currentProvider.id);
         setProviders(remainingProviders);
         setSelectedId((current) =>
-          current === currentProvider.id ? (remainingProviders[0]?.id ?? null) : current,
+          current === currentProvider.id ? (remainingProviders[0]?.id ?? null) : current
         );
         onCountChange?.(remainingProviders.length);
         setDeleteConfirmProviderId(null);
@@ -557,7 +557,7 @@ export function ModelProviderWorkspace({
         ) {
           providerDeletePendingRef.current = null;
           setProviderDeletePending((current) =>
-            current?.requestToken === request.requestToken ? null : current,
+            current?.requestToken === request.requestToken ? null : current
           );
         }
       }
@@ -575,7 +575,7 @@ export function ModelProviderWorkspace({
       scopeKey,
       showToast,
       t,
-    ],
+    ]
   );
 
   const validateProvider = useCallback(
@@ -603,13 +603,13 @@ export function ModelProviderWorkspace({
                   response_time_ms: outcome.responseTimeMs ?? item.response_time_ms,
                   error_message: outcome.errorMessage ?? null,
                 }
-              : item,
-          ),
+              : item
+          )
         );
       }
       return outcome;
     },
-    [client, replaceProvider, scopeKey, t],
+    [client, replaceProvider, scopeKey, t]
   );
 
   const loadProviderCatalog = useCallback(
@@ -617,14 +617,14 @@ export function ModelProviderWorkspace({
       config.mode === 'local'
         ? client.discoverLlmProviderModels(targetProvider.id, targetProvider.revision ?? 0)
         : client.listLlmProviderModels(targetProvider.provider_type),
-    [client, config.mode],
+    [client, config.mode]
   );
 
   const createProvider = useCallback(
     async (
       input: LlmProviderCreateInput,
       draftValidation: LlmProviderValidationOutcome,
-      idempotencyKey: string,
+      idempotencyKey: string
     ) => {
       const requestScope = scopeKey;
       const requestClient = client;
@@ -684,13 +684,13 @@ export function ModelProviderWorkspace({
             : validationState === 'configured'
               ? 'providers.providerConfigured'
               : 'providers.providerAddedNeedsAttention',
-          { provider: created.name },
-        ),
+          { provider: created.name }
+        )
       );
       await refreshRuntimeProjection(requestScope, requestClient);
       return checkedProvider;
     },
-    [client, onCountChange, providers.length, refreshRuntimeProjection, scopeKey, showToast, t],
+    [client, onCountChange, providers.length, refreshRuntimeProjection, scopeKey, showToast, t]
   );
 
   const selectProvider = (providerId: string) => {
@@ -814,18 +814,16 @@ export function ModelProviderWorkspace({
                 aria-label={t(
                   provider.is_active === false
                     ? 'providers.enableProvider'
-                    : 'providers.disableProvider',
+                    : 'providers.disableProvider'
                 )}
                 title={t(
                   provider.is_active === false
                     ? 'providers.enableProvider'
-                    : 'providers.disableProvider',
+                    : 'providers.disableProvider'
                 )}
                 onClick={() => void setProviderActive(provider)}
               >
-                {providerTogglePendingId === provider.id ? (
-                  <ReloadIcon className="spin" />
-                ) : null}
+                {providerTogglePendingId === provider.id ? <ReloadIcon className="spin" /> : null}
                 {t(
                   providerTogglePendingId === provider.id
                     ? provider.is_active === false
@@ -833,7 +831,7 @@ export function ModelProviderWorkspace({
                       : 'providers.disablingProvider'
                     : provider.is_active === false
                       ? 'providers.enableProvider'
-                      : 'providers.disableProvider',
+                      : 'providers.disableProvider'
                 )}
               </button>
             ) : null}
@@ -842,7 +840,9 @@ export function ModelProviderWorkspace({
                 <span
                   className="provider-delete-confirmation"
                   role="group"
-                  aria-label={t('providers.deleteProviderNamed', { provider: provider.name })}
+                  aria-label={t('providers.deleteProviderNamed', {
+                    provider: provider.name,
+                  })}
                 >
                   <span>{t('providers.deleteProviderConfirm')}</span>
                   <button
@@ -859,7 +859,7 @@ export function ModelProviderWorkspace({
                     {t(
                       providerDeletePendingId === provider.id
                         ? 'providers.deletingProvider'
-                        : 'common.delete',
+                        : 'common.delete'
                     )}
                   </button>
                   <button
@@ -877,8 +877,12 @@ export function ModelProviderWorkspace({
                 <button
                   className="provider-icon-button danger"
                   type="button"
-                  aria-label={t('providers.deleteProviderNamed', { provider: provider.name })}
-                  title={t('providers.deleteProviderNamed', { provider: provider.name })}
+                  aria-label={t('providers.deleteProviderNamed', {
+                    provider: provider.name,
+                  })}
+                  title={t('providers.deleteProviderNamed', {
+                    provider: provider.name,
+                  })}
                   onClick={() => setDeleteConfirmProviderId(provider.id)}
                 >
                   <TrashIcon />
@@ -1009,7 +1013,11 @@ export function ModelProviderWorkspace({
                   key={`${scopeKey}:${provider.id}`}
                   provider={provider}
                   canManage={canManage}
+                  mode={config.mode}
                   allowEmbeddingDeclaration={config.mode === 'local'}
+                  allowAudioInputDeclaration={
+                    config.mode === 'local' || provider.provider_type === 'volcengine'
+                  }
                   onLoadCatalog={loadProviderCatalog}
                   onSave={saveProvider}
                 />

@@ -13,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.application.services.provider_service import ProviderService
+from src.domain.llm_providers import audio_input as audio_policy
 from src.domain.llm_providers.audio_input import validate_audio_input_declaration
 from src.domain.llm_providers.llm_types import LLMConfig
 from src.domain.llm_providers.models import (
@@ -22,6 +23,8 @@ from src.domain.llm_providers.models import (
     _public_provider_response_config,
     validate_provider_request_config,
 )
+from src.infrastructure.agent.native_computer_use import audio_messages
+from src.infrastructure.llm.failover_chain import is_failover_worthy
 from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
 from src.infrastructure.llm.resilience.rate_limiter import ProviderRateLimiter, RateLimitConfig
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
@@ -36,7 +39,9 @@ def harness(monkeypatch):
     yield from audio_fixtures.harness.__wrapped__(monkeypatch)
 
 
-@pytest.mark.parametrize("value", ["model", True, [""], [" model"], ["model", "model"], [1]])
+@pytest.mark.parametrize(
+    "value", ["model", True, [""], [" model"], ["model", "model"], [1], ["exact"] * 101]
+)
 def test_malformed_audio_declaration_rejected(value):
     with pytest.raises(ValidationError):
         validate_provider_request_config({"audio_input_models": value})
@@ -47,6 +52,12 @@ def test_audio_declaration_round_trips_public_config_without_secrets():
     assert config == {"audio_input_models": ["exact"]}
     assert _public_provider_response_config({**config, "secret": "private"}) == config
     assert "audio_input_models" not in validate_provider_request_config({})
+
+
+def test_missing_or_malformed_historical_audio_declaration_stays_disabled():
+    assert audio_policy.declared_audio_input_models({"audio_input_models": "*"}) == []
+    assert audio_policy.declared_audio_input_models({}) == []
+    validate_audio_input_declaration("volcengine", {}, ["ep-declared-recording"])
 
 
 @pytest.mark.parametrize(
@@ -70,6 +81,23 @@ def client_for(provider):
             provider,
             cache=False,
         )
+
+
+def configure_http_audio_provider(harness, provider_type, port):
+    api_path = "/api/v3" if provider_type is ProviderType.VOLCENGINE else "/v1"
+    model = (
+        "ep-declared-recording"
+        if provider_type is ProviderType.VOLCENGINE
+        else "openai/exact-audio-model"
+    )
+    harness.provider.provider_type = provider_type
+    harness.provider.base_url = f"http://127.0.0.1:{port}{api_path}"
+    harness.provider.llm_model = model
+    harness.provider.config = {"audio_input_models": [model]}
+    harness.stored_provider.provider_type = provider_type.value
+    harness.stored_provider.base_url = harness.provider.base_url
+    harness.stored_provider.config = dict(harness.provider.config)
+    return api_path, model
 
 
 def test_model_name_never_enables_audio_and_provider_prefix_cannot_escape_adapter(harness):
@@ -99,7 +127,11 @@ async def test_selected_model_override_omits_unsupported_audio_before_http(harne
     assert harness.service.byte_reads == 0
 
 
-async def test_provider_create_and_update_validate_declaration_against_final_model_roster(harness):
+@pytest.mark.parametrize("provider_type", [ProviderType.OPENAI, ProviderType.VOLCENGINE])
+async def test_provider_create_and_update_validate_declaration_against_final_model_roster(
+    harness, provider_type
+):
+    harness.provider.provider_type = provider_type
     repository = AsyncMock()
     repository.get_by_name.return_value = None
     repository.create.return_value = harness.provider
@@ -109,7 +141,7 @@ async def test_provider_create_and_update_validate_declaration_against_final_mod
     service.resolution_service = MagicMock()
     valid = ProviderConfigCreate(
         name="audio",
-        provider_type=ProviderType.OPENAI,
+        provider_type=provider_type,
         api_key="fixture-local-only",
         llm_model="exact-audio-model",
         config={"audio_input_models": ["exact-audio-model"]},
@@ -131,11 +163,15 @@ async def test_provider_create_and_update_validate_declaration_against_final_mod
     assert repository.update.call_args.args[1].config == {"audio_input_models": ["changed"]}
 
 
-async def test_real_http_normal_and_stream_requests_contain_verified_audio_only(harness):
+@pytest.mark.parametrize("provider_type", [ProviderType.OPENAI, ProviderType.VOLCENGINE])
+async def test_real_http_normal_and_stream_requests_contain_verified_audio_only(
+    harness, provider_type
+):
     received = []
+    received_paths = []
 
     async def serve(reader, writer):
-        await reader.readline()
+        received_paths.append((await reader.readline()).decode().split()[1])
         headers = {}
         while line := await reader.readline():
             if line == b"\r\n":
@@ -185,11 +221,7 @@ async def test_real_http_normal_and_stream_requests_contain_verified_audio_only(
     server = await asyncio.start_server(serve, "127.0.0.1", 0)
     try:
         port = server.sockets[0].getsockname()[1]
-        harness.provider.base_url = f"http://127.0.0.1:{port}/v1"
-        harness.provider.llm_model = "openai/exact-audio-model"
-        harness.provider.config = {"audio_input_models": ["openai/exact-audio-model"]}
-        harness.stored_provider.base_url = harness.provider.base_url
-        harness.stored_provider.config = dict(harness.provider.config)
+        api_path, model = configure_http_audio_provider(harness, provider_type, port)
         # Thirty seconds of audio must not be counted as base64 text tokens.
         harness.content = audio_fixtures.wav_bytes(240_000)
         harness.request["media"]["native-audio"]["size_bytes"] = len(harness.content)
@@ -203,7 +235,9 @@ async def test_real_http_normal_and_stream_requests_contain_verified_audio_only(
             async for chunk in stream:
                 chunks.append(chunk)
         assert chunks and len(received) == 2
+        assert received_paths == [api_path + "/chat/completions"] * 2
         for request in received:
+            assert request["model"] == model.removeprefix("openai/")
             block = request["messages"][0]["content"][1]["input_audio"]
             assert block["format"] == "wav"
             assert base64.b64decode(block["data"]) == harness.content
@@ -211,6 +245,75 @@ async def test_real_http_normal_and_stream_requests_contain_verified_audio_only(
     finally:
         server.close()
         await server.wait_closed()
+
+
+def test_ark_audio_requires_explicit_exact_declaration_and_same_adapter_prefix(harness):
+    harness.provider.provider_type = ProviderType.VOLCENGINE
+    harness.provider.llm_model = "ep-declared-recording"
+    harness.provider.config = {"audio_input_models": ["ep-declared-recording"]}
+    validate_audio_input_declaration(
+        "volcengine", harness.provider.config, [harness.provider.llm_model]
+    )
+    client = client_for(harness.provider)
+    assert client.supports_audio_input("volcengine/ep-declared-recording")
+    assert not client.supports_audio_input("volcengine/ep-other-recording")
+    assert not client.supports_audio_input("openai/ep-declared-recording")
+    assert not client.supports_audio_input("anthropic/ep-declared-recording")
+    harness.provider.config = {}
+    assert not client.supports_audio_input("volcengine/ep-declared-recording")
+
+
+def test_ark_chat_audio_limit_uses_decoded_bytes_and_cannot_trigger_failover():
+    assert audio_policy.ARK_CHAT_AUDIO_MAX_FILE_BYTES == 25_000_000
+    audio_policy.validate_audio_input_size("volcengine", 25_000_000)
+    audio_policy.validate_audio_input_size("openai", 25_000_001)
+    with pytest.raises(audio_policy.AudioInputLimitError, match="25 MB") as caught:
+        audio_policy.validate_audio_input_size("volcengine", 25_000_001)
+    assert not is_failover_worthy(caught.value)
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_ark_oversized_owned_recording_fails_before_bytes_or_http(
+    harness, monkeypatch, streaming
+):
+    harness.provider.provider_type = ProviderType.VOLCENGINE
+    harness.stored_provider.provider_type = "volcengine"
+    _, references, messages = await persist(harness)
+    monkeypatch.setattr(audio_policy, "ARK_CHAT_AUDIO_MAX_FILE_BYTES", len(harness.content) - 1)
+    client = client_for(harness.provider)
+    with patch("litellm.acompletion", AsyncMock()) as send:
+        with pytest.raises(audio_policy.AudioInputLimitError, match="25 MB"):
+            if streaming:
+                async with aclosing(client.generate_stream(messages)) as source:
+                    _ = [chunk async for chunk in source]
+            else:
+                await client.generate(messages)
+        send.assert_not_awaited()
+    assert harness.service.byte_reads == 0
+    artifact = harness.service.artifacts[references[0]["artifact_id"]]
+    assert artifact.status.value == "ready"
+    assert messages[0]["content"][1] == references[0]
+
+
+@pytest.mark.parametrize("budget", ["files", "bytes"])
+async def test_ark_audio_budget_never_sends_a_partial_recording_request(
+    harness, monkeypatch, budget
+):
+    harness.provider.provider_type = ProviderType.VOLCENGINE
+    harness.stored_provider.provider_type = "volcengine"
+    _, references, messages = await persist(harness)
+    messages[0]["content"] = [references[0], references[0]]
+    if budget == "files":
+        monkeypatch.setattr(audio_messages, "MAX_AUDIO_INPUT_FILES", 1)
+    else:
+        monkeypatch.setattr(audio_messages, "MAX_AUDIO_INPUT_BYTES", len(harness.content))
+    client = client_for(harness.provider)
+    with patch("litellm.acompletion", AsyncMock()) as send:
+        with pytest.raises(audio_policy.AudioInputLimitError, match="count or byte budget"):
+            await client.generate(messages)
+        send.assert_not_awaited()
+    assert messages[0]["content"] == [references[0], references[0]]
+    assert harness.service.artifacts[references[0]["artifact_id"]].status.value == "ready"
 
 
 async def test_real_http_stream_is_closed_when_native_run_is_cancelled(harness):

@@ -27,6 +27,7 @@ mod embedding;
 mod endpoint;
 mod media;
 mod openai;
+mod provider_error;
 mod rerank;
 mod structured;
 

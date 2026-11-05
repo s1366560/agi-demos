@@ -517,6 +517,11 @@ class SessionProcessor:
             llm_client=config.llm_client,
             tools=self.tools,
             runtime_context=config.runtime_context,
+            generation_parameters=lambda: {
+                "model": self.config.model,
+                "temperature": self.config.temperature,
+                "provider_options": self.config.provider_options,
+            },
         )
         self._artifact_handler = ArtifactHandler(
             artifact_service=artifact_service,
@@ -3347,7 +3352,9 @@ class SessionProcessor:
             )
             if references:
                 tool_part.metadata["native_artifact_images"] = references
-            display = repl_output_display(tool_def.parameters, result.output, [*references, *omitted])
+            display = repl_output_display(
+                tool_def.parameters, result.output, [*references, *omitted]
+            )
             if display is not None:
                 tool_part.metadata["host_repl_display"] = display
             for event in events:
@@ -4238,7 +4245,8 @@ class SessionProcessor:
         self._last_raw_result = raw_for_artifacts
         self._tool_attachments[call_id] = (
             result.attachments
-            if isinstance(result, ToolResult) and not tool_part.metadata.get("repl_attachments_handled")
+            if isinstance(result, ToolResult)
+            and not tool_part.metadata.get("repl_attachments_handled")
             else []
         )
         self._last_output_str = output_str
@@ -4796,7 +4804,9 @@ class SessionProcessor:
                     }
 
                 async for attachment_event in self._prepare_repl_observe(
-                    tool_def, raw_result, tool_part,
+                    tool_def,
+                    raw_result,
+                    tool_part,
                     allowed=not result_replaced and not failed and not control,
                 ):
                     yield attachment_event
