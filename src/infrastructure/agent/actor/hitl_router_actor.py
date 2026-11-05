@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import ray
 import redis.asyncio as aioredis
+from redis.exceptions import RedisError
 
 from src.configuration.config import get_settings
 from src.configuration.ray_config import get_ray_settings
@@ -23,6 +24,8 @@ from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from src.infrastructure.agent.hitl.utils import HITLRequestRecord
 
 
@@ -53,6 +56,24 @@ class HITLStreamRouterActor:
             return
         self._running = True
         self._listen_task = asyncio.create_task(self._listen_loop())
+
+    async def health(self) -> dict[str, bool]:
+        """Report task and connection facts without creating Redis state or consuming work."""
+        redis_connected = False
+        if self._redis is not None:
+            try:
+                async with asyncio.timeout(1.0):
+                    redis_connected = await cast("Awaitable[bool]", self._redis.ping()) is True
+            except (RedisError, TimeoutError):
+                pass
+        running = self._running
+        listening = self._listen_task is not None and not self._listen_task.done()
+        return {
+            "running": running,
+            "listening": listening,
+            "redis_connected": redis_connected,
+            "ready": running and listening and redis_connected,
+        }
 
     async def stop(self) -> None:
         """Stop the router loop."""

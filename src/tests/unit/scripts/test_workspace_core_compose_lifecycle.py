@@ -122,10 +122,7 @@ def test_workspace_core_image_is_locked_non_root_and_runtime_only() -> None:
     assert "cargo build --locked --release --package memstack-workspace-core" in dockerfile
     assert "FROM debian:bookworm-slim AS runtime" in dockerfile
     assert "libsqlite3-0" in dockerfile
-    assert (
-        "COPY --from=builder /build/avernet-bcs/target/release/memstack-workspace-core"
-        in dockerfile
-    )
+    assert "COPY --from=builder /build/avernet-bcs/out/memstack-workspace-core" in dockerfile
     assert "USER workspace-core" in dockerfile
     assert 'ENTRYPOINT ["/usr/local/bin/workspace-core-entrypoint"]' in dockerfile
     assert "third_party/avernet-bcs/target" not in dockerfile
@@ -177,7 +174,9 @@ def test_workspace_core_make_lifecycle_is_complete_and_non_destructive() -> None
     ):
         assert _make_recipe(makefile, target)
 
-    assert "dev-all: dev-infra-dev db-init workspace-core-start" in makefile
+    dev_all = _make_recipe(makefile, "dev-all")
+    assert dev_all.index("$(MAKE) db-schema") < dev_all.index("plugin-bundle-upgrade")
+    assert "workspace-core-start" in dev_all
     assert "$(WORKSPACE_CORE_SERVICE)" in _make_recipe(makefile, "dev-stop")
     assert "$(WORKSPACE_CORE_SERVICE)" in _make_recipe(makefile, "status")
     assert "down" not in _make_recipe(makefile, "workspace-core-stop")

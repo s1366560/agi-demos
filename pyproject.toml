@@ -74,6 +74,8 @@ memstack-acp = "src.infrastructure.acp.cli:main"
 memstack-acp-runner = "src.infrastructure.acp.runner_cli:main"
 
 [project.optional-dependencies]
+ray-runtime = ["ray[default]==2.53.0"]
+
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",

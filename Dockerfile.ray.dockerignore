@@ -1,0 +1,134 @@
+# Ray build context. Keep the shared credential and artifact exclusions.
+# Version-control and local agent state
+.git
+.github
+.omx
+.copilot
+.auto-claude
+
+# Credentials and developer-specific configuration
+.env
+.env.*
+!.env.example
+.ssh
+.aws
+.netrc
+.npmrc
+.pypirc
+*.pem
+*.key
+*.p12
+*.pfx
+secrets
+*.secret.yaml
+*.tfvars
+
+# Python environments, caches, and reports
+.venv
+venv
+env
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.hypothesis
+.tox
+.nox
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+dist
+build
+*.egg-info
+
+# JavaScript and browser artifacts
+**/node_modules
+web/dist
+web/build
+web/playwright-report
+web/test-results
+web/coverage*
+playwright-report
+test-results
+
+# Rust build artifacts
+**/target
+
+# Runtime data and local workspaces
+logs
+*.log
+*.pid
+*.db
+*.sqlite
+*.sqlite3
+.cache
+.reports
+.volumes
+.memstack/workspace
+.memstack/worktrees
+.memstack/git-remotes
+
+# IDE and OS metadata
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Ray-specific context: retain application/runtime source trees while excluding
+# generated outputs at any depth and developer-owned runtime state.
+**/target
+**/node_modules
+**/.venv
+**/venv
+**/__pycache__
+**/.cache
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.git
+.memstack
+.codex
+.ua
+.tmp
+**/.build
+**/.next
+**/.gitnexus
+agi-stack/apps/desktop/build
+agi-stack/apps/desktop/out
+agi-stack/apps/desktop/release
+agi-stack/apps/desktop/dist
+artifacts/desktop-*
+
+# Development-only trees have no production imports or ModuleArtifact sources.
+# Keep src runtime modules, config, shared contracts, migrations and assets.
+docs
+src/tests
+tests
+evals
+design-prototype
+agi-stack/apps/desktop/tests
+agi-stack/crates/*/tests
+web/src/test
+web/e2e
+
+# Do not let nested credential files enter the Ray image.
+**/.env
+**/.env.*
+**/.ssh
+**/.aws
+**/secrets
+**/.netrc
+**/.npmrc
+**/.pypirc
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.secret.yaml
+**/*.tfvars
+!**/.env.example
+!.env.example

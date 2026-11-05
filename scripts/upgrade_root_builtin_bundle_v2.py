@@ -25,7 +25,12 @@ from src.application.services.root_builtin_bundle_upgrade_service_v2 import (  #
 from src.application.services.scoped_installed_bundle_loader_v2 import (  # noqa: E402
     ScopedInstalledBundleLoaderV2,
 )
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2  # noqa: E402
+from src.domain.model.plugins.generated_v2 import (  # noqa: E402
+    BundleReferenceV2,
+    DesiredBundleSetV2,
+    ScopeKindV2,
+    ScopeV2,
+)
 from src.infrastructure.adapters.secondary.persistence.database import (  # noqa: E402
     async_session_factory,
     engine,
@@ -84,6 +89,19 @@ async def _run_batch(args: argparse.Namespace) -> None:
         await engine.dispose()
 
 
+def _builtin_reference(
+    desired: DesiredBundleSetV2, replacement: BundleReferenceV2, *, auto: bool
+) -> BundleReferenceV2 | None:
+    current = next(
+        (item for item in desired.bundles if item.bundle_id == replacement.bundle_id), None
+    )
+    if auto and (current is None or current.source != replacement.source):
+        return None
+    if current is None:
+        raise ValueError(f"desired set has no {replacement.bundle_id} builtin reference to upgrade")
+    return current
+
+
 async def _run_scope(args: argparse.Namespace) -> None:
     sources = production_bundle_sources_v2()
     replacement = sources.desired_set.bundles[0]
@@ -103,18 +121,10 @@ async def _run_scope(args: argparse.Namespace) -> None:
                     print(json.dumps({"status": "uninitialized-scope"}))
                     return
                 raise ValueError("scope has not been initialized")
-            current = next(
-                (
-                    item
-                    for item in head.desired_set.bundles
-                    if item.bundle_id == replacement.bundle_id
-                ),
-                None,
-            )
+            current = _builtin_reference(head.desired_set, replacement, auto=args.auto)
             if current is None:
-                raise ValueError(
-                    f"desired set has no {replacement.bundle_id} builtin reference to upgrade"
-                )
+                print(json.dumps({"status": "skipped", "reason_code": "builtin_reference_absent"}))
+                return
             reference = head.desired_set.profile_source
             profile_receipt = None
             if args.upgrade_profile_baseline:

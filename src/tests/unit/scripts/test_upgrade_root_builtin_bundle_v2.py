@@ -199,6 +199,43 @@ async def test_auto_skips_uninitialized_scope(
     assert json.loads(capsys.readouterr().out) == {"status": "uninitialized-scope"}
 
 
+@pytest.mark.parametrize(
+    "reference",
+    [
+        replace(OLD_REFERENCE, bundle_id="owned-custom-bundle"),
+        replace(OLD_REFERENCE, source="oci://owned.example/custom-baseline"),
+    ],
+)
+async def test_auto_preserves_scopes_without_the_default_builtin_reference(
+    harness: Harness,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    reference: BundleReferenceV2,
+) -> None:
+    harness.install(monkeypatch, desired_record(reference))
+
+    await upgrade_script.run(make_args(auto=True, actor_id="ops"))
+
+    assert harness.upgrade_calls == []
+    assert harness.session.commits == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "skipped",
+        "reason_code": "builtin_reference_absent",
+    }
+
+
+async def test_explicit_missing_builtin_reference_still_rejects(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness.install(monkeypatch, desired_record(replace(OLD_REFERENCE, bundle_id="owned-custom")))
+
+    with pytest.raises(ValueError, match="builtin reference"):
+        await upgrade_script.run(make_args())
+
+    assert harness.upgrade_calls == []
+    assert harness.session.commits == 0
+
+
 async def test_inspect_without_auto_still_requires_initialized_scope(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -315,6 +352,37 @@ async def test_batch_upgrades_each_initialized_scope_explicitly_and_commits_per_
     await upgrade_script.run(make_args(auto=True, all_initialized_scopes=True, actor_id="ops"))
     assert [call["scope"] for call in harness.upgrade_calls] == list(scopes)
     assert harness.session.commits == 3
+
+
+async def test_batch_auto_continues_after_a_custom_scope_without_replacing_it(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    harness.install(monkeypatch, desired_record(OLD_REFERENCE))
+    scopes = (
+        ScopeV2(kind=ScopeKindV2.ROOT),
+        ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="custom-tenant"),
+        ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="builtin-tenant"),
+    )
+
+    async def list_scopes(self):
+        return scopes
+
+    async def current(self, scope):
+        reference = (
+            replace(OLD_REFERENCE, bundle_id="owned-custom")
+            if scope.tenant_id == "custom-tenant"
+            else OLD_REFERENCE
+        )
+        return desired_record(reference)
+
+    monkeypatch.setattr(FakeRepository, "list_initialized_scopes", list_scopes, raising=False)
+    monkeypatch.setattr(FakeRepository, "current_desired_set", current)
+    await upgrade_script.run(make_args(auto=True, all_initialized_scopes=True, actor_id="ops"))
+
+    assert [call["scope"] for call in harness.upgrade_calls] == [scopes[0], scopes[2]]
+    assert harness.session.commits == 2
+    receipts = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert {"status": "skipped", "reason_code": "builtin_reference_absent"} in receipts
 
 
 @pytest.mark.parametrize(

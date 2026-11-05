@@ -17,9 +17,9 @@
 #   - sdk/python/   : Python SDK
 # =============================================================================
 
-.PHONY: help install update clean init reset fresh restart stop logs status
+.PHONY: help install update clean init reset fresh restart restart-full stop logs status
 .PHONY: disk-usage clean-cache clean-build-cache clean-backend clean-web clean-docker clean-logs
-.PHONY: dev dev-all dev-stop dev-backend dev-web dev-web-stop plugin-bundle-upgrade
+.PHONY: dev dev-all dev-stop dev-app-stop dev-infra-base dev-infra-dev dev-infra dev-compute dev-backend dev-web dev-web-stop plugin-bundle-upgrade
 .PHONY: workspace-core-build workspace-core-configure workspace-core-start workspace-core-health workspace-core-status workspace-core-logs workspace-core-stop
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: drone-up drone-down drone-logs
@@ -42,6 +42,7 @@ COMPOSE_OBS ?= docker-compose.observability.yml
 COMPOSE_RERANKER ?= docker-compose.reranker.yml
 COMPOSE_CMD ?= docker compose -f $(COMPOSE_BASE)
 COMPOSE_ALL ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_ACTOR)
+COMPOSE_DEV ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_RAY_DEV) -f $(COMPOSE_ACTOR)
 COMPOSE_RAY_DEV_CMD ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_RAY_DEV)
 COMPOSE_DRONE ?= docker compose -f $(COMPOSE_BASE) -f config/drone/docker-compose.yml
 COMPOSE_RERANKER_CMD ?= COMPOSE_IGNORE_ORPHANS=True docker compose -f $(COMPOSE_RERANKER)
@@ -67,6 +68,11 @@ WORKSPACE_CORE_PORT ?= 4319
 WORKSPACE_CORE_SERVICE ?= memstack-workspace-core
 WEB_DEV_CMD ?= node_modules/.bin/vite --config vite.config.ts --host 0.0.0.0 --port 3000
 DEV_STARTUP_TIMEOUT ?= 60
+DEV_STOP_TIMEOUT ?= 10
+DEV_PYTHON ?= .venv/bin/python
+DEV_SERVICES_CMD ?= $(DEV_PYTHON) scripts/dev/services.py
+DEV_COMPOSE_WAIT_CMD ?= $(DEV_PYTHON) scripts/dev/wait_compose.py
+DEV_BUILD_CMD ?= $(DEV_PYTHON) scripts/dev/build_compose.py
 AGISTACK_DIR ?= agi-stack
 PNPM ?= corepack pnpm
 
@@ -79,7 +85,8 @@ help: ## Show this help message
 	@echo "  dev       - Start all services (API + workers + web)"
 	@echo "  stop      - Stop all services"
 	@echo "  status    - Show service status"
-	@echo "  restart   - Quick restart services"
+	@echo "  restart   - Restart API/Web and reconcile changed containers"
+	@echo "  restart-full - Force all development processes to restart"
 	@echo ""
 	@echo " Development:"
 	@echo "  dev-backend    - Start API server (foreground)"
@@ -292,10 +299,14 @@ fresh: reset init dev ## Fresh start: reset everything and start development
 	@echo ""
 	@echo " Fresh environment ready!"
 
-restart: ## Quick restart: stop and start services
-	@$(MAKE) stop
+restart: ## Restart API/Web; rebuild changed services and retain unchanged healthy infrastructure
+	@$(MAKE) dev-app-stop
 	@$(MAKE) dev
 	@echo " Services restarted"
+
+restart-full: ## Force a full development process restart, retaining database volumes
+	@$(MAKE) stop
+	@$(MAKE) dev
 
 # Convenience aliases
 stop: dev-stop ## Stop all services (alias for dev-stop)
@@ -354,78 +365,20 @@ update: ## Update all dependencies
 dev: dev-all ## Start all services (API + worker + infra + web)
 	@echo " Starting full development environment..."
 
-dev-all: dev-infra-dev db-init plugin-bundle-upgrade workspace-core-start
-	@echo " Starting API server, Ray actor worker and Web in background..."
-	@echo "   API: http://localhost:8000 (logs: logs/api.log)"
-	@echo "   Web: http://localhost:3000 (logs: logs/web.log)"
-	@echo "   Ray Actor Worker: running in Docker (logs: docker compose logs -f agent-actor-worker)"
-	@mkdir -p logs
-	@nohup env RAY_ADDRESS=ray://localhost:10001 RAY_NAMESPACE=memstack uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000 > logs/api.log 2>&1 3>&- 4>&- & echo $$! > logs/api.pid
-	@echo " Waiting for API server to become ready..."
-	@attempt=0; \
-	until curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; do \
-		attempt=$$((attempt + 1)); \
-		if [ $$attempt -ge $(DEV_STARTUP_TIMEOUT) ]; then \
-			echo " API server did not become ready within $(DEV_STARTUP_TIMEOUT) seconds"; \
-			tail -n 40 logs/api.log 2>/dev/null || true; \
-			kill -TERM $$(cat logs/api.pid 2>/dev/null) 2>/dev/null || true; \
-			rm -f logs/api.pid; \
-			exit 1; \
-		fi; \
-		sleep 1; \
-	done
-	@echo " API server is ready"
-	@(cd web && nohup $(WEB_DEV_CMD) > ../logs/web.log 2>&1) 3>&- 4>&- & echo $$! > logs/web.pid
-	@echo " Waiting for Web frontend to become ready..."
-	@attempt=0; \
-	until curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1; do \
-		attempt=$$((attempt + 1)); \
-		if [ $$attempt -ge $(DEV_STARTUP_TIMEOUT) ]; then \
-			echo " Web frontend did not become ready within $(DEV_STARTUP_TIMEOUT) seconds"; \
-			tail -n 40 logs/web.log 2>/dev/null || true; \
-			for port in 8000 3000; do \
-				PID=$$(lsof -tiTCP:$$port -sTCP:LISTEN 2>/dev/null); \
-				[ -n "$$PID" ] && kill -TERM $$PID 2>/dev/null || true; \
-			done; \
-			rm -f logs/api.pid logs/web.pid; \
-			exit 1; \
-		fi; \
-		sleep 1; \
-	done
-	@echo " Web frontend is ready"
-	@echo " Services started!"
-	@echo ""
-	@echo "View logs with:"
-	@echo "  tail -f logs/api.log            # API server logs"
-	@echo "  tail -f logs/web.log            # Web frontend logs"
-	@echo "  docker compose -f docker-compose.yml -f docker-compose.ray.yml -f docker-compose.agent-actor.yml logs -f agent-actor-worker"
-	@echo ""
-	@echo "Stop services with:"
-	@echo "  make dev-stop"
+dev-all: dev-infra-base
+	@$(MAKE) db-init
+	@$(MAKE) db-schema
+	@$(MAKE) plugin-bundle-upgrade
+	@$(MAKE) -j2 dev-compute workspace-core-start
+	@$(DEV_SERVICES_CMD) start --repo "$(CURDIR)" --timeout $(DEV_STARTUP_TIMEOUT) --web-command '$(subst ','"'"',$(WEB_DEV_CMD))'
+	@echo " Development services ready: API http://localhost:8000 · Web http://localhost:3000"
 
-dev-stop: ## Stop all background services
-	@echo " Stopping background services..."
-	@$(COMPOSE_ALL) stop ray-head ray-worker agent-actor-worker $(WORKSPACE_CORE_SERVICE) 2>/dev/null || true
-	@# Stop services by PID file and port
-	@for svc in api web; do \
-		if [ -f logs/$$svc.pid ]; then \
-			PID=$$(cat logs/$$svc.pid); \
-			kill -TERM $$PID 2>/dev/null || true; \
-			rm -f logs/$$svc.pid; \
-		fi; \
-	done
-	@# Kill processes on known ports
-	@for port in 8000 3000; do \
-		PID=$$(lsof -tiTCP:$$port -sTCP:LISTEN 2>/dev/null); \
-		[ -n "$$PID" ] && kill -9 $$PID 2>/dev/null || true; \
-	done
-	@# Fallback: kill remaining processes by pattern (scoped to current project)
-	@pkill -9 -f "uvicorn src.infrastructure" 2>/dev/null || true
-	@pkill -TERM -f "src.infrastructure.agent.actor.local_chat_worker" 2>/dev/null || true
-	@sleep 1
-	@pkill -9 -f "src.infrastructure.agent.actor.local_chat_worker" 2>/dev/null || true
-	@# Note: vite is already covered by port 3000 above, avoid killing other projects
-	@echo " All services stopped"
+dev-app-stop: ## Stop only this checkout's managed API and Web processes
+	@$(DEV_SERVICES_CMD) stop --repo "$(CURDIR)" --timeout $(DEV_STOP_TIMEOUT)
+
+dev-stop: dev-app-stop ## Stop managed development services without deleting infrastructure data
+	@$(COMPOSE_DEV) stop --timeout $(DEV_STOP_TIMEOUT) agent-actor-worker ray-worker ray-head $(WORKSPACE_CORE_SERVICE)
+	@echo " Development services stopped"
 
 dev-logs: ## Show all service logs (follow mode)
 	@echo " Showing logs (Ctrl+C to exit)..."
@@ -443,18 +396,13 @@ dev-web: ## Start web development server
 	fi
 	cd web && $(WEB_DEV_CMD)
 
-dev-web-stop: ## Stop web development server (kill process on port 3000)
-	@echo " Stopping web development server..."
-	@PID=$$(lsof -tiTCP:3000 -sTCP:LISTEN 2>/dev/null); \
-	if [ -n "$$PID" ]; then \
-		kill $$PID 2>/dev/null && echo " Web server stopped (PID: $$PID)"; \
-	else \
-		echo "  No web server running on port 3000"; \
-	fi
+dev-web-stop: ## Stop this checkout's managed Web frontend
+	@$(DEV_SERVICES_CMD) stop --repo "$(CURDIR)" --service web --timeout $(DEV_STOP_TIMEOUT)
 
 dev-infra: ## Start infrastructure services only (production mode)
 	@echo " Starting infrastructure services (production mode)..."
-	@$(COMPOSE_ALL) up -d neo4j postgres redis minio minio-setup ray-head ray-worker agent-actor-worker
+	@$(DEV_BUILD_CMD) --repo "$(CURDIR)" --service ray-head -- $(COMPOSE_ALL)
+	@$(COMPOSE_ALL) up -d --no-build neo4j postgres redis minio minio-setup ray-head ray-worker agent-actor-worker
 	@echo " Infrastructure services started"
 	@echo "   Neo4j: http://localhost:7474"
 	@echo "   Postgres: localhost:5432"
@@ -465,53 +413,38 @@ dev-infra: ## Start infrastructure services only (production mode)
 	@echo " Start observability stack with: make obs-start"
 	@echo " Note: For development with hot reload, use: make dev-infra-dev"
 
-dev-infra-dev: ## Start infrastructure with Ray in development mode (live code reload)
-	@echo " Starting infrastructure services with Ray development mode..."
-	@echo "   Ray services will use local code with hot reload"
-	@$(COMPOSE_CMD) up -d neo4j postgres redis minio minio-setup
-	@$(COMPOSE_RAY_DEV_CMD) up -d ray-head ray-worker
-	@$(COMPOSE_ALL) up -d agent-actor-worker
-	@echo " Infrastructure services started"
-	@echo "   Neo4j: http://localhost:7474"
-	@echo "   Postgres: localhost:5432"
-	@echo "   Redis: localhost:6379"
-	@echo "   MinIO: http://localhost:9000 (console: http://localhost:9001)"
-	@echo "   Ray Dashboard: http://localhost:8265"
-	@echo ""
-	@echo " Ray Development Mode:"
-	@echo "   - Code changes are reflected immediately (no rebuild needed)"
-	@echo "   - Use 'make ray-reload' to restart Ray services if needed"
-	@echo ""
-	@echo " Start observability stack with: make obs-start"
+dev-infra-base: ## Start shared infrastructure and complete object-storage initialization
+	@$(COMPOSE_DEV) up -d --wait --wait-timeout $(DEV_STARTUP_TIMEOUT) neo4j postgres redis minio
+	@$(COMPOSE_DEV) up -d --no-deps minio-setup
+	@$(DEV_COMPOSE_WAIT_CMD) --timeout $(DEV_STARTUP_TIMEOUT) --state completed --service minio-setup -- $(COMPOSE_DEV)
 
-plugin-bundle-upgrade: ## Sync ROOT builtin plugin bundle reference to the current production digest
-	@echo " Syncing ROOT builtin plugin bundle reference..."
-	@uv run python scripts/upgrade_root_builtin_bundle_v2.py --auto --actor-id make:plugin-bundle-upgrade
+dev-compute: ## Start one consistent development Ray/actor configuration
+	@$(DEV_BUILD_CMD) --repo "$(CURDIR)" --service ray-head -- $(COMPOSE_DEV)
+	@$(COMPOSE_DEV) up -d --no-build --wait --wait-timeout $(DEV_STARTUP_TIMEOUT) ray-head ray-worker agent-actor-worker
+
+dev-infra-dev: dev-infra-base ## Start infrastructure with locked dependencies and live source mounts
+	@$(MAKE) dev-compute
+
+plugin-bundle-upgrade: ## Sync initialized scopes to the current builtin bundle, preserving customizations
+	@echo " Syncing initialized builtin plugin bundle references..."
+	@uv run python scripts/upgrade_root_builtin_bundle_v2.py --all-initialized-scopes --auto --actor-id make:plugin-bundle-upgrade
 
 workspace-core-build: ## Build the independent Avernet Workspace Core image
 	@echo " Building Avernet Workspace Core..."
-	@$(COMPOSE_CMD) build $(WORKSPACE_CORE_SERVICE)
+	@$(DEV_BUILD_CMD) --repo "$(CURDIR)" --service $(WORKSPACE_CORE_SERVICE) -- $(COMPOSE_CMD)
 
 workspace-core-configure: ## Fill missing private local Workspace Core settings
 	@uv run python scripts/workspace-core/bootstrap-local-env.py --env-file .env
 
 workspace-core-start: workspace-core-configure ## Build, start and health-check Avernet Workspace Core
 	@echo " Starting Avernet Workspace Core..."
-	@$(COMPOSE_CMD) up -d --build $(WORKSPACE_CORE_SERVICE)
+	@$(DEV_BUILD_CMD) --repo "$(CURDIR)" --service $(WORKSPACE_CORE_SERVICE) -- $(COMPOSE_CMD)
+	@$(COMPOSE_CMD) up -d --no-build $(WORKSPACE_CORE_SERVICE)
 	@$(MAKE) workspace-core-health
 
 workspace-core-health: ## Wait for Avernet Workspace Core to become healthy
 	@echo " Waiting for Avernet Workspace Core health..."
-	@attempt=0; \
-	until [ "$$($(COMPOSE_CMD) ps --format json $(WORKSPACE_CORE_SERVICE) 2>/dev/null | tr -d '\n' | sed -n 's/.*\"Health\":\"\([^\"]*\)\".*/\1/p')" = "healthy" ]; do \
-		attempt=$$((attempt + 1)); \
-		if [ $$attempt -ge $(DEV_STARTUP_TIMEOUT) ]; then \
-			echo " Avernet Workspace Core did not become healthy within $(DEV_STARTUP_TIMEOUT) seconds"; \
-			$(COMPOSE_CMD) logs --tail=80 $(WORKSPACE_CORE_SERVICE) 2>/dev/null || true; \
-			exit 1; \
-		fi; \
-		sleep 1; \
-	done
+	@$(DEV_COMPOSE_WAIT_CMD) --timeout $(DEV_STARTUP_TIMEOUT) --state healthy --service $(WORKSPACE_CORE_SERVICE) -- $(COMPOSE_CMD)
 	@echo " Avernet Workspace Core is healthy at http://127.0.0.1:$(WORKSPACE_CORE_PORT)"
 
 workspace-core-status: ## Show Avernet Workspace Core container and health status
@@ -532,16 +465,7 @@ status: ## Show status of all services
 	@$(COMPOSE_CMD) ps $(WORKSPACE_CORE_SERVICE) 2>/dev/null || echo "  Workspace Core: Not running"
 	@echo ""
 	@echo "Background Processes:"
-	@if [ -f logs/api.pid ] && kill -0 $$(cat logs/api.pid) 2>/dev/null; then \
-		echo "  API Server:  Running (PID: $$(cat logs/api.pid))"; \
-	else \
-		echo "  API Server:  Not running"; \
-	fi
-	@if [ -f logs/web.pid ] && kill -0 $$(cat logs/web.pid) 2>/dev/null; then \
-		echo "  Web Frontend:  Running (PID: $$(cat logs/web.pid))"; \
-	else \
-		echo "  Web Frontend:  Not running"; \
-	fi
+	@$(DEV_SERVICES_CMD) status --repo "$(CURDIR)" --timeout $(DEV_STARTUP_TIMEOUT)
 	@echo ""
 	@echo "Ports:"
 	@lsof -i :8000 2>/dev/null | grep -q LISTEN && echo "  8000 (API):  In use" || echo "  8000 (API):  Free"
@@ -722,7 +646,7 @@ hooks-uninstall: ## Uninstall git hooks (restore default hooks path)
 db-wait: ## Wait for PostgreSQL to be ready (up to 30s)
 	@echo "  Waiting for PostgreSQL to be ready..."
 	@for i in $$(seq 1 30); do \
-		if docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then \
+		if $(COMPOSE_CMD) exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then \
 			echo " PostgreSQL is ready"; \
 			exit 0; \
 		fi; \
@@ -734,14 +658,14 @@ db-wait: ## Wait for PostgreSQL to be ready (up to 30s)
 db-init: db-wait ## Initialize database (create if not exists)
 	@echo "  Initializing database..."
 	@echo " Enabling pgvector extension..."
-	@docker compose exec -T postgres psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null || true
-	@if docker compose exec -T postgres psql -U postgres -lqt | grep -q memstack; then \
+	@$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null || true
+	@if $(COMPOSE_CMD) exec -T postgres psql -U postgres -lqt | grep -q memstack; then \
 		echo " Database 'memstack' already exists"; \
 	else \
 		echo "Creating database 'memstack'..."; \
-		docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE memstack;"; \
+		$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "CREATE DATABASE memstack;"; \
 		echo " Enabling pgvector extension in memstack database..."; \
-		docker compose exec -T postgres psql -U postgres -d memstack -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null || true; \
+		$(COMPOSE_CMD) exec -T postgres psql -U postgres -d memstack -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null || true; \
 		echo " Database created"; \
 	fi
 	@echo " Database ready (Run 'make db-schema' or 'make db-migrate' to initialize schema)"
@@ -845,7 +769,8 @@ drone-logs: ## Follow Drone service logs
 
 ray-up: ## Start Ray cluster (production mode - uses built images)
 	@echo " Starting Ray cluster (production mode)..."
-	@$(COMPOSE_ALL) up -d ray-head ray-worker
+	@$(DEV_BUILD_CMD) --repo "$(CURDIR)" --service ray-head -- $(COMPOSE_ALL)
+	@$(COMPOSE_ALL) up -d --no-build ray-head ray-worker
 	@echo " Ray cluster started"
 	@echo "   Ray Dashboard: http://localhost:8265"
 
@@ -853,20 +778,22 @@ ray-up-dev: ## Start Ray cluster in development mode (with live code reloading)
 	@echo " Starting Ray cluster in development mode..."
 	@echo "   - Local code changes will be reflected immediately"
 	@echo "   - No need to rebuild images during development"
-	@$(COMPOSE_RAY_DEV_CMD) up -d ray-head ray-worker
+	@$(DEV_BUILD_CMD) --repo "$(CURDIR)" --service ray-head -- $(COMPOSE_DEV)
+	@$(COMPOSE_DEV) up -d --no-build ray-head ray-worker
 	@echo " Ray cluster started (development mode)"
 	@echo "   Ray Dashboard: http://localhost:8265"
 	@echo "   Tip: Use 'make ray-reload' to restart services after code changes"
 
 ray-reload: ## Reload Ray services to pick up code changes (faster than rebuild)
 	@echo " Reloading Ray services..."
-	@$(COMPOSE_RAY_DEV_CMD) restart ray-head ray-worker
+	@$(COMPOSE_DEV) stop --timeout $(DEV_STOP_TIMEOUT) agent-actor-worker ray-worker ray-head
+	@$(MAKE) dev-compute
 	@echo " Ray services reloaded"
 	@echo "   Current code changes are now active"
 
 ray-rebuild: ## Rebuild Ray images (use when dependencies change)
 	@echo " Rebuilding Ray images..."
-	@$(COMPOSE_ALL) build --no-cache ray-head ray-worker
+	@$(DEV_BUILD_CMD) --no-cache --repo "$(CURDIR)" --service ray-head -- $(COMPOSE_ALL)
 	@echo " Ray images rebuilt"
 	@echo "   Start with: make ray-up or make ray-up-dev"
 
@@ -875,13 +802,13 @@ ray-logs: ## Show Ray service logs
 
 ray-down: ## Stop Ray cluster
 	@echo " Stopping Ray cluster..."
-	@$(COMPOSE_ALL) stop ray-head ray-worker 2>/dev/null || true
-	@$(COMPOSE_RAY_DEV_CMD) stop ray-head ray-worker 2>/dev/null || true
+	@$(COMPOSE_DEV) stop --timeout $(DEV_STOP_TIMEOUT) agent-actor-worker ray-worker ray-head
 	@echo " Ray cluster stopped"
 
 agent-actor-up: ## Start agent actor worker
 	@echo " Starting agent actor worker..."
-	@$(COMPOSE_ALL) up -d agent-actor-worker
+	@$(DEV_BUILD_CMD) --repo "$(CURDIR)" --service ray-head -- $(COMPOSE_DEV)
+	@$(COMPOSE_DEV) up -d --no-build agent-actor-worker
 	@echo " Agent actor worker started"
 
 docker-logs: ## Show Docker service logs

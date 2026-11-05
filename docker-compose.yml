@@ -54,6 +54,7 @@ services:
   # Avernet-backed Workspace authority. This is an independent process: the
   # FastAPI gateway never launches, supervises, or falls back from it.
   memstack-workspace-core:
+    image: ${WORKSPACE_CORE_IMAGE:-agi-demos-memstack-workspace-core:latest}
     build:
       context: .
       dockerfile: Dockerfile.workspace-core

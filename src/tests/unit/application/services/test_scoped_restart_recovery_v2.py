@@ -196,7 +196,13 @@ async def test_application_acquire_restores_without_initializing_or_publishing(
             side_effect=AssertionError("Recovery cannot initialize")
         )
         error = RuntimeError("installed artifact revoked")
-        loader = AsyncMock(side_effect=error if denied else load)
+
+        async def load_scoped(reference, *, scope):
+            assert scope == runtime_scope
+            return await load(reference)
+
+        runtime_scope = scope
+        loader = AsyncMock(side_effect=error if denied else load_scoped)
         restore = AsyncMock(wraps=second.restore_last_good)
         monkeypatch.setattr(second, "restore_last_good", restore)
         monkeypatch.setattr(
@@ -222,7 +228,7 @@ async def test_application_acquire_restores_without_initializing_or_publishing(
             await reservation.lease.release()
             restore.assert_awaited_once()
             assert events == ["apply:provider:根"]
-        loader.assert_awaited_once_with(desired.bundles[0])
+        loader.assert_awaited_once_with(desired.bundles[0], scope=scope)
         initializer.ensure_initialized.assert_not_awaited()
         second.publish.assert_not_awaited()
         assert await _counts(factory) == before

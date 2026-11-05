@@ -1,24 +1,37 @@
+# syntax=docker/dockerfile:1.7
+
 ARG PYTHON_VERSION=3.12.13
-ARG RAY_VERSION=2.53.0
 
 FROM python:${PYTHON_VERSION}-slim
 
 ARG RAY_VERSION=2.53.0
+ARG UV_VERSION=0.12.13
 
 USER root
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    UV_PROJECT_ENVIRONMENT=/opt/memstack-venv \
+    UV_LINK_MODE=copy \
+    PATH="/opt/memstack-venv/bin:${PATH}"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# Ray actors import app modules; install the full app deps into the Ray image.
+# Source changes reuse the locked dependency layer. A changed declaration or lock
+# is rebuilt by Compose --build; --locked refuses an inconsistent pair.
+RUN python -m pip install --no-cache-dir "uv==${UV_VERSION}"
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --locked --no-dev --no-install-project --extra ray-runtime \
+    && test "$(python -c 'from importlib.metadata import version; print(version("ray"))')" = "${RAY_VERSION}"
+COPY pyproject.toml uv.lock /opt/memstack-ray-dependencies/
+
 COPY . .
-RUN python -m pip install --no-cache-dir --upgrade pip \
-    && python -m pip install --no-cache-dir uv \
-    && python -m pip install --no-cache-dir "ray[default]==${RAY_VERSION}" \
-    && python -m pip install --no-cache-dir -e . \
-    && python -m pip install --no-cache-dir "neo4j>=5.14.0"
+COPY docker/ray/start-runtime.py /usr/local/libexec/memstack-ray/start-runtime.py
+COPY docker/ray/check-actor-ready.py /usr/local/libexec/memstack-ray/check-actor-ready.py
+
+ENTRYPOINT ["python", "/usr/local/libexec/memstack-ray/start-runtime.py", "--"]

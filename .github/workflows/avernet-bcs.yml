@@ -5,7 +5,7 @@ on:
     paths:
       - '.github/workflows/avernet-bcs.yml'
       - '.env.example'
-      - 'Dockerfile.workspace-core'
+      - 'Dockerfile.workspace-core*'
       - 'Makefile'
       - 'agi-stack/apps/desktop/**'
       - 'agi-stack/apps/server/**'
@@ -26,13 +26,14 @@ on:
       - 'src/tests/unit/migrations/test_avernet_workspace_schema_migrations.py'
       - 'src/tests/unit/scripts/test_workspace_core_evidence_gates.py'
       - 'src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py'
+      - 'src/tests/unit/scripts/test_workspace_core_build_cache.py'
       - 'third_party/avernet-bcs/**'
   push:
     branches: [main, develop]
     paths:
       - '.github/workflows/avernet-bcs.yml'
       - '.env.example'
-      - 'Dockerfile.workspace-core'
+      - 'Dockerfile.workspace-core*'
       - 'Makefile'
       - 'agi-stack/apps/desktop/**'
       - 'agi-stack/apps/server/**'
@@ -53,6 +54,7 @@ on:
       - 'src/tests/unit/migrations/test_avernet_workspace_schema_migrations.py'
       - 'src/tests/unit/scripts/test_workspace_core_evidence_gates.py'
       - 'src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py'
+      - 'src/tests/unit/scripts/test_workspace_core_build_cache.py'
       - 'third_party/avernet-bcs/**'
 
 permissions:
@@ -176,6 +178,7 @@ jobs:
           src/tests/unit/migrations/test_avernet_workspace_schema_migrations.py
           src/tests/unit/scripts/test_workspace_core_evidence_gates.py
           src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py
+          src/tests/unit/scripts/test_workspace_core_build_cache.py
           -q
 
   dependency-audit:

@@ -5,6 +5,8 @@
 # - Live code reloading via volume mounts
 # - Hot reloading for faster development cycles
 # - Local code changes reflected immediately without rebuilding images
+# Dependency changes rebuild the locked image through `make dev`; container
+# startup never resolves or installs packages.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.ray.yml \
@@ -21,15 +23,11 @@ services:
       # Mount source code for live reloading
       - ./src:/app/src:ro
       - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./uv.lock:/app/uv.lock:ro
       # Mount logs directory for debugging
       - ./logs:/app/logs
-    # Override command to enable development mode with auto-reload
-    command:
-      - bash
-      - -c
-      - |
-        uv pip install --system -r /app/pyproject.toml &&
-        exec ray start --head --port=6379 --dashboard-host=0.0.0.0 --dashboard-port=8265 --ray-client-server-port=10001 --object-store-memory=1073741824 --memory=4294967296 --disable-usage-stats --block
+    # Explicitly require the current image entry point, including for old images.
+    entrypoint: ["python", "/usr/local/libexec/memstack-ray/start-runtime.py", "--"]
     # Add development labels
     labels:
       - "memstack.environment=development"
@@ -40,15 +38,10 @@ services:
       # Mount source code for live reloading
       - ./src:/app/src:ro
       - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./uv.lock:/app/uv.lock:ro
       # Mount logs directory for debugging
       - ./logs:/app/logs
-    # Override command to reinstall package on start
-    command:
-      - bash
-      - -c
-      - |
-        uv pip install --system -r /app/pyproject.toml &&
-        exec ray start --address=ray-head:6379 --object-store-memory=1073741824 --memory=4294967296 --block
+    entrypoint: ["python", "/usr/local/libexec/memstack-ray/start-runtime.py", "--"]
     # Add development labels
     labels:
       - "memstack.environment=development"

@@ -1,5 +1,7 @@
 services:
   ray-head:
+    image: ${RAY_RUNTIME_IMAGE:-agi-demos-ray-head:latest}
+    pull_policy: never
     build:
       context: .
       dockerfile: Dockerfile.ray
@@ -35,6 +37,13 @@ services:
     ports:
       - "8265:8265"
       - "10001:10001"
+    healthcheck:
+      test: ["CMD", "ray", "status", "--address=127.0.0.1:6379"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+      start_interval: 2s
     mem_limit: 6g
     cpus: "1.5"
     restart: unless-stopped
@@ -44,9 +53,8 @@ services:
       - ray-runtime:/tmp/ray
 
   ray-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.ray
+    image: ${RAY_RUNTIME_IMAGE:-agi-demos-ray-head:latest}
+    pull_policy: never
     container_name: memstack-ray-worker
     environment:
       - PYTHONPATH=/app
@@ -72,7 +80,8 @@ services:
       --memory=4294967296
       --block
     depends_on:
-      - ray-head
+      ray-head:
+        condition: service_healthy
     mem_limit: 6g
     cpus: "1.5"
     restart: unless-stopped

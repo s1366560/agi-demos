@@ -2,6 +2,8 @@
 
 FROM rust:1.91.1-bookworm AS builder
 
+ARG TARGETARCH
+
 WORKDIR /build/avernet-bcs
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,7 +17,10 @@ COPY third_party/avernet-bcs/crates ./crates
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
-    cargo build --locked --release --package memstack-workspace-core
+    --mount=type=cache,id=memstack-workspace-core-rust-1.91.1-${TARGETARCH},target=/build/avernet-bcs/target,sharing=locked \
+    cargo build --locked --release --package memstack-workspace-core \
+    && mkdir -p out \
+    && install -m 0755 target/release/memstack-workspace-core out/memstack-workspace-core
 
 FROM debian:bookworm-slim AS runtime
 
@@ -29,7 +34,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --system --uid 10001 --gid workspace-core --home-dir /var/lib/memstack-workspace-core workspace-core \
     && install -d -o workspace-core -g workspace-core /etc/memstack-workspace-core /var/lib/memstack-workspace-core
 
-COPY --from=builder /build/avernet-bcs/target/release/memstack-workspace-core /usr/local/bin/memstack-workspace-core
+# Cache mounts do not become image layers; copy the exported executable instead.
+COPY --from=builder /build/avernet-bcs/out/memstack-workspace-core /usr/local/bin/memstack-workspace-core
 COPY docker/workspace-core/entrypoint.sh /usr/local/bin/workspace-core-entrypoint
 COPY docker/workspace-core/bcs-config.toml.template /usr/local/share/memstack-workspace-core/bcs-config.toml.template
 

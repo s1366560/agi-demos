@@ -1,14 +1,17 @@
 services:
   agent-actor-worker:
-    image: agi-demos-ray-head:latest
+    image: ${RAY_RUNTIME_IMAGE:-agi-demos-ray-head:latest}
+    pull_policy: never
     container_name: memstack-agent-actor-worker
-    # Source is mounted read-only; editable installs try to rewrite its egg-info.
-    command:
-      - bash
-      - -c
-      - |
-        uv pip install --system -r /app/pyproject.toml &&
-        exec python -m src.agent_actor_worker
+    entrypoint: ["python", "/usr/local/libexec/memstack-ray/start-runtime.py", "--"]
+    command: ["python", "-m", "src.agent_actor_worker"]
+    healthcheck:
+      test: ["CMD", "python", "/usr/local/libexec/memstack-ray/check-actor-ready.py"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+      start_interval: 3s
     environment:
       - RAY_ADDRESS=auto
       - RAY_NAMESPACE=memstack
@@ -31,7 +34,7 @@ services:
       - LOG_FORMAT=json
     depends_on:
       ray-head:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
       neo4j:
@@ -42,6 +45,7 @@ services:
     volumes:
       - ./src:/app/src:ro
       - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./uv.lock:/app/uv.lock:ro
       - ./docker/ray-runtime.env:/app/.env:ro
       - ray-runtime:/tmp/ray
     mem_limit: 2g
