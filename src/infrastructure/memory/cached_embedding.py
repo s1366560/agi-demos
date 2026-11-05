@@ -15,6 +15,12 @@ import logging
 from collections import OrderedDict
 from typing import TYPE_CHECKING, cast
 
+from src.domain.llm_providers.models import NoActiveProviderError
+from src.infrastructure.graph.embedding.deferred_embedding import (
+    EmbeddingProviderReadiness,
+    ensure_embedding_available,
+)
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -26,7 +32,7 @@ _DEFAULT_L1_SIZE = 500
 _DEFAULT_L2_TTL = 86400  # 24 hours
 
 
-class CachedEmbeddingService:
+class CachedEmbeddingService(EmbeddingProviderReadiness):
     """Embedding service with Redis-backed caching.
 
     Wraps an existing EmbeddingService to avoid redundant API calls.
@@ -52,6 +58,10 @@ class CachedEmbeddingService:
     @property
     def embedding_dim(self) -> int:
         return self._inner.embedding_dim
+
+    async def ensure_available(self) -> None:
+        """Check the actual provider before returning cached or newly embedded data."""
+        await ensure_embedding_available(self._inner)
 
     def _cache_key(self, text: str) -> str:
         text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -90,6 +100,7 @@ class CachedEmbeddingService:
 
     async def embed_text(self, text: str) -> list[float]:
         """Generate embedding with L1 + L2 caching."""
+        await self.ensure_available()
         if not text or not text.strip():
             return [0.0] * self.embedding_dim
 
@@ -125,6 +136,8 @@ class CachedEmbeddingService:
         """
         try:
             return await self.embed_text(text)
+        except NoActiveProviderError:
+            raise
         except Exception as e:
             logger.warning(
                 "Embedding failed, falling back to FTS-only error_type=%s",
@@ -138,6 +151,7 @@ class CachedEmbeddingService:
         batch_size: int = 100,
     ) -> list[list[float]]:
         """Batch embed with per-item caching."""
+        await self.ensure_available()
         results: list[list[float] | None] = []
         uncached_indices: list[int] = []
         uncached_texts: list[str] = []
@@ -190,6 +204,8 @@ class CachedEmbeddingService:
         """
         try:
             return [list(e) for e in await self.embed_batch(texts, batch_size=batch_size)]
+        except NoActiveProviderError:
+            raise
         except Exception as e:
             logger.warning("Batch embedding failed, returning all None: %s", e)
             return [None] * len(texts)

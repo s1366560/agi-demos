@@ -14,6 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
+from src.domain.llm_providers.models import NoActiveProviderError
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 from src.infrastructure.graph.extraction.entity_type_normalization import normalize_entity_type
 from src.infrastructure.graph.extraction.prompts import (
@@ -325,8 +326,7 @@ class ReflexionChecker:
             return self._extract_missed_entities(data)
         except json.JSONDecodeError as e:
             logger.warning(
-                "Failed to parse reflexion response as JSON: "
-                "error_type=%s response_length=%s",
+                "Failed to parse reflexion response as JSON: error_type=%s response_length=%s",
                 type(e).__name__,
                 len(response),
             )
@@ -416,6 +416,8 @@ class ReflexionChecker:
             embeddings = cast(
                 list[list[float] | None], await self._embedding_service.embed_batch(names)
             )
+        except NoActiveProviderError:
+            raise
         except Exception as e:
             logger.error(
                 "Failed to generate embeddings during reflexion error_type=%s",

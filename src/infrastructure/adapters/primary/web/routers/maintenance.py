@@ -7,6 +7,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.llm_providers.models import NoActiveProviderError
 from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
@@ -21,6 +22,7 @@ from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 i
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.graph.embedding.deferred_embedding import ensure_embedding_available
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -812,6 +814,7 @@ async def get_embedding_status(
 
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
 
+        await ensure_embedding_available(cast(Any, graph_store).embedder)
         current_dim = cast(Any, graph_store).embedder.embedding_dim
         existing_dim = await graph_store.get_existing_embedding_dimension(
             target_project_id, is_superuser, allowed_project_ids
@@ -846,7 +849,7 @@ async def get_embedding_status(
             "missing_embeddings": missing_count,
         }
 
-    except HTTPException:
+    except (HTTPException, NoActiveProviderError):
         raise
     except Exception as e:
         logger.error(f"Failed to get embedding status: {e}")
@@ -885,7 +888,7 @@ async def rebuild_embeddings(
 
         return {"status": "success", "result": result}
 
-    except HTTPException:
+    except (HTTPException, NoActiveProviderError):
         raise
     except Exception as e:
         logger.error(f"Failed to rebuild embeddings: {e}")
@@ -923,6 +926,7 @@ async def check_embedding_dimensions(
         )
 
         # Add current embedder info
+        await ensure_embedding_available(cast(Any, graph_store).embedder)
         result["current_dimension"] = cast(Any, graph_store).embedder.embedding_dim
 
         # Determine if action is needed
@@ -943,7 +947,7 @@ async def check_embedding_dimensions(
 
         return result
 
-    except HTTPException:
+    except (HTTPException, NoActiveProviderError):
         raise
     except Exception as e:
         logger.error(f"Failed to check embedding dimensions: {e}")
@@ -979,6 +983,7 @@ async def validate_embeddings(
             target_project_id, is_superuser, allowed_project_ids
         )
 
+        await ensure_embedding_available(cast(Any, graph_store).embedder)
         expected_dim = cast(Any, graph_store).embedder.embedding_dim
 
         result = await graph_store.validate_embeddings(
@@ -990,7 +995,7 @@ async def validate_embeddings(
 
         return result
 
-    except HTTPException:
+    except (HTTPException, NoActiveProviderError):
         raise
     except Exception as e:
         logger.error(f"Failed to validate embeddings: {e}")

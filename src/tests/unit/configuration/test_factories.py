@@ -83,6 +83,8 @@ async def test_create_native_graph_adapter_uses_reflexion_settings(monkeypatch: 
     assert captured["neo4j"] == ("bolt://neo4j", "neo4j", "password")
     assert captured["build_indices"] is True
     assert captured["tenant_id"] == "tenant-1"
+    assert "resolve_provider" not in captured
+    await captured["adapter_kwargs"]["embedding_service"].ensure_available()
     assert captured["resolve_provider"]["tenant_id"] == "tenant-1"
     assert captured["adapter_kwargs"]["enable_reflexion"] is True
     assert captured["adapter_kwargs"]["reflexion_max_iterations"] == 4

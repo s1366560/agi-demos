@@ -22,10 +22,12 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from src.domain.llm_providers.models import NoActiveProviderError
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.graph.embedding.deferred_embedding import ensure_embedding_available
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +266,14 @@ async def memory_search_tool(
     if not query:
         return ToolResult(
             output=json.dumps({"error": "query parameter is required"}),
+            is_error=True,
+        )
+
+    try:
+        await ensure_embedding_available(getattr(graph_service, "embedder", None))
+    except NoActiveProviderError:
+        return ToolResult(
+            output=json.dumps({"error": "provider_unconfigured", "code": "provider_unconfigured"}),
             is_error=True,
         )
 
@@ -577,6 +587,11 @@ async def _execute_memory_create(
     if not session_factory or not graph_service:
         return json.dumps({"error": "Memory creation not configured"})
 
+    try:
+        await ensure_embedding_available(getattr(graph_service, "embedder", None))
+    except NoActiveProviderError:
+        return json.dumps({"error": "provider_unconfigured", "code": "provider_unconfigured"})
+
     session = session_factory()
     try:
         from src.application.services.memory_service import MemoryService
@@ -743,6 +758,11 @@ async def _execute_memory_update(
     """Shared implementation for memory_update tool."""
     if not session_factory or not graph_service:
         return json.dumps({"error": "Memory update not configured"})
+
+    try:
+        await ensure_embedding_available(getattr(graph_service, "embedder", None))
+    except NoActiveProviderError:
+        return json.dumps({"error": "provider_unconfigured", "code": "provider_unconfigured"})
 
     session = session_factory()
     try:

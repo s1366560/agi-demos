@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from src.domain.llm_providers.models import NoActiveProviderError
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.graph.schemas import HybridSearchResult, SearchResultItem
@@ -216,6 +217,9 @@ class HybridSearch:
         include_episodes: bool,
     ) -> tuple[list[SearchResultItem], list[SearchResultItem], list[SearchResultItem]]:
         """Collect and categorize search results, handling errors."""
+        for result in results:
+            if isinstance(result, NoActiveProviderError):
+                raise result
         vector_entity_results: list[SearchResultItem] = []
         keyword_entity_results: list[SearchResultItem] = []
         episode_results: list[SearchResultItem] = []

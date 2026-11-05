@@ -17,6 +17,8 @@ from typing import Any, Protocol, cast
 
 import numpy as np
 
+from src.domain.llm_providers.models import NoActiveProviderError
+
 logger = logging.getLogger(__name__)
 
 
@@ -130,6 +132,8 @@ class EmbeddingService:
         """
         try:
             return await self.embed_text(text)
+        except NoActiveProviderError:
+            raise
         except Exception as e:
             logger.warning(
                 "Embedding failed, falling back to FTS-only error_type=%s",
@@ -206,6 +210,8 @@ class EmbeddingService:
                     max_concurrency=max_concurrency,
                 )
             ]
+        except NoActiveProviderError:
+            raise
         except Exception as e:
             logger.warning(
                 "Batch embedding failed, returning all None error_type=%s",

@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast, override
 from uuid import uuid4
 
+from src.domain.llm_providers.models import NoActiveProviderError
 from src.domain.model.graph.dtos import (
     GraphCommunityDTO,
     GraphEntityDTO,
@@ -31,6 +32,7 @@ from src.domain.ports.services.queue_port import QueuePort
 
 from .community.community_updater import CommunityUpdater
 from .community.louvain_detector import LouvainDetector
+from .embedding.deferred_embedding import ensure_embedding_available
 from .embedding.embedding_service import EmbeddingService, NullEmbeddingService
 from .extraction.entity_extractor import EntityExtractor
 from .extraction.reflexion import ReflexionChecker
@@ -315,6 +317,7 @@ class NativeGraphAdapter(GraphStorePort):
         Args:
             force: Bypass cache and force check
         """
+        await ensure_embedding_available(self._embedding_service)
         try:
             # Skip dimension check entirely for NullEmbeddingService
             if isinstance(self._embedding_service, NullEmbeddingService):
@@ -740,6 +743,8 @@ class NativeGraphAdapter(GraphStorePort):
                 community_edges=[],
             )
 
+        except NoActiveProviderError:
+            raise
         except Exception as e:
             logger.error("Failed to process episode: error_type=%s", type(e).__name__)
             # Update status to failed
@@ -1521,6 +1526,7 @@ class NativeGraphAdapter(GraphStorePort):
         index_name: str | None = None,
     ) -> list[GraphSearchHit]:
         """Vector similarity search over the default entity index."""
+        await self._check_embedding_dimension()
         idx = index_name or "entity_name_vector"
         raw = await self._neo4j_client.vector_search(
             index_name=idx,
@@ -3180,6 +3186,7 @@ class NativeGraphAdapter(GraphStorePort):
         project_id: str,
     ) -> dict[str, int]:
         """Regenerate all entity embeddings for a project using ``embedder``."""
+        await ensure_embedding_available(embedder)
         q = """
             MATCH (n:Entity {project_id: $project_id})
             RETURN n.uuid AS uuid,
@@ -3212,6 +3219,8 @@ class NativeGraphAdapter(GraphStorePort):
                     embedding_dim=len(embedding),
                 )
                 updated += 1
+            except NoActiveProviderError:
+                raise
             except Exception:
                 failed += 1
                 logger.exception("Failed to rebuild embedding for entity %s", uuid)

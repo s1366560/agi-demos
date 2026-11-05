@@ -10,6 +10,8 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any, cast
 
+from src.domain.llm_providers.models import NoActiveProviderError
+from src.infrastructure.graph.embedding.deferred_embedding import ensure_embedding_available
 from src.infrastructure.memory.chunker import TextChunk, chunk_text
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,7 @@ class MemoryIndexService:
         if not content or not content.strip():
             return 0
 
+        await ensure_embedding_available(self._embedding)
         # Delete existing chunks for this memory (re-index)
         await self._chunk_repo.delete_by_source("memory", memory_id, project_id)
 
@@ -107,6 +110,7 @@ class MemoryIndexService:
 
         text = "\n".join(lines)
 
+        await ensure_embedding_available(self._embedding)
         # Delete existing chunks (re-index)
         await self._chunk_repo.delete_by_source("conversation", conversation_id, project_id)
 
@@ -136,6 +140,7 @@ class MemoryIndexService:
         if not content or not content.strip():
             return 0
 
+        await ensure_embedding_available(self._embedding)
         await self._chunk_repo.delete_by_source("episode", episode_id, project_id)
 
         chunks = chunk_text(content, max_tokens=max_tokens)
@@ -228,6 +233,8 @@ class MemoryIndexService:
             else:
                 for i, text in enumerate(texts):
                     embeddings[i] = await self._embedding.embed_text(text)
+        except NoActiveProviderError:
+            raise
         except Exception as e:
             logger.warning("Batch embedding failed error_type=%s", type(e).__name__)
         return embeddings

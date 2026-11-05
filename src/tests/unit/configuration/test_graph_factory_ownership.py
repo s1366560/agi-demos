@@ -78,7 +78,7 @@ def graph_dependencies(monkeypatch):
     return state, Client
 
 
-@pytest.mark.parametrize("stage", ["indices", "llm", "provider", "embedder", "vector", "adapter"])
+@pytest.mark.parametrize("stage", ["indices", "llm", "adapter"])
 @pytest.mark.parametrize("external", [False, True])
 async def test_failure_closes_only_newly_constructed_client(graph_dependencies, stage, external):
     state, client_type = graph_dependencies
@@ -102,7 +102,7 @@ async def test_success_transfers_client_without_premature_close(graph_dependenci
 
 async def test_cleanup_failure_preserves_both_original_errors(graph_dependencies):
     state, _client_type = graph_dependencies
-    state.stage = "provider"
+    state.stage = "llm"
     state.cleanup_error = RuntimeError("close failed")
     with pytest.raises(BaseExceptionGroup) as error:
         await factories.create_native_graph_adapter("tenant-a")
