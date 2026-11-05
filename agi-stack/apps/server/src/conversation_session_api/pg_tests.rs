@@ -4,8 +4,7 @@ use axum::http::StatusCode;
 use serde_json::{json, Value};
 
 use crate::conversation_authority::test_support::{
-    assert_retired_workspace_tables_absent, repository_pool, shared_reader, visible_scope,
-    workspace_fixture, VisibleConversationScope,
+    shared_reader, standalone_fixture, workspace_fixture, VisibleConversationScope,
 };
 use crate::workspace_authority::{
     test_support::FixedWorkspaceAuthority, WorkspaceAuthorityProfile, WorkspaceAuthorityScope,
@@ -41,11 +40,7 @@ fn assert_retired_projection_empty(payload: &Value) {
 }
 
 pub(super) async fn assert_standalone_projection_after_workspace_retirement() {
-    let Some(pool) = repository_pool().await else {
-        return;
-    };
-    assert_retired_workspace_tables_absent(&pool).await;
-    let Some(scope) = visible_scope(&pool, false).await else {
+    let Some((pool, scope)) = standalone_fixture().await else {
         return;
     };
     let mut authority = FixedWorkspaceAuthority::new(None, &[]);
@@ -119,10 +114,7 @@ async fn postgres_workspace_projection_reads_core_profile_and_task_link_without_
         return;
     };
     let reader = shared_reader(&pool, &scope).await;
-    let mut users = vec![scope.user_id.as_str()];
-    if let Some(reader) = reader.as_deref() {
-        users.push(reader);
-    }
+    let users = [scope.user_id.as_str(), reader.as_str()];
     let authority = Arc::new(FixedWorkspaceAuthority::new(Some(profile(&scope)), &users));
     let service = PgConversationSessionProjectionService::new(pool.clone(), authority.clone());
     let projection = service
@@ -146,18 +138,14 @@ async fn postgres_workspace_projection_reads_core_profile_and_task_link_without_
         )]
     );
     assert_wrong_scopes_denied(&service, &scope).await;
-    if let Some(reader) = reader {
-        let shared = service
-            .get_projection(&reader, &scope.id, &query(&scope))
-            .await
-            .expect("Core-authorized shared reader must resolve")
-            .unwrap();
-        let payload = serde_json::to_value(shared).unwrap();
-        assert_eq!(payload["capabilities"]["can_send_message"], false);
-        assert_eq!(payload["capabilities"]["can_control_execution"], false);
-    } else {
-        eprintln!("[skip] shared reader projection: no second platform member fixture");
-    }
+    let shared = service
+        .get_projection(&reader, &scope.id, &query(&scope))
+        .await
+        .expect("Core-authorized shared reader must resolve")
+        .unwrap();
+    let payload = serde_json::to_value(shared).unwrap();
+    assert_eq!(payload["capabilities"]["can_send_message"], false);
+    assert_eq!(payload["capabilities"]["can_control_execution"], false);
 }
 
 #[tokio::test]

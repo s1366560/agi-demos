@@ -1,7 +1,15 @@
-use agistack_adapters_postgres::{connect, PgPool};
-use sqlx::FromRow;
+use agistack_adapters_postgres::PgPool;
 
-#[derive(FromRow)]
+const RETIRED_WORKSPACE_TABLES: &[&str] = &[
+    "workspaces",
+    "workspace_tasks",
+    "workspace_members",
+    "workspace_task_session_attempts",
+    "workspace_plans",
+    "workspace_plan_nodes",
+];
+const SHARED_READER: &str = "conversation-authority-reader";
+
 pub(crate) struct VisibleConversationScope {
     pub(crate) id: String,
     pub(crate) tenant_id: String,
@@ -12,69 +20,57 @@ pub(crate) struct VisibleConversationScope {
     pub(crate) current_mode: String,
 }
 
-pub(crate) async fn repository_pool() -> Option<PgPool> {
-    let Ok(database_url) = crate::startup_config::repository_database_url() else {
-        eprintln!(
-            "[skip] conversation authority Postgres checks: repository DATABASE_URL unavailable"
-        );
-        return None;
+async fn fixture_pool() -> Option<PgPool> {
+    let database_url = match crate::startup_config::repository_database_url() {
+        Ok(url) => url,
+        Err(crate::startup_config::DatabaseUrlConfigError::EnvFileUnavailable { .. }) => {
+            eprintln!(
+                "[skip] conversation authority Postgres fixture: repository .env unavailable"
+            );
+            return None;
+        }
+        Err(error) => panic!("invalid conversation authority fixture configuration: {error}"),
     };
     Some(
-        connect(database_url.expose())
+        sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .max_lifetime(None)
+            .idle_timeout(None)
+            .after_connect(|connection, _| {
+                Box::pin(async move {
+                    // A replacement connection must fail closed instead of reading
+                    // public tables when its connection-local fixture is gone.
+                    sqlx::query("SET search_path = pg_temp, pg_catalog")
+                        .execute(connection)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(database_url.expose())
             .await
-            .expect("repository database must connect"),
+            .expect("connect isolated conversation authority fixture"),
     )
 }
 
-pub(crate) async fn visible_scope(
-    pool: &PgPool,
-    workspace: bool,
-) -> Option<VisibleConversationScope> {
-    let result = sqlx::query_as::<_, VisibleConversationScope>(
-        "SELECT c.id, c.tenant_id, c.project_id, c.workspace_id, \
-                c.linked_workspace_task_id, c.user_id, c.current_mode \
-         FROM conversations AS c \
-         WHERE EXISTS (SELECT 1 FROM projects AS p \
-                       WHERE p.id = c.project_id AND p.tenant_id = c.tenant_id) \
-           AND EXISTS (SELECT 1 FROM user_projects AS up \
-                       WHERE up.project_id = c.project_id AND up.user_id = c.user_id) \
-           AND EXISTS (SELECT 1 FROM user_tenants AS ut \
-                       WHERE ut.tenant_id = c.tenant_id AND ut.user_id = c.user_id) \
-           AND (c.workspace_id IS NOT NULL) = $1 \
-         ORDER BY c.updated_at DESC NULLS LAST, c.created_at DESC LIMIT 1",
-    )
-    .bind(workspace)
-    .fetch_optional(pool)
-    .await
-    .expect("platform-only conversation lookup must succeed after Workspace retirement");
-    if result.is_none() {
-        eprintln!(
-            "[skip] conversation authority fixture: no visible workspace={workspace} conversation"
-        );
-    }
-    result
-}
-
-pub(crate) async fn assert_retired_workspace_tables_absent(pool: &PgPool) {
+async fn assert_retired_workspace_tables_unavailable(pool: &PgPool) {
+    // Ordinary Alembic upgrades do not physically delete the legacy public
+    // tables. Prove that the tested queries cannot resolve them in this fixture,
+    // independently of operator-controlled cleanup of the application database.
     let count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM information_schema.tables \
-         WHERE table_schema = 'public' AND table_name IN \
-         ('workspaces', 'workspace_tasks', 'workspace_members', \
-          'workspace_task_session_attempts', 'workspace_plans', 'workspace_plan_nodes')",
+        "SELECT count(*) FROM unnest($1::text[]) AS retired(name) \
+         WHERE to_regclass(name) IS NOT NULL",
     )
+    .bind(RETIRED_WORKSPACE_TABLES)
     .fetch_one(pool)
     .await
-    .expect("inspect retirement schema");
+    .expect("inspect fixture relation visibility");
     assert_eq!(
         count, 0,
-        "retired Workspace tables must not be restored for these tests"
+        "retired Workspace tables must be unavailable to fixture queries"
     );
 }
 
-pub(crate) async fn shared_reader(
-    pool: &PgPool,
-    scope: &VisibleConversationScope,
-) -> Option<String> {
+pub(crate) async fn shared_reader(pool: &PgPool, scope: &VisibleConversationScope) -> String {
     sqlx::query_scalar(
         "SELECT up.user_id FROM user_projects up JOIN user_tenants ut ON ut.user_id = up.user_id \
          WHERE up.project_id = $1 AND ut.tenant_id = $2 AND up.user_id <> $3 \
@@ -83,59 +79,105 @@ pub(crate) async fn shared_reader(
     .bind(&scope.project_id)
     .bind(&scope.tenant_id)
     .bind(&scope.user_id)
-    .fetch_optional(pool)
+    .fetch_one(pool)
     .await
-    .expect("platform shared reader lookup")
+    .expect("fixture must include a shared project and tenant member")
 }
 
-/// One-connection temporary tables exercise the real Postgres projection without
-/// writing application rows or reviving any retired Workspace table.
-pub(crate) async fn workspace_fixture() -> Option<(PgPool, VisibleConversationScope)> {
-    let Ok(database_url) = crate::startup_config::repository_database_url() else {
-        eprintln!("[skip] workspace projection fixture: repository DATABASE_URL unavailable");
-        return None;
-    };
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(1)
-        .connect(database_url.expose())
+/// Copy only schema into connection-local tables and seed ordinary members.
+/// Every business query resolves to TEMP tables; application rows are never
+/// copied or mutated, and closing the connection removes the entire fixture.
+pub(crate) async fn standalone_fixture() -> Option<(PgPool, VisibleConversationScope)> {
+    let pool = fixture_pool().await?;
+    for table in [
+        "conversations",
+        "agent_execution_events",
+        "agent_plan_versions",
+        "agent_plan_runs",
+        "agent_run_authorities",
+        "agent_tasks",
+        "hitl_requests",
+        "artifacts",
+        "tool_execution_records",
+    ] {
+        sqlx::query(&format!(
+            "CREATE TEMP TABLE {table} (LIKE public.{table} INCLUDING DEFAULTS)"
+        ))
+        .execute(&pool)
         .await
-        .expect("connect isolated temporary fixture");
-    assert_retired_workspace_tables_absent(&pool).await;
-    let mut scope = visible_scope(&pool, false).await?;
+        .expect("copy migrated platform table schema into fixture");
+    }
+    for statement in [
+        "CREATE TEMP TABLE projects (id text PRIMARY KEY, tenant_id text NOT NULL)",
+        "CREATE TEMP TABLE user_projects (user_id text NOT NULL, project_id text NOT NULL)",
+        "CREATE TEMP TABLE user_tenants (user_id text NOT NULL, tenant_id text NOT NULL, role text NOT NULL)",
+    ] {
+        sqlx::query(statement).execute(&pool).await.unwrap();
+    }
+    let scope = VisibleConversationScope {
+        id: "conversation-authority-fixture".into(),
+        tenant_id: "conversation-authority-tenant".into(),
+        project_id: "conversation-authority-project".into(),
+        workspace_id: None,
+        linked_workspace_task_id: None,
+        user_id: "conversation-authority-owner".into(),
+        current_mode: "build".into(),
+    };
+    sqlx::query("INSERT INTO pg_temp.projects (id, tenant_id) VALUES ($1, $2)")
+        .bind(&scope.project_id)
+        .bind(&scope.tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for user_id in [scope.user_id.as_str(), SHARED_READER] {
+        sqlx::query("INSERT INTO pg_temp.user_projects (user_id, project_id) VALUES ($1, $2)")
+            .bind(user_id)
+            .bind(&scope.project_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO pg_temp.user_tenants (user_id, tenant_id, role) VALUES ($1, $2, 'member')",
+        )
+        .bind(user_id)
+        .bind(&scope.tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
     sqlx::query(
-        "CREATE TEMP TABLE conversations AS SELECT * FROM public.conversations WHERE id = $1",
+        "INSERT INTO pg_temp.conversations \
+         (id, tenant_id, project_id, user_id, title, status, current_mode, merge_strategy, \
+          agent_config, meta, message_count, participant_agents, created_at, updated_at) \
+         VALUES ($1, $2, $3, $4, 'Isolated authority fixture', 'active', $5, 'result_only', \
+                 '{}', '{}', 0, '[]', NOW(), NOW())",
     )
     .bind(&scope.id)
+    .bind(&scope.tenant_id)
+    .bind(&scope.project_id)
+    .bind(&scope.user_id)
+    .bind(&scope.current_mode)
     .execute(&pool)
     .await
-    .expect("copy one conversation into connection-local fixture");
+    .expect("seed isolated standalone conversation");
+    assert_retired_workspace_tables_unavailable(&pool).await;
+    Some((pool, scope))
+}
+
+pub(crate) async fn workspace_fixture() -> Option<(PgPool, VisibleConversationScope)> {
+    let (pool, mut scope) = standalone_fixture().await?;
+    scope.workspace_id = Some("conversation-core-fixture-workspace".into());
+    scope.linked_workspace_task_id = Some("conversation-core-fixture-task".into());
     sqlx::query(
         "UPDATE pg_temp.conversations SET workspace_id = $1, linked_workspace_task_id = $2",
     )
-    .bind("conversation-core-fixture-workspace")
-    .bind("conversation-core-fixture-task")
+    .bind(&scope.workspace_id)
+    .bind(&scope.linked_workspace_task_id)
     .execute(&pool)
     .await
     .expect("set temporary Core linkage");
-    sqlx::query("CREATE TEMP TABLE user_projects AS SELECT user_id, project_id FROM public.user_projects WHERE project_id = $1")
-        .bind(&scope.project_id).execute(&pool).await.expect("copy platform project membership facts");
-    sqlx::query("CREATE TEMP TABLE user_tenants AS SELECT user_id, tenant_id, role FROM public.user_tenants WHERE tenant_id = $1")
-        .bind(&scope.tenant_id).execute(&pool).await.expect("copy platform tenant membership facts");
-    sqlx::query("INSERT INTO pg_temp.user_projects (user_id, project_id) VALUES ($1, $2)")
-        .bind("conversation-core-fixture-reader")
-        .bind(&scope.project_id)
-        .execute(&pool)
-        .await
-        .expect("add temporary shared project reader");
-    sqlx::query(
-        "INSERT INTO pg_temp.user_tenants (user_id, tenant_id, role) VALUES ($1, $2, 'member')",
-    )
-    .bind("conversation-core-fixture-reader")
-    .bind(&scope.tenant_id)
-    .execute(&pool)
-    .await
-    .expect("add temporary shared tenant reader");
-    scope.workspace_id = Some("conversation-core-fixture-workspace".into());
-    scope.linked_workspace_task_id = Some("conversation-core-fixture-task".into());
     Some((pool, scope))
 }
+
+#[path = "test_support_tests.rs"]
+mod tests;

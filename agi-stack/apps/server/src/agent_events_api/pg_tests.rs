@@ -4,8 +4,7 @@ use agistack_adapters_postgres::PgAgentExecutionEventRepository;
 use axum::http::StatusCode;
 
 use crate::conversation_authority::test_support::{
-    assert_retired_workspace_tables_absent, repository_pool, shared_reader, visible_scope,
-    workspace_fixture,
+    shared_reader, standalone_fixture, workspace_fixture,
 };
 use crate::workspace_authority::{
     test_support::FixedWorkspaceAuthority, WorkspaceAuthorityProfile, WorkspaceAuthorityScope,
@@ -24,11 +23,7 @@ fn cursor() -> ValidatedEventReplayQuery {
 
 #[tokio::test]
 async fn postgres_standalone_replay_does_not_depend_on_core_or_legacy_tables() {
-    let Some(pool) = repository_pool().await else {
-        return;
-    };
-    assert_retired_workspace_tables_absent(&pool).await;
-    let Some(scope) = visible_scope(&pool, false).await else {
+    let Some((pool, scope)) = standalone_fixture().await else {
         return;
     };
     let mut authority = FixedWorkspaceAuthority::new(None, &[]);
@@ -77,10 +72,7 @@ async fn postgres_workspace_replay_requires_core_for_owner_and_shared_reader() {
         task_linked: true,
     };
     let reader = shared_reader(&pool, &scope).await;
-    let mut users = vec![scope.user_id.as_str()];
-    if let Some(reader) = reader.as_deref() {
-        users.push(reader);
-    }
+    let users = [scope.user_id.as_str(), reader.as_str()];
     let authority = Arc::new(FixedWorkspaceAuthority::new(Some(profile.clone()), &users));
     let service = PgAgentEventReplayService::new(
         PgAgentExecutionEventRepository::new(pool.clone()),
@@ -90,14 +82,10 @@ async fn postgres_workspace_replay_requires_core_for_owner_and_shared_reader() {
         .replay_events(&scope.user_id, &scope.id, cursor())
         .await
         .unwrap();
-    if let Some(reader) = reader.as_deref() {
-        service
-            .replay_events(reader, &scope.id, cursor())
-            .await
-            .expect("Core-authorized shared reader must replay events");
-    } else {
-        eprintln!("[skip] shared event reader: no second platform member fixture");
-    }
+    service
+        .replay_events(&reader, &scope.id, cursor())
+        .await
+        .expect("Core-authorized shared reader must replay events");
     assert!(
         !authority.requests.lock().unwrap().is_empty(),
         "owner cannot bypass Core"
