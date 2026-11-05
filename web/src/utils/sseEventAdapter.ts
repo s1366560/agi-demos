@@ -353,6 +353,8 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         display: validateReplOutputPresentationV2(data.display) ?? undefined,
         toolInput: data.tool_input,
         execution_id: data.tool_execution_id ?? data.execution_id,
+        call_id: data.call_id,
+        message_id: data.message_id,
         execution: {
           startTime: timestamp,
           endTime: 0, // Will be set when observe arrives
@@ -398,6 +400,8 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         display: validateReplOutputPresentationV2(data.display) ?? undefined,
         toolName: data.tool_name ?? 'unknown', // Use tool_name from event
         execution_id: data.tool_execution_id ?? data.execution_id,
+        call_id: data.call_id,
+        message_id: data.message_id,
         toolOutput: observationValue,
         isError,
         mcpUiMetadata,

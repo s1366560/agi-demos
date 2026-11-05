@@ -784,7 +784,7 @@ async def _execute_memory_update(
             graph_service=graph_service,
         )
 
-        memory = await service.update_memory(
+        update = await service.prepare_memory_update(
             memory_id=memory_id,
             title=title,
             content=content,
@@ -792,7 +792,17 @@ async def _execute_memory_update(
             metadata=metadata,
         )
 
+        memory = update.memory
         await session.commit()
+
+        if update.content_changed:
+            try:
+                # Graph adapters can use other SQL sessions; never await them
+                # while this session still holds the memory/project write locks.
+                await service.reprocess_memory(memory)
+            finally:
+                # Persist conditional FAILED status on graph failure/cancellation.
+                await session.commit()
 
         # Sync searchable chunks through the shared helper whenever searchable
         # content or metadata may have changed.
@@ -819,6 +829,7 @@ async def _execute_memory_update(
                 )
                 await session.commit()
         except Exception as chunk_err:
+            await session.rollback()
             logger.warning(
                 "memory_update: failed to sync searchable chunks error_type=%s",
                 type(chunk_err).__name__,

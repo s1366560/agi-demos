@@ -15,6 +15,7 @@ import {
 } from '../../types/conversationState';
 import { loadConversationState, saveConversationState } from '../../utils/conversationDB';
 import { logger } from '../../utils/logger';
+import { coalesceToolCallDrafts } from '../../utils/toolCallTimeline';
 import { useContextStore } from '../contextStore';
 
 import { replayCanvasEventsFromTimeline } from './canvasReplay';
@@ -322,10 +323,12 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
             eventMap.set(event.id, event);
           }
         }
-        finalTimeline = Array.from(eventMap.values()).sort(compareTimelineEvents);
+        finalTimeline = coalesceToolCallDrafts(
+          Array.from(eventMap.values()).sort(compareTimelineEvents)
+        );
         finalMessages = timelineToMessages(finalTimeline);
       } else {
-        finalTimeline = mergedTimeline;
+        finalTimeline = coalesceToolCallDrafts(mergedTimeline);
         finalMessages = messages;
       }
       newConvState.timeline = finalTimeline;
@@ -539,7 +542,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
         const combinedTimeline = [...response.timeline, ...timeline];
         const sortedTimeline = combinedTimeline.sort(compareTimelineEvents);
         // Merge HITL response events into request events for single-card rendering
-        const mergedTimeline = mergeHITLResponseEvents(sortedTimeline);
+        const mergedTimeline = coalesceToolCallDrafts(mergeHITLResponseEvents(sortedTimeline));
         const newMessages = timelineToMessages(mergedTimeline);
         const newFirstTimeUs = response.first_time_us ?? null;
         const newFirstCounter = response.first_counter ?? null;

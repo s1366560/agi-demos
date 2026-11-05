@@ -617,6 +617,20 @@ async def _handle_runs(
 VALID_ACTIONS = ["status", "list", "add", "update", "remove", "run", "runs"]
 
 
+def _cron_permission(arguments: dict[str, Any]) -> str | None:
+    """Declare effects for the fixed action enum, without inferring user intent."""
+    action = arguments.get("action")
+    if not isinstance(action, str):
+        return None
+    if action in {"status", "list", "runs"}:
+        return "read"
+    if action in {"add", "update", "remove"}:
+        return "write"
+    if action == "run":
+        return "system_api"
+    return None
+
+
 @tool_define(
     name="cron",
     description=(
@@ -792,7 +806,8 @@ VALID_ACTIONS = ["status", "list", "add", "update", "remove", "run", "runs"]
         },
         "required": ["action"],
     },
-    permission=None,
+    permission="system_api",
+    permission_resolver=_cron_permission,
     category="cron",
 )
 async def cron_tool(  # noqa: PLR0911

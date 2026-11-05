@@ -1,6 +1,7 @@
 """Permission rules definition and evaluation."""
 
 import fnmatch
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -294,12 +295,18 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "file_read",
         "read_file",
         "list_files",
+        "list_artifacts",
         "cat",
         "grep",
         "glob",
         "find",
         "ls",
         "dir",
+        # Fixed AST inspection endpoints read source without executing it.
+        "ast_parse",
+        "ast_find_symbols",
+        "ast_extract_function",
+        "ast_get_imports",
         # Fixed sandbox protocol inspection endpoints; these do not invoke tools.
         "mcp_server_list",
         "mcp_server_list_prompts",
@@ -333,6 +340,7 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "node",
         "sh",
         "shell",
+        "deps_check",
     }
 
     tool_lower = tool_name.lower()
@@ -346,6 +354,26 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
     else:
         # Unknown tools default to ASK for safety
         return "ask"
+
+
+def sandbox_tool_permission_resolver(
+    tool_name: str,
+) -> Callable[[dict[str, Any]], str | None] | None:
+    """Return argument effects for a fixed sandbox protocol definition."""
+    return _deps_check_permission if tool_name == "deps_check" else None
+
+
+def _deps_check_permission(arguments: dict[str, Any]) -> str | None:
+    package_type = arguments.get("package_type", "pip")
+    if not isinstance(package_type, str):
+        return None
+    if package_type == "command":
+        # This branch only calls shutil.which; it never runs the located file.
+        return "read"
+    if package_type in {"pip", "system"}:
+        # These branches invoke subprocesses, including a caller-selected venv pip.
+        return "bash"
+    return None
 
 
 def sandbox_mcp_ruleset() -> list[PermissionRule]:

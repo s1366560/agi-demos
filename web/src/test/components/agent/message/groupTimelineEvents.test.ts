@@ -2,7 +2,88 @@ import { describe, expect, it } from 'vitest';
 
 import { groupTimelineEvents } from '../../../../components/agent/message/groupTimelineEvents';
 
-import type { TimelineEvent } from '../../../../types/agent';
+import type { ActEvent, TimelineEvent } from '../../../../types/agent';
+
+describe('groupTimelineEvents persisted execution states', () => {
+  const act: ActEvent = {
+    id: 'act',
+    type: 'act',
+    toolName: 'memory_update',
+    toolInput: {},
+    execution_id: 'execution-1',
+    timestamp: 1,
+    eventTimeUs: 1000,
+    eventCounter: 0,
+  };
+
+  it.each([
+    ['success', 'success'],
+    ['completed', 'success'],
+    ['failed', 'error'],
+    ['permission_denied', 'error'],
+    ['timeout', 'error'],
+    ['cancelled', 'cancelled'],
+    ['running', 'running'],
+  ])('renders persisted %s without waiting for an observe', (status, expected) => {
+    const events = [
+      {
+        ...act,
+        execution: { startTime: 1, endTime: 5, duration: 4, status, error: 'record detail' },
+      },
+    ];
+    const grouped = groupTimelineEvents(events);
+    expect(grouped[0]?.kind).toBe('timeline');
+    if (grouped[0]?.kind !== 'timeline') return;
+    expect(grouped[0].steps[0]).toMatchObject({
+      status: expected,
+      output: 'record detail',
+      duration: 4,
+      isError: expected === 'error',
+    });
+  });
+
+  it('uses a terminal record from a duplicate execution even when the live act is first', () => {
+    const grouped = groupTimelineEvents([
+      act,
+      {
+        ...act,
+        id: 'persisted-act',
+        execution: {
+          startTime: 1,
+          endTime: 5,
+          duration: 4,
+          status: 'cancelled',
+        },
+      },
+    ]);
+    expect(grouped[0]?.kind).toBe('timeline');
+    if (grouped[0]?.kind !== 'timeline') return;
+    expect(grouped[0].steps).toHaveLength(1);
+    expect(grouped[0].steps[0]?.status).toBe('cancelled');
+  });
+
+  it('does not attach a result from a different explicit execution of the same tool', () => {
+    const grouped = groupTimelineEvents([
+      { ...act, execution: { startTime: 1, endTime: 2, duration: 1, status: 'cancelled' } },
+      { ...act, id: 'act-2', execution_id: 'execution-2', timestamp: 3 },
+      {
+        id: 'observe-2',
+        type: 'observe',
+        execution_id: 'execution-2',
+        toolName: act.toolName,
+        toolOutput: 'success from second call',
+        isError: false,
+        timestamp: 4,
+        eventTimeUs: 4000,
+        eventCounter: 0,
+      },
+    ]);
+    expect(grouped[0]?.kind).toBe('timeline');
+    if (grouped[0]?.kind !== 'timeline') return;
+    expect(grouped[0].steps.map((step) => step.status)).toEqual(['cancelled', 'success']);
+    expect(grouped[0].steps[0]?.output).toBeUndefined();
+  });
+});
 
 describe('groupTimelineEvents state-only events', () => {
   it.each([
@@ -11,22 +92,19 @@ describe('groupTimelineEvents state-only events', () => {
     'selection_trace',
     'policy_filtered',
     'toolset_changed',
-  ])(
-    'omits %s from renderable timeline rows',
-    (type) => {
-      const timeline = [
-        {
-          id: `state-only-${type}`,
-          type,
-          timestamp: 1,
-          eventTimeUs: 1_000,
-          eventCounter: 0,
-        },
-      ] as unknown as TimelineEvent[];
+  ])('omits %s from renderable timeline rows', (type) => {
+    const timeline = [
+      {
+        id: `state-only-${type}`,
+        type,
+        timestamp: 1,
+        eventTimeUs: 1_000,
+        eventCounter: 0,
+      },
+    ] as unknown as TimelineEvent[];
 
-      expect(groupTimelineEvents(timeline)).toEqual([]);
-    }
-  );
+    expect(groupTimelineEvents(timeline)).toEqual([]);
+  });
 
   it('preserves unknown protocol events for MessageBubble diagnostics', () => {
     const event = {
@@ -274,6 +352,39 @@ describe('groupTimelineEvents HITL tool completion', () => {
 });
 
 describe('groupTimelineEvents act deduplication', () => {
+  it('keeps an authorized tool running until an actual tool result arrives', () => {
+    const timeline = [
+      {
+        id: 'act',
+        type: 'act',
+        toolName: 'memory_update',
+        toolInput: {},
+        execution_id: 'execution-1',
+        eventTimeUs: 1000,
+        eventCounter: 0,
+        timestamp: 1,
+      },
+      {
+        id: 'permission',
+        type: 'permission_asked',
+        requestId: 'permission-1',
+        answered: true,
+        granted: true,
+        toolName: 'memory_update',
+        eventTimeUs: 2000,
+        eventCounter: 0,
+        timestamp: 2,
+      },
+    ] as TimelineEvent[];
+
+    const steps = groupTimelineEvents(timeline).flatMap((item) =>
+      item.kind === 'timeline' ? item.steps : []
+    );
+    expect(steps).toHaveLength(1);
+    expect(steps[0]?.status).toBe('running');
+    expect(steps[0]?.output).toBeUndefined();
+  });
+
   it('renders a single step when the same execution is duplicated in the timeline', () => {
     // The same tool execution can appear twice when persisted history is merged
     // with live-streamed events: each copy has a distinct event id but the same

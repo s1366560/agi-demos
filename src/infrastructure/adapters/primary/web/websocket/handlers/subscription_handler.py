@@ -21,6 +21,7 @@ from src.infrastructure.adapters.primary.web.websocket.message_context import Me
 from src.infrastructure.adapters.primary.web.websocket.scoped_session_admission_v2 import (
     acquire_existing_scoped_session_v2,
     authorize_existing_scoped_session_v2,
+    scoped_session_has_only_terminal_runs_v2,
 )
 from src.infrastructure.plugins.v2.agent_recovery_stream_services import (
     AGENT_RECOVERY_STREAM_SERVICE_V2,
@@ -276,6 +277,13 @@ async def _maybe_start_recovery_bridge(
 ) -> None:
     """Start a recovery bridge on subscribe when execution is still running."""
     try:
+        if await scoped_session_has_only_terminal_runs_v2(
+            context, conversation_id=conversation_id, project_id=project_id
+        ):
+            logger.info(
+                "[WS] Skip recovery bridge for terminal canonical runs: conv=%s", conversation_id
+            )
+            return
         reservation = await acquire_existing_scoped_session_v2(
             context, conversation_id=conversation_id, project_id=project_id
         )

@@ -676,12 +676,12 @@ class AgentServiceImpl implements AgentService {
 
   respondToPermission(requestId: string, granted: boolean): Promise<void> {
     if (this.isConnected()) {
-      this.send({
+      const sent = this.send({
         type: 'permission_respond',
         request_id: requestId,
         granted,
       });
-      return Promise.resolve();
+      return sent ? Promise.resolve() : Promise.reject(new Error('WebSocket not connected'));
     }
     return restApi.respondToPermissionHttp(requestId, granted);
   }

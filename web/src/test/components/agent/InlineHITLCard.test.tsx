@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { message } from 'antd';
 import '@testing-library/jest-dom/vitest';
 
 import type { ClarificationAskedEventData, PermissionAskedEventData } from '@/types/agent';
@@ -49,6 +50,41 @@ vi.mock('@/stores/hitlStore.unified', () => {
 import { InlineHITLCard } from '@/components/agent/InlineHITLCard';
 
 describe('InlineHITLCard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requestStatuses.clear();
+  });
+
+  it('shows a failed permission submission without marking the request answered', async () => {
+    respondToPermission.mockRejectedValueOnce(new Error('Permission response failed'));
+    const errorToast = vi.spyOn(message, 'error').mockReturnValue(Promise.resolve() as never);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      render(
+        <InlineHITLCard
+          hitlType="permission"
+          requestId="permission-failed"
+          permissionData={{
+            request_id: 'permission-failed',
+            tool_name: 'memory_update',
+            permission_type: 'ask',
+            description: 'Update memory',
+            risk_level: 'low',
+            context: {},
+          }}
+        />
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Allow' }));
+      await waitFor(() => expect(errorToast).toHaveBeenCalledWith('Permission response failed'));
+      expect(updateRequestStatus).not.toHaveBeenCalled();
+      expect(screen.queryByText('Decision recorded')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Allow$/ })).not.toBeDisabled();
+    } finally {
+      errorToast.mockRestore();
+      consoleError.mockRestore();
+    }
+  });
+
   it('renders clarification requests with missing options without crashing', async () => {
     const clarificationData = {
       request_id: 'hitl-1',
@@ -95,7 +131,8 @@ describe('InlineHITLCard', () => {
 
     expect(await screen.findByText('Needs permission')).toBeInTheDocument();
     expect(screen.getByText('Deploy <prod>')).toBeInTheDocument();
-    expect(screen.getByText('Granted - executed')).toBeInTheDocument();
+    expect(screen.getByText('Permission granted')).toBeInTheDocument();
+    expect(screen.queryByText('Granted - executed')).not.toBeInTheDocument();
   });
 
   it('derives the granted verdict from the structured prop, not localized text', async () => {
@@ -120,8 +157,8 @@ describe('InlineHITLCard', () => {
       />
     );
 
-    expect(await screen.findByText('Granted - executed')).toBeInTheDocument();
-    expect(screen.queryByText('Denied - executed')).not.toBeInTheDocument();
+    expect(await screen.findByText('Permission granted')).toBeInTheDocument();
+    expect(screen.queryByText('Permission denied')).not.toBeInTheDocument();
     unmount();
 
     render(
@@ -136,6 +173,6 @@ describe('InlineHITLCard', () => {
       />
     );
 
-    expect(await screen.findByText('Denied - executed')).toBeInTheDocument();
+    expect(await screen.findByText('Permission denied')).toBeInTheDocument();
   });
 });

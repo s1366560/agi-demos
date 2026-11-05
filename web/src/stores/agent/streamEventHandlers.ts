@@ -27,10 +27,7 @@ import {
   mergeA2UIMessageStreamWithSnapshot,
 } from './a2uiMessages';
 import { useExecutionStore } from './executionStore';
-import {
-  shouldAutoApprovePermission,
-  useAgentPermissionModeStore,
-} from './permissionModeStore';
+import { shouldAutoApprovePermission, useAgentPermissionModeStore } from './permissionModeStore';
 
 import type { DeltaBufferState } from './deltaBuffers';
 import type { AdditionalAgentHandlers } from './types';
@@ -1164,21 +1161,27 @@ export function createStreamEventHandlers(
     },
 
     onPermissionAsked: (event) => {
-      const mode = useAgentPermissionModeStore
-        .getState()
-        .getPermissionMode(handlerConversationId);
+      const mode = useAgentPermissionModeStore.getState().getPermissionMode(handlerConversationId);
       const wireData = event.data as PermissionAskedEventData & {
         permission?: string | undefined;
         permission_type?: string | undefined;
       };
       const requestId = event.data.request_id;
       const isActiveConversation = get().activeConversationId === handlerConversationId;
+      const knownStatus = requestId
+        ? useUnifiedHITLStore.getState().requestStatuses.get(requestId)
+        : undefined;
+      // A server reply can arrive before a replayed ask. Its exact request ID
+      // remains terminal, so replay must not recreate buttons or submit again.
+      if (knownStatus === 'answered' || knownStatus === 'completed') return;
 
       // Full access: every ask is auto-approved, so the card is pure noise.
       // Respond directly without queueing the timeline event or creating a
       // HITL request. Background replays keep a pending card for manual review.
       if (mode === 'full_access' && requestId && isActiveConversation) {
-        void get().respondToPermission(requestId, true);
+        void get()
+          .respondToPermission(requestId, true)
+          .catch(() => undefined);
         return;
       }
 
@@ -1210,11 +1213,14 @@ export function createStreamEventHandlers(
         isActiveConversation &&
         shouldAutoApprovePermission(mode, wireData)
       ) {
-        void get().respondToPermission(requestId, true);
+        void get()
+          .respondToPermission(requestId, true)
+          .catch(() => undefined);
       }
     },
 
     onPermissionReplied: (event) => {
+      flushTimelineBufferSync();
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       const requestId = event.data.request_id;
@@ -1228,7 +1234,7 @@ export function createStreamEventHandlers(
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
         pendingPermission: null,
-        agentState: event.data.granted ? 'thinking' : 'idle',
+        agentState: convState.isStreaming ? 'thinking' : convState.agentState,
       });
 
       useUnifiedHITLStore
@@ -1557,8 +1563,10 @@ export function createStreamEventHandlers(
       // Update background store if this was a background execution
       const bgStore = useBackgroundStore.getState();
       const execId = event.data.execution_id || event.data.run_id || '';
-      if (bgStore.executions.get(execId)?.conversationId === handlerConversationId
-        && (!event.data.conversation_id || event.data.conversation_id === handlerConversationId)) {
+      if (
+        bgStore.executions.get(execId)?.conversationId === handlerConversationId &&
+        (!event.data.conversation_id || event.data.conversation_id === handlerConversationId)
+      ) {
         bgStore.complete(
           execId,
           event.data.summary || '',
@@ -1587,8 +1595,10 @@ export function createStreamEventHandlers(
       // Update background store if this was a background execution
       const bgStore = useBackgroundStore.getState();
       const execId = event.data.execution_id || event.data.run_id || '';
-      if (bgStore.executions.get(execId)?.conversationId === handlerConversationId
-        && (!event.data.conversation_id || event.data.conversation_id === handlerConversationId)) {
+      if (
+        bgStore.executions.get(execId)?.conversationId === handlerConversationId &&
+        (!event.data.conversation_id || event.data.conversation_id === handlerConversationId)
+      ) {
         bgStore.fail(execId, event.data.error || 'Unknown error');
       }
     },
@@ -1678,8 +1688,10 @@ export function createStreamEventHandlers(
       // Update background store if this was a background execution
       const bgStore = useBackgroundStore.getState();
       const execId = event.data.execution_id || event.data.run_id || '';
-      if (bgStore.executions.get(execId)?.conversationId === handlerConversationId
-        && (!event.data.conversation_id || event.data.conversation_id === handlerConversationId)) {
+      if (
+        bgStore.executions.get(execId)?.conversationId === handlerConversationId &&
+        (!event.data.conversation_id || event.data.conversation_id === handlerConversationId)
+      ) {
         bgStore.cancel(execId);
       }
     },

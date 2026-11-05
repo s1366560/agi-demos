@@ -225,6 +225,8 @@ def test_build_timeline_replays_latest_act_delta_as_act() -> None:
     assert timeline == [
         {
             "id": "act_delta-2000-0",
+            "message_id": "msg-1",
+            "call_id": "call-1",
             "type": "act",
             "eventTimeUs": 2_000,
             "eventCounter": 0,
@@ -240,6 +242,8 @@ def test_build_timeline_replays_latest_act_delta_as_act() -> None:
         },
         {
             "id": "observe-act_delta-2000-0",
+            "message_id": "msg-1",
+            "call_id": "call-1",
             "type": "observe",
             "eventTimeUs": 2_000,
             "eventCounter": 0,

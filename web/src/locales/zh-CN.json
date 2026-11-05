@@ -7869,6 +7869,7 @@
       "completedWithFailures": "已完成 {{completed}}/{{total}} 个工具调用，其中 {{failed}} 个失败：{{tools}}",
       "moreToolsSuffix": "，另有 {{count}} 个",
       "progress": "{{completed}}/{{total}} 完成",
+      "cancelled": "已取消",
       "failed": "失败",
       "toolTitle": "工具：{{tool}}",
       "parametersPreview": "参数：{{preview}}",
@@ -8237,8 +8238,9 @@
         "configured": "已配置",
         "completed": "已完成",
         "submitted": "已提交",
-        "granted_executed": "已授权执行",
-        "denied_executed": "已拒绝执行"
+        "permission_granted": "已授予权限",
+        "permission_denied": "已拒绝权限",
+        "decision_recorded": "决定已记录"
       },
       "save_for_later": "保存配置以便下次使用",
       "permission": {

@@ -226,6 +226,20 @@ describe('agentService - WebSocket Token Handling', () => {
     });
   });
 
+  it('rejects permission submission if the socket closes before the frame can be sent', async () => {
+    const connected = vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+    const transport = agentService as unknown as { send: (payload: unknown) => boolean };
+    const send = vi.spyOn(transport, 'send').mockReturnValue(false);
+    try {
+      await expect(agentService.respondToPermission('permission-1', true)).rejects.toThrow(
+        'WebSocket not connected'
+      );
+    } finally {
+      send.mockRestore();
+      connected.mockRestore();
+    }
+  });
+
   describe('chat()', () => {
     beforeEach(async () => {
       localStorage.setItem(

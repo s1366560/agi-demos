@@ -193,11 +193,15 @@ export interface ActEvent extends BaseTimelineEvent {
   toolName: string;
   toolInput: Record<string, unknown>;
   execution_id?: string | undefined; // New: unique ID for act/observe matching
+  call_id?: string | undefined;
+  message_id?: string | undefined;
   execution?:
     | {
         startTime: number;
         endTime: number;
         duration: number;
+        status?: string | undefined;
+        error?: string | null | undefined;
       }
     | undefined;
 }
@@ -212,6 +216,8 @@ export interface ObserveEvent extends BaseTimelineEvent {
   toolOutput?: string | undefined; // May be undefined if result is not a string or empty
   isError: boolean;
   execution_id?: string | undefined; // New: matches act event's execution_id
+  call_id?: string | undefined;
+  message_id?: string | undefined;
   mcpUiMetadata?:
     | {
         resource_uri?: string | undefined;

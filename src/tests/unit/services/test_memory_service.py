@@ -48,7 +48,7 @@ class TestMemoryService:
         assert mock_memory_repo.save.await_count == 1
         source, status = mock_memory_repo.update_processing_status.await_args.args
         assert source.project_id == "project"
-        assert source.revision == (1 if operation == "create" else 7)
+        assert source.revision == (1 if operation == "create" else 8)
         assert status == "FAILED"
         if operation == "update":
             assert memory.processing_status == "PENDING"
@@ -209,6 +209,7 @@ class TestMemoryService:
 
         assert result.title == "New Title"
         assert result.content == "New Content"
+        assert result.version == 2
         assert result.tags == ["updated"]
         assert result.is_public is True
         assert result.metadata["source"] == "edited"
@@ -223,6 +224,32 @@ class TestMemoryService:
         assert episode.metadata["memory_id"] == memory_id
         assert episode.metadata["tenant_id"] == "tenant-1"
         assert episode.metadata["reprocess"] is True
+
+    @pytest.mark.parametrize("content", ["Old Content", "New Content"])
+    async def test_prepare_update_defers_graph_until_caller_commits(
+        self, content, mock_memory_repo, mock_graphiti_client
+    ):
+        memory = Memory(
+            id="memory",
+            project_id="project",
+            author_id="actor",
+            title="Title",
+            content="Old Content",
+            version=7,
+            processing_status="COMPLETED",
+        )
+        mock_memory_repo.find_by_id.return_value = memory
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+
+        result = await service.prepare_memory_update("memory", content=content)
+
+        assert result.memory is memory
+        assert result.content_changed is (content != "Old Content")
+        assert memory.version == (8 if result.content_changed else 7)
+        assert memory.processing_status == ("PENDING" if result.content_changed else "COMPLETED")
+        mock_memory_repo.save.assert_awaited_once_with(memory)
+        mock_graphiti_client.add_episode.assert_not_awaited()
+        mock_graphiti_client.delete_episode_by_memory_id.assert_not_awaited()
 
     async def test_update_memory_logs_do_not_include_identifiers_or_content(
         self,
@@ -323,6 +350,54 @@ class TestMemoryService:
         mock_memory_repo.save.assert_awaited_once_with(existing_memory)
         mock_graphiti_client.add_episode.assert_not_awaited()
         mock_graphiti_client.delete_episode_by_memory_id.assert_not_awaited()
+
+    @pytest.mark.parametrize(
+        ("graph_status", "applied", "expected_status"),
+        [
+            ("COMPLETED", True, "COMPLETED"),
+            ("COMPLETED", False, "PENDING"),
+            ("PENDING", True, "PENDING"),
+        ],
+    )
+    async def test_reprocess_records_only_confirmed_completion_for_current_revision(
+        self,
+        mock_memory_repo,
+        mock_graphiti_client,
+        graph_status,
+        applied,
+        expected_status,
+    ):
+        memory = Memory(
+            id="memory",
+            project_id="project",
+            author_id="actor",
+            title="Updated",
+            content="Updated content",
+            version=8,
+        )
+
+        async def add_episode(episode):
+            assert episode.metadata["source_revision"] == 8
+            episode.status = graph_status
+            return episode
+
+        mock_graphiti_client.add_episode.side_effect = add_episode
+        mock_memory_repo.update_processing_status = AsyncMock(return_value=applied)
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+
+        await service.reprocess_memory(memory)
+
+        assert memory.processing_status == expected_status
+        if graph_status == "COMPLETED":
+            source, status = mock_memory_repo.update_processing_status.await_args.args
+            assert (source.memory_id, source.project_id, source.revision) == (
+                "memory",
+                "project",
+                8,
+            )
+            assert status == "COMPLETED"
+        else:
+            mock_memory_repo.update_processing_status.assert_not_awaited()
 
     async def test_delete_memory_success(self, mock_memory_repo, mock_graphiti_client):
         """Test successful memory deletion with proper graph cleanup."""

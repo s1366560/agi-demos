@@ -7849,6 +7849,7 @@
       "completedWithFailures": "Finish {{completed}}/{{total}} tools, mark {{failed}} failed: {{tools}}",
       "moreToolsSuffix": ", include {{count}} more",
       "progress": "{{completed}}/{{total}} done",
+      "cancelled": "Cancelled",
       "failed": "Failed",
       "toolTitle": "Tool: {{tool}}",
       "parametersPreview": "Parameters: {{preview}}",
@@ -8217,8 +8218,9 @@
         "configured": "Configured",
         "completed": "Completed",
         "submitted": "Submitted",
-        "granted_executed": "Granted - executed",
-        "denied_executed": "Denied - executed"
+        "permission_granted": "Permission granted",
+        "permission_denied": "Permission denied",
+        "decision_recorded": "Decision recorded"
       },
       "save_for_later": "Save configuration for next time",
       "permission": {

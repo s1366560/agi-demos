@@ -4,7 +4,9 @@
  * SubAgent events are grouped into SubAgentGroup blocks.
  */
 
-import type { TimelineEvent, ObserveEvent } from '../../../types/agent';
+import { getPersistedToolStatus } from '../../../utils/toolCallTimeline';
+
+import type { TimelineEvent, ObserveEvent, ActEvent } from '../../../types/agent';
 import type { TimelineStep } from '../timeline/ExecutionTimeline';
 import type { SubAgentGroup } from '../timeline/SubAgentTimeline';
 
@@ -186,9 +188,13 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
 
   // Build observe lookup by execution_id
   const observeByExecId = new Map<string, ObserveEvent>();
+  const terminalExecutionById = new Map<string, ActEvent['execution']>();
   // Fallback: build observe lookup by toolName for events without execution_id
   const observeByToolName = new Map<string, ObserveEvent[]>();
   for (const ev of timeline) {
+    if (ev.type === 'act' && ev.execution_id && getPersistedToolStatus(ev.execution?.status)) {
+      terminalExecutionById.set(ev.execution_id, ev.execution);
+    }
     if (ev.type === 'observe') {
       const obsEv = ev;
       if (obsEv.execution_id) {
@@ -267,7 +273,11 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
       if (!obs) {
         const candidates = observeByToolName.get(act.toolName) || [];
         for (const cand of candidates) {
-          if (!consumedObserves.has(cand.id) && cand.timestamp >= act.timestamp) {
+          if (
+            (!act.execution_id || !cand.execution_id) &&
+            !consumedObserves.has(cand.id) &&
+            cand.timestamp >= act.timestamp
+          ) {
             obs = cand;
             consumedObserves.add(cand.id);
             break;
@@ -276,18 +286,34 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
       }
 
       const hitlRequest = obs ? undefined : findHITLRequestForAct(timeline, i);
-      const hitlAnswered = hitlRequest ? isAnsweredHITLEvent(hitlRequest, timeline) : false;
+      // A permission verdict authorizes the tool; only its observe proves execution finished.
+      const isPermissionRequest =
+        hitlRequest?.type === 'permission_asked' || hitlRequest?.type === 'permission_requested';
+      const hitlAnswered =
+        hitlRequest && !isPermissionRequest ? isAnsweredHITLEvent(hitlRequest, timeline) : false;
+      const execution =
+        (act.execution_id ? terminalExecutionById.get(act.execution_id) : undefined) ??
+        act.execution;
+      const persistedStatus = getPersistedToolStatus(execution?.status);
 
       const step: TimelineStep = {
         id: act.execution_id || act.id || `step-${String(i)}`,
         toolName: act.toolName || 'unknown',
-        status: obs ? (obs.isError ? 'error' : 'success') : hitlAnswered ? 'success' : 'running',
+        status: obs
+          ? obs.isError
+            ? 'error'
+            : 'success'
+          : (persistedStatus ?? (hitlAnswered ? 'success' : 'running')),
         input: act.toolInput,
         output:
           obs?.toolOutput ??
+          execution?.error ??
           (hitlAnswered && hitlRequest ? getHITLStepOutput(hitlRequest) : undefined),
-        isError: obs?.isError,
-        duration: obs && act.timestamp && obs.timestamp ? obs.timestamp - act.timestamp : undefined,
+        isError: obs?.isError ?? persistedStatus === 'error',
+        duration:
+          obs && act.timestamp && obs.timestamp
+            ? obs.timestamp - act.timestamp
+            : execution?.duration,
         todoTitle: todoTitleById.get(getTodoId(act.toolInput) ?? ''),
         mcpUiMetadata: obs?.mcpUiMetadata,
       };

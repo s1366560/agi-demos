@@ -21,6 +21,16 @@ export interface ActiveAgentRun {
   authority_revision: number;
 }
 
+export interface CancelRunReceipt {
+  accepted: true;
+  status: 'cancel_requested' | 'cancelled';
+  run: {
+    id: string;
+    revision: number;
+    status: ActiveAgentRun['status'];
+  };
+}
+
 export interface RunInputCodeRangeReference {
   type: 'code_range';
   snapshot_id: string;
@@ -160,6 +170,12 @@ export const runInputService = {
       `/agent/conversations/${encodeURIComponent(conversationId)}/latest-run`
     );
     return normalizeRunProjection(response.latest_run);
+  },
+
+  cancel(runId: string, expectedRevision: number): Promise<CancelRunReceipt> {
+    return httpClient.post(`${runPath(runId)}/cancel`, {
+      expected_revision: expectedRevision,
+    });
   },
 
   create(runId: string, request: CreateRunInputRequest): Promise<RunInputReceipt> {

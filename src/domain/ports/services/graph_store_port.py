@@ -41,7 +41,11 @@ class GraphStorePort(ABC):
 
     @abstractmethod
     async def add_episode(self, episode: Episode) -> Episode:
-        """Persist an episode and queue it for entity extraction."""
+        """Persist and process or enqueue an episode for entity extraction.
+
+        Return status COMPLETED only after synchronous processing succeeds;
+        queued work retains PENDING until its worker completes it.
+        """
 
     @abstractmethod
     async def search(self, query: str, project_id: str | None = None, limit: int = 10) -> list[Any]:

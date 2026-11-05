@@ -135,33 +135,24 @@ class GoalEvaluator:
     ) -> GoalCheckResult:
         task_result = self._evaluate_task_goal(tasks)
         if self._native_control_outcome is ToolControlOutcome.USER_STOPPED:
-            failed_count = self._summarize_task_counts(tasks)["failed"]
-            if failed_count:
-                return GoalCheckResult(
-                    achieved=False,
-                    should_stop=True,
-                    reason=f"{failed_count} task(s) failed",
-                    source="tasks",
-                )
             return await self._evaluate_llm_goal(
                 messages,
-                context_summary=self._build_pending_task_goal_check_context(
+                context_summary=self._build_task_goal_check_context(
                     tasks,
                     task_result,
                     messages,
                 ),
             )
-        if task_result.achieved or task_result.should_stop:
-            return task_result
-        reconciled_result = await self._evaluate_pending_task_goal_with_llm(
+        return await self._evaluate_task_goal_with_llm(
             tasks,
             task_result,
             messages,
         )
-        return reconciled_result if reconciled_result is not None else task_result
 
-    async def evaluate_task_completion_gate(self, session_id: str) -> GoalCheckResult | None:
-        """Evaluate only persisted task state for a final completion gate."""
+    async def evaluate_task_completion_gate(
+        self, session_id: str, messages: list[dict[str, Any]]
+    ) -> GoalCheckResult | None:
+        """Recheck persisted task evidence against the current requested scope."""
         if self._runtime_context.get("effective_mode") == "plan":
             return None
         workspace_result = await self._evaluate_workspace_goal()
@@ -180,7 +171,7 @@ class GoalEvaluator:
             )
         if not tasks:
             return None
-        return self._evaluate_task_goal(tasks)
+        return await self._evaluate_loaded_task_goal(tasks, messages)
 
     async def generate_suggestions(self, messages: list[dict[str, Any]]) -> list[str] | None:
         """Generate follow-up suggestions based on conversation context.
@@ -521,34 +512,32 @@ class GoalEvaluator:
     # LLM-based evaluation
     # ------------------------------------------------------------------
 
-    async def _evaluate_pending_task_goal_with_llm(
+    async def _evaluate_task_goal_with_llm(
         self,
         tasks: list[dict[str, Any]],
         task_result: GoalCheckResult,
         messages: list[dict[str, Any]],
-    ) -> GoalCheckResult | None:
-        """Reconcile a pending ordinary task ledger with recent completion evidence."""
-        if task_result.pending_tasks <= 0 or self._llm_client is None:
-            return None
+    ) -> GoalCheckResult:
+        """Judge ordinary ledger evidence within the latest authorized user scope."""
+        if self._llm_client is None:
+            return self._goal_judge_unavailable_result()
 
-        context_summary = self._build_pending_task_goal_check_context(
+        context_summary = self._build_task_goal_check_context(
             tasks,
             task_result,
             messages,
         )
         if not context_summary:
-            return None
+            return self._goal_judge_unavailable_result()
 
         judgment = await self._call_goal_check_llm(context_summary)
         if judgment is None:
-            return None
-        if not judgment.achieved:
-            return None
+            return self._goal_judge_unavailable_result()
 
         return GoalCheckResult(
-            achieved=True,
+            achieved=judgment.achieved,
             reason=judgment.rationale,
-            source="llm_task_reconciliation",
+            source="llm_task_reconciliation" if judgment.achieved else "llm_self_check",
         )
 
     async def _evaluate_llm_goal(
@@ -729,27 +718,21 @@ class GoalEvaluator:
         selected_agent_id = str(self._runtime_context.get("selected_agent_id", "")).strip()
         return selected_agent_id or "agent:goal-completion-judge"
 
-    def _build_pending_task_goal_check_context(
+    def _build_task_goal_check_context(
         self,
         tasks: list[dict[str, Any]],
         task_result: GoalCheckResult,
         messages: list[dict[str, Any]],
     ) -> str:
-        """Build context for reconciling stale ordinary task ledgers."""
+        """Provide persisted task facts without treating them as current-run scope."""
         base_context = self._build_goal_check_context(messages)
         counts = self._summarize_task_counts(tasks)
-        pending_examples: list[str] = []
+        task_examples: list[str] = []
         for task in tasks:
             status = str(task.get("status", "")).strip().lower()
-            if status not in {"pending", "in_progress"}:
-                continue
             task_id = str(task.get("id", "")).strip()
             content = str(task.get("content", "")).strip()
-            pending_examples.append(
-                f"- id={task_id or '<missing>'} status={status} content={content[:160]}"
-            )
-            if len(pending_examples) >= 8:
-                break
+            task_examples.append(f"- id={task_id or '<missing>'} status={status} content={content}")
 
         lines = [
             base_context,
@@ -757,14 +740,18 @@ class GoalEvaluator:
             "Task ledger reconciliation:",
             f"- current_task_result: {task_result.reason}",
             f"- status_counts: {json.dumps(counts, ensure_ascii=False, sort_keys=True)}",
-            "- pending_task_examples:",
-            *(pending_examples or ["- <none>"]),
+            "- persisted_tasks:",
+            *(task_examples or ["- <none>"]),
             "",
-            "The task ledger is authoritative unless it appears stale because recent assistant "
-            "messages provide concrete final deliverables or verification evidence satisfying the "
-            "user objective. Return goal_achieved=true only if the user's objective is fully "
-            "satisfied despite the pending task statuses. Return false when listed tasks still "
-            "represent real unfinished work.",
+            "Task statuses are evidence, not authorization to execute every item. Judge only "
+            "the current user request and its explicit limits. Updating, restoring, inspecting, "
+            "or deferring a task list does not authorize executing its pending tasks. Pending "
+            "items outside the current request may remain pending when that request is complete. "
+            "Return goal_achieved=true only when the current request is satisfied by the evidence. "
+            "Historical completed or cancelled statuses do not prove that a new request is done. "
+            "Failures relevant to the current request must not be hidden by completion or handoff. "
+            "If false, identify the specific unfinished work within the current authorized scope; "
+            "do not demand executing, cancelling, or falsely completing unrelated backlog items.",
         ]
         return "\n".join(lines)
 

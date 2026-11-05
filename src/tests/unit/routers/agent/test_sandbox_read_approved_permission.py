@@ -50,15 +50,26 @@ async def test_canonical_sandbox_reads_pass_approved_read_only_guard(
     receipt = await plans.approve_plan_and_start(body, SimpleNamespace(), test_user, test_db)
     await asyncio.sleep(0)
     run_id = receipt["run"]["id"]
-    names = (
+    read_names = (
         "read",
         "batch_read",
         "list",
         "glob",
         "grep",
         "ls",
+        "ast_parse",
+        "ast_get_imports",
+        "ast_find_symbols",
+        "ast_extract_function",
+        "list_artifacts",
+    )
+    names = (
+        *read_names,
         "unknown_read",
         "read_secret_mutation",
+        "ast_parse_and_execute",
+        "export_artifact",
+        "batch_export_artifacts",
     )
     port = SimpleNamespace(call_tool=AsyncMock(side_effect=AssertionError("No network allowed")))
     tools = {
@@ -102,7 +113,7 @@ async def test_canonical_sandbox_reads_pass_approved_read_only_guard(
             operation, run_id, sessions=async_sessionmaker(test_engine, expire_on_commit=False)
         )
         for definition in selected.definitions:
-            if definition.name in names[:6]:
+            if definition.name in read_names:
                 await require_approved_run_tool_permission_v2(definition.permission, required=True)
                 assert definition.permission == "read"
             else:

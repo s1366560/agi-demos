@@ -61,6 +61,7 @@ from src.infrastructure.plugins.v2.session_event_log import (
 
 from .permission_history_projection import permission_granted, permission_history_item
 from .schemas import ExecutionStatsResponse
+from .tool_history_projection import event_identity, replayable_act_delta_ids
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -269,10 +270,16 @@ def _build_tool_exec_map(tool_executions: list[Any]) -> dict[str, Any]:
         tool_name = getattr(te, "tool_name", None)
         execution = {
             "_execution_id": str(record_id) if record_id else None,
+            "_call_id": str(call_id) if call_id else None,
             "startTime": te.started_at.timestamp() * 1000 if te.started_at else None,
             "endTime": te.completed_at.timestamp() * 1000 if te.completed_at else None,
             "duration": te.duration_ms,
         }
+        execution_status = getattr(te, "status", None)
+        if execution_status is not None:
+            execution["status"] = getattr(execution_status, "value", execution_status)
+        if isinstance(getattr(te, "error", None), str):
+            execution["error"] = te.error
 
         for execution_id in (call_id, record_id):
             if execution_id:
@@ -524,10 +531,21 @@ def _build_act(
     execution_keys = []
     if execution_id:
         execution_keys.append(f"{event.message_id}:{execution_id}")
-    execution_keys.append(f"{event.message_id}:{data.get('tool_name', '')}")
+    else:
+        execution_keys.append(f"{event.message_id}:{data.get('tool_name', '')}")
     for key in execution_keys:
         if key in tool_exec_map:
             execution = dict(tool_exec_map[key])
+            if execution_id and execution_id not in (
+                execution.get("_execution_id"),
+                execution.get("_call_id"),
+            ):
+                continue
+            execution.pop("_call_id", None)
+            if not execution_id:
+                # Legacy name matching cannot establish which invocation settled.
+                execution.pop("status", None)
+                execution.pop("error", None)
             execution_id = execution.pop("_execution_id", None) or execution_id
             item["execution"] = execution
             break
@@ -1214,7 +1232,11 @@ def _build_agent_completed(data: dict[str, Any], **_kwargs: Any) -> dict[str, An
         "payload": {
             key: data[key]
             for key in (
-                "child_run_id", "child_session_id", "parent_session_id", "spawn_id", "status"
+                "child_run_id",
+                "child_session_id",
+                "parent_session_id",
+                "spawn_id",
+                "status",
             )
             if key in data
         },
@@ -1253,7 +1275,11 @@ def _build_agent_stopped(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]
         "payload": {
             key: data[key]
             for key in (
-                "child_run_id", "child_session_id", "parent_session_id", "spawn_id", "status"
+                "child_run_id",
+                "child_session_id",
+                "parent_session_id",
+                "spawn_id",
+                "status",
             )
             if key in data
         },
@@ -1427,10 +1453,10 @@ def _build_timeline(
 ) -> list[dict[str, Any]]:
     """Build the timeline list from raw events using the dispatch dict."""
     timeline: list[dict[str, Any]] = []
-    replayable_act_delta_ids = _find_replayable_act_delta_ids(events)
+    replayable_delta_ids = replayable_act_delta_ids(events)
     for event in events:
         event_type = event.event_type
-        if event_type == "act_delta" and _event_identity(event) not in replayable_act_delta_ids:
+        if event_type == "act_delta" and event_identity(event) not in replayable_delta_ids:
             continue
         data = event.event_data or {}
         builder = _EVENT_BUILDERS.get(event_type)
@@ -1461,6 +1487,11 @@ def _build_timeline(
             else (int(event.created_at.timestamp() * 1000) if event.created_at else None),
         }
         item.update(fields)
+        if event_type in {"act", "act_delta", "observe"}:
+            if event.message_id or data.get("message_id"):
+                item["message_id"] = event.message_id or data["message_id"]
+            if data.get("call_id"):
+                item["call_id"] = data["call_id"]
         timeline.append(item)
         if event_type == "act_delta" and _should_append_synthetic_observe(item):
             timeline.append(_build_synthetic_observe_item(item))
@@ -1489,42 +1520,14 @@ def _build_synthetic_observe_item(act_item: dict[str, Any]) -> dict[str, Any]:
         "execution_id": act_item.get("execution_id"),
         "metadata": metadata,
     }
+    for key in ("message_id", "call_id"):
+        if act_item.get(key):
+            item[key] = act_item[key]
     if isinstance(act_item.get("display"), dict):
         item["display"] = act_item["display"]
     if isinstance(act_item.get("fileMetadata"), dict):
         item["fileMetadata"] = act_item["fileMetadata"]
     return item
-
-
-def _event_identity(event: Any) -> tuple[int, int, str]:
-    return (event.event_time_us, event.event_counter, event.event_type)
-
-
-def _act_delta_replay_key(event: Any) -> tuple[str, str]:
-    data = event.event_data or {}
-    message_id = event.message_id or ""
-    tool_name = data.get("tool_name", "")
-    execution_id = _extract_tool_execution_id(data)
-    return (message_id, str(execution_id or tool_name))
-
-
-def _find_replayable_act_delta_ids(events: list[Any]) -> set[tuple[int, int, str]]:
-    """Return the last act_delta per tool call, unless a full act already exists."""
-    latest_delta_by_key: dict[tuple[str, str], Any] = {}
-    full_act_keys: set[tuple[str, str]] = set()
-
-    for event in events:
-        if event.event_type == "act_delta":
-            latest_delta_by_key[_act_delta_replay_key(event)] = event
-            continue
-        if event.event_type == "act":
-            full_act_keys.add(_act_delta_replay_key(event))
-
-    return {
-        _event_identity(event)
-        for event in latest_delta_by_key.values()
-        if _act_delta_replay_key(event) not in full_act_keys
-    }
 
 
 async def _resolve_pagination_cursors(

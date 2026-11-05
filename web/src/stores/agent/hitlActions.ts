@@ -280,9 +280,9 @@ export function createHITLActions(deps: HITLActionDeps) {
         await agentService.respondToPermission(requestId, granted);
         agentService.assertSession(operation);
         if (get().activeConversationId !== activeConversationId) return;
-        clearAllDeltaBuffers();
 
         const convState = get().getConversationState(activeConversationId);
+        const agentState = convState.isStreaming ? 'thinking' : convState.agentState;
         const updatedTimeline = updateHITLEventInTimeline(
           convState.timeline,
           requestId,
@@ -295,17 +295,11 @@ export function createHITLActions(deps: HITLActionDeps) {
         get().updateConversationState(activeConversationId, {
           timeline: updatedTimeline,
           pendingPermission: null,
-          agentState: granted ? 'thinking' : 'idle',
-          isStreaming: granted,
-          streamStatus: granted ? 'streaming' : 'idle',
-          streamingAssistantContent: '',
+          agentState,
         });
 
         useTimelineStore.getState().setAgentTimeline(updatedTimeline);
-        useStreamingStore.getState().setAgentIsStreaming(granted);
-        useStreamingStore.getState().setAgentStreamStatus(granted ? 'streaming' : 'idle');
-        useStreamingStore.getState().setAgentStreamingAssistantContent('');
-        useExecutionStore.getState().setAgentExecutionState(granted ? 'thinking' : 'idle');
+        useExecutionStore.getState().setAgentExecutionState(agentState);
 
         if (activeConversationId) {
           tabSync.broadcastHITLStateChanged(activeConversationId, false, 'permission');
@@ -317,9 +311,11 @@ export function createHITLActions(deps: HITLActionDeps) {
         )
           return;
         console.error('Failed to respond to permission request:', error);
-        useExecutionStore.getState().setAgentExecutionState('idle');
-        useStreamingStore.getState().setAgentIsStreaming(false);
-        useStreamingStore.getState().setAgentStreamStatus('idle');
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        get().updateConversationState(activeConversationId, {
+          error: errorMessage,
+        });
+        throw error;
       }
     },
   };

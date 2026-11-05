@@ -78,7 +78,7 @@ export interface AgentV3State {
   ) => Promise<string | null>;
   deleteConversation: (conversationId: string, projectId: string) => Promise<void>;
   renameConversation: (conversationId: string, projectId: string, title: string) => Promise<void>;
-  abortStream: (conversationId?: string) => void;
+  abortStream: (conversationId?: string) => Promise<void>;
   respondToClarification: (requestId: string, answer: string) => Promise<void>;
   respondToDecision: (requestId: string, decision: string | string[]) => Promise<void>;
   respondToEnvVar: (requestId: string, values: Record<string, string>) => Promise<void>;

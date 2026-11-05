@@ -1406,8 +1406,18 @@ async def test_run_signal_interrupts_model_await_and_publishes_cancelled(monkeyp
         RunCancellationIdentity,
         start_run_cancellation_monitor,
     )
+    from src.infrastructure.agent.actor.state import running_state
 
     started = asyncio.Event()
+    renewed = asyncio.Event()
+
+    async def refresh(conversation_id, ttl_seconds=300, *, message_id=None):
+        assert (conversation_id, message_id) == ("c", "m")
+        renewed.set()
+
+    refresh_mock = AsyncMock(side_effect=refresh)
+    monkeypatch.setattr(running_state, "AGENT_HEARTBEAT_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(running_state, "refresh_agent_running_ttl", refresh_mock)
 
     class BlockedAgent(_FakeAgent):
         async def execute_chat(self, **kwargs):
@@ -1440,6 +1450,8 @@ async def test_run_signal_interrupts_model_await_and_publishes_cancelled(monkeyp
     )
     task = asyncio.create_task(execution.execute_project_chat(BlockedAgent(), request))
     await asyncio.wait_for(started.wait(), timeout=1)
+    # A blocked tool/model emits no events, but must remain visible as running.
+    await asyncio.wait_for(renewed.wait(), timeout=1)
     store.get.return_value = RunCancellationIdentity(
         tenant_id="tenant-1", project_id="proj-1", conversation_id="c", run_id="r"
     ).payload()
@@ -1448,3 +1460,6 @@ async def test_run_signal_interrupts_model_await_and_publishes_cancelled(monkeyp
     assert settle.await_args.kwargs["outcome"] == "cancelled"
     assert settle.await_args.kwargs["run_id"] == "r"
     assert publish.await_args.kwargs["event"]["type"] == "cancelled"
+    renewals = refresh_mock.await_count
+    await asyncio.sleep(0.03)
+    assert refresh_mock.await_count == renewals

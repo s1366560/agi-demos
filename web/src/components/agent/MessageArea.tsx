@@ -352,8 +352,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     // are noise: filter them out before grouping. Pending and denied cards
     // stay visible so nothing becomes unanswerable.
     const permissionMode = useAgentPermissionModeStore(
-      (state) =>
-        (conversationId ? state.modesByConversation[conversationId] : undefined) ?? 'ask'
+      (state) => (conversationId ? state.modesByConversation[conversationId] : undefined) ?? 'ask'
     );
     const visibleTimeline = useMemo(
       () =>
@@ -382,6 +381,39 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         displayItems.map((item, index) => getDisplayItemMeasurementKey(item, index)).join('\u001f'),
       [displayItems]
     );
+
+    const estimateSize = useCallback(
+      (index: number) => {
+        const item = displayItems[index];
+        return item ? estimateGroupedItemHeight(item) : 80;
+      },
+      [displayItems]
+    );
+    const getItemKey = useCallback(
+      (index: number) => displayItemKeys[index] ?? `missing:${String(index)}`,
+      [displayItemKeys]
+    );
+
+    // eslint-disable-next-line react-hooks/incompatible-library
+    const virtualizer = useVirtualizer({
+      count: displayItems.length,
+      getScrollElement: () => containerRef.current,
+      estimateSize,
+      getItemKey,
+      overscan: 15,
+      paddingEnd: isStreaming ? 16 : 0,
+    });
+    const virtualizerRef = useRef(virtualizer);
+    virtualizerRef.current = virtualizer;
+    const scrollToLatestItem = useCallback(() => {
+      if (displayItems.length === 0) return;
+      // Index scrolling rechecks its target after dynamic rows are measured.
+      // A single smooth pixel target can stop at an outdated list height.
+      virtualizerRef.current.scrollToIndex(displayItems.length - 1, {
+        align: 'end',
+        behavior: 'auto',
+      });
+    }, [displayItems.length]);
 
     // Map each grouped item index to the turn that owns it. Used to wire the
     // "collapse turn" button on user-message bubbles.
@@ -483,6 +515,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       onLoadEarlier,
       propIsLoadingEarlier,
       preloadItemCount,
+      scrollToLatestItem,
     });
 
     const scrollState = useMemo(
@@ -530,35 +563,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const timelineLen = visibleTimeline.length;
     const lastEventIndex = timelineLen - 1;
 
-    // Virtualizer setup
-    const estimateSize = useCallback(
-      (index: number) => {
-        const item = displayItems[index];
-        return item ? estimateGroupedItemHeight(item) : 80;
-      },
-      [displayItems]
-    );
-    const getItemKey = useCallback(
-      (index: number) => displayItemKeys[index] ?? `missing:${String(index)}`,
-      [displayItemKeys]
-    );
-
-    // eslint-disable-next-line react-hooks/incompatible-library
-    const virtualizer = useVirtualizer({
-      count: displayItems.length,
-      getScrollElement: () => containerRef.current,
-      estimateSize,
-      getItemKey,
-      overscan: 15,
-      paddingEnd: isStreaming ? 16 : 0,
-    });
-    const virtualizerRef = useRef(virtualizer);
     const rowResizeObserverRef = useRef<ResizeObserver | null>(null);
     const rowElementsByKeyRef = useRef(new Map<string, Element>());
     const pendingMeasuredRowsRef = useRef(new Set<Element>());
     const rowMeasurementFrameRef = useRef<number | null>(null);
-
-    virtualizerRef.current = virtualizer;
 
     const shouldAdjustVirtualizerScroll = useCallback(
       (item: VirtualItem, _delta: number, instance: Virtualizer<HTMLDivElement, Element>) => {
@@ -677,7 +685,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       // second frame scrolls after layout has settled.
       const rafId = requestAnimationFrame(() => {
         const rafId2 = requestAnimationFrame(() => {
-          if (displayItems.length > 0) {
+          if (displayItems.length > 0 && !isLoading) {
             virtualizer.scrollToIndex(displayItems.length - 1, { align: 'end' });
             isInitialLoadRef.current = false;
             hasScrolledInitiallyRef.current = true;
@@ -705,6 +713,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       virtualizer,
       displayItems.length,
       timeline.length,
+      isLoading,
       lastConversationIdRef,
       isSwitchingConversationRef,
       isPositioningRef,

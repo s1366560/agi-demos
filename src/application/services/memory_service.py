@@ -5,7 +5,9 @@ This service handles memory CRUD operations, integrates with the graph service
 for entity extraction and knowledge graph operations.
 """
 
+import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -30,6 +32,14 @@ def _legacy_update_tenant_id(
             raise KnowledgeSyncError("knowledge_sync_input_invalid")
     # Historical rows without tenant metadata retain their existing behavior.
     return tenant_id if isinstance(tenant_id, str) and tenant_id else None
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryUpdateResult:
+    """Persisted update and whether its graph projection needs rebuilding."""
+
+    memory: Memory
+    content_changed: bool
 
 
 class SearchResults:
@@ -257,10 +267,37 @@ class MemoryService:
         is_public: bool | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Memory:
-        """
-        Update memory properties.
+        """Update and reprocess using the caller's transaction lifecycle.
 
-        If content is updated, the memory will be reprocessed.
+        Callers whose graph adapter uses separate SQL sessions must instead use
+        prepare_memory_update, commit, and then reprocess_memory.
+        """
+        result = await self.prepare_memory_update(
+            memory_id=memory_id,
+            title=title,
+            content=content,
+            tags=tags,
+            is_public=is_public,
+            metadata=metadata,
+        )
+        if result.content_changed:
+            await self.reprocess_memory(result.memory)
+        return result.memory
+
+    async def prepare_memory_update(
+        self,
+        memory_id: str,
+        title: str | None = None,
+        content: str | None = None,
+        tags: list[str] | None = None,
+        is_public: bool | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> MemoryUpdateResult:
+        """
+        Persist memory properties without invoking graph services.
+
+        The caller must commit before reprocessing changed content. Graph services
+        can use separate database sessions that need the same project lock.
 
         Args:
             memory_id: Memory ID
@@ -271,7 +308,7 @@ class MemoryService:
             metadata: New metadata (optional)
 
         Returns:
-            Updated memory
+            Updated memory and the graph reprocessing requirement
 
         Raises:
             ValueError: If memory doesn't exist
@@ -304,6 +341,7 @@ class MemoryService:
 
                 # If content changed, reprocess by updating processing status
                 if content_changed:
+                    memory.version += 1
                     memory.processing_status = ProcessingStatus.PENDING.value
 
                 await self._memory_repo.save(memory)
@@ -318,47 +356,53 @@ class MemoryService:
                     len(memory.tags),
                 )
 
-                # If content changed, forget the stale graph state and create a new episode.
-                if content_changed:
-                    source = MemoryProcessingSource(
-                        memory_id=memory.id, project_id=memory.project_id, revision=memory.version
-                    )
-                    try:
-                        try:
-                            await self._graph_service.delete_episode_by_memory_id(memory_id)
-                            logger.info("Cleaned old graph state before reprocessing memory")
-                        except Exception as cleanup_error:
-                            logger.warning(
-                                "Failed to clean old graph state before reprocessing memory error_type=%s",
-                                type(cleanup_error).__name__,
-                            )
+                return MemoryUpdateResult(memory=memory, content_changed=content_changed)
 
-                        episode = Episode(
-                            id=Episode.generate_id(),
-                            name=memory.title,
-                            content=memory.content,
-                            source_type=SourceType.TEXT,
-                            valid_at=datetime.now(UTC),
-                            metadata={
-                                "memory_id": memory.id,
-                                "tenant_id": memory.metadata.get("tenant_id"),
-                                "project_id": memory.project_id,
-                                "user_id": memory.author_id,
-                                "reprocess": True,
-                            },
-                            tenant_id=memory.metadata.get("tenant_id"),
-                            project_id=memory.project_id,
-                            user_id=memory.author_id,
-                            status=ProcessingStatus.PENDING.value,
-                        )
-                        await self._graph_service.add_episode(episode)
-                        logger.info("Queued reprocessing for memory")
-                    except Exception as e:
-                        logger.error("Failed to queue reprocessing error_type=%s", type(e).__name__)
-                        await self._mark_processing_failed(memory, source)
-                        raise
+    async def reprocess_memory(self, memory: Memory) -> None:
+        """Rebuild graph content after its database update has been committed."""
+        source = MemoryProcessingSource(
+            memory_id=memory.id, project_id=memory.project_id, revision=memory.version
+        )
+        try:
+            try:
+                await self._graph_service.delete_episode_by_memory_id(memory.id)
+                logger.info("Cleaned old graph state before reprocessing memory")
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Failed to clean old graph state before reprocessing memory error_type=%s",
+                    type(cleanup_error).__name__,
+                )
 
-                return memory
+            episode = Episode(
+                id=Episode.generate_id(),
+                name=memory.title,
+                content=memory.content,
+                source_type=SourceType.TEXT,
+                valid_at=datetime.now(UTC),
+                metadata={
+                    "memory_id": memory.id,
+                    "tenant_id": memory.metadata.get("tenant_id"),
+                    "project_id": memory.project_id,
+                    "user_id": memory.author_id,
+                    "reprocess": True,
+                    "source_revision": source.revision,
+                },
+                tenant_id=memory.metadata.get("tenant_id"),
+                project_id=memory.project_id,
+                user_id=memory.author_id,
+                status=ProcessingStatus.PENDING.value,
+            )
+            processed = await self._graph_service.add_episode(episode)
+            if processed.status == ProcessingStatus.COMPLETED.value:
+                if await self._memory_repo.update_processing_status(
+                    source, ProcessingStatus.COMPLETED.value
+                ):
+                    memory.processing_status = ProcessingStatus.COMPLETED.value
+            logger.info("Reprocessed or queued memory")
+        except (Exception, asyncio.CancelledError) as e:
+            logger.error("Failed to queue reprocessing error_type=%s", type(e).__name__)
+            await self._mark_processing_failed(memory, source)
+            raise
 
     async def delete_memory(self, memory_id: str) -> None:
         """

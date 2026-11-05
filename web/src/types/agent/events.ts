@@ -376,6 +376,8 @@ export interface ActEventData {
   step_number?: number | undefined;
   execution_id?: string | undefined; // Legacy alias
   tool_execution_id?: string | undefined; // Backend field name for act/observe matching
+  call_id?: string | undefined;
+  message_id?: string | undefined;
 }
 
 /**
@@ -398,6 +400,8 @@ export interface ObserveEventData {
   tool_name?: string | undefined; // New: tool name
   execution_id?: string | undefined; // Legacy alias
   tool_execution_id?: string | undefined; // Backend field name for act/observe matching
+  call_id?: string | undefined;
+  message_id?: string | undefined;
   error?: string | undefined; // Error message if tool execution failed
   result?: unknown;
 }

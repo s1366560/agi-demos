@@ -191,7 +191,9 @@ export const InputToolbar = memo<InputToolbarProps>(
               danger
               size="small"
               icon={<Square size={14} className="fill-current" />}
-              onClick={onAbort}
+              onClick={() => {
+                onAbort();
+              }}
               className="flex h-8 items-center gap-1.5 rounded-lg px-3 shadow-sm"
             >
               {t('agent.inputBar.stop', 'Stop')}

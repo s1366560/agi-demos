@@ -125,21 +125,42 @@ describe('streamEventHandlers', () => {
     useBackgroundStore.getState().clearAll();
     mockState.subagentPreviews = new Map();
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
-    handlers.onBackgroundLaunched?.({ type: 'background_launched', data: {
-      execution_id: 'bg-current', subagent_name: 'worker', task: 'task',
-    } } as any);
-    expect(useBackgroundStore.getState().executions.get('bg-current')?.conversationId).toBe(conversationId);
-    handlers.onSubAgentKilled?.({ type: 'subagent_killed', data: {
-      subagent_id: 'bg-current', kill_reason: 'configuration id is not execution identity',
-    } } as any);
+    handlers.onBackgroundLaunched?.({
+      type: 'background_launched',
+      data: {
+        execution_id: 'bg-current',
+        subagent_name: 'worker',
+        task: 'task',
+      },
+    } as any);
+    expect(useBackgroundStore.getState().executions.get('bg-current')?.conversationId).toBe(
+      conversationId
+    );
+    handlers.onSubAgentKilled?.({
+      type: 'subagent_killed',
+      data: {
+        subagent_id: 'bg-current',
+        kill_reason: 'configuration id is not execution identity',
+      },
+    } as any);
     expect(useBackgroundStore.getState().executions.get('bg-current')?.status).toBe('running');
-    handlers.onSubAgentKilled?.({ type: 'subagent_killed', data: {
-      execution_id: 'bg-current', conversation_id: 'other-conversation', subagent_id: 'worker',
-    } } as any);
+    handlers.onSubAgentKilled?.({
+      type: 'subagent_killed',
+      data: {
+        execution_id: 'bg-current',
+        conversation_id: 'other-conversation',
+        subagent_id: 'worker',
+      },
+    } as any);
     expect(useBackgroundStore.getState().executions.get('bg-current')?.status).toBe('running');
-    handlers.onSubAgentKilled?.({ type: 'subagent_killed', data: {
-      execution_id: 'bg-current', conversation_id: conversationId, subagent_id: 'worker',
-    } } as any);
+    handlers.onSubAgentKilled?.({
+      type: 'subagent_killed',
+      data: {
+        execution_id: 'bg-current',
+        conversation_id: conversationId,
+        subagent_id: 'worker',
+      },
+    } as any);
     expect(useBackgroundStore.getState().executions.get('bg-current')?.status).toBe('cancelled');
     useBackgroundStore.getState().clearAll();
   });
@@ -151,9 +172,15 @@ describe('streamEventHandlers', () => {
     store.launch('bg-new', 'worker', 'task', conversationId);
     store.launch('worker', 'worker', 'other task', 'other-conversation');
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
-    handlers.onSubAgentCompleted?.({ type: 'subagent_completed', data: {
-      execution_id: 'bg-new', subagent_id: 'worker', summary: 'done', success: true,
-    } } as any);
+    handlers.onSubAgentCompleted?.({
+      type: 'subagent_completed',
+      data: {
+        execution_id: 'bg-new',
+        subagent_id: 'worker',
+        summary: 'done',
+        success: true,
+      },
+    } as any);
     expect(useBackgroundStore.getState().executions.get('bg-new')?.status).toBe('completed');
     expect(useBackgroundStore.getState().executions.get('worker')?.status).toBe('running');
     useBackgroundStore.getState().clearAll();
@@ -1510,11 +1537,140 @@ describe('streamEventHandlers', () => {
     );
   });
 
+  it('settles the streaming state when the server confirms cancellation', () => {
+    mockState.isStreaming = true;
+    mockState.streamStatus = 'streaming';
+    mockState.agentState = 'acting';
+    mockState.isThinkingStreaming = true;
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+    handlers.onCanonicalEvent?.({ type: 'cancelled', data: { run_id: 'run-7' } });
+
+    expect(mockState).toMatchObject({
+      isStreaming: false,
+      streamStatus: 'idle',
+      agentState: 'idle',
+      isThinkingStreaming: false,
+    });
+    expect(mockDeps.flushTimelineBufferSync).toHaveBeenCalled();
+  });
+
   describe('onPermissionAsked permission mode automation', () => {
     beforeEach(() => {
       useAgentPermissionModeStore.setState({ modesByConversation: {} });
       useUnifiedHITLStore.getState().reset();
       mockRespondToPermission.mockClear();
+    });
+
+    it.each([true, false])(
+      'applies the server permission verdict %s without a local submission',
+      (granted) => {
+        mockState.isStreaming = true;
+        mockState.streamStatus = 'streaming';
+        const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+        handlers.onPermissionAsked?.({
+          type: 'permission_asked',
+          data: {
+            request_id: 'remote-decision',
+            tool_name: 'memory_update',
+            description: 'Update memory',
+          },
+        } as any);
+        handlers.onPermissionReplied?.({
+          type: 'permission_replied',
+          data: {
+            request_id: 'remote-decision',
+            granted,
+          },
+        });
+
+        expect(mockState.timeline.find((event) => event.type === 'permission_asked')).toMatchObject(
+          {
+            requestId: 'remote-decision',
+            answered: true,
+            granted,
+          }
+        );
+        expect(useUnifiedHITLStore.getState().pendingRequests.has('remote-decision')).toBe(false);
+        expect(useUnifiedHITLStore.getState().requestStatuses.get('remote-decision')).toBe(
+          'completed'
+        );
+        expect(mockRespondToPermission).not.toHaveBeenCalled();
+        expect(mockState.agentState).toBe('thinking');
+
+        handlers.onPermissionAsked?.({
+          type: 'permission_asked',
+          data: {
+            request_id: 'remote-decision',
+            tool_name: 'memory_update',
+            description: 'Replayed request',
+          },
+        } as any);
+        expect(
+          mockState.timeline.filter((event) => event.type === 'permission_asked')
+        ).toHaveLength(1);
+        expect(mockState.pendingPermission).toBeNull();
+        expect(useUnifiedHITLStore.getState().pendingRequests.has('remote-decision')).toBe(false);
+      }
+    );
+
+    it.each([true, false])(
+      'does not reactivate a cancelled run on a late permission verdict %s',
+      (granted) => {
+        mockState.isStreaming = true;
+        mockState.streamStatus = 'streaming';
+        const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+        handlers.onPermissionAsked?.({
+          type: 'permission_asked',
+          data: {
+            request_id: 'late-decision',
+            tool_name: 'memory_update',
+            description: 'Update memory',
+          },
+        } as any);
+        handlers.onCanonicalEvent?.({ type: 'cancelled', data: { run_id: 'run-7' } });
+        handlers.onPermissionReplied?.({
+          type: 'permission_replied',
+          data: { request_id: 'late-decision', granted },
+        });
+
+        expect(mockState).toMatchObject({
+          isStreaming: false,
+          streamStatus: 'idle',
+          agentState: 'idle',
+          pendingPermission: null,
+        });
+        expect(mockState.timeline.find((event) => event.type === 'permission_asked')).toMatchObject({
+          requestId: 'late-decision',
+          answered: true,
+          granted,
+        });
+      }
+    );
+
+    it('does not recreate or auto-approve a request when the server reply precedes its replayed ask', () => {
+      useAgentPermissionModeStore.getState().setPermissionMode(conversationId, 'full_access');
+      const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+      handlers.onPermissionReplied?.({
+        type: 'permission_replied',
+        data: {
+          request_id: 'already-decided',
+          granted: false,
+        },
+      });
+      handlers.onPermissionAsked?.({
+        type: 'permission_asked',
+        data: {
+          request_id: 'already-decided',
+          tool_name: 'memory_update',
+          description: 'Replayed request',
+        },
+      } as any);
+
+      expect(mockState.timeline.some((event) => event.type === 'permission_asked')).toBe(false);
+      expect(mockState.pendingPermission).toBeNull();
+      expect(useUnifiedHITLStore.getState().pendingRequests.has('already-decided')).toBe(false);
+      expect(mockRespondToPermission).not.toHaveBeenCalled();
     });
 
     it('queues the permission card into the timeline in every mode', () => {

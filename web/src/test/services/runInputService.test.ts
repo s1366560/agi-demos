@@ -117,6 +117,21 @@ describe('runInputService', () => {
     expect(receipt.input.status).toBe('pending_boundary');
   });
 
+  it('cancels the selected run with its expected revision', async () => {
+    (httpClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
+      accepted: true,
+      status: 'cancel_requested',
+      run: { id: 'run/7', revision: 7, status: 'running' },
+    });
+
+    const receipt = await runInputService.cancel('run/7', 7);
+
+    expect(httpClient.post).toHaveBeenCalledWith('/agent/runs/run%2F7/cancel', {
+      expected_revision: 7,
+    });
+    expect(receipt.status).toBe('cancel_requested');
+  });
+
   it('lists and promotes inputs through nested canonical routes', async () => {
     (httpClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       run_id: 'run-1',

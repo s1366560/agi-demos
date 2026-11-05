@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import src.infrastructure.agent.tools.memory_tools as memory_tools_module
+from src.application.services.memory_service import MemoryUpdateResult
 from src.infrastructure.agent.tools.memory_tools import (
     _background_sync_created_memory,
     _execute_memory_create,
@@ -516,15 +517,18 @@ class TestMemoryToolsChunkSync:
         session_factory = MagicMock(return_value=session)
         repo = MagicMock()
         service = MagicMock()
-        service.update_memory = AsyncMock(
-            return_value=SimpleNamespace(
-                id="mem-1",
-                title="Updated title",
-                project_id="proj-1",
-                processing_status="PENDING",
-                content="updated content",
-                tags=["tag-2"],
-                metadata={"category": "decision"},
+        service.prepare_memory_update = AsyncMock(
+            return_value=MemoryUpdateResult(
+                content_changed=False,
+                memory=SimpleNamespace(
+                    id="mem-1",
+                    title="Updated title",
+                    project_id="proj-1",
+                    processing_status="PENDING",
+                    content="updated content",
+                    tags=["tag-2"],
+                    metadata={"category": "decision"},
+                ),
             )
         )
         upsert_chunks = AsyncMock(return_value=1)
@@ -570,15 +574,18 @@ class TestMemoryToolsChunkSync:
         secret_memory_id = "mem-update-secret"
         repo = MagicMock()
         service = MagicMock()
-        service.update_memory = AsyncMock(
-            return_value=SimpleNamespace(
-                id=secret_memory_id,
-                title="Updated title",
-                project_id="proj-1",
-                processing_status="COMPLETED",
-                content="updated content",
-                tags=[],
-                metadata={"category": "fact"},
+        service.prepare_memory_update = AsyncMock(
+            return_value=MemoryUpdateResult(
+                content_changed=False,
+                memory=SimpleNamespace(
+                    id=secret_memory_id,
+                    title="Updated title",
+                    project_id="proj-1",
+                    processing_status="COMPLETED",
+                    content="updated content",
+                    tags=[],
+                    metadata={"category": "fact"},
+                ),
             )
         )
         caplog.set_level(logging.INFO, logger="src.infrastructure.agent.tools.memory_tools")
@@ -619,15 +626,18 @@ class TestMemoryToolsChunkSync:
         exception_detail = "chunk sync leaked memory id mem-update-chunk-secret"
         repo = MagicMock()
         service = MagicMock()
-        service.update_memory = AsyncMock(
-            return_value=SimpleNamespace(
-                id=secret_memory_id,
-                title="Updated title",
-                project_id="proj-1",
-                processing_status="PENDING",
-                content="updated content",
-                tags=["tag-2"],
-                metadata={"category": "decision"},
+        service.prepare_memory_update = AsyncMock(
+            return_value=MemoryUpdateResult(
+                content_changed=False,
+                memory=SimpleNamespace(
+                    id=secret_memory_id,
+                    title="Updated title",
+                    project_id="proj-1",
+                    processing_status="PENDING",
+                    content="updated content",
+                    tags=["tag-2"],
+                    metadata={"category": "decision"},
+                ),
             )
         )
         upsert_chunks = AsyncMock(side_effect=RuntimeError(exception_detail))
@@ -678,7 +688,7 @@ class TestMemoryToolsChunkSync:
         exception_detail = "update service leaked memory id mem-update-failure-secret"
         repo = MagicMock()
         service = MagicMock()
-        service.update_memory = AsyncMock(side_effect=RuntimeError(exception_detail))
+        service.prepare_memory_update = AsyncMock(side_effect=RuntimeError(exception_detail))
         caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
 
         with (

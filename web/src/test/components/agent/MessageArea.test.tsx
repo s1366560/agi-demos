@@ -187,6 +187,59 @@ describe('MessageArea Compound Component', () => {
       expect(latestOptions?.getItemKey?.(1)).toBe('2');
     });
 
+    it('targets the latest virtual row when the user returns to the bottom', () => {
+      const requestAnimationFrameSpy = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation((callback: FrameRequestCallback) => {
+          callback(0);
+          return 1;
+        });
+      try {
+        render(<MessageArea {...defaultProps} />);
+        const container = screen.getByTestId('message-container');
+        defineScrollMetrics(container, { scrollHeight: 4823, clientHeight: 808 });
+        container.scrollTop = 2847;
+        fireEvent.scroll(container);
+        virtualizerMock.scrollToIndex.mockClear();
+
+        fireEvent.click(screen.getByTestId('scroll-button'));
+
+        expect(virtualizerMock.scrollToIndex).toHaveBeenCalledWith(1, {
+          align: 'end',
+          behavior: 'auto',
+        });
+      } finally {
+        requestAnimationFrameSpy.mockRestore();
+      }
+    });
+
+    it('positions the latest server history after cached history finishes loading', () => {
+      const requestAnimationFrameSpy = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation((callback: FrameRequestCallback) => {
+          callback(0);
+          return 1;
+        });
+      try {
+        const { rerender } = render(<MessageArea {...defaultProps} isLoading />);
+        expect(virtualizerMock.scrollToIndex).not.toHaveBeenCalled();
+        const latestTimeline = [
+          ...mockTimeline,
+          { id: 'new-user', type: 'user_message', content: 'Latest request', timestamp: 3 },
+          { id: 'new-answer', type: 'assistant_message', content: 'Latest response', timestamp: 4 },
+        ];
+
+        rerender(<MessageArea timeline={latestTimeline} isStreaming={false} isLoading={false} />);
+
+        expect(virtualizerMock.scrollToIndex).toHaveBeenCalledWith(3, {
+          align: 'end',
+          behavior: 'auto',
+        });
+      } finally {
+        requestAnimationFrameSpy.mockRestore();
+      }
+    });
+
     it('should remeasure when the same index changes into a long timeline group', () => {
       const shortTimeline: any[] = [
         { id: 'user-1', type: 'user_message', content: 'Run diagnostics', timestamp: 1 },
@@ -335,11 +388,9 @@ describe('MessageArea Compound Component', () => {
 
       const virtualizer = virtualizerMock.instances.at(-1);
       expect(
-        virtualizer?.shouldAdjustScrollPositionOnItemSizeChange?.(
-          { start: 0 },
-          500,
-          { scrollOffset: 100 }
-        )
+        virtualizer?.shouldAdjustScrollPositionOnItemSizeChange?.({ start: 0 }, 500, {
+          scrollOffset: 100,
+        })
       ).toBe(false);
     });
 
@@ -353,11 +404,9 @@ describe('MessageArea Compound Component', () => {
 
       const virtualizer = virtualizerMock.instances.at(-1);
       expect(
-        virtualizer?.shouldAdjustScrollPositionOnItemSizeChange?.(
-          { start: 100 },
-          120,
-          { scrollOffset: 700 }
-        )
+        virtualizer?.shouldAdjustScrollPositionOnItemSizeChange?.({ start: 100 }, 120, {
+          scrollOffset: 700,
+        })
       ).toBe(true);
     });
 

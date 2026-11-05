@@ -9,9 +9,10 @@
  * `updateConversationState` call instead of one per event.
  */
 
-import { sseEventToTimeline } from '../../utils/sseEventAdapter';
+import { appendSSEEventToTimeline } from '../../utils/sseEventAdapter';
+import { coalesceToolCallDrafts } from '../../utils/toolCallTimeline';
 
-import type { AgentEvent, TimelineEvent, ActDeltaEventData } from '../../types/agent';
+import type { AgentEvent, ActDeltaEventData } from '../../types/agent';
 import type { ConversationState } from '../../types/conversationState';
 
 /**
@@ -149,10 +150,7 @@ function flushNow(conversationId: string, deps: TimelineBufferDeps): void {
   let mergedStateUpdates: Partial<ConversationState> = {};
 
   for (const entry of entries) {
-    const timelineEvent: TimelineEvent | null = sseEventToTimeline(entry.event);
-    if (timelineEvent) {
-      timeline = timeline.concat(timelineEvent);
-    }
+    timeline = appendSSEEventToTimeline(timeline, entry.event);
     if (entry.stateUpdates) {
       mergedStateUpdates = { ...mergedStateUpdates, ...entry.stateUpdates };
     }
@@ -160,7 +158,7 @@ function flushNow(conversationId: string, deps: TimelineBufferDeps): void {
 
   deps.updateConversationState(conversationId, {
     ...mergedStateUpdates,
-    timeline,
+    timeline: coalesceToolCallDrafts(timeline),
   });
 }
 

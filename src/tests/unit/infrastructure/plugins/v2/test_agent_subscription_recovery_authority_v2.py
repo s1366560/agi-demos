@@ -42,6 +42,16 @@ _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
+@pytest.fixture(autouse=True)
+def _legacy_subscription_preflight(monkeypatch):
+    """These generation fixtures model legacy subscriptions without canonical runs."""
+    monkeypatch.setattr(
+        subscription_handler,
+        "scoped_session_has_only_terminal_runs_v2",
+        AsyncMock(return_value=False),
+    )
+
+
 class _ScopedRecoveryAuthority:
     """Real scope registry with an independent ROOT conversation-access host."""
 

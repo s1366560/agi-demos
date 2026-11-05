@@ -1112,8 +1112,8 @@ const PermissionContent: React.FC<{
             <CheckCircle2 className={`w-4 h-4 ${wasGranted ? 'text-green-500' : 'text-red-500'}`} />
             <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
               {wasGranted
-                ? t('agent.hitl.status.granted_executed', 'Granted - executed')
-                : t('agent.hitl.status.denied_executed', 'Denied - executed')}
+                ? t('agent.hitl.status.permission_granted', 'Permission granted')
+                : t('agent.hitl.status.permission_denied', 'Permission denied')}
             </span>
             <LazyTag color={wasGranted ? 'green' : 'red'} className="text-xs">
               {wasGranted
@@ -1331,7 +1331,9 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                 </span>
                 {isAnswered ? (
                   <LazyTag color={color} className="text-xs rounded-full opacity-75">
-                    {t('agent.hitl.status.completed', 'Completed')}
+                    {hitlType === 'permission'
+                      ? t('agent.hitl.status.decision_recorded', 'Decision recorded')
+                      : t('agent.hitl.status.completed', 'Completed')}
                   </LazyTag>
                 ) : (
                   <span className="inline-flex items-center gap-1.5">

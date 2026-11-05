@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, cast, override
 from uuid import uuid4
 
 from src.domain.llm_providers.models import NoActiveProviderError
+from src.domain.model.enums import ProcessingStatus
 from src.domain.model.graph.dtos import (
     GraphCommunityDTO,
     GraphEntityDTO,
@@ -472,7 +473,7 @@ class NativeGraphAdapter(GraphStorePort):
             episode: Episode domain object
 
         Returns:
-            The episode (unchanged)
+            The episode with COMPLETED for synchronous processing or PENDING for queued work
         """
         try:
             # Check embedding dimension compatibility
@@ -547,6 +548,7 @@ class NativeGraphAdapter(GraphStorePort):
                     user_id=episode.user_id,
                     memory_id=episode.metadata.get("memory_id"),
                 )
+                episode.status = ProcessingStatus.PENDING.value
             else:
                 logger.info(
                     "QueuePort not configured. Processing episode %s synchronously.",
@@ -559,6 +561,7 @@ class NativeGraphAdapter(GraphStorePort):
                     tenant_id=episode.tenant_id,
                     user_id=episode.user_id,
                 )
+                episode.status = ProcessingStatus.COMPLETED.value
 
             return episode
 

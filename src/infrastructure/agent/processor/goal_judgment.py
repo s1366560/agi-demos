@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from src.infrastructure.agent.native_computer_use.image_messages import IMAGE_MESSAGE_MARKER
 from src.infrastructure.logging_redaction import redact_sensitive_log_text
 
 GOAL_COMPLETION_JUDGE_TOOL_V2 = "submit_goal_completion_judgment_v2"
@@ -155,6 +156,33 @@ def build_goal_check_context(
 ) -> str:
     """Build compact evidence for the structured judgment without classifying prose."""
     summary_lines: list[str] = []
+    latest_user = next(
+        (
+            msg
+            for msg in reversed(messages)
+            if msg.get("role") == "user" and not msg.get(IMAGE_MESSAGE_MARKER)
+        ),
+        None,
+    )
+    if latest_user is not None:
+        current_request = _goal_message_text(latest_user.get("content", ""))
+        if current_request:
+            summary_lines.extend(
+                [
+                    "Current user request (full text):",
+                    current_request,
+                    "",
+                    "Judge this turn against the latest user request and its restrictions, "
+                    "while respecting higher-priority instructions. Earlier objectives remain "
+                    "relevant only where compatible with the current request. A request to "
+                    "inspect, create, restore, or change a task ledger does not by itself "
+                    "authorize executing its task contents. Intentionally pending tasks may "
+                    "be the requested outcome; do not require their execution or completion "
+                    "unless the current user request authorizes that work. For a request only "
+                    "about the ledger, judge whether that ledger operation itself is complete.",
+                    "",
+                ]
+            )
     if plan_mode:
         summary_lines.append(
             "Plan mode is active. Judge whether the requested planning and analysis "
@@ -163,20 +191,10 @@ def build_goal_check_context(
         )
     recent_messages = messages[-8:] if len(messages) > 8 else messages
     for msg in recent_messages:
+        if msg is latest_user:
+            continue
         role = str(msg.get("role", "unknown"))
-        content = msg.get("content", "")
-
-        if isinstance(content, list):
-            text_chunks = []
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "text":
-                    text_chunks.append(str(part.get("text", "")))
-            content_text = " ".join(chunk for chunk in text_chunks if chunk).strip()
-        elif isinstance(content, str):
-            content_text = content.strip()
-        else:
-            content_text = str(content).strip() if content else ""
-
+        content_text = _goal_message_text(msg.get("content", ""))
         if content_text:
             summary_lines.append(f"{role}: {content_text[:400]}")
 
@@ -184,6 +202,20 @@ def build_goal_check_context(
         summary_lines.append(f"assistant_latest: {latest_text.strip()[:400]}")
 
     return "\n".join(summary_lines)
+
+
+def _goal_message_text(content: object) -> str:
+    """Read text from protocol message blocks without interpreting its intent."""
+    if isinstance(content, list):
+        chunks = [
+            str(part.get("text", ""))
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        ]
+        return " ".join(chunk for chunk in chunks if chunk).strip()
+    if isinstance(content, str):
+        return content.strip()
+    return str(content).strip() if content else ""
 
 
 def parse_goal_judgment(

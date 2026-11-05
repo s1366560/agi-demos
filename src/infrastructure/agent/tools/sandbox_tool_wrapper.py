@@ -20,7 +20,10 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.tools.define import ToolInfo
 
 
-from src.infrastructure.agent.permission.rules import classify_sandbox_tool_permission
+from src.infrastructure.agent.permission.rules import (
+    classify_sandbox_tool_permission,
+    sandbox_tool_permission_resolver,
+)
 from src.infrastructure.agent.tools.file_metadata import build_sandbox_tool_metadata
 from src.infrastructure.agent.tools.mcp_errors import (
     MCPToolError,
@@ -1763,8 +1766,13 @@ def create_sandbox_mcp_tool(
         require_workspace_file_binding_v2,
         validate_confined_write_arguments_v2,
     )
+
     confined_root = parse_workspace_write_contract_v2(tool_schema)
-    permission = "workspace_file_write" if confined_root is not None else classify_sandbox_tool_permission(tool_name)
+    permission = (
+        "workspace_file_write"
+        if confined_root is not None
+        else classify_sandbox_tool_permission(tool_name)
+    )
 
     async def execute(ctx: ToolContext, **kwargs: Any) -> ToolResult:
         """Execute the sandbox MCP tool with retry logic."""
@@ -1775,7 +1783,9 @@ def create_sandbox_mcp_tool(
             if confined_root is not None:
                 validate_confined_write_arguments_v2(kwargs, confined_root)
                 await require_workspace_file_binding_v2(
-                    sandbox_id=sandbox_id, workspace_root=confined_root, sandbox_port=sandbox_port,
+                    sandbox_id=sandbox_id,
+                    workspace_root=confined_root,
+                    sandbox_port=sandbox_port,
                 )
             normalized_kwargs = _normalize_workspace_harness_kwargs(tool_name, kwargs)
             root_override = _workspace_root_override_from_context(ctx)
@@ -1876,6 +1886,9 @@ def create_sandbox_mcp_tool(
         parameters=parameters,
         execute=execute,
         permission=permission,
+        permission_resolver=(
+            sandbox_tool_permission_resolver(tool_name) if confined_root is None else None
+        ),
         category="mcp",
         tags=frozenset({"mcp", "sandbox"}),
     )

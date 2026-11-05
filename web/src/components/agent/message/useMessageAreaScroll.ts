@@ -26,6 +26,7 @@ export interface UseMessageAreaScrollParams {
   onLoadEarlier?: (() => void) | undefined;
   propIsLoadingEarlier: boolean;
   preloadItemCount: number;
+  scrollToLatestItem: () => void;
 }
 
 export interface UseMessageAreaScrollReturn {
@@ -62,6 +63,7 @@ export function useMessageAreaScroll(
     onLoadEarlier,
     propIsLoadingEarlier,
     preloadItemCount,
+    scrollToLatestItem,
   } = params;
 
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -89,13 +91,10 @@ export function useMessageAreaScroll(
   const scrollToBottom = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: 'smooth',
-    });
-    setShowScrollButton(false);
     userScrolledUpRef.current = false;
-  }, [containerRef]);
+    scrollToLatestItem();
+    setShowScrollButton(false);
+  }, [containerRef, scrollToLatestItem]);
 
   // Save scroll position before loading earlier messages
   const saveScrollPosition = useCallback(() => {
@@ -203,7 +202,7 @@ export function useMessageAreaScroll(
     const currentTimelineLength = timeline.length;
     const previousTimelineLength = prevTimelineLengthRef.current;
     const hasNewMessages = currentTimelineLength > previousTimelineLength;
-    const isInitialLoad = isInitialLoadRef.current && currentTimelineLength > 0;
+    const isInitialLoad = isInitialLoadRef.current && currentTimelineLength > 0 && !isLoading;
 
     // Handle initial load -- also covers data arriving after conversation switch
     if (isInitialLoad && !hasScrolledInitiallyRef.current) {
@@ -216,7 +215,7 @@ export function useMessageAreaScroll(
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (containerRef.current) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight;
+            scrollToLatestItem();
           }
           // Allow scroll events after positioning settles
           requestAnimationFrame(() => {
@@ -268,7 +267,14 @@ export function useMessageAreaScroll(
     prevTimelineLengthRef.current = currentTimelineLength;
     // groupedItems.length is intentionally excluded from deps when virtualizer
     // is not available inside this hook -- the component passes it in
-  }, [timeline.length, isStreaming, isLoading, restoreScrollPosition, containerRef]);
+  }, [
+    timeline.length,
+    isStreaming,
+    isLoading,
+    restoreScrollPosition,
+    containerRef,
+    scrollToLatestItem,
+  ]);
 
   // NOTE: scroll-follow while streaming lives in StreamingAssistantSection,
   // which subscribes to the per-token streaming stores locally so this hook's

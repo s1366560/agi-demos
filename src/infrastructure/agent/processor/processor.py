@@ -47,6 +47,7 @@ from src.domain.events.agent_events import (
     AgentMessageReceivedEvent,
     AgentObserveEvent,
     AgentPermissionAskedEvent,
+    AgentPermissionRepliedEvent,
     AgentRetryEvent,
     AgentRunInputAppliedEvent,
     AgentStartEvent,
@@ -2239,13 +2240,17 @@ class SessionProcessor:
                 self._last_process_result = ProcessorResult.STOP
                 return
             if not replan_dispatched and not task_reconciled_completion and not control_handoff:
-                task_gate = await self._goal_evaluator.evaluate_task_completion_gate(session_id)
+                task_gate = await self._goal_evaluator.evaluate_task_completion_gate(
+                    session_id, messages
+                )
                 if task_gate is not None and not task_gate.achieved:
                     self._pending_completion_status = None
                     yield AgentStatusEvent(status=f"goal_pending:{task_gate.source}")
                     yield AgentErrorEvent(
                         message=task_gate.reason or "Goal not achieved",
-                        code="GOAL_NOT_ACHIEVED",
+                        code="GOAL_JUDGE_UNAVAILABLE"
+                        if task_gate.source == "agent_judge"
+                        else "GOAL_NOT_ACHIEVED",
                     )
                     self._state = ProcessorState.ERROR
                     self._last_process_result = ProcessorResult.STOP
@@ -3623,6 +3628,7 @@ class SessionProcessor:
                 hitl_type=HITLType.PERMISSION,
                 timeout_seconds=self.config.permission_timeout,
             )
+            yield AgentPermissionRepliedEvent(request_id=request_id, granted=bool(granted))
             if not granted:
                 error = "Permission rejected by user"
         except TimeoutError:

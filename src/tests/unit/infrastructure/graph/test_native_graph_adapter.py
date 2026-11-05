@@ -260,6 +260,7 @@ class TestNativeGraphAdapterAddEpisode:
         result = await adapter.add_episode(episode)
 
         assert result is episode
+        assert result.status == "PENDING"
         mock_neo4j_client.execute_query.assert_called()
         mock_queue_port.add_episode.assert_called_once()
 
@@ -293,6 +294,8 @@ class TestNativeGraphAdapterAddEpisode:
 
         with patch.object(adapter, "process_episode", AsyncMock()) as process_episode:
             result = await adapter.add_episode(episode)
+
+        assert result.status == "COMPLETED"
 
         assert result is episode
         process_episode.assert_awaited_once_with(

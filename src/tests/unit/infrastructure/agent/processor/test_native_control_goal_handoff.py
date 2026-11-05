@@ -126,7 +126,13 @@ async def test_stop_does_not_force_handoff_when_authorized_work_remains():
 
 
 async def test_stop_cannot_hide_real_failed_task_even_with_other_pending_work():
-    evaluator, llm, audits = evaluator_for(judgment(goal_achieved=False, control_handoff=True))
+    evaluator, llm, audits = evaluator_for(
+        judgment(
+            goal_achieved=False,
+            control_handoff=False,
+            rationale="The requested verification failed; stopping desktop use does not resolve it.",
+        )
+    )
     evaluator.set_native_control_outcome(ToolControlOutcome.USER_STOPPED)
     evaluator._tools["todoread"] = object()
     evaluator._load_session_tasks = AsyncMock(
@@ -138,10 +144,12 @@ async def test_stop_cannot_hide_real_failed_task_even_with_other_pending_work():
     result = await evaluate(evaluator)
     assert not result.control_handoff
     assert not result.achieved
-    assert result.should_stop
-    assert result.source == "tasks"
-    llm.generate.assert_not_awaited()
-    assert audits == []
+    assert not result.should_stop
+    assert result.source == "llm_self_check"
+    llm.generate.assert_awaited_once()
+    assert len(audits) == 1
+    assert "status=failed" in audits[0].input_json["context_summary"]
+    assert "Failures relevant to the current request" in audits[0].input_json["context_summary"]
 
 
 async def test_reset_removes_handoff_authority_for_next_run():

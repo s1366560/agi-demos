@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.domain.events.agent_events import AgentPermissionAskedEvent
+from src.domain.events.agent_events import (
+    AgentObserveEvent,
+    AgentPermissionAskedEvent,
+    AgentPermissionRepliedEvent,
+)
 from src.infrastructure.agent.core.message import ToolPart, ToolState
 from src.infrastructure.agent.hitl.coordinator import (
     HITLCoordinator,
@@ -20,7 +24,10 @@ from src.infrastructure.agent.processor.processor import (
 
 
 @pytest.mark.unit
-async def test_real_coordinator_permission_event_is_delivered_before_response() -> None:
+@pytest.mark.parametrize("granted", [True, False])
+async def test_real_coordinator_permission_event_is_delivered_before_response(
+    granted: bool,
+) -> None:
     tool = ToolDefinition(
         name="delivery_probe",
         description="No model or real side effects",
@@ -52,16 +59,27 @@ async def test_real_coordinator_permission_event_is_delivered_before_response() 
         persist.assert_awaited_once()
         assert event.request_id in coordinator.pending_request_ids
         tool.execute.assert_not_awaited()
+        reply_task = asyncio.create_task(anext(events))
+        await asyncio.sleep(0)
+        assert not reply_task.done()
         assert (
             resolve_by_request_id(
                 event.request_id,
-                {"action": "allow", "remember": False},
+                {"action": "allow" if granted else "deny", "granted": granted, "scope": "once"},
                 tenant_id="delivery-order-tenant",
                 project_id="delivery-order-project",
                 conversation_id="delivery-order-conversation",
             )
             == ResolveResult.RESOLVED
         )
+        reply = await asyncio.wait_for(reply_task, timeout=1)
+        assert isinstance(reply, AgentPermissionRepliedEvent)
+        assert reply.request_id == event.request_id
+        assert reply.granted is granted
+        if not granted:
+            observation = await asyncio.wait_for(anext(events), timeout=1)
+            assert isinstance(observation, AgentObserveEvent)
+            assert observation.error == "Permission rejected by user"
         with pytest.raises(StopAsyncIteration):
             await asyncio.wait_for(anext(events), timeout=1)
         coordinator.cancel_request_if_pending(event.request_id)

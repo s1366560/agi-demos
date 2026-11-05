@@ -85,6 +85,11 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     )
     context.v2_authorize = AsyncMock()
     monkeypatch.setattr(
+        subscription_handler,
+        "scoped_session_has_only_terminal_runs_v2",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
         subscription_handler, "authorize_existing_scoped_session_v2", context.v2_authorize
     )
     context.v2_agent_service = AsyncMock()

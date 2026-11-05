@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -190,10 +191,101 @@ async def test_automatic_accepts_only_formal_workspace_write_category(chat_guard
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("mode", "mutation_decision"),
+    [("ask", "ask"), ("automatic", "deny"), ("full_access", "allow")],
+)
+async def test_protocol_tool_factories_obey_sql_backed_chat_permission_modes(
+    chat_guard_case, mode, mutation_decision
+):
+    from src.infrastructure.agent.core.tool_converter import convert_tools
+    from src.infrastructure.agent.tools.cron_tool import make_cron_tool
+    from src.infrastructure.agent.tools.model_availability_tool import make_model_awareness_tools
+    from src.infrastructure.agent.tools.permission_metadata_v2 import resolve_tool_permission_v2
+    from src.infrastructure.agent.tools.sandbox_tool_wrapper import create_sandbox_mcp_tool
+
+    port = SimpleNamespace(call_tool=AsyncMock(side_effect=AssertionError("No network allowed")))
+    session_factory = AsyncMock(side_effect=AssertionError("No tool execution allowed"))
+    cron = make_cron_tool(session_factory=session_factory)
+    model = make_model_awareness_tools(
+        session_factory=session_factory,
+        model_catalog=object(),
+        provider_resolver=AsyncMock(),
+        persist_model_override=AsyncMock(),
+    )["list_available_models"]
+    read_names = (
+        "ast_parse",
+        "ast_get_imports",
+        "ast_find_symbols",
+        "ast_extract_function",
+        "list_artifacts",
+    )
+    sandbox_tools = {
+        name: create_sandbox_mcp_tool("qa-sandbox", name, {"input_schema": {}}, port)
+        for name in (
+            *read_names,
+            "deps_check",
+            "ast_parse_and_execute",
+            "export_artifact",
+            "batch_export_artifacts",
+        )
+    }
+    definitions = {
+        tool.name: tool
+        for tool in convert_tools({cron.name: cron, model.name: model, **sandbox_tools})
+    }
+    cases = [
+        ("cron", {"action": "status"}, "read"),
+        ("cron", {"action": "list"}, "read"),
+        ("cron", {"action": "runs"}, "read"),
+        ("cron", {"action": "add"}, "write"),
+        ("cron", {"action": "update"}, "write"),
+        ("cron", {"action": "remove"}, "write"),
+        ("cron", {"action": "run"}, "system_api"),
+        ("cron", {"action": "read_jobs"}, None),
+        ("cron", {"action": "LIST"}, None),
+        ("cron", {"action": []}, None),
+        ("cron", {}, None),
+        ("list_available_models", {}, "read"),
+        *((name, {}, "read") for name in read_names),
+        ("deps_check", {"package_type": "command"}, "read"),
+        ("deps_check", {"package_type": "pip", "venv_path": "/tmp/custom"}, "bash"),
+        ("deps_check", {"package_type": "system"}, "bash"),
+        ("deps_check", {}, "bash"),
+        ("deps_check", {"package_type": "unknown"}, None),
+        ("deps_check", {"package_type": []}, None),
+        ("deps_check", {"package_type": None}, None),
+        ("ast_parse_and_execute", {}, "ask"),
+        ("export_artifact", {}, "ask"),
+        ("batch_export_artifacts", {}, "ask"),
+    ]
+    async with chat_guard_case(mode):
+        for name, arguments, expected_permission in cases:
+            permission = resolve_tool_permission_v2(definitions[name], arguments)
+            assert permission == expected_permission, (name, arguments)
+            expected = (
+                "allow"
+                if expected_permission == "read"
+                else "deny"
+                if expected_permission in {None, "ask"}
+                else mutation_decision
+            )
+            assert (
+                await decision_for_current_chat_tool_v2(permission, name, arguments, required=True)
+                == expected
+            ), (mode, name, arguments)
+    port.call_tool.assert_not_called()
+    session_factory.assert_not_called()
+
+
+@pytest.mark.unit
 async def test_real_permission_coordinator_publishes_request_before_waiting_for_response(
     chat_guard_case, monkeypatch, tmp_path
 ):
-    from src.domain.events.agent_events import AgentPermissionAskedEvent
+    from src.domain.events.agent_events import (
+        AgentPermissionAskedEvent,
+        AgentPermissionRepliedEvent,
+    )
     from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
     from src.infrastructure.agent.hitl.coordinator import HITLCoordinator, ResolveResult
     from src.infrastructure.agent.processor.processor import (
@@ -245,7 +337,10 @@ async def test_real_permission_coordinator_publishes_request_before_waiting_for_
                 message_id=row.id,
             )
             assert outcome == ResolveResult.RESOLVED
-            _events = [event async for event in iterator]
+            resumed_events = [resumed_event async for resumed_event in iterator]
+            assert isinstance(resumed_events[0], AgentPermissionRepliedEvent)
+            assert resumed_events[0].request_id == event.request_id
+            assert resumed_events[0].granted is True
             assert destination.exists()
         finally:
             await iterator.aclose()

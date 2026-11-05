@@ -116,7 +116,7 @@ class TestProcessorGoalCompletion:
         return _factory
 
     @pytest.mark.asyncio
-    async def test_task_goal_pending_returns_not_complete(self, evaluator_with_tasks):
+    async def test_task_goal_pending_requires_an_available_scope_judge(self, evaluator_with_tasks):
         evaluator = evaluator_with_tasks(
             [
                 {"id": "t1", "status": "completed"},
@@ -130,9 +130,8 @@ class TestProcessorGoalCompletion:
         )
 
         assert result.achieved is False
-        assert result.should_stop is False
-        assert result.source == "tasks"
-        assert result.pending_tasks == 1
+        assert result.should_stop is True
+        assert result.source == "agent_judge"
 
     @pytest.mark.asyncio
     async def test_pending_task_goal_can_reconcile_with_llm_completion_evidence(self) -> None:
@@ -171,7 +170,7 @@ class TestProcessorGoalCompletion:
         assert "final report" in result.reason
 
     @pytest.mark.asyncio
-    async def test_pending_task_goal_preserves_task_result_when_llm_rejects_completion(
+    async def test_pending_task_goal_preserves_judgment_when_llm_rejects_completion(
         self,
     ) -> None:
         llm_client = AsyncMock()
@@ -196,12 +195,11 @@ class TestProcessorGoalCompletion:
         )
 
         assert result.achieved is False
-        assert result.source == "tasks"
-        assert result.reason == "1 task(s) still in progress"
-        assert result.pending_tasks == 1
+        assert result.source == "llm_self_check"
+        assert result.reason == "The report is not present in the conversation."
 
     @pytest.mark.asyncio
-    async def test_task_goal_all_terminal_success_returns_complete(self, evaluator_with_tasks):
+    async def test_terminal_ledger_requires_scope_judgment(self, evaluator_with_tasks):
         evaluator = evaluator_with_tasks(
             [
                 {"id": "t1", "status": "completed"},
@@ -214,8 +212,9 @@ class TestProcessorGoalCompletion:
             messages=[{"role": "user", "content": "finish task"}],
         )
 
-        assert result.achieved is True
-        assert result.source == "tasks"
+        assert result.achieved is False
+        assert result.should_stop is True
+        assert result.source == "agent_judge"
 
     @pytest.mark.asyncio
     async def test_goal_completion_fails_closed_when_task_state_is_unverifiable(self) -> None:
@@ -244,7 +243,7 @@ class TestProcessorGoalCompletion:
         assert result.reason == "Unable to verify task completion state"
 
     @pytest.mark.asyncio
-    async def test_task_goal_failed_returns_stop(self, evaluator_with_tasks):
+    async def test_failed_ledger_stops_when_scope_judge_is_unavailable(self, evaluator_with_tasks):
         evaluator = evaluator_with_tasks(
             [
                 {"id": "t1", "status": "failed"},
@@ -259,7 +258,7 @@ class TestProcessorGoalCompletion:
 
         assert result.achieved is False
         assert result.should_stop is True
-        assert result.source == "tasks"
+        assert result.source == "agent_judge"
 
     @pytest.mark.asyncio
     async def test_task_goal_reads_toolinfo_todoread_with_tool_context(self) -> None:
@@ -277,8 +276,8 @@ class TestProcessorGoalCompletion:
         )
 
         assert result.achieved is False
-        assert result.source == "tasks"
-        assert result.pending_tasks == 1
+        assert result.source == "agent_judge"
+        assert result.should_stop is True
         cast(AsyncMock, tool.execute).assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -307,19 +306,24 @@ class TestProcessorGoalCompletion:
             messages=[{"role": "user", "content": "finish task"}],
         )
 
-        assert result.achieved is True
-        assert result.source == "tasks"
+        assert result.achieved is False
+        assert result.should_stop is True
+        assert result.source == "agent_judge"
 
     @pytest.mark.asyncio
     async def test_task_completion_gate_returns_none_without_tasks(self, evaluator_with_tasks):
         evaluator = evaluator_with_tasks([])
 
-        result = await evaluator.evaluate_task_completion_gate(session_id="session-1")
+        result = await evaluator.evaluate_task_completion_gate(
+            session_id="session-1", messages=[{"role": "user", "content": "finish task"}]
+        )
 
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_task_completion_gate_uses_persisted_tasks(self, evaluator_with_tasks):
+    async def test_task_completion_gate_requires_scope_judge_for_pending_tasks(
+        self, evaluator_with_tasks
+    ):
         evaluator = evaluator_with_tasks(
             [
                 {"id": "t1", "status": "completed"},
@@ -327,12 +331,14 @@ class TestProcessorGoalCompletion:
             ]
         )
 
-        result = await evaluator.evaluate_task_completion_gate(session_id="session-1")
+        result = await evaluator.evaluate_task_completion_gate(
+            session_id="session-1", messages=[{"role": "user", "content": "finish task"}]
+        )
 
         assert result is not None
         assert result.achieved is False
-        assert result.source == "tasks"
-        assert result.pending_tasks == 1
+        assert result.source == "agent_judge"
+        assert result.should_stop is True
 
     @pytest.mark.asyncio
     async def test_task_completion_gate_fails_closed_when_task_state_unavailable(self) -> None:
@@ -347,7 +353,9 @@ class TestProcessorGoalCompletion:
         )
         evaluator = GoalEvaluator(llm_client=None, tools={"todoread": tool})
 
-        result = await evaluator.evaluate_task_completion_gate(session_id="session-1")
+        result = await evaluator.evaluate_task_completion_gate(
+            session_id="session-1", messages=[{"role": "user", "content": "finish task"}]
+        )
 
         assert result is not None
         assert result.achieved is False
@@ -368,7 +376,9 @@ class TestProcessorGoalCompletion:
         )
         evaluator = GoalEvaluator(llm_client=None, tools={"todoread": tool})
 
-        result = await evaluator.evaluate_task_completion_gate(session_id="session-1")
+        result = await evaluator.evaluate_task_completion_gate(
+            session_id="session-1", messages=[{"role": "user", "content": "finish task"}]
+        )
 
         assert result is not None
         assert result.achieved is False
@@ -392,7 +402,9 @@ class TestProcessorGoalCompletion:
         )
         evaluator = GoalEvaluator(llm_client=None, tools={"todoread": tool})
 
-        result = await evaluator.evaluate_task_completion_gate(session_id="session-1")
+        result = await evaluator.evaluate_task_completion_gate(
+            session_id="session-1", messages=[{"role": "user", "content": "finish task"}]
+        )
 
         assert result is not None
         assert result.achieved is False
@@ -425,7 +437,9 @@ class TestProcessorGoalCompletion:
         )
         evaluator = GoalEvaluator(llm_client=None, tools={"todoread": tool})
 
-        result = await evaluator.evaluate_task_completion_gate(session_id="session-1")
+        result = await evaluator.evaluate_task_completion_gate(
+            session_id="session-1", messages=[{"role": "user", "content": "finish task"}]
+        )
 
         assert result is not None
         assert result.achieved is False
@@ -455,7 +469,9 @@ class TestProcessorGoalCompletion:
             )
 
         with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="retired"):
-            await evaluator.evaluate_task_completion_gate(session_id="session-1")
+            await evaluator.evaluate_task_completion_gate(
+                session_id="session-1", messages=[{"role": "user", "content": "finish task"}]
+            )
 
         assert todoread.mock_calls == []
         assert llm_client.mock_calls == []

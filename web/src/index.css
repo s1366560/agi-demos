@@ -1774,7 +1774,6 @@ img[loading='lazy'] {
 }
 
 :is(.dark .memstack-prose) :not(pre) > code {
-  color: var(--color-primary-300);
   background-color: rgba(99, 102, 241, 0.15);
 }
 

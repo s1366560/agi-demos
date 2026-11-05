@@ -16,13 +16,14 @@ import {
 } from 'lucide-react';
 
 import { AgentSection } from '../chat/MessageStream';
+import { getPersistedToolStatus } from '../../../utils/toolCallTimeline';
 
 import { TimeBadge } from './shared';
 
 import type { ActEvent, ObserveEvent } from '../../../types/agent';
 
 interface StatusBadgeProps {
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'cancelled';
   label?: string | undefined;
   duration?: number | undefined;
 }
@@ -41,6 +42,13 @@ function StatusBadge({ status, label, duration }: StatusBadgeProps) {
       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-2xs font-semibold uppercase tracking-label">
         <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
         {label ?? t('agent.agentToolCards.status.running')}
+      </span>
+    );
+  }
+  if (status === 'cancelled') {
+    return (
+      <span className="text-2xs text-content-tertiary">
+        {t('agent.timeline.cancelled', 'Cancelled')}
       </span>
     );
   }
@@ -84,7 +92,7 @@ function truncate(s: string, max: number): string {
 interface AgentSpawnCardProps {
   params: Record<string, unknown>;
   result: Record<string, unknown> | null;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'cancelled';
   error?: string | undefined;
   duration?: number | undefined;
 }
@@ -156,7 +164,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
 interface AgentStopCardProps {
   params: Record<string, unknown>;
   result: Record<string, unknown> | null;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'cancelled';
   error?: string | undefined;
   duration?: number | undefined;
 }
@@ -218,7 +226,7 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
 interface AgentSendCardProps {
   params: Record<string, unknown>;
   result: Record<string, unknown> | null;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'cancelled';
   error?: string | undefined;
   duration?: number | undefined;
 }
@@ -284,7 +292,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
 
 interface AgentListCardProps {
   result: unknown[] | Record<string, unknown> | null;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'cancelled';
   error?: string | undefined;
   duration?: number | undefined;
 }
@@ -351,7 +359,7 @@ function AgentListCard({ result, status, error, duration }: AgentListCardProps) 
 
 interface AgentSessionsCardProps {
   result: unknown[] | Record<string, unknown> | null;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'cancelled';
   error?: string | undefined;
   duration?: number | undefined;
 }
@@ -449,7 +457,7 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
 interface AgentHistoryCardProps {
   params: Record<string, unknown>;
   result: unknown[] | Record<string, unknown> | null;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'cancelled';
   error?: string | undefined;
   duration?: number | undefined;
 }
@@ -550,7 +558,7 @@ interface AgentToolStepCardProps {
   toolName: string;
   input?: Record<string, unknown>;
   output?: string | Record<string, unknown>;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'cancelled';
   isError?: boolean;
   duration?: number;
   onAgentSessionSelect?: ((sessionId: string) => void) | undefined;
@@ -686,13 +694,19 @@ export const AgentToolCard = memo(function AgentToolCard({
   event,
   observeEvent,
 }: AgentToolCardProps) {
-  const status: 'running' | 'success' | 'error' = observeEvent
+  const status: 'running' | 'success' | 'error' | 'cancelled' = observeEvent
     ? observeEvent.isError
       ? 'error'
       : 'success'
-    : 'running';
-  const duration = observeEvent ? observeEvent.timestamp - event.timestamp : undefined;
-  const errorMsg = observeEvent?.isError ? (observeEvent.toolOutput ?? undefined) : undefined;
+    : (getPersistedToolStatus(event.execution?.status) ?? 'running');
+  const duration = observeEvent
+    ? observeEvent.timestamp - event.timestamp
+    : event.execution?.duration;
+  const errorMsg = observeEvent?.isError
+    ? (observeEvent.toolOutput ?? undefined)
+    : status === 'error'
+      ? (event.execution?.error ?? undefined)
+      : undefined;
   const parsed = observeEvent?.toolOutput ? parseResult(observeEvent.toolOutput) : null;
   const params = event.toolInput;
   const toolName = event.toolName;

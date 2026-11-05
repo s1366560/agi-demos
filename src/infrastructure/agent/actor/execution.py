@@ -58,6 +58,8 @@ from src.infrastructure.agent.actor.state.running_state import (
     clear_agent_running,
     refresh_agent_running_ttl,
     set_agent_running,
+    start_agent_running_heartbeat,
+    stop_agent_running_heartbeat,
 )
 from src.infrastructure.agent.actor.state.snapshot_repo import (
     delete_hitl_snapshot,
@@ -92,7 +94,9 @@ async def _mark_root_run_authority_running(
             conversation_id=conversation_id,
         )
 
-        return run is not None and isinstance(run.authorization_snapshot.get("cancellation_receipt"), dict)
+        return run is not None and isinstance(
+            run.authorization_snapshot.get("cancellation_receipt"), dict
+        )
 
 
 async def _settle_root_run_authority(
@@ -1009,6 +1013,7 @@ async def execute_project_chat(  # noqa: PLR0915
     llm_overrides, model_override = await _resolve_chat_runtime_overrides(request)
 
     cancellation_monitor: asyncio.Task[None] | None = None
+    running_heartbeat = start_agent_running_heartbeat(request.conversation_id, request.message_id)
     try:
         cancellation_monitor = await _open_chat_cancellation_monitor(
             request=request,
@@ -1065,7 +1070,10 @@ async def execute_project_chat(  # noqa: PLR0915
             canonical_run_id=run_authority_id,
             plugin_generation=request.plugin_generation,
         ):
-            if event.get("type") in {"complete", "error", "cancelled"} and cancellation_monitor is not None:
+            if (
+                event.get("type") in {"complete", "error", "cancelled"}
+                and cancellation_monitor is not None
+            ):
                 await _close_chat_cancellation_monitor(cancellation_monitor)
                 cancellation_monitor = None
             evt_time_us, evt_counter = time_gen.next()
@@ -1264,6 +1272,7 @@ async def execute_project_chat(  # noqa: PLR0915
         )
         return result
     finally:
+        await stop_agent_running_heartbeat(running_heartbeat)
         await _close_chat_cancellation_monitor(cancellation_monitor)
         await clear_agent_running(request.conversation_id, request.message_id)
 
@@ -1442,6 +1451,7 @@ async def continue_project_chat(  # noqa: PLR0912, PLR0915
     await set_agent_running(state.conversation_id, state.message_id)
     await _project_automation_runtime_running(automation_identity)
 
+    running_heartbeat = start_agent_running_heartbeat(state.conversation_id, state.message_id)
     try:
         conversation_context = _build_hitl_context(state, response_data)
 
@@ -1631,6 +1641,7 @@ async def continue_project_chat(  # noqa: PLR0912, PLR0915
         )
         return result
     finally:
+        await stop_agent_running_heartbeat(running_heartbeat)
         await clear_agent_running(state.conversation_id, state.message_id)
 
 

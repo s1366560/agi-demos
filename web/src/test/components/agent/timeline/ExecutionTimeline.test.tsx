@@ -14,6 +14,23 @@ vi.mock('../../../../components/agent/timeline/useMCPAppOpen', () => ({
 }));
 
 describe('ExecutionTimeline summary formatting', () => {
+  it('shows cancelled history without a running spinner', () => {
+    const { container } = render(
+      <ExecutionTimeline
+        steps={[
+          {
+            id: 'cancelled-call',
+            toolName: 'memory_update',
+            status: 'cancelled',
+            input: {},
+          },
+        ]}
+      />
+    );
+    expect(screen.getAllByText(/Cancelled/).length).toBeGreaterThan(0);
+    expect(container.querySelector('.animate-spin')).toBeNull();
+  });
+
   it('uses locale-neutral separators for todo summaries', () => {
     render(
       <ExecutionTimeline

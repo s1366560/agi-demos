@@ -36,7 +36,7 @@ import { useMCPAppOpen } from './useMCPAppOpen';
 export interface TimelineStep {
   id: string;
   toolName: string;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'cancelled';
   input?: Record<string, unknown> | undefined;
   output?: string | Record<string, unknown> | undefined;
   isError?: boolean | undefined;
@@ -516,7 +516,9 @@ const TimelineStepItem = memo<{
                   ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
                   : step.status === 'success'
                     ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/50'
-                    : 'border-red-400 bg-red-50 dark:bg-red-950/50'
+                    : step.status === 'cancelled'
+                      ? 'border-slate-300 bg-slate-50 dark:bg-slate-900'
+                      : 'border-red-400 bg-red-50 dark:bg-red-950/50'
               }
             `}
           >
@@ -529,7 +531,13 @@ const TimelineStepItem = memo<{
               <span className="animate-fade-in flex items-center justify-center">
                 <Brain
                   size={11}
-                  className={step.status === 'success' ? 'text-emerald-500' : 'text-red-500'}
+                  className={
+                    step.status === 'success'
+                      ? 'text-emerald-500'
+                      : step.status === 'cancelled'
+                        ? 'text-slate-400'
+                        : 'text-red-500'
+                  }
                 />
               </span>
             )}
@@ -558,7 +566,9 @@ const TimelineStepItem = memo<{
       ? 'text-blue-500'
       : step.status === 'success'
         ? 'text-emerald-500'
-        : 'text-red-500';
+        : step.status === 'cancelled'
+          ? 'text-slate-400'
+          : 'text-red-500';
 
   return (
     <div className="relative flex gap-2 mb-0 min-h-6">
@@ -575,7 +585,9 @@ const TimelineStepItem = memo<{
                 ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
                 : step.status === 'success'
                   ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/50'
-                  : 'border-red-400 bg-red-50 dark:bg-red-950/50'
+                  : step.status === 'cancelled'
+                    ? 'border-slate-300 bg-slate-50 dark:bg-slate-900'
+                    : 'border-red-400 bg-red-50 dark:bg-red-950/50'
             }
           `}
         >
@@ -634,6 +646,11 @@ const TimelineStepItem = memo<{
                   <ChevronRight size={12} className="text-slate-400" />
                 ))}
             </button>
+            {step.status === 'cancelled' && (
+              <span className="text-2xs text-content-tertiary">
+                {t('agent.timeline.cancelled', 'Cancelled')}
+              </span>
+            )}
             {onUndoRequest && step.status === 'success' && (
               <button
                 type="button"
@@ -728,6 +745,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
     const summary = useMemo(() => {
       const total = steps.length;
       const completed = steps.filter((s) => s.status === 'success').length;
+      const cancelled = steps.filter((s) => s.status === 'cancelled').length;
       const failed = steps.filter((s) => s.status === 'error').length;
       const running = steps.filter((s) => s.status === 'running').length;
       const actions = summarizeToolActions(steps, t);
@@ -742,7 +760,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
             }));
       const detailActions = actions.slice(1);
       const hiddenActions = Math.max(0, detailActions.length - 7);
-      return { total, completed, failed, running, title, detailActions, hiddenActions };
+      return { total, completed, failed, cancelled, running, title, detailActions, hiddenActions };
     }, [steps, t]);
 
     if (steps.length === 0) return null;
@@ -781,6 +799,11 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
               total: summary.total,
             })}
           </span>
+          {summary.cancelled > 0 && (
+            <span className="text-2xs text-content-tertiary">
+              {summary.cancelled} {t('agent.timeline.cancelled', 'Cancelled')}
+            </span>
+          )}
           {summary.failed > 0 && (
             <span className="text-2xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
               {summary.failed} {t('agent.timeline.failed', 'Failed')}

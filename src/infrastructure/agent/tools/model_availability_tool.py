@@ -292,7 +292,7 @@ def _resolve_requested_model_name(
         },
         "required": [],
     },
-    permission=None,
+    permission="read",
     category="llm",
 )
 async def list_available_models_tool(

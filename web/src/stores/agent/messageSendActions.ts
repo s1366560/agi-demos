@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import i18n from '../../i18n/config';
 import { agentService } from '../../services/agentService';
+import { runInputService } from '../../services/runInputService';
 import {
   type ConversationState,
   createDefaultConversationState,
@@ -351,33 +352,28 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
       }
     },
 
-    abortStream: (conversationId?: string): void => {
-      const targetConvId = conversationId || get().activeConversationId;
-      if (targetConvId) {
-        const stopSent = agentService.stopChat(targetConvId);
+    abortStream: async (conversationId?: string): Promise<void> => {
+      const targetConvId =
+        typeof conversationId === 'string' && conversationId
+          ? conversationId
+          : get().activeConversationId;
+      if (!targetConvId) return;
+      const owner = getWebOperationAvailabilityV2().owner;
+      const stillOwned = () =>
+        getWebOperationAvailabilityV2().available &&
+        getWebOperationAvailabilityV2().owner === owner;
+      if (!stillOwned()) return;
 
-        if (!stopSent) {
-          const { updateConversationState } = get();
-          updateConversationState(targetConvId, {
-            error: 'Failed to send stop request',
-            isStreaming: false,
-            streamStatus: 'error',
-          });
-          return;
-        }
-
-        // Clean up delta buffers to prevent stale timers from firing
-        clearDeltaBuffers(targetConvId);
-
-        const { updateConversationState } = get();
-        updateConversationState(targetConvId, {
-          isStreaming: false,
-          streamStatus: 'idle',
-          agentState: 'idle',
-          streamingThought: '',
-          isThinkingStreaming: false,
-          streamingAssistantContent: '',
-          pendingToolsStack: [],
+      try {
+        const run = await runInputService.getActiveRun(targetConvId);
+        if (!stillOwned() || !run) return;
+        await runInputService.cancel(run.run_id, run.run_revision);
+        // Acceptance only requests cancellation. Terminal stream events own
+        // the state transition and final deltas must remain available to them.
+      } catch (error) {
+        if (!stillOwned()) return;
+        get().updateConversationState(targetConvId, {
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     },
