@@ -267,6 +267,7 @@ test('voice transcription controller streams PCM, dispatches text, and releases 
   assert.equal(await started, true);
   assert.deepEqual(JSON.parse(fixture.socket.sent[0]), {
     type: 'voice_config',
+    mode: 'dictation',
     sample_rate: 16000,
     speaker: 'zh_female_tianmeixiaoyuan_moon_bigtts',
   });

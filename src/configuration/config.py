@@ -637,6 +637,11 @@ class Settings(BaseSettings):
     volc_app_id: str | None = Field(default=None, alias="VOLC_APP_ID")
     speech_app_id: str | None = Field(default=None, alias="SPEECH_APP_ID")
     speech_access_token: str | None = Field(default=None, alias="SPEECH_ACCESS_TOKEN")
+    speech_profiles_json: str | None = Field(
+        default=None,
+        alias="SPEECH_PROFILES_JSON",
+        description="Tenant-scoped speech profiles containing runtime secret references, never tokens",
+    )
     speech_ws_proxy: str | None = Field(
         default=None,
         alias="SPEECH_WS_PROXY",

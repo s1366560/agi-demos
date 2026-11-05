@@ -136,6 +136,7 @@ export class VoiceTranscriptionController {
       socket.send(
         JSON.stringify({
           type: 'voice_config',
+          mode: 'dictation',
           sample_rate: 16000,
           speaker: DEFAULT_SPEAKER,
         }),

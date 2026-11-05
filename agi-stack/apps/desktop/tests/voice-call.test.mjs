@@ -296,6 +296,7 @@ test('voice call controller connects, streams PCM, and projects scoped protocol 
   await startFixture(fixture);
   assert.deepEqual(JSON.parse(fixture.socket.sent[0]), {
     type: 'voice_config',
+    mode: 'voice',
     sample_rate: 16000,
     speaker: 'zh_female_tianmeixiaoyuan_moon_bigtts',
   });

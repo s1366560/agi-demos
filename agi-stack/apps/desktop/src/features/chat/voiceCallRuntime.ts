@@ -218,6 +218,7 @@ export class VoiceCallController {
       socket.send(
         JSON.stringify({
           type: 'voice_config',
+          mode: 'voice',
           sample_rate: 16000,
           speaker: DEFAULT_SPEAKER,
         }),

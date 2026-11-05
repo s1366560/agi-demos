@@ -102,6 +102,7 @@ export class WebVoiceSessionV2 {
               socket.send(
                 JSON.stringify({
                   type: 'voice_config',
+                  mode: 'voice',
                   sample_rate: 16000,
                   speaker: options.speaker,
                 })

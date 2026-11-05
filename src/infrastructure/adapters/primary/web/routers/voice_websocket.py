@@ -16,15 +16,14 @@ from contextlib import AsyncExitStack, aclosing
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.config import get_settings
+from src.domain.model.audio_session import AudioMode
 from src.infrastructure.adapters.primary.web.websocket.auth import (
     authenticate_websocket,
     extract_websocket_api_key,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.boundary import (
@@ -35,6 +34,9 @@ from src.infrastructure.plugins.v2.boundary import (
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
+from .voice_protocol import transcript_events, voice_mode
+from .voice_turns import voice_turns
+
 router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
 logger = logging.getLogger(__name__)
 
@@ -43,11 +45,6 @@ _SENTENCE_BOUNDARY = re.compile(r"[.!?\u3002\uff01\uff1f]")
 
 # Maximum buffer size before forcing a TTS flush
 _MAX_BUFFER_CHARS = 100
-
-# Silence threshold (seconds) -- when no new ASR text arrives for this
-# long, treat the accumulated buffer as a complete utterance.  Matches the
-# reference implementation's ASRInterval=2000ms approach.
-_ASR_SILENCE_THRESHOLD = 1.5
 
 
 @router.websocket("/chat")
@@ -101,51 +98,30 @@ async def voice_chat_endpoint(
         await websocket.close(code=4000)
         return
 
+    try:
+        mode = voice_mode(config_msg)
+    except (ValueError, TypeError):
+        await _send_error(websocket, "Unsupported voice mode")
+        await websocket.close(code=4000)
+        return
     _sample_rate: int = config_msg.get("sample_rate", 16000)
     speaker: str = config_msg.get("speaker", "zh_female_tianmeixiaoyuan_moon_bigtts")
 
-    # 4. Resolve Volcengine Speech Console credentials (DB first, env fallback)
     settings = get_settings()
-    speech_access_token: str | None = settings.speech_access_token
-    speech_app_id: str | None = settings.speech_app_id
+    from src.infrastructure.adapters.secondary.external.volcengine.speech_credentials import (
+        resolve_speech_credentials,
+    )
 
     try:
-        from src.infrastructure.persistence.llm_providers_models import (
-            LLMProvider as LLMProviderORM,
+        credentials = resolve_speech_credentials(
+            settings.speech_profiles_json, tenant_id, config_msg.get("provider_profile_id")
         )
-
-        result = await db.execute(
-            refresh_select_statement(
-                select(LLMProviderORM)
-                .where(LLMProviderORM.provider_type.like("volcengine%"))
-                .where(LLMProviderORM.is_active.is_(True))
-                .limit(1)
-            )
-        )
-        provider = result.scalar_one_or_none()
-        if provider and provider.config:
-            db_cfg: dict[str, Any] = provider.config
-            speech_access_token = db_cfg.get("speech_access_token") or speech_access_token
-            speech_app_id = db_cfg.get("speech_app_id") or speech_app_id
-            logger.info(
-                "[Voice WS] Resolved Speech credentials from DB: access_token=%s app_id=%s",
-                bool(speech_access_token),
-                bool(speech_app_id),
-            )
-    except Exception:
-        logger.warning(
-            "[Voice WS] Failed to read provider config from DB, using env vars",
-            exc_info=True,
-        )
-    if not speech_access_token or not speech_app_id:
-        await _send_error(
-            websocket,
-            "Volcengine Speech credentials not configured "
-            + "(set speech_app_id + speech_access_token in provider config "
-            + "or SPEECH_APP_ID + SPEECH_ACCESS_TOKEN env vars)",
-        )
+    except ValueError as error:
+        await _send_error(websocket, str(error))
         await websocket.close(code=4000)
         return
+    speech_access_token = credentials.access_token
+    speech_app_id = credentials.app_id
 
     speech_ws_proxy: str | None = settings.speech_ws_proxy
 
@@ -165,7 +141,7 @@ async def voice_chat_endpoint(
 
     # Shared state between tasks
     asr_final_queue: asyncio.Queue[str] = asyncio.Queue()
-    tts_text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+    interrupts: asyncio.Queue[None] = asyncio.Queue()
     shutdown_event = asyncio.Event()
     tasks: list[asyncio.Task[None]] = []
 
@@ -176,40 +152,48 @@ async def voice_chat_endpoint(
         # 6. Launch concurrent tasks
         tasks = [
             asyncio.create_task(
-                _audio_receiver(websocket, asr_client, shutdown_event),
+                _audio_receiver(websocket, asr_client, shutdown_event, interrupts=interrupts),
                 name="audio_receiver",
             ),
             asyncio.create_task(
-                _asr_processor(websocket, asr_client, asr_final_queue, shutdown_event),
+                _asr_processor(
+                    websocket,
+                    asr_client,
+                    asr_final_queue,
+                    shutdown_event,
+                    mode=mode,
+                    interrupts=interrupts,
+                ),
                 name="asr_processor",
             ),
-            asyncio.create_task(
-                _agent_bridge(
-                    websocket,
-                    asr_final_queue,
-                    tts_text_queue,
-                    conversation_id,
-                    project_id,
-                    user_id,
-                    tenant_id,
-                    api_key,
-                    shutdown_event,
-                ),
-                name="agent_bridge",
-            ),
-            asyncio.create_task(
-                _tts_sender(
-                    websocket,
-                    tts_text_queue,
-                    speech_access_token,
-                    speech_app_id,
-                    speaker,
-                    shutdown_event,
-                    proxy=speech_ws_proxy,
-                ),
-                name="tts_sender",
-            ),
         ]
+        if mode is AudioMode.VOICE:
+            tasks.append(
+                asyncio.create_task(
+                    voice_turns(
+                        websocket,
+                        asr_final_queue,
+                        interrupts,
+                        shutdown_event,
+                        _agent_bridge,
+                        _tts_sender,
+                        {
+                            "conversation_id": conversation_id,
+                            "project_id": project_id,
+                            "user_id": user_id,
+                            "tenant_id": tenant_id,
+                            "api_key": api_key,
+                        },
+                        {
+                            "access_key": speech_access_token,
+                            "app_key": speech_app_id,
+                            "speaker": speaker,
+                            "proxy": speech_ws_proxy,
+                        },
+                    ),
+                    name="voice_turns",
+                )
+            )
 
         # Wait for any task to complete (usually means disconnect or error)
         done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -265,13 +249,25 @@ async def _audio_receiver(
     websocket: WebSocket,
     asr_client: Any,
     shutdown: asyncio.Event,
+    *,
+    interrupts: asyncio.Queue[None] | None = None,
 ) -> None:
     """Receive binary PCM audio frames from browser and forward to ASR client."""
     frame_count = 0
     total_bytes = 0
     try:
         while not shutdown.is_set():
-            data = await websocket.receive_bytes()
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+            if message.get("text") is not None:
+                import json
+
+                control = json.loads(message["text"])
+                if control.get("type") == "voice_interrupt" and interrupts is not None:
+                    interrupts.put_nowait(None)
+                continue
+            data = message.get("bytes")
             if not data:
                 continue
             frame_count += 1
@@ -317,119 +313,41 @@ async def _asr_processor(
     asr_client: Any,
     asr_final_queue: asyncio.Queue[str],
     shutdown: asyncio.Event,
+    *,
+    mode: AudioMode = AudioMode.DICTATION,
+    interrupts: asyncio.Queue[None] | None = None,
 ) -> None:
-    """Receive transcription results from ASR and dispatch complete utterances.
-
-    Uses a **silence-timeout** strategy (matching the Volcengine reference
-    implementation) instead of relying on the ``definite`` flag which may not
-    be reliably set in streaming mode.
-
-    The algorithm:
-    1. Accumulate ``asr_buffer`` from ``result.text``.
-    2. Track when the buffer last *grew* (``last_growth_time``).
-    3. When the buffer has content and silence exceeds
-       ``_ASR_SILENCE_THRESHOLD``, treat the buffer as a complete sentence
-       and enqueue it for the agent.
-    4. ``definite=True`` is still honoured as an immediate flush trigger.
-    """
-    import time
-
-    asr_buffer = ""
-    last_growth_time: float = time.monotonic()
-    pending_interim_sent = False
-
+    """Forward provider utterances; only explicit voice mode may submit a turn."""
+    stream_id = str(uuid.uuid4())
+    revision = 0
+    committed: set[str] = set()
+    observed: set[str] = set()
     try:
         while not shutdown.is_set():
-            # Use a short timeout so we can check silence even when no
-            # new ASR messages arrive.
-            try:
-                result = await asyncio.wait_for(asr_client.receive(), timeout=0.3)
-            except TimeoutError:
-                # No new ASR data -- check silence timeout
-                if asr_buffer and (time.monotonic() - last_growth_time) > _ASR_SILENCE_THRESHOLD:
-                    logger.info(
-                        "[Voice WS] ASR silence timeout, flushing: %s",
-                        asr_buffer[:80],
-                    )
-                    await _send_json(websocket, {"type": "asr_final", "text": asr_buffer})
-                    await asr_final_queue.put(asr_buffer)
-                    asr_buffer = ""
-                    pending_interim_sent = False
-                continue
-
-            if result is None:
-                break
-
-            payload = result.get("payload_msg", {})
-            asr_result = payload.get("result", {})
-            text = asr_result.get("text", "")
-            utterances = asr_result.get("utterances", [])
-            is_definite = any(u.get("definite", False) for u in utterances)
-
-            logger.debug(
-                "[Voice WS] ASR recv text=%r definite=%s buf_len=%d",
-                text[:80] if text else "",
-                is_definite,
-                len(asr_buffer),
-            )
-
-            if text:
-                # Check if buffer grew (new speech detected)
-                if len(text) > len(asr_buffer):
-                    last_growth_time = time.monotonic()
-                asr_buffer = text
-
-                if is_definite:
-                    # Immediate flush on definite utterance
-                    logger.info(
-                        "[Voice WS] ASR definite utterance: %s",
-                        asr_buffer[:80],
-                    )
-                    await _send_json(
-                        websocket,
-                        {"type": "asr_final", "text": asr_buffer},
-                    )
-                    await asr_final_queue.put(asr_buffer)
-                    asr_buffer = ""
-                    pending_interim_sent = False
-                elif not pending_interim_sent or len(text) > len(asr_buffer) - 2:
-                    # Send interim update to browser for live display
-                    await _send_json(
-                        websocket,
-                        {"type": "asr_interim", "text": text},
-                    )
-                    pending_interim_sent = True
-
-            if result.get("is_last_package"):
-                # Server signals end of stream -- flush remaining buffer
-                if asr_buffer:
-                    logger.info(
-                        "[Voice WS] ASR last package, flushing: %s",
-                        asr_buffer[:80],
-                    )
-                    await _send_json(
-                        websocket,
-                        {"type": "asr_final", "text": asr_buffer},
-                    )
-                    await asr_final_queue.put(asr_buffer)
-                    asr_buffer = ""
-                break
-
-        # Flush any remaining buffer on normal exit
-        if asr_buffer:
-            logger.info(
-                "[Voice WS] ASR processor exiting, flushing remaining: %s",
-                asr_buffer[:80],
-            )
-            await _send_json(websocket, {"type": "asr_final", "text": asr_buffer})
-            await asr_final_queue.put(asr_buffer)
-
+            response = await asr_client.receive()
+            if response is None:
+                return
+            revision += 1
+            for event in transcript_events(response, stream_id, revision):
+                identity = event["segment_id"]
+                if identity in committed:
+                    continue
+                if identity not in observed:
+                    observed.add(identity)
+                    if mode is AudioMode.VOICE and interrupts is not None:
+                        interrupts.put_nowait(None)
+                await _send_json(websocket, event)
+                if event["final"]:
+                    committed.add(identity)
+                    if mode is AudioMode.VOICE:
+                        await asr_final_queue.put(event["text"])
+            if response.get("is_last_package"):
+                return
     except asyncio.CancelledError:
-        # Flush on cancellation too
-        if asr_buffer:
-            await asr_final_queue.put(asr_buffer)
-    except Exception as e:
-        logger.error("[Voice WS] ASR processor error: %s", e, exc_info=True)
+        raise
+    except Exception:
+        logger.exception("Voice ASR stream failed")
+        await _send_error(websocket, "Speech recognition failed")
     finally:
         shutdown.set()
 
