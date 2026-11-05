@@ -28,7 +28,7 @@ const TOOL_RESULT_SLOT = Object.freeze({
 
 async function generationWithUiSlotsEnabledV2(
   enabled: boolean,
-  entryId = 'builtin-web-feature-ui-settings'
+  entryId = 'builtin-web-feature-ui-tool-result'
 ) {
   const snapshot = structuredClone(bootstrapProfile);
   const entry = snapshot.entries.find(({ entry_id }) => entry_id === entryId);
@@ -69,19 +69,23 @@ describe('WebUiSlotAuthorityV2', () => {
 
     const state = projectWebUiSlotAuthorityV2(generation);
     expect(state.status).toBe('ready');
-    expect(state.slotDefinitions).toHaveLength(7);
+    expect(state.slotDefinitions.map(({ slot }) => slot).sort()).toEqual([
+      'authenticated_shell_surface',
+      'tool_result_renderer',
+    ]);
     expect(state.uiSlotArtifactIds).toContain('web.ui-slots.authenticated-shell-surface.v1');
-    expect(state.uiSlotArtifactIds).toContain('web.ui-slots.settings.v1');
+    expect(state.uiSlotArtifactIds).toContain('web.ui-slots.tool-result.v1');
     expect(state.renderers).toBeDefined();
     await runtime.close();
   });
 
-  it('projects no UI slot authority when the contribution is disabled', async () => {
+  it('removes the tool renderer when its contribution is disabled', async () => {
     const { generation, runtime } = await generationWithUiSlotsEnabledV2(false);
 
     const state = projectWebUiSlotAuthorityV2(generation);
-    expect(state.slotDefinitions).toHaveLength(6);
-    expect(state.uiSlotArtifactIds).not.toContain('web.ui-slots.settings.v1');
+    expect(state.slotDefinitions.map(({ slot }) => slot)).toEqual(['authenticated_shell_surface']);
+    expect(findWebToolResultSlotV2(state, 'memory_search')).toBeUndefined();
+    expect(state.uiSlotArtifactIds).not.toContain('web.ui-slots.tool-result.v1');
     expect(state.uiSlotArtifactIds).toContain('web.ui-slots.authenticated-shell-surface.v1');
     await runtime.close();
   });
@@ -93,11 +97,11 @@ describe('WebUiSlotAuthorityV2', () => {
     );
 
     const state = projectWebUiSlotAuthorityV2(generation);
-    expect(state.slotDefinitions).toHaveLength(6);
+    expect(state.slotDefinitions.map(({ slot }) => slot)).toEqual(['tool_result_renderer']);
     expect(state.slotDefinitions.some(({ slot }) => slot === 'authenticated_shell_surface')).toBe(
       false
     );
-    expect(state.uiSlotArtifactIds).toContain('web.ui-slots.settings.v1');
+    expect(state.uiSlotArtifactIds).toContain('web.ui-slots.tool-result.v1');
     await runtime.close();
   });
 

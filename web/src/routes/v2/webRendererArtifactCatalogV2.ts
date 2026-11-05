@@ -44,14 +44,15 @@ export interface WebFeatureAuxiliaryArtifactV2 {
   readonly featureId: string;
 }
 
-const OWNER_SLOT_KINDS_V2 = {
-  navigation: 'nav_item',
-  settings: 'settings_page',
-  conversation: 'conversation_renderer',
-  composer: 'composer_action',
-  canvas: 'mcp_canvas',
-  'tool-result': 'tool_result_renderer',
-} as const;
+// These controls already belong to the application shell. Keep their artifact references
+// valid for published profiles, but leave extension outlets empty until a plugin contributes UI.
+const SHELL_EXTENSION_ARTIFACT_NAMES_V2 = [
+  'navigation',
+  'settings',
+  'conversation',
+  'composer',
+  'canvas',
+] as const;
 
 interface WebRendererArtifactBaseV2 {
   readonly id: string;
@@ -94,23 +95,24 @@ const WEB_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, WebRendererArtifactV2>(
     const id = `web.settings.${featureId}.v1`;
     return [id, Object.freeze({ id, kind: 'settings-page', featureId })];
   }),
-  ...Object.entries(OWNER_SLOT_KINDS_V2).map(([name, slot]): [string, WebRendererArtifactV2] => {
+  ...SHELL_EXTENSION_ARTIFACT_NAMES_V2.map((name): [string, WebRendererArtifactV2] => {
     const id = `web.ui-slots.${name}.v1`;
-    return [
-      id,
-      defineWebUiSlotArtifactV2(id, [
-        {
-          id: name,
-          pluginId: `builtin-${name}`,
-          slot,
-          contract: name === 'tool-result' ? 'tool-result:default' : `ui-builtin:${name}`,
-          moduleRef: `builtin:web-slot-${name}`,
-          permission: `ui.${name}`,
-          sandbox: true,
-        },
-      ]),
-    ];
+    return [id, defineWebUiSlotArtifactV2(id, [])];
   }),
+  [
+    'web.ui-slots.tool-result.v1',
+    defineWebUiSlotArtifactV2('web.ui-slots.tool-result.v1', [
+      {
+        id: 'tool-result',
+        pluginId: 'builtin-tool-result',
+        slot: 'tool_result_renderer',
+        contract: 'tool-result:default',
+        moduleRef: 'builtin:web-slot-tool-result',
+        permission: 'ui.tool-result',
+        sandbox: true,
+      },
+    ]),
+  ],
   ...createWebFeatureArtifactsV2().map((artifact): [string, WebRendererArtifactV2] => [
     artifact.id,
     artifact,
