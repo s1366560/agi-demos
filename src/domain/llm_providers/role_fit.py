@@ -10,16 +10,9 @@ from src.domain.llm_providers.provider_catalog import ROLE_ORDER, provider_famil
 _CHAT_CAPABILITIES = frozenset({"chat", "completion"})
 _EMBEDDING_CAPABILITIES = frozenset({"embedding"})
 _RERANK_CAPABILITIES = frozenset({"rerank", "reranking"})
-_AUDIO_CAPABILITIES = frozenset(
-    {
-        "tts",
-        "asr",
-        "audio_generation",
-        "voice_cloning",
-        "realtime_voice",
-    }
-)
-_AUDIO_MODALITIES = frozenset({"audio"})
+# Speech roles only. A generic "audio" modality is multimodal input, not voice.
+_VOICE_CAPABILITIES = frozenset({"tts", "asr", "voice_cloning", "realtime_voice"})
+_NATIVE_RERANK_FAMILIES = frozenset({"cohere"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,10 +40,23 @@ def _normalized(values: frozenset[str]) -> frozenset[str]:
     return frozenset(value.strip().lower() for value in values if value.strip())
 
 
-def _has_audio_capability(signals: ModelSignals) -> bool:
-    return bool(
-        signals.capabilities & _AUDIO_CAPABILITIES or signals.modalities & _AUDIO_MODALITIES
-    )
+def _has_voice_capability(signals: ModelSignals) -> bool:
+    """True only for realtime voice, TTS, STT, or voice cloning."""
+    return bool(signals.capabilities & _VOICE_CAPABILITIES)
+
+
+def _rerank_assessment(signals: ModelSignals, provider_type: str | None) -> tuple[bool, str]:
+    """Native rerank models qualify everywhere. Chat models score passages elsewhere."""
+    if signals.capabilities & _RERANK_CAPABILITIES:
+        return True, "deprecated" if signals.deprecated else "ok"
+    family = provider_family(provider_type or "")
+    if not signals.known:
+        return True, "unknown_assumed_chat"
+    if family in _NATIVE_RERANK_FAMILIES:
+        return False, "rerank_capability_required"
+    if signals.capabilities & _CHAT_CAPABILITIES:
+        return True, "deprecated" if signals.deprecated else "llm_scoring_rerank"
+    return False, "rerank_capability_required"
 
 
 def _chat_reason(signals: ModelSignals) -> tuple[bool, str]:
@@ -85,9 +91,9 @@ def assess_model_roles(
     )
     chat_supported, chat_reason = _chat_reason(normalized)
     embedding_supported = bool(capabilities & _EMBEDDING_CAPABILITIES or "embedding" in modalities)
-    rerank_supported = bool(capabilities & _RERANK_CAPABILITIES)
+    rerank_supported, rerank_reason = _rerank_assessment(normalized, provider_type)
     audio_allowed = provider_family(provider_type or "") in OPENAI_AUDIO_INPUT_ADAPTERS
-    if _has_audio_capability(normalized):
+    if _has_voice_capability(normalized) and audio_allowed:
         voice_supported, voice_reason = True, "deprecated" if normalized.deprecated else "ok"
     elif normalized.audio_declared and audio_allowed:
         voice_supported, voice_reason = True, "ok"
@@ -115,7 +121,7 @@ def assess_model_roles(
         "rerank": RoleAssessment(
             "rerank",
             rerank_supported,
-            _reason(rerank_supported, "ok" if rerank_supported else "rerank_capability_required"),
+            _reason(rerank_supported, rerank_reason),
         ),
         "voice": RoleAssessment("voice", voice_supported, voice_reason),
     }

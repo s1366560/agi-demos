@@ -4146,10 +4146,9 @@ impl ModelListProfile {
             .iter()
             .map(|item| item.to_ascii_lowercase())
             .collect::<BTreeSet<_>>();
-        let audio = ["tts", "asr", "audio_generation", "voice_cloning", "realtime_voice"]
+        let audio = ["tts", "asr", "voice_cloning", "realtime_voice"]
             .into_iter()
-            .any(|name| capabilities.contains(name))
-            || modalities.contains("audio");
+            .any(|name| capabilities.contains(name));
         Self {
             id: metadata.name.clone(),
             known: true,

@@ -6,6 +6,7 @@ export type RoleReason =
   | 'not_a_chat_model'
   | 'embedding_capability_required'
   | 'rerank_capability_required'
+  | 'llm_scoring_rerank'
   | 'audio_input_not_declared'
   | 'audio_declaration_unsupported'
   | 'deprecated'
@@ -19,6 +20,7 @@ export interface ModelSignals {
   deprecated?: boolean;
   audioDeclared?: boolean;
   audioDeclarationAllowed?: boolean;
+  providerType?: string;
 }
 
 export interface RoleAssessment {
@@ -29,7 +31,8 @@ export interface RoleAssessment {
 const CHAT = new Set(['chat', 'completion']);
 const EMBEDDING = new Set(['embedding']);
 const RERANK = new Set(['rerank', 'reranking']);
-const AUDIO = new Set(['tts', 'asr', 'audio_generation', 'voice_cloning', 'realtime_voice']);
+const VOICE = new Set(['tts', 'asr', 'voice_cloning', 'realtime_voice']);
+const NATIVE_RERANK = new Set(['cohere']);
 
 const AUDIO_PROVIDERS = new Set(['openai', 'openrouter', 'lmstudio', 'kimi', 'volcengine']);
 
@@ -65,13 +68,25 @@ export function assessModelRole(role: ModelRole, signals: ModelSignals): RoleAss
   }
 
   if (role === 'rerank') {
-    const supported = hasAny(capabilities, RERANK);
-    if (!supported) return { supported: false, reason: 'rerank_capability_required' };
-    return { supported: true, reason: deprecated ? 'deprecated' : 'ok' };
+    if (hasAny(capabilities, RERANK)) {
+      return { supported: true, reason: deprecated ? 'deprecated' : 'ok' };
+    }
+    const family = (signals.providerType ?? '').replace(/_(coding|embedding|reranker)$/, '');
+    if (NATIVE_RERANK.has(family)) {
+      if (!signals.known) return { supported: true, reason: 'unknown_assumed_chat' };
+      return { supported: false, reason: 'rerank_capability_required' };
+    }
+    if (!signals.known) return { supported: true, reason: 'unknown_assumed_chat' };
+    if (hasAny(capabilities, CHAT)) {
+      return { supported: true, reason: deprecated ? 'deprecated' : 'llm_scoring_rerank' };
+    }
+    return { supported: false, reason: 'rerank_capability_required' };
   }
 
-  const audioCapability = hasAny(capabilities, AUDIO) || modalities.has('audio');
-  if (audioCapability) return { supported: true, reason: deprecated ? 'deprecated' : 'ok' };
+  const voiceCapability = hasAny(capabilities, VOICE);
+  if (voiceCapability && signals.audioDeclarationAllowed) {
+    return { supported: true, reason: deprecated ? 'deprecated' : 'ok' };
+  }
   if (signals.audioDeclared && signals.audioDeclarationAllowed) {
     return { supported: true, reason: 'ok' };
   }

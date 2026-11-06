@@ -39,7 +39,12 @@ import {
 } from '../../types/memory';
 
 import { ModelCapabilityCard } from './ModelCapabilityCard';
-import { assessModelRole, preferredListedModel, roleForOperation } from './modelRoleFit';
+import {
+  assessModelRole,
+  preferredListedModel,
+  providerAllowsAudioDeclaration,
+  roleForOperation,
+} from './modelRoleFit';
 import {
   buildProviderAuthPayload,
   getDefaultProviderAuthMethod,
@@ -758,7 +763,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
             modalities: activeMeta.modalities,
             known: true,
             deprecated: activeMeta.is_deprecated,
-            audioDeclarationAllowed: false,
+            providerType: formData.provider_type,
+            audioDeclarationAllowed: providerAllowsAudioDeclaration(formData.provider_type),
           }).supported
         ) {
           return false;

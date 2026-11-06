@@ -67,6 +67,64 @@ def test_role_fit_does_not_infer_audio_from_the_model_name() -> None:
     assert declared["voice"].supported is True
 
 
+def test_chat_model_can_score_rerank_outside_native_rerank_providers() -> None:
+    openai = {
+        item.role: item
+        for item in assess_model_roles(
+            ModelSignals(name="gpt-6-luna", capabilities=frozenset({"chat"}), known=True),
+            provider_type="openai",
+        )
+    }
+    assert openai["rerank"].supported is True
+    assert openai["rerank"].reason == "llm_scoring_rerank"
+
+    cohere = {
+        item.role: item
+        for item in assess_model_roles(
+            ModelSignals(name="command-a-03-2025", capabilities=frozenset({"chat"}), known=True),
+            provider_type="cohere",
+        )
+    }
+    assert cohere["rerank"].supported is False
+    assert cohere["rerank"].reason == "rerank_capability_required"
+
+
+def test_audio_modality_does_not_make_a_model_voice_capable() -> None:
+    gemini = {
+        item.role: item
+        for item in assess_model_roles(
+            ModelSignals(
+                name="gemini-3.8-flash",
+                capabilities=frozenset({"chat", "vision"}),
+                modalities=frozenset({"text", "image", "audio"}),
+                known=True,
+            ),
+            provider_type="gemini",
+        )
+    }
+    assert gemini["voice"].supported is False
+    assert gemini["voice"].reason == "audio_declaration_unsupported"
+
+    realtime = {
+        item.role: item
+        for item in assess_model_roles(
+            ModelSignals(
+                name="gpt-realtime",
+                capabilities=frozenset({"chat", "realtime_voice"}),
+                known=True,
+            ),
+            provider_type="openai",
+        )
+    }
+    assert realtime["voice"].supported is True
+    assert realtime["voice"].reason == "ok"
+
+    guidance = build_provider_guidance("gemini")
+    flash = next(profile for profile in guidance["profiles"] if profile["id"] == "gemini-3.8-flash")
+    assert flash["audio_input"] is False
+    assert flash["roles"]["voice"]["supported"] is False
+
+
 def test_embedding_model_cannot_fill_the_primary_role() -> None:
     roles = {
         item.role: item
@@ -89,7 +147,8 @@ def test_guidance_explains_providers_without_embedding_or_rerank() -> None:
     assert by_role["fast"]["default_model"] == "claude-haiku-5-5"
     assert by_role["embedding"]["available"] is False
     assert by_role["embedding"]["reason"] == "provider_has_no_embedding_models"
-    assert by_role["rerank"]["reason"] == "provider_has_no_rerank_models"
+    assert by_role["rerank"]["available"] is True
+    assert by_role["rerank"]["reason"] == "ok"
     assert by_role["voice"]["reason"] == "audio_input_not_declared"
 
 

@@ -14,6 +14,43 @@ describe('assessModelRole', () => {
     });
   });
 
+  it('allows a known chat model to score rerank and keeps Cohere native', () => {
+    expect(
+      assessModelRole('rerank', {
+        capabilities: ['chat'],
+        known: true,
+        providerType: 'openai',
+      })
+    ).toEqual({ supported: true, reason: 'llm_scoring_rerank' });
+    expect(
+      assessModelRole('rerank', {
+        capabilities: ['chat'],
+        known: true,
+        providerType: 'cohere',
+      })
+    ).toEqual({ supported: false, reason: 'rerank_capability_required' });
+  });
+
+  it('does not treat an audio modality as a voice model', () => {
+    expect(
+      assessModelRole('voice', {
+        capabilities: ['chat', 'vision'],
+        modalities: ['text', 'audio'],
+        known: true,
+        providerType: 'gemini',
+        audioDeclarationAllowed: false,
+      })
+    ).toEqual({ supported: false, reason: 'audio_declaration_unsupported' });
+    expect(
+      assessModelRole('voice', {
+        capabilities: ['chat', 'realtime_voice'],
+        known: true,
+        providerType: 'openai',
+        audioDeclarationAllowed: true,
+      }).supported
+    ).toBe(true);
+  });
+
   it('rejects an embedding model as the primary chat model', () => {
     expect(assessModelRole('primary', { capabilities: ['embedding'], known: true })).toEqual({
       supported: false,

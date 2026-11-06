@@ -10102,6 +10102,7 @@
           "not_a_chat_model": "This model cannot answer chat. Choose it only for embedding or rerank.",
           "embedding_capability_required": "Embedding requires a model whose catalog capability is embedding.",
           "rerank_capability_required": "Rerank requires a model whose catalog capability is rerank.",
+          "llm_scoring_rerank": "This chat model can score passages for rerank. It is not a native reranker.",
           "audio_input_not_declared": "Audio input stays off until you explicitly declare this model. The name alone does not enable it.",
           "audio_declaration_unsupported": "This provider cannot store an audio-input declaration.",
           "deprecated": "This model still runs, and the catalog marks it deprecated.",

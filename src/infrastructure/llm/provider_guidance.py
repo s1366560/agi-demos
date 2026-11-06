@@ -39,9 +39,7 @@ def _signals_from_metadata(
     )
 
 
-_AUDIO_CAPABILITIES = frozenset(
-    {"tts", "asr", "audio_generation", "voice_cloning", "realtime_voice"}
-)
+_VOICE_CAPABILITIES = frozenset({"tts", "asr", "voice_cloning", "realtime_voice"})
 
 
 def catalog_profile(model_id: str, metadata: ModelMetadata | None) -> dict[str, Any] | None:
@@ -58,7 +56,7 @@ def catalog_profile(model_id: str, metadata: ModelMetadata | None) -> dict[str, 
         "vision": "vision" in capabilities or "image" in modalities,
         "tools": bool(metadata.supports_tool_call),
         "reasoning": bool(metadata.reasoning),
-        "audio_input": bool(capabilities & _AUDIO_CAPABILITIES or "audio" in modalities),
+        "audio_input": bool(capabilities & _VOICE_CAPABILITIES),
         "deprecated": bool(metadata.is_deprecated),
         "input_cost_per_1m": metadata.input_cost_per_1m,
         "output_cost_per_1m": metadata.output_cost_per_1m,

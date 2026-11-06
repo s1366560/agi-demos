@@ -10122,6 +10122,7 @@
           "not_a_chat_model": "此模型不能回答对话。请只把它用于嵌入或重排序。",
           "embedding_capability_required": "嵌入角色需要目录中标记为嵌入能力的模型。",
           "rerank_capability_required": "重排序角色需要目录中标记为重排序能力的模型。",
+          "llm_scoring_rerank": "此对话模型可以用打分完成重排序，它不是原生重排序模型。",
           "audio_input_not_declared": "在明确声明之前，音频输入保持关闭。模型名称本身不会启用音频。",
           "audio_declaration_unsupported": "此提供商不能保存音频输入声明。",
           "deprecated": "此模型仍可使用，目录已将它标记为弃用。",
