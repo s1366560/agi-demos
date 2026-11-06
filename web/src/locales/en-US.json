@@ -1779,6 +1779,7 @@
         "cohere": "Cohere",
         "mistral": "Mistral AI",
         "groq": "Groq",
+        "xai": "xAI Grok",
         "azure_openai": "Azure OpenAI",
         "bedrock": "AWS Bedrock",
         "vertex": "Google Vertex AI",

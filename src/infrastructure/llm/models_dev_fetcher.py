@@ -52,6 +52,7 @@ PROVIDER_MAP: dict[str, str] = {
     "moonshotai-cn": "kimi",
     "mistral": "mistral",
     "groq": "groq",
+    "xai": "xai",
     "cohere": "cohere",
     "volcengine": "volcengine",
 }
@@ -148,7 +149,18 @@ def convert_to_model_metadata(
             logger.warning("Provider '%s' not found in models.dev data", dev_provider)
             continue
 
-        models_raw: dict[str, Any] = provider_data.get("models", {})
+        models_raw: dict[str, Any] = dict(provider_data.get("models", {}))
+        if dev_provider == "xai":
+            # Official image model published after the models.dev image entry.
+            models_raw.setdefault(
+                "grok-imagine-image-2.0",
+                {
+                    "name": "Grok Imagine Image 2.0",
+                    "family": "grok",
+                    "modalities": {"input": ["text", "image"], "output": ["image"]},
+                    "limit": {"context": 16000, "output": 0},
+                },
+            )
         for model_id, model_data in models_raw.items():
             try:
                 meta = _convert_single_model(model_id, model_data, codebase_provider)

@@ -225,6 +225,18 @@ def _endpoint_kimi(
     )
 
 
+def _endpoint_xai(
+    config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    base_url = config.base_url or "https://api.x.ai/v1"
+    return _HealthEndpoint(
+        url=f"{base_url}/models",
+        headers=_bearer_auth(api_key),
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
 def _endpoint_ollama(
     config: ProviderConfig,
     _api_key: str | None,
@@ -264,6 +276,7 @@ _HEALTH_ENDPOINT_REGISTRY: dict[
     ProviderType.VOLCENGINE: _endpoint_volcengine,
     ProviderType.ZAI: _endpoint_zai,
     ProviderType.KIMI: _endpoint_kimi,
+    ProviderType.XAI: _endpoint_xai,
     ProviderType.OLLAMA: _endpoint_ollama,
     ProviderType.LMSTUDIO: _endpoint_lmstudio,
 }

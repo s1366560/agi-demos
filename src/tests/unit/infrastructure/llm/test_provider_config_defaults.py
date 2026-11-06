@@ -74,6 +74,7 @@ def test_get_provider_prefix_maps_supported_provider_types(
         ("gemini-2.0-flash", ProviderType.GEMINI),
         ("deepseek-chat", ProviderType.DEEPSEEK),
         ("doubao-seed-2.0-pro", ProviderType.VOLCENGINE),
+        ("grok-4.7", ProviderType.XAI),
         ("unknown-model", ProviderType.OPENAI),
     ],
 )
@@ -138,6 +139,7 @@ def test_models_dev_llm_defaults_exist_in_snapshot() -> None:
         ProviderType.MINIMAX,
         ProviderType.ZAI,
         ProviderType.GROQ,
+        ProviderType.XAI,
         ProviderType.COHERE,
         ProviderType.BEDROCK,
         ProviderType.VERTEX,

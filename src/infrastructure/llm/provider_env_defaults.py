@@ -89,6 +89,8 @@ PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
     "dashscope-embedding": ProviderType.DASHSCOPE_EMBEDDING,
     "dashscope_reranker": ProviderType.DASHSCOPE_RERANKER,
     "dashscope-reranker": ProviderType.DASHSCOPE_RERANKER,
+    "xai": ProviderType.XAI,
+    "grok": ProviderType.XAI,
     "anthropic": ProviderType.ANTHROPIC,
     "claude": ProviderType.ANTHROPIC,
     "ollama": ProviderType.OLLAMA,
@@ -118,6 +120,7 @@ PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
     ("ZHIPU_API_KEY", "zai"),
     ("MOONSHOT_API_KEY", "kimi"),
     ("KIMI_API_KEY", "kimi"),
+    ("XAI_API_KEY", "xai"),
     ("ANTHROPIC_API_KEY", "anthropic"),
     ("OLLAMA_BASE_URL", "ollama"),
     ("LMSTUDIO_BASE_URL", "lmstudio"),
@@ -126,6 +129,13 @@ PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
 ]
 
 _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
+    ProviderType.XAI: _ProviderEnvProfile(
+        api_key=_EnvField(("XAI_API_KEY",)),
+        llm_model=_EnvField(("XAI_MODEL",), "grok-4.7"),
+        llm_small_model=_EnvField(("XAI_SMALL_MODEL",), "grok-4.20-0309-non-reasoning"),
+        reranker_model=_EnvField(("XAI_RERANK_MODEL",), "grok-4.20-0309-non-reasoning"),
+        base_url=_EnvField(("XAI_BASE_URL",), "https://api.x.ai/v1"),
+    ),
     ProviderType.GEMINI: _ProviderEnvProfile(
         api_key=_EnvField(("GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY")),
         llm_model=_EnvField(("GEMINI_MODEL",), "gemini-3.8-flash"),

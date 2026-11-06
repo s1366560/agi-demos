@@ -459,6 +459,18 @@ def _static_provider_models(provider_type: str) -> dict[str, list[str]]:
             "embedding": [],
             "rerank": [],
         },
+        "xai": {
+            "chat": [
+                "grok-4.7",
+                "grok-4.6",
+                "grok-4.20-0309-non-reasoning",
+                "grok-4.20-0309-reasoning",
+                "grok-build-0.1",
+                "grok-imagine-image-2.0",
+            ],
+            "embedding": [],
+            "rerank": [],
+        },
         "deepseek": {
             "chat": ["deepseek-v4-pro", "deepseek-flash", "deepseek-chat", "deepseek-reasoner"],
             "embedding": [],

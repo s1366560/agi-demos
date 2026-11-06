@@ -2,9 +2,9 @@
   "_meta": {
     "version": "3.0.0",
     "source": "models.dev",
-    "generated_at": "2026-11-06T01:22:33Z",
+    "generated_at": "2026-11-06T01:46:51Z",
     "description": "Model catalog snapshot generated from models.dev API",
-    "model_count": 1054
+    "model_count": 1065
   },
   "models": {
     "claude-fable-5": {
@@ -35707,80 +35707,6 @@
         1.0
       ]
     },
-    "xai/grok-4.6": {
-      "name": "xai/grok-4.6",
-      "context_length": 524288,
-      "max_output_tokens": 500000,
-      "input_cost_per_1m": 2.0,
-      "output_cost_per_1m": 6.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "vertex",
-      "modalities": [
-        "text",
-        "image"
-      ],
-      "family": "grok",
-      "release_date": "2026-08-12",
-      "description": "Grok 4.6",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.5,
-      "knowledge_cutoff": "2026-02-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "xai/grok-4.7": {
-      "name": "xai/grok-4.7",
-      "context_length": 524288,
-      "max_output_tokens": 500000,
-      "input_cost_per_1m": 2.0,
-      "output_cost_per_1m": 6.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "vertex",
-      "modalities": [
-        "text",
-        "image"
-      ],
-      "family": "grok",
-      "release_date": "2026-09-21",
-      "description": "Grok 4.7",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.5,
-      "knowledge_cutoff": "2026-05",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
     "zai-org/glm-4.7-maas": {
       "name": "zai-org/glm-4.7-maas",
       "context_length": 200000,
@@ -36684,6 +36610,419 @@
       },
       "cache_read_cost_per_1m": 0.03414,
       "open_weights": true,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "grok-4.20-0309-non-reasoning": {
+      "name": "grok-4.20-0309-non-reasoning",
+      "context_length": 1000000,
+      "max_output_tokens": 30000,
+      "input_cost_per_1m": 1.25,
+      "output_cost_per_1m": 2.5,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "grok",
+      "release_date": "2026-03-09",
+      "description": "Grok 4.20 (Non-Reasoning)",
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.2,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "grok-4.20-0309-reasoning": {
+      "name": "grok-4.20-0309-reasoning",
+      "context_length": 1000000,
+      "max_output_tokens": 30000,
+      "input_cost_per_1m": 1.25,
+      "output_cost_per_1m": 2.5,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "grok",
+      "release_date": "2026-03-09",
+      "description": "Grok 4.20 (Reasoning)",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.2,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "grok-4.20-multi-agent-0309": {
+      "name": "grok-4.20-multi-agent-0309",
+      "context_length": 1000000,
+      "max_output_tokens": 30000,
+      "input_cost_per_1m": 1.25,
+      "output_cost_per_1m": 2.5,
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "grok",
+      "release_date": "2026-03-09",
+      "description": "Grok 4.20 Multi-Agent",
+      "reasoning": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.2,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "grok-4.3": {
+      "name": "grok-4.3",
+      "context_length": 1000000,
+      "max_output_tokens": 30000,
+      "input_cost_per_1m": 1.25,
+      "output_cost_per_1m": 2.5,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "grok",
+      "release_date": "2026-04-17",
+      "description": "Grok 4.3",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.2,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "grok-4.5": {
+      "name": "grok-4.5",
+      "context_length": 500000,
+      "max_output_tokens": 500000,
+      "input_cost_per_1m": 2.0,
+      "output_cost_per_1m": 6.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "grok",
+      "release_date": "2026-07-08",
+      "description": "Grok 4.5",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.3,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "grok-build-0.1": {
+      "name": "grok-build-0.1",
+      "context_length": 256000,
+      "max_output_tokens": 256000,
+      "input_cost_per_1m": 1.0,
+      "output_cost_per_1m": 2.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "grok-build",
+      "release_date": "2026-04-16",
+      "description": "Grok Build 0.1",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.2,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "grok-imagine-image": {
+      "name": "grok-imagine-image",
+      "context_length": 16000,
+      "max_output_tokens": 4096,
+      "capabilities": [
+        "image_editing"
+      ],
+      "supports_streaming": false,
+      "supports_json_mode": false,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image"
+      ],
+      "family": "grok",
+      "release_date": "2026-01-28",
+      "description": "Grok Imagine Image",
+      "supports_temperature": false,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "grok-imagine-image-2.0": {
+      "name": "grok-imagine-image-2.0",
+      "context_length": 16000,
+      "max_output_tokens": 4096,
+      "capabilities": [
+        "image_editing"
+      ],
+      "supports_streaming": false,
+      "supports_json_mode": false,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image"
+      ],
+      "family": "grok",
+      "description": "Grok Imagine Image 2.0",
+      "supports_temperature": false,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "grok-imagine-video": {
+      "name": "grok-imagine-video",
+      "context_length": 1024,
+      "max_output_tokens": 4096,
+      "capabilities": [
+        "video_generation"
+      ],
+      "supports_streaming": false,
+      "supports_json_mode": false,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "family": "grok",
+      "release_date": "2026-01-28",
+      "description": "Grok Imagine Video",
+      "supports_temperature": false,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "grok-imagine-video-1.5": {
+      "name": "grok-imagine-video-1.5",
+      "context_length": 1024,
+      "max_output_tokens": 4096,
+      "capabilities": [
+        "video_generation"
+      ],
+      "supports_streaming": false,
+      "supports_json_mode": false,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "audio",
+        "video"
+      ],
+      "family": "grok",
+      "release_date": "2026-05-30",
+      "description": "Grok Imagine Video 1.5",
+      "supports_temperature": false,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "grok-imagine-video-1.5-lite": {
+      "name": "grok-imagine-video-1.5-lite",
+      "context_length": 1024,
+      "max_output_tokens": 4096,
+      "capabilities": [
+        "video_generation"
+      ],
+      "supports_streaming": false,
+      "supports_json_mode": false,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "family": "grok",
+      "release_date": "2026-10-01",
+      "description": "Grok Imagine Video 1.5 Lite",
+      "supports_temperature": false,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "xai/grok-4.6": {
+      "name": "grok-4.6",
+      "context_length": 500000,
+      "max_output_tokens": 500000,
+      "input_cost_per_1m": 2.0,
+      "output_cost_per_1m": 6.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "grok",
+      "release_date": "2026-08-12",
+      "description": "Grok 4.6",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "knowledge_cutoff": "2026-02-01",
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "xai/grok-4.7": {
+      "name": "grok-4.7",
+      "context_length": 500000,
+      "max_output_tokens": 500000,
+      "input_cost_per_1m": 2.0,
+      "output_cost_per_1m": 6.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "xai",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "grok",
+      "release_date": "2026-09-21",
+      "description": "Grok 4.7",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "knowledge_cutoff": "2026-05",
       "supports_response_format": true,
       "temperature_range": [
         0.0,

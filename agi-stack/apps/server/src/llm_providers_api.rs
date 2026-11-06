@@ -48,6 +48,7 @@ const PROVIDER_TYPES: &[&str] = &[
     "gemini",
     "anthropic",
     "groq",
+    "xai",
     "azure_openai",
     "cohere",
     "mistral",
@@ -1548,6 +1549,7 @@ fn provider_probe_default_base_url(provider_type: &str) -> Option<&'static str> 
         "zai" => Some("https://open.bigmodel.cn/api/paas/v4"),
         "kimi" => Some("https://api.moonshot.cn/v1"),
         "groq" => Some("https://api.groq.com/openai/v1"),
+        "xai" => Some("https://api.x.ai/v1"),
         "mistral" => Some("https://api.mistral.ai/v1"),
         "volcengine" => Some("https://ark.cn-beijing.volces.com/api/v3"),
         "cohere" => Some("https://api.cohere.com/v1"),
@@ -1593,7 +1595,19 @@ fn validate_persisted_provider_base_url(
     validate_provider_base_url_path(&provider_type, &url)
 }
 
+fn xai_us_regional_endpoint(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url
+            .host_str()
+            .is_some_and(|host| host.eq_ignore_ascii_case("us.api.x.ai"))
+        && url.port_or_known_default() == Some(443)
+        && normalized_provider_base_path(url.path()) == "/v1"
+}
+
 fn validate_provider_base_url_path(provider_type: &str, url: &Url) -> Result<(), &'static str> {
+    if provider_type == "xai" && xai_us_regional_endpoint(url) {
+        return Ok(());
+    }
     if let Some(default_url) = provider_probe_default_base_url(provider_type) {
         let default_url = validated_probe_base_url(default_url)?;
         if provider_url_has_same_origin(url, &default_url) {
@@ -1614,6 +1628,13 @@ fn validate_provider_base_url_path(provider_type: &str, url: &Url) -> Result<(),
 
 fn environment_credential_endpoint_is_official(provider_type: &str, raw_url: Option<&str>) -> bool {
     let provider_type = catalog_provider_key(provider_type);
+    if provider_type == "xai" {
+        if let Some(candidate) = raw_url.map(str::trim).filter(|value| !value.is_empty()) {
+            if validated_probe_base_url(candidate).is_ok_and(xai_us_regional_endpoint) {
+                return true;
+            }
+        }
+    }
     let Some(default_url) = provider_probe_default_base_url(&provider_type) else {
         return false;
     };
@@ -2708,7 +2729,8 @@ fn catalog_provider_key(provider_type: &str) -> String {
 fn static_provider_models_source(provider_type: &str) -> Option<&'static str> {
     match provider_type {
         "openai" | "openrouter" | "dashscope" | "zai" | "kimi" | "ollama" | "lmstudio"
-        | "gemini" | "anthropic" | "groq" | "deepseek" | "minimax" | "cohere" | "mistral"
+        | "gemini" | "anthropic" | "groq" | "xai" | "deepseek" | "minimax" | "cohere"
+        | "mistral"
         | "azure_openai" | "bedrock" | "vertex" | "volcengine" => Some("static-fallback"),
         _ => None,
     }
@@ -2798,6 +2820,19 @@ fn static_provider_models(provider_type: &str) -> CategorizedProviderModels {
                 "claude-haiku-5-5",
                 "claude-fable-5-1",
                 "claude-haiku-4-5",
+            ]),
+            embedding: Vec::new(),
+            rerank: Vec::new(),
+            vision: None,
+        },
+        "xai" => CategorizedProviderModels {
+            chat: vecs(&[
+                "grok-4.7",
+                "grok-4.6",
+                "grok-4.20-0309-non-reasoning",
+                "grok-4.20-0309-reasoning",
+                "grok-build-0.1",
+                "grok-imagine-image-2.0",
             ]),
             embedding: Vec::new(),
             rerank: Vec::new(),
@@ -2935,6 +2970,7 @@ const ENV_PROVIDER_AUTO_DETECT: &[(&str, &str)] = &[
     ("ZHIPU_API_KEY", "zai"),
     ("MOONSHOT_API_KEY", "kimi"),
     ("KIMI_API_KEY", "kimi"),
+    ("XAI_API_KEY", "xai"),
     ("ANTHROPIC_API_KEY", "anthropic"),
     ("OLLAMA_BASE_URL", "ollama"),
     ("LMSTUDIO_BASE_URL", "lmstudio"),
@@ -3811,6 +3847,20 @@ where
             embedding_model: env_default(lookup, "KIMI_EMBEDDING_MODEL", "kimi-embedding-1"),
             reranker_model: env_raw(lookup, "KIMI_RERANK_MODEL"),
         },
+        "xai" => EnvProviderConfig {
+            provider_type: provider_name.to_string(),
+            operation_type: "llm".to_string(),
+            api_key: env_nonempty(lookup, "XAI_API_KEY"),
+            base_url: env_default(lookup, "XAI_BASE_URL", "https://api.x.ai/v1"),
+            llm_model: env_default(lookup, "XAI_MODEL", "grok-4.7"),
+            llm_small_model: env_default(
+                lookup,
+                "XAI_SMALL_MODEL",
+                "grok-4.20-0309-non-reasoning",
+            ),
+            embedding_model: None,
+            reranker_model: env_raw(lookup, "XAI_RERANK_MODEL"),
+        },
         "anthropic" => EnvProviderConfig {
             provider_type: provider_name.to_string(),
             operation_type: "llm".to_string(),
@@ -3884,6 +3934,7 @@ fn provider_environment_variables(provider_name: &str) -> &'static [&'static str
         ],
         "anthropic" => &["ANTHROPIC_API_KEY"],
         "groq" => &["GROQ_API_KEY"],
+        "xai" => &["XAI_API_KEY"],
         "mistral" => &["MISTRAL_API_KEY"],
         "deepseek" => &["DEEPSEEK_API_KEY"],
         "minimax" => &["MINIMAX_API_KEY"],
@@ -5446,7 +5497,7 @@ mod tests {
     fn model_catalog_embedded_snapshot_loads_in_python_order() {
         let catalog = ModelCatalog::load_embedded();
         // Reproduce against the Python authority with scripts/generate_llm_catalog_golden.py.
-        assert_eq!(catalog.models.len(), 1054);
+        assert_eq!(catalog.models.len(), 1065);
         assert_eq!(catalog.models[0].name, "claude-fable-5");
     }
 

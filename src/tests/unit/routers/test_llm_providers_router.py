@@ -1201,6 +1201,7 @@ class TestLLMProvidersRouterTypes:
             ProviderType.GEMINI,
             ProviderType.ANTHROPIC,
             ProviderType.GROQ,
+            ProviderType.XAI,
             ProviderType.MISTRAL,
             ProviderType.DEEPSEEK,
             ProviderType.MINIMAX,

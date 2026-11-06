@@ -362,6 +362,7 @@ export type ProviderType =
   | 'gemini'
   | 'anthropic'
   | 'groq'
+  | 'xai'
   | 'azure_openai'
   | 'cohere'
   | 'mistral'

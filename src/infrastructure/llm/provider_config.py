@@ -48,6 +48,7 @@ class ProviderPrefix(StrEnum):
     KIMI = "openai"  # Kimi uses OpenAI-compatible API
     MISTRAL = "mistral"
     GROQ = "groq"
+    XAI = "xai"
     COHERE = "cohere"
 
     # Cloud providers
@@ -75,6 +76,7 @@ MODEL_PREFIX_TO_PROVIDER: dict[str, ProviderType] = {
     "minimax-": ProviderType.MINIMAX,
     "abab": ProviderType.MINIMAX,
     "glm-": ProviderType.ZAI,
+    "grok-": ProviderType.XAI,
     "claude-": ProviderType.ANTHROPIC,
     "mistral-": ProviderType.MISTRAL,
     "codestral-": ProviderType.MISTRAL,
@@ -153,6 +155,11 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "embedding": "text-embedding-3-small",  # Uses OpenAI
         "rerank": "llama-3.1-8b-instant",
     },
+    ProviderType.XAI: {
+        "completion": "grok-4.20-0309-non-reasoning",
+        "completion_medium": "grok-4.7",
+        "rerank": "grok-4.20-0309-non-reasoning",
+    },
     ProviderType.COHERE: {
         "completion": "command-a-03-2025",
         "completion_medium": "command-a-plus-05-2026",
@@ -220,6 +227,7 @@ def get_provider_prefix(provider_type: ProviderType) -> ProviderPrefix:
         ProviderType.KIMI: ProviderPrefix.KIMI,
         ProviderType.MISTRAL: ProviderPrefix.MISTRAL,
         ProviderType.GROQ: ProviderPrefix.GROQ,
+        ProviderType.XAI: ProviderPrefix.XAI,
         ProviderType.COHERE: ProviderPrefix.COHERE,
         ProviderType.BEDROCK: ProviderPrefix.BEDROCK,
         ProviderType.VERTEX: ProviderPrefix.VERTEX_AI,
@@ -358,6 +366,7 @@ class UnifiedLLMConfig:
             ProviderType.OPENROUTER,
             ProviderType.MISTRAL,
             ProviderType.GROQ,
+            ProviderType.XAI,
             ProviderType.DEEPSEEK,
             ProviderType.MINIMAX,
             ProviderType.ZAI,

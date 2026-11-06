@@ -13,6 +13,41 @@ from src.domain.llm_providers.security_policy import (
 pytestmark = pytest.mark.unit
 
 
+class TestXaiOfficialEndpoints:
+    def test_global_v1_endpoint_is_accepted(self):
+        assert (
+            validate_provider_base_url("https://api.x.ai/v1", ProviderType.XAI)
+            == "https://api.x.ai/v1"
+        )
+
+    def test_us_regional_endpoint_is_official(self):
+        assert (
+            validate_provider_base_url("https://us.api.x.ai/v1", ProviderType.XAI)
+            == "https://us.api.x.ai/v1"
+        )
+        assert environment_credential_endpoint_is_official(
+            ProviderType.XAI, "https://us.api.x.ai/v1"
+        )
+        assert environment_credential_endpoint_is_official(ProviderType.XAI, "https://api.x.ai/v1")
+
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "https://api.x.ai/v1/secret",
+            "https://api.x.ai",
+            "http://api.x.ai/v1",
+        ],
+    )
+    def test_xai_fail_closed_rejections(self, base_url):
+        with pytest.raises(ValueError, match="allowed API base path|HTTPS is required"):
+            validate_provider_base_url(base_url, ProviderType.XAI)
+
+    def test_lookalike_host_is_not_an_official_credential_endpoint(self):
+        assert not environment_credential_endpoint_is_official(
+            ProviderType.XAI, "https://api.x.ai.evil.com/v1"
+        )
+
+
 class TestKimiOfficialEndpoints:
     def test_kimi_coding_subscription_endpoint_is_accepted(self):
         assert (

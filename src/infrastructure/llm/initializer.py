@@ -30,6 +30,8 @@ PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
     "zhipu": ProviderType.ZAI,  # Alias for zai
     "kimi": ProviderType.KIMI,  # Moonshot AI (Kimi)
     "moonshot": ProviderType.KIMI,  # Alias for kimi
+    "xai": ProviderType.XAI,
+    "grok": ProviderType.XAI,
     "anthropic": ProviderType.ANTHROPIC,  # Anthropic (Claude)
     "claude": ProviderType.ANTHROPIC,  # Alias for anthropic
     "ollama": ProviderType.OLLAMA,  # Local Ollama
@@ -54,6 +56,7 @@ _PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
     ("ZHIPU_API_KEY", "zai"),
     ("MOONSHOT_API_KEY", "kimi"),
     ("KIMI_API_KEY", "kimi"),
+    ("XAI_API_KEY", "xai"),
     ("ANTHROPIC_API_KEY", "anthropic"),
     ("OLLAMA_BASE_URL", "ollama"),
     ("LMSTUDIO_BASE_URL", "lmstudio"),
@@ -342,6 +345,16 @@ def _env_lmstudio() -> dict[str, Any]:
     }
 
 
+def _env_xai() -> dict[str, Any]:
+    return {
+        "api_key": os.getenv("XAI_API_KEY"),
+        "llm_model": os.getenv("XAI_MODEL", "grok-4.7"),
+        "llm_small_model": os.getenv("XAI_SMALL_MODEL", "grok-4.20-0309-non-reasoning"),
+        "reranker_model": os.getenv("XAI_RERANK_MODEL"),
+        "base_url": os.getenv("XAI_BASE_URL", "https://api.x.ai/v1"),
+    }
+
+
 def _env_volcengine() -> dict[str, Any]:
     return {
         "api_key": os.getenv("VOLCENGINE_API_KEY") or os.getenv("ARK_API_KEY"),
@@ -365,6 +378,8 @@ _PROVIDER_ENV_REGISTRY: dict[str, Any] = {
     "minimax": _env_minimax,
     "kimi": _env_kimi,
     "moonshot": _env_kimi,
+    "xai": _env_xai,
+    "grok": _env_xai,
     "anthropic": _env_anthropic,
     "claude": _env_anthropic,
     "ollama": _env_ollama,

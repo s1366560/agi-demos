@@ -92,6 +92,22 @@ def test_build_provider_configs_supports_models_dev_env_aliases(monkeypatch):
 
 
 @pytest.mark.unit
+def test_build_provider_configs_supports_xai_bootstrap(monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    monkeypatch.delenv("XAI_BASE_URL", raising=False)
+    monkeypatch.delenv("XAI_MODEL", raising=False)
+    monkeypatch.delenv("XAI_SMALL_MODEL", raising=False)
+
+    configs = initializer._build_provider_configs("xai")
+
+    assert len(configs) == 1
+    assert configs[0].provider_type == ProviderType.XAI
+    assert configs[0].llm_model == "grok-4.7"
+    assert configs[0].llm_small_model == "grok-4.20-0309-non-reasoning"
+    assert configs[0].base_url == "https://api.x.ai/v1"
+
+
+@pytest.mark.unit
 async def test_initialize_defaults_falls_back_to_ollama_for_unknown_provider(monkeypatch):
     captured_config = {}
 
