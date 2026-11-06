@@ -8,7 +8,7 @@ use std::{
     path::{Path as FsPath, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
     },
 };
 
@@ -4645,37 +4645,43 @@ async fn list_llm_provider_types() -> Json<Vec<LlmProviderTypeDescriptor>> {
     Json(LOCAL_LLM_PROVIDER_TYPES.to_vec())
 }
 
+fn static_local_roster(provider_type: &str) -> LocalLlmProviderModels {
+    const ROSTER_JSON: &str =
+        include_str!("../../../../../../src/infrastructure/llm/static_provider_models.json");
+    static ROSTER: OnceLock<serde_json::Map<String, Value>> = OnceLock::new();
+    let roster = ROSTER.get_or_init(|| {
+        serde_json::from_str(ROSTER_JSON).expect("static provider model roster must parse")
+    });
+    let Some(entry) = roster.get(provider_type).and_then(Value::as_object) else {
+        return LocalLlmProviderModels::default();
+    };
+    LocalLlmProviderModels {
+        chat: string_list(entry.get("chat")),
+        embedding: string_list(entry.get("embedding")),
+        rerank: string_list(entry.get("rerank")),
+    }
+}
+
+fn string_list(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 async fn list_llm_provider_models(
     Path(provider_type): Path<String>,
 ) -> Result<Json<LocalLlmProviderModelsResponse>, (StatusCode, Json<Value>)> {
     let provider_type = provider_type.trim().to_lowercase();
     let (models, source) = match provider_type.as_str() {
-        "openai" => (
-            LocalLlmProviderModels {
-                chat: local_model_ids(&[
-                    "gpt-6-astra",
-                    "gpt-6.1-sol",
-                    "gpt-6-luna",
-                    "gpt-4o",
-                    "gpt-4o-mini",
-                ]),
-                embedding: local_model_ids(&["text-embedding-3-small", "text-embedding-3-large"]),
-                rerank: Vec::new(),
-            },
-            Some("static-fallback"),
-        ),
-        "anthropic" => (
-            LocalLlmProviderModels {
-                chat: local_model_ids(&[
-                    "claude-opus-5-5",
-                    "claude-sonnet-5-5",
-                    "claude-haiku-5-5",
-                    "claude-fable-5-1",
-                    "claude-haiku-4-5",
-                ]),
-                embedding: Vec::new(),
-                rerank: Vec::new(),
-            },
+        "openai" | "anthropic" => (
+            static_local_roster(provider_type.as_str()),
             Some("static-fallback"),
         ),
         "openai_compatible" => (LocalLlmProviderModels::default(), None),
@@ -4691,10 +4697,6 @@ async fn list_llm_provider_models(
         models,
         source,
     }))
-}
-
-fn local_model_ids(values: &[&str]) -> Vec<String> {
-    values.iter().map(|value| (*value).to_string()).collect()
 }
 
 async fn list_llm_providers(

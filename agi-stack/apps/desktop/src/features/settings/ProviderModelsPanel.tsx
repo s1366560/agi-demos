@@ -17,12 +17,14 @@ import type {
   RuntimeMode,
 } from '../../types';
 import {
+  modelProfileFacts,
   providerEnabledModelIds,
   providerAudioInputDeclarationSupported,
   providerModelCanBeDisabled,
   providerMutationForEnabledModels,
 } from './providerManagementModel';
 import { ProviderEmbeddingDeclarationField } from './ProviderEmbeddingDeclarationField';
+import { boundaryForCapability } from './modelRoleFit';
 
 type ProviderModelsPanelProps = {
   provider: ManagedLlmProvider;
@@ -41,6 +43,7 @@ type VisibleModel = {
   id: string;
   capability: 'chat' | 'embedding' | 'rerank';
   source: 'catalog' | 'staticFallback' | 'configured';
+  profile?: LlmProviderModelCatalog['models'][number]['profile'];
 };
 
 export function ProviderModelsPanel({
@@ -260,6 +263,24 @@ export function ProviderModelsPanel({
         )}
       </header>
 
+      <div className="provider-role-guide">
+        {(['primary', 'fast', 'embedding', 'rerank', 'voice'] as const).map((role) => (
+          <p key={role}>
+            <b>{t(`providers.role.${role}`)}</b>
+            <span>{t(`providers.rolePurpose.${role}`)}</span>
+          </p>
+        ))}
+      </div>
+
+      {models.some(
+        (model) => model.id === provider.llm_model && model.capability !== 'chat'
+      ) ? (
+        <div className="provider-inline-error" role="status">
+          <ExclamationTriangleIcon />
+          <span>{t('providers.roleReason.not_a_chat_model')}</span>
+        </div>
+      ) : null}
+
       {allowEmbeddingDeclaration ? (
         <ProviderEmbeddingDeclarationField
           value={embeddingModel}
@@ -323,6 +344,16 @@ export function ProviderModelsPanel({
                       ? t('providers.currentDefault')
                       : t('providers.exactModelId')}
                   </small>
+                  <small>
+                    {t(`providers.roleReason.${
+                      boundaryForCapability(
+                        model.capability,
+                        audioInputModels.has(model.id),
+                        canDeclareAudioInput
+                      ).reason
+                    }`)}
+                  </small>
+                  <ModelProfileLine profile={model.profile} />
                 </span>
               </div>
               <div className="provider-capabilities">
@@ -433,5 +464,30 @@ export function ProviderModelsPanel({
         </label>
       </div>
     </section>
+  );
+}
+
+function ModelProfileLine({ profile }: { profile: VisibleModel['profile'] }) {
+  const { t } = useI18n();
+  const facts = modelProfileFacts(profile);
+  if (!facts) return null;
+  const input = facts.inputCost == null ? '?' : `$${String(facts.inputCost)}`;
+  const output = facts.outputCost == null ? '?' : `$${String(facts.outputCost)}`;
+  const price =
+    facts.inputCost == null && facts.outputCost == null
+      ? t('providers.profile.priceUnknown')
+      : t('providers.profile.price', { input, output });
+  return (
+    <small className="provider-model-limits">
+      {facts.deprecated ? <b>{t('providers.profile.deprecated')}</b> : null}
+      {facts.context ? <span>{t('providers.profile.context', { value: facts.context })}</span> : null}
+      {facts.maxOutput ? (
+        <span>{t('providers.profile.maxOutput', { value: facts.maxOutput })}</span>
+      ) : null}
+      <span>{price}</span>
+      {facts.flags.map((flag) => (
+        <span key={flag}>{t(`providers.profile.flag.${flag}`)}</span>
+      ))}
+    </small>
   );
 }

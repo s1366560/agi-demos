@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -38,6 +38,13 @@ import {
   ProviderUpdate,
 } from '../../types/memory';
 
+import { ModelCapabilityCard } from './ModelCapabilityCard';
+import {
+  assessModelRole,
+  preferredListedModel,
+  providerAllowsAudioDeclaration,
+  roleForOperation,
+} from './modelRoleFit';
 import {
   buildProviderAuthPayload,
   getDefaultProviderAuthMethod,
@@ -142,25 +149,23 @@ const operationForProviderType = (pt: ProviderType): ProviderOperationType => {
   return 'llm';
 };
 
-const resolvePrimaryLlmModel = (models?: ProviderModels | null): string =>
-  models?.chat[0] || models?.embedding[0] || models?.rerank[0] || '';
+const resolvePrimaryLlmModel = (
+  models?: ProviderModels | null,
+  preferred?: string | null
+): string => {
+  const chatModels = models?.chat ?? [];
+  if (preferred && chatModels.includes(preferred)) return preferred;
+  return chatModels[0] || '';
+};
 
 const getLlmCandidates = (models?: ProviderModels | null): string[] =>
   models?.chat.length ? models.chat : [...(models?.embedding || []), ...(models?.rerank || [])];
 
-const resolveSmallLlmModel = (models?: ProviderModels | null, primaryModel = ''): string => {
-  const chatModels = getLlmCandidates(models);
-  const keywords = ['mini', 'small', 'flash', 'haiku', 'turbo', 'nano', 'lite'];
-  const keywordMatch = chatModels.find(
-    (m) => m !== primaryModel && keywords.some((keyword) => m.toLowerCase().includes(keyword))
-  );
-  if (keywordMatch) return keywordMatch;
-
-  const fallbackChat = chatModels.find((m) => m !== primaryModel);
-  if (fallbackChat) return fallbackChat;
-
-  return primaryModel;
-};
+const resolveSmallLlmModel = (
+  models?: ProviderModels | null,
+  primaryModel = '',
+  preferred?: string | null
+): string => preferredListedModel(getLlmCandidates(models), preferred, primaryModel);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -188,21 +193,6 @@ const getProviderErrorMessage = (error: unknown, fallback: string): string => {
 
 const filterModelOption = (input: string, option?: { label?: string | undefined }): boolean =>
   (option?.label ?? '').toLowerCase().includes(input.toLowerCase());
-
-const formatCompactCount = (value: number): string => {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1000) return `${String(Math.round(value / 1000))}k`;
-  return String(value);
-};
-
-const formatModelCost = (
-  inputCost: number | null | undefined,
-  outputCost: number | null | undefined
-): string => {
-  if (inputCost == null) return 'N/A';
-  const output = outputCost == null ? '?' : `$${String(outputCost)}`;
-  return `$${String(inputCost)} / ${output}`;
-};
 
 const toNullableNumber = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -287,6 +277,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const isEditing = !!provider;
+  const roleDefaultsRef = useRef<Record<string, string | null>>({});
   const [currentStep, setCurrentStep] = useState<Step>('provider');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -425,6 +416,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     setIsLoadingModels(true);
     try {
       const response = await providerAPI.listModels(type);
+      try {
+        const guidance = await providerAPI.getModelGuidance(type);
+        roleDefaultsRef.current = Object.fromEntries(
+          guidance.roles.map((role) => [role.role, role.default_model])
+        );
+      } catch {
+        roleDefaultsRef.current = {};
+      }
       setAvailableModels(response.models);
 
       // If editing, don't auto-select defaults yet, we handle that in useEffect
@@ -572,11 +571,15 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       // Fetch models for default provider
       void fetchModels(defaultProvider).then((models) => {
         if (models) {
-          const primaryModel = resolvePrimaryLlmModel(models);
+          const primaryModel = resolvePrimaryLlmModel(models, roleDefaultsRef.current.primary);
           setFormData((prev) => ({
             ...prev,
             llm_model: defaultOperation === 'llm' ? primaryModel : '',
-            llm_small_model: resolveSmallLlmModel(models, primaryModel),
+            llm_small_model: resolveSmallLlmModel(
+              models,
+              primaryModel,
+              roleDefaultsRef.current.fast
+            ),
             embedding_model: models.embedding[0] ?? '',
             reranker_model: models.rerank[0] ?? '',
           }));
@@ -633,7 +636,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
     // Fetch models first
     const models = await fetchModels(type);
-    const primaryModel = resolvePrimaryLlmModel(models);
+    const primaryModel = resolvePrimaryLlmModel(models, roleDefaultsRef.current.primary);
     const authMethods = getProviderAuthMethods(providerCapabilities, type);
     const envValues = envProviders[type];
     const environmentVariable = getDetectedEnvironmentVariable(envValues, authMethods);
@@ -652,7 +655,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         use_custom_base_url: false,
         name: providerMeta?.label ?? prev.name,
         llm_model: nextOperation === 'llm' ? primaryModel : '',
-        llm_small_model: resolveSmallLlmModel(models, primaryModel),
+        llm_small_model: resolveSmallLlmModel(models, primaryModel, roleDefaultsRef.current.fast),
         embedding_model: models?.embedding[0] ?? '',
         embedding_dimensions: '1536', // Default, user can change
         embedding_provider_options: {},
@@ -743,10 +746,47 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         return !!formData.provider_type;
       case 'credentials':
         return !!formData.name && credentialReady;
-      case 'models':
-        if (formData.operation_type === 'embedding') return !!formData.embedding_model;
-        if (formData.operation_type === 'rerank') return !!formData.reranker_model;
-        return !!formData.llm_model;
+      case 'models': {
+        const activeRole = roleForOperation(formData.operation_type);
+        const activeModel =
+          activeRole === 'embedding'
+            ? formData.embedding_model
+            : activeRole === 'rerank'
+              ? formData.reranker_model
+              : formData.llm_model;
+        if (!activeModel) return false;
+        const activeMeta = modelCatalog.find((entry) => entry.name === activeModel) ?? null;
+        if (
+          activeMeta &&
+          !assessModelRole(activeRole, {
+            capabilities: activeMeta.capabilities,
+            modalities: activeMeta.modalities,
+            known: true,
+            deprecated: activeMeta.is_deprecated,
+            providerType: formData.provider_type,
+            audioDeclarationAllowed: providerAllowsAudioDeclaration(formData.provider_type),
+          }).supported
+        ) {
+          return false;
+        }
+        if (activeRole === 'primary' && formData.llm_small_model) {
+          const smallMeta =
+            modelCatalog.find((entry) => entry.name === formData.llm_small_model) ?? null;
+          if (
+            smallMeta &&
+            !assessModelRole('fast', {
+              capabilities: smallMeta.capabilities,
+              modalities: smallMeta.modalities,
+              known: true,
+              deprecated: smallMeta.is_deprecated,
+              audioDeclarationAllowed: false,
+            }).supported
+          ) {
+            return false;
+          }
+        }
+        return true;
+      }
       case 'review':
         return true;
       default:
@@ -946,14 +986,17 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const showRerankerFields = formData.operation_type === 'rerank';
 
   const handleOperationSelect = (operation: ProviderOperationType) => {
-    const primaryModel = formData.llm_model || resolvePrimaryLlmModel(availableModels);
+    const primaryModel =
+      formData.llm_model ||
+      resolvePrimaryLlmModel(availableModels, roleDefaultsRef.current.primary);
     setFormData({
       ...formData,
       operation_type: operation,
       llm_model: operation === 'llm' ? primaryModel : '',
       llm_small_model:
         operation === 'llm'
-          ? formData.llm_small_model || resolveSmallLlmModel(availableModels, primaryModel)
+          ? formData.llm_small_model ||
+            resolveSmallLlmModel(availableModels, primaryModel, roleDefaultsRef.current.fast)
           : '',
       embedding_model:
         operation === 'embedding'
@@ -1166,6 +1209,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     defaultValue: 'My OpenAI Provider',
                   })}
                 />
+                <p className="mt-1 text-xs text-slate-500">
+                  {t('components.provider.config.connectionTestHelp', {
+                    defaultValue:
+                      'Test checks the credential, endpoint, and whether model discovery responds. You can continue after a failed discovery and enter an exact model ID.',
+                  })}
+                </p>
               </div>
 
               <div>
@@ -1470,6 +1519,21 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         {/* Step 3: Models */}
         {currentStep === 'models' && (
           <div className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(['primary', 'fast', 'embedding', 'rerank', 'voice'] as const).map((role) => (
+                <div
+                  key={role}
+                  className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                >
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                    {t(`components.provider.config.roles.${role}.name`)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {t(`components.provider.config.roles.${role}.purpose`)}
+                  </p>
+                </div>
+              ))}
+            </div>
             {isLoadingModels && (
               <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
                 <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
@@ -1538,7 +1602,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         type="button"
                         onClick={() => {
                           setUseCustomModel({ ...useCustomModel, llm: false });
-                          const primaryModel = resolvePrimaryLlmModel(availableModels);
+                          const primaryModel = resolvePrimaryLlmModel(
+                            availableModels,
+                            roleDefaultsRef.current.primary
+                          );
                           setFormData({
                             ...formData,
                             llm_model: primaryModel,
@@ -1582,96 +1649,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     />
                   )}
                 </div>
-
-                {/* Model Info Card */}
-                {selectedModelMeta && (
-                  <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                        {t('components.provider.config.modelInfo', {
-                          defaultValue: 'Model Info',
-                        })}
-                      </span>
-                      {selectedModelMeta.is_deprecated && (
-                        <span className="px-1.5 py-0.5 text-2xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">
-                          {t('components.provider.config.deprecated', {
-                            defaultValue: 'Deprecated',
-                          })}
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <span className="text-content-tertiary">
-                          {t('components.provider.config.context', { defaultValue: 'Context' })}
-                        </span>
-                        <div className="font-medium text-slate-700 dark:text-slate-300">
-                          {formatCompactCount(selectedModelMeta.context_length)}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-content-tertiary">
-                          {t('components.provider.config.maxOutput', {
-                            defaultValue: 'Max Output',
-                          })}
-                        </span>
-                        <div className="font-medium text-slate-700 dark:text-slate-300">
-                          {formatCompactCount(selectedModelMeta.max_output_tokens)}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-content-tertiary">
-                          {t('components.provider.config.costPerMillion', {
-                            defaultValue: 'Cost ($/1M)',
-                          })}
-                        </span>
-                        <div className="font-medium text-slate-700 dark:text-slate-300">
-                          {formatModelCost(
-                            selectedModelMeta.input_cost_per_1m,
-                            selectedModelMeta.output_cost_per_1m
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedModelMeta.reasoning && (
-                        <span className="px-1.5 py-0.5 text-2xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded">
-                          Reasoning
-                        </span>
-                      )}
-                      {selectedModelMeta.supports_tool_call && (
-                        <span className="px-1.5 py-0.5 text-2xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded">
-                          Tools
-                        </span>
-                      )}
-                      {selectedModelMeta.capabilities.includes('vision') && (
-                        <span className="px-1.5 py-0.5 text-2xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">
-                          Vision
-                        </span>
-                      )}
-                      {selectedModelMeta.supports_structured_output && (
-                        <span className="px-1.5 py-0.5 text-2xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded">
-                          Structured
-                        </span>
-                      )}
-                      {selectedModelMeta.supports_temperature && (
-                        <span className="px-1.5 py-0.5 text-2xs font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 rounded">
-                          Temperature
-                        </span>
-                      )}
-                      {selectedModelMeta.open_weights && (
-                        <span className="px-1.5 py-0.5 text-2xs font-medium bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-300 rounded">
-                          Open
-                        </span>
-                      )}
-                    </div>
-                    {selectedModelMeta.knowledge_cutoff && (
-                      <div className="text-2xs text-content-tertiary">
-                        Knowledge cutoff: {selectedModelMeta.knowledge_cutoff}
-                      </div>
-                    )}
-                  </div>
-                )}
               </>
             )}
 
@@ -1701,10 +1678,15 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       onClick={() => {
                         setUseCustomModel({ ...useCustomModel, small: false });
                         const primaryModel =
-                          formData.llm_model || resolvePrimaryLlmModel(availableModels);
+                          formData.llm_model ||
+                          resolvePrimaryLlmModel(availableModels, roleDefaultsRef.current.primary);
                         setFormData({
                           ...formData,
-                          llm_small_model: resolveSmallLlmModel(availableModels, primaryModel),
+                          llm_small_model: resolveSmallLlmModel(
+                            availableModels,
+                            primaryModel,
+                            roleDefaultsRef.current.fast
+                          ),
                         });
                       }}
                       className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
@@ -1738,6 +1720,47 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 )}
               </div>
             )}
+
+            {showLlmFields && formData.llm_model ? (
+              <ModelCapabilityCard
+                model={selectedModelMeta}
+                modelId={formData.llm_model}
+                role="primary"
+                providerType={formData.provider_type}
+                t={t}
+              />
+            ) : null}
+            {showLlmFields && formData.llm_small_model ? (
+              <ModelCapabilityCard
+                model={
+                  modelCatalog.find((entry) => entry.name === formData.llm_small_model) ?? null
+                }
+                modelId={formData.llm_small_model}
+                role="fast"
+                providerType={formData.provider_type}
+                t={t}
+              />
+            ) : null}
+            {showEmbeddingFields && formData.embedding_model ? (
+              <ModelCapabilityCard
+                model={
+                  modelCatalog.find((entry) => entry.name === formData.embedding_model) ?? null
+                }
+                modelId={formData.embedding_model}
+                role="embedding"
+                providerType={formData.provider_type}
+                t={t}
+              />
+            ) : null}
+            {showRerankerFields && formData.reranker_model ? (
+              <ModelCapabilityCard
+                model={modelCatalog.find((entry) => entry.name === formData.reranker_model) ?? null}
+                modelId={formData.reranker_model}
+                role="rerank"
+                providerType={formData.provider_type}
+                t={t}
+              />
+            ) : null}
 
             {/* Advanced LLM Settings */}
             {showLlmFields && (

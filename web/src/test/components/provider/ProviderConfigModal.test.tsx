@@ -19,6 +19,7 @@ vi.mock('../../../stores/provider', () => ({
 vi.mock('../../../services/api', () => ({
   providerAPI: {
     listModels: vi.fn(),
+    getModelGuidance: vi.fn(),
     listTypes: vi.fn(),
     detectEnvKeys: vi.fn(),
     testConnection: vi.fn(),
@@ -86,6 +87,26 @@ describe('ProviderConfigModal', () => {
     vi.clearAllMocks();
     providerStore.fetchModelCatalog.mockResolvedValue(undefined);
     vi.mocked(providerAPI.listTypes).mockResolvedValue(providerTypes);
+    vi.mocked(providerAPI.getModelGuidance).mockResolvedValue({
+      provider_type: 'openai',
+      roles: [
+        {
+          role: 'primary',
+          purpose_code: 'primary_chat',
+          default_model: 'gpt-4o',
+          available: true,
+          reason: 'ok',
+        },
+        {
+          role: 'fast',
+          purpose_code: 'fast_chat',
+          default_model: null,
+          available: true,
+          reason: 'ok',
+        },
+      ],
+      profiles: [],
+    });
     vi.mocked(providerAPI.detectEnvKeys).mockResolvedValue({ detected_providers: {} });
     vi.mocked(providerAPI.listModels).mockImplementation(async (providerType) => {
       if (providerType === 'deepseek') {

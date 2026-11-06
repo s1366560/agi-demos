@@ -380,32 +380,11 @@ def provider_revision(updated_at: datetime) -> int:
     return (delta.days * 86_400 + delta.seconds) * 1_000_000 + delta.microseconds
 
 
-_PROVIDER_ENVIRONMENT_VARIABLES: dict[str, tuple[str, ...]] = {
-    "openai": ("OPENAI_API_KEY",),
-    "openrouter": ("OPENROUTER_API_KEY",),
-    "dashscope": ("DASHSCOPE_API_KEY",),
-    "gemini": ("GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY"),
-    "anthropic": ("ANTHROPIC_API_KEY",),
-    "groq": ("GROQ_API_KEY",),
-    "xai": ("XAI_API_KEY",),
-    "mistral": ("MISTRAL_API_KEY",),
-    "deepseek": ("DEEPSEEK_API_KEY",),
-    "minimax": ("MINIMAX_API_KEY",),
-    "zai": ("ZAI_API_KEY", "ZHIPU_API_KEY"),
-    "kimi": ("MOONSHOT_API_KEY", "KIMI_API_KEY"),
-    "volcengine": ("VOLCENGINE_API_KEY", "ARK_API_KEY"),
-}
-_PROVIDER_VARIANT_SUFFIXES: tuple[str, ...] = ("_coding", "_embedding", "_reranker")
-
-
 def provider_environment_variables(provider_type: ProviderType) -> tuple[str, ...]:
     """Return the server-side credential variable names allowed for a provider type."""
-    provider_family = provider_type.value
-    for suffix in _PROVIDER_VARIANT_SUFFIXES:
-        if provider_family.endswith(suffix):
-            provider_family = provider_family[: -len(suffix)]
-            break
-    return _PROVIDER_ENVIRONMENT_VARIABLES.get(provider_family, ())
+    from src.domain.llm_providers.provider_catalog import api_key_env_vars
+
+    return api_key_env_vars(provider_type)
 
 
 class ProviderTypeDescriptor(BaseModel):

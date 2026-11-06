@@ -1,6 +1,7 @@
 import type {
   LlmProviderAuthMethod,
   LlmProviderCatalogModel,
+  LlmProviderModelProfile,
   LlmProviderCreateInput,
   LlmProviderMutationInput,
   LlmProviderProbeInput,
@@ -364,6 +365,40 @@ export function filterProviders(
       providerConnectionStatus(provider, descriptor?.probeSupported !== false) === filter;
     return matchesQuery && matchesFilter;
   });
+}
+
+export function compactTokenCount(value: number | null): string | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  if (value >= 1_000_000) {
+    const millions = (value / 1_000_000).toFixed(1).replace(/\.0$/, '');
+    return `${millions}M`;
+  }
+  if (value >= 1_000) return `${String(Math.round(value / 1_000))}K`;
+  return String(value);
+}
+
+export function modelProfileFacts(profile: LlmProviderModelProfile | undefined): {
+  context: string | null;
+  maxOutput: string | null;
+  inputCost: number | null;
+  outputCost: number | null;
+  flags: Array<'vision' | 'tools' | 'reasoning' | 'audio'>;
+  deprecated: boolean;
+} | null {
+  if (!profile) return null;
+  const flags: Array<'vision' | 'tools' | 'reasoning' | 'audio'> = [];
+  if (profile.vision) flags.push('vision');
+  if (profile.tools) flags.push('tools');
+  if (profile.reasoning) flags.push('reasoning');
+  if (profile.audioInput) flags.push('audio');
+  return {
+    context: compactTokenCount(profile.contextWindow),
+    maxOutput: compactTokenCount(profile.maxOutputTokens),
+    inputCost: profile.inputCostPer1m,
+    outputCost: profile.outputCostPer1m,
+    flags,
+    deprecated: profile.deprecated,
+  };
 }
 
 export function providerModelsFromProvider(

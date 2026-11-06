@@ -1434,6 +1434,38 @@ class TestLLMProvidersRouterTypes:
         data = response.json()
         assert data["models"] == {"chat": [], "embedding": [], "rerank": []}
 
+    @pytest.mark.asyncio
+    async def test_model_guidance_explains_missing_embedding(self, llm_client):
+        """Guidance tells the UI when a provider cannot fill a role."""
+        response = llm_client.get("/api/v1/llm-providers/models/anthropic/guidance")
+
+        assert response.status_code == status.HTTP_200_OK
+        roles = {item["role"]: item for item in response.json()["roles"]}
+        assert roles["primary"]["default_model"] == "claude-opus-5-5"
+        assert roles["embedding"]["reason"] == "provider_has_no_embedding_models"
+        assert roles["voice"]["reason"] == "audio_input_not_declared"
+
+    @pytest.mark.asyncio
+    async def test_list_models_includes_optional_snapshot_profiles(self, llm_client):
+        """Profiles are additive and carry the same limits as the snapshot."""
+        response = llm_client.get("/api/v1/llm-providers/models/anthropic")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        profile = next(item for item in data["profiles"] if item["id"] == "claude-opus-5-5")
+        assert profile["context_window"] == 1_000_000
+        assert profile["max_output_tokens"] == 128_000
+        assert profile["vision"] is True
+        assert profile["tools"] is True
+        assert profile["reasoning"] is True
+        assert profile["audio_input"] is False
+        assert profile["deprecated"] is False
+        assert profile["input_cost_per_1m"] == 4.0
+        assert profile["output_cost_per_1m"] == 20.0
+
+        unknown = llm_client.get("/api/v1/llm-providers/models/unknown_provider")
+        assert "profiles" not in unknown.json()
+
 
 @pytest.mark.unit
 class TestLLMProvidersRouterUsage:

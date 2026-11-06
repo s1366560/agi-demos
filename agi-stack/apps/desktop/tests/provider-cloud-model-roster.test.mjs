@@ -8,12 +8,16 @@ import { createTenantProvidersHttpClientV2Fixture } from './tenantProvidersOpera
 const require = createRequire(import.meta.url);
 const dist = '/tmp/agistack-desktop-test-dist/src';
 const {
+  modelProfileFacts,
   providerDraftFromProvider,
   providerEnabledModelIds,
   providerMutationForEnabledModels,
   providerMutationForActiveState,
   providerMutationFromDraft,
 } = require(`${dist}/features/settings/providerManagementModel.js`);
+const { normalizeProviderCatalogV2 } = require(
+  `${dist}/plugins/desktopTenantProvidersResponseContractV2.js`
+);
 const { normalizeManagedLlmProviderV2 } = require(
   `${dist}/plugins/desktopTenantProvidersResponseContractV2.js`
 );
@@ -49,6 +53,66 @@ const json = (body) =>
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
+
+test('cloud model roster keeps snapshot profiles on the matching model id', () => {
+  const catalog = normalizeProviderCatalogV2(
+    {
+      provider_type: 'anthropic',
+      source: 'models.dev',
+      models: { chat: ['claude-opus-5-5'], embedding: [], rerank: [] },
+      profiles: [
+        {
+          id: 'claude-opus-5-5',
+          known: true,
+          context_window: 1_000_000,
+          max_output_tokens: 128_000,
+          vision: true,
+          tools: true,
+          reasoning: true,
+          audio_input: false,
+          deprecated: false,
+          input_cost_per_1m: 4,
+          output_cost_per_1m: 20,
+        },
+      ],
+    },
+    'anthropic'
+  );
+  assert.equal(catalog.models[0].profile.contextWindow, 1_000_000);
+  assert.equal(catalog.models[0].profile.maxOutputTokens, 128_000);
+  assert.deepEqual(modelProfileFacts(catalog.models[0].profile), {
+    context: '1M',
+    maxOutput: '128K',
+    inputCost: 4,
+    outputCost: 20,
+    flags: ['vision', 'tools', 'reasoning'],
+    deprecated: false,
+  });
+  const html = renderToStaticMarkup(
+    React.createElement(
+      I18nProvider,
+      { initialLocale: 'en' },
+      React.createElement(ProviderModelsPanel, {
+        provider: {
+          id: 'provider-1',
+          name: 'Anthropic',
+          provider_type: 'anthropic',
+          llm_model: 'claude-opus-5-5',
+          allowed_models: ['claude-opus-5-5'],
+          revision: 1,
+        },
+        mode: 'cloud',
+        canManage: false,
+        onLoadCatalog: async () => catalog,
+        onSave: async () => {
+          throw new Error('unused');
+        },
+      })
+    )
+  );
+  // The catalog load is asynchronous; the configured row still explains the chat role.
+  assert.match(html, /claude-opus-5-5/);
+});
 
 test('real Python cloud response preserves small/secondary declarations and distinguishes prefix filters', () => {
   const provider = normalizeManagedLlmProviderV2(fixture.response);

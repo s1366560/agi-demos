@@ -1204,6 +1204,24 @@ struct ProviderModelsResponse {
     models: CategorizedProviderModels,
     #[serde(skip_serializing_if = "Option::is_none")]
     source: Option<&'static str>,
+    /// Snapshot limits for returned model IDs. Omitted when none are known.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    profiles: Vec<ModelListProfile>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ModelListProfile {
+    id: String,
+    known: bool,
+    context_window: u64,
+    max_output_tokens: u64,
+    vision: bool,
+    tools: bool,
+    reasoning: bool,
+    audio_input: bool,
+    deprecated: bool,
+    input_cost_per_1m: Option<f64>,
+    output_cost_per_1m: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -1630,7 +1648,9 @@ fn environment_credential_endpoint_is_official(provider_type: &str, raw_url: Opt
     let provider_type = catalog_provider_key(provider_type);
     if provider_type == "xai" {
         if let Some(candidate) = raw_url.map(str::trim).filter(|value| !value.is_empty()) {
-            if validated_probe_base_url(candidate).is_ok_and(xai_us_regional_endpoint) {
+            if validated_probe_base_url(candidate)
+                .is_ok_and(|url| xai_us_regional_endpoint(&url))
+            {
                 return true;
             }
         }
@@ -2691,18 +2711,54 @@ impl ModelCatalog {
             if categorized.vision.is_none() {
                 categorized.vision = static_models.vision;
             }
-            return ProviderModelsResponse {
-                provider_type: provider_type.to_string(),
-                models: categorized,
-                source: Some("models.dev"),
-            };
+            return self.models_response(provider_type, categorized, Some("models.dev"));
         }
 
+        let models = static_provider_models(provider_type);
+        let source = static_provider_models_source(provider_type);
+        self.models_response(provider_type, models, source)
+    }
+
+    fn models_response(
+        &self,
+        provider_type: &str,
+        models: CategorizedProviderModels,
+        source: Option<&'static str>,
+    ) -> ProviderModelsResponse {
+        let profiles = self.profiles_for(&models);
         ProviderModelsResponse {
             provider_type: provider_type.to_string(),
-            models: static_provider_models(provider_type),
-            source: static_provider_models_source(provider_type),
+            models,
+            source,
+            profiles,
         }
+    }
+
+    fn profiles_for(&self, models: &CategorizedProviderModels) -> Vec<ModelListProfile> {
+        let mut by_key: std::collections::HashMap<&str, &ModelMetadataView> =
+            std::collections::HashMap::new();
+        for model in &self.models {
+            by_key.insert(model.catalog_key.as_str(), model);
+        }
+        let mut profiles = Vec::new();
+        let mut seen = BTreeSet::new();
+        let vision = models.vision.iter().flatten();
+        for model_id in models
+            .chat
+            .iter()
+            .chain(models.embedding.iter())
+            .chain(models.rerank.iter())
+            .chain(vision)
+        {
+            if !seen.insert(model_id.clone()) {
+                continue;
+            }
+            let Some(metadata) = by_key.get(model_id.as_str()) else {
+                continue;
+            };
+            profiles.push(ModelListProfile::from_metadata(metadata));
+        }
+        profiles
     }
 }
 
@@ -2726,235 +2782,56 @@ fn catalog_provider_key(provider_type: &str) -> String {
     normalized
 }
 
+const STATIC_PROVIDER_MODELS_JSON: &str =
+    include_str!("../../../../src/infrastructure/llm/static_provider_models.json");
+
+#[derive(Debug, Deserialize)]
+struct StaticModelLists {
+    #[serde(default)]
+    chat: Vec<String>,
+    #[serde(default)]
+    embedding: Vec<String>,
+    #[serde(default)]
+    rerank: Vec<String>,
+    #[serde(default)]
+    vision: Option<Vec<String>>,
+}
+
+fn static_provider_model_table() -> &'static BTreeMap<String, CategorizedProviderModels> {
+    static TABLE: OnceLock<BTreeMap<String, CategorizedProviderModels>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let parsed: BTreeMap<String, StaticModelLists> =
+            serde_json::from_str(STATIC_PROVIDER_MODELS_JSON)
+                .expect("static provider model roster must parse");
+        parsed
+            .into_iter()
+            .map(|(provider, lists)| {
+                let vision = lists.vision.filter(|items| !items.is_empty());
+                (
+                    provider,
+                    CategorizedProviderModels {
+                        chat: lists.chat,
+                        embedding: lists.embedding,
+                        rerank: lists.rerank,
+                        vision,
+                    },
+                )
+            })
+            .collect()
+    })
+}
+
 fn static_provider_models_source(provider_type: &str) -> Option<&'static str> {
-    match provider_type {
-        "openai" | "openrouter" | "dashscope" | "zai" | "kimi" | "ollama" | "lmstudio"
-        | "gemini" | "anthropic" | "groq" | "xai" | "deepseek" | "minimax" | "cohere"
-        | "mistral"
-        | "azure_openai" | "bedrock" | "vertex" | "volcengine" => Some("static-fallback"),
-        _ => None,
-    }
+    static_provider_model_table()
+        .contains_key(provider_type)
+        .then_some("static-fallback")
 }
 
 fn static_provider_models(provider_type: &str) -> CategorizedProviderModels {
-    let mut models = match provider_type {
-        "openai" => CategorizedProviderModels {
-            chat: vecs(&[
-                "gpt-6-astra",
-                "gpt-6.1-sol",
-                "gpt-6-luna",
-                "gpt-4o",
-                "gpt-4o-mini",
-            ]),
-            embedding: vecs(&["text-embedding-3-small", "text-embedding-3-large"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "openrouter" => CategorizedProviderModels {
-            chat: vecs(&[
-                "openai/gpt-6-astra",
-                "openai/gpt-6-luna",
-                "anthropic/claude-opus-5.5",
-                "openai/gpt-4o",
-            ]),
-            embedding: vecs(&["openai/text-embedding-3-small"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "dashscope" => CategorizedProviderModels {
-            chat: vecs(&[
-                "qwen3.8-max",
-                "qwen3.8-flash",
-                "qwen-max",
-                "qwen-plus",
-                "qwen-turbo",
-            ]),
-            embedding: vecs(&["text-embedding-v3", "text-embedding-v2"]),
-            rerank: vecs(&["qwen3-rerank"]),
-            vision: None,
-        },
-        "zai" => CategorizedProviderModels {
-            chat: vecs(&["glm-5.3", "glm-5.3-flash", "glm-5.1", "glm-4.7-flash"]),
-            embedding: vecs(&["embedding-3", "embedding-2"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "kimi" => CategorizedProviderModels {
-            chat: vecs(&[
-                "kimi-k3.1-pro",
-                "kimi-k3.1-pro-highspeed",
-                "kimi-k3",
-                "kimi-k2.5",
-            ]),
-            embedding: vecs(&["kimi-embedding-1"]),
-            rerank: vecs(&["kimi-rerank-1"]),
-            vision: None,
-        },
-        "ollama" => CategorizedProviderModels {
-            chat: vecs(&["llama3.1:8b", "qwen2.5:7b", "mistral-nemo"]),
-            embedding: vecs(&["nomic-embed-text"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "lmstudio" => CategorizedProviderModels {
-            chat: vecs(&["local-model"]),
-            embedding: vecs(&["text-embedding-nomic-embed-text-v1.5"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "gemini" => CategorizedProviderModels {
-            chat: vecs(&[
-                "gemini-3.8-flash",
-                "gemini-3.6-flash",
-                "gemini-3.1-pro-preview",
-                "gemini-2.5-flash",
-            ]),
-            embedding: vecs(&["gemini-embedding-001", "gemini-embedding-2"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "anthropic" => CategorizedProviderModels {
-            chat: vecs(&[
-                "claude-opus-5-5",
-                "claude-sonnet-5-5",
-                "claude-haiku-5-5",
-                "claude-fable-5-1",
-                "claude-haiku-4-5",
-            ]),
-            embedding: Vec::new(),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "xai" => CategorizedProviderModels {
-            chat: vecs(&[
-                "grok-4.7",
-                "grok-4.6",
-                "grok-4.20-0309-non-reasoning",
-                "grok-4.20-0309-reasoning",
-                "grok-build-0.1",
-                "grok-imagine-image-2.0",
-            ]),
-            embedding: Vec::new(),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "groq" => CategorizedProviderModels {
-            chat: vecs(&[
-                "llama-3.3-70b-versatile",
-                "llama-3.1-8b-instant",
-                "openai/gpt-oss-120b",
-                "qwen/qwen3.8-27b",
-            ]),
-            embedding: Vec::new(),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "deepseek" => CategorizedProviderModels {
-            chat: vecs(&[
-                "deepseek-v4-pro",
-                "deepseek-flash",
-                "deepseek-chat",
-                "deepseek-reasoner",
-            ]),
-            embedding: Vec::new(),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "minimax" => CategorizedProviderModels {
-            chat: vecs(&[
-                "MiniMax-M3",
-                "MiniMax-M3.1-Flash",
-                "MiniMax-M2.5",
-                "MiniMax-M2.5-highspeed",
-            ]),
-            embedding: vecs(&["embo-01"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "cohere" => CategorizedProviderModels {
-            chat: vecs(&[
-                "command-a-plus-05-2026",
-                "command-a-03-2025",
-                "command-r-plus-08-2024",
-            ]),
-            embedding: vecs(&["embed-english-v3.0", "embed-multilingual-v3.0"]),
-            rerank: vecs(&["rerank-english-v3.0", "rerank-multilingual-v3.0"]),
-            vision: None,
-        },
-        "mistral" => CategorizedProviderModels {
-            chat: vecs(&[
-                "mistral-large-latest",
-                "mistral-medium-latest",
-                "mistral-small-latest",
-            ]),
-            embedding: vecs(&["mistral-embed"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "azure_openai" => CategorizedProviderModels {
-            chat: vecs(&["gpt-6-astra", "gpt-6-luna", "gpt-4o", "gpt-4o-mini"]),
-            embedding: vecs(&["text-embedding-3-small", "text-embedding-ada-002"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "bedrock" => CategorizedProviderModels {
-            chat: vecs(&[
-                "anthropic.claude-opus-5-5",
-                "anthropic.claude-sonnet-5-5",
-                "anthropic.claude-haiku-5-5",
-                "anthropic.claude-sonnet-4-6",
-            ]),
-            embedding: vecs(&["amazon.titan-embed-text-v1", "amazon.titan-embed-text-v2:0"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "vertex" => CategorizedProviderModels {
-            chat: vecs(&[
-                "gemini-3.8-flash",
-                "gemini-3.6-flash",
-                "gemini-3.1-pro-preview",
-            ]),
-            embedding: vecs(&["textembedding-gecko", "gemini-embedding-001"]),
-            rerank: Vec::new(),
-            vision: None,
-        },
-        "volcengine" => CategorizedProviderModels {
-            chat: vecs(&[
-                "doubao-seed-2-1-pro-260628",
-                "doubao-seed-2-1-turbo-260628",
-                "doubao-seed-2-0-lite-260428",
-                "doubao-seed-2-0-mini-260428",
-                "doubao-seed-2.0-pro",
-                "doubao-seed-2.0-lite",
-                "doubao-seed-2.0-mini",
-                "doubao-seed-2.0-code",
-            ]),
-            embedding: vecs(&[
-                "doubao-embedding",
-                "doubao-embedding-large",
-                "doubao-embedding-large-text-240915",
-                "doubao-embedding-large-text-250515",
-                "doubao-embedding-text-240715",
-            ]),
-            rerank: vecs(&["doubao-reranker-large"]),
-            vision: Some(vecs(&[
-                "doubao-1.5-vision-pro-32k",
-                "doubao-seed-1-6-vision-250815",
-            ])),
-        },
-        _ => CategorizedProviderModels::default(),
-    };
-    models.chat.shrink_to_fit();
-    models.embedding.shrink_to_fit();
-    models.rerank.shrink_to_fit();
-    if let Some(vision) = models.vision.as_mut() {
-        vision.shrink_to_fit();
-    }
-    models
-}
-
-fn vecs(values: &[&str]) -> Vec<String> {
-    values.iter().map(|value| (*value).to_string()).collect()
+    static_provider_model_table()
+        .get(provider_type)
+        .cloned()
+        .unwrap_or_default()
 }
 
 const ENV_PROVIDER_AUTO_DETECT: &[(&str, &str)] = &[
@@ -4156,8 +4033,9 @@ impl<'de> Visitor<'de> for OrderedModelsVisitor {
         while let Some((key, value)) = map.next_entry::<String, ModelMetadataView>()? {
             let mut model = value;
             if model.name.is_empty() {
-                model.name = key;
+                model.name = key.clone();
             }
+            model.catalog_key = key;
             model.coerce_python_bounds();
             models.push(model);
         }
@@ -4251,6 +4129,40 @@ struct ModelMetadataView {
     top_p_range: Option<Vec<f64>>,
     #[serde(default)]
     supported_params: Option<Vec<String>>,
+    /// JSON object key from the snapshot. Python looks models up by this key.
+    #[serde(skip, default)]
+    catalog_key: String,
+}
+
+impl ModelListProfile {
+    fn from_metadata(metadata: &ModelMetadataView) -> Self {
+        let capabilities = metadata
+            .capabilities
+            .iter()
+            .map(|item| item.to_ascii_lowercase())
+            .collect::<BTreeSet<_>>();
+        let modalities = metadata
+            .modalities
+            .iter()
+            .map(|item| item.to_ascii_lowercase())
+            .collect::<BTreeSet<_>>();
+        let audio = ["tts", "asr", "voice_cloning", "realtime_voice"]
+            .into_iter()
+            .any(|name| capabilities.contains(name));
+        Self {
+            id: metadata.name.clone(),
+            known: true,
+            context_window: metadata.context_length,
+            max_output_tokens: metadata.max_output_tokens,
+            vision: capabilities.contains("vision") || modalities.contains("image"),
+            tools: metadata.supports_tool_call,
+            reasoning: metadata.reasoning,
+            audio_input: audio,
+            deprecated: metadata.is_deprecated,
+            input_cost_per_1m: metadata.input_cost_per_1m,
+            output_cost_per_1m: metadata.output_cost_per_1m,
+        }
+    }
 }
 
 impl ModelMetadataView {

@@ -5,59 +5,20 @@ from __future__ import annotations
 from ipaddress import ip_address
 from urllib.parse import quote, urlsplit, urlunsplit
 
-_PROVIDER_VARIANT_SUFFIXES: tuple[str, ...] = ("_coding", "_embedding", "_reranker")
+from src.domain.llm_providers.provider_catalog import (
+    FAMILY_SECURITY,
+    extra_official_endpoints,
+    family_security,
+    official_base_paths,
+    probe_default_base_urls,
+    provider_family,
+)
 
-_PROVIDER_PROBE_DEFAULT_BASE_URLS: dict[str, str] = {
-    "openai": "https://api.openai.com/v1",
-    "openrouter": "https://openrouter.ai/api/v1",
-    "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "gemini": "https://generativelanguage.googleapis.com",
-    "anthropic": "https://api.anthropic.com",
-    "groq": "https://api.groq.com/openai/v1",
-    "xai": "https://api.x.ai/v1",
-    "mistral": "https://api.mistral.ai/v1",
-    "deepseek": "https://api.deepseek.com/v1",
-    "minimax": "https://api.minimax.io/v1",
-    "zai": "https://open.bigmodel.cn/api/paas/v4",
-    "kimi": "https://api.moonshot.cn/v1",
-    "volcengine": "https://ark.cn-beijing.volces.com/api/v3",
-    "cohere": "https://api.cohere.com/v1",
-    "ollama": "http://localhost:11434",
-    "lmstudio": "http://localhost:1234/v1",
-}
-
-_OFFICIAL_PROVIDER_BASE_PATHS: dict[str, frozenset[str]] = {
-    "openai": frozenset({"/v1"}),
-    "openrouter": frozenset({"/api/v1"}),
-    "dashscope": frozenset({"/compatible-mode/v1"}),
-    "gemini": frozenset({"", "/v1beta"}),
-    "anthropic": frozenset({"", "/v1"}),
-    "groq": frozenset({"/openai/v1"}),
-    "xai": frozenset({"/v1"}),
-    "mistral": frozenset({"/v1"}),
-    "deepseek": frozenset({"/v1"}),
-    "minimax": frozenset({"/v1"}),
-    "zai": frozenset({"/api/paas/v4"}),
-    "kimi": frozenset({"/v1"}),
-    "volcengine": frozenset({"/api/v3"}),
-    "cohere": frozenset({"/v1"}),
-    "ollama": frozenset({"", "/api"}),
-    "lmstudio": frozenset({"/v1"}),
-}
-
-# Official provider origins beyond the canonical probe default, each with the
-# exact API base paths that origin is known to serve. These are real first-party
-# endpoints (not custom gateways), so credentials may be sent to them.
-_PROVIDER_EXTRA_OFFICIAL_ENDPOINTS: dict[str, dict[str, frozenset[str]]] = {
-    "kimi": {
-        # Kimi for Coding subscription endpoint (OpenAI-compatible).
-        "api.kimi.com": frozenset({"/coding/v1"}),
-    },
-    "xai": {
-        # US regional endpoint. Same /v1 path, inference stays in the United States.
-        "us.api.x.ai": frozenset({"/v1"}),
-    },
-}
+_PROVIDER_PROBE_DEFAULT_BASE_URLS: dict[str, str] = probe_default_base_urls()
+_OFFICIAL_PROVIDER_BASE_PATHS: dict[str, frozenset[str]] = official_base_paths()
+_PROVIDER_EXTRA_OFFICIAL_ENDPOINTS: dict[str, dict[str, frozenset[str]]] = (
+    extra_official_endpoints()
+)
 
 # Custom gateways are permitted, but only at well-known API base paths. Arbitrary
 # path components are rejected because they are commonly used for bearer-like
@@ -76,17 +37,28 @@ _SAFE_CUSTOM_PROVIDER_BASE_PATHS = frozenset(
     }
 )
 
-_PERSISTENT_AUTH_UNAVAILABLE_PROVIDER_FAMILIES = frozenset({"bedrock", "vertex"})
-_PROBE_UNSUPPORTED_PROVIDER_FAMILIES = frozenset({"azure_openai", "bedrock", "vertex"})
+
+def _families_where(
+    *,
+    probe_supported: bool | None = None,
+    persistent_auth: bool | None = None,
+) -> frozenset[str]:
+    selected: set[str] = set()
+    for family, spec in FAMILY_SECURITY.items():
+        if probe_supported is not None and spec.probe_supported is probe_supported:
+            selected.add(family)
+        if persistent_auth is not None and spec.persistent_auth is persistent_auth:
+            selected.add(family)
+    return frozenset(selected)
+
+
+_PERSISTENT_AUTH_UNAVAILABLE_PROVIDER_FAMILIES = _families_where(persistent_auth=False)
+_PROBE_UNSUPPORTED_PROVIDER_FAMILIES = _families_where(probe_supported=False)
 
 
 def normalize_provider_family(provider_type: object) -> str:
     """Normalize enum/string provider variants to their base provider family."""
-    normalized = str(getattr(provider_type, "value", provider_type)).strip().lower()
-    for suffix in _PROVIDER_VARIANT_SUFFIXES:
-        if normalized.endswith(suffix):
-            return normalized.removesuffix(suffix)
-    return normalized
+    return provider_family(provider_type)
 
 
 def provider_probe_default_base_url(provider_type: object) -> str | None:
@@ -170,7 +142,8 @@ def _validate_provider_transport(
     provider_family: str,
 ) -> None:
     """Validate remote HTTPS and loopback-only local HTTP transports."""
-    is_local_provider = provider_family in {"ollama", "lmstudio"}
+    spec = family_security(provider_family)
+    is_local_provider = bool(spec and spec.local_http)
     if not is_local_provider and scheme != "https":
         raise ValueError("HTTPS is required for credentialed providers")
     if not is_local_provider or scheme != "http":
