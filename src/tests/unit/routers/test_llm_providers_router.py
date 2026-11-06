@@ -1434,6 +1434,17 @@ class TestLLMProvidersRouterTypes:
         data = response.json()
         assert data["models"] == {"chat": [], "embedding": [], "rerank": []}
 
+    @pytest.mark.asyncio
+    async def test_model_guidance_explains_missing_embedding(self, llm_client):
+        """Guidance tells the UI when a provider cannot fill a role."""
+        response = llm_client.get("/api/v1/llm-providers/models/anthropic/guidance")
+
+        assert response.status_code == status.HTTP_200_OK
+        roles = {item["role"]: item for item in response.json()["roles"]}
+        assert roles["primary"]["default_model"] == "claude-opus-5-5"
+        assert roles["embedding"]["reason"] == "provider_has_no_embedding_models"
+        assert roles["voice"]["reason"] == "audio_input_not_declared"
+
 
 @pytest.mark.unit
 class TestLLMProvidersRouterUsage:

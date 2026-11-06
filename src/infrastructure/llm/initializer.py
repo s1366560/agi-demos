@@ -13,56 +13,22 @@ from sqlalchemy.exc import IntegrityError
 
 from src.application.services.provider_service import ProviderService
 from src.domain.llm_providers.models import OperationType, ProviderConfigCreate, ProviderType
+from src.domain.llm_providers.provider_catalog import (
+    AUTO_DETECT_ENV,
+    STARTUP_ALIASES,
+    detection_defaults,
+)
 from src.infrastructure.llm.provider_credentials import should_require_api_key
 
 logger = logging.getLogger(__name__)
 
-# Provider type mapping from config name to ProviderType enum
+# Provider type mapping from config name to ProviderType enum.
 PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
-    "gemini": ProviderType.GEMINI,
-    "dashscope": ProviderType.DASHSCOPE,
-    "openai": ProviderType.OPENAI,
-    "openrouter": ProviderType.OPENROUTER,
-    "open-router": ProviderType.OPENROUTER,
-    "deepseek": ProviderType.DEEPSEEK,
-    "minimax": ProviderType.MINIMAX,
-    "zai": ProviderType.ZAI,
-    "zhipu": ProviderType.ZAI,  # Alias for zai
-    "kimi": ProviderType.KIMI,  # Moonshot AI (Kimi)
-    "moonshot": ProviderType.KIMI,  # Alias for kimi
-    "xai": ProviderType.XAI,
-    "grok": ProviderType.XAI,
-    "anthropic": ProviderType.ANTHROPIC,  # Anthropic (Claude)
-    "claude": ProviderType.ANTHROPIC,  # Alias for anthropic
-    "ollama": ProviderType.OLLAMA,  # Local Ollama
-    "lmstudio": ProviderType.LMSTUDIO,  # LM Studio
-    "volcengine": ProviderType.VOLCENGINE,
-    "volcano": ProviderType.VOLCENGINE,  # Alias for volcengine
-    "ark": ProviderType.VOLCENGINE,  # Alias for volcengine (Ark platform)
-    "doubao": ProviderType.VOLCENGINE,  # Alias for volcengine (Doubao models)
+    alias: ProviderType(provider_type) for alias, provider_type in STARTUP_ALIASES.items()
 }
 
 # Auto-detection order: env var -> provider name
-_PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
-    ("GOOGLE_API_KEY", "gemini"),
-    ("GOOGLE_GENERATIVE_AI_API_KEY", "gemini"),
-    ("GEMINI_API_KEY", "gemini"),
-    ("DASHSCOPE_API_KEY", "dashscope"),
-    ("OPENAI_API_KEY", "openai"),
-    ("OPENROUTER_API_KEY", "openrouter"),
-    ("DEEPSEEK_API_KEY", "deepseek"),
-    ("MINIMAX_API_KEY", "minimax"),
-    ("ZAI_API_KEY", "zai"),
-    ("ZHIPU_API_KEY", "zai"),
-    ("MOONSHOT_API_KEY", "kimi"),
-    ("KIMI_API_KEY", "kimi"),
-    ("XAI_API_KEY", "xai"),
-    ("ANTHROPIC_API_KEY", "anthropic"),
-    ("OLLAMA_BASE_URL", "ollama"),
-    ("LMSTUDIO_BASE_URL", "lmstudio"),
-    ("VOLCENGINE_API_KEY", "volcengine"),
-    ("ARK_API_KEY", "volcengine"),
-]
+_PROVIDER_AUTO_DETECT: list[tuple[str, str]] = list(AUTO_DETECT_ENV)
 
 _LOCAL_FALLBACK_PROVIDER = "ollama"
 
@@ -216,178 +182,146 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
 # This replaces the long if/elif chain in provider env config building.
 
 
-def _env_gemini() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("GOOGLE_API_KEY")
-        or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
-        or os.getenv("GEMINI_API_KEY"),
-        "llm_model": os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
-        "llm_small_model": os.getenv("GEMINI_SMALL_MODEL", "gemini-3.6-flash"),
-        "embedding_model": os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
-        "reranker_model": os.getenv("GEMINI_RERANK_MODEL"),
+_DETECTION_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
+    "openai": {
+        "api_key": ("OPENAI_API_KEY",),
+        "llm_model": ("OPENAI_MODEL",),
+        "llm_small_model": ("OPENAI_SMALL_MODEL",),
+        "embedding_model": ("OPENAI_EMBEDDING_MODEL",),
+        "reranker_model": ("OPENAI_RERANK_MODEL",),
+        "base_url": ("OPENAI_BASE_URL",),
+    },
+    "openrouter": {
+        "api_key": ("OPENROUTER_API_KEY",),
+        "llm_model": ("OPENROUTER_MODEL",),
+        "llm_small_model": ("OPENROUTER_SMALL_MODEL",),
+        "embedding_model": ("OPENROUTER_EMBEDDING_MODEL",),
+        "reranker_model": ("OPENROUTER_RERANK_MODEL",),
+        "base_url": ("OPENROUTER_BASE_URL",),
+    },
+    "gemini": {
+        "api_key": ("GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY"),
+        "llm_model": ("GEMINI_MODEL",),
+        "llm_small_model": ("GEMINI_SMALL_MODEL",),
+        "embedding_model": ("GEMINI_EMBEDDING_MODEL",),
+        "reranker_model": ("GEMINI_RERANK_MODEL",),
+    },
+    "dashscope": {
+        "api_key": ("DASHSCOPE_API_KEY",),
+        "llm_model": ("DASHSCOPE_MODEL",),
+        "llm_small_model": ("DASHSCOPE_SMALL_MODEL",),
+        "embedding_model": ("DASHSCOPE_EMBEDDING_MODEL",),
+        "reranker_model": ("DASHSCOPE_RERANK_MODEL",),
+        "base_url": ("DASHSCOPE_BASE_URL",),
+    },
+    "deepseek": {
+        "api_key": ("DEEPSEEK_API_KEY",),
+        "llm_model": ("DEEPSEEK_MODEL",),
+        "llm_small_model": ("DEEPSEEK_SMALL_MODEL",),
+        "reranker_model": ("DEEPSEEK_RERANK_MODEL",),
+        "base_url": ("DEEPSEEK_BASE_URL",),
+    },
+    "minimax": {
+        "api_key": ("MINIMAX_API_KEY",),
+        "llm_model": ("MINIMAX_MODEL",),
+        "llm_small_model": ("MINIMAX_SMALL_MODEL",),
+        "embedding_model": ("MINIMAX_EMBEDDING_MODEL",),
+        "reranker_model": ("MINIMAX_RERANK_MODEL",),
+        "base_url": ("MINIMAX_BASE_URL",),
+    },
+    "zai": {
+        "api_key": ("ZAI_API_KEY", "ZHIPU_API_KEY"),
+        "llm_model": ("ZAI_MODEL", "ZHIPU_MODEL"),
+        "llm_small_model": ("ZAI_SMALL_MODEL", "ZHIPU_SMALL_MODEL"),
+        "embedding_model": ("ZAI_EMBEDDING_MODEL", "ZHIPU_EMBEDDING_MODEL"),
+        "reranker_model": ("ZAI_RERANK_MODEL", "ZHIPU_RERANK_MODEL"),
+        "base_url": ("ZAI_BASE_URL", "ZHIPU_BASE_URL"),
+    },
+    "kimi": {
+        "api_key": ("MOONSHOT_API_KEY", "KIMI_API_KEY"),
+        "llm_model": ("KIMI_MODEL", "MOONSHOT_MODEL"),
+        "llm_small_model": ("KIMI_SMALL_MODEL", "MOONSHOT_SMALL_MODEL"),
+        "embedding_model": ("KIMI_EMBEDDING_MODEL",),
+        "reranker_model": ("KIMI_RERANK_MODEL",),
+        "base_url": ("KIMI_BASE_URL",),
+    },
+    "xai": {
+        "api_key": ("XAI_API_KEY",),
+        "llm_model": ("XAI_MODEL",),
+        "llm_small_model": ("XAI_SMALL_MODEL",),
+        "reranker_model": ("XAI_RERANK_MODEL",),
+        "base_url": ("XAI_BASE_URL",),
+    },
+    "anthropic": {
+        "api_key": ("ANTHROPIC_API_KEY",),
+        "llm_model": ("ANTHROPIC_MODEL",),
+        "llm_small_model": ("ANTHROPIC_SMALL_MODEL",),
+        "embedding_model": ("ANTHROPIC_EMBEDDING_MODEL",),
+        "reranker_model": ("ANTHROPIC_RERANK_MODEL",),
+        "base_url": ("ANTHROPIC_BASE_URL",),
+    },
+    "ollama": {
+        "api_key": ("OLLAMA_API_KEY",),
+        "llm_model": ("OLLAMA_MODEL",),
+        "llm_small_model": ("OLLAMA_SMALL_MODEL",),
+        "embedding_model": ("OLLAMA_EMBEDDING_MODEL",),
+        "reranker_model": ("OLLAMA_RERANK_MODEL",),
+        "base_url": ("OLLAMA_BASE_URL",),
+    },
+    "lmstudio": {
+        "api_key": ("LMSTUDIO_API_KEY",),
+        "llm_model": ("LMSTUDIO_MODEL",),
+        "llm_small_model": ("LMSTUDIO_SMALL_MODEL",),
+        "embedding_model": ("LMSTUDIO_EMBEDDING_MODEL",),
+        "reranker_model": ("LMSTUDIO_RERANK_MODEL",),
+        "base_url": ("LMSTUDIO_BASE_URL",),
+    },
+    "volcengine": {
+        "api_key": ("VOLCENGINE_API_KEY", "ARK_API_KEY"),
+        "llm_model": ("VOLCENGINE_MODEL",),
+        "llm_small_model": ("VOLCENGINE_SMALL_MODEL",),
+        "embedding_model": ("VOLCENGINE_EMBEDDING_MODEL",),
+        "reranker_model": ("VOLCENGINE_RERANK_MODEL",),
+        "base_url": ("VOLCENGINE_BASE_URL",),
+    },
+}
+
+
+def _chain_env(names: tuple[str, ...], default: str | None = None) -> str | None:
+    """Read the first non-empty env var, applying a fallback only on the last name."""
+    if not names:
+        return default
+    for name in names[:-1]:
+        value = os.getenv(name)
+        if value:
+            return value
+    last = names[-1]
+    if default is None:
+        return os.getenv(last)
+    return os.getenv(last, default)
+
+
+def _detected_provider_config(provider_name: str) -> dict[str, Any]:
+    """Build the historical startup env view for one canonical provider."""
+    defaults = detection_defaults(provider_name)
+    fields = _DETECTION_FIELDS[provider_name]
+    if defaults is None:
+        return {}
+    fallbacks = {
+        "llm_model": defaults.llm_model,
+        "llm_small_model": defaults.llm_small_model,
+        "embedding_model": defaults.embedding_model,
+        "base_url": defaults.base_url,
     }
+    return {key: _chain_env(names, fallbacks.get(key)) for key, names in fields.items()}
 
 
-def _env_zai() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY"),
-        "llm_model": os.getenv("ZAI_MODEL") or os.getenv("ZHIPU_MODEL", "glm-5.3"),
-        "llm_small_model": os.getenv("ZAI_SMALL_MODEL")
-        or os.getenv("ZHIPU_SMALL_MODEL", "glm-5.3-flash"),
-        "embedding_model": os.getenv("ZAI_EMBEDDING_MODEL")
-        or os.getenv("ZHIPU_EMBEDDING_MODEL", "embedding-3"),
-        "reranker_model": os.getenv("ZAI_RERANK_MODEL") or os.getenv("ZHIPU_RERANK_MODEL"),
-        "base_url": os.getenv("ZAI_BASE_URL")
-        or os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
-    }
-
-
-def _env_dashscope() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("DASHSCOPE_API_KEY"),
-        "llm_model": os.getenv("DASHSCOPE_MODEL", "qwen3.8-max"),
-        "llm_small_model": os.getenv("DASHSCOPE_SMALL_MODEL", "qwen3.8-flash"),
-        "embedding_model": os.getenv("DASHSCOPE_EMBEDDING_MODEL", "text-embedding-v3"),
-        "reranker_model": os.getenv("DASHSCOPE_RERANK_MODEL"),
-        "base_url": os.getenv(
-            "DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        ),
-    }
-
-
-def _env_openai() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("OPENAI_API_KEY"),
-        "llm_model": os.getenv("OPENAI_MODEL", "gpt-6-astra"),
-        "llm_small_model": os.getenv("OPENAI_SMALL_MODEL", "gpt-6-luna"),
-        "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
-        "reranker_model": os.getenv("OPENAI_RERANK_MODEL"),
-        "base_url": os.getenv("OPENAI_BASE_URL"),
-    }
-
-
-def _env_openrouter() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("OPENROUTER_API_KEY"),
-        "llm_model": os.getenv("OPENROUTER_MODEL", "openai/gpt-6-astra"),
-        "llm_small_model": os.getenv("OPENROUTER_SMALL_MODEL", "openai/gpt-6-luna"),
-        "embedding_model": os.getenv("OPENROUTER_EMBEDDING_MODEL", "openai/text-embedding-3-small"),
-        "reranker_model": os.getenv("OPENROUTER_RERANK_MODEL"),
-        "base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-    }
-
-
-def _env_deepseek() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("DEEPSEEK_API_KEY"),
-        "llm_model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"),
-        "llm_small_model": os.getenv("DEEPSEEK_SMALL_MODEL", "deepseek-flash"),
-        "reranker_model": os.getenv("DEEPSEEK_RERANK_MODEL"),
-        "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
-    }
-
-
-def _env_minimax() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("MINIMAX_API_KEY"),
-        "llm_model": os.getenv("MINIMAX_MODEL", "MiniMax-M3"),
-        "llm_small_model": os.getenv("MINIMAX_SMALL_MODEL", "MiniMax-M3.1-Flash"),
-        "embedding_model": os.getenv("MINIMAX_EMBEDDING_MODEL", "embo-01"),
-        "reranker_model": os.getenv("MINIMAX_RERANK_MODEL"),
-        "base_url": os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
-    }
-
-
-def _env_kimi() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("MOONSHOT_API_KEY") or os.getenv("KIMI_API_KEY"),
-        "llm_model": os.getenv("KIMI_MODEL") or os.getenv("MOONSHOT_MODEL", "kimi-k3.1-pro"),
-        "llm_small_model": os.getenv("KIMI_SMALL_MODEL")
-        or os.getenv("MOONSHOT_SMALL_MODEL", "kimi-k3.1-pro-highspeed"),
-        "embedding_model": os.getenv("KIMI_EMBEDDING_MODEL", "kimi-embedding-1"),
-        "reranker_model": os.getenv("KIMI_RERANK_MODEL"),
-        "base_url": os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1"),
-    }
-
-
-def _env_anthropic() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("ANTHROPIC_API_KEY"),
-        "llm_model": os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5"),
-        "llm_small_model": os.getenv("ANTHROPIC_SMALL_MODEL", "claude-haiku-5-5"),
-        "embedding_model": os.getenv("ANTHROPIC_EMBEDDING_MODEL", ""),
-        "reranker_model": os.getenv("ANTHROPIC_RERANK_MODEL"),
-        "base_url": os.getenv("ANTHROPIC_BASE_URL"),
-    }
-
-
-def _env_ollama() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("OLLAMA_API_KEY"),
-        "llm_model": os.getenv("OLLAMA_MODEL", "llama3.1:8b"),
-        "llm_small_model": os.getenv("OLLAMA_SMALL_MODEL", "llama3.1:8b"),
-        "embedding_model": os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text"),
-        "reranker_model": os.getenv("OLLAMA_RERANK_MODEL"),
-        "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-    }
-
-
-def _env_lmstudio() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("LMSTUDIO_API_KEY"),
-        "llm_model": os.getenv("LMSTUDIO_MODEL", "local-model"),
-        "llm_small_model": os.getenv("LMSTUDIO_SMALL_MODEL", "local-model"),
-        "embedding_model": os.getenv(
-            "LMSTUDIO_EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5"
-        ),
-        "reranker_model": os.getenv("LMSTUDIO_RERANK_MODEL"),
-        "base_url": os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
-    }
-
-
-def _env_xai() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("XAI_API_KEY"),
-        "llm_model": os.getenv("XAI_MODEL", "grok-4.7"),
-        "llm_small_model": os.getenv("XAI_SMALL_MODEL", "grok-4.20-0309-non-reasoning"),
-        "reranker_model": os.getenv("XAI_RERANK_MODEL"),
-        "base_url": os.getenv("XAI_BASE_URL", "https://api.x.ai/v1"),
-    }
-
-
-def _env_volcengine() -> dict[str, Any]:
-    return {
-        "api_key": os.getenv("VOLCENGINE_API_KEY") or os.getenv("ARK_API_KEY"),
-        "llm_model": os.getenv("VOLCENGINE_MODEL", "doubao-seed-2-1-pro-260628"),
-        "llm_small_model": os.getenv("VOLCENGINE_SMALL_MODEL", "doubao-seed-2-0-mini-260428"),
-        "embedding_model": os.getenv("VOLCENGINE_EMBEDDING_MODEL", "doubao-embedding"),
-        "reranker_model": os.getenv("VOLCENGINE_RERANK_MODEL"),
-        "base_url": os.getenv("VOLCENGINE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
-    }
+def _detected_from_alias(alias: str) -> dict[str, Any]:
+    return _detected_provider_config(STARTUP_ALIASES[alias])
 
 
 _PROVIDER_ENV_REGISTRY: dict[str, Any] = {
-    "gemini": _env_gemini,
-    "zhipu": _env_zai,
-    "zai": _env_zai,
-    "dashscope": _env_dashscope,
-    "openai": _env_openai,
-    "openrouter": _env_openrouter,
-    "open-router": _env_openrouter,
-    "deepseek": _env_deepseek,
-    "minimax": _env_minimax,
-    "kimi": _env_kimi,
-    "moonshot": _env_kimi,
-    "xai": _env_xai,
-    "grok": _env_xai,
-    "anthropic": _env_anthropic,
-    "claude": _env_anthropic,
-    "ollama": _env_ollama,
-    "lmstudio": _env_lmstudio,
-    "volcengine": _env_volcengine,
-    "volcano": _env_volcengine,
-    "ark": _env_volcengine,
-    "doubao": _env_volcengine,
+    alias: (lambda alias=alias: _detected_from_alias(alias)) for alias in STARTUP_ALIASES
 }
 
 

@@ -10065,6 +10065,49 @@
         "context": "Context",
         "maxOutput": "Max Output",
         "costPerMillion": "Cost ($/1M)",
+        "limitUnknown": "Unknown until the catalog lists this model",
+        "roleLabel": "Role",
+        "connectionTestHelp": "Test checks the credential, endpoint, and whether model discovery responds. You can continue after a failed discovery and enter an exact model ID.",
+        "roles": {
+          "primary": {
+            "name": "Primary",
+            "purpose": "Main agent replies and tool calls. Must be a chat model."
+          },
+          "fast": {
+            "name": "Fast",
+            "purpose": "Shorter, cheaper chat calls. It still has to be a chat model."
+          },
+          "embedding": {
+            "name": "Embedding",
+            "purpose": "Turns text into vectors for search. It cannot answer chat."
+          },
+          "rerank": {
+            "name": "Rerank",
+            "purpose": "Reorders retrieved passages. It cannot answer chat."
+          },
+          "voice": {
+            "name": "Voice",
+            "purpose": "Spoken input. Audio stays off until this provider explicitly declares the model."
+          }
+        },
+        "flags": {
+          "reasoning": "Reasoning",
+          "tools": "Tools",
+          "vision": "Vision",
+          "audio": "Audio"
+        },
+        "roleReason": {
+          "ok": "This model can fill the selected role.",
+          "unknown_assumed_chat": "This model is not in the catalog. It can be saved as a chat model, but embedding, rerank, vision, and audio are not assumed.",
+          "not_a_chat_model": "This model cannot answer chat. Choose it only for embedding or rerank.",
+          "embedding_capability_required": "Embedding requires a model whose catalog capability is embedding.",
+          "rerank_capability_required": "Rerank requires a model whose catalog capability is rerank.",
+          "audio_input_not_declared": "Audio input stays off until you explicitly declare this model. The name alone does not enable it.",
+          "audio_declaration_unsupported": "This provider cannot store an audio-input declaration.",
+          "deprecated": "This model still runs, and the catalog marks it deprecated.",
+          "provider_has_no_embedding_models": "This provider has no embedding models in the catalog.",
+          "provider_has_no_rerank_models": "This provider has no rerank models in the catalog."
+        },
         "default": "Default",
         "float": "Float",
         "base64": "Base64",

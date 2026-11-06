@@ -22,6 +22,12 @@ from enum import StrEnum
 from typing import Any
 
 from src.domain.llm_providers.models import ProviderType
+from src.domain.llm_providers.provider_catalog import (
+    MODEL_PREFIXES,
+    TRANSPORT_PREFIX,
+    runtime_model_table,
+    transport_prefix,
+)
 
 
 class ProviderPrefix(StrEnum):
@@ -65,143 +71,18 @@ class ProviderPrefix(StrEnum):
     DEFAULT = ""
 
 
-# Model name prefixes for provider inference
 MODEL_PREFIX_TO_PROVIDER: dict[str, ProviderType] = {
-    "qwen-": ProviderType.DASHSCOPE,
-    "qwq-": ProviderType.DASHSCOPE,
-    "gpt-": ProviderType.OPENAI,
-    "o1-": ProviderType.OPENAI,
-    "gemini-": ProviderType.GEMINI,
-    "deepseek-": ProviderType.DEEPSEEK,
-    "minimax-": ProviderType.MINIMAX,
-    "abab": ProviderType.MINIMAX,
-    "glm-": ProviderType.ZAI,
-    "grok-": ProviderType.XAI,
-    "claude-": ProviderType.ANTHROPIC,
-    "mistral-": ProviderType.MISTRAL,
-    "codestral-": ProviderType.MISTRAL,
-    "rerank-": ProviderType.COHERE,
-    "embed-": ProviderType.OPENAI,
-    "text-embedding-": ProviderType.OPENAI,
-    "doubao-": ProviderType.VOLCENGINE,
+    prefix: ProviderType(provider_type) for prefix, provider_type in MODEL_PREFIXES
 }
 
-
-# Default models by provider and operation type
 DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
-    ProviderType.OPENAI: {
-        "completion": "gpt-6-luna",
-        "completion_medium": "gpt-6-astra",
-        "embedding": "text-embedding-3-small",
-        "rerank": "gpt-6-luna",  # LLM-based rerank
-    },
-    ProviderType.OPENROUTER: {
-        "completion": "openai/gpt-6-luna",
-        "completion_medium": "openai/gpt-6-astra",
-        "embedding": "openai/text-embedding-3-small",
-        "rerank": "openai/gpt-6-luna",
-    },
-    ProviderType.ANTHROPIC: {
-        "completion": "claude-haiku-5-5",
-        "completion_medium": "claude-opus-5-5",
-        "embedding": "text-embedding-3-small",  # Uses OpenAI
-        "rerank": "claude-haiku-5-5",
-    },
-    ProviderType.GEMINI: {
-        "completion": "gemini-3.6-flash",
-        "completion_medium": "gemini-3.8-flash",
-        "embedding": "gemini-embedding-001",
-        "rerank": "gemini-3.6-flash",
-    },
-    ProviderType.DASHSCOPE: {
-        "completion": "qwen3.8-flash",
-        "completion_medium": "qwen3.8-max",
-        "embedding": "text-embedding-v3",
-        "rerank": "qwen3.8-flash",
-    },
-    ProviderType.KIMI: {
-        "completion": "kimi-k3.1-pro-highspeed",
-        "completion_medium": "kimi-k3.1-pro",
-        "embedding": "kimi-embedding-1",
-        "rerank": "kimi-rerank-1",
-    },
-    ProviderType.DEEPSEEK: {
-        "completion": "deepseek-flash",
-        "completion_medium": "deepseek-v4-pro",
-        "embedding": "text-embedding-v3",  # Uses Dashscope
-        "rerank": "deepseek-flash",
-    },
-    ProviderType.MINIMAX: {
-        "completion": "MiniMax-M3.1-Flash",
-        "completion_medium": "MiniMax-M3",
-        "embedding": "embo-01",
-        "rerank": "MiniMax-M3.1-Flash",
-    },
-    ProviderType.ZAI: {
-        "completion": "glm-5.3-flash",
-        "completion_medium": "glm-5.3",
-        "embedding": "embedding-3",
-        "rerank": "glm-5.3-flash",
-    },
-    ProviderType.MISTRAL: {
-        "completion": "mistral-small-latest",
-        "completion_medium": "mistral-medium-latest",
-        "embedding": "mistral-embed",
-        "rerank": "mistral-small-latest",
-    },
-    ProviderType.GROQ: {
-        "completion": "llama-3.1-8b-instant",
-        "completion_medium": "llama-3.3-70b-versatile",
-        "embedding": "text-embedding-3-small",  # Uses OpenAI
-        "rerank": "llama-3.1-8b-instant",
-    },
-    ProviderType.XAI: {
-        "completion": "grok-4.20-0309-non-reasoning",
-        "completion_medium": "grok-4.7",
-        "rerank": "grok-4.20-0309-non-reasoning",
-    },
-    ProviderType.COHERE: {
-        "completion": "command-a-03-2025",
-        "completion_medium": "command-a-plus-05-2026",
-        "embedding": "embed-english-v3.0",
-        "rerank": "rerank-english-v3.0",
-    },
-    ProviderType.OLLAMA: {
-        "completion": "llama3.1:8b",
-        "completion_medium": "llama3.1:70b",
-        "embedding": "nomic-embed-text",
-        "rerank": "llama3.1:8b",
-    },
-    ProviderType.LMSTUDIO: {
-        "completion": "local-model",
-        "completion_medium": "local-model",
-        "embedding": "text-embedding-nomic-embed-text-v1.5",
-        "rerank": "local-model",
-    },
-    ProviderType.BEDROCK: {
-        "completion": "anthropic.claude-haiku-5-5",
-        "completion_medium": "anthropic.claude-sonnet-5-5",
-        "embedding": "amazon.titan-embed-text-v1",
-        "rerank": "anthropic.claude-haiku-5-5",
-    },
-    ProviderType.VERTEX: {
-        "completion": "gemini-3.6-flash",
-        "completion_medium": "gemini-3.8-flash",
-        "embedding": "textembedding-gecko",
-        "rerank": "gemini-3.6-flash",
-    },
-    ProviderType.AZURE_OPENAI: {
-        "completion": "gpt-6-luna",
-        "completion_medium": "gpt-6-astra",
-        "embedding": "text-embedding-3-small",
-        "rerank": "gpt-6-luna",
-    },
-    ProviderType.VOLCENGINE: {
-        "completion": "doubao-seed-2-0-lite-260428",
-        "completion_medium": "doubao-seed-2-1-pro-260628",
-        "embedding": "doubao-embedding-large",
-        "rerank": "doubao-reranker-large",
-    },
+    ProviderType(provider_type): models for provider_type, models in runtime_model_table().items()
+}
+
+_PREFIXED_PROVIDER_TYPES = {
+    ProviderType(provider_type)
+    for provider_type, spec in TRANSPORT_PREFIX.items()
+    if spec.prefix_model_names
 }
 
 
@@ -215,28 +96,10 @@ def get_provider_prefix(provider_type: ProviderType) -> ProviderPrefix:
     Returns:
         ProviderPrefix enum value
     """
-    prefix_map: dict[ProviderType, ProviderPrefix] = {
-        ProviderType.OPENAI: ProviderPrefix.OPENAI,
-        ProviderType.OPENROUTER: ProviderPrefix.OPENAI,
-        ProviderType.ANTHROPIC: ProviderPrefix.ANTHROPIC,
-        ProviderType.GEMINI: ProviderPrefix.GEMINI,
-        ProviderType.DASHSCOPE: ProviderPrefix.DASHSCOPE,
-        ProviderType.DEEPSEEK: ProviderPrefix.DEEPSEEK,
-        ProviderType.MINIMAX: ProviderPrefix.MINIMAX,
-        ProviderType.ZAI: ProviderPrefix.ZAI,
-        ProviderType.KIMI: ProviderPrefix.KIMI,
-        ProviderType.MISTRAL: ProviderPrefix.MISTRAL,
-        ProviderType.GROQ: ProviderPrefix.GROQ,
-        ProviderType.XAI: ProviderPrefix.XAI,
-        ProviderType.COHERE: ProviderPrefix.COHERE,
-        ProviderType.BEDROCK: ProviderPrefix.BEDROCK,
-        ProviderType.VERTEX: ProviderPrefix.VERTEX_AI,
-        ProviderType.AZURE_OPENAI: ProviderPrefix.AZURE,
-        ProviderType.OLLAMA: ProviderPrefix.OLLAMA,
-        ProviderType.LMSTUDIO: ProviderPrefix.LMSTUDIO,
-        ProviderType.VOLCENGINE: ProviderPrefix.VOLCENGINE,
-    }
-    return prefix_map.get(provider_type, ProviderPrefix.DEFAULT)
+    spec = transport_prefix(provider_type)
+    if spec is None:
+        return ProviderPrefix.DEFAULT
+    return ProviderPrefix[spec.member]
 
 
 def infer_provider_from_model(model_name: str) -> ProviderType:
@@ -358,26 +221,7 @@ class UnifiedLLMConfig:
         # Get provider prefix
         prefix = get_provider_prefix(self.provider_type)
 
-        # Special handling for providers that need explicit prefix
-        needs_prefix = {
-            ProviderType.ANTHROPIC,
-            ProviderType.GEMINI,
-            ProviderType.DASHSCOPE,
-            ProviderType.OPENROUTER,
-            ProviderType.MISTRAL,
-            ProviderType.GROQ,
-            ProviderType.XAI,
-            ProviderType.DEEPSEEK,
-            ProviderType.MINIMAX,
-            ProviderType.ZAI,
-            ProviderType.COHERE,
-            ProviderType.BEDROCK,
-            ProviderType.VERTEX,
-            ProviderType.OLLAMA,
-            ProviderType.VOLCENGINE,
-        }
-
-        if self.provider_type in needs_prefix and prefix.value:
+        if self.provider_type in _PREFIXED_PROVIDER_TYPES and prefix.value:
             return f"{prefix.value}/{model_name}"
 
         return model_name

@@ -584,6 +584,21 @@ export const providerAPI = {
   ): Promise<{ message: string; new_state: unknown }> => {
     return await api.post(`/llm-providers/system/reset-circuit-breaker/${providerType}`);
   },
+  getModelGuidance: async (
+    providerType: string
+  ): Promise<{
+    provider_type: string;
+    roles: Array<{
+      role: 'primary' | 'fast' | 'embedding' | 'rerank' | 'voice';
+      purpose_code: string;
+      default_model: string | null;
+      available: boolean;
+      reason: string;
+    }>;
+    profiles: Array<{ id: string; roles: Record<string, { supported: boolean; reason: string }> }>;
+  }> => {
+    return await api.get(`/llm-providers/models/${providerType}/guidance`);
+  },
   listModels: async (
     providerType: string
   ): Promise<{

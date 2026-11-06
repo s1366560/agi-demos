@@ -341,6 +341,17 @@ async def refresh_catalog_models(
     return {"status": "refreshed", "snapshot": info}
 
 
+@router.get("/models/{provider_type}/guidance")
+async def get_provider_model_guidance(
+    provider_type: str,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return role purposes and capability limits for a provider's suggested models."""
+    from src.infrastructure.llm.provider_guidance import build_provider_guidance
+
+    return build_provider_guidance(provider_type)
+
+
 @router.get("/models/{provider_type}")
 async def list_models_for_provider_type(
     provider_type: str,
@@ -382,160 +393,10 @@ async def list_models_for_provider_type(
 
 
 def _static_provider_models(provider_type: str) -> dict[str, list[str]]:
-    """Offline model roster used when the models.dev snapshot has no rows.
+    """Offline model roster used when the models.dev snapshot has no rows."""
+    from src.domain.llm_providers.provider_catalog import static_provider_models
 
-    Current IDs come first. Still-accepted previous IDs stay so existing
-    configurations remain selectable.
-    """
-    return {
-        "openai": {
-            "chat": ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna", "gpt-4o", "gpt-4o-mini"],
-            "embedding": ["text-embedding-3-small", "text-embedding-3-large"],
-            "rerank": [],
-        },
-        "openrouter": {
-            "chat": [
-                "openai/gpt-6-astra",
-                "openai/gpt-6-luna",
-                "anthropic/claude-opus-5.5",
-                "openai/gpt-4o",
-            ],
-            "embedding": ["openai/text-embedding-3-small"],
-            "rerank": [],
-        },
-        "dashscope": {
-            "chat": ["qwen3.8-max", "qwen3.8-flash", "qwen-max", "qwen-plus", "qwen-turbo"],
-            "embedding": ["text-embedding-v3", "text-embedding-v2"],
-            "rerank": ["qwen3-rerank"],
-        },
-        "zai": {
-            "chat": ["glm-5.3", "glm-5.3-flash", "glm-5.1", "glm-4.7-flash"],
-            "embedding": ["embedding-3", "embedding-2"],
-            "rerank": [],
-        },
-        "kimi": {
-            "chat": ["kimi-k3.1-pro", "kimi-k3.1-pro-highspeed", "kimi-k3", "kimi-k2.5"],
-            "embedding": ["kimi-embedding-1"],
-            "rerank": ["kimi-rerank-1"],
-        },
-        "ollama": {
-            "chat": ["llama3.1:8b", "qwen2.5:7b", "mistral-nemo"],
-            "embedding": ["nomic-embed-text"],
-            "rerank": [],
-        },
-        "lmstudio": {
-            "chat": ["local-model"],
-            "embedding": ["text-embedding-nomic-embed-text-v1.5"],
-            "rerank": [],
-        },
-        "gemini": {
-            "chat": [
-                "gemini-3.8-flash",
-                "gemini-3.6-flash",
-                "gemini-3.1-pro-preview",
-                "gemini-2.5-flash",
-            ],
-            "embedding": ["gemini-embedding-001", "gemini-embedding-2"],
-            "rerank": [],
-        },
-        "anthropic": {
-            "chat": [
-                "claude-opus-5-5",
-                "claude-sonnet-5-5",
-                "claude-haiku-5-5",
-                "claude-fable-5-1",
-                "claude-haiku-4-5",
-            ],
-            "embedding": [],
-            "rerank": [],
-        },
-        "groq": {
-            "chat": [
-                "llama-3.3-70b-versatile",
-                "llama-3.1-8b-instant",
-                "openai/gpt-oss-120b",
-                "qwen/qwen3.8-27b",
-            ],
-            "embedding": [],
-            "rerank": [],
-        },
-        "xai": {
-            "chat": [
-                "grok-4.7",
-                "grok-4.6",
-                "grok-4.20-0309-non-reasoning",
-                "grok-4.20-0309-reasoning",
-                "grok-build-0.1",
-                "grok-imagine-image-2.0",
-            ],
-            "embedding": [],
-            "rerank": [],
-        },
-        "deepseek": {
-            "chat": ["deepseek-v4-pro", "deepseek-flash", "deepseek-chat", "deepseek-reasoner"],
-            "embedding": [],
-            "rerank": [],
-        },
-        "minimax": {
-            "chat": ["MiniMax-M3", "MiniMax-M3.1-Flash", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
-            "embedding": ["embo-01"],
-            "rerank": [],
-        },
-        "cohere": {
-            "chat": ["command-a-plus-05-2026", "command-a-03-2025", "command-r-plus-08-2024"],
-            "embedding": ["embed-english-v3.0", "embed-multilingual-v3.0"],
-            "rerank": ["rerank-english-v3.0", "rerank-multilingual-v3.0"],
-        },
-        "mistral": {
-            "chat": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
-            "embedding": ["mistral-embed"],
-            "rerank": [],
-        },
-        "azure_openai": {
-            "chat": ["gpt-6-astra", "gpt-6-luna", "gpt-4o", "gpt-4o-mini"],
-            "embedding": ["text-embedding-3-small", "text-embedding-ada-002"],
-            "rerank": [],
-        },
-        "bedrock": {
-            "chat": [
-                "anthropic.claude-opus-5-5",
-                "anthropic.claude-sonnet-5-5",
-                "anthropic.claude-haiku-5-5",
-                "anthropic.claude-sonnet-4-6",
-            ],
-            "embedding": ["amazon.titan-embed-text-v1", "amazon.titan-embed-text-v2:0"],
-            "rerank": [],
-        },
-        "vertex": {
-            "chat": ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-pro-preview"],
-            "embedding": ["textembedding-gecko", "gemini-embedding-001"],
-            "rerank": [],
-        },
-        "volcengine": {
-            "chat": [
-                "doubao-seed-2-1-pro-260628",
-                "doubao-seed-2-1-turbo-260628",
-                "doubao-seed-2-0-lite-260428",
-                "doubao-seed-2-0-mini-260428",
-                "doubao-seed-2.0-pro",
-                "doubao-seed-2.0-lite",
-                "doubao-seed-2.0-mini",
-                "doubao-seed-2.0-code",
-            ],
-            "vision": [
-                "doubao-1.5-vision-pro-32k",
-                "doubao-seed-1-6-vision-250815",
-            ],
-            "embedding": [
-                "doubao-embedding",
-                "doubao-embedding-large",
-                "doubao-embedding-large-text-240915",
-                "doubao-embedding-large-text-250515",
-                "doubao-embedding-text-240715",
-            ],
-            "rerank": ["doubao-reranker-large"],
-        },
-    }.get(provider_type, {})
+    return static_provider_models(provider_type)
 
 
 @router.get("/env-detection")

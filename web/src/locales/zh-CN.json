@@ -10085,6 +10085,49 @@
         "context": "上下文",
         "maxOutput": "最大输出",
         "costPerMillion": "成本（美元/100万）",
+        "limitUnknown": "目录尚未列出此模型，限额未知",
+        "roleLabel": "角色",
+        "connectionTestHelp": "测试会检查凭据、端点，以及模型发现是否有响应。发现失败后仍可继续，并手动填写精确的模型 ID。",
+        "roles": {
+          "primary": {
+            "name": "主模型",
+            "purpose": "负责主要对话和工具调用，必须是对话模型。"
+          },
+          "fast": {
+            "name": "快速模型",
+            "purpose": "用于更短、更省的对话调用，仍然必须是对话模型。"
+          },
+          "embedding": {
+            "name": "嵌入",
+            "purpose": "把文本变成向量供检索使用，不能回答对话。"
+          },
+          "rerank": {
+            "name": "重排序",
+            "purpose": "重新排列检索到的片段，不能回答对话。"
+          },
+          "voice": {
+            "name": "语音",
+            "purpose": "语音输入。只有该提供商明确声明模型后才会启用音频。"
+          }
+        },
+        "flags": {
+          "reasoning": "推理",
+          "tools": "工具",
+          "vision": "视觉",
+          "audio": "音频"
+        },
+        "roleReason": {
+          "ok": "此模型可以承担所选角色。",
+          "unknown_assumed_chat": "目录中没有此模型。它可以作为对话模型保存，但不会假定它支持嵌入、重排序、视觉或音频。",
+          "not_a_chat_model": "此模型不能回答对话。请只把它用于嵌入或重排序。",
+          "embedding_capability_required": "嵌入角色需要目录中标记为嵌入能力的模型。",
+          "rerank_capability_required": "重排序角色需要目录中标记为重排序能力的模型。",
+          "audio_input_not_declared": "在明确声明之前，音频输入保持关闭。模型名称本身不会启用音频。",
+          "audio_declaration_unsupported": "此提供商不能保存音频输入声明。",
+          "deprecated": "此模型仍可使用，目录已将它标记为弃用。",
+          "provider_has_no_embedding_models": "此提供商的目录中没有嵌入模型。",
+          "provider_has_no_rerank_models": "此提供商的目录中没有重排序模型。"
+        },
         "default": "默认",
         "float": "Float",
         "base64": "Base64",

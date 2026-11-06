@@ -20,6 +20,8 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from src.domain.llm_providers.provider_catalog import LEGACY_MODEL_LIMITS
+
 if TYPE_CHECKING:
     from src.domain.llm_providers.models import ModelMetadata
 
@@ -35,19 +37,8 @@ class ModelLimits:
     max_input_tokens: int | None = None
 
 
-# Known max output token limits per model family.
 _MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
-    # Qwen / Dashscope (not in models.dev catalog)
-    "qwen-long": 8192,
-    # Deepseek (not in models.dev catalog)
-    "deepseek-coder": 8192,
-    # ZhipuAI (not in models.dev catalog)
-    "glm-4": 4096,
-    "glm-4-flash": 4096,
-    # Kimi / Moonshot (not in models.dev catalog)
-    "moonshot-v1-8k": 8192,
-    "moonshot-v1-32k": 8192,
-    "moonshot-v1-128k": 8192,
+    name: limits.max_output_tokens for name, limits in LEGACY_MODEL_LIMITS.items()
 }
 
 # Known max INPUT token limits for models where provider-enforced input caps
@@ -56,19 +47,8 @@ _MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
 # now served by the ModelCatalog snapshot. Dict retained for non-catalog models.
 _MODEL_MAX_INPUT_TOKENS: dict[str, int] = {}
 
-# Known context window sizes (total input + output) per model.
 _MODEL_CONTEXT_WINDOW: dict[str, int] = {
-    # Qwen / Dashscope (not in models.dev catalog)
-    "qwen-long": 1_000_000,
-    # Deepseek (not in models.dev catalog)
-    "deepseek-coder": 65536,
-    # ZhipuAI (not in models.dev catalog)
-    "glm-4": 128_000,
-    "glm-4-flash": 128_000,
-    # Kimi / Moonshot (not in models.dev catalog)
-    "moonshot-v1-8k": 8192,
-    "moonshot-v1-32k": 32768,
-    "moonshot-v1-128k": 131072,
+    name: limits.context_window for name, limits in LEGACY_MODEL_LIMITS.items()
 }
 
 _DEFAULT_CONTEXT_WINDOW = 128_000
@@ -78,15 +58,17 @@ _DEFAULT_CHARS_PER_TOKEN = 3.0
 # Safety ratio for practical input budgeting. This intentionally leaves headroom
 # for tokenizer/provider counting differences and hidden system overhead.
 _MODEL_INPUT_BUDGET_RATIO: dict[str, float] = {
-    # Qwen / Dashscope (not in models.dev catalog)
-    "qwen-long": 0.9,
+    name: limits.input_budget_ratio
+    for name, limits in LEGACY_MODEL_LIMITS.items()
+    if limits.input_budget_ratio is not None
 }
 
 # Fallback chars/token estimates for conservative char-based budgeting.
 # Lower means stricter budgets.
 _MODEL_CHARS_PER_TOKEN: dict[str, float] = {
-    # Qwen / Dashscope (not in models.dev catalog)
-    "qwen-long": 1.6,
+    name: limits.chars_per_token
+    for name, limits in LEGACY_MODEL_LIMITS.items()
+    if limits.chars_per_token is not None
 }
 
 

@@ -250,6 +250,10 @@
 .provider-inline-error svg { flex: 0 0 auto; color: var(--red); }
 .provider-model-table { overflow: hidden; border: 1px solid var(--desktop-border-8); border-radius: 6px; }
 .provider-model-table-head,
+.provider-role-guide { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.provider-role-guide p { display: grid; gap: 2px; margin: 0; padding: 8px 10px; background: var(--desktop-surface-5); border: 1px solid var(--desktop-border-8); border-radius: 8px; }
+.provider-role-guide b { font-size: 12px; }
+.provider-role-guide span { color: var(--desktop-gray-19); font-size: 12px; line-height: 1.4; }
 .provider-model-row { display: grid; grid-template-columns: minmax(190px, 1.35fr) minmax(160px, 1fr) 70px 58px; align-items: center; gap: 10px; }
 .provider-model-table-head { min-height: 34px; padding: 0 11px; color: var(--desktop-gray-4); font-size: 12px; font-weight: 700; background: var(--desktop-surface-23); }
 .provider-model-row { min-height: 55px; padding: 7px 11px; color: var(--desktop-gray-11); font-size: 11px; background: var(--desktop-surface-5); border-top: 1px solid var(--desktop-border-8); }

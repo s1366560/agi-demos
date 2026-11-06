@@ -23,6 +23,7 @@ import {
   providerMutationForEnabledModels,
 } from './providerManagementModel';
 import { ProviderEmbeddingDeclarationField } from './ProviderEmbeddingDeclarationField';
+import { boundaryForCapability } from './modelRoleFit';
 
 type ProviderModelsPanelProps = {
   provider: ManagedLlmProvider;
@@ -260,6 +261,24 @@ export function ProviderModelsPanel({
         )}
       </header>
 
+      <div className="provider-role-guide">
+        {(['primary', 'fast', 'embedding', 'rerank', 'voice'] as const).map((role) => (
+          <p key={role}>
+            <b>{t(`providers.role.${role}`)}</b>
+            <span>{t(`providers.rolePurpose.${role}`)}</span>
+          </p>
+        ))}
+      </div>
+
+      {models.some(
+        (model) => model.id === provider.llm_model && model.capability !== 'chat'
+      ) ? (
+        <div className="provider-inline-error" role="status">
+          <ExclamationTriangleIcon />
+          <span>{t('providers.roleReason.not_a_chat_model')}</span>
+        </div>
+      ) : null}
+
       {allowEmbeddingDeclaration ? (
         <ProviderEmbeddingDeclarationField
           value={embeddingModel}
@@ -322,6 +341,15 @@ export function ProviderModelsPanel({
                     {model.id === provider.llm_model
                       ? t('providers.currentDefault')
                       : t('providers.exactModelId')}
+                  </small>
+                  <small>
+                    {t(`providers.roleReason.${
+                      boundaryForCapability(
+                        model.capability,
+                        audioInputModels.has(model.id),
+                        canDeclareAudioInput
+                      ).reason
+                    }`)}
                   </small>
                 </span>
               </div>
