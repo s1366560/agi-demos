@@ -24,7 +24,7 @@ Endpoint -> AIServiceFactory -> ProviderResolutionService (DB lookup)
 - Resolves LLM provider config per tenant from database
 - `ProviderResolutionService` handles multi-tenant isolation
 - Creates appropriate client (LLM, embedder, reranker) based on provider type
-- Supported providers: gemini, dashscope, openai, deepseek, anthropic
+- Supported providers: openai, openrouter, gemini, vertex, azure_openai, bedrock, dashscope, deepseek, minimax, zai, kimi, anthropic, mistral, groq, cohere, ollama, lmstudio, volcengine
 
 ## Circuit Breaker Config
 | Parameter | Default |

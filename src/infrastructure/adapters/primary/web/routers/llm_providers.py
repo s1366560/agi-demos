@@ -352,37 +352,69 @@ async def list_models_for_provider_type(
     Returns categorized models (chat, embedding, rerank) for the provider.
     """
     catalog_models = _categorize_catalog_models(provider_type)
+    static_models = _static_provider_models(provider_type)
     if any(catalog_models.values()):
+        merged = {
+            category: catalog_models[category] or static_models.get(category, [])
+            for category in ("chat", "embedding", "rerank")
+        }
+        if static_models.get("vision") and "vision" not in catalog_models:
+            merged["vision"] = static_models["vision"]
         return {
             "provider_type": provider_type,
-            "models": catalog_models,
+            "models": merged,
             "source": "models.dev",
         }
 
-    # Categorized models for each provider type
-    models_data = {
+    if not static_models:
+        # Return empty lists for unknown providers instead of error
+        # This allows frontend to fallback to defaults or show empty dropdowns
+        return {
+            "provider_type": provider_type,
+            "models": {"chat": [], "embedding": [], "rerank": []},
+        }
+
+    return {
+        "provider_type": provider_type,
+        "models": static_models,
+        "source": "static-fallback",
+    }
+
+
+def _static_provider_models(provider_type: str) -> dict[str, list[str]]:
+    """Offline model roster used when the models.dev snapshot has no rows.
+
+    Current IDs come first. Still-accepted previous IDs stay so existing
+    configurations remain selectable.
+    """
+    return {
         "openai": {
-            "chat": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
+            "chat": ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna", "gpt-4o", "gpt-4o-mini"],
             "embedding": ["text-embedding-3-small", "text-embedding-3-large"],
             "rerank": [],
         },
         "openrouter": {
-            "chat": ["openai/gpt-4o", "openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet"],
+            "chat": [
+                "openai/gpt-6-astra",
+                "openai/gpt-6-luna",
+                "anthropic/claude-opus-5.5",
+                "openai/gpt-4o",
+            ],
             "embedding": ["openai/text-embedding-3-small"],
             "rerank": [],
         },
         "dashscope": {
-            "chat": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-long"],
+            "chat": ["qwen3.8-max", "qwen3.8-flash", "qwen-max", "qwen-plus", "qwen-turbo"],
             "embedding": ["text-embedding-v3", "text-embedding-v2"],
             "rerank": ["qwen3-rerank"],
         },
         "zai": {
-            "chat": ["glm-4-plus", "glm-4-flash", "glm-4-air"],
+            "chat": ["glm-5.3", "glm-5.3-flash", "glm-5.1", "glm-4.7-flash"],
             "embedding": ["embedding-3", "embedding-2"],
             "rerank": [],
         },
         "kimi": {
-            "chat": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+            "chat": ["kimi-k3.1-pro", "kimi-k3.1-pro-highspeed", "kimi-k3", "kimi-k2.5"],
             "embedding": ["kimi-embedding-1"],
             "rerank": ["kimi-rerank-1"],
         },
@@ -398,19 +430,21 @@ async def list_models_for_provider_type(
         },
         "gemini": {
             "chat": [
-                "gemini-1.5-pro",
-                "gemini-1.5-flash",
-                "gemini-1.5-pro-002",
-                "gemini-1.5-flash-002",
+                "gemini-3.8-flash",
+                "gemini-3.6-flash",
+                "gemini-3.1-pro-preview",
+                "gemini-2.5-flash",
             ],
-            "embedding": ["text-embedding-004"],
+            "embedding": ["gemini-embedding-001", "gemini-embedding-2"],
             "rerank": [],
         },
         "anthropic": {
             "chat": [
-                "claude-3-5-sonnet-20241022",
-                "claude-3-5-haiku-20241022",
-                "claude-3-opus-20240229",
+                "claude-opus-5-5",
+                "claude-sonnet-5-5",
+                "claude-haiku-5-5",
+                "claude-fable-5-1",
+                "claude-haiku-4-5",
             ],
             "embedding": [],
             "rerank": [],
@@ -418,25 +452,25 @@ async def list_models_for_provider_type(
         "groq": {
             "chat": [
                 "llama-3.3-70b-versatile",
-                "llama-3.1-70b-versatile",
-                "mixtral-8x7b-32768",
                 "llama-3.1-8b-instant",
+                "openai/gpt-oss-120b",
+                "qwen/qwen3.8-27b",
             ],
             "embedding": [],
             "rerank": [],
         },
         "deepseek": {
-            "chat": ["deepseek-chat", "deepseek-coder"],
+            "chat": ["deepseek-v4-pro", "deepseek-flash", "deepseek-chat", "deepseek-reasoner"],
             "embedding": [],
             "rerank": [],
         },
         "minimax": {
-            "chat": ["abab6.5-chat", "abab6.5s-chat", "MiniMax-Text-01"],
+            "chat": ["MiniMax-M3", "MiniMax-M3.1-Flash", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
             "embedding": ["embo-01"],
             "rerank": [],
         },
         "cohere": {
-            "chat": ["command-r-plus", "command-r"],
+            "chat": ["command-a-plus-05-2026", "command-a-03-2025", "command-r-plus-08-2024"],
             "embedding": ["embed-english-v3.0", "embed-multilingual-v3.0"],
             "rerank": ["rerank-english-v3.0", "rerank-multilingual-v3.0"],
         },
@@ -446,47 +480,39 @@ async def list_models_for_provider_type(
             "rerank": [],
         },
         "azure_openai": {
-            "chat": ["gpt-4o", "gpt-4", "gpt-4o-mini", "gpt-35-turbo"],
+            "chat": ["gpt-6-astra", "gpt-6-luna", "gpt-4o", "gpt-4o-mini"],
             "embedding": ["text-embedding-3-small", "text-embedding-ada-002"],
             "rerank": [],
         },
         "bedrock": {
             "chat": [
-                "anthropic.claude-3-sonnet-20240229-v1:0",
-                "anthropic.claude-3-haiku-20240307-v1:0",
-                "meta.llama3-70b-instruct-v1:0",
+                "anthropic.claude-opus-5-5",
+                "anthropic.claude-sonnet-5-5",
+                "anthropic.claude-haiku-5-5",
+                "anthropic.claude-sonnet-4-6",
             ],
             "embedding": ["amazon.titan-embed-text-v1", "amazon.titan-embed-text-v2:0"],
             "rerank": [],
         },
         "vertex": {
-            "chat": ["gemini-1.5-pro", "gemini-1.5-flash"],
-            "embedding": ["textembedding-gecko"],
+            "chat": ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-pro-preview"],
+            "embedding": ["textembedding-gecko", "gemini-embedding-001"],
             "rerank": [],
         },
         "volcengine": {
             "chat": [
+                "doubao-seed-2-1-pro-260628",
+                "doubao-seed-2-1-turbo-260628",
+                "doubao-seed-2-0-lite-260428",
+                "doubao-seed-2-0-mini-260428",
                 "doubao-seed-2.0-pro",
                 "doubao-seed-2.0-lite",
                 "doubao-seed-2.0-mini",
                 "doubao-seed-2.0-code",
-                "doubao-1.5-pro-32k",
-                "doubao-1.5-pro-128k",
-                "doubao-1.5-pro-256k",
-                "doubao-1.5-lite-32k",
-                "doubao-1.5-lite-128k",
-                "doubao-pro-32k",
-                "doubao-pro-128k",
-                "doubao-pro-256k",
-                "doubao-lite-32k",
-                "doubao-lite-128k",
             ],
             "vision": [
                 "doubao-1.5-vision-pro-32k",
-                "doubao-1.5-vision-pro-128k",
-                "doubao-vision-pro-32k",
-                "doubao-vision-pro-128k",
-                "doubao-vision-lite-32k",
+                "doubao-seed-1-6-vision-250815",
             ],
             "embedding": [
                 "doubao-embedding",
@@ -497,21 +523,7 @@ async def list_models_for_provider_type(
             ],
             "rerank": ["doubao-reranker-large"],
         },
-    }
-
-    if provider_type not in models_data:
-        # Return empty lists for unknown providers instead of error
-        # This allows frontend to fallback to defaults or show empty dropdowns
-        return {
-            "provider_type": provider_type,
-            "models": {"chat": [], "embedding": [], "rerank": []},
-        }
-
-    return {
-        "provider_type": provider_type,
-        "models": models_data[provider_type],
-        "source": "static-fallback",
-    }
+    }.get(provider_type, {})
 
 
 @router.get("/env-detection")

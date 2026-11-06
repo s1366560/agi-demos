@@ -19,8 +19,8 @@
       "credential_configured": true,
       "environment_variable": "OPENAI_API_KEY",
       "base_url": "https://api.openai.com/v1",
-      "llm_model": "gpt-4o",
-      "llm_small_model": "gpt-4o-mini",
+      "llm_model": "gpt-6-astra",
+      "llm_small_model": "gpt-6-luna",
       "embedding_model": "text-embedding-3-small",
       "reranker_model": null
     }

@@ -174,6 +174,40 @@ def test_convert_single_model_classifies_rerank_models() -> None:
     assert meta.supports_response_format is False
 
 
+def test_deprecated_status_and_retired_alias_are_preserved() -> None:
+    raw = {
+        "deepseek": {
+            "models": {
+                "deepseek-flash": _chat_model_payload(
+                    name="DeepSeek Flash",
+                    id="deepseek-flash",
+                    family="deepseek-flash",
+                ),
+            }
+        }
+    }
+
+    converted = convert_to_model_metadata(raw, providers={"deepseek": "deepseek"})
+
+    assert converted["deepseek-flash"].is_deprecated is False
+    alias = converted["deepseek-chat"]
+    assert alias.provider == "deepseek"
+    assert alias.is_deprecated is True
+    assert alias.name == "deepseek-chat"
+    assert _metadata_to_dict(alias)["is_deprecated"] is True
+
+
+def test_convert_single_model_marks_models_dev_deprecated_status() -> None:
+    meta = _convert_single_model(
+        "gpt-4",
+        _chat_model_payload(status="deprecated"),
+        "openai",
+    )
+
+    assert meta is not None
+    assert meta.is_deprecated is True
+
+
 def test_metadata_to_dict_and_generate_snapshot_are_deterministic(tmp_path: Path) -> None:
     meta = ModelMetadata(
         name="model-a",

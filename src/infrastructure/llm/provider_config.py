@@ -88,58 +88,58 @@ MODEL_PREFIX_TO_PROVIDER: dict[str, ProviderType] = {
 # Default models by provider and operation type
 DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
     ProviderType.OPENAI: {
-        "completion": "gpt-4o-mini",
-        "completion_medium": "gpt-4o",
+        "completion": "gpt-6-luna",
+        "completion_medium": "gpt-6-astra",
         "embedding": "text-embedding-3-small",
-        "rerank": "gpt-4o-mini",  # LLM-based rerank
+        "rerank": "gpt-6-luna",  # LLM-based rerank
     },
     ProviderType.OPENROUTER: {
-        "completion": "openai/gpt-4o-mini",
-        "completion_medium": "openai/gpt-4o",
+        "completion": "openai/gpt-6-luna",
+        "completion_medium": "openai/gpt-6-astra",
         "embedding": "openai/text-embedding-3-small",
-        "rerank": "openai/gpt-4o-mini",
+        "rerank": "openai/gpt-6-luna",
     },
     ProviderType.ANTHROPIC: {
-        "completion": "claude-3-5-haiku-20241022",
-        "completion_medium": "claude-3-5-sonnet-20241022",
+        "completion": "claude-haiku-5-5",
+        "completion_medium": "claude-opus-5-5",
         "embedding": "text-embedding-3-small",  # Uses OpenAI
-        "rerank": "claude-3-5-haiku-20241022",
+        "rerank": "claude-haiku-5-5",
     },
     ProviderType.GEMINI: {
-        "completion": "gemini-2.0-flash",
-        "completion_medium": "gemini-2.5-flash",
+        "completion": "gemini-3.6-flash",
+        "completion_medium": "gemini-3.8-flash",
         "embedding": "gemini-embedding-001",
-        "rerank": "gemini-2.0-flash",
+        "rerank": "gemini-3.6-flash",
     },
     ProviderType.DASHSCOPE: {
-        "completion": "qwen-turbo",
-        "completion_medium": "qwen-max",
+        "completion": "qwen3.8-flash",
+        "completion_medium": "qwen3.8-max",
         "embedding": "text-embedding-v3",
-        "rerank": "qwen-turbo",
+        "rerank": "qwen3.8-flash",
     },
     ProviderType.KIMI: {
-        "completion": "kimi-k2.5",
-        "completion_medium": "kimi-k2-thinking",
+        "completion": "kimi-k3.1-pro-highspeed",
+        "completion_medium": "kimi-k3.1-pro",
         "embedding": "kimi-embedding-1",
         "rerank": "kimi-rerank-1",
     },
     ProviderType.DEEPSEEK: {
-        "completion": "deepseek-chat",
-        "completion_medium": "deepseek-chat",
+        "completion": "deepseek-flash",
+        "completion_medium": "deepseek-v4-pro",
         "embedding": "text-embedding-v3",  # Uses Dashscope
-        "rerank": "deepseek-chat",
+        "rerank": "deepseek-flash",
     },
     ProviderType.MINIMAX: {
-        "completion": "MiniMax-M2.5-highspeed",
-        "completion_medium": "MiniMax-M2.5",
+        "completion": "MiniMax-M3.1-Flash",
+        "completion_medium": "MiniMax-M3",
         "embedding": "embo-01",
-        "rerank": "MiniMax-M2.5-highspeed",
+        "rerank": "MiniMax-M3.1-Flash",
     },
     ProviderType.ZAI: {
-        "completion": "glm-4.7-flash",
-        "completion_medium": "glm-5.1",
+        "completion": "glm-5.3-flash",
+        "completion_medium": "glm-5.3",
         "embedding": "embedding-3",
-        "rerank": "glm-4.7-flash",
+        "rerank": "glm-5.3-flash",
     },
     ProviderType.MISTRAL: {
         "completion": "mistral-small-latest",
@@ -154,8 +154,8 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "rerank": "llama-3.1-8b-instant",
     },
     ProviderType.COHERE: {
-        "completion": "command-r-08-2024",
-        "completion_medium": "command-r-plus-08-2024",
+        "completion": "command-a-03-2025",
+        "completion_medium": "command-a-plus-05-2026",
         "embedding": "embed-english-v3.0",
         "rerank": "rerank-english-v3.0",
     },
@@ -172,26 +172,26 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "rerank": "local-model",
     },
     ProviderType.BEDROCK: {
-        "completion": "anthropic.claude-haiku-4-5-20251001-v1:0",
-        "completion_medium": "anthropic.claude-sonnet-4-6",
+        "completion": "anthropic.claude-haiku-5-5",
+        "completion_medium": "anthropic.claude-sonnet-5-5",
         "embedding": "amazon.titan-embed-text-v1",
-        "rerank": "anthropic.claude-haiku-4-5-20251001-v1:0",
+        "rerank": "anthropic.claude-haiku-5-5",
     },
     ProviderType.VERTEX: {
-        "completion": "gemini-2.5-flash",
-        "completion_medium": "gemini-3.1-pro-preview",
+        "completion": "gemini-3.6-flash",
+        "completion_medium": "gemini-3.8-flash",
         "embedding": "textembedding-gecko",
-        "rerank": "gemini-2.5-flash",
+        "rerank": "gemini-3.6-flash",
     },
     ProviderType.AZURE_OPENAI: {
-        "completion": "gpt-4o-mini",
-        "completion_medium": "gpt-4o",
+        "completion": "gpt-6-luna",
+        "completion_medium": "gpt-6-astra",
         "embedding": "text-embedding-3-small",
-        "rerank": "gpt-4o-mini",
+        "rerank": "gpt-6-luna",
     },
     ProviderType.VOLCENGINE: {
-        "completion": "doubao-seed-2.0-lite",
-        "completion_medium": "doubao-seed-2.0-pro",
+        "completion": "doubao-seed-2-0-lite-260428",
+        "completion_medium": "doubao-seed-2-1-pro-260628",
         "embedding": "doubao-embedding-large",
         "rerank": "doubao-reranker-large",
     },
@@ -325,11 +325,11 @@ class UnifiedLLMConfig:
 
         if operation == "completion":
             if use_small:
-                # For some providers, small = flash/haiku/turbo variants
-                return provider_defaults.get("completion", "gpt-4o-mini")
-            return provider_defaults.get("completion_medium", "gpt-4o")
+                # For some providers, small = flash/haiku/luna variants
+                return provider_defaults.get("completion", "gpt-6-luna")
+            return provider_defaults.get("completion_medium", "gpt-6-astra")
 
-        return provider_defaults.get(operation, "gpt-4o-mini")
+        return provider_defaults.get(operation, "gpt-6-luna")
 
     def get_litellm_model_name(self, model: str | None = None) -> str:
         """

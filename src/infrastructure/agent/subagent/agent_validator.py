@@ -43,14 +43,23 @@ class SubAgentValidator:
         "haiku",
         "gpt-4",
         "gpt-4o",
+        "gpt-6-astra",
+        "gpt-6-luna",
         "gemini",
         "gemini-pro",
+        "gemini-3.8-flash",
         "qwen-max",
         "qwen-plus",
+        "qwen3.8-max",
         "deepseek",
         "deepseek-chat",
+        "deepseek-flash",
+        "deepseek-v4-pro",
         "claude-3-5-sonnet",
         "claude-sonnet",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
     }
 
     def validate(self, markdown: SubAgentMarkdown) -> ValidationResult:

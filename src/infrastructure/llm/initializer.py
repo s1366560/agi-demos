@@ -218,7 +218,8 @@ def _env_gemini() -> dict[str, Any]:
         "api_key": os.getenv("GOOGLE_API_KEY")
         or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
         or os.getenv("GEMINI_API_KEY"),
-        "llm_model": os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+        "llm_model": os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+        "llm_small_model": os.getenv("GEMINI_SMALL_MODEL", "gemini-3.6-flash"),
         "embedding_model": os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
         "reranker_model": os.getenv("GEMINI_RERANK_MODEL"),
     }
@@ -227,9 +228,9 @@ def _env_gemini() -> dict[str, Any]:
 def _env_zai() -> dict[str, Any]:
     return {
         "api_key": os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY"),
-        "llm_model": os.getenv("ZAI_MODEL") or os.getenv("ZHIPU_MODEL", "glm-5.1"),
+        "llm_model": os.getenv("ZAI_MODEL") or os.getenv("ZHIPU_MODEL", "glm-5.3"),
         "llm_small_model": os.getenv("ZAI_SMALL_MODEL")
-        or os.getenv("ZHIPU_SMALL_MODEL", "glm-4.7-flash"),
+        or os.getenv("ZHIPU_SMALL_MODEL", "glm-5.3-flash"),
         "embedding_model": os.getenv("ZAI_EMBEDDING_MODEL")
         or os.getenv("ZHIPU_EMBEDDING_MODEL", "embedding-3"),
         "reranker_model": os.getenv("ZAI_RERANK_MODEL") or os.getenv("ZHIPU_RERANK_MODEL"),
@@ -241,8 +242,8 @@ def _env_zai() -> dict[str, Any]:
 def _env_dashscope() -> dict[str, Any]:
     return {
         "api_key": os.getenv("DASHSCOPE_API_KEY"),
-        "llm_model": os.getenv("DASHSCOPE_MODEL", "qwen-plus"),
-        "llm_small_model": os.getenv("DASHSCOPE_SMALL_MODEL", "qwen-turbo"),
+        "llm_model": os.getenv("DASHSCOPE_MODEL", "qwen3.8-max"),
+        "llm_small_model": os.getenv("DASHSCOPE_SMALL_MODEL", "qwen3.8-flash"),
         "embedding_model": os.getenv("DASHSCOPE_EMBEDDING_MODEL", "text-embedding-v3"),
         "reranker_model": os.getenv("DASHSCOPE_RERANK_MODEL"),
         "base_url": os.getenv(
@@ -254,8 +255,8 @@ def _env_dashscope() -> dict[str, Any]:
 def _env_openai() -> dict[str, Any]:
     return {
         "api_key": os.getenv("OPENAI_API_KEY"),
-        "llm_model": os.getenv("OPENAI_MODEL", "gpt-4o"),
-        "llm_small_model": os.getenv("OPENAI_SMALL_MODEL", "gpt-4o-mini"),
+        "llm_model": os.getenv("OPENAI_MODEL", "gpt-6-astra"),
+        "llm_small_model": os.getenv("OPENAI_SMALL_MODEL", "gpt-6-luna"),
         "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
         "reranker_model": os.getenv("OPENAI_RERANK_MODEL"),
         "base_url": os.getenv("OPENAI_BASE_URL"),
@@ -265,8 +266,8 @@ def _env_openai() -> dict[str, Any]:
 def _env_openrouter() -> dict[str, Any]:
     return {
         "api_key": os.getenv("OPENROUTER_API_KEY"),
-        "llm_model": os.getenv("OPENROUTER_MODEL", "openai/gpt-4o"),
-        "llm_small_model": os.getenv("OPENROUTER_SMALL_MODEL", "openai/gpt-4o-mini"),
+        "llm_model": os.getenv("OPENROUTER_MODEL", "openai/gpt-6-astra"),
+        "llm_small_model": os.getenv("OPENROUTER_SMALL_MODEL", "openai/gpt-6-luna"),
         "embedding_model": os.getenv("OPENROUTER_EMBEDDING_MODEL", "openai/text-embedding-3-small"),
         "reranker_model": os.getenv("OPENROUTER_RERANK_MODEL"),
         "base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
@@ -276,8 +277,8 @@ def _env_openrouter() -> dict[str, Any]:
 def _env_deepseek() -> dict[str, Any]:
     return {
         "api_key": os.getenv("DEEPSEEK_API_KEY"),
-        "llm_model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-        "llm_small_model": os.getenv("DEEPSEEK_SMALL_MODEL", "deepseek-v4-flash"),
+        "llm_model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"),
+        "llm_small_model": os.getenv("DEEPSEEK_SMALL_MODEL", "deepseek-flash"),
         "reranker_model": os.getenv("DEEPSEEK_RERANK_MODEL"),
         "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
     }
@@ -286,8 +287,8 @@ def _env_deepseek() -> dict[str, Any]:
 def _env_minimax() -> dict[str, Any]:
     return {
         "api_key": os.getenv("MINIMAX_API_KEY"),
-        "llm_model": os.getenv("MINIMAX_MODEL", "MiniMax-M2.5"),
-        "llm_small_model": os.getenv("MINIMAX_SMALL_MODEL", "MiniMax-M2.5-highspeed"),
+        "llm_model": os.getenv("MINIMAX_MODEL", "MiniMax-M3"),
+        "llm_small_model": os.getenv("MINIMAX_SMALL_MODEL", "MiniMax-M3.1-Flash"),
         "embedding_model": os.getenv("MINIMAX_EMBEDDING_MODEL", "embo-01"),
         "reranker_model": os.getenv("MINIMAX_RERANK_MODEL"),
         "base_url": os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
@@ -297,9 +298,9 @@ def _env_minimax() -> dict[str, Any]:
 def _env_kimi() -> dict[str, Any]:
     return {
         "api_key": os.getenv("MOONSHOT_API_KEY") or os.getenv("KIMI_API_KEY"),
-        "llm_model": os.getenv("KIMI_MODEL") or os.getenv("MOONSHOT_MODEL", "kimi-k2.5"),
+        "llm_model": os.getenv("KIMI_MODEL") or os.getenv("MOONSHOT_MODEL", "kimi-k3.1-pro"),
         "llm_small_model": os.getenv("KIMI_SMALL_MODEL")
-        or os.getenv("MOONSHOT_SMALL_MODEL", "kimi-k2.5"),
+        or os.getenv("MOONSHOT_SMALL_MODEL", "kimi-k3.1-pro-highspeed"),
         "embedding_model": os.getenv("KIMI_EMBEDDING_MODEL", "kimi-embedding-1"),
         "reranker_model": os.getenv("KIMI_RERANK_MODEL"),
         "base_url": os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1"),
@@ -309,8 +310,8 @@ def _env_kimi() -> dict[str, Any]:
 def _env_anthropic() -> dict[str, Any]:
     return {
         "api_key": os.getenv("ANTHROPIC_API_KEY"),
-        "llm_model": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20240620"),
-        "llm_small_model": os.getenv("ANTHROPIC_SMALL_MODEL", "claude-3-haiku-20240307"),
+        "llm_model": os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5"),
+        "llm_small_model": os.getenv("ANTHROPIC_SMALL_MODEL", "claude-haiku-5-5"),
         "embedding_model": os.getenv("ANTHROPIC_EMBEDDING_MODEL", ""),
         "reranker_model": os.getenv("ANTHROPIC_RERANK_MODEL"),
         "base_url": os.getenv("ANTHROPIC_BASE_URL"),
@@ -344,8 +345,8 @@ def _env_lmstudio() -> dict[str, Any]:
 def _env_volcengine() -> dict[str, Any]:
     return {
         "api_key": os.getenv("VOLCENGINE_API_KEY") or os.getenv("ARK_API_KEY"),
-        "llm_model": os.getenv("VOLCENGINE_MODEL", "doubao-1.5-pro-32k"),
-        "llm_small_model": os.getenv("VOLCENGINE_SMALL_MODEL", "doubao-1.5-lite-32k"),
+        "llm_model": os.getenv("VOLCENGINE_MODEL", "doubao-seed-2-1-pro-260628"),
+        "llm_small_model": os.getenv("VOLCENGINE_SMALL_MODEL", "doubao-seed-2-0-mini-260428"),
         "embedding_model": os.getenv("VOLCENGINE_EMBEDDING_MODEL", "doubao-embedding"),
         "reranker_model": os.getenv("VOLCENGINE_RERANK_MODEL"),
         "base_url": os.getenv("VOLCENGINE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),

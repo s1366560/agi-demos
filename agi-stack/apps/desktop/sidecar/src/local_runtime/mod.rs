@@ -4652,7 +4652,13 @@ async fn list_llm_provider_models(
     let (models, source) = match provider_type.as_str() {
         "openai" => (
             LocalLlmProviderModels {
-                chat: local_model_ids(&["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]),
+                chat: local_model_ids(&[
+                    "gpt-6-astra",
+                    "gpt-6.1-sol",
+                    "gpt-6-luna",
+                    "gpt-4o",
+                    "gpt-4o-mini",
+                ]),
                 embedding: local_model_ids(&["text-embedding-3-small", "text-embedding-3-large"]),
                 rerank: Vec::new(),
             },
@@ -4661,9 +4667,11 @@ async fn list_llm_provider_models(
         "anthropic" => (
             LocalLlmProviderModels {
                 chat: local_model_ids(&[
-                    "claude-3-5-sonnet-20241022",
-                    "claude-3-5-haiku-20241022",
-                    "claude-3-opus-20240229",
+                    "claude-opus-5-5",
+                    "claude-sonnet-5-5",
+                    "claude-haiku-5-5",
+                    "claude-fable-5-1",
+                    "claude-haiku-4-5",
                 ]),
                 embedding: Vec::new(),
                 rerank: Vec::new(),
@@ -14043,7 +14051,7 @@ mod tests {
             json!({
                 "provider_type": "openai",
                 "models": {
-                    "chat": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
+                    "chat": ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna", "gpt-4o", "gpt-4o-mini"],
                     "embedding": ["text-embedding-3-small", "text-embedding-3-large"],
                     "rerank": []
                 },

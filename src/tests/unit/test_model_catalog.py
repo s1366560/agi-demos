@@ -512,7 +512,7 @@ class TestModelRegistryBackwardCompat:
     def test_context_window_known_model(self) -> None:
         """Known model returns its context window."""
         ctx = get_model_context_window("deepseek-chat")
-        assert ctx == 1_000_000
+        assert ctx == 1_048_576
 
     def test_context_window_unknown_model(self) -> None:
         """Unknown model returns default 128000."""
@@ -522,7 +522,7 @@ class TestModelRegistryBackwardCompat:
     def test_context_window_with_prefix(self) -> None:
         """Provider prefix is stripped."""
         ctx = get_model_context_window("deepseek/deepseek-chat")
-        assert ctx == 1_000_000
+        assert ctx == 1_048_576
 
     # -- get_model_max_input_tokens --
 
@@ -536,8 +536,8 @@ class TestModelRegistryBackwardCompat:
     def test_max_input_tokens_derived(self) -> None:
         """Model without explicit cap derives from context - output."""
         result = get_model_max_input_tokens("deepseek-chat", max_output_tokens=8192)
-        # context_window(1000000) - 8192 = 991808
-        assert result == 991808
+        # context_window(1048576) - 8192 = 1040384
+        assert result == 1_040_384
 
     def test_max_input_tokens_positive(self) -> None:
         """Result is always >= 1."""

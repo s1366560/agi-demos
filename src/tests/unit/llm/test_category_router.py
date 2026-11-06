@@ -139,10 +139,10 @@ class TestDefaultMappings:
             assert cat in defaults, f"Missing default mapping for {cat}"
 
     def test_code_defaults_prefer_deepseek(self) -> None:
-        """CODE category defaults to deepseek-chat first."""
+        """CODE category defaults to the current DeepSeek pro model first."""
         defaults = build_default_mappings()
         code_config = defaults[TaskCategory.CODE]
-        assert code_config.preferred_models[0] == "deepseek-chat"
+        assert code_config.preferred_models[0] == "deepseek-v4-pro"
         assert code_config.temperature_override == 0.0
 
     def test_analysis_defaults_prefer_reasoning_models(self) -> None:

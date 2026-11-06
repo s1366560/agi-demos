@@ -15,9 +15,9 @@ Error classification:
 Example:
     chain = FailoverChain(
         fallback_sequence=[
-            ("gemini", "gemini-2.0-flash"),
-            ("openai", "gpt-4o"),
-            ("deepseek", "deepseek-chat"),
+            ("gemini", "gemini-3.6-flash"),
+            ("openai", "gpt-6-astra"),
+            ("deepseek", "deepseek-flash"),
         ],
     )
 
@@ -218,7 +218,7 @@ class FailoverChain:
 
     Example::
 
-        chain = FailoverChain([("openai", "gpt-4o"), ("gemini", "gemini-2.0-flash")])
+        chain = FailoverChain([("openai", "gpt-6-astra"), ("gemini", "gemini-3.6-flash")])
 
         result = await chain.execute(my_llm_call, system_prompt="Hello")
         if result.success:
@@ -436,8 +436,7 @@ class FailoverChain:
             # Unknown provider — treat as healthy.
             return True
         return any(
-            self._health_store.is_healthy(self._health_key(provider, m))
-            for m in tracked_models
+            self._health_store.is_healthy(self._health_key(provider, m)) for m in tracked_models
         )
 
     def mark_provider_failed(self, provider: str, model: str | None = None) -> None:
@@ -470,9 +469,7 @@ class FailoverChain:
             if self._health_store.is_healthy(self._health_key(p, m))
         ]
 
-    def get_provider_health(
-        self, provider: str, model: str | None = None
-    ) -> ProviderHealth | None:
+    def get_provider_health(self, provider: str, model: str | None = None) -> ProviderHealth | None:
         """Build a :class:`ProviderHealth` view from the store record.
 
         Returns a default-healthy view for any provider/model in the

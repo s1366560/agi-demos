@@ -68,8 +68,8 @@ def test_build_provider_configs_supports_deepseek_bootstrap(monkeypatch):
     assert len(configs) == 1
     assert configs[0].provider_type == ProviderType.DEEPSEEK
     assert configs[0].operation_type == OperationType.LLM
-    assert configs[0].llm_model == "deepseek-chat"
-    assert configs[0].llm_small_model == "deepseek-v4-flash"
+    assert configs[0].llm_model == "deepseek-v4-pro"
+    assert configs[0].llm_small_model == "deepseek-flash"
     assert configs[0].base_url == "https://api.deepseek.com/v1"
     assert configs[0].pool_enabled is True
 
@@ -86,8 +86,8 @@ def test_build_provider_configs_supports_models_dev_env_aliases(monkeypatch):
     assert len(configs) == 2
     assert configs[0].provider_type == ProviderType.KIMI
     assert configs[0].operation_type == OperationType.LLM
-    assert configs[0].llm_model == "kimi-k2.5"
-    assert configs[0].llm_small_model == "kimi-k2.5"
+    assert configs[0].llm_model == "kimi-k3.1-pro"
+    assert configs[0].llm_small_model == "kimi-k3.1-pro-highspeed"
     assert configs[0].api_key == "sk-moonshot"
 
 

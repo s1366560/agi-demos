@@ -9964,10 +9964,10 @@
           "keepCurrentKey": "Leave empty to keep current key",
           "enterApiKey": "Enter your API key",
           "optionalLocalApiKey": "Optional for local providers",
-          "primaryModel": "e.g., gpt-4o",
-          "smallModel": "e.g., gpt-4o-mini",
+          "primaryModel": "e.g., gpt-6-astra",
+          "smallModel": "e.g., gpt-6-luna",
           "embeddingModel": "e.g., text-embedding-3-small",
-          "rerankerModel": "e.g., gpt-4o-mini (optional)",
+          "rerankerModel": "e.g., gpt-6-luna (optional)",
           "baseUrl": "https://api.example.com/v1",
           "environmentVariable": "PROVIDER_API_KEY"
         },
