@@ -538,6 +538,7 @@ class ProviderService:
             "zai",
             "kimi",
             "groq",
+            "xai",
             "mistral",
             "volcengine",
         }

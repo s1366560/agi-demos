@@ -5,6 +5,7 @@
   {"provider_type": "gemini", "operation_type": "llm", "auth_methods": ["api_key", "environment"], "unavailable_auth_methods": [], "probe_supported": true},
   {"provider_type": "anthropic", "operation_type": "llm", "auth_methods": ["api_key", "environment"], "unavailable_auth_methods": ["oauth"], "probe_supported": true},
   {"provider_type": "groq", "operation_type": "llm", "auth_methods": ["api_key", "environment"], "unavailable_auth_methods": [], "probe_supported": true},
+  {"provider_type": "xai", "operation_type": "llm", "auth_methods": ["api_key", "environment"], "unavailable_auth_methods": [], "probe_supported": true},
   {"provider_type": "azure_openai", "operation_type": "llm", "auth_methods": ["api_key"], "unavailable_auth_methods": [], "probe_supported": false},
   {"provider_type": "cohere", "operation_type": "llm", "auth_methods": ["api_key"], "unavailable_auth_methods": [], "probe_supported": true},
   {"provider_type": "mistral", "operation_type": "llm", "auth_methods": ["api_key", "environment"], "unavailable_auth_methods": [], "probe_supported": true},

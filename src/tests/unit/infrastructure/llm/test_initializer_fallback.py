@@ -68,8 +68,8 @@ def test_build_provider_configs_supports_deepseek_bootstrap(monkeypatch):
     assert len(configs) == 1
     assert configs[0].provider_type == ProviderType.DEEPSEEK
     assert configs[0].operation_type == OperationType.LLM
-    assert configs[0].llm_model == "deepseek-chat"
-    assert configs[0].llm_small_model == "deepseek-v4-flash"
+    assert configs[0].llm_model == "deepseek-v4-pro"
+    assert configs[0].llm_small_model == "deepseek-flash"
     assert configs[0].base_url == "https://api.deepseek.com/v1"
     assert configs[0].pool_enabled is True
 
@@ -86,9 +86,25 @@ def test_build_provider_configs_supports_models_dev_env_aliases(monkeypatch):
     assert len(configs) == 2
     assert configs[0].provider_type == ProviderType.KIMI
     assert configs[0].operation_type == OperationType.LLM
-    assert configs[0].llm_model == "kimi-k2.5"
-    assert configs[0].llm_small_model == "kimi-k2.5"
+    assert configs[0].llm_model == "kimi-k3.1-pro"
+    assert configs[0].llm_small_model == "kimi-k3.1-pro-highspeed"
     assert configs[0].api_key == "sk-moonshot"
+
+
+@pytest.mark.unit
+def test_build_provider_configs_supports_xai_bootstrap(monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    monkeypatch.delenv("XAI_BASE_URL", raising=False)
+    monkeypatch.delenv("XAI_MODEL", raising=False)
+    monkeypatch.delenv("XAI_SMALL_MODEL", raising=False)
+
+    configs = initializer._build_provider_configs("xai")
+
+    assert len(configs) == 1
+    assert configs[0].provider_type == ProviderType.XAI
+    assert configs[0].llm_model == "grok-4.7"
+    assert configs[0].llm_small_model == "grok-4.20-0309-non-reasoning"
+    assert configs[0].base_url == "https://api.x.ai/v1"
 
 
 @pytest.mark.unit

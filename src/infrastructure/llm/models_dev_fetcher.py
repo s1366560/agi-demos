@@ -52,7 +52,24 @@ PROVIDER_MAP: dict[str, str] = {
     "moonshotai-cn": "kimi",
     "mistral": "mistral",
     "groq": "groq",
+    "xai": "xai",
     "cohere": "cohere",
+    "volcengine": "volcengine",
+}
+
+# Retired API IDs that still appear in stored provider configs. Each alias copies
+# the successor's catalog metadata and stays marked deprecated so pickers hide it
+# while context and capability lookups keep working.
+_COMPATIBILITY_ALIASES: dict[str, tuple[str, str]] = {
+    "deepseek-chat": ("deepseek", "deepseek-flash"),
+    "deepseek-reasoner": ("deepseek", "deepseek-v4-pro"),
+    "kimi-k2.5": ("kimi", "kimi-k3"),
+    "kimi-k2-thinking": ("kimi", "kimi-k3"),
+    "gemini-2.0-flash": ("gemini", "gemini-3.8-flash"),
+    "doubao-seed-2.0-lite": ("volcengine", "doubao-seed-2-0-lite-260428"),
+    "doubao-seed-2.0-mini": ("volcengine", "doubao-seed-2-0-mini-260428"),
+    "doubao-seed-2.0-pro": ("volcengine", "doubao-seed-2-1-pro-260628"),
+    "doubao-seed-2.0-code": ("volcengine", "doubao-seed-2-0-code-preview-260215"),
 }
 
 # Provider-specific overrides for input_budget_ratio and chars_per_token
@@ -132,7 +149,18 @@ def convert_to_model_metadata(
             logger.warning("Provider '%s' not found in models.dev data", dev_provider)
             continue
 
-        models_raw: dict[str, Any] = provider_data.get("models", {})
+        models_raw: dict[str, Any] = dict(provider_data.get("models", {}))
+        if dev_provider == "xai":
+            # Official image model published after the models.dev image entry.
+            models_raw.setdefault(
+                "grok-imagine-image-2.0",
+                {
+                    "name": "Grok Imagine Image 2.0",
+                    "family": "grok",
+                    "modalities": {"input": ["text", "image"], "output": ["image"]},
+                    "limit": {"context": 16000, "output": 0},
+                },
+            )
         for model_id, model_data in models_raw.items():
             try:
                 meta = _convert_single_model(model_id, model_data, codebase_provider)
@@ -150,6 +178,7 @@ def convert_to_model_metadata(
                     exc_info=True,
                 )
 
+    _apply_compatibility_aliases(result)
     logger.info("Converted %d models from models.dev", len(result))
     return result
 
@@ -190,6 +219,48 @@ def generate_snapshot(
     _ = dest.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     logger.info("Wrote %d models to %s", len(models), dest)
     return dest
+
+
+def _find_provider_model(
+    models: dict[str, ModelMetadata],
+    provider: str,
+    name: str,
+) -> ModelMetadata | None:
+    """Resolve a catalog row for one provider, including prefixed collision keys."""
+    direct = models.get(name)
+    if direct is not None and direct.provider == provider:
+        return direct
+    prefixed = models.get(f"{provider}/{name}")
+    if prefixed is not None and prefixed.provider == provider:
+        return prefixed
+    for meta in models.values():
+        if meta.provider == provider and meta.name == name:
+            return meta
+    return None
+
+
+def _apply_compatibility_aliases(models: dict[str, ModelMetadata]) -> None:
+    """Keep retired model IDs resolvable against their current successors."""
+    for alias, (provider, successor_name) in _COMPATIBILITY_ALIASES.items():
+        successor = _find_provider_model(models, provider, successor_name)
+        if successor is None:
+            continue
+        key = alias
+        existing = models.get(key)
+        if existing is not None and existing.provider != provider:
+            key = f"{provider}/{alias}"
+        if _find_provider_model(models, provider, alias) is not None:
+            continue
+        models[key] = successor.model_copy(
+            update={
+                "name": alias,
+                "is_deprecated": True,
+                "description": (
+                    f"Retired alias of {successor_name}. "
+                    "New requests should use the successor model ID."
+                ),
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +342,7 @@ def _convert_single_model(  # noqa: PLR0912, PLR0915
     supports_attachment = bool(data.get("attachment", False))
     open_weights = bool(data.get("open_weights", False))
     knowledge_cutoff = data.get("knowledge")
+    is_deprecated = str(data.get("status") or "").lower() == "deprecated"
 
     # --- B1.2: Extended parameter support inference ---
     # Infer supports_response_format from structured_output or tool_call
@@ -340,6 +412,7 @@ def _convert_single_model(  # noqa: PLR0912, PLR0915
         modalities=all_modalities,
         family=family,
         release_date=release_date,
+        is_deprecated=is_deprecated,
         description=data.get("name"),
         max_input_tokens=max_input_tokens,
         input_budget_ratio=budget_ratio,
@@ -453,6 +526,8 @@ def _metadata_to_dict(meta: ModelMetadata) -> dict[str, Any]:  # noqa: C901, PLR
         d["family"] = meta.family
     if meta.release_date:
         d["release_date"] = meta.release_date.isoformat()
+    if meta.is_deprecated:
+        d["is_deprecated"] = True
     if meta.description:
         d["description"] = meta.description
 

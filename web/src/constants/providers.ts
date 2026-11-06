@@ -305,6 +305,18 @@ export const PROVIDERS: ProviderMeta[] = [
     documentationUrl: 'https://console.groq.com/docs',
   },
   {
+    value: 'xai',
+    label: 'xAI Grok',
+    icon: 'sparkles',
+    description: 'Grok 4.7, Grok 4.6, and Grok 4.20',
+    apiKeyEnvVar: 'XAI_API_KEY',
+    apiKeyPlaceholder: 'xai-...',
+    hasEmbedding: false,
+    hasNativeRerank: false,
+    baseUrlRequired: false,
+    documentationUrl: 'https://docs.x.ai/developers/models',
+  },
+  {
     value: 'azure_openai',
     label: 'Azure OpenAI',
     icon: 'cloud',

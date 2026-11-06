@@ -2,7 +2,7 @@
 
 MemStack provides support for Volcengine (火山引擎/豆包 Doubao) services, including LLM, Vision, and Audio.
 
-> Last checked against code: 2026-06-23
+> Last checked against code: 2026-11-06
 
 ## LLM Configuration
 
@@ -14,13 +14,23 @@ Volcengine models are accessed via **Deployment Endpoint IDs** (`ep-xxx`).
 - `VOLC_APP_ID`: Application ID for Voice services
 
 ### Supported Models
-| Model Category | Registry ID | Context Window |
-|----------------|-------------|----------------|
-| **Chat** | `doubao-1.5-pro` | 128k/256k |
-| | `doubao-1.5-lite` | 128k/256k |
-| **Vision** | `doubao-vision` | 128k |
+Ark chat models use dated model IDs. Dotted `doubao-seed-2.0-*` IDs remain in the
+catalog as retired aliases of the dated successors.
+
+| Model Category | Registry ID | Notes |
+|----------------|-------------|-------|
+| **Chat** | `doubao-seed-2-1-pro-260628` | Current pro |
+| | `doubao-seed-2-1-turbo-260628` | Faster pro-class |
+| | `doubao-seed-2-0-lite-260428` | Lite |
+| | `doubao-seed-2-0-mini-260428` | Mini; explicit audio input is declared separately |
+| **Vision** | `doubao-1.5-vision-pro-32k` | Static vision roster |
 | **Embedding** | `doubao-embedding-large` | 2560 dim |
 | **Reranker** | `doubao-reranker-large` | - |
+
+Environment defaults: `VOLCENGINE_MODEL=doubao-seed-2-1-pro-260628`,
+`VOLCENGINE_SMALL_MODEL=doubao-seed-2-0-mini-260428`,
+`VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3`,
+API key `VOLCENGINE_API_KEY` or `ARK_API_KEY`.
 
 ## Audio Services
 

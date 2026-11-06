@@ -171,6 +171,7 @@ _DEFAULT_API_BASES: dict[str, str] = {
     "ollama": "http://localhost:11434",
     "lmstudio": "http://localhost:1234/v1",
     "volcengine": "https://ark.cn-beijing.volces.com/api/v3",
+    "xai": "https://api.x.ai/v1",
 }
 
 # Provider prefixes for LiteLLM model qualification
@@ -181,6 +182,7 @@ _PROVIDER_PREFIXES: dict[str, str] = {
     "bedrock": "bedrock",
     "mistral": "mistral",
     "groq": "groq",
+    "xai": "xai",
     "deepseek": "deepseek",
     "zai": "zai",
     "minimax": "minimax",
@@ -292,6 +294,7 @@ class LiteLLMClient(LLMClient):
             "gemini": "GOOGLE_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
             "groq": "GROQ_API_KEY",
+            "xai": "XAI_API_KEY",
             "mistral": "MISTRAL_API_KEY",
             "deepseek": "DEEPSEEK_API_KEY",
             "zai": "ZAI_API_KEY",

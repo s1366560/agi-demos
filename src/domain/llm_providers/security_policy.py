@@ -14,6 +14,7 @@ _PROVIDER_PROBE_DEFAULT_BASE_URLS: dict[str, str] = {
     "gemini": "https://generativelanguage.googleapis.com",
     "anthropic": "https://api.anthropic.com",
     "groq": "https://api.groq.com/openai/v1",
+    "xai": "https://api.x.ai/v1",
     "mistral": "https://api.mistral.ai/v1",
     "deepseek": "https://api.deepseek.com/v1",
     "minimax": "https://api.minimax.io/v1",
@@ -32,6 +33,7 @@ _OFFICIAL_PROVIDER_BASE_PATHS: dict[str, frozenset[str]] = {
     "gemini": frozenset({"", "/v1beta"}),
     "anthropic": frozenset({"", "/v1"}),
     "groq": frozenset({"/openai/v1"}),
+    "xai": frozenset({"/v1"}),
     "mistral": frozenset({"/v1"}),
     "deepseek": frozenset({"/v1"}),
     "minimax": frozenset({"/v1"}),
@@ -50,6 +52,10 @@ _PROVIDER_EXTRA_OFFICIAL_ENDPOINTS: dict[str, dict[str, frozenset[str]]] = {
     "kimi": {
         # Kimi for Coding subscription endpoint (OpenAI-compatible).
         "api.kimi.com": frozenset({"/coding/v1"}),
+    },
+    "xai": {
+        # US regional endpoint. Same /v1 path, inference stays in the United States.
+        "us.api.x.ai": frozenset({"/v1"}),
     },
 }
 

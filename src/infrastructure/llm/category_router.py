@@ -81,43 +81,79 @@ def build_default_mappings() -> dict[TaskCategory, CategoryModelConfig]:
     return {
         TaskCategory.CODE: CategoryModelConfig(
             category=TaskCategory.CODE,
-            preferred_models=["deepseek-chat", "qwen-plus", "gpt-4o-mini"],
-            fallback_model="qwen-turbo",
+            preferred_models=[
+                "deepseek-v4-pro",
+                "deepseek-flash",
+                "deepseek-chat",
+                "qwen3.8-max",
+                "qwen-plus",
+                "gpt-6-luna",
+            ],
+            fallback_model="qwen3.8-flash",
             temperature_override=0.0,
         ),
         TaskCategory.ANALYSIS: CategoryModelConfig(
             category=TaskCategory.ANALYSIS,
-            preferred_models=["qwen-max", "gpt-4o", "deepseek-chat"],
+            preferred_models=[
+                "qwen3.8-max",
+                "qwen-max",
+                "gpt-6-astra",
+                "gpt-4o",
+                "deepseek-v4-pro",
+                "deepseek-chat",
+            ],
             fallback_model="qwen-plus",
             temperature_override=0.2,
         ),
         TaskCategory.WRITING: CategoryModelConfig(
             category=TaskCategory.WRITING,
-            preferred_models=["qwen-plus", "gpt-4o-mini", "claude-3-5-sonnet-20241022"],
-            fallback_model="qwen-turbo",
+            preferred_models=[
+                "qwen3.8-max",
+                "qwen-plus",
+                "gpt-6-luna",
+                "claude-sonnet-5-5",
+            ],
+            fallback_model="qwen3.8-flash",
             temperature_override=0.7,
         ),
         TaskCategory.CONVERSATION: CategoryModelConfig(
             category=TaskCategory.CONVERSATION,
-            preferred_models=["qwen-turbo", "gpt-4o-mini", "gemini-2.0-flash"],
+            preferred_models=[
+                "qwen3.8-flash",
+                "qwen-turbo",
+                "gpt-6-luna",
+                "gemini-3.6-flash",
+            ],
             fallback_model="qwen-plus",
             temperature_override=0.5,
         ),
         TaskCategory.PLANNING: CategoryModelConfig(
             category=TaskCategory.PLANNING,
-            preferred_models=["qwen-max", "gpt-4o", "deepseek-chat"],
+            preferred_models=[
+                "qwen3.8-max",
+                "qwen-max",
+                "gpt-6-astra",
+                "deepseek-v4-pro",
+                "deepseek-chat",
+            ],
             fallback_model="qwen-plus",
             temperature_override=0.3,
         ),
         TaskCategory.TOOL_USE: CategoryModelConfig(
             category=TaskCategory.TOOL_USE,
-            preferred_models=["gemini-2.0-flash", "qwen-plus", "gpt-4o-mini"],
-            fallback_model="qwen-turbo",
+            preferred_models=[
+                "gemini-3.8-flash",
+                "gemini-3.6-flash",
+                "qwen3.8-max",
+                "qwen-plus",
+                "gpt-6-luna",
+            ],
+            fallback_model="qwen3.8-flash",
             temperature_override=0.0,
         ),
         TaskCategory.VISION: CategoryModelConfig(
             category=TaskCategory.VISION,
-            preferred_models=["qwen-vl-max", "gpt-4o", "gemini-1.5-pro"],
+            preferred_models=["qwen-vl-max", "gpt-6-astra", "gemini-3.8-flash"],
             fallback_model="qwen-vl-plus",
         ),
         TaskCategory.EMBEDDING: CategoryModelConfig(
@@ -127,8 +163,14 @@ def build_default_mappings() -> dict[TaskCategory, CategoryModelConfig]:
         ),
         TaskCategory.DEFAULT: CategoryModelConfig(
             category=TaskCategory.DEFAULT,
-            preferred_models=["qwen-plus", "gpt-4o-mini", "deepseek-chat"],
-            fallback_model="qwen-turbo",
+            preferred_models=[
+                "qwen3.8-max",
+                "qwen-plus",
+                "gpt-6-luna",
+                "deepseek-flash",
+                "deepseek-chat",
+            ],
+            fallback_model="qwen3.8-flash",
         ),
     }
 

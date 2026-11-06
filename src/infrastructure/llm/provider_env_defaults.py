@@ -89,6 +89,8 @@ PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
     "dashscope-embedding": ProviderType.DASHSCOPE_EMBEDDING,
     "dashscope_reranker": ProviderType.DASHSCOPE_RERANKER,
     "dashscope-reranker": ProviderType.DASHSCOPE_RERANKER,
+    "xai": ProviderType.XAI,
+    "grok": ProviderType.XAI,
     "anthropic": ProviderType.ANTHROPIC,
     "claude": ProviderType.ANTHROPIC,
     "ollama": ProviderType.OLLAMA,
@@ -118,6 +120,7 @@ PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
     ("ZHIPU_API_KEY", "zai"),
     ("MOONSHOT_API_KEY", "kimi"),
     ("KIMI_API_KEY", "kimi"),
+    ("XAI_API_KEY", "xai"),
     ("ANTHROPIC_API_KEY", "anthropic"),
     ("OLLAMA_BASE_URL", "ollama"),
     ("LMSTUDIO_BASE_URL", "lmstudio"),
@@ -126,16 +129,24 @@ PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
 ]
 
 _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
+    ProviderType.XAI: _ProviderEnvProfile(
+        api_key=_EnvField(("XAI_API_KEY",)),
+        llm_model=_EnvField(("XAI_MODEL",), "grok-4.7"),
+        llm_small_model=_EnvField(("XAI_SMALL_MODEL",), "grok-4.20-0309-non-reasoning"),
+        reranker_model=_EnvField(("XAI_RERANK_MODEL",), "grok-4.20-0309-non-reasoning"),
+        base_url=_EnvField(("XAI_BASE_URL",), "https://api.x.ai/v1"),
+    ),
     ProviderType.GEMINI: _ProviderEnvProfile(
         api_key=_EnvField(("GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY")),
-        llm_model=_EnvField(("GEMINI_MODEL",), "gemini-2.0-flash"),
+        llm_model=_EnvField(("GEMINI_MODEL",), "gemini-3.8-flash"),
+        llm_small_model=_EnvField(("GEMINI_SMALL_MODEL",), "gemini-3.6-flash"),
         embedding_model=_EnvField(("GEMINI_EMBEDDING_MODEL",), "gemini-embedding-001"),
-        reranker_model=_EnvField(("GEMINI_RERANK_MODEL",), "gemini-2.0-flash"),
+        reranker_model=_EnvField(("GEMINI_RERANK_MODEL",), "gemini-3.6-flash"),
     ),
     ProviderType.ZAI: _ProviderEnvProfile(
         api_key=_EnvField(("ZAI_API_KEY", "ZHIPU_API_KEY")),
-        llm_model=_EnvField(("ZAI_MODEL", "ZHIPU_MODEL"), "glm-5.1"),
-        llm_small_model=_EnvField(("ZAI_SMALL_MODEL", "ZHIPU_SMALL_MODEL"), "glm-4.7-flash"),
+        llm_model=_EnvField(("ZAI_MODEL", "ZHIPU_MODEL"), "glm-5.3"),
+        llm_small_model=_EnvField(("ZAI_SMALL_MODEL", "ZHIPU_SMALL_MODEL"), "glm-5.3-flash"),
         embedding_model=_EnvField(("ZAI_EMBEDDING_MODEL", "ZHIPU_EMBEDDING_MODEL"), "embedding-3"),
         reranker_model=_EnvField(("ZAI_RERANK_MODEL", "ZHIPU_RERANK_MODEL"), "glm-4.7-flash"),
         base_url=_EnvField(
@@ -145,8 +156,8 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.DASHSCOPE: _ProviderEnvProfile(
         api_key=_EnvField(("DASHSCOPE_API_KEY",)),
-        llm_model=_EnvField(("DASHSCOPE_MODEL",), "qwen-plus"),
-        llm_small_model=_EnvField(("DASHSCOPE_SMALL_MODEL",), "qwen-turbo"),
+        llm_model=_EnvField(("DASHSCOPE_MODEL",), "qwen3.8-max"),
+        llm_small_model=_EnvField(("DASHSCOPE_SMALL_MODEL",), "qwen3.8-flash"),
         embedding_model=_EnvField(("DASHSCOPE_EMBEDDING_MODEL",), "text-embedding-v3"),
         reranker_model=_EnvField(("DASHSCOPE_RERANK_MODEL",), "qwen-turbo"),
         base_url=_EnvField(
@@ -156,41 +167,41 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.OPENAI: _ProviderEnvProfile(
         api_key=_EnvField(("OPENAI_API_KEY",)),
-        llm_model=_EnvField(("OPENAI_MODEL",), "gpt-4o"),
-        llm_small_model=_EnvField(("OPENAI_SMALL_MODEL",), "gpt-4o-mini"),
+        llm_model=_EnvField(("OPENAI_MODEL",), "gpt-6-astra"),
+        llm_small_model=_EnvField(("OPENAI_SMALL_MODEL",), "gpt-6-luna"),
         embedding_model=_EnvField(("OPENAI_EMBEDDING_MODEL",), "text-embedding-3-small"),
-        reranker_model=_EnvField(("OPENAI_RERANK_MODEL",), "gpt-4o-mini"),
+        reranker_model=_EnvField(("OPENAI_RERANK_MODEL",), "gpt-6-luna"),
         base_url=_EnvField(("OPENAI_BASE_URL",)),
     ),
     ProviderType.OPENROUTER: _ProviderEnvProfile(
         api_key=_EnvField(("OPENROUTER_API_KEY",)),
-        llm_model=_EnvField(("OPENROUTER_MODEL",), "openai/gpt-4o"),
-        llm_small_model=_EnvField(("OPENROUTER_SMALL_MODEL",), "openai/gpt-4o-mini"),
+        llm_model=_EnvField(("OPENROUTER_MODEL",), "openai/gpt-6-astra"),
+        llm_small_model=_EnvField(("OPENROUTER_SMALL_MODEL",), "openai/gpt-6-luna"),
         embedding_model=_EnvField(("OPENROUTER_EMBEDDING_MODEL",), "openai/text-embedding-3-small"),
-        reranker_model=_EnvField(("OPENROUTER_RERANK_MODEL",), "openai/gpt-4o-mini"),
+        reranker_model=_EnvField(("OPENROUTER_RERANK_MODEL",), "openai/gpt-6-luna"),
         base_url=_EnvField(("OPENROUTER_BASE_URL",), "https://openrouter.ai/api/v1"),
     ),
     ProviderType.DEEPSEEK: _ProviderEnvProfile(
         api_key=_EnvField(("DEEPSEEK_API_KEY",)),
-        llm_model=_EnvField(("DEEPSEEK_MODEL",), "deepseek-chat"),
-        llm_small_model=_EnvField(("DEEPSEEK_SMALL_MODEL",), "deepseek-v4-flash"),
-        reranker_model=_EnvField(("DEEPSEEK_RERANK_MODEL",), "deepseek-chat"),
+        llm_model=_EnvField(("DEEPSEEK_MODEL",), "deepseek-v4-pro"),
+        llm_small_model=_EnvField(("DEEPSEEK_SMALL_MODEL",), "deepseek-flash"),
+        reranker_model=_EnvField(("DEEPSEEK_RERANK_MODEL",), "deepseek-flash"),
         base_url=_EnvField(("DEEPSEEK_BASE_URL",), "https://api.deepseek.com/v1"),
     ),
     ProviderType.MINIMAX: _ProviderEnvProfile(
         api_key=_EnvField(("MINIMAX_API_KEY",)),
-        llm_model=_EnvField(("MINIMAX_MODEL",), "MiniMax-M2.5"),
-        llm_small_model=_EnvField(("MINIMAX_SMALL_MODEL",), "MiniMax-M2.5-highspeed"),
+        llm_model=_EnvField(("MINIMAX_MODEL",), "MiniMax-M3"),
+        llm_small_model=_EnvField(("MINIMAX_SMALL_MODEL",), "MiniMax-M3.1-Flash"),
         embedding_model=_EnvField(("MINIMAX_EMBEDDING_MODEL",), "embo-01"),
         reranker_model=_EnvField(("MINIMAX_RERANK_MODEL",), "MiniMax-M2.5-highspeed"),
         base_url=_EnvField(("MINIMAX_BASE_URL",), "https://api.minimax.io/v1"),
     ),
     ProviderType.MINIMAX_CODING: _ProviderEnvProfile(
         api_key=_EnvField(("MINIMAX_API_KEY",)),
-        llm_model=_EnvField(("MINIMAX_CODING_MODEL", "MINIMAX_MODEL"), "MiniMax-M2.5"),
+        llm_model=_EnvField(("MINIMAX_CODING_MODEL", "MINIMAX_MODEL"), "MiniMax-M3"),
         llm_small_model=_EnvField(
             ("MINIMAX_CODING_SMALL_MODEL", "MINIMAX_SMALL_MODEL"),
-            "MiniMax-M2.5-highspeed",
+            "MiniMax-M3.1-Flash",
         ),
         embedding_model=_EnvField(("MINIMAX_EMBEDDING_MODEL",), "embo-01"),
         reranker_model=_EnvField(("MINIMAX_RERANK_MODEL",), "MiniMax-M2.5-highspeed"),
@@ -227,16 +238,20 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.KIMI: _ProviderEnvProfile(
         api_key=_EnvField(("MOONSHOT_API_KEY", "KIMI_API_KEY")),
-        llm_model=_EnvField(("KIMI_MODEL", "MOONSHOT_MODEL"), "kimi-k2.5"),
-        llm_small_model=_EnvField(("KIMI_SMALL_MODEL", "MOONSHOT_SMALL_MODEL"), "kimi-k2.5"),
+        llm_model=_EnvField(("KIMI_MODEL", "MOONSHOT_MODEL"), "kimi-k3.1-pro"),
+        llm_small_model=_EnvField(
+            ("KIMI_SMALL_MODEL", "MOONSHOT_SMALL_MODEL"), "kimi-k3.1-pro-highspeed"
+        ),
         embedding_model=_EnvField(("KIMI_EMBEDDING_MODEL",), "kimi-embedding-1"),
         reranker_model=_EnvField(("KIMI_RERANK_MODEL",), "kimi-rerank-1"),
         base_url=_EnvField(("KIMI_BASE_URL",), "https://api.moonshot.cn/v1"),
     ),
     ProviderType.KIMI_CODING: _ProviderEnvProfile(
         api_key=_EnvField(("KIMI_API_KEY",)),
-        llm_model=_EnvField(("KIMI_CODING_MODEL", "KIMI_MODEL"), "kimi-k2-thinking"),
-        llm_small_model=_EnvField(("KIMI_CODING_SMALL_MODEL", "KIMI_SMALL_MODEL"), "k2p5"),
+        llm_model=_EnvField(("KIMI_CODING_MODEL", "KIMI_MODEL"), "k3"),
+        llm_small_model=_EnvField(
+            ("KIMI_CODING_SMALL_MODEL", "KIMI_SMALL_MODEL"), "k3.1-pro-highspeed"
+        ),
         embedding_model=_EnvField(("KIMI_EMBEDDING_MODEL",), "kimi-embedding-1"),
         reranker_model=_EnvField(("KIMI_RERANK_MODEL",), "kimi-rerank-1"),
         base_url=_EnvField(
@@ -266,10 +281,10 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.ZAI_CODING: _ProviderEnvProfile(
         api_key=_EnvField(("ZAI_API_KEY", "ZHIPU_API_KEY")),
-        llm_model=_EnvField(("ZAI_CODING_MODEL", "ZHIPU_CODING_MODEL", "ZAI_MODEL"), "glm-5"),
+        llm_model=_EnvField(("ZAI_CODING_MODEL", "ZHIPU_CODING_MODEL", "ZAI_MODEL"), "glm-5.3"),
         llm_small_model=_EnvField(
             ("ZAI_CODING_SMALL_MODEL", "ZHIPU_CODING_SMALL_MODEL", "ZAI_SMALL_MODEL"),
-            "glm-4.7-flash",
+            "glm-5.3-flash",
         ),
         embedding_model=_EnvField(("ZAI_EMBEDDING_MODEL", "ZHIPU_EMBEDDING_MODEL"), "embedding-3"),
         reranker_model=_EnvField(("ZAI_RERANK_MODEL", "ZHIPU_RERANK_MODEL"), "glm-4.7-flash"),
@@ -315,7 +330,7 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.DASHSCOPE_CODING: _ProviderEnvProfile(
         api_key=_EnvField(("DASHSCOPE_API_KEY",)),
-        llm_model=_EnvField(("DASHSCOPE_CODING_MODEL", "DASHSCOPE_MODEL"), "qwen3-coder-plus"),
+        llm_model=_EnvField(("DASHSCOPE_CODING_MODEL", "DASHSCOPE_MODEL"), "qwen3.7-plus"),
         llm_small_model=_EnvField(
             ("DASHSCOPE_CODING_SMALL_MODEL", "DASHSCOPE_SMALL_MODEL"),
             "qwen3-coder-flash",
@@ -356,10 +371,10 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.ANTHROPIC: _ProviderEnvProfile(
         api_key=_EnvField(("ANTHROPIC_API_KEY",)),
-        llm_model=_EnvField(("ANTHROPIC_MODEL",), "claude-3-5-sonnet-20240620"),
-        llm_small_model=_EnvField(("ANTHROPIC_SMALL_MODEL",), "claude-3-haiku-20240307"),
+        llm_model=_EnvField(("ANTHROPIC_MODEL",), "claude-opus-5-5"),
+        llm_small_model=_EnvField(("ANTHROPIC_SMALL_MODEL",), "claude-haiku-5-5"),
         embedding_model=_EnvField(("ANTHROPIC_EMBEDDING_MODEL",)),
-        reranker_model=_EnvField(("ANTHROPIC_RERANK_MODEL",), "claude-3-haiku-20240307"),
+        reranker_model=_EnvField(("ANTHROPIC_RERANK_MODEL",), "claude-haiku-5-5"),
         base_url=_EnvField(("ANTHROPIC_BASE_URL",)),
     ),
     ProviderType.OLLAMA: _ProviderEnvProfile(
@@ -383,8 +398,8 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.VOLCENGINE: _ProviderEnvProfile(
         api_key=_EnvField(("VOLCENGINE_API_KEY", "ARK_API_KEY")),
-        llm_model=_EnvField(("VOLCENGINE_MODEL",), "doubao-1.5-pro-32k"),
-        llm_small_model=_EnvField(("VOLCENGINE_SMALL_MODEL",), "doubao-1.5-lite-32k"),
+        llm_model=_EnvField(("VOLCENGINE_MODEL",), "doubao-seed-2-1-pro-260628"),
+        llm_small_model=_EnvField(("VOLCENGINE_SMALL_MODEL",), "doubao-seed-2-0-mini-260428"),
         embedding_model=_EnvField(("VOLCENGINE_EMBEDDING_MODEL",), "doubao-embedding"),
         reranker_model=_EnvField(("VOLCENGINE_RERANK_MODEL",), "doubao-1.5-pro-32k"),
         base_url=_EnvField(
@@ -394,8 +409,8 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.VOLCENGINE_CODING: _ProviderEnvProfile(
         api_key=_EnvField(("VOLCENGINE_API_KEY", "ARK_API_KEY")),
-        llm_model=_EnvField(("VOLCENGINE_MODEL",), "doubao-1.5-pro-32k"),
-        llm_small_model=_EnvField(("VOLCENGINE_SMALL_MODEL",), "doubao-1.5-lite-32k"),
+        llm_model=_EnvField(("VOLCENGINE_MODEL",), "doubao-seed-2-1-pro-260628"),
+        llm_small_model=_EnvField(("VOLCENGINE_SMALL_MODEL",), "doubao-seed-2-0-mini-260428"),
         embedding_model=_EnvField(("VOLCENGINE_EMBEDDING_MODEL",), "doubao-embedding"),
         reranker_model=_EnvField(("VOLCENGINE_RERANK_MODEL",), "doubao-1.5-pro-32k"),
         base_url=_EnvField(
@@ -405,8 +420,8 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.VOLCENGINE_EMBEDDING: _ProviderEnvProfile(
         api_key=_EnvField(("VOLCENGINE_API_KEY", "ARK_API_KEY")),
-        llm_model=_EnvField(("VOLCENGINE_MODEL",), "doubao-1.5-pro-32k"),
-        llm_small_model=_EnvField(("VOLCENGINE_SMALL_MODEL",), "doubao-1.5-lite-32k"),
+        llm_model=_EnvField(("VOLCENGINE_MODEL",), "doubao-seed-2-1-pro-260628"),
+        llm_small_model=_EnvField(("VOLCENGINE_SMALL_MODEL",), "doubao-seed-2-0-mini-260428"),
         embedding_model=_EnvField(("VOLCENGINE_EMBEDDING_MODEL",), "doubao-embedding"),
         reranker_model=_EnvField(("VOLCENGINE_RERANK_MODEL",), "doubao-1.5-pro-32k"),
         base_url=_EnvField(
@@ -416,8 +431,8 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ),
     ProviderType.VOLCENGINE_RERANKER: _ProviderEnvProfile(
         api_key=_EnvField(("VOLCENGINE_API_KEY", "ARK_API_KEY")),
-        llm_model=_EnvField(("VOLCENGINE_MODEL",), "doubao-1.5-pro-32k"),
-        llm_small_model=_EnvField(("VOLCENGINE_SMALL_MODEL",), "doubao-1.5-lite-32k"),
+        llm_model=_EnvField(("VOLCENGINE_MODEL",), "doubao-seed-2-1-pro-260628"),
+        llm_small_model=_EnvField(("VOLCENGINE_SMALL_MODEL",), "doubao-seed-2-0-mini-260428"),
         embedding_model=_EnvField(("VOLCENGINE_EMBEDDING_MODEL",), "doubao-embedding"),
         reranker_model=_EnvField(("VOLCENGINE_RERANK_MODEL",), "doubao-1.5-pro-32k"),
         base_url=_EnvField(

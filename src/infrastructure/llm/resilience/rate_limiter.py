@@ -117,6 +117,11 @@ DEFAULT_RATE_LIMITS: dict[ProviderType, RateLimitConfig] = {
         rpm=3000,
         tpm=100000,
     ),
+    ProviderType.XAI: RateLimitConfig(
+        max_concurrent=30,
+        rpm=5000,
+        tpm=200000,
+    ),
     ProviderType.GROQ: RateLimitConfig(
         max_concurrent=30,
         rpm=30000,  # Very fast inference

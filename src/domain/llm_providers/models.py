@@ -320,6 +320,7 @@ class ProviderType(StrEnum):
     GEMINI = "gemini"
     ANTHROPIC = "anthropic"
     GROQ = "groq"
+    XAI = "xai"  # xAI Grok
     AZURE_OPENAI = "azure_openai"
     COHERE = "cohere"
     MISTRAL = "mistral"
@@ -386,6 +387,7 @@ _PROVIDER_ENVIRONMENT_VARIABLES: dict[str, tuple[str, ...]] = {
     "gemini": ("GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY"),
     "anthropic": ("ANTHROPIC_API_KEY",),
     "groq": ("GROQ_API_KEY",),
+    "xai": ("XAI_API_KEY",),
     "mistral": ("MISTRAL_API_KEY",),
     "deepseek": ("DEEPSEEK_API_KEY",),
     "minimax": ("MINIMAX_API_KEY",),

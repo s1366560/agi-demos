@@ -24,7 +24,8 @@ Endpoint -> AIServiceFactory -> ProviderResolutionService (DB lookup)
 - Resolves LLM provider config per tenant from database
 - `ProviderResolutionService` handles multi-tenant isolation
 - Creates appropriate client (LLM, embedder, reranker) based on provider type
-- Supported providers: gemini, dashscope, openai, deepseek, anthropic
+- Supported providers: openai, openrouter, gemini, vertex, azure_openai, bedrock, dashscope, deepseek, minimax, zai, kimi, anthropic, mistral, groq, xai, cohere, ollama, lmstudio, volcengine
+- xAI Grok uses `XAI_API_KEY` and `https://api.x.ai/v1` (US regional: `https://us.api.x.ai/v1`). Default model is `grok-4.7`; the fast default is `grok-4.20-0309-non-reasoning`. Vision and tool calling come from the catalog. Audio input is not inferred and is not enabled for this chat adapter.
 
 ## Circuit Breaker Config
 | Parameter | Default |

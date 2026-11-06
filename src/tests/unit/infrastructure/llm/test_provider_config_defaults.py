@@ -74,6 +74,7 @@ def test_get_provider_prefix_maps_supported_provider_types(
         ("gemini-2.0-flash", ProviderType.GEMINI),
         ("deepseek-chat", ProviderType.DEEPSEEK),
         ("doubao-seed-2.0-pro", ProviderType.VOLCENGINE),
+        ("grok-4.7", ProviderType.XAI),
         ("unknown-model", ProviderType.OPENAI),
     ],
 )
@@ -92,14 +93,14 @@ def test_unified_llm_config_defaults_and_litellm_names() -> None:
         provider_options={"top_p": 0.9},
     )
 
-    assert config.model == "qwen-max"
-    assert config.small_model == "qwen-turbo"
-    assert config.get_litellm_model_name() == "dashscope/qwen-max"
+    assert config.model == "qwen3.8-max"
+    assert config.small_model == "qwen3.8-flash"
+    assert config.get_litellm_model_name() == "dashscope/qwen3.8-max"
     assert config.get_litellm_model_name("already/prefixed") == "already/prefixed"
-    assert config.get_model_for_size("small") == "qwen-turbo"
-    assert config.get_model_for_size("large") == "qwen-max"
+    assert config.get_model_for_size("small") == "qwen3.8-flash"
+    assert config.get_model_for_size("large") == "qwen3.8-max"
     assert config.to_kwargs() == {
-        "model": "dashscope/qwen-max",
+        "model": "dashscope/qwen3.8-max",
         "temperature": 0.2,
         "max_tokens": 2048,
         "timeout": 600,
@@ -112,13 +113,13 @@ def test_unified_llm_config_keeps_openai_model_unprefixed() -> None:
 
     assert config.get_litellm_model_name() == "gpt-4o"
     assert config.get_default_model("embedding") == "text-embedding-3-small"
-    assert config.get_default_model("missing-operation") == "gpt-4o-mini"
+    assert config.get_default_model("missing-operation") == "gpt-6-luna"
 
 
 def test_provider_health_config_uses_completion_default() -> None:
     config = ProviderHealthConfig(provider_type=ProviderType.GEMINI)
 
-    assert config.health_check_model == "gemini-2.0-flash"
+    assert config.health_check_model == "gemini-3.6-flash"
     assert config.failure_threshold == 5
     assert config.recovery_timeout == 60.0
 
@@ -138,6 +139,7 @@ def test_models_dev_llm_defaults_exist_in_snapshot() -> None:
         ProviderType.MINIMAX,
         ProviderType.ZAI,
         ProviderType.GROQ,
+        ProviderType.XAI,
         ProviderType.COHERE,
         ProviderType.BEDROCK,
         ProviderType.VERTEX,
@@ -230,7 +232,7 @@ def test_resolve_provider_env_defaults_supports_deepseek(
     assert defaults.api_key_source == "DEEPSEEK_API_KEY"
     assert defaults.llm_model == "deepseek-reasoner"
     assert defaults.llm_model_source == "DEEPSEEK_MODEL"
-    assert defaults.llm_small_model == "deepseek-v4-flash"
+    assert defaults.llm_small_model == "deepseek-flash"
     assert defaults.base_url == "https://api.deepseek.com/v1"
     assert defaults.api_key_env_vars == ("DEEPSEEK_API_KEY",)
 
@@ -262,8 +264,8 @@ def test_resolve_provider_env_defaults_uses_models_dev_env_aliases(
     kimi = resolve_provider_env_defaults(ProviderType.KIMI)
     assert kimi.api_key == "moonshot-key"
     assert kimi.api_key_source == "MOONSHOT_API_KEY"
-    assert kimi.llm_model == "kimi-k2.5"
-    assert kimi.llm_small_model == "kimi-k2.5"
+    assert kimi.llm_model == "kimi-k3.1-pro"
+    assert kimi.llm_small_model == "kimi-k3.1-pro-highspeed"
     assert kimi.api_key_env_vars == ("MOONSHOT_API_KEY", "KIMI_API_KEY")
 
 

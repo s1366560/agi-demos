@@ -48,6 +48,7 @@ const PROVIDER_TYPES: &[&str] = &[
     "gemini",
     "anthropic",
     "groq",
+    "xai",
     "azure_openai",
     "cohere",
     "mistral",
@@ -1548,6 +1549,7 @@ fn provider_probe_default_base_url(provider_type: &str) -> Option<&'static str> 
         "zai" => Some("https://open.bigmodel.cn/api/paas/v4"),
         "kimi" => Some("https://api.moonshot.cn/v1"),
         "groq" => Some("https://api.groq.com/openai/v1"),
+        "xai" => Some("https://api.x.ai/v1"),
         "mistral" => Some("https://api.mistral.ai/v1"),
         "volcengine" => Some("https://ark.cn-beijing.volces.com/api/v3"),
         "cohere" => Some("https://api.cohere.com/v1"),
@@ -1593,7 +1595,19 @@ fn validate_persisted_provider_base_url(
     validate_provider_base_url_path(&provider_type, &url)
 }
 
+fn xai_us_regional_endpoint(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url
+            .host_str()
+            .is_some_and(|host| host.eq_ignore_ascii_case("us.api.x.ai"))
+        && url.port_or_known_default() == Some(443)
+        && normalized_provider_base_path(url.path()) == "/v1"
+}
+
 fn validate_provider_base_url_path(provider_type: &str, url: &Url) -> Result<(), &'static str> {
+    if provider_type == "xai" && xai_us_regional_endpoint(url) {
+        return Ok(());
+    }
     if let Some(default_url) = provider_probe_default_base_url(provider_type) {
         let default_url = validated_probe_base_url(default_url)?;
         if provider_url_has_same_origin(url, &default_url) {
@@ -1614,6 +1628,13 @@ fn validate_provider_base_url_path(provider_type: &str, url: &Url) -> Result<(),
 
 fn environment_credential_endpoint_is_official(provider_type: &str, raw_url: Option<&str>) -> bool {
     let provider_type = catalog_provider_key(provider_type);
+    if provider_type == "xai" {
+        if let Some(candidate) = raw_url.map(str::trim).filter(|value| !value.is_empty()) {
+            if validated_probe_base_url(candidate).is_ok_and(xai_us_regional_endpoint) {
+                return true;
+            }
+        }
+    }
     let Some(default_url) = provider_probe_default_base_url(&provider_type) else {
         return false;
     };
@@ -2657,6 +2678,19 @@ impl ModelCatalog {
             || !categorized.embedding.is_empty()
             || !categorized.rerank.is_empty()
         {
+            let static_models = static_provider_models(provider_type);
+            if categorized.chat.is_empty() {
+                categorized.chat = static_models.chat;
+            }
+            if categorized.embedding.is_empty() {
+                categorized.embedding = static_models.embedding;
+            }
+            if categorized.rerank.is_empty() {
+                categorized.rerank = static_models.rerank;
+            }
+            if categorized.vision.is_none() {
+                categorized.vision = static_models.vision;
+            }
             return ProviderModelsResponse {
                 provider_type: provider_type.to_string(),
                 models: categorized,
@@ -2695,7 +2729,8 @@ fn catalog_provider_key(provider_type: &str) -> String {
 fn static_provider_models_source(provider_type: &str) -> Option<&'static str> {
     match provider_type {
         "openai" | "openrouter" | "dashscope" | "zai" | "kimi" | "ollama" | "lmstudio"
-        | "gemini" | "anthropic" | "groq" | "deepseek" | "minimax" | "cohere" | "mistral"
+        | "gemini" | "anthropic" | "groq" | "xai" | "deepseek" | "minimax" | "cohere"
+        | "mistral"
         | "azure_openai" | "bedrock" | "vertex" | "volcengine" => Some("static-fallback"),
         _ => None,
     }
@@ -2704,35 +2739,53 @@ fn static_provider_models_source(provider_type: &str) -> Option<&'static str> {
 fn static_provider_models(provider_type: &str) -> CategorizedProviderModels {
     let mut models = match provider_type {
         "openai" => CategorizedProviderModels {
-            chat: vecs(&["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]),
+            chat: vecs(&[
+                "gpt-6-astra",
+                "gpt-6.1-sol",
+                "gpt-6-luna",
+                "gpt-4o",
+                "gpt-4o-mini",
+            ]),
             embedding: vecs(&["text-embedding-3-small", "text-embedding-3-large"]),
             rerank: Vec::new(),
             vision: None,
         },
         "openrouter" => CategorizedProviderModels {
             chat: vecs(&[
+                "openai/gpt-6-astra",
+                "openai/gpt-6-luna",
+                "anthropic/claude-opus-5.5",
                 "openai/gpt-4o",
-                "openai/gpt-4o-mini",
-                "anthropic/claude-3.5-sonnet",
             ]),
             embedding: vecs(&["openai/text-embedding-3-small"]),
             rerank: Vec::new(),
             vision: None,
         },
         "dashscope" => CategorizedProviderModels {
-            chat: vecs(&["qwen-max", "qwen-plus", "qwen-turbo", "qwen-long"]),
+            chat: vecs(&[
+                "qwen3.8-max",
+                "qwen3.8-flash",
+                "qwen-max",
+                "qwen-plus",
+                "qwen-turbo",
+            ]),
             embedding: vecs(&["text-embedding-v3", "text-embedding-v2"]),
             rerank: vecs(&["qwen3-rerank"]),
             vision: None,
         },
         "zai" => CategorizedProviderModels {
-            chat: vecs(&["glm-4-plus", "glm-4-flash", "glm-4-air"]),
+            chat: vecs(&["glm-5.3", "glm-5.3-flash", "glm-5.1", "glm-4.7-flash"]),
             embedding: vecs(&["embedding-3", "embedding-2"]),
             rerank: Vec::new(),
             vision: None,
         },
         "kimi" => CategorizedProviderModels {
-            chat: vecs(&["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]),
+            chat: vecs(&[
+                "kimi-k3.1-pro",
+                "kimi-k3.1-pro-highspeed",
+                "kimi-k3",
+                "kimi-k2.5",
+            ]),
             embedding: vecs(&["kimi-embedding-1"]),
             rerank: vecs(&["kimi-rerank-1"]),
             vision: None,
@@ -2751,20 +2804,35 @@ fn static_provider_models(provider_type: &str) -> CategorizedProviderModels {
         },
         "gemini" => CategorizedProviderModels {
             chat: vecs(&[
-                "gemini-1.5-pro",
-                "gemini-1.5-flash",
-                "gemini-1.5-pro-002",
-                "gemini-1.5-flash-002",
+                "gemini-3.8-flash",
+                "gemini-3.6-flash",
+                "gemini-3.1-pro-preview",
+                "gemini-2.5-flash",
             ]),
-            embedding: vecs(&["text-embedding-004"]),
+            embedding: vecs(&["gemini-embedding-001", "gemini-embedding-2"]),
             rerank: Vec::new(),
             vision: None,
         },
         "anthropic" => CategorizedProviderModels {
             chat: vecs(&[
-                "claude-3-5-sonnet-20241022",
-                "claude-3-5-haiku-20241022",
-                "claude-3-opus-20240229",
+                "claude-opus-5-5",
+                "claude-sonnet-5-5",
+                "claude-haiku-5-5",
+                "claude-fable-5-1",
+                "claude-haiku-4-5",
+            ]),
+            embedding: Vec::new(),
+            rerank: Vec::new(),
+            vision: None,
+        },
+        "xai" => CategorizedProviderModels {
+            chat: vecs(&[
+                "grok-4.7",
+                "grok-4.6",
+                "grok-4.20-0309-non-reasoning",
+                "grok-4.20-0309-reasoning",
+                "grok-build-0.1",
+                "grok-imagine-image-2.0",
             ]),
             embedding: Vec::new(),
             rerank: Vec::new(),
@@ -2773,28 +2841,42 @@ fn static_provider_models(provider_type: &str) -> CategorizedProviderModels {
         "groq" => CategorizedProviderModels {
             chat: vecs(&[
                 "llama-3.3-70b-versatile",
-                "llama-3.1-70b-versatile",
-                "mixtral-8x7b-32768",
                 "llama-3.1-8b-instant",
+                "openai/gpt-oss-120b",
+                "qwen/qwen3.8-27b",
             ]),
             embedding: Vec::new(),
             rerank: Vec::new(),
             vision: None,
         },
         "deepseek" => CategorizedProviderModels {
-            chat: vecs(&["deepseek-chat", "deepseek-coder"]),
+            chat: vecs(&[
+                "deepseek-v4-pro",
+                "deepseek-flash",
+                "deepseek-chat",
+                "deepseek-reasoner",
+            ]),
             embedding: Vec::new(),
             rerank: Vec::new(),
             vision: None,
         },
         "minimax" => CategorizedProviderModels {
-            chat: vecs(&["abab6.5-chat", "abab6.5s-chat", "MiniMax-Text-01"]),
+            chat: vecs(&[
+                "MiniMax-M3",
+                "MiniMax-M3.1-Flash",
+                "MiniMax-M2.5",
+                "MiniMax-M2.5-highspeed",
+            ]),
             embedding: vecs(&["embo-01"]),
             rerank: Vec::new(),
             vision: None,
         },
         "cohere" => CategorizedProviderModels {
-            chat: vecs(&["command-r-plus", "command-r"]),
+            chat: vecs(&[
+                "command-a-plus-05-2026",
+                "command-a-03-2025",
+                "command-r-plus-08-2024",
+            ]),
             embedding: vecs(&["embed-english-v3.0", "embed-multilingual-v3.0"]),
             rerank: vecs(&["rerank-english-v3.0", "rerank-multilingual-v3.0"]),
             vision: None,
@@ -2810,43 +2892,42 @@ fn static_provider_models(provider_type: &str) -> CategorizedProviderModels {
             vision: None,
         },
         "azure_openai" => CategorizedProviderModels {
-            chat: vecs(&["gpt-4o", "gpt-4", "gpt-4o-mini", "gpt-35-turbo"]),
+            chat: vecs(&["gpt-6-astra", "gpt-6-luna", "gpt-4o", "gpt-4o-mini"]),
             embedding: vecs(&["text-embedding-3-small", "text-embedding-ada-002"]),
             rerank: Vec::new(),
             vision: None,
         },
         "bedrock" => CategorizedProviderModels {
             chat: vecs(&[
-                "anthropic.claude-3-sonnet-20240229-v1:0",
-                "anthropic.claude-3-haiku-20240307-v1:0",
-                "meta.llama3-70b-instruct-v1:0",
+                "anthropic.claude-opus-5-5",
+                "anthropic.claude-sonnet-5-5",
+                "anthropic.claude-haiku-5-5",
+                "anthropic.claude-sonnet-4-6",
             ]),
             embedding: vecs(&["amazon.titan-embed-text-v1", "amazon.titan-embed-text-v2:0"]),
             rerank: Vec::new(),
             vision: None,
         },
         "vertex" => CategorizedProviderModels {
-            chat: vecs(&["gemini-1.5-pro", "gemini-1.5-flash"]),
-            embedding: vecs(&["textembedding-gecko"]),
+            chat: vecs(&[
+                "gemini-3.8-flash",
+                "gemini-3.6-flash",
+                "gemini-3.1-pro-preview",
+            ]),
+            embedding: vecs(&["textembedding-gecko", "gemini-embedding-001"]),
             rerank: Vec::new(),
             vision: None,
         },
         "volcengine" => CategorizedProviderModels {
             chat: vecs(&[
+                "doubao-seed-2-1-pro-260628",
+                "doubao-seed-2-1-turbo-260628",
+                "doubao-seed-2-0-lite-260428",
+                "doubao-seed-2-0-mini-260428",
                 "doubao-seed-2.0-pro",
                 "doubao-seed-2.0-lite",
                 "doubao-seed-2.0-mini",
                 "doubao-seed-2.0-code",
-                "doubao-1.5-pro-32k",
-                "doubao-1.5-pro-128k",
-                "doubao-1.5-pro-256k",
-                "doubao-1.5-lite-32k",
-                "doubao-1.5-lite-128k",
-                "doubao-pro-32k",
-                "doubao-pro-128k",
-                "doubao-pro-256k",
-                "doubao-lite-32k",
-                "doubao-lite-128k",
             ]),
             embedding: vecs(&[
                 "doubao-embedding",
@@ -2858,10 +2939,7 @@ fn static_provider_models(provider_type: &str) -> CategorizedProviderModels {
             rerank: vecs(&["doubao-reranker-large"]),
             vision: Some(vecs(&[
                 "doubao-1.5-vision-pro-32k",
-                "doubao-1.5-vision-pro-128k",
-                "doubao-vision-pro-32k",
-                "doubao-vision-pro-128k",
-                "doubao-vision-lite-32k",
+                "doubao-seed-1-6-vision-250815",
             ])),
         },
         _ => CategorizedProviderModels::default(),
@@ -2892,6 +2970,7 @@ const ENV_PROVIDER_AUTO_DETECT: &[(&str, &str)] = &[
     ("ZHIPU_API_KEY", "zai"),
     ("MOONSHOT_API_KEY", "kimi"),
     ("KIMI_API_KEY", "kimi"),
+    ("XAI_API_KEY", "xai"),
     ("ANTHROPIC_API_KEY", "anthropic"),
     ("OLLAMA_BASE_URL", "ollama"),
     ("LMSTUDIO_BASE_URL", "lmstudio"),
@@ -3263,8 +3342,14 @@ fn provider_update_record(
         &provider_type,
         &operation_type,
         llm_model.as_deref(),
-        request.allowed_models.as_deref().unwrap_or(&existing.allowed_models),
-        request.blocked_models.as_deref().unwrap_or(&existing.blocked_models),
+        request
+            .allowed_models
+            .as_deref()
+            .unwrap_or(&existing.allowed_models),
+        request
+            .blocked_models
+            .as_deref()
+            .unwrap_or(&existing.blocked_models),
     )
     .map_err(LlmProvidersApiError::unprocessable)?;
     let api_key_plaintext = if provider_type_changed && !provider_requires_api_key(&provider_type) {
@@ -3641,8 +3726,8 @@ where
                 ],
             ),
             base_url: None,
-            llm_model: env_default(lookup, "GEMINI_MODEL", "gemini-2.0-flash"),
-            llm_small_model: None,
+            llm_model: env_default(lookup, "GEMINI_MODEL", "gemini-3.8-flash"),
+            llm_small_model: env_default(lookup, "GEMINI_SMALL_MODEL", "gemini-3.6-flash"),
             embedding_model: env_default(lookup, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
             reranker_model: env_raw(lookup, "GEMINI_RERANK_MODEL"),
         },
@@ -3660,13 +3745,13 @@ where
                 lookup,
                 &["ZAI_MODEL"],
                 "ZHIPU_MODEL",
-                "glm-5.1",
+                "glm-5.3",
             ),
             llm_small_model: first_nonempty_or_env_default(
                 lookup,
                 &["ZAI_SMALL_MODEL"],
                 "ZHIPU_SMALL_MODEL",
-                "glm-4.7-flash",
+                "glm-5.3-flash",
             ),
             embedding_model: first_nonempty_or_env_default(
                 lookup,
@@ -3685,8 +3770,8 @@ where
                 "DASHSCOPE_BASE_URL",
                 "https://dashscope.aliyuncs.com/compatible-mode/v1",
             ),
-            llm_model: env_default(lookup, "DASHSCOPE_MODEL", "qwen-plus"),
-            llm_small_model: env_default(lookup, "DASHSCOPE_SMALL_MODEL", "qwen-turbo"),
+            llm_model: env_default(lookup, "DASHSCOPE_MODEL", "qwen3.8-max"),
+            llm_small_model: env_default(lookup, "DASHSCOPE_SMALL_MODEL", "qwen3.8-flash"),
             embedding_model: env_default(lookup, "DASHSCOPE_EMBEDDING_MODEL", "text-embedding-v3"),
             reranker_model: env_raw(lookup, "DASHSCOPE_RERANK_MODEL"),
         },
@@ -3695,8 +3780,8 @@ where
             operation_type: "llm".to_string(),
             api_key: env_nonempty(lookup, "OPENAI_API_KEY"),
             base_url: env_raw(lookup, "OPENAI_BASE_URL"),
-            llm_model: env_default(lookup, "OPENAI_MODEL", "gpt-4o"),
-            llm_small_model: env_default(lookup, "OPENAI_SMALL_MODEL", "gpt-4o-mini"),
+            llm_model: env_default(lookup, "OPENAI_MODEL", "gpt-6-astra"),
+            llm_small_model: env_default(lookup, "OPENAI_SMALL_MODEL", "gpt-6-luna"),
             embedding_model: env_default(
                 lookup,
                 "OPENAI_EMBEDDING_MODEL",
@@ -3713,8 +3798,8 @@ where
                 "OPENROUTER_BASE_URL",
                 "https://openrouter.ai/api/v1",
             ),
-            llm_model: env_default(lookup, "OPENROUTER_MODEL", "openai/gpt-4o"),
-            llm_small_model: env_default(lookup, "OPENROUTER_SMALL_MODEL", "openai/gpt-4o-mini"),
+            llm_model: env_default(lookup, "OPENROUTER_MODEL", "openai/gpt-6-astra"),
+            llm_small_model: env_default(lookup, "OPENROUTER_SMALL_MODEL", "openai/gpt-6-luna"),
             embedding_model: env_default(
                 lookup,
                 "OPENROUTER_EMBEDDING_MODEL",
@@ -3727,8 +3812,8 @@ where
             operation_type: "llm".to_string(),
             api_key: env_nonempty(lookup, "DEEPSEEK_API_KEY"),
             base_url: env_default(lookup, "DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
-            llm_model: env_default(lookup, "DEEPSEEK_MODEL", "deepseek-chat"),
-            llm_small_model: env_default(lookup, "DEEPSEEK_SMALL_MODEL", "deepseek-v4-flash"),
+            llm_model: env_default(lookup, "DEEPSEEK_MODEL", "deepseek-v4-pro"),
+            llm_small_model: env_default(lookup, "DEEPSEEK_SMALL_MODEL", "deepseek-flash"),
             embedding_model: None,
             reranker_model: env_raw(lookup, "DEEPSEEK_RERANK_MODEL"),
         },
@@ -3737,8 +3822,8 @@ where
             operation_type: "llm".to_string(),
             api_key: env_nonempty(lookup, "MINIMAX_API_KEY"),
             base_url: env_default(lookup, "MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
-            llm_model: env_default(lookup, "MINIMAX_MODEL", "MiniMax-M2.5"),
-            llm_small_model: env_default(lookup, "MINIMAX_SMALL_MODEL", "MiniMax-M2.5-highspeed"),
+            llm_model: env_default(lookup, "MINIMAX_MODEL", "MiniMax-M3"),
+            llm_small_model: env_default(lookup, "MINIMAX_SMALL_MODEL", "MiniMax-M3.1-Flash"),
             embedding_model: env_default(lookup, "MINIMAX_EMBEDDING_MODEL", "embo-01"),
             reranker_model: env_raw(lookup, "MINIMAX_RERANK_MODEL"),
         },
@@ -3751,28 +3836,38 @@ where
                 lookup,
                 &["KIMI_MODEL"],
                 "MOONSHOT_MODEL",
-                "kimi-k2.5",
+                "kimi-k3.1-pro",
             ),
             llm_small_model: first_nonempty_or_env_default(
                 lookup,
                 &["KIMI_SMALL_MODEL"],
                 "MOONSHOT_SMALL_MODEL",
-                "kimi-k2.5",
+                "kimi-k3.1-pro-highspeed",
             ),
             embedding_model: env_default(lookup, "KIMI_EMBEDDING_MODEL", "kimi-embedding-1"),
             reranker_model: env_raw(lookup, "KIMI_RERANK_MODEL"),
+        },
+        "xai" => EnvProviderConfig {
+            provider_type: provider_name.to_string(),
+            operation_type: "llm".to_string(),
+            api_key: env_nonempty(lookup, "XAI_API_KEY"),
+            base_url: env_default(lookup, "XAI_BASE_URL", "https://api.x.ai/v1"),
+            llm_model: env_default(lookup, "XAI_MODEL", "grok-4.7"),
+            llm_small_model: env_default(
+                lookup,
+                "XAI_SMALL_MODEL",
+                "grok-4.20-0309-non-reasoning",
+            ),
+            embedding_model: None,
+            reranker_model: env_raw(lookup, "XAI_RERANK_MODEL"),
         },
         "anthropic" => EnvProviderConfig {
             provider_type: provider_name.to_string(),
             operation_type: "llm".to_string(),
             api_key: env_nonempty(lookup, "ANTHROPIC_API_KEY"),
             base_url: env_raw(lookup, "ANTHROPIC_BASE_URL"),
-            llm_model: env_default(lookup, "ANTHROPIC_MODEL", "claude-3-5-sonnet-20240620"),
-            llm_small_model: env_default(
-                lookup,
-                "ANTHROPIC_SMALL_MODEL",
-                "claude-3-haiku-20240307",
-            ),
+            llm_model: env_default(lookup, "ANTHROPIC_MODEL", "claude-opus-5-5"),
+            llm_small_model: env_default(lookup, "ANTHROPIC_SMALL_MODEL", "claude-haiku-5-5"),
             embedding_model: env_default(lookup, "ANTHROPIC_EMBEDDING_MODEL", ""),
             reranker_model: env_raw(lookup, "ANTHROPIC_RERANK_MODEL"),
         },
@@ -3809,8 +3904,12 @@ where
                 "VOLCENGINE_BASE_URL",
                 "https://ark.cn-beijing.volces.com/api/v3",
             ),
-            llm_model: env_default(lookup, "VOLCENGINE_MODEL", "doubao-1.5-pro-32k"),
-            llm_small_model: env_default(lookup, "VOLCENGINE_SMALL_MODEL", "doubao-1.5-lite-32k"),
+            llm_model: env_default(lookup, "VOLCENGINE_MODEL", "doubao-seed-2-1-pro-260628"),
+            llm_small_model: env_default(
+                lookup,
+                "VOLCENGINE_SMALL_MODEL",
+                "doubao-seed-2-0-mini-260428",
+            ),
             embedding_model: env_default(lookup, "VOLCENGINE_EMBEDDING_MODEL", "doubao-embedding"),
             reranker_model: env_raw(lookup, "VOLCENGINE_RERANK_MODEL"),
         },
@@ -3835,6 +3934,7 @@ fn provider_environment_variables(provider_name: &str) -> &'static [&'static str
         ],
         "anthropic" => &["ANTHROPIC_API_KEY"],
         "groq" => &["GROQ_API_KEY"],
+        "xai" => &["XAI_API_KEY"],
         "mistral" => &["MISTRAL_API_KEY"],
         "deepseek" => &["DEEPSEEK_API_KEY"],
         "minimax" => &["MINIMAX_API_KEY"],
@@ -5397,7 +5497,7 @@ mod tests {
     fn model_catalog_embedded_snapshot_loads_in_python_order() {
         let catalog = ModelCatalog::load_embedded();
         // Reproduce against the Python authority with scripts/generate_llm_catalog_golden.py.
-        assert_eq!(catalog.models.len(), 865);
+        assert_eq!(catalog.models.len(), 1065);
         assert_eq!(catalog.models[0].name, "claude-fable-5");
     }
 

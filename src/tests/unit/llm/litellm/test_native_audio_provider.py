@@ -64,6 +64,7 @@ def test_missing_or_malformed_historical_audio_declaration_stays_disabled():
     "provider,declared,roster",
     [
         ("anthropic", ["exact"], ["exact"]),
+        ("xai", ["grok-4.7"], ["grok-4.7"]),
         ("openai", ["not-configured"], ["exact"]),
     ],
 )
