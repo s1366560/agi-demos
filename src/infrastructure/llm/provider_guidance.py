@@ -39,6 +39,49 @@ def _signals_from_metadata(
     )
 
 
+_AUDIO_CAPABILITIES = frozenset(
+    {"tts", "asr", "audio_generation", "voice_cloning", "realtime_voice"}
+)
+
+
+def catalog_profile(model_id: str, metadata: ModelMetadata | None) -> dict[str, Any] | None:
+    """Compact limits for one snapshot model. Unknown IDs stay absent."""
+    if metadata is None:
+        return None
+    capabilities = {str(item).lower() for item in metadata.capabilities}
+    modalities = {item.lower() for item in metadata.modalities}
+    return {
+        "id": model_id,
+        "known": True,
+        "context_window": metadata.context_length,
+        "max_output_tokens": metadata.max_output_tokens,
+        "vision": "vision" in capabilities or "image" in modalities,
+        "tools": bool(metadata.supports_tool_call),
+        "reasoning": bool(metadata.reasoning),
+        "audio_input": bool(capabilities & _AUDIO_CAPABILITIES or "audio" in modalities),
+        "deprecated": bool(metadata.is_deprecated),
+        "input_cost_per_1m": metadata.input_cost_per_1m,
+        "output_cost_per_1m": metadata.output_cost_per_1m,
+    }
+
+
+def catalog_profiles_for_ids(model_ids: list[str]) -> list[dict[str, Any]]:
+    """Return snapshot profiles in list order, skipping IDs the snapshot does not know."""
+    from src.infrastructure.llm.model_catalog import get_model_catalog_service
+
+    catalog = get_model_catalog_service()
+    profiles: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for model_id in model_ids:
+        if not model_id or model_id in seen:
+            continue
+        seen.add(model_id)
+        profile = catalog_profile(model_id, catalog.get_model(model_id))
+        if profile is not None:
+            profiles.append(profile)
+    return profiles
+
+
 def _profile(
     model_id: str,
     metadata: ModelMetadata | None,

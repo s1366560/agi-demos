@@ -6,6 +6,7 @@ import {
 import type {
   LlmProviderAuthMethod,
   LlmProviderModelCatalog,
+  LlmProviderModelProfile,
   LlmProviderPublicConfig,
   LlmProviderRoutingPolicy,
   LlmProviderTypeDescriptor,
@@ -350,6 +351,35 @@ function readTrimmedString(record: Record<string, unknown>, key: string): string
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function readModelProfiles(value: unknown): Map<string, LlmProviderModelProfile> {
+  const profiles = new Map<string, LlmProviderModelProfile>();
+  if (!Array.isArray(value)) return profiles;
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const id = typeof record.id === 'string' ? record.id.trim() : '';
+    if (!id) continue;
+    profiles.set(id, {
+      id,
+      known: record.known !== false,
+      contextWindow: readFiniteNumber(record.context_window ?? record.contextWindow),
+      maxOutputTokens: readFiniteNumber(record.max_output_tokens ?? record.maxOutputTokens),
+      vision: record.vision === true,
+      tools: record.tools === true,
+      reasoning: record.reasoning === true,
+      audioInput: record.audio_input === true || record.audioInput === true,
+      deprecated: record.deprecated === true,
+      inputCostPer1m: readFiniteNumber(record.input_cost_per_1m ?? record.inputCostPer1m),
+      outputCostPer1m: readFiniteNumber(record.output_cost_per_1m ?? record.outputCostPer1m),
+    });
+  }
+  return profiles;
+}
+
 function unavailableProviderCatalog(
   providerType: string,
   providerId = '',
@@ -385,6 +415,7 @@ export function normalizeProviderCatalogV2(
     return unavailableProviderCatalog(providerType, providerId ?? '', detail);
   }
   const categorized = record.models as Record<string, unknown>;
+  const profiles = readModelProfiles(record.profiles);
   const models: LlmProviderModelCatalog['models'] = [];
   for (const capability of ['chat', 'embedding', 'rerank'] as const) {
     const candidates = categorized[capability];
@@ -395,7 +426,8 @@ export function normalizeProviderCatalogV2(
       const id = candidate.trim();
       if (!id || seen.has(id)) continue;
       seen.add(id);
-      models.push({ id, capability });
+      const profile = profiles.get(id);
+      models.push(profile ? { id, capability, profile } : { id, capability });
     }
   }
   const source = typeof record.source === 'string' ? record.source.trim() || null : null;

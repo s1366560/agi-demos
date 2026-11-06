@@ -262,6 +262,7 @@
 .provider-model-row > div:first-child > span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .provider-model-row b { color: var(--desktop-gray-32); font-size: 11px; }
 .provider-model-row small { overflow: hidden; color: var(--desktop-gray-19); font: 10.5px Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.provider-model-limits { display: flex; flex-wrap: wrap; gap: 4px; overflow: visible; white-space: normal; font-family: inherit; text-overflow: unset; }
 .provider-capabilities { display: flex; flex-wrap: wrap; gap: 4px; }
 .provider-capabilities span { padding: 3px 5px; color: var(--desktop-gray-26); font-size: 10px; background: var(--desktop-surface-25); border: 1px solid var(--desktop-border-12); border-radius: 4px; }
 .provider-audio-declaration { display: inline-flex; align-items: center; gap: 4px; color: var(--desktop-gray-26); font-size: 11px; }

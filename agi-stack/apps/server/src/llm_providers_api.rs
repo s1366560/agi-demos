@@ -1204,6 +1204,24 @@ struct ProviderModelsResponse {
     models: CategorizedProviderModels,
     #[serde(skip_serializing_if = "Option::is_none")]
     source: Option<&'static str>,
+    /// Snapshot limits for returned model IDs. Omitted when none are known.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    profiles: Vec<ModelListProfile>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ModelListProfile {
+    id: String,
+    known: bool,
+    context_window: u64,
+    max_output_tokens: u64,
+    vision: bool,
+    tools: bool,
+    reasoning: bool,
+    audio_input: bool,
+    deprecated: bool,
+    input_cost_per_1m: Option<f64>,
+    output_cost_per_1m: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -1630,7 +1648,9 @@ fn environment_credential_endpoint_is_official(provider_type: &str, raw_url: Opt
     let provider_type = catalog_provider_key(provider_type);
     if provider_type == "xai" {
         if let Some(candidate) = raw_url.map(str::trim).filter(|value| !value.is_empty()) {
-            if validated_probe_base_url(candidate).is_ok_and(xai_us_regional_endpoint) {
+            if validated_probe_base_url(candidate)
+                .is_ok_and(|url| xai_us_regional_endpoint(&url))
+            {
                 return true;
             }
         }
@@ -2691,18 +2711,54 @@ impl ModelCatalog {
             if categorized.vision.is_none() {
                 categorized.vision = static_models.vision;
             }
-            return ProviderModelsResponse {
-                provider_type: provider_type.to_string(),
-                models: categorized,
-                source: Some("models.dev"),
-            };
+            return self.models_response(provider_type, categorized, Some("models.dev"));
         }
 
+        let models = static_provider_models(provider_type);
+        let source = static_provider_models_source(provider_type);
+        self.models_response(provider_type, models, source)
+    }
+
+    fn models_response(
+        &self,
+        provider_type: &str,
+        models: CategorizedProviderModels,
+        source: Option<&'static str>,
+    ) -> ProviderModelsResponse {
+        let profiles = self.profiles_for(&models);
         ProviderModelsResponse {
             provider_type: provider_type.to_string(),
-            models: static_provider_models(provider_type),
-            source: static_provider_models_source(provider_type),
+            models,
+            source,
+            profiles,
         }
+    }
+
+    fn profiles_for(&self, models: &CategorizedProviderModels) -> Vec<ModelListProfile> {
+        let mut by_key: std::collections::HashMap<&str, &ModelMetadataView> =
+            std::collections::HashMap::new();
+        for model in &self.models {
+            by_key.insert(model.catalog_key.as_str(), model);
+        }
+        let mut profiles = Vec::new();
+        let mut seen = BTreeSet::new();
+        let vision = models.vision.iter().flatten();
+        for model_id in models
+            .chat
+            .iter()
+            .chain(models.embedding.iter())
+            .chain(models.rerank.iter())
+            .chain(vision)
+        {
+            if !seen.insert(model_id.clone()) {
+                continue;
+            }
+            let Some(metadata) = by_key.get(model_id.as_str()) else {
+                continue;
+            };
+            profiles.push(ModelListProfile::from_metadata(metadata));
+        }
+        profiles
     }
 }
 
@@ -3977,8 +4033,9 @@ impl<'de> Visitor<'de> for OrderedModelsVisitor {
         while let Some((key, value)) = map.next_entry::<String, ModelMetadataView>()? {
             let mut model = value;
             if model.name.is_empty() {
-                model.name = key;
+                model.name = key.clone();
             }
+            model.catalog_key = key;
             model.coerce_python_bounds();
             models.push(model);
         }
@@ -4072,6 +4129,41 @@ struct ModelMetadataView {
     top_p_range: Option<Vec<f64>>,
     #[serde(default)]
     supported_params: Option<Vec<String>>,
+    /// JSON object key from the snapshot. Python looks models up by this key.
+    #[serde(skip, default)]
+    catalog_key: String,
+}
+
+impl ModelListProfile {
+    fn from_metadata(metadata: &ModelMetadataView) -> Self {
+        let capabilities = metadata
+            .capabilities
+            .iter()
+            .map(|item| item.to_ascii_lowercase())
+            .collect::<BTreeSet<_>>();
+        let modalities = metadata
+            .modalities
+            .iter()
+            .map(|item| item.to_ascii_lowercase())
+            .collect::<BTreeSet<_>>();
+        let audio = ["tts", "asr", "audio_generation", "voice_cloning", "realtime_voice"]
+            .into_iter()
+            .any(|name| capabilities.contains(name))
+            || modalities.contains("audio");
+        Self {
+            id: metadata.name.clone(),
+            known: true,
+            context_window: metadata.context_length,
+            max_output_tokens: metadata.max_output_tokens,
+            vision: capabilities.contains("vision") || modalities.contains("image"),
+            tools: metadata.supports_tool_call,
+            reasoning: metadata.reasoning,
+            audio_input: audio,
+            deprecated: metadata.is_deprecated,
+            input_cost_per_1m: metadata.input_cost_per_1m,
+            output_cost_per_1m: metadata.output_cost_per_1m,
+        }
+    }
 }
 
 impl ModelMetadataView {

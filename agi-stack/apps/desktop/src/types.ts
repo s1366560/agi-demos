@@ -1174,9 +1174,24 @@ export type LlmProviderTypeDescriptor = {
   source: 'local_runtime' | 'cloud_api';
 };
 
+export type LlmProviderModelProfile = {
+  id: string;
+  known: boolean;
+  contextWindow: number | null;
+  maxOutputTokens: number | null;
+  vision: boolean;
+  tools: boolean;
+  reasoning: boolean;
+  audioInput: boolean;
+  deprecated: boolean;
+  inputCostPer1m: number | null;
+  outputCostPer1m: number | null;
+};
+
 export type LlmProviderCatalogModel = {
   id: string;
   capability: 'chat' | 'embedding' | 'rerank';
+  profile?: LlmProviderModelProfile;
 };
 
 export type LlmProviderModelCatalog = {

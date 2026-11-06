@@ -371,11 +371,13 @@ async def list_models_for_provider_type(
         }
         if static_models.get("vision") and "vision" not in catalog_models:
             merged["vision"] = static_models["vision"]
-        return {
-            "provider_type": provider_type,
-            "models": merged,
-            "source": "models.dev",
-        }
+        return _with_optional_profiles(
+            {
+                "provider_type": provider_type,
+                "models": merged,
+                "source": "models.dev",
+            }
+        )
 
     if not static_models:
         # Return empty lists for unknown providers instead of error
@@ -385,11 +387,31 @@ async def list_models_for_provider_type(
             "models": {"chat": [], "embedding": [], "rerank": []},
         }
 
-    return {
-        "provider_type": provider_type,
-        "models": static_models,
-        "source": "static-fallback",
-    }
+    return _with_optional_profiles(
+        {
+            "provider_type": provider_type,
+            "models": static_models,
+            "source": "static-fallback",
+        }
+    )
+
+
+def _with_optional_profiles(payload: dict[str, Any]) -> dict[str, Any]:
+    """Attach snapshot profiles when present. An empty list stays off the wire."""
+    from src.infrastructure.llm.provider_guidance import catalog_profiles_for_ids
+
+    models = payload.get("models")
+    if not isinstance(models, dict):
+        return payload
+    model_ids: list[str] = []
+    for category in ("chat", "embedding", "rerank", "vision"):
+        values = models.get(category) or []
+        if isinstance(values, list):
+            model_ids.extend(str(item) for item in values)
+    profiles = catalog_profiles_for_ids(model_ids)
+    if profiles:
+        payload["profiles"] = profiles
+    return payload
 
 
 def _static_provider_models(provider_type: str) -> dict[str, list[str]]:
