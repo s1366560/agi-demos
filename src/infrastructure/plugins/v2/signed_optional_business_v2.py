@@ -348,6 +348,22 @@ class SignedOptionalBusinessRuntimeV2:
     def dispose_ui(self, plugin_id: str) -> None:
         self._ui_mounted[plugin_id] = False
 
+    def dispatch_command(
+        self, plugin_id: str, scope: ScopeBindingV2, command_id: str
+    ) -> dict[str, Any]:
+        active = self._require_active(plugin_id)
+        self._require_not_revoked(plugin_id)
+        matches = [
+            command
+            for command in active.package.contribution.commands
+            if command.command_id == command_id
+        ]
+        if len(matches) != 1:
+            raise OptionalBusinessError("command_conflict", "command must resolve to one contribution")
+        command = matches[0]
+        self._require_permissions(active, command.permissions)
+        return self.invoke(plugin_id, scope, command.tool, dict(command.payload))
+
     def _apply(self, package: SignedPackageBytesV2) -> None:
         self._phase[package.plugin_id] = "loading"
         host = self._compile(package)
@@ -460,6 +476,8 @@ def _declared_permissions(contribution: ContributionDocument) -> frozenset[str]:
         declared |= skill.permissions
     for ui in contribution.ui:
         declared |= ui.permissions
+    for command in contribution.commands:
+        declared |= command.permissions
     if contribution.storage is not None:
         declared |= contribution.storage.permissions
     return frozenset(declared)

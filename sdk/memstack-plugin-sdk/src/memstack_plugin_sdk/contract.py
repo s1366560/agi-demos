@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 CONTRIBUTION_SCHEMA = "memstack.plugin.contributions/1"
+UNIMPLEMENTED_EXECUTORS = frozenset({"channels", "llm_providers", "workflows", "mcp"})
 SLOT_UI_SCHEMA = "memstack.slot-ui/1"
 INVOKE_INPUT_OFFSET = 0
 INVOKE_OUTPUT_OFFSET = 65536
@@ -56,6 +57,14 @@ class UiContribution:
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommandContribution:
+    command_id: str
+    tool: str
+    payload: dict[str, Any]
+    permissions: frozenset[str]
+
+
+@dataclass(frozen=True, kw_only=True)
 class StorageContribution:
     schema_version: int
     permissions: frozenset[str]
@@ -65,6 +74,7 @@ class StorageContribution:
 class ContributionDocument:
     tools: tuple[ToolContribution, ...]
     skills: tuple[SkillContribution, ...]
+    commands: tuple[CommandContribution, ...]
     ui: tuple[UiContribution, ...]
     storage: StorageContribution | None
 
@@ -86,8 +96,15 @@ class ScanEvidence:
 def parse_contribution(payload: dict[str, Any]) -> ContributionDocument:
     if payload.get("schema") != CONTRIBUTION_SCHEMA:
         raise ContractError("contribution_schema", "unsupported contribution schema")
+    missing = sorted(set(payload) & UNIMPLEMENTED_EXECUTORS)
+    if missing:
+        raise ContractError(
+            "executor_unavailable",
+            f"profile rejected unimplemented executors: {', '.join(missing)}",
+        )
     tools = tuple(_tool(item) for item in _list(payload.get("tools", [])))
     skills = tuple(_skill(item) for item in _list(payload.get("skills", [])))
+    commands = tuple(_command(item) for item in _list(payload.get("commands", [])))
     ui = tuple(_ui(item) for item in _list(payload.get("ui", [])))
     storage_payload = payload.get("storage")
     storage = None if storage_payload is None else _storage(storage_payload)
@@ -97,7 +114,9 @@ def parse_contribution(payload: dict[str, Any]) -> ContributionDocument:
     unknown = sorted(declared - PERMISSIONS)
     if unknown:
         raise ContractError("permission_unknown", f"unknown permissions: {', '.join(unknown)}")
-    return ContributionDocument(tools=tools, skills=skills, ui=ui, storage=storage)
+    return ContributionDocument(
+        tools=tools, skills=skills, commands=commands, ui=ui, storage=storage
+    )
 
 
 def parse_slot_ui(payload: dict[str, Any]) -> SlotUiDocument:
@@ -164,6 +183,24 @@ def _tool(value: object) -> ToolContribution:
         abi=abi,
         input_schema=input_schema,
         output_schema=output_schema,
+        permissions=_permissions(value.get("permissions")),
+    )
+
+
+def _command(value: object) -> CommandContribution:
+    if not isinstance(value, dict):
+        raise ContractError("command", "command contribution must be an object")
+    command_id = value.get("id")
+    tool = value.get("tool")
+    payload = value.get("payload")
+    if not isinstance(command_id, str) or not command_id or not isinstance(tool, str) or not tool:
+        raise ContractError("command", "command id or tool is invalid")
+    if not isinstance(payload, dict):
+        raise ContractError("command", "command payload must be an object")
+    return CommandContribution(
+        command_id=command_id,
+        tool=tool,
+        payload=payload,
         permissions=_permissions(value.get("permissions")),
     )
 
