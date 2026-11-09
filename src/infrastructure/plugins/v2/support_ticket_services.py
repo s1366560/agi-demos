@@ -259,7 +259,7 @@ class SqlSupportTicketPersistenceV2:
             )
         )
         ticket = result.scalar_one_or_none()
-        if ticket is None:
+        if not isinstance(ticket, SupportTicket):
             raise SupportTicketNotFoundV2
         return ticket
 

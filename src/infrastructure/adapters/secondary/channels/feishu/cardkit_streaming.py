@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from feishu_adapter import FeishuAdapter  # type: ignore[import-not-found]
+    from feishu_adapter import FeishuAdapter
 
 CONTENT_ELEMENT_ID = "content"
 """Fixed element_id for the main markdown content element."""
@@ -224,7 +224,7 @@ class CardKitStreamingManager:
         if ok:
             state.last_content = content
             self._last_update_time = now
-        return ok
+        return bool(ok)
 
     async def finish_streaming(
         self,
@@ -259,7 +259,7 @@ class CardKitStreamingManager:
 
         if ok:
             logger.info(f"[CardKitStreaming] Finished streaming: card_id={state.card_id}")
-        return ok
+        return bool(ok)
 
     async def add_hitl_buttons(
         self,
@@ -280,9 +280,11 @@ class CardKitStreamingManager:
         if state.streaming_active:
             await self.finish_streaming(state, state.last_content)
 
-        return await self._adapter.add_card_elements(
-            state.card_id,
-            elements,
-            position="append",
-            sequence=state.next_seq(),
+        return bool(
+            await self._adapter.add_card_elements(
+                state.card_id,
+                elements,
+                position="append",
+                sequence=state.next_seq(),
+            )
         )

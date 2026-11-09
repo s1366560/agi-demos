@@ -133,9 +133,10 @@ async def lifecycle_message_access_v2(
     if message.get("type") != "subagent_lifecycle":
         return True
     event = message.get("data")
-    nested = event.get("data", event) if isinstance(event, dict) else None
-    if not isinstance(nested, dict):
+    if not isinstance(event, dict):
         return False
+    nested_value = event.get("data", event)
+    nested = nested_value if isinstance(nested_value, dict) else event
     conversation_id = nested.get("conversation_id") or event.get("conversation_id")
     run_id = (
         nested.get("run_id")

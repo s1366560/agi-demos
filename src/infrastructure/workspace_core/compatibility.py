@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 
 from src.infrastructure.workspace_core.client import (
     WorkspaceCoreCompatibilityError,
@@ -22,7 +23,7 @@ WORKSPACE_PUBLIC_API_ROUTE_KEYS_SHA256 = (
 
 def require_complete_public_api(capabilities: WorkspaceCorePublicApiCapabilities) -> None:
     """Reject an Avernet authority unless it proves the entire frozen route contract."""
-    route_keys = [(route.method, route.path) for route in capabilities.implemented_routes]
+    route_keys = [(str(route.method), route.path) for route in capabilities.implemented_routes]
     route_keys_sha256 = _route_keys_sha256(route_keys)
     checks = (
         (
@@ -78,7 +79,7 @@ def require_complete_public_api(capabilities: WorkspaceCorePublicApiCapabilities
         )
 
 
-def _route_keys_sha256(route_keys: list[tuple[str, str]]) -> str:
+def _route_keys_sha256(route_keys: Sequence[tuple[str, str]]) -> str:
     canonical_routes = [
         {"method": method, "path": path}
         for method, path in sorted(route_keys, key=lambda route: (route[1], route[0]))

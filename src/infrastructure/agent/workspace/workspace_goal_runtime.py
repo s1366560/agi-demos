@@ -26,24 +26,17 @@ from src.application.services.workspace_agent_autonomy import (
     validate_autonomy_metadata,
 )
 from src.application.services.workspace_autonomy_profiles import evaluate_completion_evidence
-from src.application.services.workspace_goal_materialization_service import (
-    WorkspaceGoalMaterializationService,
-)
-from src.application.services.workspace_goal_sensing_service import WorkspaceGoalSensingService
 from src.application.services.workspace_task_command_service import WorkspaceTaskCommandService
 from src.application.services.workspace_task_event_publisher import (
     PendingWorkspaceTaskEvent,
     WorkspaceTaskEventPublisher,
-    serialize_workspace_task,
 )
 from src.application.services.workspace_task_service import (
     WorkspaceTaskAuthorityContext,
-    WorkspaceTaskService,
 )
 from src.application.services.workspace_task_session_attempt_service import (
     WorkspaceTaskSessionAttemptService,
 )
-from src.domain.events.types import AgentEventType
 from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
     WorkspaceTaskPriority,
@@ -57,23 +50,13 @@ from src.domain.model.workspace_plan import Plan
 from src.domain.model.workspace_plan.plan import PlanStatus
 from src.domain.model.workspace_plan.plan_node import PlanNodeKind, TaskExecution, TaskIntent
 from src.domain.ports.repositories import WorkspaceTaskRepository
-from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.agent.workspace.dispatcher.retry_policy import DEFAULT_RETRY_POLICY
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
     CURRENT_ATTEMPT_ID,
-    CURRENT_ATTEMPT_WORKER_BINDING_ID,
-    EXECUTION_STATE,
-    LAST_LEADER_ADJUDICATION_STATUS,
-    LAST_WORKER_REPORT_ATTEMPT_ID,
-    LAST_WORKER_REPORT_SUMMARY,
-    PENDING_LEADER_ADJUDICATION,
     REMEDIATION_STATUS,
     REMEDIATION_SUMMARY,
     ROOT_GOAL_TASK_ID,
-    TASK_ROLE,
-    WORKSPACE_PLAN_ID,
-    WORKSPACE_PLAN_NODE_ID,
 )
 from src.infrastructure.agent.workspace_plan.system_actor import persisted_attempt_leader_agent_id
 from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
@@ -245,125 +228,6 @@ async def maybe_materialize_workspace_goal_candidate(
     this module.
     """
     legacy_workspace_runtime_retired("Workspace goal materialization")
-    if not project_id or not tenant_id or not user_id:
-        return None
-
-    try:
-        redis_client = _current_workspace_goal_redis_client_v2()
-    except Exception:
-        logger.warning("Workspace goal runtime: redis unavailable", exc_info=True)
-        redis_client = None
-
-    try:
-        async with async_session_factory() as db:
-            workspace_repo = legacy_workspace_runtime_retired(db)
-            workspaces = await workspace_repo.find_by_project(
-                tenant_id=tenant_id,
-                project_id=project_id,
-                limit=1,
-            )
-            if not workspaces:
-                return None
-
-            workspace = workspaces[0]
-            task_repo = legacy_workspace_runtime_retired(db)
-            task_service = WorkspaceTaskService(
-                workspace_repo=workspace_repo,
-                workspace_member_repo=legacy_workspace_runtime_retired(db),
-                workspace_agent_repo=legacy_workspace_runtime_retired(db),
-                workspace_task_repo=task_repo,
-            )
-            tasks = await task_service.list_tasks(
-                workspace_id=workspace.id,
-                actor_user_id=user_id,
-                limit=100,
-                offset=0,
-            )
-            objectives = await legacy_workspace_runtime_retired(db).find_by_workspace(
-                workspace.id,
-                limit=50,
-            )
-            posts = await legacy_workspace_runtime_retired(db).list_posts_by_workspace(
-                workspace.id,
-                limit=20,
-            )
-            messages = await legacy_workspace_runtime_retired(db).find_by_workspace(
-                workspace.id,
-                limit=50,
-            )
-
-            candidates = WorkspaceGoalSensingService().sense_candidates(
-                tasks=tasks,
-                objectives=objectives,
-                posts=posts,
-                messages=messages,
-            )
-            selected_candidate = _select_existing_root_candidate(candidates, tasks)
-            if selected_candidate is None:
-                return None
-            extra_events: list[PendingWorkspaceTaskEvent] = []
-
-            command_service = WorkspaceTaskCommandService(task_service)
-            materializer = WorkspaceGoalMaterializationService(
-                objective_repo=legacy_workspace_runtime_retired(db),
-                task_repo=task_repo,
-                task_service=task_service,
-                task_command_service=command_service,
-            )
-            # Fallback: if no explicit preferred_language was supplied, read the
-            # actor user's stored preference so the materialized goal root carries
-            # the language hint into downstream planning + worker conversations.
-            resolved_preferred_language = preferred_language
-            if resolved_preferred_language is None:
-                resolved_preferred_language = await _user_preferred_language_from_db(db, user_id)
-            task = await materializer.materialize_candidate(
-                workspace_id=workspace.id,
-                actor_user_id=user_id,
-                candidate=selected_candidate,
-                preferred_language=resolved_preferred_language,
-            )
-            if task is None:
-                return None
-
-            if getattr(task, "metadata", {}).get(TASK_ROLE) == "goal_root":
-                extra_events.append(
-                    PendingWorkspaceTaskEvent(
-                        workspace_id=workspace.id,
-                        event_type=AgentEventType.WORKSPACE_TASK_UPDATED,
-                        payload={"task": serialize_workspace_task(task)},
-                    )
-                )
-
-            await db.commit()
-            publisher = WorkspaceTaskEventPublisher(redis_client)
-            await publisher.publish_pending_events(
-                [*command_service.consume_pending_events(), *extra_events]
-            )
-            try:
-                from src.infrastructure.agent.workspace.goal_runtime import (
-                    kickoff_v2_plan,
-                )
-                from src.infrastructure.agent.workspace_plan.system_actor import (
-                    WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
-                )
-
-                _ = await kickoff_v2_plan(
-                    workspace_id=workspace.id,
-                    title=getattr(task, "title", "") or user_query,
-                    description=getattr(task, "description", None) or user_query,
-                    created_by=user_id,
-                    root_task_id=task.id,
-                    leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
-                )
-            except Exception:
-                logger.warning(
-                    "workspace_goal_runtime.v2_kickoff_failed",
-                    exc_info=True,
-                )
-            return task
-    except Exception:
-        logger.warning("Workspace goal runtime materialization failed", exc_info=True)
-        return None
 
 
 async def _ensure_root_goal_evidence(
@@ -479,13 +343,10 @@ async def _load_workspace_metadata_for_task(
     if session is None:
         return {}
     try:
-        workspace_result = legacy_workspace_runtime_retired(session).find_by_id(workspace_id)
-        workspace = await workspace_result if inspect.isawaitable(workspace_result) else None
+        legacy_workspace_runtime_retired("workspace metadata")
     except Exception:
         logger.warning("workspace_goal_runtime.load_workspace_metadata_failed", exc_info=True)
         return {}
-    metadata = getattr(workspace, "metadata", None)
-    return dict(metadata) if isinstance(metadata, Mapping) else {}
 
 
 async def _workspace_run_gate_allows_root_completion(
@@ -595,7 +456,7 @@ async def _ensure_root_task_started(
     )
 
 
-async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touched in this change
+async def auto_complete_ready_root(
     *,
     workspace_id: str,
     actor_user_id: str,
@@ -611,97 +472,6 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
     (e.g. autonomy ticks) remain resilient.
     """
     legacy_workspace_runtime_retired("Workspace root auto-completion")
-    try:
-        children = await _load_current_root_progress_children(
-            task_repo=task_repo,
-            workspace_id=workspace_id,
-            root_task_id=root_task.id,
-        )
-    except Exception:
-        logger.warning("auto_complete_ready_root: find_by_root_goal_task_id failed", exc_info=True)
-        return None
-    execution_children = [
-        c for c in children if (getattr(c, "metadata", {}) or {}).get(TASK_ROLE) == "execution_task"
-    ]
-    if not execution_children:
-        return None
-    if not all(getattr(c.status, "value", c.status) == "done" for c in execution_children):
-        return None
-    current_status = getattr(root_task.status, "value", root_task.status)
-    if current_status == "done":
-        return None
-
-    # The root goal policy requires metadata.goal_evidence before completion.
-    # Synthesize it from the done children so the completion guardrail accepts
-    # the transition. Mirrors _handle_remediation_complete_root_goal.
-    try:
-        evidence_allows_completion, evidence_block_reason = await _ensure_root_goal_evidence(
-            root_task=root_task,
-            task_repo=task_repo,
-            generated_by_agent_id=leader_agent_id or str(actor_user_id),
-        )
-    except Exception as exc:
-        logger.warning("auto_complete_ready_root: ensure_goal_evidence failed", exc_info=True)
-        await _record_root_auto_complete_failure(
-            root_task=root_task,
-            task_repo=task_repo,
-            reason=f"root auto-complete evidence synthesis failed: {exc}",
-        )
-        return None
-    if not evidence_allows_completion:
-        await _record_root_auto_complete_failure(
-            root_task=root_task,
-            task_repo=task_repo,
-            reason=evidence_block_reason or "root auto-complete evidence is insufficient",
-        )
-        return None
-
-    gate_allows_completion, gate_block_reason = await _workspace_run_gate_allows_root_completion(
-        workspace_id=workspace_id,
-        task_repo=task_repo,
-    )
-    if not gate_allows_completion:
-        await _record_root_auto_complete_failure(
-            root_task=root_task,
-            task_repo=task_repo,
-            reason=gate_block_reason or "workspace run completion gate blocked",
-        )
-        return None
-
-    refreshed = await task_repo.find_by_id(root_task.id)
-    if refreshed is None:
-        return None
-    if getattr(refreshed.status, "value", refreshed.status) == "done":
-        return None
-
-    try:
-        if getattr(refreshed.status, "value", refreshed.status) == "todo":
-            refreshed = await command_service.start_task(
-                workspace_id=workspace_id,
-                task_id=refreshed.id,
-                actor_user_id=actor_user_id,
-                actor_type="agent",
-                actor_agent_id=leader_agent_id,
-                reason="workspace_goal_runtime.auto_complete_ready_root.start_root",
-                authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-            )
-        return await command_service.complete_task(
-            workspace_id=workspace_id,
-            task_id=refreshed.id,
-            actor_user_id=actor_user_id,
-            actor_type="agent",
-            actor_agent_id=leader_agent_id,
-            reason="workspace_goal_runtime.auto_complete_ready_root",
-            authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-        )
-    except Exception as exc:
-        logger.warning("auto_complete_ready_root: complete_task failed", exc_info=True)
-        await _record_root_auto_complete_failure(
-            root_task=refreshed,
-            task_repo=task_repo,
-            reason=f"root auto-complete failed: {exc}",
-        )
-        return None
 
 
 def _build_execution_state(
@@ -970,7 +740,7 @@ def _worker_report_matches_task_actor(
     )
 
 
-async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR0915
+async def apply_workspace_worker_report(  # noqa: PLR0913
     *,
     workspace_id: str,
     root_goal_task_id: str,
@@ -988,283 +758,9 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
 ) -> WorkspaceTask | None:
     """Record a worker execution report as candidate output awaiting leader adjudication."""
     legacy_workspace_runtime_retired("Workspace worker report")
-    artifacts = [artifact for artifact in (artifacts or []) if artifact]
-    explicit_verifications = [
-        verification
-        for verification in (verifications or [])
-        if isinstance(verification, str) and verification
-    ]
-    try:
-        async with async_session_factory() as db:
-            workspace_repo = legacy_workspace_runtime_retired(db)
-            task_repo = legacy_workspace_runtime_retired("Workspace delegation task lookup")
-            task_service = WorkspaceTaskService(
-                workspace_repo=workspace_repo,
-                workspace_member_repo=legacy_workspace_runtime_retired(db),
-                workspace_agent_repo=legacy_workspace_runtime_retired(db),
-                workspace_task_repo=task_repo,
-            )
-            command_service = WorkspaceTaskCommandService(task_service)
-            attempt_service = _build_attempt_service(db)
-
-            task = await task_service.get_task(
-                workspace_id=workspace_id,
-                task_id=task_id,
-                actor_user_id=actor_user_id,
-            )
-            if task.metadata.get(ROOT_GOAL_TASK_ID) != root_goal_task_id:
-                raise ValueError("Worker report task does not belong to the provided root goal")
-            resolved_attempt: WorkspaceTaskSessionAttempt
-            if attempt_id:
-                attempt = await attempt_service.get_attempt(attempt_id)
-                if attempt is None or attempt.workspace_task_id != task.id:
-                    raise ValueError("Worker report attempt_id does not match the task")
-                resolved_attempt = attempt
-            else:
-                resolved_attempt = await _ensure_execution_attempt(
-                    attempt_service=attempt_service,
-                    task=task,
-                    leader_agent_id=leader_agent_id,
-                )
-            if _is_stale_terminal_worker_report(
-                task_metadata=task.metadata,
-                attempt_id=resolved_attempt.id,
-                report_type=report_type,
-            ):
-                logger.info(
-                    "workspace_goal_runtime.worker_report ignored stale terminal report",
-                    extra={
-                        "workspace_id": workspace_id,
-                        "task_id": task_id,
-                        "attempt_id": resolved_attempt.id,
-                        "current_attempt_id": task.metadata.get(CURRENT_ATTEMPT_ID),
-                        "report_type": report_type,
-                        "report_id": report_id,
-                    },
-                )
-                return task
-            effective_worker_agent_id = worker_agent_id or resolved_attempt.worker_agent_id
-            if not isinstance(effective_worker_agent_id, str) or not effective_worker_agent_id:
-                raise ValueError("Worker report requires an attempt-bound worker_agent_id")
-            if not _worker_report_matches_task_actor(
-                task=task,
-                resolved_attempt=resolved_attempt,
-                effective_worker_agent_id=effective_worker_agent_id,
-            ):
-                raise ValueError("Worker report does not match the task assignee")
-            attempt_status_value = getattr(
-                getattr(resolved_attempt, "status", None),
-                "value",
-                getattr(resolved_attempt, "status", None),
-            )
-            if (
-                report_type in _WORKER_TERMINAL_REPORT_TYPES
-                and attempt_status_value in _ATTEMPT_TERMINAL_STATUSES
-            ):
-                logger.info(
-                    "workspace_goal_runtime.worker_report ignored terminal report "
-                    "for terminal attempt",
-                    extra={
-                        "workspace_id": workspace_id,
-                        "task_id": task_id,
-                        "attempt_id": resolved_attempt.id,
-                        "attempt_status": attempt_status_value,
-                        "report_type": report_type,
-                        "report_id": report_id,
-                    },
-                )
-                return task
-
-            metadata = dict(task.metadata)
-            v2_plan_linked = (
-                isinstance(metadata.get(WORKSPACE_PLAN_ID), str)
-                and bool(metadata.get(WORKSPACE_PLAN_ID))
-                and isinstance(metadata.get(WORKSPACE_PLAN_NODE_ID), str)
-                and bool(metadata.get(WORKSPACE_PLAN_NODE_ID))
-            )
-            evidence_refs = metadata.get("evidence_refs")
-            if isinstance(evidence_refs, list):
-                prior_refs = [str(ref) for ref in evidence_refs if ref]
-            else:
-                prior_refs = []
-            existing_verifications = metadata.get("execution_verifications")
-            if isinstance(existing_verifications, list):
-                prior_verifications = [str(item) for item in existing_verifications if item]
-            else:
-                prior_verifications = []
-            normalized_summary, report_artifacts, parsed_report_verifications = (
-                _parse_worker_report_payload(
-                    report_type=report_type,
-                    summary=summary,
-                    artifacts=list(dict.fromkeys(artifacts)),
-                )
-            )
-            report_verifications = list(
-                dict.fromkeys([*explicit_verifications, *parsed_report_verifications])
-            )
-            merged_artifacts = list(dict.fromkeys([*prior_refs, *report_artifacts]))
-            report_fingerprint = _build_worker_report_fingerprint(
-                report_type=report_type,
-                summary=normalized_summary,
-                artifacts=merged_artifacts,
-                verifications=report_verifications,
-                report_id=report_id,
-            )
-            if metadata.get("last_worker_report_fingerprint") == report_fingerprint:
-                return task
-            metadata["evidence_refs"] = merged_artifacts
-            metadata["execution_verifications"] = list(
-                dict.fromkeys([*prior_verifications, *report_verifications])
-            )
-            reported_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-            metadata["last_worker_report_type"] = report_type
-            metadata[LAST_WORKER_REPORT_SUMMARY] = normalized_summary
-            metadata["last_worker_report_artifacts"] = list(merged_artifacts)
-            metadata["last_worker_report_verifications"] = list(dict.fromkeys(report_verifications))
-            metadata["last_worker_reported_at"] = reported_at
-            metadata["last_worker_report_fingerprint"] = report_fingerprint
-            metadata[LAST_WORKER_REPORT_ATTEMPT_ID] = resolved_attempt.id
-            metadata[PENDING_LEADER_ADJUDICATION] = (
-                report_type in _WORKER_TERMINAL_REPORT_TYPES and not v2_plan_linked
-            )
-            if report_id:
-                metadata["last_worker_report_id"] = report_id
-            metadata[CURRENT_ATTEMPT_ID] = resolved_attempt.id
-            metadata["last_attempt_id"] = resolved_attempt.id
-            metadata["current_attempt_number"] = resolved_attempt.attempt_number
-            phase = "in_progress"
-            if report_type in _WORKER_TERMINAL_REPORT_TYPES:
-                action = (
-                    "await_plan_verification" if v2_plan_linked else "await_leader_adjudication"
-                )
-            else:
-                action = "start"
-            metadata["last_attempt_status"] = (
-                "awaiting_plan_verification"
-                if report_type in _WORKER_TERMINAL_REPORT_TYPES and v2_plan_linked
-                else WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value
-                if report_type in _WORKER_TERMINAL_REPORT_TYPES
-                else WorkspaceTaskSessionAttemptStatus.RUNNING.value
-            )
-            metadata[EXECUTION_STATE] = _build_execution_state(
-                phase=phase,
-                reason=f"workspace_goal_runtime.worker_report.{report_type}:{normalized_summary}",
-                action=action,
-                actor_id=effective_worker_agent_id,
-            )
-
-            worker_authority = WorkspaceTaskAuthorityContext.worker(effective_worker_agent_id)
-            worker_metadata_patch = {
-                key: metadata[key]
-                for key in (
-                    EXECUTION_STATE,
-                    "evidence_refs",
-                    "execution_verifications",
-                    "last_worker_report_type",
-                    LAST_WORKER_REPORT_SUMMARY,
-                    "last_worker_report_artifacts",
-                    "last_worker_report_verifications",
-                    "last_worker_reported_at",
-                    "last_worker_report_fingerprint",
-                    LAST_WORKER_REPORT_ATTEMPT_ID,
-                    "last_worker_report_id",
-                    PENDING_LEADER_ADJUDICATION,
-                    CURRENT_ATTEMPT_ID,
-                    "last_attempt_id",
-                    "current_attempt_number",
-                    "last_attempt_status",
-                )
-                if key in metadata
-            }
-            updated = await command_service.update_task(
-                workspace_id=workspace_id,
-                task_id=task_id,
-                actor_user_id=actor_user_id,
-                metadata=worker_metadata_patch,
-                blocker_reason=(
-                    normalized_summary
-                    if report_type in {"blocked", "failed", "needs_replan"}
-                    else None
-                ),
-                actor_type="agent",
-                actor_agent_id=effective_worker_agent_id,
-                reason=f"workspace_goal_runtime.worker_report.{report_type}.metadata",
-                authority=worker_authority,
-            )
-            if updated.status.value == "todo":
-                root_task = await task_service.get_task(
-                    workspace_id=workspace_id,
-                    task_id=root_goal_task_id,
-                    actor_user_id=actor_user_id,
-                )
-                _ = await _ensure_root_task_started(
-                    workspace_id=workspace_id,
-                    root_task=root_task,
-                    actor_user_id=actor_user_id,
-                    command_service=command_service,
-                    leader_agent_id=leader_agent_id,
-                    reason=f"workspace_goal_runtime.worker_report.{report_type}.start_root",
-                )
-                updated = await command_service.start_task(
-                    workspace_id=workspace_id,
-                    task_id=task_id,
-                    actor_user_id=actor_user_id,
-                    actor_type="agent",
-                    actor_agent_id=effective_worker_agent_id,
-                    reason=f"workspace_goal_runtime.worker_report.{report_type}.start",
-                    authority=worker_authority,
-                )
-
-            if report_type in _WORKER_TERMINAL_REPORT_TYPES:
-                await attempt_service.record_candidate_output(
-                    resolved_attempt.id,
-                    summary=normalized_summary,
-                    artifacts=report_artifacts,
-                    verifications=report_verifications,
-                    conversation_id=conversation_id,
-                )
-                await _mark_workspace_plan_node_reported(
-                    db=db,
-                    workspace_id=workspace_id,
-                    root_goal_task_id=root_goal_task_id,
-                    actor_user_id=actor_user_id,
-                    task_metadata=metadata,
-                    attempt_id=resolved_attempt.id,
-                    worker_agent_id=effective_worker_agent_id,
-                    leader_agent_id=leader_agent_id,
-                )
-            elif resolved_attempt.status == WorkspaceTaskSessionAttemptStatus.PENDING:
-                await attempt_service.mark_running(resolved_attempt.id)
-
-            await db.commit()
-            try:
-                await _publish_workspace_goal_events_v2(command_service.consume_pending_events())
-            except Exception:
-                logger.warning(
-                    "Workspace worker report event publish failed after commit",
-                    exc_info=True,
-                    extra={
-                        "workspace_id": workspace_id,
-                        "task_id": task_id,
-                        "attempt_id": resolved_attempt.id,
-                    },
-                )
-            if report_type in _WORKER_TERMINAL_REPORT_TYPES:
-                try:
-                    from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
-                        schedule_autonomy_tick,
-                    )
-
-                    schedule_autonomy_tick(workspace_id, actor_user_id)
-                except Exception:
-                    logger.warning("schedule_autonomy_tick failed", exc_info=True)
-            return updated
-    except Exception:
-        logger.warning("Workspace worker report application failed", exc_info=True)
-        return None
 
 
-async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
+async def adjudicate_workspace_worker_report(
     *,
     workspace_id: str,
     task_id: str,
@@ -1277,200 +773,6 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
 ) -> WorkspaceTask | None:
     """Apply a leader decision to a previously ingested worker report."""
     legacy_workspace_runtime_retired("Workspace worker adjudication")
-    try:
-        async with async_session_factory() as db:
-            workspace_repo = legacy_workspace_runtime_retired(db)
-            task_repo = legacy_workspace_runtime_retired(db)
-            task_service = WorkspaceTaskService(
-                workspace_repo=workspace_repo,
-                workspace_member_repo=legacy_workspace_runtime_retired(db),
-                workspace_agent_repo=legacy_workspace_runtime_retired(db),
-                workspace_task_repo=task_repo,
-            )
-            command_service = WorkspaceTaskCommandService(task_service)
-            attempt_service = _build_attempt_service(db)
-
-            task = await task_service.get_task(
-                workspace_id=workspace_id,
-                task_id=task_id,
-                actor_user_id=actor_user_id,
-            )
-            metadata = dict(task.metadata)
-            current_attempt_id = attempt_id
-            if current_attempt_id is None:
-                maybe_attempt = metadata.get(CURRENT_ATTEMPT_ID)
-                current_attempt_id = (
-                    maybe_attempt if isinstance(maybe_attempt, str) and maybe_attempt else None
-                )
-            summary = str(metadata.get(LAST_WORKER_REPORT_SUMMARY) or "").strip()
-            if metadata.get(PENDING_LEADER_ADJUDICATION) is True:
-                metadata[PENDING_LEADER_ADJUDICATION] = False
-            metadata[LAST_LEADER_ADJUDICATION_STATUS] = status.value
-            metadata["last_leader_adjudicated_at"] = (
-                datetime.now(UTC)
-                .isoformat()
-                .replace(
-                    "+00:00",
-                    "Z",
-                )
-            )
-            phase_map = {
-                WorkspaceTaskStatus.TODO: "todo",
-                WorkspaceTaskStatus.IN_PROGRESS: "in_progress",
-                WorkspaceTaskStatus.BLOCKED: "blocked",
-                WorkspaceTaskStatus.DONE: "done",
-            }
-            action_map = {
-                WorkspaceTaskStatus.TODO: "reprioritized",
-                WorkspaceTaskStatus.IN_PROGRESS: "start",
-                WorkspaceTaskStatus.BLOCKED: "blocked",
-                WorkspaceTaskStatus.DONE: "completed",
-            }
-            metadata[EXECUTION_STATE] = _build_execution_state(
-                phase=phase_map[status],
-                reason=f"workspace_goal_runtime.leader_adjudication.{status.value}:{summary or task.title}",
-                action=action_map[status],
-                actor_id=leader_agent_id or actor_user_id,
-            )
-
-            retry_launch_request: dict[str, str] | None = None
-            updated = await command_service.update_task(
-                workspace_id=workspace_id,
-                task_id=task_id,
-                actor_user_id=actor_user_id,
-                title=title,
-                priority=priority,
-                metadata=metadata,
-                actor_type="agent",
-                actor_agent_id=leader_agent_id,
-                reason=f"workspace_goal_runtime.leader_adjudication.{status.value}.metadata",
-                authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-            )
-            if current_attempt_id:
-                if status == WorkspaceTaskStatus.DONE:
-                    accepted_attempt = await attempt_service.accept(
-                        current_attempt_id,
-                        leader_feedback=summary or None,
-                    )
-                    metadata["last_worker_report_type"] = "completed"
-                    metadata["last_attempt_status"] = accepted_attempt.status.value
-                    metadata["last_attempt_id"] = accepted_attempt.id
-                    metadata[CURRENT_ATTEMPT_ID] = accepted_attempt.id
-                elif status == WorkspaceTaskStatus.BLOCKED:
-                    blocked_attempt = await attempt_service.block(
-                        current_attempt_id,
-                        leader_feedback=summary or task.title,
-                        adjudication_reason="leader_blocked",
-                    )
-                    metadata["last_attempt_status"] = blocked_attempt.status.value
-                    metadata["last_attempt_id"] = blocked_attempt.id
-                    metadata[CURRENT_ATTEMPT_ID] = blocked_attempt.id
-                elif status == WorkspaceTaskStatus.IN_PROGRESS:
-                    rejected_attempt = await attempt_service.reject(
-                        current_attempt_id,
-                        leader_feedback=summary or task.title,
-                        adjudication_reason="leader_rework_required",
-                    )
-                    new_attempt = await attempt_service.create_attempt(
-                        workspace_task_id=task.id,
-                        root_goal_task_id=str(task.metadata.get(ROOT_GOAL_TASK_ID) or ""),
-                        workspace_id=workspace_id,
-                        worker_agent_id=task.assignee_agent_id,
-                        leader_agent_id=persisted_attempt_leader_agent_id(leader_agent_id),
-                    )
-                    metadata["last_attempt_status"] = rejected_attempt.status.value
-                    metadata["last_attempt_id"] = rejected_attempt.id
-                    metadata[CURRENT_ATTEMPT_ID] = new_attempt.id
-                    metadata["current_attempt_number"] = new_attempt.attempt_number
-                    worker_binding_id = task.get_workspace_agent_binding_id()
-                    if worker_binding_id is None and task.assignee_agent_id:
-                        binding = await legacy_workspace_runtime_retired(
-                            db
-                        ).find_by_workspace_and_agent_id(
-                            workspace_id=workspace_id,
-                            agent_id=task.assignee_agent_id,
-                        )
-                        worker_binding_id = binding.id if binding is not None else None
-                    if worker_binding_id:
-                        metadata[CURRENT_ATTEMPT_WORKER_BINDING_ID] = worker_binding_id
-                    if leader_agent_id and task.assignee_agent_id:
-                        retry_launch_request = {
-                            "workspace_id": workspace_id,
-                            ROOT_GOAL_TASK_ID: str(task.metadata.get(ROOT_GOAL_TASK_ID) or ""),
-                            "workspace_task_id": task.id,
-                            "attempt_id": new_attempt.id,
-                            "attempt_number": str(new_attempt.attempt_number),
-                            "actor_user_id": actor_user_id,
-                            "leader_agent_id": leader_agent_id,
-                            "retry_feedback": summary or task.title,
-                        }
-                updated = await command_service.update_task(
-                    workspace_id=workspace_id,
-                    task_id=task_id,
-                    actor_user_id=actor_user_id,
-                    metadata=metadata,
-                    actor_type="agent",
-                    actor_agent_id=leader_agent_id,
-                    reason=f"workspace_goal_runtime.leader_adjudication.{status.value}.attempt_metadata",
-                    authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-                )
-            if status == WorkspaceTaskStatus.IN_PROGRESS and updated.status.value == "todo":
-                root_goal_task_id = task.metadata.get(ROOT_GOAL_TASK_ID)
-                if isinstance(root_goal_task_id, str) and root_goal_task_id:
-                    root_task = await task_service.get_task(
-                        workspace_id=workspace_id,
-                        task_id=root_goal_task_id,
-                        actor_user_id=actor_user_id,
-                    )
-                    _ = await _ensure_root_task_started(
-                        workspace_id=workspace_id,
-                        root_task=root_task,
-                        actor_user_id=actor_user_id,
-                        command_service=command_service,
-                        leader_agent_id=leader_agent_id,
-                        reason="workspace_goal_runtime.leader_adjudication.in_progress.start_root",
-                    )
-                updated = await command_service.start_task(
-                    workspace_id=workspace_id,
-                    task_id=task_id,
-                    actor_user_id=actor_user_id,
-                    actor_type="agent",
-                    actor_agent_id=leader_agent_id,
-                    reason="workspace_goal_runtime.leader_adjudication.in_progress.start",
-                    authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-                )
-            elif status == WorkspaceTaskStatus.DONE and updated.status.value != "done":
-                updated = await command_service.complete_task(
-                    workspace_id=workspace_id,
-                    task_id=task_id,
-                    actor_user_id=actor_user_id,
-                    actor_type="agent",
-                    actor_agent_id=leader_agent_id,
-                    reason="workspace_goal_runtime.leader_adjudication.completed.complete",
-                    authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-                )
-            elif status == WorkspaceTaskStatus.BLOCKED and updated.status.value not in (
-                "blocked",
-                "done",
-            ):
-                updated = await command_service.block_task(
-                    workspace_id=workspace_id,
-                    task_id=task_id,
-                    actor_user_id=actor_user_id,
-                    actor_type="agent",
-                    actor_agent_id=leader_agent_id,
-                    reason="workspace_goal_runtime.leader_adjudication.blocked.block",
-                    authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-                )
-
-            await db.commit()
-            await _publish_workspace_goal_events_v2(command_service.consume_pending_events())
-            if retry_launch_request is not None:
-                _schedule_workspace_retry_attempt(**retry_launch_request)
-            return updated
-    except Exception:
-        logger.warning("Workspace worker report adjudication failed", exc_info=True)
-        return None
 
 
 async def resolve_workspace_execution_task_for_delegate(
@@ -1498,40 +800,6 @@ async def resolve_workspace_execution_task_for_delegate(
     semantic judgment). We return ``None`` instead of guessing.
     """
     legacy_workspace_runtime_retired("Workspace delegation task lookup")
-    normalized_text = delegated_task_text.strip()
-    explicit_task_id = workspace_task_id or _extract_workspace_task_id(normalized_text)
-    try:
-        async with async_session_factory() as db:
-            task_repo = legacy_workspace_runtime_retired(db)
-            if explicit_task_id:
-                task = await task_repo.find_by_id(explicit_task_id)
-                if (
-                    task is not None
-                    and task.workspace_id == workspace_id
-                    and task.metadata.get(ROOT_GOAL_TASK_ID) == root_goal_task_id
-                ):
-                    return task
-
-            candidates = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
-            open_candidates = [
-                task for task in candidates if task.status != WorkspaceTaskStatus.DONE
-            ]
-            if not open_candidates:
-                return None
-
-            # Agent-First: singleton fallback is pure set-membership (exactly one open task).
-            # Ambiguous multi-candidate cases require an explicit ID from the caller.
-            if len(open_candidates) == 1:
-                return open_candidates[0]
-
-            logger.info(
-                "Workspace delegate resolution ambiguous: %d open candidates, "
-                "no explicit workspace_task_id provided (caller must supply one).",
-                len(open_candidates),
-            )
-    except Exception:
-        logger.warning("Workspace delegation task resolution failed", exc_info=True)
-    return None
 
 
 async def prepare_workspace_subagent_delegation(
@@ -1547,96 +815,6 @@ async def prepare_workspace_subagent_delegation(
 ) -> dict[str, str] | None:
     """Bind a delegated subagent run to a workspace task and mark it in progress via leader."""
     legacy_workspace_runtime_retired("Workspace subagent delegation")
-    task = await resolve_workspace_execution_task_for_delegate(
-        workspace_id=workspace_id,
-        root_goal_task_id=root_goal_task_id,
-        delegated_task_text=delegated_task_text,
-        subagent_name=subagent_name,
-        workspace_task_id=workspace_task_id,
-    )
-    if task is None:
-        return None
-
-    try:
-        async with async_session_factory() as db:
-            task_service = WorkspaceTaskService(
-                workspace_repo=legacy_workspace_runtime_retired(db),
-                workspace_member_repo=legacy_workspace_runtime_retired(db),
-                workspace_agent_repo=legacy_workspace_runtime_retired(db),
-                workspace_task_repo=legacy_workspace_runtime_retired(db),
-            )
-            command_service = WorkspaceTaskCommandService(task_service)
-            attempt_service = _build_attempt_service(db)
-            attempt = await _ensure_execution_attempt(
-                attempt_service=attempt_service,
-                task=task,
-                leader_agent_id=leader_agent_id,
-            )
-
-            metadata = dict(task.metadata)
-            metadata["delegated_subagent_name"] = subagent_name
-            if subagent_id:
-                metadata["delegated_subagent_id"] = subagent_id
-            metadata["delegated_task_text"] = delegated_task_text.strip()
-            metadata[CURRENT_ATTEMPT_ID] = attempt.id
-            metadata["last_attempt_id"] = attempt.id
-            metadata["current_attempt_number"] = attempt.attempt_number
-            metadata["last_attempt_status"] = attempt.status.value
-            if attempt.worker_agent_id:
-                metadata["current_attempt_worker_agent_id"] = attempt.worker_agent_id
-            worker_binding_id = task.get_workspace_agent_binding_id()
-            if worker_binding_id:
-                metadata[CURRENT_ATTEMPT_WORKER_BINDING_ID] = worker_binding_id
-
-            updated = await command_service.update_task(
-                workspace_id=workspace_id,
-                task_id=task.id,
-                actor_user_id=actor_user_id,
-                metadata=metadata,
-                actor_type="agent",
-                actor_agent_id=leader_agent_id,
-                reason="workspace_goal_runtime.prepare_subagent_delegation.metadata",
-                authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-            )
-            root_task = await task_service.get_task(
-                workspace_id=workspace_id,
-                task_id=root_goal_task_id,
-                actor_user_id=actor_user_id,
-            )
-            _ = await _ensure_root_task_started(
-                workspace_id=workspace_id,
-                root_task=root_task,
-                actor_user_id=actor_user_id,
-                command_service=command_service,
-                leader_agent_id=leader_agent_id,
-                reason="workspace_goal_runtime.prepare_subagent_delegation.start_root",
-            )
-            if updated.status == WorkspaceTaskStatus.TODO:
-                updated = await command_service.start_task(
-                    workspace_id=workspace_id,
-                    task_id=task.id,
-                    actor_user_id=actor_user_id,
-                    actor_type="agent",
-                    actor_agent_id=leader_agent_id,
-                    reason="workspace_goal_runtime.prepare_subagent_delegation.start",
-                    authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-                )
-
-            await db.commit()
-            await _publish_workspace_goal_events_v2(command_service.consume_pending_events())
-            return {
-                "workspace_task_id": updated.id,
-                "attempt_id": attempt.id,
-                "worker_agent_id": attempt.worker_agent_id or "",
-                "workspace_agent_binding_id": updated.get_workspace_agent_binding_id() or "",
-                "workspace_id": workspace_id,
-                ROOT_GOAL_TASK_ID: root_goal_task_id,
-                "actor_user_id": actor_user_id,
-                "leader_agent_id": leader_agent_id or "",
-            }
-    except Exception:
-        logger.warning("Workspace subagent delegation preparation failed", exc_info=True)
-        return None
 
 
 def _extract_workspace_task_id(task_text: str) -> str | None:

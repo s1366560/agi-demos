@@ -23,15 +23,35 @@ from darwinian_evolver.cli_common import (
     register_hyperparameter_args,
 )
 from darwinian_evolver.evolve_problem_loop import EvolveProblemLoop
-from darwinian_evolver.problem import (
-    EvaluationFailureCase,
-    EvaluationResult,
-    Evaluator,
-    Mutator,
-    Organism,
-    Problem,
-)
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
+
+if TYPE_CHECKING:
+
+    class _DarwinModel:
+        def __init__(self, *args: object, **kwargs: object) -> None: ...
+
+    class Organism(_DarwinModel): ...
+
+    class EvaluationFailureCase(_DarwinModel): ...
+
+    class EvaluationResult(_DarwinModel): ...
+
+    class Evaluator[OrganismT, ResultT, FailureT](_DarwinModel): ...
+
+    class Mutator[OrganismT, FailureT](_DarwinModel): ...
+
+    class Problem[OrganismT, ResultT, FailureT](_DarwinModel): ...
+
+else:
+    from darwinian_evolver.problem import (
+        EvaluationFailureCase,
+        EvaluationResult,
+        Evaluator,
+        Mutator,
+        Organism,
+        Problem,
+    )
 
 if TYPE_CHECKING:
     from darwinian_evolver.learning_log import LearningLogEntry
@@ -203,7 +223,7 @@ class ParrotEvaluator(Evaluator[ParrotOrganism, EvaluationResult, ParrotEvaluati
         )
 
 
-def make_problem() -> Problem:
+def make_problem() -> Problem[ParrotOrganism, EvaluationResult, ParrotEvaluationFailureCase]:
     return Problem[ParrotOrganism, EvaluationResult, ParrotEvaluationFailureCase](
         evaluator=ParrotEvaluator(),
         mutators=[ImproveParrotMutator()],
@@ -268,7 +288,7 @@ def _classify_prompt(prompt: str) -> str:
     return "evaluator"
 
 
-def _messages_for_prompt(*, purpose: str, prompt: str) -> list[dict[str, str]]:
+def _messages_for_prompt(*, purpose: str, prompt: str) -> list[ChatCompletionMessageParam]:
     if purpose == "mutator":
         system = (
             "You improve Jinja prompt templates. Return only the requested artifact, "

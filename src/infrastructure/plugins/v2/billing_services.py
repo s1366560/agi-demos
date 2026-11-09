@@ -214,9 +214,10 @@ class SqlBillingPersistenceV2:
         return _tenant_record_v2(tenant)
 
     async def _tenant_model(self, *, tenant_id: str) -> Tenant | None:
-        return await self._session.scalar(
+        tenant: Tenant | None = await self._session.scalar(
             select(Tenant).where(Tenant.id == tenant_id).execution_options(populate_existing=True)
         )
+        return tenant
 
 
 def _tenant_record_v2(tenant: Tenant) -> BillingTenantRecordV2:

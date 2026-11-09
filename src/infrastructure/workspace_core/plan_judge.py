@@ -16,7 +16,7 @@ from src.infrastructure.llm.model_pool import ModelPoolService, PoolFilter, get_
 
 logger = logging.getLogger(__name__)
 
-_PLAN_TOOL_NAME = "judge_workspace_plan"
+_PLAN_TOOL_NAME: Literal["judge_workspace_plan"] = "judge_workspace_plan"
 PlanJudgmentKind = Literal[
     "recover_stale_attempts",
     "trigger_next_iteration",

@@ -311,8 +311,8 @@ class LocalHITLResumeConsumer:
         async with reservation.admit() as generation:
             with self._redis_generation.bind(generation):
                 await self._resume_and_ack(
-                    stream_key,
-                    msg_id,
+                    stream_key.decode() if isinstance(stream_key, bytes) else stream_key,
+                    msg_id.decode() if isinstance(msg_id, bytes) else msg_id,
                     tenant_id,
                     project_id,
                     request_id,

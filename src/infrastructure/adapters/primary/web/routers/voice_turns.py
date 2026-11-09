@@ -68,7 +68,11 @@ async def voice_turns(
                 )
                 if text_task in completed:
                     turn = generation
-                    socket = VoiceTurnSocket(websocket, lambda turn=turn: turn == generation, turn)
+
+                    def still_current(expected: int = turn) -> bool:
+                        return expected == generation
+
+                    socket = VoiceTurnSocket(websocket, still_current, turn)
                     queue: asyncio.Queue[str] = asyncio.Queue()
                     queue.put_nowait(text_task.result())
                     synthesis: asyncio.Queue[str | None] = asyncio.Queue()

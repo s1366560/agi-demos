@@ -204,14 +204,14 @@ class AvernetProviderAdapter:
                     "local_worker_cancelled": result.local_worker_cancelled,
                 }
             case "chat.history":
-                result = await self._runtime.history(request)
+                history = await self._runtime.history(request)
                 return {
                     "ok": True,
                     "session_id": request.session_id,
-                    "messages": result.messages,
-                    "has_more": result.has_more,
-                    "next_before": result.next_before,
-                    "next_after": result.next_after,
+                    "messages": history.messages,
+                    "has_more": history.has_more,
+                    "next_before": history.next_before,
+                    "next_after": history.next_after,
                 }
 
     async def _start_event_bridge(self, request: ProviderWebhookRequest) -> None:

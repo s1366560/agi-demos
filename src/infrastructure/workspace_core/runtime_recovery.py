@@ -52,7 +52,7 @@ _DEFAULT_STALE_AFTER_SECONDS = 120
 _DEFAULT_LEASE_SECONDS = 60
 _DEFAULT_BATCH_SIZE = 20
 _DEFAULT_INTERVAL_SECONDS = 30.0
-_RECOVERY_TOOL_NAME = "decide_runtime_recovery"
+_RECOVERY_TOOL_NAME: Literal["decide_runtime_recovery"] = "decide_runtime_recovery"
 
 _RECOVERY_TOOL: list[dict[str, Any]] = [
     {

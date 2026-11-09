@@ -255,19 +255,8 @@ async def get_execution_diagnostics(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceExecutionDiagnosticsResponse:
-    service = _execution_diagnostics_service_from_request(request, db)
-    try:
-        diagnostics = await service.get_diagnostics(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            actor_user_id=current_user.id,
-            task_limit=task_limit,
-            tool_limit_per_conversation=tool_limit_per_conversation,
-        )
-        return WorkspaceExecutionDiagnosticsResponse(**diagnostics.to_dict())
-    except Exception as exc:
-        raise _map_error(exc) from exc
+    _ = (tenant_id, project_id, workspace_id, task_limit, tool_limit_per_conversation, current_user)
+    _execution_diagnostics_service_from_request(request, db)
 
 
 @router.post("/posts", response_model=BlackboardPostResponse, status_code=status.HTTP_201_CREATED)

@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from src.infrastructure.agent.processor.goal_judgment import (
     GOAL_COMPLETION_JUDGE_TOOL_V2,
     NATIVE_CONTROL_HANDOFF_GUIDANCE,
-    GoalCheckResult,
+    GoalCheckResult as GoalCheckResult,
     GoalJudgmentAuditSinkV2,
     GoalJudgmentAuditV2,
     _GoalJudgmentV2,

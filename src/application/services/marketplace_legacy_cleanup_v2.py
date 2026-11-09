@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import inspect, select
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapper
 
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginBackendSelectionModel,
@@ -48,7 +49,10 @@ def require_local_development(database_url: str, environment: str) -> str:
 
 
 def _row_payload(row: object) -> dict[str, Any]:
-    values = {column.key: getattr(row, column.key) for column in inspect(type(row)).columns}
+    mapper = inspect(type(row))
+    if mapper is None:
+        raise TypeError("cleanup row is not a mapped instance")
+    values = {column.key: getattr(row, column.key) for column in mapper.columns}
     return {
         key: {"$datetime": value.isoformat()} if isinstance(value, datetime) else value
         for key, value in values.items()
@@ -106,14 +110,14 @@ class MarketplaceLegacyCleanupV2:
             for item in row.manifest.get("manifests", [])
         )
         owned = plugin_ids - preserved
-        blockers = []
-        heads = {}
-        for row in await self.db.scalars(
+        blockers: list[dict[str, str]] = []
+        heads: dict[str, PlatformPluginV2DesiredBundleSetModel] = {}
+        for desired_head in await self.db.scalars(
             select(PlatformPluginV2DesiredBundleSetModel).order_by(
                 PlatformPluginV2DesiredBundleSetModel.revision.desc()
             )
         ):
-            heads.setdefault(row.scope_key, row)
+            heads.setdefault(desired_head.scope_key, desired_head)
         for row in heads.values():
             if any(ref.get("bundle_id") in bundle_ids for ref in row.payload.get("bundles", [])):
                 blockers.append({"kind": "desired_reference", "id": row.id})
@@ -123,21 +127,21 @@ class MarketplaceLegacyCleanupV2:
             if row.applied_publication_id
         }
         if applied_ids:
-            for row in await self.db.scalars(
+            for publication in await self.db.scalars(
                 select(PlatformPluginV2PublicationModel).where(
                     PlatformPluginV2PublicationModel.id.in_(applied_ids)
                 )
             ):
-                snapshot = row.distribution.get("snapshot", {})
+                snapshot = publication.distribution.get("snapshot", {})
                 if any(
                     item.get("plugin_id") in plugin_ids for item in snapshot.get("manifests", [])
                 ):
-                    blockers.append({"kind": "applied_reference", "id": row.id})
+                    blockers.append({"kind": "applied_reference", "id": publication.id})
         tables = {
             PlatformPluginPackageModel.__tablename__: [_row_payload(row) for row in candidates]
         }
         for model in _OWNED:
-            rows = (
+            owned_rows: list[object] = (
                 list(
                     await self.db.scalars(
                         select(model).where(model.plugin_id.in_(owned)).with_for_update()
@@ -146,19 +150,19 @@ class MarketplaceLegacyCleanupV2:
                 if owned
                 else []
             )
-            tables[model.__tablename__] = [_row_payload(row) for row in rows]
-            for row in rows:
-                if isinstance(row, PlatformPluginQuotaUsageModel) and row.concurrent_calls:
-                    blockers.append({"kind": "in_flight_calls", "id": row.plugin_id})
-                if isinstance(row, PlatformPluginHttpRouteModel) and row.enabled:
-                    blockers.append({"kind": "enabled_route", "id": row.id})
+            tables[model.__tablename__] = [_row_payload(item) for item in owned_rows]
+            for item in owned_rows:
+                if isinstance(item, PlatformPluginQuotaUsageModel) and item.concurrent_calls:
+                    blockers.append({"kind": "in_flight_calls", "id": item.plugin_id})
+                if isinstance(item, PlatformPluginHttpRouteModel) and item.enabled:
+                    blockers.append({"kind": "enabled_route", "id": item.id})
         if owned:
-            for row in await self.db.scalars(
+            for selection in await self.db.scalars(
                 select(PlatformPluginBackendSelectionModel).where(
                     PlatformPluginBackendSelectionModel.plugin_id.in_(owned)
                 )
             ):
-                blockers.append({"kind": "backend_selection", "id": row.id})
+                blockers.append({"kind": "backend_selection", "id": selection.id})
         payload = {
             "schema_version": 1,
             "target": self.target,
@@ -190,7 +194,10 @@ class MarketplaceLegacyCleanupV2:
             os.fsync(backup.fileno())
         for model in (*_OWNED, PlatformPluginPackageModel):
             for payload in plan["tables"][model.__tablename__]:
-                key = tuple(payload[column.key] for column in inspect(model).primary_key)
+                mapper = inspect(model)
+                if not isinstance(mapper, Mapper):
+                    raise TypeError("cleanup model is not mapped")
+                key = tuple(payload[column.key] for column in mapper.primary_key)
                 row = await self.db.get(model, key)
                 if row is None or _row_payload(row) != payload:
                     raise ValueError("cleanup candidate changed after backup")
@@ -211,7 +218,10 @@ class MarketplaceLegacyCleanupV2:
         for model in (PlatformPluginPackageModel, *_OWNED):
             count = 0
             for payload in plan["tables"][model.__tablename__]:
-                key = tuple(payload[column.key] for column in inspect(model).primary_key)
+                mapper = inspect(model)
+                if not isinstance(mapper, Mapper):
+                    raise TypeError("cleanup model is not mapped")
+                key = tuple(payload[column.key] for column in mapper.primary_key)
                 if await self.db.get(model, key) is not None:
                     raise ValueError("restore would overwrite an existing record")
                 values = {

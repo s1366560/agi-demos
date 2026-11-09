@@ -110,6 +110,7 @@ class AgentOrchestrationRuntimeV2:
                     )
                 return binding.resource.orchestrator
 
+            resource: AgentOrchestratorResourceV2 | Awaitable[AgentOrchestratorResourceV2]
             if self._factory is None:
                 resource = create_agent_orchestrator_resource_v2(
                     self._run_registry,

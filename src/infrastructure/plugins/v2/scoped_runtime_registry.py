@@ -300,7 +300,8 @@ def _validate_snapshot_scope(scope: ScopeV2, snapshot: ProfileSnapshotV2) -> Non
         if module is None or DataPlaneTargetV2.PYTHON not in module.targets:
             continue
         contracts = module.contract.services
-        services = {item.service for item in (*contracts.provides, *contracts.requires)}
+        services = {item.service for item in contracts.provides}
+        services.update(item.service for item in contracts.requires)
         if services & _GLOBAL_ROUTE_SERVICES:
             raise RuntimeV2Error(
                 "scope_global_route_forbidden", "scoped hosts cannot contribute global HTTP routes"

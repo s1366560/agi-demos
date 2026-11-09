@@ -488,9 +488,7 @@ class FeishuAdapter:
                     background_task = current_loop.create_task(response_coro)
                     _ws_bg_tasks.add(background_task)
                     background_task.add_done_callback(_ws_bg_tasks.discard)
-                    background_task.add_done_callback(
-                        self._log_background_hitl_response_result
-                    )
+                    background_task.add_done_callback(self._log_background_hitl_response_result)
             except RuntimeError:
                 if self._app_loop and self._app_loop.is_running():
                     response_future = asyncio.run_coroutine_threadsafe(
@@ -560,9 +558,7 @@ class FeishuAdapter:
                         "type": "raw",
                         "data": pending_card,
                     }
-                return P2CardActionTriggerResponse(
-                    response_payload
-                )
+                return P2CardActionTriggerResponse(response_payload)
 
             if published is HITLChannelResponseOutcome.REJECTED or published is False:
                 return P2CardActionTriggerResponse(
@@ -639,7 +635,8 @@ class FeishuAdapter:
     ) -> dict[str, Any] | None:
         """Build a confirmation card after user responds to HITL request."""
         _hitl_mod = _load_sibling("hitl_cards.py")
-        return _hitl_mod.HITLCardBuilder().build_responded_card(hitl_type, selected_label)
+        card = _hitl_mod.HITLCardBuilder().build_responded_card(hitl_type, selected_label)
+        return card if isinstance(card, dict) else None
 
     def _build_processing_card(
         self,
@@ -648,7 +645,8 @@ class FeishuAdapter:
     ) -> dict[str, Any] | None:
         """Build a non-interactive card while a response is still processing."""
         _hitl_mod = _load_sibling("hitl_cards.py")
-        return _hitl_mod.HITLCardBuilder().build_processing_card(hitl_type, selected_label)
+        card = _hitl_mod.HITLCardBuilder().build_processing_card(hitl_type, selected_label)
+        return card if isinstance(card, dict) else None
 
     async def _connect_webhook(self) -> None:
         """Connect via Webhook (HTTP server mode).
@@ -687,7 +685,10 @@ class FeishuAdapter:
 
             @app.post(path)
             async def _webhook_endpoint(request: FastAPIRequest) -> dict[str, Any]:
-                return await handler.handle_request(request)
+                body = await handler.handle_request(request)
+                if not isinstance(body, dict):
+                    raise TypeError("Feishu webhook handler must return an object")
+                return body
 
             config = uvicorn.Config(
                 app,

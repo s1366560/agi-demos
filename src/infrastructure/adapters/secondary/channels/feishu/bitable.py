@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from feishu_client import FeishuClient  # type: ignore[import-not-found]
+    from feishu_client import FeishuClient
 
 logger = logging.getLogger(__name__)
 

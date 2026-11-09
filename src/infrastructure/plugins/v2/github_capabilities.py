@@ -36,9 +36,7 @@ GITHUB_TOOL_SERVICE_V2 = "service:agent-tool.github"
 GITHUB_DEFAULTS_SERVICE_V2 = "service:github-defaults"
 GITHUB_SECRET_PATHS_SERVICE_V2 = "service:github-secret-paths"
 
-_GITHUB_SKILL_DIGEST_V2 = (
-    "sha256:d2172a1c63aa7abc68c754df3a0421790f50cf016461dceaa29def89c87d1af6"
-)
+_GITHUB_SKILL_DIGEST_V2 = "sha256:d2172a1c63aa7abc68c754df3a0421790f50cf016461dceaa29def89c87d1af6"
 _GITHUB_TOOL_SOURCE_V2 = "builtin-github-tool"
 _GITHUB_SKILL_SOURCE_V2 = "builtin-github-skill"
 _GITHUB_PROFILE_DEFAULTS_V2: dict[str, object] = {
@@ -205,7 +203,7 @@ def _build_request(  # noqa: C901, PLR0911, PLR0912, PLR0913
     ref: str | None,
     per_page: int,
     page: int,
-) -> tuple[str, str, dict[str, object] | None] | ToolResult:
+) -> tuple[str, str, dict[str, object] | None, urllib.request.Request] | ToolResult:
     method = "GET"
     payload: dict[str, object] | None = None
 
@@ -483,9 +481,7 @@ def _apply_github_tool_contribution_v2(
             "invalid_service_implementation",
             "GitHub tool contribution received an invalid tool catalog",
         )
-    contribution_config = {
-        key: value for key, value in config.items() if key != "source_id"
-    }
+    contribution_config = {key: value for key, value in config.items() if key != "source_id"}
     defaults = MappingProxyType({**_GITHUB_PROFILE_DEFAULTS_V2, **contribution_config})
     capability = GitHubToolCapabilityV2(source_id=source_id, defaults=defaults)
     _ = context.provide(

@@ -160,6 +160,13 @@ class InstanceDeployAccessV2:
         return result.scalar_one_or_none() is not None
 
 
+async def _close_redis_pubsub(pubsub: object) -> None:
+    """Close a Redis pubsub whose stubs leave ``aclose`` untyped."""
+    close = getattr(pubsub, "aclose", None)
+    if callable(close):
+        await close()
+
+
 @dataclass(frozen=True, kw_only=True)
 class DeployProgressStreamV2:
     """Redis-backed deploy progress stream hidden behind the application seam."""
@@ -214,7 +221,7 @@ class DeployProgressStreamV2:
                     await asyncio.sleep(0.5)
         finally:
             await pubsub.unsubscribe(channel_name)
-            await pubsub.aclose()
+            await _close_redis_pubsub(pubsub)
 
 
 @dataclass(frozen=True, kw_only=True)

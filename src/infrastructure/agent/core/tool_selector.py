@@ -191,11 +191,12 @@ class ToolSelector:
         context: ToolSelectionContext,
     ) -> list[str] | None:
         try:
-            decision = ranker.rank_tools(tools, context)
+            ranked = ranker.rank_tools(tools, context)
         except Exception:
             logger.exception("Agent tool ranker failed; preserving the complete tool set")
             return None
 
+        decision: object = ranked
         if not isinstance(decision, ToolRankingDecisionV2):
             logger.warning("Agent tool ranker returned no structured decision; preserving all")
             return None

@@ -65,7 +65,8 @@ class MarketplaceOAuth:
         )
         if lock:
             query = query.with_for_update().execution_options(populate_existing=True)
-        return await self.db.scalar(query)
+        found: MarketplaceRecordV3 | None = await self.db.scalar(query)
+        return found
 
     async def installation(
         self, installation_id: str, *, lock: bool = False
@@ -139,6 +140,8 @@ class MarketplaceOAuth:
                 and challenge.payload.get("expires_at", 0) > time.time()
                 for challenge in challenges
             ):
+                if not isinstance(current, dict):
+                    raise OAuthError("oauth_status_malformed")
                 return current
             self.update_status(row, name, "expired", "oauth_challenge_expired")
         grant = await self.record("oauth_grant", f"{installation_id}:{name}")
@@ -155,7 +158,10 @@ class MarketplaceOAuth:
                 ),
                 "expires_at": grant.payload.get("expires_at"),
             }
-        return row.payload.get("oauth_status", {}).get(name, {"status": "not_connected"})
+        status = row.payload.get("oauth_status", {}).get(name, {"status": "not_connected"})
+        if not isinstance(status, dict):
+            raise OAuthError("oauth_status_malformed")
+        return status
 
     async def start(
         self,
@@ -177,7 +183,10 @@ class MarketplaceOAuth:
         if existing:
             if existing.payload["request_hash"] != request_hash:
                 raise OAuthError("oauth_idempotency_conflict")
-            return existing.payload["response"]
+            response = existing.payload["response"]
+            if not isinstance(response, dict):
+                raise OAuthError("oauth_response_malformed")
+            return response
         previous = await self.db.scalars(
             select(MarketplaceRecordV3).where(
                 MarketplaceRecordV3.tenant_id == self.tenant_id,
@@ -250,23 +259,23 @@ class MarketplaceOAuth:
                 + ("&" if "?" in metadata["authorization_endpoint"] else "?")
                 + urlencode(parameters)
             )
-            response = {
+            started: dict[str, Any] = {
                 **self.update_status(row, name, "authorizing"),
                 "authorization_url": url,
                 "expires_at": expires_at,
             }
         except ValueError as exc:
-            response = self.update_status(row, name, "needs_configuration", str(exc))
+            started = self.update_status(row, name, "needs_configuration", str(exc))
         _ = await self.put(
             "oauth_request",
             key,
             {
                 "installation_id": installation_id,
                 "request_hash": request_hash,
-                "response": response,
+                "response": started,
             },
         )
-        return response
+        return started
 
     async def callback(
         self, state: str, code: str | None, error: str | None = None
@@ -400,7 +409,10 @@ class MarketplaceOAuth:
                 else saved["refresh_token"],
                 "expires_at": time.time() + token.get("expires_in", 3600),
             }
-        return "Bearer " + open_transport(grant.payload["access_token"])
+        access_token = open_transport(grant.payload["access_token"])
+        if not isinstance(access_token, str):
+            raise OAuthError("oauth_token_malformed")
+        return "Bearer " + access_token
 
     async def control(
         self, installation_id: str, name: str, action: str, key: str
@@ -413,7 +425,10 @@ class MarketplaceOAuth:
         if previous:
             if previous.payload["request_hash"] != request_hash:
                 raise OAuthError("oauth_idempotency_conflict")
-            return previous.payload["response"]
+            response = previous.payload["response"]
+            if not isinstance(response, dict):
+                raise OAuthError("oauth_response_malformed")
+            return response
         response = await self.disconnect(installation_id, name, cancel_only=action == "cancel")
         _ = await self.put(
             "oauth_request",

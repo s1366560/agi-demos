@@ -85,7 +85,10 @@ def project_service_closure_v2(
         contract = modules[entry_id].contract
         if any(
             declaration.service in _GLOBAL_ROUTE_SERVICES
-            for declaration in (*contract.services.provides, *contract.services.requires)
+            for declaration in contract.services.provides
+        ) or any(
+            declaration.service in _GLOBAL_ROUTE_SERVICES
+            for declaration in contract.services.requires
         ):
             raise RuntimeV2Error(
                 "scope_global_route_service",

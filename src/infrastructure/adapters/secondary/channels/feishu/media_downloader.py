@@ -17,7 +17,6 @@ class FeishuMediaDownloadError(Exception):
     """Exception raised when media download fails."""
 
 
-
 class FeishuMediaDownloader:
     """Download media files from Feishu/Lark server.
 

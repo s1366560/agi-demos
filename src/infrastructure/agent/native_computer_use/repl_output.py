@@ -142,9 +142,10 @@ def _entries(output: object, references: list[dict[str, Any]]) -> list[dict[str,
 
 
 def _within_limit(entry: dict[str, Any], admitted_bytes: int) -> bool:
-    return entry["sizeBytes"] <= MAX_MEDIA_BYTES and (
-        admitted_bytes + entry["sizeBytes"] <= MAX_CELL_MEDIA_BYTES
-    )
+    size = entry["sizeBytes"]
+    if isinstance(size, bool) or not isinstance(size, int):
+        return False
+    return bool(size <= MAX_MEDIA_BYTES and admitted_bytes + size <= MAX_CELL_MEDIA_BYTES)
 
 
 def select_repl_attachments(
