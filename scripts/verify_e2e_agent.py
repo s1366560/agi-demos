@@ -224,7 +224,7 @@ def verify_agent(
     timeout_seconds: float = 60.0,
 ) -> None:
     """Create an isolated project/conversation and complete one real Agent turn."""
-    with httpx.Client(timeout=15.0) as client:
+    with httpx.Client(timeout=90.0) as client:
         fixture = _bootstrap_agent_fixture(api_base, client)
         asyncio.run(
             _verify_agent_websocket(
