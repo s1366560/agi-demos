@@ -4660,6 +4660,20 @@
         "title": "配置 {{name}}",
         "noConfig": "该插件未声明可配置项。"
       },
+      "optionalBusiness": {
+        "title": "签名可选业务",
+        "pluginId": "插件标识",
+        "packageFile": "签名包文件",
+        "install": "安装签名包",
+        "enable": "启用",
+        "disable": "禁用",
+        "rollback": "回滚",
+        "uninstall": "卸载",
+        "absent": "未登记",
+        "loadFailed": "无法加载签名包",
+        "actionFailed": "签名包操作失败",
+        "packageInvalid": "包文件不是有效的 JSON"
+      },
       "messages": {
         "loadProjectsFailed": "加载项目失败",
         "loadPluginsFailed": "加载 V2 市场目录失败",

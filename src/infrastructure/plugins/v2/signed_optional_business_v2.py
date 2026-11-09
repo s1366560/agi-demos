@@ -6,6 +6,7 @@ object, import host modules, or choose another tenant.
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -343,6 +344,9 @@ class SignedOptionalBusinessRuntimeV2:
             "title": document.title,
             "actions": [{"id": action_id, "label": label} for action_id, label in document.actions],
             "digest": ui.digest,
+            "bytes_base64": base64.b64encode(content).decode("ascii"),
+            "source": f"signed-package://{plugin_id}/{ui.path}",
+            "module_ref": f"signed:{plugin_id}/{slot}",
         }
 
     def dispose_ui(self, plugin_id: str) -> None:

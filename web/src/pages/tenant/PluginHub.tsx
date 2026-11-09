@@ -27,7 +27,7 @@ import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { InstallPluginPackageModal } from '@/components/marketplace/InstallPluginPackageModal';
 import { PluginMarketplaceV3 } from '@/components/marketplace/v3/PluginMarketplaceV3';
 import { PluginInstancesV2 } from '@/components/plugins/PluginInstancesV2';
-import { SignedBusinessMount } from '@/components/plugins/SignedBusinessMount';
+import { OptionalBusinessPanel } from '@/components/plugins/OptionalBusinessPanel';
 
 import { ChannelConfigSection } from './ChannelConfigSection';
 import { PluginMarketplaceSection } from './PluginMarketplaceSection';
@@ -654,7 +654,10 @@ export const PluginHub: React.FC = () => {
               ))}
             </select>
           </label>
-          <SignedBusinessMount document={null} />
+          <OptionalBusinessPanel
+            tenantId={tenantId}
+            projectId={selectedProjectId ?? projectIdFromQuery}
+          />
           <PluginInstancesV2
             tenantId={tenantId}
             projectId={instanceProjectId}

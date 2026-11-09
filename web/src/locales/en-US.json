@@ -4474,6 +4474,20 @@
         "title": "Configure {{name}}",
         "noConfig": "This plugin does not declare configurable settings."
       },
+      "optionalBusiness": {
+        "title": "Signed optional business",
+        "pluginId": "Plugin id",
+        "packageFile": "Signed package file",
+        "install": "Install signed package",
+        "enable": "Enable",
+        "disable": "Disable",
+        "rollback": "Rollback",
+        "uninstall": "Uninstall",
+        "absent": "not recorded",
+        "loadFailed": "Could not load the signed package",
+        "actionFailed": "Signed package action failed",
+        "packageInvalid": "The package file is not valid JSON"
+      },
       "messages": {
         "loadProjectsFailed": "Failed to load projects",
         "loadPluginsFailed": "Failed to load the V2 marketplace catalog",
