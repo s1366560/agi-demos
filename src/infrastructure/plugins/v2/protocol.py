@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict
 from enum import Enum
@@ -88,6 +89,10 @@ def plugin_contract_digest_v2(contract: PluginContractV2) -> str:
     return f"sha256:{hashlib.sha256(canonical_json_v2(payload)).hexdigest()}"
 
 
+_PARSED_SNAPSHOTS: OrderedDict[str, ProfileSnapshotV2] = OrderedDict()
+_PARSED_SNAPSHOT_LIMIT = 32
+
+
 def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
     """Validate and parse one v2 snapshot; v1 is intentionally rejected."""
     if not isinstance(payload, dict):
@@ -97,6 +102,14 @@ def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
             "incompatible_schema_version",
             "plugin snapshot schema_version must be 2; v1 is not accepted",
         )
+    # The default profile embeds the whole kernel manifest. Re-walking that schema
+    # on every compose is what pushed profile p95 past 100ms. A verified digest
+    # already proves the bytes match a snapshot that passed validation.
+    digest = payload.get("digest")
+    if isinstance(digest, str) and (cached := _PARSED_SNAPSHOTS.get(digest)) is not None:
+        if digest == _snapshot_digest(payload):
+            _PARSED_SNAPSHOTS.move_to_end(digest)
+            return cached
     _validate_schema("ProfileSnapshotV2", payload)
     _validate_snapshot_semantics(payload)
     expected_digest = _snapshot_digest(payload)
@@ -105,7 +118,12 @@ def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
             "digest_mismatch",
             f"snapshot digest mismatch: expected {expected_digest}",
         )
-    return _snapshot_from_payload(payload)
+    snapshot = _snapshot_from_payload(payload)
+    _PARSED_SNAPSHOTS[expected_digest] = snapshot
+    _PARSED_SNAPSHOTS.move_to_end(expected_digest)
+    while len(_PARSED_SNAPSHOTS) > _PARSED_SNAPSHOT_LIMIT:
+        _PARSED_SNAPSHOTS.popitem(last=False)
+    return snapshot
 
 
 def parse_plugin_manifest_v2(payload: object) -> PluginManifestV2:
