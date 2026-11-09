@@ -38,7 +38,7 @@ jobs:
       - name: Run backend-independent smoke tests
         env:
           CI: true
-        run: pnpm exec playwright test e2e/smoke.spec.ts e2e/optional-business-lifecycle.spec.ts
+        run: pnpm exec playwright test e2e/smoke.spec.ts
 
       - name: Upload Playwright report
         if: always()
@@ -232,7 +232,7 @@ jobs:
 
       - name: Run backend-dependent smoke
         working-directory: web
-        run: pnpm exec playwright test e2e/backend-smoke.spec.ts
+        run: pnpm exec playwright test e2e/backend-smoke.spec.ts e2e/optional-business-lifecycle.spec.ts
 
       - name: Stop local-runtime API
         run: |
