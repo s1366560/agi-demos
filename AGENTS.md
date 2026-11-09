@@ -319,3 +319,11 @@ The WS endpoint `/api/v1/agent/ws` authenticates via `?token=<api_key>` query pa
 ## Environment Variables
 
 Core groups (see `.env.example` for full list): `API_*` · `SECRET_KEY`, `LLM_ENCRYPTION_KEY` · `NEO4J_*` · `POSTGRES_*` · `REDIS_*` · `LLM_PROVIDER` + provider keys (`GEMINI_API_KEY`, `DASHSCOPE_API_KEY`, `OPENAI_API_KEY`, ...) · `SANDBOX_*` · `MCP_*`.
+
+## Cursor Cloud specific instructions
+
+Cloud Agent VMs do not run systemd as PID 1, and `/usr/sbin/policy-rc.d` rejects service starts. Start Docker with `sudo setsid dockerd` (overlay2 storage driver and legacy iptables). Do not rely on `systemctl start docker` or `service docker start`.
+
+`docker compose` still names the object-storage images `minio/minio:latest` and `minio/mc:latest`. Those Docker Hub repositories are gone. Pull `pgsty/minio:latest` and `pgsty/mc:latest`, then tag them onto the compose names before `docker compose up`. Workspace Core (`Dockerfile.workspace-core`) needs Docker Buildx because the Dockerfile uses BuildKit cache mounts. The API process exits on startup unless Workspace Core is healthy and `.env` contains the tokens from `uv run python scripts/workspace-core/bootstrap-local-env.py --env-file .env`.
+
+The checked-out cloud start path brings up Postgres, Redis, Neo4j, MinIO, Workspace Core, the API on port 8000, and the web console on port 3000. It does not start the Ray head and worker: each is configured for about 4GB plus a 1GB object store. `AGENT_RUNTIME_MODE=auto` keeps the API on the local runtime when Ray is absent. `make dev` still tries to build and start Ray; use that only when the machine can afford it. Sign in at http://localhost:3000 with `admin@memstack.ai` / `adminpassword`. Health check: `curl -fsS http://127.0.0.1:8000/health`.
