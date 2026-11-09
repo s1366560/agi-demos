@@ -91,6 +91,11 @@ jobs:
           uv run ruff check src/ sdk/
           uv run mypy src/ --ignore-missing-imports
       
+      - name: Plugin storage and review Postgres
+        env:
+          PLUGIN_STORAGE_POSTGRES_URL: postgresql+psycopg2://postgres:testpassword@localhost:5432/memstack
+        run: uv run pytest src/tests/integration/test_plugin_storage_postgres.py -q
+
       - name: Run tests
         env:
           NEO4J_URI: bolt://localhost:7687
