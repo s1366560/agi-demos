@@ -84,14 +84,14 @@ PY
 for build_script in \
   "${BCS_ROOT}/crates/bootstrap/bcs/build.rs" \
   "${BCS_ROOT}/crates/tools/bcs-cli/build.rs"; do
-  if rg -n 'Command::new\("git"\)|Local::now' "${build_script}"; then
+  if grep -E -n 'Command::new\("git"\)|Local::now' "${build_script}"; then
     echo "${build_script}: build provenance must not inspect Git or wall-clock time" >&2
     exit 1
   fi
-  rg -q 'MEMSTACK_HOST_GIT_REVISION' "${build_script}"
-  rg -q 'AVERNET_UPSTREAM_GIT_REVISION' "${build_script}"
-  rg -q 'SOURCE_DATE_EPOCH' "${build_script}"
-  rg -q 'e470fb3d88979b9da8dc11c63f9d9c4b73343c9d' "${build_script}"
+  grep -q 'MEMSTACK_HOST_GIT_REVISION' "${build_script}"
+  grep -q 'AVERNET_UPSTREAM_GIT_REVISION' "${build_script}"
+  grep -q 'SOURCE_DATE_EPOCH' "${build_script}"
+  grep -q 'e470fb3d88979b9da8dc11c63f9d9c4b73343c9d' "${build_script}"
 done
 
 echo "Avernet supply-chain contracts verified"
