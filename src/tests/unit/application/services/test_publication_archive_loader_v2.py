@@ -159,7 +159,10 @@ async def retained(db_session):
             )
         )
         await PlatformPluginGovernanceRepository(db).grant_permission(
-            plugin_id=reference.bundle_id, permission="tools.execute"
+            plugin_id=reference.bundle_id,
+            permission="tools.execute",
+            scope_type="root",
+            scope_id="global",
         )
         row = await PlatformPluginRepositoryV2(db).record_requested_distribution(snapshot, envelope)
         await PlatformPluginPublicationSourceRepositoryV2(db).record(
