@@ -56,6 +56,21 @@ async def test_attention_routes_proxy_auth_and_revision_without_local_authority(
     monkeypatch.setattr(
         workspace_core_routes, "workspace_core_client_v2_from_request", lambda _: core
     )
+
+    class _IdleSession:
+        async def __aenter__(self) -> SimpleNamespace:
+            return SimpleNamespace()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    async def admit_proxy_without_local_lookup(**_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(workspace_core_routes, "async_session_factory", lambda: _IdleSession())
+    monkeypatch.setattr(
+        workspace_core_routes, "admit_feature_endpoint_v2", admit_proxy_without_local_lookup
+    )
     app = FastAPI()
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
         id="user-1", email="user@example.test", is_superuser=False

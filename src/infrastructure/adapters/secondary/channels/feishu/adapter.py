@@ -369,7 +369,7 @@ class FeishuAdapter:
         """Handle user entering bot P2P chat (no-op, suppresses SDK warning)."""
         logger.debug("[Feishu] User entered bot P2P chat")
 
-    def _on_card_action(self, event: Any) -> Any:
+    def _on_card_action(self, event: Any) -> Any:  # noqa: C901, PLR0911, PLR0912, PLR0915
         """Handle interactive card button click (card.action.trigger callback).
 
         The lark_oapi SDK deserializes the callback into typed objects:

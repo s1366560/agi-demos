@@ -17,7 +17,7 @@ concurrency:
 jobs:
   neo4j-runtime:
     name: Neo4j ingest, isolation, restart, and recovery
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:
       postgres:

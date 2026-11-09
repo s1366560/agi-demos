@@ -39,11 +39,11 @@ echo "goldens: $golden_count"
 step "checking gateway strangler routing policy"
 test -f "$RULES_FILE" || fail "missing gateway rules file: $RULES_FILE"
 if sed -n '/STRANGLED_PREFIXES/,/];/p' "$RULES_FILE" \
-  | rg -n '"/api/v1/?("|")|"/api/v1/(auth|projects|tenants|skills|channels|workspaces|agent|graph|search-enhanced|memory)"' >/dev/null
+  | grep -E -n '"/api/v1/?("|")|"/api/v1/(auth|projects|tenants|skills|channels|workspaces|agent|graph|search-enhanced|memory)"' >/dev/null
 then
   fail "STRANGLED_PREFIXES contains a broad /api/v1 capability prefix; use exact or method-scoped rules instead"
 fi
-if rg -n 'MethodMatchKind::Prefix' "$RULES_FILE" >/dev/null; then
+if grep -E -n 'MethodMatchKind::Prefix' "$RULES_FILE" >/dev/null; then
   fail "gateway rules use a prefix match; strangler flips must stay exact or method-scoped"
 fi
 echo "gateway rules: conservative prefixes only"

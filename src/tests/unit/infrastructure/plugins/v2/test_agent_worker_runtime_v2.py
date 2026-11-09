@@ -431,7 +431,7 @@ def test_local_runtime_bootstrap_occurs_inside_the_generation_admission() -> Non
         getsource(AgentRuntimeBootstrapper._run_chat_local),
         getsource(local_chat_worker._run),
     ):
-        assert source.index("async with admission.admit(") < source.index(
+        assert source.index("async with admit_agent_turn_v2(") < source.index(
             "_ensure_local_runtime_bootstrapped()"
         )
 
