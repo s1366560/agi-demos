@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:57ff5dcac1e06bb8a0a95dcd28187e3fd82df5584866fb5186b1616f64',
-  'd9c745","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:22af7b7b848f8a9bebef2779260c4a3229755a1c17ec5fe4ef031bc4d2',
+  '5fe54a","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -730,8 +730,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '2cffa142d3c8e216924b920b1d9b11bceabb4833a38c","entrypoint":"src.infrastructure.plugi',
   'ns.v2.agent_turn_services:_apply_agent_turn_v2","module_ref":"builtin://memstack/age',
   'nt/turn-service","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","tar',
-  'gets":["python"]},{"artifact_digest":"sha256:d47e4ab9b6db2ded371cdf2bd7ab05f530beda2',
-  '422ae0c20578102b366df04a6","artifact_source":"repo+python://src/infrastructure/plugi',
+  'gets":["python"]},{"artifact_digest":"sha256:884484c77780107eb00694803390e36b2a9f01b',
+  '5bd93adab6ff148425655adcf","artifact_source":"repo+python://src/infrastructure/plugi',
   'ns/v2/agent_worker_runtime.py","contract":{"config_schema":{"$schema":"https://json-',
   'schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strateg',
   'y":{"const":"generation-sandbox-runtime","type":"string"}},"required":["strategy"],"',
@@ -3045,8 +3045,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'point":"src.infrastructure.plugins.v2.conversation_collection_services:_apply_conver',
   'sation_created_redis_publisher_v2","module_ref":"builtin://memstack/events/conversat',
   'ion-created-redis-publisher","plugin_id":"memstack-runtime-kernel","plugin_version":',
-  '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:b372ac240dccb409459733e066b',
-  '00d0bff9a7b4273c4b3ffc5843208f27665d7","artifact_source":"repo+python://src/infrastr',
+  '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:4dca74c500d64cce09ce0c98bd3',
+  'f4841d29c85dfe7964ec7ea7be944e2dba83e","artifact_source":"repo+python://src/infrastr',
   'ucture/plugins/v2/graph_runtime.py","contract":{"config_schema":{"$schema":"https://',
   'json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"re',
   'quired":{"type":"boolean"},"strategy":{"const":"native-adapter","type":"string"}},"r',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:57ff5dcac1e06bb8a0a95dcd28187e3fd82df5584866fb5186b1616f64d9c745' as const;
+  'sha256:22af7b7b848f8a9bebef2779260c4a3229755a1c17ec5fe4ef031bc4d25fe54a' as const;

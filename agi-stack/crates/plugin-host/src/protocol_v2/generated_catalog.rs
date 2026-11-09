@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:57ff5dcac1e06bb8a0a95dcd28187e3fd82df5584866fb5186b1616f64d9c7",
-    "45\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:22af7b7b848f8a9bebef2779260c4a3229755a1c17ec5fe4ef031bc4d25fe5",
+    "4a\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -678,8 +678,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "2cffa142d3c8e216924b920b1d9b11bceabb4833a38c\",\"entrypoint\":\"src.infrastructure.plugins.v",
     "2.agent_turn_services:_apply_agent_turn_v2\",\"module_ref\":\"builtin://memstack/agent/turn-",
     "service\",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"pyth",
-    "on\"]},{\"artifact_digest\":\"sha256:d47e4ab9b6db2ded371cdf2bd7ab05f530beda2422ae0c20578102b",
-    "366df04a6\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent_worker_r",
+    "on\"]},{\"artifact_digest\":\"sha256:884484c77780107eb00694803390e36b2a9f01b5bd93adab6ff1484",
+    "25655adcf\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent_worker_r",
     "untime.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12",
     "/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"generation-sand",
     "box-runtime\",\"type\":\"string\"}},\"required\":[\"strategy\"],\"type\":\"object\"},\"events\":{\"emits",
@@ -2888,8 +2888,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "ucture.plugins.v2.conversation_collection_services:_apply_conversation_created_redis_pub",
     "lisher_v2\",\"module_ref\":\"builtin://memstack/events/conversation-created-redis-publisher\"",
     ",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"",
-    "artifact_digest\":\"sha256:b372ac240dccb409459733e066b00d0bff9a7b4273c4b3ffc5843208f27665d",
-    "7\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/graph_runtime.py\",\"con",
+    "artifact_digest\":\"sha256:4dca74c500d64cce09ce0c98bd3f4841d29c85dfe7964ec7ea7be944e2dba83",
+    "e\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/graph_runtime.py\",\"con",
     "tract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"addit",
     "ionalProperties\":false,\"properties\":{\"required\":{\"type\":\"boolean\"},\"strategy\":{\"const\":\"",
     "native-adapter\",\"type\":\"string\"}},\"required\":[\"required\",\"strategy\"],\"type\":\"object\"},\"e",
@@ -4785,4 +4785,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "rsion\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:57ff5dcac1e06bb8a0a95dcd28187e3fd82df5584866fb5186b1616f64d9c745";
+    "sha256:22af7b7b848f8a9bebef2779260c4a3229755a1c17ec5fe4ef031bc4d25fe54a";

@@ -270,7 +270,6 @@ jobs:
           esac
           COVERAGE_FILE="coverage-${{ matrix.shard }}" \
             uv run pytest "${args[@]}" \
-              -n auto --dist loadscope \
               --cov=src \
               --cov-report= \
               --cov-fail-under=0

@@ -4326,10 +4326,12 @@
         "noDeclaredPermissions": "This plugin declares no permissions.",
         "approveTenantPermissions": "Approve all declared permissions for this tenant",
         "installAdminRequired": "Platform administrator access required",
-        "installUnavailable.revoked": "Revoked package · install unavailable",
-        "installUnavailable.installed": "Already installed",
-        "installUnavailable.scan_pending": "Security scan has not passed · install unavailable",
-        "installUnavailable.unsigned": "Catalog entry lacks verifiable signature material · install unavailable",
+        "installUnavailable": {
+          "revoked": "Revoked package · install unavailable",
+          "installed": "Already installed",
+          "scan_pending": "Security scan has not passed · install unavailable",
+          "unsigned": "Catalog entry lacks verifiable signature material · install unavailable"
+        },
         "installPlaceholder": "e.g., memstack-plugin-template==0.1.0",
         "install": "Install",
         "enable": "Enable",
