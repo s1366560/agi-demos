@@ -189,6 +189,7 @@ export function TenantAgentConfigEditor({
       return;
     }
 
+    let cancelled = false;
     const loadConfig = async () => {
       setLoading(true);
       setError(null);
@@ -206,6 +207,9 @@ export function TenantAgentConfigEditor({
               error: t('tenant.agentConfigEditor.runtimeHooks.catalogUnavailableDescription'),
             })),
         ]);
+        if (cancelled) {
+          return;
+        }
         const { catalog, error: nextHookCatalogError } = catalogResult;
 
         const catalogKeys = new Set(catalog.map((entry) => hookKey(entry)));
@@ -234,6 +238,9 @@ export function TenantAgentConfigEditor({
         });
         setHasChanges(false);
       } catch (err) {
+        if (cancelled) {
+          return;
+        }
         const messageText =
           err instanceof TenantAgentConfigError
             ? err.message
@@ -244,11 +251,16 @@ export function TenantAgentConfigEditor({
           onClose();
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     void loadConfig();
+    return () => {
+      cancelled = true;
+    };
   }, [open, tenantId, initialConfig, form, onClose, t]);
 
   const onValuesChange = useCallback(() => {
