@@ -112,7 +112,7 @@ symlinkSync(join(desktopRoot, 'node_modules'), join(compiledRoot, 'node_modules'
 const testFiles = discoverTestFiles(testsDirectory);
 assertTestInventoryComplete({ testsDirectory, testFiles });
 
-const run = spawnSync(process.execPath, ['--test', ...testFiles], {
+const run = spawnSync(process.execPath, ['--test', '--test-force-exit', ...testFiles], {
   cwd: desktopRoot,
   env: {
     ...process.env,
