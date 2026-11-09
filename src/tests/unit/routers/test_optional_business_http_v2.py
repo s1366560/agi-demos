@@ -179,3 +179,88 @@ async def test_member_cannot_write_and_owner_can_install_enable_and_invoke(http)
         headers={"Authorization": f"Bearer {keys['owner']}"},
     )
     assert rolled.status_code == 409
+
+
+async def test_failed_update_keeps_the_running_generation_and_rollback_restores_it(http) -> None:
+    client, keys = http
+    headers = {"Authorization": f"Bearer {keys['owner']}"}
+    scope = {"tenant_id": "t", "project_id": "p"}
+    first = _body()
+    installed = await client.post(
+        "/api/v1/platform-plugins/v2/optional-business/install",
+        json=first,
+        headers=headers,
+    )
+    assert installed.status_code == 200
+    enabled = await client.post(
+        "/api/v1/platform-plugins/v2/optional-business/sample.notes/enable",
+        json=scope,
+        headers=headers,
+    )
+    assert enabled.status_code == 200
+    broken = _body()
+    broken["version"] = "2.0.0"
+    broken["digest"] = "sha256:2.0.0"
+    broken["wasm_base64"] = base64.b64encode(b"not-wasm").decode()
+    assert (
+        await client.post(
+            "/api/v1/platform-plugins/v2/optional-business/install",
+            json=broken,
+            headers=headers,
+        )
+    ).status_code == 200
+    failed = await client.post(
+        "/api/v1/platform-plugins/v2/optional-business/sample.notes/enable",
+        json=scope,
+        headers=headers,
+    )
+    assert failed.status_code == 409
+    still = await client.post(
+        "/api/v1/platform-plugins/v2/optional-business/sample.notes/invoke",
+        json={**scope, "tool_name": "note.ping", "payload": {"op": "ping"}},
+        headers=headers,
+    )
+    assert still.status_code == 200
+    assert still.json()["op"] == "ping"
+    nxt = _body()
+    nxt["version"] = "1.1.0"
+    nxt["digest"] = "sha256:1.1.0"
+    assert (
+        await client.post(
+            "/api/v1/platform-plugins/v2/optional-business/install",
+            json=nxt,
+            headers=headers,
+        )
+    ).status_code == 200
+    assert (
+        await client.post(
+            "/api/v1/platform-plugins/v2/optional-business/sample.notes/enable",
+            json=scope,
+            headers=headers,
+        )
+    ).status_code == 200
+    current = await client.get(
+        "/api/v1/platform-plugins/v2/optional-business/sample.notes",
+        params=scope,
+        headers=headers,
+    )
+    assert current.json()["actual_digest"] == "sha256:1.1.0"
+    restored = await client.post(
+        "/api/v1/platform-plugins/v2/optional-business/sample.notes/rollback",
+        json=scope,
+        headers=headers,
+    )
+    assert restored.status_code == 200
+    after = await client.get(
+        "/api/v1/platform-plugins/v2/optional-business/sample.notes",
+        params=scope,
+        headers=headers,
+    )
+    assert after.json()["actual_digest"] == "sha256:1.0.0"
+    removed = await client.post(
+        "/api/v1/platform-plugins/v2/optional-business/sample.notes/uninstall",
+        json=scope,
+        headers=headers,
+    )
+    assert removed.status_code == 200
+    assert removed.json()["retention"] == "retained"

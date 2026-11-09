@@ -366,7 +366,16 @@ class SignedOptionalBusinessRuntimeV2:
 
     def _apply(self, package: SignedPackageBytesV2) -> None:
         self._phase[package.plugin_id] = "loading"
-        host = self._compile(package)
+        try:
+            host = self._compile(package)
+        except Exception as exc:
+            active = package.plugin_id in self._active
+            self._phase[package.plugin_id] = "active" if active else "failed"
+            self._sync[package.plugin_id] = "degraded"
+            self._failure[package.plugin_id] = str(exc)
+            if active:
+                raise OptionalBusinessError("apply_failed", str(exc)) from exc
+            raise
         previous = self._active.get(package.plugin_id)
         if previous is not None:
             self._previous[package.plugin_id] = previous.package
