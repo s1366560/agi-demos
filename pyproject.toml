@@ -195,6 +195,7 @@ ignore = [
 
 # Delayed import exemptions (logging config etc.)
 "src/infrastructure/adapters/primary/web/main.py" = ["E402"]
+"src/infrastructure/plugins/v2/signed_optional_business_v2.py" = ["E402", "I001"]
 "src/infrastructure/adapters/secondary/ray/__init__.py" = ["E402"]
 "src/infrastructure/llm/litellm/litellm_client.py" = ["E402", "ANN401"]
 "src/tests/unit/infrastructure/llm/conftest.py" = ["E402"]

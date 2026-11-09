@@ -26,6 +26,7 @@ from src.infrastructure.plugins.governance import sha256_hex
 from src.infrastructure.plugins.package_registry import RegistryPluginArtifact
 from src.infrastructure.plugins.v2.bundle_archive import parse_bundle_archive_v2
 from src.infrastructure.plugins.v2.protocol import bundle_manifest_v2_to_payload
+from src.infrastructure.plugins.v2.scan_evidence_v2 import resolve_security_scan_status_v2
 
 
 class MarketplaceArtifactClient(Protocol):
@@ -144,7 +145,7 @@ class PluginMarketplaceInstallService:
                 manifest=bundle_payload,
                 signature=signature_record,
                 provenance=provenance_record,
-                security_scan_status="passed",
+                security_scan_status=resolve_security_scan_status_v2(None),
             )
             mutation = await self._desired_bundles.install(
                 scope=ScopeV2(
@@ -246,8 +247,7 @@ def _admit_install_request(
         raise ValueError("protocol v2 marketplace trust store is empty")
     if not request.tenant_admin_approved:
         raise ValueError("tenant admin approval is required")
-    if not request.security_scan_passed:
-        raise ValueError("security scan failed")
+    # security_scan_passed is retained for old clients and is not scan evidence.
     if (request.signature is None) != (request.provenance is None):
         raise ValueError("marketplace signature and provenance must be provided together")
 

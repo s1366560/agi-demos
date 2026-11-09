@@ -1,0 +1,13 @@
+{
+  "name": "@memstack/plugin-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "In-repo TypeScript contract for signed optional-business plugins. Not published.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit"
+  }
+}
