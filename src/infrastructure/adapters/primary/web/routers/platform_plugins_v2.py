@@ -339,7 +339,9 @@ async def get_web_public_view_v2(
             )
             service = instance_runtime_v2(request).instances(scope)
             await service.initialize(current_user.id)
-            snapshot = await service.effective_snapshot()
+            # The shell only needs the accepted document. Publishing here starts
+            # the agent graph runtime and holds the page blank until indices exist.
+            snapshot = (await service.configuration()).snapshot
             # Archive loading and publication await IO: recheck revocable authority.
             await resolve_plugin_read_scope_v2(db, current_user=current_user, requested_scope=scope)
             return project_web_public_view_v2(

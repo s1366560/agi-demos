@@ -17,7 +17,7 @@ from src.domain.model.plugins.generated_v2 import (
     SnapshotApplyReceiptV2,
 )
 from src.infrastructure.adapters.primary.web.dependencies import create_api_key
-from src.infrastructure.adapters.primary.web.routers import platform_plugins
+from src.infrastructure.adapters.primary.web.routers import platform_plugins, platform_plugins_v2
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_data_plane_credential_repository_v2 import (
@@ -174,6 +174,52 @@ async def test_invalid_public_configuration_returns_fixed_safe_error(
     assert response.json()["detail"]["code"] == "web_public_view_unavailable"
     assert "private-secret-canary" not in response.text
     assert "private-extra" not in response.text
+
+
+async def test_scoped_web_view_reads_configuration_without_publishing(
+    authenticated_views,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    client, keys, _workload = authenticated_views
+    payload = json.loads((_ROOT / "shared/profiles/memstack-default-bootstrap.v2.json").read_text())
+    payload.pop("digest")
+    payload["digest"] = hashlib.sha256(canonical_json_v2(payload)).hexdigest()
+    snapshot = parse_profile_snapshot_v2(payload)
+    published = False
+
+    class _Configuration:
+        def __init__(self) -> None:
+            self.snapshot = snapshot
+
+    class _Service:
+        async def initialize(self, actor_id: str) -> None:
+            assert actor_id
+
+        async def configuration(self) -> _Configuration:
+            return _Configuration()
+
+        async def effective_snapshot(self) -> object:
+            nonlocal published
+            published = True
+            raise AssertionError("web view must not publish the agent runtime")
+
+    class _Runtime:
+        def instances(self, scope: ScopeV2) -> _Service:
+            assert scope.kind is ScopeKindV2.ROOT
+            return _Service()
+
+    async def scope(*_args: object, **_kwargs: object) -> ScopeV2:
+        return ScopeV2(kind=ScopeKindV2.ROOT)
+
+    monkeypatch.setattr(platform_plugins_v2, "instance_runtime_v2", lambda _request: _Runtime())
+    monkeypatch.setattr(platform_plugins_v2, "resolve_plugin_read_scope_v2", scope)
+    response = await client.get(
+        f"{_PATH}?tenant_id=tenant-1",
+        headers={"Authorization": f"Bearer {keys[0]}"},
+    )
+    assert published is False
+    assert response.status_code == 200
+    assert "entries" in response.json()["snapshot"]
 
 
 def test_real_builtin_route_contribution_registers_public_view():
