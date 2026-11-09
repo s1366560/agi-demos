@@ -1,4 +1,2 @@
 [advisories]
-ignore = [
-  { id = "RUSTSEC-2024-0449", reason = "serde_yaml 0.9 depends on unmaintained unsafe-libyaml and no patched release exists" },
-]
+ignore = ["RUSTSEC-2024-0449"]

@@ -53,7 +53,8 @@ step "checking Rust formatting"
 
 if [ "$RUN_CLIPPY" = "1" ]; then
   step "checking clippy"
-  "$CARGO" clippy --workspace --all-targets -- -D warnings
+  # async_trait emits an empty #[must_use] that clippy 1.99 reports as double_must_use.
+  "$CARGO" clippy --workspace --all-targets -- -D warnings -A clippy::double_must_use
 else
   echo "skipping clippy because AGISTACK_STRANGLER_GATE_CLIPPY=$RUN_CLIPPY"
 fi

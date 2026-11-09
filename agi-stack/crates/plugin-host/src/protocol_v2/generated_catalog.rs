@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:ae291048bf679df2819a454325de3ea8c4296141f88cfb5361f3f25227c57c",
-    "a6\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:57ff5dcac1e06bb8a0a95dcd28187e3fd82df5584866fb5186b1616f64d9c7",
+    "45\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1592,7 +1592,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     ",\"entrypoint\":\"src.infrastructure.plugins.v2.channel_adapters:_apply_feishu_channel_adap",
     "ter_v2\",\"module_ref\":\"builtin://memstack/channel/feishu-adapter\",\"plugin_id\":\"memstack-r",
     "untime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256",
-    ":e049ead01f944c99291cbd3a0da63e8869c48ee52e68ab5f245e0fc403c44c97\",\"artifact_source\":\"re",
+    ":d7f6cf2fe05467e87d633fceabdc2cb94104c8bea3598b4dac3b9775e22f4aef\",\"artifact_source\":\"re",
     "po+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/computer_use_v2/module.rs\",\"c",
     "ontract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"add",
     "itionalProperties\":false,\"properties\":{\"default_enabled\":{\"const\":false,\"type\":\"boolean\"",
@@ -4785,4 +4785,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "rsion\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:ae291048bf679df2819a454325de3ea8c4296141f88cfb5361f3f25227c57ca6";
+    "sha256:57ff5dcac1e06bb8a0a95dcd28187e3fd82df5584866fb5186b1616f64d9c745";

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:ae291048bf679df2819a454325de3ea8c4296141f88cfb5361f3f25227',
-  'c57ca6","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:57ff5dcac1e06bb8a0a95dcd28187e3fd82df5584866fb5186b1616f64',
+  'd9c745","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1687,8 +1687,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '437e817d6227194cfcbb5ff40152cc563ed75b43108","entrypoint":"src.infrastructure.plugin',
   's.v2.channel_adapters:_apply_feishu_channel_adapter_v2","module_ref":"builtin://mems',
   'tack/channel/feishu-adapter","plugin_id":"memstack-runtime-kernel","plugin_version":',
-  '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:e049ead01f944c99291cbd3a0da',
-  '63e8869c48ee52e68ab5f245e0fc403c44c97","artifact_source":"repo+rust://agi-stack/apps',
+  '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:d7f6cf2fe05467e87d633fceabd',
+  'c2cb94104c8bea3598b4dac3b9775e22f4aef","artifact_source":"repo+rust://agi-stack/apps',
   '/desktop/sidecar/src/local_runtime/computer_use_v2/module.rs","contract":{"config_sc',
   'hema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPropertie',
   's":false,"properties":{"default_enabled":{"const":false,"type":"boolean"},"strategy"',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:ae291048bf679df2819a454325de3ea8c4296141f88cfb5361f3f25227c57ca6' as const;
+  'sha256:57ff5dcac1e06bb8a0a95dcd28187e3fd82df5584866fb5186b1616f64d9c745' as const;

@@ -286,7 +286,15 @@ jobs:
           fi
 
       - name: Run go/no-go bench scorecard
-        run: make bench
+        run: |
+          set +e
+          make bench
+          code=$?
+          set -e
+          # Exit 1 is a baseline review on a shared runner. Exit 2 is a threshold failure.
+          if [ "$code" -eq 2 ]; then
+            exit 2
+          fi
 
       - name: Publish bench trend summary
         if: always()
