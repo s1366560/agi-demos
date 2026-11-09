@@ -226,3 +226,4 @@ crates/services/memstack-workspace-store/src/runtime_terminal/sql.rs	2910541dc7e
 crates/services/memstack-workspace-store/src/task_session.rs	2c621e6026f83f397e1089841918ec0a9f92df8704b727483ce957b5b3ca73dd	100644	Register downstream Workspace files already in the tree
 crates/services/memstack-workspace-store/tests/cross_store_state_contract.rs	7fe843583b2ae93681cbe0b063d7c178db7e50d8592c8dacb09ca7ea878cc884	100644	Register downstream Workspace files already in the tree
 .cargo/audit.toml	5b48b23899e04a7a8ab4419710344dd658c5683c1afc87f545eae62eada44c67	100644	Record the unmaintained unsafe-libyaml advisory with no patched release
+crates/plugins/openclaw-channel-bcn/package-lock.json	ecb2b01b3d4c5fb17cb3feee413edf6716f585c2094a013f3b565be5069487de	100644	Register the reviewed OpenClaw channel plugin npm lockfile

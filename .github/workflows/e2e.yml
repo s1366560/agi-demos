@@ -134,7 +134,7 @@ jobs:
       MCP_ENABLED: false
       RAY_ENABLE_UV_RUN_RUNTIME_ENV: '0'
       CI: true
-      WORKSPACE_CORE_BASE_URL: http://127.0.0.1:9
+      WORKSPACE_CORE_BASE_URL: http://127.0.0.1:4321
       WORKSPACE_CORE_SERVICE_TOKEN: e2e-workspace-core
       WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN: e2e-provider-webhook
       WORKSPACE_CORE_PROVIDER_EVENT_TOKEN: e2e-provider-event
@@ -180,6 +180,9 @@ jobs:
           nohup uv run uvicorn scripts.fake_openai_server:app \
             --host 127.0.0.1 --port 8010 > backend-e2e-logs/fake-openai.log 2>&1 &
           echo $! > backend-e2e-logs/fake-openai.pid
+          nohup uv run python scripts/e2e_fake_workspace_core.py \
+            > backend-e2e-logs/fake-workspace-core.log 2>&1 &
+          echo $! > backend-e2e-logs/fake-workspace-core.pid
           for attempt in $(seq 1 30); do
             if curl -fsS http://localhost:8010/v1/models; then
               exit 0
@@ -316,7 +319,8 @@ jobs:
           for pid_file in \
             backend-e2e-logs/api.pid \
             backend-e2e-logs/agent-actor.pid \
-            backend-e2e-logs/fake-openai.pid; do
+            backend-e2e-logs/fake-openai.pid \
+            backend-e2e-logs/fake-workspace-core.pid; do
             if [ -f "$pid_file" ]; then
               kill "$(cat "$pid_file")" 2>/dev/null || true
             fi

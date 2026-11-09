@@ -244,8 +244,11 @@ jobs:
       - name: Validate native catalog against Python cloud admission
         run: cargo test -p agistack-adapters-cua --test cloud_catalog --test cloud_permission_bridge
 
+      - name: Install desktop native libraries
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev pkg-config
+
       - name: Run strangler gate
-        run: make strangler-gate
+        run: PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}" make strangler-gate
 
   agi-stack-bench:
     name: agi-stack Bench Scorecard
@@ -289,12 +292,17 @@ jobs:
         run: |
           set +e
           make bench
-          code=$?
           set -e
-          # Exit 1 is a baseline review on a shared runner. Exit 2 is a threshold failure.
-          if [ "$code" -eq 2 ]; then
-            exit 2
-          fi
+          python3 - << 'PY'
+          import json
+          import sys
+          from pathlib import Path
+          report_path = Path("target/bench/scorecard.json")
+          if not report_path.is_file():
+              sys.exit(2)
+          report = json.loads(report_path.read_text())
+          sys.exit(0 if report["summary"]["fail"] == 0 else 2)
+          PY
 
       - name: Publish bench trend summary
         if: always()
