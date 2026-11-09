@@ -159,8 +159,10 @@ android: ## 移动:交叉编译真实 aarch64 Android .so + Kotlin 绑定(需 ND
 	AR_aarch64_linux_android="$(NDK_TC)/llvm-ar" \
 	  $(CARGO) build -p agistack-bindings-uniffi --target $(ANDROID_TARGET) --release
 	$(CARGO) build -p agistack-bindings-uniffi >/dev/null
-	$(CARGO) run -q -p agistack-bindings-uniffi --bin uniffi-bindgen -- generate \
-	  --library target/debug/libagistack_mobile.dylib --language kotlin --out-dir target/kotlin
+	@host_lib=target/debug/libagistack_mobile.dylib; \
+	  if [ ! -f "$$host_lib" ]; then host_lib=target/debug/libagistack_mobile.so; fi; \
+	  $(CARGO) run -q -p agistack-bindings-uniffi --bin uniffi-bindgen -- generate \
+	    --library "$$host_lib" --language kotlin --out-dir target/kotlin
 	@file target/$(ANDROID_TARGET)/release/libagistack_mobile.so
 	@echo "==> 产物:target/$(ANDROID_TARGET)/release/libagistack_mobile.so + target/kotlin/"
 

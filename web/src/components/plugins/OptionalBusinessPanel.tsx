@@ -42,7 +42,9 @@ function responseOf(error: unknown): { status?: number; detail: string } {
     const response = (error as { response?: { status?: number; data?: { detail?: unknown } } })
       .response;
     const detail = response?.data?.detail;
-    return { status: response?.status, detail: typeof detail === 'string' ? detail : '' };
+    const message = typeof detail === 'string' ? detail : '';
+    if (response?.status === undefined) return { detail: message };
+    return { status: response.status, detail: message };
   }
   return { detail: '' };
 }

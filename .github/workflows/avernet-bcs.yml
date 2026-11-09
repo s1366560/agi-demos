@@ -138,13 +138,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: '3.12'
+          python-version: '3.12.13'
 
       - name: Install uv
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
-
-      - name: Install pinned Python
-        run: uv python install
 
       - name: Install Python dependencies
         run: uv sync --extra dev --frozen
