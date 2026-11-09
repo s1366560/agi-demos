@@ -6,13 +6,41 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Path filter
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      web: ${{ steps.filter.outputs.web }}
+      agi: ${{ steps.filter.outputs.agi }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/ci_path_filter.py
+
   test:
     name: Backend Tests
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
       UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
     
@@ -62,12 +90,28 @@ jobs:
           persist-credentials: false
       
       - name: Set up Python
+        id: setup-python
+        continue-on-error: true
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12.13'
       
       - name: Install uv
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
 
       - name: Install dependencies
         run: |
@@ -96,26 +140,6 @@ jobs:
           PLUGIN_STORAGE_POSTGRES_URL: postgresql+psycopg2://postgres:testpassword@localhost:5432/memstack
         run: uv run pytest src/tests/integration/test_plugin_storage_postgres.py -q
 
-      - name: Run tests
-        env:
-          NEO4J_URI: bolt://localhost:7687
-          NEO4J_USER: neo4j
-          NEO4J_PASSWORD: testpassword
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: memstack
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: testpassword
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          LLM_PROVIDER: gemini
-        run: |
-          uv run pytest src/tests/unit \
-            --cov=src \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            --cov-fail-under=72.8
-
       - name: Prove Workspace authority PostgreSQL triggers and concurrency
         env:
           WORKSPACE_AUTHORITY_POSTGRES_URL: postgresql://postgres:testpassword@localhost:5432/memstack
@@ -124,6 +148,191 @@ jobs:
             src/tests/integration/test_workspace_collaboration_authority_postgres.py \
             -q
       
+  unit:
+    name: Backend unit (${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [plugins, adapters, agent, rest]
+    env:
+      UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
+      PYTEST_TEST_TIMEOUT: "180"
+      NEO4J_URI: bolt://localhost:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: testpassword
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: memstack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpassword
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      LLM_PROVIDER: gemini
+    services:
+      neo4j:
+        image: neo4j:5.26
+        env:
+          NEO4J_AUTH: neo4j/testpassword
+          NEO4J_PLUGINS: '["apoc"]'
+        ports:
+          - 7687:7687
+          - 7474:7474
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p testpassword 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: memstack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        id: setup-python
+        continue-on-error: true
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra neo4j
+
+      - name: Configure repository test database
+        env:
+          DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+        run: printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+
+      - name: Run unit shard
+        run: |
+          set -euo pipefail
+          case "${{ matrix.shard }}" in
+            plugins)
+              args=(src/tests/unit/infrastructure/plugins)
+              ;;
+            adapters)
+              args=(src/tests/unit/infrastructure/adapters)
+              ;;
+            agent)
+              args=(src/tests/unit/infrastructure/agent)
+              ;;
+            rest)
+              args=(
+                src/tests/unit
+                --ignore=src/tests/unit/infrastructure/plugins
+                --ignore=src/tests/unit/infrastructure/adapters
+                --ignore=src/tests/unit/infrastructure/agent
+              )
+              ;;
+          esac
+          COVERAGE_FILE="coverage-${{ matrix.shard }}" \
+            uv run pytest "${args[@]}" \
+              -n auto --dist loadscope \
+              --cov=src \
+              --cov-report= \
+              --cov-fail-under=0
+
+      - name: Upload shard coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-${{ matrix.shard }}
+          path: coverage-${{ matrix.shard }}
+          if-no-files-found: error
+
+  coverage:
+    name: Backend coverage
+    needs: unit
+    if: needs.unit.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        id: setup-python
+        continue-on-error: true
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
+
+      - name: Install dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: Download shard coverage
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      - name: Combine coverage
+        run: |
+          uv run coverage combine coverage-plugins coverage-adapters coverage-agent coverage-rest
+          uv run coverage report --fail-under=72.8
+          uv run coverage xml
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4.6.0
         with:
@@ -133,7 +342,10 @@ jobs:
 
   web:
     name: Web Typecheck, Tests & Build
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: web
@@ -155,12 +367,29 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Set up Python
+        id: setup-python
+        continue-on-error: true
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12.13'
 
       - name: Install uv
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
 
       - name: Install Python test dependencies
         working-directory: .
@@ -180,7 +409,10 @@ jobs:
 
   agi-stack-strangler-gate:
     name: agi-stack Strangler Gate
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: agi-stack
@@ -219,6 +451,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Cache Cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agi-stack/target
+          key: cargo-strangler-${{ runner.os }}-${{ hashFiles('agi-stack/Cargo.lock') }}
+          restore-keys: cargo-strangler-${{ runner.os }}-
+
       - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal
@@ -227,6 +469,8 @@ jobs:
           rustup target add wasm32-unknown-unknown
 
       - name: Set up Python for cloud contract validation
+        id: setup-python
+        continue-on-error: true
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12.13'
@@ -235,6 +479,19 @@ jobs:
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
         with:
           enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
 
       - name: Install cloud contract Python dependencies
         working-directory: .
@@ -264,7 +521,10 @@ jobs:
 
   agi-stack-bench:
     name: agi-stack Bench Scorecard
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: agi-stack
@@ -356,7 +616,10 @@ jobs:
 
   agi-stack-desktop-bundle:
     name: agi-stack Desktop Bundle
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: macos-latest
+    timeout-minutes: 50
     defaults:
       run:
         working-directory: agi-stack
@@ -366,6 +629,17 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+
+      - name: Cache Cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agi-stack/target
+            .cache/avernet-bcs
+          key: cargo-desktop-${{ runner.os }}-${{ hashFiles('agi-stack/Cargo.lock', 'third_party/avernet-bcs/Cargo.lock') }}
+          restore-keys: cargo-desktop-${{ runner.os }}-
 
       - name: Install Rust toolchain
         run: |
@@ -411,7 +685,10 @@ jobs:
 
   agi-stack-android-artifact:
     name: agi-stack Android Artifact
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: agi-stack
@@ -449,7 +726,10 @@ jobs:
 
   agi-stack-ios-artifact:
     name: agi-stack iOS Artifact
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: macos-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: agi-stack

@@ -108,6 +108,7 @@ async def chat_completions(request: Request) -> Response:
     is_streaming = body.get("stream") is True
     tools = body.get("tools")
     has_route_request_tool = False
+    has_goal_judge_tool = False
     if isinstance(tools, list):
         for raw_tool in cast("list[object]", tools):
             if not isinstance(raw_tool, Mapping):
@@ -118,7 +119,8 @@ async def chat_completions(request: Request) -> Response:
             function_mapping = cast("Mapping[str, object]", function)
             if function_mapping.get("name") == "route_request":
                 has_route_request_tool = True
-                break
+            elif function_mapping.get("name") == "submit_goal_completion_judgment_v2":
+                has_goal_judge_tool = True
 
     content = E2E_AGENT_RESPONSE if is_streaming else E2E_GOAL_RESPONSE
     if is_streaming:
@@ -126,7 +128,29 @@ async def chat_completions(request: Request) -> Response:
 
     message: dict[str, object] = {"role": "assistant", "content": content}
     finish_reason = "stop"
-    if has_route_request_tool:
+    if has_goal_judge_tool and not has_route_request_tool:
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-memstack-e2e-goal",
+                    "type": "function",
+                    "function": {
+                        "name": "submit_goal_completion_judgment_v2",
+                        "arguments": json.dumps(
+                            {
+                                "goal_achieved": True,
+                                "rationale": "Deterministic E2E goal judgment.",
+                            },
+                            separators=(",", ":"),
+                        ),
+                    },
+                }
+            ],
+        }
+        finish_reason = "tool_calls"
+    elif has_route_request_tool:
         message = {
             "role": "assistant",
             "content": None,

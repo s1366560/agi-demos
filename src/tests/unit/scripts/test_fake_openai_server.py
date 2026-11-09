@@ -82,6 +82,36 @@ def test_fake_openai_returns_structured_auto_broker_tool_call() -> None:
     }
 
 
+def test_fake_openai_returns_goal_completion_judgment_tool_call() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "memstack-e2e",
+                "messages": [{"role": "user", "content": "judge"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_goal_completion_judgment_v2",
+                            "parameters": {},
+                        },
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    choice = response.json()["choices"][0]
+    assert choice["finish_reason"] == "tool_calls"
+    tool_call = choice["message"]["tool_calls"][0]
+    assert tool_call["function"]["name"] == "submit_goal_completion_judgment_v2"
+    assert json.loads(tool_call["function"]["arguments"]) == {
+        "goal_achieved": True,
+        "rationale": "Deterministic E2E goal judgment.",
+    }
+
+
 def test_fake_openai_returns_openai_compatible_sse_stream() -> None:
     with TestClient(app) as client:
         response = client.post(

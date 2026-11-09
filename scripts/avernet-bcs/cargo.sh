@@ -98,7 +98,7 @@ install_protoc() {
   trap 'rm -rf "${temp_dir:?}"' RETURN
   archive="${temp_dir}/protoc.zip"
 
-  curl --fail --location --silent --show-error \
+  curl --fail --location --retry 3 --retry-delay 2 --max-time 60 --silent --show-error \
     "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${platform}.zip" \
     --output "${archive}"
   actual="$(shasum -a 256 "${archive}" | awk '{print $1}')"
@@ -119,10 +119,25 @@ install_protoc() {
 }
 
 if ! rustup toolchain list | grep -q "^${RUST_VERSION}-"; then
-  CARGO_HOME="${RUSTUP_PROXY_CARGO_HOME}" rustup toolchain install "${RUST_VERSION}" \
-    --profile minimal \
-    --component clippy \
-    --component rustfmt >&2
+  # rustup retries a stalled download without an upper bound. Bound the install
+  # so a hung toolchain fetch fails the job instead of occupying the runner.
+  (
+    CARGO_HOME="${RUSTUP_PROXY_CARGO_HOME}" rustup toolchain install "${RUST_VERSION}" \
+      --profile minimal \
+      --component clippy \
+      --component rustfmt >&2 &
+    install_pid=$!
+    for _ in $(seq 1 180); do
+      if ! kill -0 "${install_pid}" 2>/dev/null; then
+        wait "${install_pid}"
+        exit $?
+      fi
+      sleep 1
+    done
+    kill -TERM "${install_pid}" 2>/dev/null || true
+    echo "rustup toolchain install exceeded 180s" >&2
+    exit 124
+  )
 fi
 
 readonly PROTOC_BIN="$(install_protoc)"

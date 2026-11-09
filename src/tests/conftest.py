@@ -1,6 +1,7 @@
 """Pytest configuration and shared fixtures for testing."""
 
 import os
+import signal
 
 # The module-level production app must always use Avernet and fail closed.
 os.environ.setdefault("WORKSPACE_CORE_BASE_URL", "http://workspace-core.test")
@@ -1047,3 +1048,24 @@ async def test_tenant_in_db(test_db: AsyncSession, test_user: User) -> dict:
 def test_sandbox_id() -> str:
     """Provide a test sandbox ID for sandbox-related tests."""
     return "test-sandbox-12345"
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> object:
+    """Bound one test when CI sets PYTEST_TEST_TIMEOUT. Local runs stay unbounded."""
+    raw = os.environ.get("PYTEST_TEST_TIMEOUT")
+    if not raw or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+    seconds = int(raw)
+
+    def _handler(signum: int, frame: object) -> None:
+        raise TimeoutError(f"pytest test exceeded {seconds}s: {item.nodeid}")
+
+    previous = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
@@ -215,15 +217,36 @@ def agent_worker_sandbox_runtime_factory_v2() -> MCPSandboxAdapter | None:
         return None
 
 
+_process_graph_adapters: dict[str | None, GraphStorePort] = {}
+_process_graph_lock: asyncio.Lock | None = None
+
+
+def _process_graph_adapter_lock() -> asyncio.Lock:
+    global _process_graph_lock
+    if _process_graph_lock is None:
+        _process_graph_lock = asyncio.Lock()
+    return _process_graph_lock
+
+
 def agent_worker_graph_runtime_factory_v2(
     tenant_id: str | None,
 ) -> GraphRuntimeFactoryV2:
-    """Build a tenant-bound graph factory for one Agent data-plane generation."""
+    """Build a tenant-bound graph factory for one Agent data-plane generation.
+
+    The API process reuses one adapter per tenant. Publishing another generation
+    otherwise reconnects to Neo4j and rebuilds indices while later requests wait.
+    """
 
     async def factory() -> GraphStorePort:
         from src.configuration.factories import create_native_graph_adapter
         from src.infrastructure.llm.initializer import initialize_default_llm_providers
 
+        reuse = "PYTEST_CURRENT_TEST" not in os.environ
+        if reuse:
+            async with _process_graph_adapter_lock():
+                cached = _process_graph_adapters.get(tenant_id)
+                if cached is not None:
+                    return cached
         try:
             await initialize_default_llm_providers()
         except Exception as exc:
@@ -232,7 +255,12 @@ def agent_worker_graph_runtime_factory_v2(
                 "error_type=%s",
                 type(exc).__name__,
             )
-        return await create_native_graph_adapter(tenant_id=tenant_id)
+        adapter = await create_native_graph_adapter(tenant_id=tenant_id)
+        if reuse:
+            object.__setattr__(adapter, "_process_shared_graph_v2", True)
+            async with _process_graph_adapter_lock():
+                _process_graph_adapters[tenant_id] = adapter
+        return adapter
 
     return factory
 

@@ -1,5 +1,9 @@
 name: Avernet BCS Baseline
 
+concurrency:
+  group: avernet-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     paths:

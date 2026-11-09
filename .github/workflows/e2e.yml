@@ -6,10 +6,15 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   web-smoke:
     name: Web Playwright Smoke
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: web
@@ -144,6 +149,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
+        id: setup-python
+        continue-on-error: true
         uses: actions/setup-python@v5
         with:
           python-version: '3.12.13'
@@ -152,6 +159,18 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
 
       - name: Install backend dependencies
         run: uv sync --extra dev --dev --frozen

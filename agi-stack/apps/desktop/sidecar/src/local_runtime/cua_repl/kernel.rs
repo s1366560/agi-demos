@@ -18,7 +18,9 @@ pub(super) struct Kernel {
 
 impl Kernel {
     pub async fn start(config: &RuntimeConfig) -> Result<Self, String> {
-        let stderr = if cfg!(test) {
+        // Inherit only for local debugging. CI captures stderr; a full pipe
+        // blocks the Node process before it writes the ready frame.
+        let stderr = if cfg!(test) && std::env::var_os("CI").is_none() {
             Stdio::inherit()
         } else {
             Stdio::null()
