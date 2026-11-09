@@ -153,13 +153,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
-    # Graph publication cases take about 90s each and sit in one cluster.
-    # Forty minutes cancelled a still-passing adapters shard at 13%.
-    timeout-minutes: 180
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        shard: [plugins, adapters, agent, rest]
+        shard: [plugins-a, plugins-b, adapters-a, adapters-b, agent, rest-a, rest-b, rest-c, rest-d]
     env:
       UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
       PYTEST_TEST_TIMEOUT: "600"
@@ -251,24 +249,49 @@ jobs:
       - name: Run unit shard
         run: |
           set -euo pipefail
+          # Interleave files so one directory's slow cases do not land in one shard.
+          # Local --durations: adapters 11m, plugins 12m, agent 2m. Rest was still
+          # in the router files at 70% after 23m, so it is cut four ways.
+          shard_files() {
+            local part="$1" parts="$2"
+            shift 2
+            local files=("$@")
+            args=()
+            local i
+            for i in "${!files[@]}"; do
+              if (( i % parts == part )); then
+                args+=("${files[$i]}")
+              fi
+            done
+            if ((${#args[@]} == 0)); then
+              echo "shard ${part}/${parts} collected no tests" >&2
+              exit 1
+            fi
+          }
           case "${{ matrix.shard }}" in
-            plugins)
-              args=(src/tests/unit/infrastructure/plugins)
+            plugins-a|plugins-b)
+              mapfile -t files < <(find src/tests/unit/infrastructure/plugins -name 'test_*.py' | sort)
               ;;
-            adapters)
-              args=(src/tests/unit/infrastructure/adapters)
+            adapters-a|adapters-b)
+              mapfile -t files < <(find src/tests/unit/infrastructure/adapters -name 'test_*.py' | sort)
               ;;
             agent)
               args=(src/tests/unit/infrastructure/agent)
               ;;
-            rest)
-              args=(
-                src/tests/unit
-                --ignore=src/tests/unit/infrastructure/plugins
-                --ignore=src/tests/unit/infrastructure/adapters
-                --ignore=src/tests/unit/infrastructure/agent
-              )
+            rest-a|rest-b|rest-c|rest-d)
+              mapfile -t files < <(find src/tests/unit -name 'test_*.py' \
+                -not -path '*/infrastructure/plugins/*' \
+                -not -path '*/infrastructure/adapters/*' \
+                -not -path '*/infrastructure/agent/*' | sort)
               ;;
+          esac
+          case "${{ matrix.shard }}" in
+            plugins-a|adapters-a) shard_files 0 2 "${files[@]}" ;;
+            plugins-b|adapters-b) shard_files 1 2 "${files[@]}" ;;
+            rest-a) shard_files 0 4 "${files[@]}" ;;
+            rest-b) shard_files 1 4 "${files[@]}" ;;
+            rest-c) shard_files 2 4 "${files[@]}" ;;
+            rest-d) shard_files 3 4 "${files[@]}" ;;
           esac
           COVERAGE_FILE="coverage-${{ matrix.shard }}" \
             uv run pytest "${args[@]}" \
@@ -330,7 +353,7 @@ jobs:
 
       - name: Combine coverage
         run: |
-          uv run coverage combine coverage-plugins coverage-adapters coverage-agent coverage-rest
+          uv run coverage combine coverage-*
           uv run coverage report --fail-under=72.8
           uv run coverage xml
 
