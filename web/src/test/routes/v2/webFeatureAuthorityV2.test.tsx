@@ -11,6 +11,7 @@ import {
   projectWebRouteAuthorityV2,
 } from '../../../routes/v2/webRouteAuthorityStateV2';
 import { useWebFeatureEnabledV2 } from '../../../routes/v2/webFeatureAuthorityV2';
+import '../../../routes/v2/webFeatureCompositionV2';
 import { validateWebRendererContributionsV2 } from '../../../routes/v2/webRendererArtifactCatalogV2';
 import bootstrap from '../../../../../shared/profiles/memstack-default-bootstrap.v2.json';
 import type { ReactNode } from 'react';
@@ -62,5 +63,29 @@ describe('Web feature UI authority', () => {
     unmount();
     await runtime.close();
     current = undefined;
+  });
+
+  it('keeps core features available without enabling an unknown plugin feature', () => {
+    current = undefined;
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <WebRouteAuthorityContextV2.Provider
+        value={{
+          routeArtifacts: [],
+          routeArtifactIds: ['web.routes.default-business.v1'],
+          routeKeys: [],
+          status: 'ready',
+        }}
+      >
+        {children}
+      </WebRouteAuthorityContextV2.Provider>
+    );
+    const { result } = renderHook(
+      () => ({
+        core: useWebFeatureEnabledV2('tenant-skills'),
+        plugin: useWebFeatureEnabledV2('optional-business-sample'),
+      }),
+      { wrapper }
+    );
+    expect(result.current).toEqual({ core: true, plugin: false });
   });
 });

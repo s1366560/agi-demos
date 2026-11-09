@@ -11,6 +11,7 @@ import {
   isWebNavigationPathActiveV2,
   useWebTopNavigationItemsV2,
 } from './webNavigationAuthorityStateV2';
+import { isCoreWebFeatureV2 } from './webFeatureIdsV2';
 import { resolveWebRendererArtifactsV2 } from './webRendererArtifactCatalogV2';
 import { useWebRouteAuthorityV2 } from './webRouteAuthorityStateV2';
 
@@ -25,7 +26,12 @@ export function useWebFeatureEnabledV2(
   const generation = useCurrentWebPluginGenerationV2();
   return useMemo(() => {
     if (routeAuthority.status !== 'ready') return false;
-    if (routeAuthority.routeArtifactIds.includes('web.routes.default-business.v1')) return true;
+    if (
+      routeAuthority.routeArtifactIds.includes('web.routes.default-business.v1') &&
+      isCoreWebFeatureV2(featureId)
+    ) {
+      return true;
+    }
     if (!routeAuthority.routeArtifacts.some((artifact) => artifact.featureId === featureId))
       return false;
     if (!contributionKind) return true;
