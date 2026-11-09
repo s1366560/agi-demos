@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Optional business lifecycle</title>
+  </head>
+  <body>
+    <button type="button" id="install">Install</button>
+    <button type="button" id="enable">Enable</button>
+    <button type="button" id="rollback">Rollback</button>
+    <button type="button" id="uninstall">Uninstall</button>
+    <p id="status">idle</p>
+    <div id="slot"></div>
+    <script>
+      const versions = {
+        current: null,
+        previous: null,
+      };
+      const documents = {
+        '1.0.0': '<h1>Notes</h1>',
+        '1.1.0': '<h1>Notes updated</h1>',
+      };
+      const status = document.getElementById('status');
+      const slot = document.getElementById('slot');
+      function render() {
+        slot.replaceChildren();
+        if (!versions.current || status.textContent === 'uninstalled') return;
+        if (status.textContent !== 'enabled' && status.textContent !== 'rolled-back') return;
+        const frame = document.createElement('iframe');
+        frame.title = 'signed-business-slot';
+        frame.setAttribute('data-testid', 'signed-business-slot');
+        frame.setAttribute('sandbox', 'allow-scripts');
+        frame.srcdoc = documents[versions.current];
+        slot.append(frame);
+      }
+      document.getElementById('install').onclick = () => {
+        versions.current = '1.0.0';
+        status.textContent = 'recorded';
+        render();
+      };
+      document.getElementById('enable').onclick = () => {
+        if (versions.current === '1.0.0') versions.previous = null;
+        if (status.textContent === 'enabled') {
+          versions.previous = versions.current;
+          versions.current = '1.1.0';
+        }
+        status.textContent = 'enabled';
+        render();
+      };
+      document.getElementById('rollback').onclick = () => {
+        if (!versions.previous) return;
+        versions.current = versions.previous;
+        versions.previous = '1.1.0';
+        status.textContent = 'rolled-back';
+        render();
+      };
+      document.getElementById('uninstall').onclick = () => {
+        versions.current = null;
+        status.textContent = 'uninstalled';
+        render();
+      };
+    </script>
+  </body>
+</html>
