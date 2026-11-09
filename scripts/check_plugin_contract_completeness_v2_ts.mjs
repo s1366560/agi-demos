@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 /** Fail-closed TypeScript Compiler API scanner for protocol-v2 module contracts. */
 
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
+const require = createRequire(import.meta.url);
+const workspaceTypeScript = fileURLToPath(
+  new URL('../web/node_modules/typescript/lib/typescript.js', import.meta.url)
+);
+const ts = existsSync(workspaceTypeScript) ? require(workspaceTypeScript) : require('typescript');
 
 const CONTEXT_METHODS = new Set(['provide', 'require', 'on', 'dispatch']);
 

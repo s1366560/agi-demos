@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:a117dcaf7f51b7e35f65a80ee415101bb54cb2337c401fc71343b95d6d6cdb'
-    '45","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:ae291048bf679df2819a454325de3ea8c4296141f88cfb5361f3f25227c57c'
+    'a6","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1606,8 +1606,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     's":[]}},"contract_digest":"sha256:2c3fd967e227902c32b57ad6b47f3a0154f93be63eec57ee8c8353'
     'bacfdcf68c","entrypoint":"ComputerUseModuleV2::apply","module_ref":"builtin://memstack/c'
     'omputer-use/native","plugin_id":"memstack-computer-use","plugin_version":"2.0.0","target'
-    's":["desktop-sidecar"]},{"artifact_digest":"sha256:dd92700d09907f8bb90d54c735b6021bd6c35'
-    '3ba0ed613319e743ff18d4e0d0a","artifact_source":"repo+rust://agi-stack/crates/plugin-host'
+    's":["desktop-sidecar"]},{"artifact_digest":"sha256:74011f17e967559ed1a7e387f58f70e1931d7'
+    'e2d8963469ecc032716fbf8ab4e","artifact_source":"repo+rust://agi-stack/crates/plugin-host'
     '/src/protocol_v2/target_modules.rs","contract":{"config_schema":{"$schema":"https://json'
     '-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"contributi'
     'on_id":{"const":"memstack-desktop-local-api.v1","type":"string"},"strategy":{"const":"ax'
@@ -1631,8 +1631,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '760d157244f6c880683deae31e9815481c980c4742bae282f52b4aa","entrypoint":"KnowledgeModuleV2'
     '::apply","module_ref":"builtin://memstack/desktop-sidecar/knowledge-authority","plugin_i'
     'd":"memstack-local-knowledge","plugin_version":"2.0.0","targets":["desktop-sidecar"]},{"'
-    'artifact_digest":"sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0'
-    'a","artifact_source":"repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_mo'
+    'artifact_digest":"sha256:74011f17e967559ed1a7e387f58f70e1931d7e2d8963469ecc032716fbf8ab4'
+    'e","artifact_source":"repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_mo'
     'dules.rs","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/'
     'schema","additionalProperties":false,"properties":{"strategy":{"const":"native-local-cap'
     'ability","type":"string"}},"required":["strategy"],"type":"object"},"events":{"emits":[{'
@@ -3254,8 +3254,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '15fc2e9b99b1f492629e9ed96b3592c6c048d4","entrypoint":"src.infrastructure.plugins.v2.buil'
     'tin_observability_http_routes:builtin_observability_http_routes_definition_v2","module_r'
     'ef":"builtin://memstack/http/observability-routes","plugin_id":"memstack-runtime-kernel"'
-    ',"plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:f837a3379e492'
-    '2f53171ef6b3747fca557c9676f64f36e8abe48409bfaf3fe86","artifact_source":"repo+python://sr'
+    ',"plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:3c2c26b2dcaeb'
+    'e655a6523694e3a6b762b770c6f1b95da1d82dd62a77a7840bd","artifact_source":"repo+python://sr'
     'c/infrastructure/plugins/v2/builtin_platform_plugins_http_routes.py","contract":{"config'
     '_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties'
     '":false,"properties":{},"type":"object"},"events":{"emits":[],"handles":[]},"services":{'
@@ -3264,8 +3264,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '99b1f492629e9ed96b3592c6c048d4","entrypoint":"src.infrastructure.plugins.v2.builtin_plat'
     'form_plugins_http_routes:builtin_platform_plugins_http_routes_definition_v2","module_ref'
     '":"builtin://memstack/http/platform-plugins-routes","plugin_id":"memstack-runtime-kernel'
-    '","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:deb85998796a'
-    '4ff9ef812c8e7fead38dd6ffe360edba4f965012fd43b0a612b4","artifact_source":"repo+python://s'
+    '","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:1db88dba3071'
+    'c64889247fa87a31221ec334c64d8e9f85b3f70ffc7b26827cd0","artifact_source":"repo+python://s'
     'rc/infrastructure/plugins/v2/builtin_plugin_marketplace_http_routes.py","contract":{"con'
     'fig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPropert'
     'ies":false,"properties":{},"type":"object"},"events":{"emits":[],"handles":[]},"services'
@@ -4514,8 +4514,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'gest":"sha256:86e82e004640593f1d1ce1017fec173af733f249fa3fab8e66ebd1786cf11867","entrypo'
     'int":"CronSchedulerWorkerModuleV2::apply","module_ref":"builtin://memstack/rust-server/c'
     'ron-scheduler-worker","plugin_id":"memstack-native-target-hosts","plugin_version":"2.0.0'
-    '","targets":["rust-server"]},{"artifact_digest":"sha256:dd92700d09907f8bb90d54c735b6021b'
-    'd6c353ba0ed613319e743ff18d4e0d0a","artifact_source":"repo+rust://agi-stack/crates/plugin'
+    '","targets":["rust-server"]},{"artifact_digest":"sha256:74011f17e967559ed1a7e387f58f70e1'
+    '931d7e2d8963469ecc032716fbf8ab4e","artifact_source":"repo+rust://agi-stack/crates/plugin'
     '-host/src/protocol_v2/target_modules.rs","contract":{"config_schema":{"$schema":"https:/'
     '/json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strat'
     'egy":{"const":"generated-catalog-bootstrap","type":"string"}},"required":["strategy"],"t'
@@ -4566,8 +4566,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'quires":[]}},"contract_digest":"sha256:554137c0be08604aa573418bde8c593934c04ef5aed8b0f09'
     '01097b7dd19f2b4","entrypoint":"RustServerHostModuleV2::apply","module_ref":"builtin://me'
     'mstack/rust-server/generation-host","plugin_id":"memstack-native-target-hosts","plugin_v'
-    'ersion":"2.0.0","targets":["rust-server"]},{"artifact_digest":"sha256:dd92700d09907f8bb9'
-    '0d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a","artifact_source":"repo+rust://agi-stack'
+    'ersion":"2.0.0","targets":["rust-server"]},{"artifact_digest":"sha256:74011f17e967559ed1'
+    'a7e387f58f70e1931d7e2d8963469ecc032716fbf8ab4e","artifact_source":"repo+rust://agi-stack'
     '/crates/plugin-host/src/protocol_v2/target_modules.rs","contract":{"config_schema":{"$sc'
     'hema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"prope'
     'rties":{"contribution_id":{"const":"memstack-rust-default-api.v1","type":"string"},"stra'
@@ -4788,7 +4788,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:a117dcaf7f51b7e35f65a80ee415101bb54cb2337c401fc71343b95d6d6cdb45"
+    "sha256:ae291048bf679df2819a454325de3ea8c4296141f88cfb5361f3f25227c57ca6"
 )
 # fmt: on
 

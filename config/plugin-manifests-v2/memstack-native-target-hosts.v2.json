@@ -129,7 +129,7 @@
       "module_ref": "builtin://memstack/rust-server/generation-host",
       "entrypoint": "RustServerHostModuleV2::apply",
       "artifact": {
-        "digest": "sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a",
+        "digest": "sha256:74011f17e967559ed1a7e387f58f70e1931d7e2d8963469ecc032716fbf8ab4e",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": [
@@ -501,7 +501,7 @@
       "module_ref": "builtin://memstack/rust-server/http-routes",
       "entrypoint": "RustServerHttpRoutesModuleV2::apply",
       "artifact": {
-        "digest": "sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a",
+        "digest": "sha256:74011f17e967559ed1a7e387f58f70e1931d7e2d8963469ecc032716fbf8ab4e",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": [
@@ -547,7 +547,7 @@
       "module_ref": "builtin://memstack/desktop-sidecar/http-routes",
       "entrypoint": "DesktopSidecarHttpRoutesModuleV2::apply",
       "artifact": {
-        "digest": "sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a",
+        "digest": "sha256:74011f17e967559ed1a7e387f58f70e1931d7e2d8963469ecc032716fbf8ab4e",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": [
@@ -593,7 +593,7 @@
       "module_ref": "builtin://memstack/desktop-sidecar/local-capability",
       "entrypoint": "DesktopSidecarHostModuleV2::apply",
       "artifact": {
-        "digest": "sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a",
+        "digest": "sha256:74011f17e967559ed1a7e387f58f70e1931d7e2d8963469ecc032716fbf8ab4e",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": [

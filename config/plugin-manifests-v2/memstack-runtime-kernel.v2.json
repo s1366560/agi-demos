@@ -10260,7 +10260,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:deb85998796a4ff9ef812c8e7fead38dd6ffe360edba4f965012fd43b0a612b4",
+        "digest": "sha256:1db88dba3071c64889247fa87a31221ec334c64d8e9f85b3f70ffc7b26827cd0",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_plugin_marketplace_http_routes.py"
       }
     },
@@ -10294,7 +10294,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:f837a3379e4922f53171ef6b3747fca557c9676f64f36e8abe48409bfaf3fe86",
+        "digest": "sha256:3c2c26b2dcaebe655a6523694e3a6b762b770c6f1b95da1d82dd62a77a7840bd",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_platform_plugins_http_routes.py"
       }
     },

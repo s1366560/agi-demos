@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:a117dcaf7f51b7e35f65a80ee415101bb54cb2337c401fc71343b95d6d',
-  '6cdb45","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:ae291048bf679df2819a454325de3ea8c4296141f88cfb5361f3f25227',
+  'c57ca6","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1699,8 +1699,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'uires":[]}},"contract_digest":"sha256:2c3fd967e227902c32b57ad6b47f3a0154f93be63eec57',
   'ee8c8353bacfdcf68c","entrypoint":"ComputerUseModuleV2::apply","module_ref":"builtin:',
   '//memstack/computer-use/native","plugin_id":"memstack-computer-use","plugin_version"',
-  ':"2.0.0","targets":["desktop-sidecar"]},{"artifact_digest":"sha256:dd92700d09907f8bb',
-  '90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a","artifact_source":"repo+rust://agi-',
+  ':"2.0.0","targets":["desktop-sidecar"]},{"artifact_digest":"sha256:74011f17e967559ed',
+  '1a7e387f58f70e1931d7e2d8963469ecc032716fbf8ab4e","artifact_source":"repo+rust://agi-',
   'stack/crates/plugin-host/src/protocol_v2/target_modules.rs","contract":{"config_sche',
   'ma":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties"',
   ':false,"properties":{"contribution_id":{"const":"memstack-desktop-local-api.v1","typ',
@@ -1725,8 +1725,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   't":"sha256:dc663935f760d157244f6c880683deae31e9815481c980c4742bae282f52b4aa","entryp',
   'oint":"KnowledgeModuleV2::apply","module_ref":"builtin://memstack/desktop-sidecar/kn',
   'owledge-authority","plugin_id":"memstack-local-knowledge","plugin_version":"2.0.0","',
-  'targets":["desktop-sidecar"]},{"artifact_digest":"sha256:dd92700d09907f8bb90d54c735b',
-  '6021bd6c353ba0ed613319e743ff18d4e0d0a","artifact_source":"repo+rust://agi-stack/crat',
+  'targets":["desktop-sidecar"]},{"artifact_digest":"sha256:74011f17e967559ed1a7e387f58',
+  'f70e1931d7e2d8963469ecc032716fbf8ab4e","artifact_source":"repo+rust://agi-stack/crat',
   'es/plugin-host/src/protocol_v2/target_modules.rs","contract":{"config_schema":{"$sch',
   'ema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"pr',
   'operties":{"strategy":{"const":"native-local-capability","type":"string"}},"required',
@@ -3426,8 +3426,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '"entrypoint":"src.infrastructure.plugins.v2.builtin_observability_http_routes:builti',
   'n_observability_http_routes_definition_v2","module_ref":"builtin://memstack/http/obs',
   'ervability-routes","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","t',
-  'argets":["python"]},{"artifact_digest":"sha256:f837a3379e4922f53171ef6b3747fca557c96',
-  '76f64f36e8abe48409bfaf3fe86","artifact_source":"repo+python://src/infrastructure/plu',
+  'argets":["python"]},{"artifact_digest":"sha256:3c2c26b2dcaebe655a6523694e3a6b762b770',
+  'c6f1b95da1d82dd62a77a7840bd","artifact_source":"repo+python://src/infrastructure/plu',
   'gins/v2/builtin_platform_plugins_http_routes.py","contract":{"config_schema":{"$sche',
   'ma":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"pro',
   'perties":{},"type":"object"},"events":{"emits":[],"handles":[]},"services":{"provide',
@@ -3437,7 +3437,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'platform_plugins_http_routes:builtin_platform_plugins_http_routes_definition_v2","mo',
   'dule_ref":"builtin://memstack/http/platform-plugins-routes","plugin_id":"memstack-ru',
   'ntime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha',
-  '256:deb85998796a4ff9ef812c8e7fead38dd6ffe360edba4f965012fd43b0a612b4","artifact_sour',
+  '256:1db88dba3071c64889247fa87a31221ec334c64d8e9f85b3f70ffc7b26827cd0","artifact_sour',
   'ce":"repo+python://src/infrastructure/plugins/v2/builtin_plugin_marketplace_http_rou',
   'tes.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-1',
   '2/schema","additionalProperties":false,"properties":{},"type":"object"},"events":{"e',
@@ -4746,8 +4746,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ec173af733f249fa3fab8e66ebd1786cf11867","entrypoint":"CronSchedulerWorkerModuleV2::a',
   'pply","module_ref":"builtin://memstack/rust-server/cron-scheduler-worker","plugin_id',
   '":"memstack-native-target-hosts","plugin_version":"2.0.0","targets":["rust-server"]}',
-  ',{"artifact_digest":"sha256:dd92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff1',
-  '8d4e0d0a","artifact_source":"repo+rust://agi-stack/crates/plugin-host/src/protocol_v',
+  ',{"artifact_digest":"sha256:74011f17e967559ed1a7e387f58f70e1931d7e2d8963469ecc032716',
+  'fbf8ab4e","artifact_source":"repo+rust://agi-stack/crates/plugin-host/src/protocol_v',
   '2/target_modules.rs","contract":{"config_schema":{"$schema":"https://json-schema.org',
   '/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const',
   '":"generated-catalog-bootstrap","type":"string"}},"required":["strategy"],"type":"ob',
@@ -4800,8 +4800,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'quires":[]}},"contract_digest":"sha256:554137c0be08604aa573418bde8c593934c04ef5aed8b',
   '0f0901097b7dd19f2b4","entrypoint":"RustServerHostModuleV2::apply","module_ref":"buil',
   'tin://memstack/rust-server/generation-host","plugin_id":"memstack-native-target-host',
-  's","plugin_version":"2.0.0","targets":["rust-server"]},{"artifact_digest":"sha256:dd',
-  '92700d09907f8bb90d54c735b6021bd6c353ba0ed613319e743ff18d4e0d0a","artifact_source":"r',
+  's","plugin_version":"2.0.0","targets":["rust-server"]},{"artifact_digest":"sha256:74',
+  '011f17e967559ed1a7e387f58f70e1931d7e2d8963469ecc032716fbf8ab4e","artifact_source":"r',
   'epo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs","contract',
   '":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additi',
   'onalProperties":false,"properties":{"contribution_id":{"const":"memstack-rust-defaul',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:a117dcaf7f51b7e35f65a80ee415101bb54cb2337c401fc71343b95d6d6cdb45' as const;
+  'sha256:ae291048bf679df2819a454325de3ea8c4296141f88cfb5361f3f25227c57ca6' as const;
