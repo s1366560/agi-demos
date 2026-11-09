@@ -8,6 +8,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import uuid4
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
+
 
 @dataclass(frozen=True, kw_only=True)
 class CatalogProjectionRowV2:
@@ -25,6 +28,126 @@ class ReviewRequestV2:
     digest: str
     status: str
     note: str
+
+
+class SqlMarketplaceReviewQueueV2:
+    """SQL-backed queue. A new session on the same database still sees the rows."""
+
+    def __init__(self, session: object) -> None:
+        self._session = session
+
+    def submit(self, *, plugin_id: str, version: str, digest: str, note: str) -> ReviewRequestV2:
+        from src.infrastructure.adapters.secondary.persistence.platform_plugin_review_model_v2 import (
+            PlatformPluginReviewRequestModelV2,
+        )
+
+        review_id = str(uuid4())
+        self._session.add(  # type: ignore[attr-defined]
+            PlatformPluginReviewRequestModelV2(
+                review_id=review_id,
+                plugin_id=plugin_id,
+                version=version,
+                digest=digest,
+                status="pending",
+                note=note,
+            )
+        )
+        self._session.flush()  # type: ignore[attr-defined]
+        return ReviewRequestV2(
+            review_id=review_id,
+            plugin_id=plugin_id,
+            version=version,
+            digest=digest,
+            status="pending",
+            note=note,
+        )
+
+    def list(self, status: str | None = None) -> tuple[ReviewRequestV2, ...]:
+        from sqlalchemy import select
+
+        from src.infrastructure.adapters.secondary.persistence.platform_plugin_review_model_v2 import (
+            PlatformPluginReviewRequestModelV2,
+        )
+
+        statement = select(PlatformPluginReviewRequestModelV2).order_by(
+            PlatformPluginReviewRequestModelV2.review_id
+        )
+        if status is not None:
+            statement = statement.where(PlatformPluginReviewRequestModelV2.status == status)
+        rows = self._session.scalars(statement).all()  # type: ignore[attr-defined]
+        return tuple(
+            ReviewRequestV2(
+                review_id=row.review_id,
+                plugin_id=row.plugin_id,
+                version=row.version,
+                digest=row.digest,
+                status=row.status,
+                note=row.note,
+            )
+            for row in rows
+        )
+
+    def decide(self, review_id: str, status: str) -> ReviewRequestV2:
+        from sqlalchemy import select
+
+        from src.infrastructure.adapters.secondary.persistence.platform_plugin_review_model_v2 import (
+            PlatformPluginReviewRequestModelV2,
+        )
+
+        if status not in {"approved", "rejected"}:
+            raise ValueError("review decision must be approved or rejected")
+        row = self._session.scalar(  # type: ignore[attr-defined]
+            select(PlatformPluginReviewRequestModelV2).where(
+                PlatformPluginReviewRequestModelV2.review_id == review_id
+            )
+        )
+        if row is None:
+            raise KeyError(review_id)
+        row.status = status
+        self._session.flush()  # type: ignore[attr-defined]
+        return ReviewRequestV2(
+            review_id=row.review_id,
+            plugin_id=row.plugin_id,
+            version=row.version,
+            digest=row.digest,
+            status=row.status,
+            note=row.note,
+        )
+
+
+async def submit_durable_review_v2(
+    session: AsyncSession, *, plugin_id: str, version: str, digest: str, note: str
+) -> ReviewRequestV2:
+    """Insert through the sync session API and commit before the request ends."""
+
+    def _submit(sync: Session) -> ReviewRequestV2:
+        return SqlMarketplaceReviewQueueV2(sync).submit(
+            plugin_id=plugin_id, version=version, digest=digest, note=note
+        )
+
+    row = await session.run_sync(_submit)
+    await session.commit()
+    return row
+
+
+async def list_durable_reviews_v2(
+    session: AsyncSession, status: str | None = None
+) -> tuple[ReviewRequestV2, ...]:
+    def _list(sync: Session) -> tuple[ReviewRequestV2, ...]:
+        return SqlMarketplaceReviewQueueV2(sync).list(status)
+
+    return await session.run_sync(_list)
+
+
+async def decide_durable_review_v2(
+    session: AsyncSession, review_id: str, status: str
+) -> ReviewRequestV2:
+    def _decide(sync: Session) -> ReviewRequestV2:
+        return SqlMarketplaceReviewQueueV2(sync).decide(review_id, status)
+
+    row = await session.run_sync(_decide)
+    await session.commit()
+    return row
 
 
 class MarketplaceReviewQueueV2:

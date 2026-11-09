@@ -4931,6 +4931,12 @@ from . import (  # noqa: E402
     platform_plugin_namespace_model_v2 as _namespace_model_v2,
     platform_plugin_outcome_supersession_model_v2 as _outcome_supersession_model_v2,
     platform_plugin_publication_source_model_v2 as _publication_source_model_v2,
+    platform_plugin_review_model_v2 as _review_model_v2,
 )
 
-del _publication_source_model_v2, _outcome_supersession_model_v2, _namespace_model_v2
+del (
+    _publication_source_model_v2,
+    _outcome_supersession_model_v2,
+    _namespace_model_v2,
+    _review_model_v2,
+)
