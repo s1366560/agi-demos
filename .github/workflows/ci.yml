@@ -153,7 +153,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Graph publication cases take about 90s each and sit in one cluster.
+    # Forty minutes cancelled a still-passing adapters shard at 13%.
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
