@@ -4,19 +4,19 @@ mod application;
 #[path = "linux_capture.rs"]
 mod capture;
 use crate::backend::{
-    App, Backend, NativeError, Observation, Rect, Result, Window, check_cancel, required,
+    check_cancel, required, App, Backend, NativeError, Observation, Rect, Result, Window,
 };
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sky_cua_linux::{
-    apps::discovery::{DiscoveredApp, discover_apps},
+    apps::discovery::{discover_apps, DiscoveredApp},
     atspi::{self, actions},
     portal::remote_desktop::MouseButton,
     x11,
 };
 use std::{
     path::Path,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{atomic::AtomicBool, Arc},
 };
 
 pub struct LinuxBackend {

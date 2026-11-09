@@ -88,16 +88,12 @@ pub(super) fn apply_event(
             |row| row.get(0),
         )
         .map_err(storage)?;
-    if pending_content.is_some()
-        || active_conflict
-        || (local.is_some() && baseline.is_none())
-    {
+    if pending_content.is_some() || active_conflict || (local.is_some() && baseline.is_none()) {
         // A pending local extraction with no local record yet is materialized
         // first so explicit resolution always has a local version to compare.
         let local = match (local, &pending_content) {
             (None, Some(payload)) => {
-                let content: RemoteGraphContent =
-                    serde_json::from_str(payload).map_err(storage)?;
+                let content: RemoteGraphContent = serde_json::from_str(payload).map_err(storage)?;
                 let version = RemoteGraphVersion {
                     object_id: remote.object_id.clone(),
                     revision: 1,

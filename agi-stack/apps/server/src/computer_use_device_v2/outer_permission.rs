@@ -15,7 +15,9 @@ fn pending(row: &Value) -> Value {
 }
 
 fn required(row: &Value, claim: &broker::Claim) -> CoreResult<ToolResult> {
-    use agistack_core::ports::{permission_input_digest, PermissionBinding, PermissionKind, PermissionRequired};
+    use agistack_core::ports::{
+        permission_input_digest, PermissionBinding, PermissionKind, PermissionRequired,
+    };
     Ok(PermissionRequired::new(PermissionKind::ServerMcpTool, PermissionBinding {
         tool_name: claim.tool_name.clone(), input_digest: permission_input_digest(&claim.input_json)?,
         engine_session_id: Some(claim.session_id.clone()), cell_id: None, step_id: None,
@@ -88,7 +90,9 @@ impl Broker {
             }
             _ => return Err(fail("computer_use_permission_already_consumed")),
         }
-        let pending_result = (row["status"] == "pending").then(|| required(&row, claim)).transpose()?;
+        let pending_result = (row["status"] == "pending")
+            .then(|| required(&row, claim))
+            .transpose()?;
         objects
             .put(
                 &key,

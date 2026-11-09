@@ -74,11 +74,7 @@ fn assemble(
         ))
     })?;
     let (generated_at, status, failed_processing, failed_index, success, sync) = bundle;
-    let configuration = status
-        .configuration
-        .as_ref()
-        .map(summary)
-        .transpose()?;
+    let configuration = status.configuration.as_ref().map(summary).transpose()?;
     let processing_failed = serde_json::to_value(failed_processing.items)
         .map_err(|_| KnowledgeAuthorityErrorV2::Knowledge(KnowledgeError::InvalidInput))?;
     let (index_failed, index_truncated) = match failed_index {

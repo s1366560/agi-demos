@@ -1,7 +1,7 @@
 //! Opt-in test executes the production Rust facade against real Chromium CDP.
-use agistack_adapters_browser::{BridgeWsClient, BrowserToolHost, facade};
+use agistack_adapters_browser::{facade, BridgeWsClient, BrowserToolHost};
 use agistack_core::ports::ToolHost;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::process::Stdio;

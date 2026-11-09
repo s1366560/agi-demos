@@ -528,18 +528,16 @@ mod tests {
                     session,
                     "new-request"
                 ));
-                assert!(
-                    !authorize(
-                        &db,
-                        &owner,
-                        "device:control",
-                        "device",
-                        "locked_use",
-                        session,
-                        "new-request"
-                    )
-                    .unwrap()
-                );
+                assert!(!authorize(
+                    &db,
+                    &owner,
+                    "device:control",
+                    "device",
+                    "locked_use",
+                    session,
+                    "new-request"
+                )
+                .unwrap());
                 let pending = super::super::PendingConsent {
                     request_id: "new-request".into(),
                     session_id: session.into(),

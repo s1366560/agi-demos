@@ -601,7 +601,7 @@ async fn cancelled_checkpoint_reports_completed_calls_without_claiming_success()
         .map(|round| CompletedCall {
             control_outcome: None,
             control_generation: None,
-        metadata: serde_json::json!({}),
+            metadata: serde_json::json!({}),
             round,
             tool: "read".into(),
             input_json: "private-input".into(),

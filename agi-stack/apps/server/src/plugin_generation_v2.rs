@@ -59,11 +59,15 @@ pub(crate) struct RustServerGenerationAdmissionV2 {
 }
 
 impl Default for RustServerGenerationAdmissionV2 {
-    fn default() -> Self { Self::new(Arc::new(GenerationManagerV2::new())) }
+    fn default() -> Self {
+        Self::new(Arc::new(GenerationManagerV2::new()))
+    }
 }
 
 impl RustServerGenerationAdmissionV2 {
-    pub(crate) fn shared_manager(&self) -> Arc<GenerationManagerV2> { self.inner.manager.clone() }
+    pub(crate) fn shared_manager(&self) -> Arc<GenerationManagerV2> {
+        self.inner.manager.clone()
+    }
 
     #[must_use]
     pub(crate) fn new(manager: Arc<GenerationManagerV2>) -> Self {
@@ -125,7 +129,10 @@ impl RustServerGenerationAdmissionV2 {
 
     pub(crate) fn admit_operation(&self) -> Result<Arc<RustServerOperationGenerationV2>, String> {
         let (descriptor, guard) = self.admit().map_err(|error| error.message.to_owned())?;
-        Ok(Arc::new(RustServerOperationGenerationV2 { descriptor, guard }))
+        Ok(Arc::new(RustServerOperationGenerationV2 {
+            descriptor,
+            guard,
+        }))
     }
 
     fn admit(
@@ -169,7 +176,10 @@ impl RustServerGenerationAdmissionV2 {
     }
 
     fn spawn_release_owner(&self, lease: GenerationLeaseV2) -> GenerationReleaseGuardV2 {
-        let runtime_generation = lease.generation().expect("validated generation lease").clone();
+        let runtime_generation = lease
+            .generation()
+            .expect("validated generation lease")
+            .clone();
         let (release_tx, release_rx) = oneshot::channel();
         let inner = Arc::clone(&self.inner);
         tokio::spawn(async move {
@@ -296,12 +306,31 @@ impl RustServerOperationGenerationV2 {
             scope,
         )
     }
-    pub(crate) fn tool_policy(&self, scope: &ScopeV2, operation_id: &str) -> Result<Arc<dyn agistack_core::agent::tool_policy::ToolExecutionPolicy>, String> {
-        use agistack_plugin_host::protocol_v2::{tool_policy::{TrustedToolPolicyV2, TOOL_EXECUTION_POLICY_SERVICE_V2}, tool_policy_adapter::GenerationToolExecutionPolicyV2};
-        let service = self.guard.runtime_generation.resolve_versioned::<TrustedToolPolicyV2>(
-            TOOL_EXECUTION_POLICY_SERVICE_V2, "1.0.0", scope, None,
-        ).map_err(|error| error.to_string())?;
-        Ok(Arc::new(GenerationToolExecutionPolicyV2::new(service, scope.clone(), operation_id.into(), self.descriptor.digest.clone())))
+    pub(crate) fn tool_policy(
+        &self,
+        scope: &ScopeV2,
+        operation_id: &str,
+    ) -> Result<Arc<dyn agistack_core::agent::tool_policy::ToolExecutionPolicy>, String> {
+        use agistack_plugin_host::protocol_v2::{
+            tool_policy::{TrustedToolPolicyV2, TOOL_EXECUTION_POLICY_SERVICE_V2},
+            tool_policy_adapter::GenerationToolExecutionPolicyV2,
+        };
+        let service = self
+            .guard
+            .runtime_generation
+            .resolve_versioned::<TrustedToolPolicyV2>(
+                TOOL_EXECUTION_POLICY_SERVICE_V2,
+                "1.0.0",
+                scope,
+                None,
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(Arc::new(GenerationToolExecutionPolicyV2::new(
+            service,
+            scope.clone(),
+            operation_id.into(),
+            self.descriptor.digest.clone(),
+        )))
     }
 }
 

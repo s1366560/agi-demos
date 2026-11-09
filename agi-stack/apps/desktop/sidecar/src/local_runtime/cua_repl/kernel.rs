@@ -1,5 +1,5 @@
 use super::config::RuntimeConfig;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::process::Stdio;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},

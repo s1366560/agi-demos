@@ -251,7 +251,8 @@ impl Broker {
         // Persist consumed before granting dispatch: a crash can lose a result, never replay an action.
         // Preserve ordinary receipt execution for inputs outside the witness digest domain.
         // A null digest can never match an authenticated permission binding.
-        row["permission_input_digest"] = json!(agistack_core::ports::permission_input_digest(&input.input_json).ok());
+        row["permission_input_digest"] =
+            json!(agistack_core::ports::permission_input_digest(&input.input_json).ok());
         objects
             .put(
                 &key,
@@ -260,9 +261,13 @@ impl Broker {
             )
             .await?;
         self.live_step_parent(user, request_id, &input.device_id)?;
-        self.permission_steps.lock().expect("CUA permission steps").insert(
-            (request_id.into(), input.cell_id.clone(), step_id.into()), key.clone(),
-        );
+        self.permission_steps
+            .lock()
+            .expect("CUA permission steps")
+            .insert(
+                (request_id.into(), input.cell_id.clone(), step_id.into()),
+                key.clone(),
+            );
         if row["status"] == "pending" {
             return Ok(
                 json!({"status":"pending","error":"cua_permission_required","request":pending(&row),"scopes":["once"]}),
@@ -370,7 +375,9 @@ fn transition(
         }
         row["status"] = json!("released");
         row["last_outcome"] = json!("not_sent");
-        row.as_object_mut().expect("step record").remove("continuation");
+        row.as_object_mut()
+            .expect("step record")
+            .remove("continuation");
         return Ok(());
     }
     if row["status"] == "consumed" || row["status"] == "denied" {

@@ -331,9 +331,7 @@ async fn concurrent_real_unix_pty_shutdown_reaps_idle_and_short_lived_foreground
 }
 
 fn child_signal_wasm_tools() -> [agistack_adapters_wasmtime::WasmtimeTool; 4] {
-    use agistack_adapters_wasmtime::{
-        WasmtimeTool, INFINITE_WAT, MEMORY_HOG_WAT, SCORE_V1_WAT,
-    };
+    use agistack_adapters_wasmtime::{WasmtimeTool, INFINITE_WAT, MEMORY_HOG_WAT, SCORE_V1_WAT};
     let bounds = r#"(module (memory 1)
         (func (export "score") (param i32) (result i32)
             local.get 0 i32.load))"#;
@@ -342,7 +340,12 @@ fn child_signal_wasm_tools() -> [agistack_adapters_wasmtime::WasmtimeTool; 4] {
         WasmtimeTool::from_wat("bounds", "1.0.0", bounds, 10_000).unwrap(),
         WasmtimeTool::from_wat("fuel", "1.0.0", INFINITE_WAT, 10_000).unwrap(),
         WasmtimeTool::from_bytes_with_limits(
-            "memory", "1.0.0", MEMORY_HOG_WAT.as_bytes(), 10_000, 64 * 1024, None,
+            "memory",
+            "1.0.0",
+            MEMORY_HOG_WAT.as_bytes(),
+            10_000,
+            64 * 1024,
+            None,
         )
         .unwrap(),
     ]

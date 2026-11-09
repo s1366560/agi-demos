@@ -7,6 +7,8 @@ use std::{
 use agistack_core::ports::{CoreError, CoreResult};
 use serde_json::{json, Value};
 
+#[cfg(test)]
+use super::mcp_supervisor::McpScope;
 use super::{
     computer_use_v2::call_identity::{self, CallIdentity},
     execution_authority::{ExecutionAuthority, ExecutionScope},
@@ -14,8 +16,6 @@ use super::{
     mcp_supervisor::{McpAppDefinition, McpToolBinding},
     LocalRuntimeService, LocalRuntimeState,
 };
-#[cfg(test)]
-use super::mcp_supervisor::McpScope;
 mod callback;
 mod callback_origin;
 mod continuation;
@@ -68,11 +68,17 @@ fn mcp_scope(scope: &ExecutionScope) -> McpScope {
 
 impl McpAppAutomationRegistry {
     pub(super) fn revoke_run(&self, run_id: &str) {
-        self.authorities.lock().expect("MCP app authorities")
+        self.authorities
+            .lock()
+            .expect("MCP app authorities")
             .retain(|(owner, _), _| owner != run_id);
-        self.tabs.lock().expect("MCP app tabs")
+        self.tabs
+            .lock()
+            .expect("MCP app tabs")
             .retain(|_, tab| tab.scope.run_id != run_id);
-        self.cloud_authorities.lock().expect("MCP app cloud authorities")
+        self.cloud_authorities
+            .lock()
+            .expect("MCP app cloud authorities")
             .retain(|authority| authority.scope().run_id != run_id);
     }
 

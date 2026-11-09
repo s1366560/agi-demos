@@ -1,13 +1,13 @@
 //! Connector routing uses declared serverInfo capabilities and exact tool IDs only.
 use super::Owner;
 use crate::local_runtime::{
-    LocalRuntimeState,
     mcp_supervisor::{McpScope, McpServerDefinition, McpToolCallOutcome},
+    LocalRuntimeState,
 };
-use agistack_adapters_cua::{CONNECTOR_OPERATION_EFFECTS, ConnectorOperationEffect};
+use agistack_adapters_cua::{ConnectorOperationEffect, CONNECTOR_OPERATION_EFFECTS};
 use agistack_core::ports::{CoreError, CoreResult, ToolResult};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 #[derive(Clone, Serialize)]
 pub(super) struct Connector {

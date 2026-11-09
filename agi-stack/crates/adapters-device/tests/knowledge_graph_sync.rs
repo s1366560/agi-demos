@@ -3,7 +3,9 @@ use agistack_core::knowledge::processing::*;
 use agistack_core::knowledge::sync::graph::*;
 use agistack_core::knowledge::sync::graph_resolution::*;
 use agistack_core::knowledge::sync::push::KnowledgeSyncTarget;
-use agistack_core::knowledge::sync::{KnowledgeSyncLink, KnowledgeSyncRepository, KnowledgeUnbindPolicy};
+use agistack_core::knowledge::sync::{
+    KnowledgeSyncLink, KnowledgeSyncRepository, KnowledgeUnbindPolicy,
+};
 use agistack_core::knowledge::KnowledgeMemory as Memory;
 use agistack_core::knowledge::{
     KnowledgeError, KnowledgeScope, MemoryMutation, ScopedMemoryRepository,
@@ -89,9 +91,14 @@ async fn link(repo: &SqliteKnowledgeRepository) {
         .unwrap();
 }
 async fn extract(repo: &SqliteKnowledgeRepository, id: &str, name: &str) {
-    repo.mutate(&scope(), "local-author", &format!("create-{id}-{name}"), memory(id))
-        .await
-        .unwrap();
+    repo.mutate(
+        &scope(),
+        "local-author",
+        &format!("create-{id}-{name}"),
+        memory(id),
+    )
+    .await
+    .unwrap();
     let lease = repo
         .claim(&scope(), "worker", 0, 100)
         .await
@@ -207,7 +214,10 @@ fn push_receipt_applied_advances_baseline_and_update_uses_remote_revision() {
             .unwrap()
             .is_some());
         assert_eq!(
-            repo.sync_status(&scope()).await.unwrap().pending_graph_changes,
+            repo.sync_status(&scope())
+                .await
+                .unwrap()
+                .pending_graph_changes,
             0
         );
         // Re-extraction enqueues an update carrying the remote base revision.
@@ -290,15 +300,15 @@ fn pull_applies_remote_record_and_serves_it_before_and_after_source_arrival() {
         let repo = db.open();
         link(&repo).await;
         let event = remote_version("cloud-memory", 1, "Cloud");
-        let response = page(
-            vec![(1, &Uuid::new_v4().to_string(), event)],
-            false,
-        );
+        let response = page(vec![(1, &Uuid::new_v4().to_string(), event)], false);
         let receipt = repo
             .accept_graph_pull_page(&scope(), &target(), 0, response)
             .await
             .unwrap();
-        assert_eq!((receipt.applied, receipt.conflicts, receipt.next_cursor), (1, 0, 1));
+        assert_eq!(
+            (receipt.applied, receipt.conflicts, receipt.next_cursor),
+            (1, 0, 1)
+        );
         // The source memory has not arrived: durable but source-unavailable.
         let synced = repo
             .synced_graph_projection(&scope(), "cloud-memory")
@@ -338,8 +348,16 @@ fn pull_conflict_pauses_object_and_other_objects_continue() {
         extract(&repo, "memory", "Alice").await;
         let response = page(
             vec![
-                (1, &Uuid::new_v4().to_string(), remote_version("memory", 1, "Cloud")),
-                (2, &Uuid::new_v4().to_string(), remote_version("other", 1, "Other")),
+                (
+                    1,
+                    &Uuid::new_v4().to_string(),
+                    remote_version("memory", 1, "Cloud"),
+                ),
+                (
+                    2,
+                    &Uuid::new_v4().to_string(),
+                    remote_version("other", 1, "Other"),
+                ),
             ],
             false,
         );
@@ -352,7 +370,10 @@ fn pull_conflict_pauses_object_and_other_objects_continue() {
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0]["object_id"], "memory");
         // The conflict materialized the pending local extraction for comparison.
-        assert_eq!(conflicts[0]["local"]["content"]["entities"][0]["name"], "Alice");
+        assert_eq!(
+            conflicts[0]["local"]["content"]["entities"][0]["name"],
+            "Alice"
+        );
         let other = repo
             .synced_graph_projection(&scope(), "other")
             .await
@@ -398,7 +419,10 @@ fn own_journal_echo_settles_push_without_conflict() {
         // record: the origin already serves it from its audited projection.
         assert_eq!((receipt.applied, receipt.conflicts), (0, 0));
         assert_eq!(
-            repo.sync_status(&scope()).await.unwrap().pending_graph_changes,
+            repo.sync_status(&scope())
+                .await
+                .unwrap()
+                .pending_graph_changes,
             0
         );
         assert!(repo
@@ -432,7 +456,10 @@ fn stale_cursor_and_malformed_events_fail_closed() {
                 .await,
             Err(KnowledgeError::InvalidInput)
         ));
-        assert_eq!(repo.graph_pull_cursor(&scope(), &target()).await.unwrap(), 1);
+        assert_eq!(
+            repo.graph_pull_cursor(&scope(), &target()).await.unwrap(),
+            1
+        );
     });
 }
 
@@ -444,7 +471,11 @@ fn use_remote_resolution_applies_remote_and_supersedes_pending_push() {
         link(&repo).await;
         extract(&repo, "memory", "Alice").await;
         let response = page(
-            vec![(1, &Uuid::new_v4().to_string(), remote_version("memory", 1, "Cloud"))],
+            vec![(
+                1,
+                &Uuid::new_v4().to_string(),
+                remote_version("memory", 1, "Cloud"),
+            )],
             false,
         );
         repo.accept_graph_pull_page(&scope(), &target(), 0, response)
@@ -476,7 +507,11 @@ fn use_remote_resolution_applies_remote_and_supersedes_pending_push() {
             .unwrap()
             .unwrap();
         assert_eq!(synced.content.entities[0].name, "Cloud");
-        assert!(repo.graph_pull_conflicts(&scope(), 10).await.unwrap().is_empty());
+        assert!(repo
+            .graph_pull_conflicts(&scope(), 10)
+            .await
+            .unwrap()
+            .is_empty());
         // Replay returns the original receipt.
         let replayed = repo
             .resolve_graph_pull_conflicts(
@@ -507,7 +542,11 @@ fn use_local_resolution_rebases_and_repushes_local_content() {
         link(&repo).await;
         extract(&repo, "memory", "Alice").await;
         let response = page(
-            vec![(1, &Uuid::new_v4().to_string(), remote_version("memory", 1, "Cloud"))],
+            vec![(
+                1,
+                &Uuid::new_v4().to_string(),
+                remote_version("memory", 1, "Cloud"),
+            )],
             false,
         );
         repo.accept_graph_pull_page(&scope(), &target(), 0, response)
@@ -576,7 +615,11 @@ fn keep_both_resolution_preserves_local_as_deterministic_detached_copy() {
         link(&repo).await;
         extract(&repo, "memory", "Alice").await;
         let response = page(
-            vec![(1, &Uuid::new_v4().to_string(), remote_version("memory", 1, "Cloud"))],
+            vec![(
+                1,
+                &Uuid::new_v4().to_string(),
+                remote_version("memory", 1, "Cloud"),
+            )],
             false,
         );
         repo.accept_graph_pull_page(&scope(), &target(), 0, response)
@@ -633,7 +676,11 @@ fn merged_resolution_applies_and_pushes_merged_content() {
         link(&repo).await;
         extract(&repo, "memory", "Alice").await;
         let response = page(
-            vec![(1, &Uuid::new_v4().to_string(), remote_version("memory", 1, "Cloud"))],
+            vec![(
+                1,
+                &Uuid::new_v4().to_string(),
+                remote_version("memory", 1, "Cloud"),
+            )],
             false,
         );
         repo.accept_graph_pull_page(&scope(), &target(), 0, response)
@@ -654,9 +701,7 @@ fn merged_resolution_applies_and_pushes_merged_content() {
                     expected_local_revision: 1,
                     expected_remote_revision: 1,
                     expected_baseline_revision: 0,
-                    choice: GraphConflictChoice::Merged {
-                        content: merged,
-                    },
+                    choice: GraphConflictChoice::Merged { content: merged },
                 },
             )
             .await
@@ -702,7 +747,10 @@ fn unbind_fences_graph_outbox_and_delete_policy_tombstones_cloud_records() {
             .unwrap();
         assert!(cloud.deleted);
         assert_eq!(
-            repo.sync_status(&scope()).await.unwrap().pending_graph_changes,
+            repo.sync_status(&scope())
+                .await
+                .unwrap()
+                .pending_graph_changes,
             0
         );
         assert!(matches!(

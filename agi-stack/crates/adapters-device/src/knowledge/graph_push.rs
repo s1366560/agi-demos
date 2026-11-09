@@ -2,8 +2,7 @@
 //! persisted requests, revision-checked receipts, durable conflict pauses.
 
 use agistack_core::knowledge::sync::graph::{
-    KnowledgeGraphPushReceipt, KnowledgeGraphPushRepository, RemoteGraphContent,
-    RemoteGraphVersion,
+    KnowledgeGraphPushReceipt, KnowledgeGraphPushRepository, RemoteGraphContent, RemoteGraphVersion,
 };
 use agistack_core::knowledge::sync::push::{
     KnowledgeSyncTarget, PreparedKnowledgePush, MAX_REMOTE_REVISION,
@@ -212,10 +211,9 @@ fn settle_resolution(
         )
         .map_err(storage)?;
     let rows = statement
-        .query_map(
-            params![scope.tenant_id, scope.project_id],
-            |row| Ok((row.get::<_, u64>(0)?, row.get::<_, String>(1)?)),
-        )
+        .query_map(params![scope.tenant_id, scope.project_id], |row| {
+            Ok((row.get::<_, u64>(0)?, row.get::<_, String>(1)?))
+        })
         .map_err(storage)?;
     let mut matched: Option<(u64, Value)> = None;
     for row in rows {

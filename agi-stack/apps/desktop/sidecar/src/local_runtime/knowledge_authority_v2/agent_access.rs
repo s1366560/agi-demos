@@ -137,7 +137,11 @@ impl RunAuthorization {
 
 pub(in crate::local_runtime) fn current_auth() -> Option<AuthenticatedContext> {
     CURRENT
-        .try_with(|current| current.as_ref().map(|authorization| authorization.auth.clone()))
+        .try_with(|current| {
+            current
+                .as_ref()
+                .map(|authorization| authorization.auth.clone())
+        })
         .ok()
         .flatten()
 }

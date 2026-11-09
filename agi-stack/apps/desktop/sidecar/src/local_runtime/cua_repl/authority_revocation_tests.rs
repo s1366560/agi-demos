@@ -45,7 +45,10 @@ struct Fixture {
 impl Fixture {
     async fn new() -> Self {
         let (state, conversation, run, root) = test_support::state(LAUNCH);
-        state.ensure_authoritative_launch_checkpoint(&run).await.unwrap();
+        state
+            .ensure_authoritative_launch_checkpoint(&run)
+            .await
+            .unwrap();
         let wire: Value = serde_json::from_str(include_str!(
             "../../../../../../../shared/profiles/memstack-default-bootstrap.v2.json"
         ))

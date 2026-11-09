@@ -121,12 +121,19 @@ async fn cold_nested_repl_schema_validation() {
         lease.clone(),
     )
     .unwrap();
-    let auth = state.session_store.validate_session_credential(
-        "cold-nested-schema", chrono::Utc::now().timestamp_millis(),
-    ).unwrap().unwrap();
+    let auth = state
+        .session_store
+        .validate_session_credential("cold-nested-schema", chrono::Utc::now().timestamp_millis())
+        .unwrap()
+        .unwrap();
     let authorization = RunAuthorization::capture(
-        auth, Some(lease), &conversation, &run.message_id, Some(&run.id),
-    ).unwrap();
+        auth,
+        Some(lease),
+        &conversation,
+        &run.message_id,
+        Some(&run.id),
+    )
+    .unwrap();
     agent_access::scope(Some(authorization), async {
     state.claim_agent_run(&conversation.id, Some(&run.id)).unwrap();
     let profile = state.execution_profile(&conversation).unwrap();

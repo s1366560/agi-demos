@@ -187,7 +187,9 @@ fn generated_desktop_sidecar_catalog_requires_the_native_computer_use_module() {
         .await;
         assert_eq!(
             error,
-            RuntimeV2Error::MissingModuleDefinition("builtin://memstack/computer-use/native".into())
+            RuntimeV2Error::MissingModuleDefinition(
+                "builtin://memstack/computer-use/native".into()
+            )
         );
     });
 }

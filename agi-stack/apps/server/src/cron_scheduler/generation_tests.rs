@@ -5,8 +5,8 @@ use agistack_plugin_host::{GenerationManagerV2, RuntimeV2Error};
 use crate::background_worker_control_v2::BackgroundWorkerGenerationV2;
 
 mod pg;
-mod support;
 mod readiness;
+mod support;
 use support::*;
 
 #[tokio::test]

@@ -1,10 +1,10 @@
 //! Bounded AT-SPI traversal. Native roles, interfaces and actions only; no name-based inference.
 use atspi::{
-    CoordType, Role,
     proxy::{accessible::ObjectRefExt, proxy_ext::ProxyExt},
+    CoordType, Role,
 };
 use atspi_connection::AccessibilityConnection;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sky_cua_platform::model::{CoordinateSpace, ElementNode, RectF};
 use std::collections::BTreeSet;
 

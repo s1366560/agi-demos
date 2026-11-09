@@ -1,19 +1,19 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::{atomic::Ordering, Arc};
 
 use agistack_core::agent::types::{HitlKind, HitlRequest, SessionState, SessionStatus};
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tower::ServiceExt;
 
 use super::super::{
-    LocalConversation, LocalRuntimeState,
     authority_store::{DesktopHitlStatus, DesktopRun, DesktopRunStatus},
     local_router, now_iso,
     session_store::{HitlResponseCommit, HitlResponseCommitError},
     tests::{seed_controlled_run, test_decision_context, test_state},
+    LocalConversation, LocalRuntimeState,
 };
 
 async fn waiting_run(
@@ -130,15 +130,13 @@ async fn waiting_input_and_approval_stop_without_answer_or_restart() {
             .unwrap();
         assert_eq!(history.status, DesktopHitlStatus::Pending);
         assert!(history.response_data.is_none());
-        assert!(
-            state
-                .session_store
-                .conversation_session_snapshot(&conversation.id)
-                .unwrap()
-                .unwrap()
-                .pending_hitl
-                .is_empty()
-        );
+        assert!(state
+            .session_store
+            .conversation_session_snapshot(&conversation.id)
+            .unwrap()
+            .unwrap()
+            .pending_hitl
+            .is_empty());
         assert!(state.browser_once_consents.lock().unwrap().is_empty());
         assert!(state.run_once_tool_permissions.lock().unwrap().is_empty());
         assert!(state.agent_runs.lock().unwrap().is_empty());

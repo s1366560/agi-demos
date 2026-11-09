@@ -21,13 +21,29 @@ impl CallIdentity {
     pub(in crate::local_runtime) fn engine_session_id(&self) -> &str {
         &self.session_id
     }
-    pub(in crate::local_runtime) fn round(&self) -> u64 { self.round }
-    pub(in crate::local_runtime) async fn for_tool<F: Future>(&self, tool: &str, future: F) -> F::Output {
-        scope(&ToolPolicyContext { session_id: &self.session_id, round: self.round, tool }, future).await
+    pub(in crate::local_runtime) fn round(&self) -> u64 {
+        self.round
+    }
+    pub(in crate::local_runtime) async fn for_tool<F: Future>(
+        &self,
+        tool: &str,
+        future: F,
+    ) -> F::Output {
+        scope(
+            &ToolPolicyContext {
+                session_id: &self.session_id,
+                round: self.round,
+                tool,
+            },
+            future,
+        )
+        .await
     }
 }
 pub(in crate::local_runtime) fn active() -> CoreResult<CallIdentity> {
-    IDENTITY.try_with(Clone::clone).map_err(|_| CoreError::Tool("execution_engine_identity_required".into()))
+    IDENTITY
+        .try_with(Clone::clone)
+        .map_err(|_| CoreError::Tool("execution_engine_identity_required".into()))
 }
 tokio::task_local! {static IDENTITY:CallIdentity;}
 pub(in crate::local_runtime) async fn scope<F: Future>(
@@ -65,7 +81,8 @@ pub(super) fn id(owner: &Owner, run_id: &str, identity: &CallIdentity) -> CoreRe
         binding["step_id"] = json!(step_id);
     }
     canonical_json_digest(&binding)
-        .map(|digest|format!("cua-call-{digest}")).map_err(|error|CoreError::Tool(error.to_string()))
+        .map(|digest| format!("cua-call-{digest}"))
+        .map_err(|error| CoreError::Tool(error.to_string()))
 }
 pub(super) fn existing(
     db: &Connection,

@@ -96,7 +96,13 @@ pub(super) fn accept_journal(
         } else {
             json!({"status":"applied","change_id":id,"sequence":sequence,"version":version})
         };
-        receipt::accept(tx, scope, &actor, id, json!({"replayed":false,"receipt":receipt}))?;
+        receipt::accept(
+            tx,
+            scope,
+            &actor,
+            id,
+            json!({"replayed":false,"receipt":receipt}),
+        )?;
     }
     Ok(())
 }

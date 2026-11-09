@@ -1,11 +1,11 @@
 use super::*;
-use agistack_core::agent::ReActObserver;
-use agistack_core::ports::CoreError;
 use crate::local_runtime::{
     local_plugin_tool_host_v2::identity::{child_scope, ChildIdentityV2},
     tool_authority::{ToolEffect, ToolMetadata},
     PlanModeToolHost,
 };
+use agistack_core::agent::ReActObserver;
+use agistack_core::ports::CoreError;
 use std::collections::{BTreeMap, BTreeSet};
 
 fn capture(
@@ -292,8 +292,14 @@ fn signed_subagent_boundary(
         conversation,
         &run.message_id,
         &run.id,
-        Arc::new(state.platform_plugin_authority_v2.acquire_generation().unwrap()),
-    ).unwrap()
+        Arc::new(
+            state
+                .platform_plugin_authority_v2
+                .acquire_generation()
+                .unwrap(),
+        ),
+    )
+    .unwrap()
 }
 
 #[tokio::test]
@@ -306,23 +312,61 @@ async fn production_subagent_factory_delegates_real_signed_read_plugin_through_a
         .claim_agent_run(&conversation.id, Some(&run.id))
         .unwrap();
     let native = capture(&state, &conversation, &run.message_id, Some(&run.id));
-    agent_access::scope(Some(native),async {
-        let profile=state.execution_profile(&conversation).unwrap();
-        assert_eq!(profile.agent.id,"qa-plugin-parent");
-        let boundary=signed_subagent_boundary(&state,&conversation,&run);
-        let host=state.subagent_agent_tool_host_with_boundary(&conversation,&run,&profile,&[],Arc::new(ScriptedLlm::new(vec![AgentAction::CallTool {tool:name.clone(), input_json:r#"{"input":"中"}"#.into()},AgentAction::Finish {answer:"child completed".into()}])),4,Some(boundary)).await.unwrap().unwrap();
-        let metadata=host.authority_metadata_by_name();
-        assert_eq!(metadata["subagent"].effect,ToolEffect::Read);
-        let wrapped=AuthorizedRunToolHost::with_dynamic_metadata(Arc::new(host),state.session_store.clone(),run.clone(),metadata);
-        let output=wrapped.call("subagent",r#"{"subagent_id":"qa-plugin-child","task":"Call marker"}"#).await.unwrap();
+    agent_access::scope(Some(native), async {
+        let profile = state.execution_profile(&conversation).unwrap();
+        assert_eq!(profile.agent.id, "qa-plugin-parent");
+        let boundary = signed_subagent_boundary(&state, &conversation, &run);
+        let host = state
+            .subagent_agent_tool_host_with_boundary(
+                &conversation,
+                &run,
+                &profile,
+                &[],
+                Arc::new(ScriptedLlm::new(vec![
+                    AgentAction::CallTool {
+                        tool: name.clone(),
+                        input_json: r#"{"input":"中"}"#.into(),
+                    },
+                    AgentAction::Finish {
+                        answer: "child completed".into(),
+                    },
+                ])),
+                4,
+                Some(boundary),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let metadata = host.authority_metadata_by_name();
+        assert_eq!(metadata["subagent"].effect, ToolEffect::Read);
+        let wrapped = AuthorizedRunToolHost::with_dynamic_metadata(
+            Arc::new(host),
+            state.session_store.clone(),
+            run.clone(),
+            metadata,
+        );
+        let output = wrapped
+            .call(
+                "subagent",
+                r#"{"subagent_id":"qa-plugin-child","task":"Call marker"}"#,
+            )
+            .await
+            .unwrap();
         assert!(output.contains("child completed"));
         let result: Value = serde_json::from_str(&output).unwrap();
         assert_eq!(result["run_id"], run.id);
         assert_eq!(result["run_revision"], run.revision);
         let timeline = state.session_store.timeline(&conversation.id, 100).unwrap();
-        let child_events = timeline.iter().filter(|item| item["type"] == "subagent_tool_call" || item["type"] == "subagent_tool_result").collect::<Vec<_>>();
+        let child_events = timeline
+            .iter()
+            .filter(|item| {
+                item["type"] == "subagent_tool_call" || item["type"] == "subagent_tool_result"
+            })
+            .collect::<Vec<_>>();
         assert_eq!(child_events.len(), 2);
-        assert!(!timeline.iter().any(|item| item["type"] == "subagent_tool_error"));
+        assert!(!timeline
+            .iter()
+            .any(|item| item["type"] == "subagent_tool_error"));
         for event in &child_events {
             assert_eq!(event["payload"]["execution_id"], result["execution_id"]);
             assert_eq!(event["payload"]["parent_run_id"], run.id);
@@ -331,12 +375,25 @@ async fn production_subagent_factory_delegates_real_signed_read_plugin_through_a
             assert_eq!(event["payload"]["tool_name"], name);
             assert!(event.get("toolName").is_none());
         }
-        assert_eq!(serde_json::from_str::<Value>(child_events[1]["payload"]["tool_output"].as_str().unwrap()).unwrap(), json!({"score":20260914,"input_bytes":15}));
-        assert!(!timeline.iter().any(|item| item["type"] == "act" || item["type"] == "observe"));
-        let invocations=state.session_store.list_tool_invocations(&conversation.id).unwrap();
-        assert!(invocations.iter().any(|row| row.tool_name==name && row.status==local_runtime::tool_authority::InvocationStatus::Completed));
-        state.release_agent_run_if_control(&conversation.id,&parent);
-    }).await;
+        assert_eq!(
+            serde_json::from_str::<Value>(
+                child_events[1]["payload"]["tool_output"].as_str().unwrap()
+            )
+            .unwrap(),
+            json!({"score":20260914,"input_bytes":15})
+        );
+        assert!(!timeline
+            .iter()
+            .any(|item| item["type"] == "act" || item["type"] == "observe"));
+        let invocations = state
+            .session_store
+            .list_tool_invocations(&conversation.id)
+            .unwrap();
+        assert!(invocations.iter().any(|row| row.tool_name == name
+            && row.status == local_runtime::tool_authority::InvocationStatus::Completed));
+        state.release_agent_run_if_control(&conversation.id, &parent);
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -450,7 +507,10 @@ async fn unbound_native_http_and_websocket_discover_load_skill_then_call_real_pl
     native_plan_request_advertises_and_executes_signed_plugin(false, true).await;
     native_plan_request_advertises_and_executes_signed_plugin(true, true).await;
 }
-async fn native_plan_request_advertises_and_executes_signed_plugin(websocket: bool, discover_skill: bool) {
+async fn native_plan_request_advertises_and_executes_signed_plugin(
+    websocket: bool,
+    discover_skill: bool,
+) {
     use agistack_core::{
         agent::types::{AgentAction, TranscriptEntry},
         model::Episode,
@@ -480,17 +540,37 @@ async fn native_plan_request_advertises_and_executes_signed_plugin(websocket: bo
         ) -> CoreResult<AgentAction> {
             *self.0.lock().unwrap() = tools.to_vec();
             if self.1 && round < 2 {
-                let tool = if round == 0 { "skill_list" } else { "skill_loader" };
+                let tool = if round == 0 {
+                    "skill_list"
+                } else {
+                    "skill_loader"
+                };
                 assert!(
                     tools.iter().any(|item| item.name == tool),
                     "unbound Plan must advertise {tool}; available: {:?}",
                     tools.iter().map(|item| &item.name).collect::<Vec<_>>()
                 );
-                if round == 1 { assert!(transcript.iter().any(|item| item.content.contains("native-marker-skill"))); }
-                return Ok(AgentAction::CallTool { tool: tool.into(), input_json: if round == 0 { "{}".into() } else { r#"{"skill_id":"native-marker-skill"}"#.into() }});
+                if round == 1 {
+                    assert!(transcript
+                        .iter()
+                        .any(|item| item.content.contains("native-marker-skill")));
+                }
+                return Ok(AgentAction::CallTool {
+                    tool: tool.into(),
+                    input_json: if round == 0 {
+                        "{}".into()
+                    } else {
+                        r#"{"skill_id":"native-marker-skill"}"#.into()
+                    },
+                });
             }
             if round == if self.1 { 2 } else { 0 } {
-                if self.1 { assert!(transcript.iter().any(|item| item.content.contains("SIGNED_SKILL_GUIDANCE") && item.content.contains("available_tools"))); }
+                if self.1 {
+                    assert!(transcript
+                        .iter()
+                        .any(|item| item.content.contains("SIGNED_SKILL_GUIDANCE")
+                            && item.content.contains("available_tools")));
+                }
                 let tool = tools
                     .iter()
                     .find(|tool| {
@@ -613,12 +693,27 @@ async fn native_plan_request_advertises_and_executes_signed_plugin(websocket: bo
         .any(|tool| tool.name.starts_with("plugin__")));
     let timeline = state.session_store.timeline(id, 100).unwrap();
     if discover_skill {
-        assert!(state.session_store.execution_selection(id).unwrap().unwrap_or_default().forced_skill_id.is_none());
-        let loaded=timeline.iter().find(|item|item["type"] == "observe" && item["toolName"] == "skill_loader").unwrap();
-        let output:Value=serde_json::from_str(loaded["toolOutput"].as_str().unwrap()).unwrap();
-        assert_eq!(output["execution_started"],false);
-        assert_eq!(output["authority_changed"],false);
-        assert!(output["available_tools"].as_array().unwrap().iter().any(|name|name.as_str().is_some_and(|name| name.starts_with("plugin__"))));
+        assert!(state
+            .session_store
+            .execution_selection(id)
+            .unwrap()
+            .unwrap_or_default()
+            .forced_skill_id
+            .is_none());
+        let loaded = timeline
+            .iter()
+            .find(|item| item["type"] == "observe" && item["toolName"] == "skill_loader")
+            .unwrap();
+        let output: Value = serde_json::from_str(loaded["toolOutput"].as_str().unwrap()).unwrap();
+        assert_eq!(output["execution_started"], false);
+        assert_eq!(output["authority_changed"], false);
+        assert!(output["available_tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|name| name
+                .as_str()
+                .is_some_and(|name| name.starts_with("plugin__"))));
     }
     let observed = timeline
         .iter()

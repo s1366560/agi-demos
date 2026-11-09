@@ -581,13 +581,22 @@ pub(crate) async fn respond_to_hitl(
     Json(request): Json<HitlResponsePayload>,
 ) -> Result<Json<Value>, HitlApiError> {
     let outcome = app.hitl.respond(&identity.user_id, request.clone()).await?;
-    if crate::computer_use_device_v2::resume(&app,&identity.user_id,&request).await.map_err(HitlApiError::internal)? {
-        return crate::computer_use_device_v2::native_receipt(&app,&request.request_id).await.map(Json).map_err(HitlApiError::internal);
+    if crate::computer_use_device_v2::resume(&app, &identity.user_id, &request)
+        .await
+        .map_err(HitlApiError::internal)?
+    {
+        return crate::computer_use_device_v2::native_receipt(&app, &request.request_id)
+            .await
+            .map(Json)
+            .map_err(HitlApiError::internal);
     }
-    Ok(Json(serde_json::to_value(HumanInteractionResponse {
-        success: true,
-        message: response_message(&outcome),
-    }).map_err(HitlApiError::internal)?))
+    Ok(Json(
+        serde_json::to_value(HumanInteractionResponse {
+            success: true,
+            message: response_message(&outcome),
+        })
+        .map_err(HitlApiError::internal)?,
+    ))
 }
 
 pub(crate) fn response_message(outcome: &HitlResponseOutcome) -> String {

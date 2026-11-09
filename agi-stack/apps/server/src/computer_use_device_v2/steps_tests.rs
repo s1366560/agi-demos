@@ -66,7 +66,10 @@ async fn step_pending_exact_approval_new_outer_and_one_use_receipt() {
         .unwrap();
     finish(&broker, &id, pending);
     call.await.unwrap().unwrap();
-    broker.resolve_step_permission(&stored, true, "committed-hitl").await.unwrap();
+    broker
+        .resolve_step_permission(&stored, true, "committed-hitl")
+        .await
+        .unwrap();
     let (next, next_call) = outer(&broker, &mut receive, 2, 3).await;
     broker.claim(&next, "user", "device").unwrap();
     let mut input = input;
@@ -75,11 +78,16 @@ async fn step_pending_exact_approval_new_outer_and_one_use_receipt() {
         .await
         .unwrap();
     let continuation = ready["continuation"].clone();
-    assert_eq!(continuation, json!({"kind":"hitl","hitl_request_id":"committed-hitl",
+    assert_eq!(
+        continuation,
+        json!({"kind":"hitl","hitl_request_id":"committed-hitl",
         "origin_request_id":id,"previous_authorization_revision":3,"authorization_revision":3,
-        "cell_id":"cell","step_id":"step"}));
+        "cell_id":"cell","step_id":"step"})
+    );
     input["receipt"] = ready["receipt"].clone();
-    let consumed = authorize(&broker, &next, "step", input.clone()).await.unwrap();
+    let consumed = authorize(&broker, &next, "step", input.clone())
+        .await
+        .unwrap();
     assert_eq!(consumed["status"], "authorized");
     assert_eq!(consumed["continuation"], continuation);
     assert!(authorize(&broker, &next, "step", input).await.is_err());
@@ -247,7 +255,10 @@ async fn step_http_route_pending_resume_consumption_and_cancel() {
         .unwrap();
     finish(&broker, &id, pending);
     call.await.unwrap().unwrap();
-    broker.resolve_step_permission(&stored, true, "committed-hitl-http").await.unwrap();
+    broker
+        .resolve_step_permission(&stored, true, "committed-hitl-http")
+        .await
+        .unwrap();
     let (next, next_call) = outer(&broker, &mut receive, 2, 3).await;
     broker.claim(&next, "user", "device").unwrap();
     input["parent_request_id"] = json!(id);

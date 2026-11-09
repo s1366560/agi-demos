@@ -1,12 +1,12 @@
 //! Fail-closed, run-scoped tool execution for the local desktop runtime.
 #[cfg(test)]
-mod connector_tests;
-#[cfg(test)]
-mod repl_permission_tests;
-#[cfg(test)]
 mod audio_release_tests;
 #[cfg(test)]
+mod connector_tests;
+#[cfg(test)]
 mod permission_provenance_tests;
+#[cfg(test)]
+mod repl_permission_tests;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -14,7 +14,9 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-use agistack_core::ports::{CoreError, CoreResult, PermissionKind, PermissionRequired, ToolHost, ToolResult};
+use agistack_core::ports::{
+    CoreError, CoreResult, PermissionKind, PermissionRequired, ToolHost, ToolResult,
+};
 use async_trait::async_trait;
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -168,11 +170,14 @@ impl AuthorizedRunToolHost {
 
     fn validate_owner(&self) -> CoreResult<()> {
         if let Some(owner) = &self.owner {
-            if !self.session_store
+            if !self
+                .session_store
                 .session_context_is_current(owner, Utc::now().timestamp_millis())
                 .map_err(CoreError::Storage)?
             {
-                return Err(CoreError::Tool("run owner session is no longer current".into()));
+                return Err(CoreError::Tool(
+                    "run owner session is no longer current".into(),
+                ));
             }
         }
         Ok(())
@@ -223,11 +228,18 @@ impl AuthorizedRunToolHost {
         let permission = result
             .as_ref()
             .ok()
-            .filter(|result| result.control_outcome.is_none() && result.control_generation.is_none())
+            .filter(|result| {
+                result.control_outcome.is_none() && result.control_generation.is_none()
+            })
             .and_then(|result| result.permission_required.as_ref());
         let consent_pending = if let Some(permission) = permission {
-            matches!(permission.kind(), PermissionKind::BrowserOrigin | PermissionKind::BrowserFullCdp | PermissionKind::BrowserCredentialFill)
-                && permission.binding() == &super::execution_authority::permission_binding(tool, input_json)?
+            matches!(
+                permission.kind(),
+                PermissionKind::BrowserOrigin
+                    | PermissionKind::BrowserFullCdp
+                    | PermissionKind::BrowserCredentialFill
+            ) && permission.binding()
+                == &super::execution_authority::permission_binding(tool, input_json)?
         } else {
             false
         };
@@ -235,33 +247,59 @@ impl AuthorizedRunToolHost {
             self.once_permissions
                 .lock()
                 .expect("run once tool permissions")
-                .insert((self.run.id.clone(), once_key.expect("reserved once permission")));
+                .insert((
+                    self.run.id.clone(),
+                    once_key.expect("reserved once permission"),
+                ));
         }
         result
     }
 
     async fn call_native(&self, tool: &str, input_json: &str) -> CoreResult<ToolResult> {
-        self.metadata(tool).ok_or_else(|| CoreError::Tool("computer-use authority metadata is missing".into()))?;
+        self.metadata(tool)
+            .ok_or_else(|| CoreError::Tool("computer-use authority metadata is missing".into()))?;
         self.validate_browser_run()?;
         let effect = super::computer_use_v2::input_effect(&*self.inner, tool, input_json)?;
-        let resolved = match effect { agistack_adapters_cua::CuaToolEffect::Read => ToolEffect::Read, agistack_adapters_cua::CuaToolEffect::Mutate => ToolEffect::Mutate };
+        let resolved = match effect {
+            agistack_adapters_cua::CuaToolEffect::Read => ToolEffect::Read,
+            agistack_adapters_cua::CuaToolEffect::Mutate => ToolEffect::Mutate,
+        };
         let profile_allowed = self.allows_without_once(tool, resolved);
         let once_key = self.consume_once_permission(tool, input_json);
         if !profile_allowed && once_key.is_none() {
-            if super::execution_authority::current_step_id().is_some() { return repl_permission_required(tool, input_json); }
-            return Err(CoreError::Tool("computer-use tool is outside the approved permission profile".into()));
+            if super::execution_authority::current_step_id().is_some() {
+                return repl_permission_required(tool, input_json);
+            }
+            return Err(CoreError::Tool(
+                "computer-use tool is outside the approved permission profile".into(),
+            ));
         }
-        let result = super::computer_use_v2::with_effect(effect, self.inner.call_with_content(tool, input_json)).await;
-        let permission = result.as_ref().ok().filter(|result| result.control_outcome.is_none() && result.control_generation.is_none())
+        let result = super::computer_use_v2::with_effect(
+            effect,
+            self.inner.call_with_content(tool, input_json),
+        )
+        .await;
+        let permission = result
+            .as_ref()
+            .ok()
+            .filter(|result| {
+                result.control_outcome.is_none() && result.control_generation.is_none()
+            })
             .and_then(|result| result.permission_required.as_ref());
         let consent_required = if let Some(permission) = permission {
             permission.kind() == PermissionKind::NativeConsent
-                && permission.binding() == &super::execution_authority::permission_binding(tool, input_json)?
+                && permission.binding()
+                    == &super::execution_authority::permission_binding(tool, input_json)?
         } else {
             false
         };
-        if let Some(key) = once_key.filter(|_| consent_required && self.validate_browser_run().is_ok()) {
-            self.once_permissions.lock().expect("run once tool permissions").insert((self.run.id.clone(), key));
+        if let Some(key) =
+            once_key.filter(|_| consent_required && self.validate_browser_run().is_ok())
+        {
+            self.once_permissions
+                .lock()
+                .expect("run once tool permissions")
+                .insert((self.run.id.clone(), key));
         }
         result
     }
@@ -304,9 +342,9 @@ impl ToolHost for AuthorizedRunToolHost {
             .into_iter()
             .filter(|tool| {
                 self.metadata(tool).is_some_and(|metadata| {
-                    self.allows(tool, metadata.effect,None)
+                    self.allows(tool, metadata.effect, None)
                         || self.permission_request_tools.contains(tool)
-                        || super::computer_use_v2::has_read_operation(&*self.inner,tool)
+                        || super::computer_use_v2::has_read_operation(&*self.inner, tool)
                         || (self.run.permission_profile == DesktopPermissionProfile::ReadOnly
                             && is_workspace_write_tool(tool))
                 })
@@ -322,7 +360,7 @@ impl ToolHost for AuthorizedRunToolHost {
         let metadata = self
             .metadata(tool)
             .ok_or_else(|| CoreError::Tool(format!("tool '{tool}' has no authority metadata")))?;
-        if !self.allows(tool, metadata.effect,Some(input_json)) {
+        if !self.allows(tool, metadata.effect, Some(input_json)) {
             if super::execution_authority::current_step_id().is_some() {
                 return repl_permission_required(tool, input_json);
             }
@@ -428,7 +466,9 @@ impl ToolHost for AuthorizedRunToolHost {
             if super::execution_authority::current_step_id().is_some() {
                 return repl_permission_required(tool, input_json);
             }
-            return Err(CoreError::Tool("tool once permission was already consumed".into()));
+            return Err(CoreError::Tool(
+                "tool once permission was already consumed".into(),
+            ));
         }
 
         self.session_store
@@ -463,7 +503,9 @@ impl ToolHost for AuthorizedRunToolHost {
         }
     }
     async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
-        self.call_with_content(tool, input_json).await.map(|result| result.output_json)
+        self.call_with_content(tool, input_json)
+            .await
+            .map(|result| result.output_json)
     }
 }
 
@@ -486,8 +528,11 @@ fn authority_error(error: impl std::fmt::Display) -> CoreError {
 }
 
 fn tool_effect(tool: &str) -> Option<ToolEffect> {
-    if let Some(effect)=agistack_adapters_cua::tool_effects().get(tool) {
-        return Some(match effect {agistack_adapters_cua::CuaToolEffect::Read=>ToolEffect::Read,agistack_adapters_cua::CuaToolEffect::Mutate=>ToolEffect::Mutate});
+    if let Some(effect) = agistack_adapters_cua::tool_effects().get(tool) {
+        return Some(match effect {
+            agistack_adapters_cua::CuaToolEffect::Read => ToolEffect::Read,
+            agistack_adapters_cua::CuaToolEffect::Mutate => ToolEffect::Mutate,
+        });
     }
     if READ_ONLY_TOOLS.contains(&tool) {
         Some(ToolEffect::Read)
@@ -971,7 +1016,8 @@ pub(super) mod tests {
 
         async fn call(&self, _tool: &str, _input: &str) -> CoreResult<String> {
             let attempt = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            self.effects.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.effects
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             tokio::task::yield_now().await;
             if attempt == 0 {
                 return Err(CoreError::Tool("browser bridge connection reset".into()));
@@ -981,8 +1027,8 @@ pub(super) mod tests {
     }
 
     #[tokio::test]
-    async fn browser_transport_error_after_effect_never_restores_once_permission() -> Result<(), String>
-    {
+    async fn browser_transport_error_after_effect_never_restores_once_permission(
+    ) -> Result<(), String> {
         let (root, store, run, _) = running_host(DesktopPermissionProfile::ReadOnly)?;
         let probe = Arc::new(FlakyBrowserProbe::default());
         let permissions: RunOnceToolPermissions = Arc::new(Mutex::new(BTreeSet::from([(
@@ -1002,7 +1048,10 @@ pub(super) mod tests {
         host.call("browser_navigate", "{}")
             .await
             .expect_err("the first bridge attempt fails at the transport layer");
-        assert!(!once_active(), "a transport error does not prove the action was not sent");
+        assert!(
+            !once_active(),
+            "a transport error does not prove the action was not sent"
+        );
 
         host.call("browser_navigate", "{}")
             .await
@@ -1404,7 +1453,10 @@ pub(super) mod tests {
             // Timeline visibility must not authorize arbitrary JavaScript as a read tool.
             assert!(tool_metadata(tool).is_none());
         }
-        assert_eq!(redact_tool_payload("cua_repl_forged", "{}"), "[UNAVAILABLE]");
+        assert_eq!(
+            redact_tool_payload("cua_repl_forged", "{}"),
+            "[UNAVAILABLE]"
+        );
     }
 
     #[test]

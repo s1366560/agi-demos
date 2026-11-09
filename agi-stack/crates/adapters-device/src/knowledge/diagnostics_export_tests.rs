@@ -19,7 +19,8 @@ impl Fixture {
     fn with_memories(ids: &[&str]) -> Self {
         let path =
             std::env::temp_dir().join(format!("knowledge-export-{}.db", uuid::Uuid::new_v4()));
-        let repo = std::sync::Arc::new(SqliteKnowledgeRepository::open(path.to_str().unwrap()).unwrap());
+        let repo =
+            std::sync::Arc::new(SqliteKnowledgeRepository::open(path.to_str().unwrap()).unwrap());
         let scope = KnowledgeScope {
             tenant_id: "tenant".into(),
             project_id: "project".into(),
@@ -122,7 +123,9 @@ fn success_timestamps_track_applied_audits_and_exact_build_completions() {
     f.apply(100);
     assert_eq!(read(None).processing_ms, Some(110));
     let build = f.build();
-    f.repo.begin_index_build_durable(&build, &|| Ok(200)).unwrap();
+    f.repo
+        .begin_index_build_durable(&build, &|| Ok(200))
+        .unwrap();
     let config = f
         .repo
         .select_index_config_durable(&build, None, &|| Ok(201))
@@ -256,7 +259,9 @@ fn schema_18_upgrade_adds_completion_timestamps_and_preserves_jobs() {
     let f = Fixture::new();
     f.apply(100);
     let build = f.build();
-    f.repo.begin_index_build_durable(&build, &|| Ok(200)).unwrap();
+    f.repo
+        .begin_index_build_durable(&build, &|| Ok(200))
+        .unwrap();
     let config = f
         .repo
         .select_index_config_durable(&build, None, &|| Ok(201))
@@ -287,7 +292,9 @@ fn schema_18_upgrade_adds_completion_timestamps_and_preserves_jobs() {
     assert_eq!(timestamps.index_ms, None);
     assert_eq!(timestamps.processing_ms, Some(110));
     // New completions after the upgrade are timestamped again.
-    let failed = repo.claim_index_durable(&config, "worker", 100, &|| Ok(300)).unwrap();
+    let failed = repo
+        .claim_index_durable(&config, "worker", 100, &|| Ok(300))
+        .unwrap();
     assert!(failed.is_none());
     let version: i64 = rusqlite::Connection::open(&path)
         .unwrap()

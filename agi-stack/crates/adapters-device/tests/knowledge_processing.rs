@@ -7,12 +7,12 @@ use futures::executor::block_on;
 use rusqlite::Connection;
 use uuid::Uuid;
 
-#[path = "knowledge_processing/retry.rs"]
-mod retry;
 #[path = "knowledge_processing/leases.rs"]
 mod leases;
 #[path = "knowledge_processing/persistence.rs"]
 mod persistence;
+#[path = "knowledge_processing/retry.rs"]
+mod retry;
 
 struct Database(std::path::PathBuf);
 impl Database {

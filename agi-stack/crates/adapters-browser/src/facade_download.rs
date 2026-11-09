@@ -1,8 +1,8 @@
 //! Completion tracking for a single browser download.
 use super::{
-    BridgeEndpoint, BridgeNotification, CoreResult, Download, DownloadResult, Duration, Instant,
-    Interception, Owner, PathBuf, Value, broadcast, cdp, completed_file, json, next_event, oneshot,
-    tool_err, watch,
+    broadcast, cdp, completed_file, json, next_event, oneshot, tool_err, watch, BridgeEndpoint,
+    BridgeNotification, CoreResult, Download, DownloadResult, Duration, Instant, Interception,
+    Owner, PathBuf, Value,
 };
 
 pub(super) async fn download_task<E: BridgeEndpoint>(

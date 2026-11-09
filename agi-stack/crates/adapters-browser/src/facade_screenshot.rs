@@ -1,9 +1,9 @@
 //! Annotated viewport capture; annotations never modify the page DOM.
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, tool_err};
+use crate::host::{tool_err, Backend, BridgeEndpoint, BrowserToolHost};
 use agistack_core::ports::CoreResult;
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use image::{ImageFormat, Rgba};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 impl<E: BridgeEndpoint> BrowserToolHost<E> {
     pub(crate) async fn element_screenshot(

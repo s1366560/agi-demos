@@ -1,14 +1,14 @@
 //! Device management stays local in both local and cloud conversation modes.
-use super::{Owner, denials, store};
+use super::{denials, store, Owner};
 use crate::local_runtime::{AuthenticatedContext, LocalRuntimeState};
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     routing::{get, post},
+    Json, Router,
 };
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 #[derive(Deserialize)]

@@ -1,17 +1,17 @@
 //! Windows HWND discovery with MTA UIA, explicit native patterns, SendInput, and WGC.
 use crate::backend::{
-    App, Backend, NativeError, Observation, Rect, Result, Window, check_cancel, required,
+    check_cancel, required, App, Backend, NativeError, Observation, Rect, Result, Window,
 };
 use crate::{windows_input::Input, windows_uia};
 use async_trait::async_trait;
-use serde_json::{Value, json};
-use sky_cua_platform::{DesktopBackend, model::WindowTarget};
+use serde_json::{json, Value};
+use sky_cua_platform::{model::WindowTarget, DesktopBackend};
 use sky_cua_windows::WindowsDesktopBackend;
 use std::{
     path::Path,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{atomic::AtomicBool, Arc},
 };
-use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
+use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 pub struct WindowsBackend {
     native: WindowsDesktopBackend,
     mta: bool,
@@ -22,7 +22,7 @@ impl WindowsBackend {
     pub fn new() -> Self {
         let mta = unsafe {
             use windows::Win32::{
-                System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize},
+                System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED},
                 UI::HiDpi::*,
             };
             let dpi = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
@@ -386,7 +386,7 @@ impl Backend for WindowsBackend {
 }
 fn input_desktop_locked() -> Result<bool> {
     use windows::Win32::System::StationsAndDesktops::{
-        CloseDesktop, DESKTOP_READOBJECTS, GetUserObjectInformationW, OpenInputDesktop, UOI_NAME,
+        CloseDesktop, GetUserObjectInformationW, OpenInputDesktop, DESKTOP_READOBJECTS, UOI_NAME,
     };
     // SAFETY: the returned desktop handle is closed, and the UTF-16 buffer is bounded.
     unsafe {
@@ -421,11 +421,11 @@ fn input_desktop_locked() -> Result<bool> {
 pub fn private_root(path: &Path) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
     use windows::{
+        core::{w, BOOL, PWSTR},
         Win32::{
-            Foundation::{HLOCAL, LocalFree},
+            Foundation::{LocalFree, HLOCAL},
             Security::{Authorization::*, *},
         },
-        core::{BOOL, PWSTR, w},
     };
     std::fs::create_dir(path).map_err(|_| {
         NativeError::new("artifact_unavailable", "cannot create native artifact root")
@@ -478,10 +478,10 @@ pub fn private_root(path: &Path) -> Result<()> {
 
 async fn microphone_permission(request: bool) -> Result<Value> {
     use windows::{
+        core::HSTRING,
         Security::Authorization::AppCapabilityAccess::{
             AppCapability, AppCapabilityAccessStatus as Status,
         },
-        core::HSTRING,
     };
     let capability = AppCapability::Create(&HSTRING::from("microphone")).map_err(|_| {
         NativeError::new(

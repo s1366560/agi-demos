@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use zeroize::Zeroize;
 
@@ -249,7 +249,9 @@ impl AuthTicket {
 
 impl BrowserAuthBroker {
     pub(super) fn cancel_run(&self, run_id: &str) {
-        self.pending.lock().expect("browser auth requests")
+        self.pending
+            .lock()
+            .expect("browser auth requests")
             .retain(|_, pending| pending.owner.run_id != run_id);
     }
 
@@ -417,13 +419,11 @@ mod tests {
         let owner = owner();
         let mut ticket = broker.begin(owner.clone(), request()).unwrap();
         assert_eq!(broker.pending_for("other").unwrap(), json!([]));
-        assert!(
-            !broker
-                .pending_for("conversation")
-                .unwrap()
-                .to_string()
-                .contains("selector")
-        );
+        assert!(!broker
+            .pending_for("conversation")
+            .unwrap()
+            .to_string()
+            .contains("selector"));
         let mut other = owner.clone();
         other.run_revision = 2;
         let response = || AuthResponse {
@@ -469,32 +469,28 @@ mod tests {
                 Some("data:image/png;base64,test-only".into()),
             )
             .unwrap();
-        assert!(
-            !broker
-                .pending_for("conversation")
-                .unwrap()
-                .to_string()
-                .contains("base64")
-        );
+        assert!(!broker
+            .pending_for("conversation")
+            .unwrap()
+            .to_string()
+            .contains("base64"));
         assert_eq!(
             broker.pending_for_ui("conversation").unwrap()[0]["qr_image"],
             "data:image/png;base64,test-only"
         );
         live.store(false, Ordering::SeqCst);
         assert_eq!(broker.pending_for_ui("conversation").unwrap(), json!([]));
-        assert!(
-            broker
-                .respond(
-                    &ticket.id,
-                    &owner(),
-                    AuthResponse {
-                        action: "submit".into(),
-                        selected_option: None,
-                        values: BTreeMap::new()
-                    }
-                )
-                .is_err()
-        );
+        assert!(broker
+            .respond(
+                &ticket.id,
+                &owner(),
+                AuthResponse {
+                    action: "submit".into(),
+                    selected_option: None,
+                    values: BTreeMap::new()
+                }
+            )
+            .is_err());
         assert!(AuthRequest::parse(&json!({"origin":"https://example.com","fields":[],"qr_code":true,"options":[{"id":"choice","label":"Choice","selector":{"steps":[]}}]})).is_err());
     }
 }

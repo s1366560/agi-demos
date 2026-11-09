@@ -102,12 +102,9 @@ impl McpAppAutomationRegistry {
             (ExecutionAuthority::LocalRun(_), Ok(_)) => {
                 return Err(denied("mcp_app_scope_mismatch"));
             }
-            (ExecutionAuthority::CloudClaim(_), _) => self.cloud_callback_candidate(
-                state,
-                &origin.renderer_id,
-                &origin.scope,
-                authority,
-            )?,
+            (ExecutionAuthority::CloudClaim(_), _) => {
+                self.cloud_callback_candidate(state, &origin.renderer_id, &origin.scope, authority)?
+            }
         };
         if !tab.attached || tab.registration.as_deref() != Some(&origin.registration) {
             return Err(denied("mcp_app_frame_or_scope_changed"));

@@ -142,12 +142,7 @@ fn apply(
         superseded_sequences: Vec::new(),
         pending_push_sequences: Vec::new(),
     };
-    let baseline_json = serde_json::to_string(
-        &snapshot
-            .context
-            .remote,
-    )
-    .map_err(storage)?;
+    let baseline_json = serde_json::to_string(&snapshot.context.remote).map_err(storage)?;
     let rebase = |tx: &Transaction<'_>| -> KnowledgeResult<()> {
         tx.execute(
             "INSERT INTO knowledge_sync_graph_remote_versions(tenant_id, project_id, object_id, version_json)
@@ -157,7 +152,9 @@ fn apply(
         .map_err(storage)?;
         Ok(())
     };
-    let supersede = |tx: &Transaction<'_>, receipt: &mut GraphResolutionReceipt| -> KnowledgeResult<()> {
+    let supersede = |tx: &Transaction<'_>,
+                     receipt: &mut GraphResolutionReceipt|
+     -> KnowledgeResult<()> {
         for sequence in &pending {
             tx.execute(
                 "INSERT INTO knowledge_sync_graph_superseded_outbox(sequence, resolution_id) VALUES(?1, ?2)",
@@ -219,10 +216,8 @@ fn apply(
             super::graph_sync::store_object(tx, scope, &snapshot.remote, next_revision)?;
             rebase(tx)?;
             // The local version survives as a detached copy pushed as a create.
-            let copy_id = super::graph_sync::change_id_for(
-                tx,
-                &format!("graph-keep-both:{resolution_id}"),
-            )?;
+            let copy_id =
+                super::graph_sync::change_id_for(tx, &format!("graph-keep-both:{resolution_id}"))?;
             let copy = RemoteGraphVersion {
                 object_id: copy_id.clone(),
                 revision: 1,
@@ -285,8 +280,7 @@ impl SqliteKnowledgeRepository {
                 replayed: true,
             });
         }
-        let snapshot =
-            snapshot(&tx, scope, &command.object_id)?.ok_or(KnowledgeError::Conflict)?;
+        let snapshot = snapshot(&tx, scope, &command.object_id)?.ok_or(KnowledgeError::Conflict)?;
         validate_guard(&command, &snapshot)?;
         let replica = super::sync::replica(&tx)?;
         let identity = serde_json::to_vec(&json!([scope.tenant_id, scope.project_id, actor, key]))

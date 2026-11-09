@@ -1648,9 +1648,7 @@ fn environment_credential_endpoint_is_official(provider_type: &str, raw_url: Opt
     let provider_type = catalog_provider_key(provider_type);
     if provider_type == "xai" {
         if let Some(candidate) = raw_url.map(str::trim).filter(|value| !value.is_empty()) {
-            if validated_probe_base_url(candidate)
-                .is_ok_and(|url| xai_us_regional_endpoint(&url))
-            {
+            if validated_probe_base_url(candidate).is_ok_and(|url| xai_us_regional_endpoint(&url)) {
                 return true;
             }
         }
@@ -3730,11 +3728,7 @@ where
             api_key: env_nonempty(lookup, "XAI_API_KEY"),
             base_url: env_default(lookup, "XAI_BASE_URL", "https://api.x.ai/v1"),
             llm_model: env_default(lookup, "XAI_MODEL", "grok-4.7"),
-            llm_small_model: env_default(
-                lookup,
-                "XAI_SMALL_MODEL",
-                "grok-4.20-0309-non-reasoning",
-            ),
+            llm_small_model: env_default(lookup, "XAI_SMALL_MODEL", "grok-4.20-0309-non-reasoning"),
             embedding_model: None,
             reranker_model: env_raw(lookup, "XAI_RERANK_MODEL"),
         },

@@ -166,14 +166,27 @@ impl ChildTimelineObserver {
 #[async_trait]
 impl ReActObserver for ChildTimelineObserver {
     async fn on_tool_control(
-        &self, session: &str, round: u64, tool: &str, input: &str,
+        &self,
+        session: &str,
+        round: u64,
+        tool: &str,
+        input: &str,
         result: &agistack_core::ports::ToolResult,
     ) -> CoreResult<agistack_core::agent::ToolControlResolution> {
         if !self.current(session) {
             return Err(CoreError::Tool("cua_child_authority_revoked".into()));
         }
-        self.publish(session, round, tool, input, Some(&result.output_json), false, result.control_outcome);
-        computer_use_v2::local_control::wait(&self.state, &self.conversation_id, session, result).await
+        self.publish(
+            session,
+            round,
+            tool,
+            input,
+            Some(&result.output_json),
+            false,
+            result.control_outcome,
+        );
+        computer_use_v2::local_control::wait(&self.state, &self.conversation_id, session, result)
+            .await
     }
 
     async fn on_tool_call(

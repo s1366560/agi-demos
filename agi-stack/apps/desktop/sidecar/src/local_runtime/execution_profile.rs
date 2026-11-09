@@ -284,9 +284,15 @@ impl ToolHost for ProfiledToolHost {
         }
         self.inner.call(tool, input_json).await
     }
-    async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<agistack_core::ports::ToolResult> {
+    async fn call_with_content(
+        &self,
+        tool: &str,
+        input_json: &str,
+    ) -> CoreResult<agistack_core::ports::ToolResult> {
         if !self.can_dispatch(tool) {
-            return Err(CoreError::Tool(format!("tool '{tool}' is not allowed by the selected execution profile")));
+            return Err(CoreError::Tool(format!(
+                "tool '{tool}' is not allowed by the selected execution profile"
+            )));
         }
         self.inner.call_with_content(tool, input_json).await
     }

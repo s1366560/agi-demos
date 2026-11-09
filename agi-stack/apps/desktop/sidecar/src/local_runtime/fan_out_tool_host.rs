@@ -57,9 +57,15 @@ impl ToolHost for FanOutToolHost {
         }
         Err(CoreError::Tool(format!("unknown tool: {tool}")))
     }
-    async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<agistack_core::ports::ToolResult> {
+    async fn call_with_content(
+        &self,
+        tool: &str,
+        input_json: &str,
+    ) -> CoreResult<agistack_core::ports::ToolResult> {
         for host in &self.hosts {
-            if host.can_dispatch(tool) { return host.call_with_content(tool, input_json).await; }
+            if host.can_dispatch(tool) {
+                return host.call_with_content(tool, input_json).await;
+            }
         }
         Err(CoreError::Tool(format!("unknown tool: {tool}")))
     }

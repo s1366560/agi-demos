@@ -43,17 +43,16 @@ fn validate(
             return Err(KnowledgeError::InvalidInput);
         }
         let copy = context::remote(
-            receipt.get("copy_version").ok_or(KnowledgeError::InvalidInput)?,
+            receipt
+                .get("copy_version")
+                .ok_or(KnowledgeError::InvalidInput)?,
             copy_id,
         )?;
         let expected: RemoteMemoryContent =
             serde_json::from_value(record.archive.original_request["content"].clone())
                 .map_err(|_| KnowledgeError::InvalidInput)?;
         let actor: String = tx.query_row("SELECT remote_actor_id FROM knowledge_sync_links WHERE tenant_id=?1 AND project_id=?2",params![scope.tenant_id,scope.project_id],|r|r.get(0)).map_err(storage)?;
-        if copy.revision != 1
-            || copy.deleted
-            || copy.author_id != actor
-            || copy.content != expected
+        if copy.revision != 1 || copy.deleted || copy.author_id != actor || copy.content != expected
         {
             return Err(KnowledgeError::InvalidInput);
         }

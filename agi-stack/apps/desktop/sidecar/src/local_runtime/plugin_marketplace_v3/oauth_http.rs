@@ -4,7 +4,8 @@ use futures_util::StreamExt;
 use serde_json::{json, Value};
 use std::time::Duration;
 #[cfg(test)]
-pub(in crate::local_runtime) static TEST_ORIGIN_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+pub(in crate::local_runtime) static TEST_ORIGIN_LOCK: tokio::sync::Mutex<()> =
+    tokio::sync::Mutex::const_new(());
 
 pub(super) async fn client(raw: &str) -> PackageResult<(reqwest::Client, url::Url)> {
     let parsed = url::Url::parse(raw).map_err(|_| "oauth_url_invalid")?;

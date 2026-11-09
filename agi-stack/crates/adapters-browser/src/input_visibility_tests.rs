@@ -1,7 +1,7 @@
 use super::*;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use tokio::sync::{Notify, broadcast};
+use tokio::sync::{broadcast, Notify};
 
 struct Endpoint {
     hidden: bool,

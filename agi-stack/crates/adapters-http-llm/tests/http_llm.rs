@@ -555,36 +555,54 @@ struct RequestLog {
 
 #[async_trait::async_trait]
 impl agistack_core::model_request::ModelRequestLog for RequestLog {
-    async fn prepare_request(&self, protocol: &str, body: serde_json::Value) -> agistack_core::ports::CoreResult<String> {
+    async fn prepare_request(
+        &self,
+        protocol: &str,
+        body: serde_json::Value,
+    ) -> agistack_core::ports::CoreResult<String> {
         let mut requests = self.prepared.lock().unwrap();
         let id = format!("attempt-{}", requests.len());
         requests.push((id.clone(), protocol.into(), body));
         self.ready.notify_one();
         Ok(id)
     }
-    async fn settle_request(&self, id: &str, status: agistack_core::model_request::ModelRequestStatus) -> agistack_core::ports::CoreResult<()> {
+    async fn settle_request(
+        &self,
+        id: &str,
+        status: agistack_core::model_request::ModelRequestStatus,
+    ) -> agistack_core::ports::CoreResult<()> {
         self.settled.lock().unwrap().push((id.into(), status));
         Ok(())
     }
     fn cancel_request(&self, id: &str) {
-        self.settled.lock().unwrap().push((id.into(), agistack_core::model_request::ModelRequestStatus::Cancelled));
+        self.settled.lock().unwrap().push((
+            id.into(),
+            agistack_core::model_request::ModelRequestStatus::Cancelled,
+        ));
     }
 }
 
 #[tokio::test]
 async fn prepared_requests_capture_exact_wire_bodies_for_each_repair_without_credentials() {
     use agistack_adapters_http_llm::with_model_request_log;
-    let (base, wire) = mock_responses(vec![chat_body("invalid structured action"), chat_body(r#"{"kind":"finish","answer":"repaired"}"#)]).await;
+    let (base, wire) = mock_responses(vec![
+        chat_body("invalid structured action"),
+        chat_body(r#"{"kind":"finish","answer":"repaired"}"#),
+    ])
+    .await;
     let llm = HttpLlm::new(base, "wire-model").with_api_key("test-transport-secret");
     let log = Arc::new(RequestLog::default());
-    let result = with_model_request_log(log.clone(), llm.decide("original input", 2, &[], &[])).await.unwrap();
+    let result = with_model_request_log(log.clone(), llm.decide("original input", 2, &[], &[]))
+        .await
+        .unwrap();
     assert!(matches!(result, AgentAction::Finish { answer } if answer == "repaired"));
     let prepared = log.prepared.lock().unwrap();
     let requests = wire.lock().await;
     assert_eq!(prepared.len(), 2);
     for ((_, protocol, body), request) in prepared.iter().zip(requests.iter()) {
         assert_eq!(protocol, "openai.chat_completions");
-        let wire_body: serde_json::Value = serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        let wire_body: serde_json::Value =
+            serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(body, &wire_body);
         assert!(!body.to_string().contains("test-transport-secret"));
         assert!(body.get("api_key").is_none());
@@ -599,7 +617,12 @@ async fn provider_request_failures_and_cancellation_keep_the_prepared_attempt() 
     use agistack_core::model_request::ModelRequestStatus;
     let (base, _) = mock(500, "provider failed").await;
     let log = Arc::new(RequestLog::default());
-    assert!(with_model_request_log(log.clone(), HttpLlm::new(base, "m").complete("system", "input")).await.is_err());
+    assert!(with_model_request_log(
+        log.clone(),
+        HttpLlm::new(base, "m").complete("system", "input")
+    )
+    .await
+    .is_err());
     assert_eq!(log.settled.lock().unwrap()[0].1, ModelRequestStatus::Failed);
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -611,13 +634,20 @@ async fn provider_request_failures_and_cancellation_keep_the_prepared_attempt() 
     let cancellation_log = Arc::new(RequestLog::default());
     let recorder = cancellation_log.clone();
     let operation = tokio::spawn(async move {
-        with_model_request_log(recorder, HttpLlm::new(endpoint, "m").stream_complete("system", "input", |_| {})).await
+        with_model_request_log(
+            recorder,
+            HttpLlm::new(endpoint, "m").stream_complete("system", "input", |_| {}),
+        )
+        .await
     });
     cancellation_log.ready.notified().await;
     operation.abort();
     assert!(operation.await.unwrap_err().is_cancelled());
     assert_eq!(cancellation_log.prepared.lock().unwrap().len(), 1);
-    assert_eq!(cancellation_log.settled.lock().unwrap()[0].1, ModelRequestStatus::Cancelled);
+    assert_eq!(
+        cancellation_log.settled.lock().unwrap()[0].1,
+        ModelRequestStatus::Cancelled
+    );
     pending.abort();
 }
 
@@ -627,11 +657,17 @@ async fn anthropic_request_snapshot_is_the_model_body_without_transport_headers(
     let (base, wire) = mock_content_type(200, sse, "text/event-stream").await;
     let log = Arc::new(RequestLog::default());
     let llm = AnthropicLlm::new(base, "anthropic-model").with_api_key("test-private-key");
-    let answer = agistack_adapters_http_llm::with_model_request_log(log.clone(), llm.stream_complete("system", "final input", |_| {})).await.unwrap();
+    let answer = agistack_adapters_http_llm::with_model_request_log(
+        log.clone(),
+        llm.stream_complete("system", "final input", |_| {}),
+    )
+    .await
+    .unwrap();
     assert_eq!(answer, "hello");
     let recorded = log.prepared.lock().unwrap();
     let requests = wire.lock().await;
-    let body: serde_json::Value = serde_json::from_str(requests[0].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    let body: serde_json::Value =
+        serde_json::from_str(requests[0].split("\r\n\r\n").nth(1).unwrap()).unwrap();
     assert_eq!(recorded[0].1, "anthropic.messages");
     assert_eq!(recorded[0].2, body);
     assert!(!recorded[0].2.to_string().contains("test-private-key"));

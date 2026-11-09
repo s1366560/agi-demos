@@ -1,6 +1,6 @@
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, tool_err};
+use crate::host::{tool_err, Backend, BridgeEndpoint, BrowserToolHost};
 use agistack_core::ports::CoreResult;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 /// Cancellation may drop an input future between down and up. Release through
@@ -22,8 +22,11 @@ impl<E: BridgeEndpoint> InputRelease<E> {
         method: &'static str,
         params: Value,
     ) -> Self {
-        let registration = host.register_input_release(backend, tab,
-            json!({"tabId":tab,"method":method,"params":params}));
+        let registration = host.register_input_release(
+            backend,
+            tab,
+            json!({"tabId":tab,"method":method,"params":params}),
+        );
         Self {
             registration,
             endpoint: host.endpoint.clone(),
@@ -36,7 +39,9 @@ impl<E: BridgeEndpoint> InputRelease<E> {
     }
     fn disarm(&mut self) {
         self.params = None;
-        if let Some(registration) = &self.registration { registration.disarm(); }
+        if let Some(registration) = &self.registration {
+            registration.disarm();
+        }
     }
     fn set_session(&mut self, session: Option<&str>) {
         self.session = session.map(str::to_owned);
@@ -47,7 +52,9 @@ impl<E: BridgeEndpoint> InputRelease<E> {
 }
 impl<E: BridgeEndpoint> Drop for InputRelease<E> {
     fn drop(&mut self) {
-        if self.registration.is_some() { return; }
+        if self.registration.is_some() {
+            return;
+        }
         let Some(params) = self.params.take() else {
             return;
         };
@@ -61,7 +68,9 @@ impl<E: BridgeEndpoint> Drop for InputRelease<E> {
             args["sessionId"] = json!(session);
         }
         runtime.spawn(async move {
-            let _ = endpoint.request_on(&backend.wire_name(), "executeCdp", args).await;
+            let _ = endpoint
+                .request_on(&backend.wire_name(), "executeCdp", args)
+                .await;
         });
     }
 }
@@ -143,11 +152,19 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         tab: u64,
         text: &str,
     ) -> CoreResult<Value> {
-        self.with_input_visibility(backend, tab, self.facade_type_characters_prepared(backend, tab, text)).await
+        self.with_input_visibility(
+            backend,
+            tab,
+            self.facade_type_characters_prepared(backend, tab, text),
+        )
+        .await
     }
 
     async fn facade_type_characters_prepared(
-        &self, backend: Backend, tab: u64, text: &str,
+        &self,
+        backend: Backend,
+        tab: u64,
+        text: &str,
     ) -> CoreResult<Value> {
         for character in text.chars() {
             let text = character.to_string();
@@ -179,11 +196,20 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         operation: &str,
         args: &[Value],
     ) -> CoreResult<Value> {
-        self.with_input_visibility(backend, tab, self.facade_input_prepared(backend, tab, operation, args)).await
+        self.with_input_visibility(
+            backend,
+            tab,
+            self.facade_input_prepared(backend, tab, operation, args),
+        )
+        .await
     }
 
     async fn facade_input_prepared(
-        &self, backend: Backend, tab: u64, operation: &str, args: &[Value],
+        &self,
+        backend: Backend,
+        tab: u64,
+        operation: &str,
+        args: &[Value],
     ) -> CoreResult<Value> {
         let first = args.first().cloned().unwrap_or(Value::Null);
         match operation {

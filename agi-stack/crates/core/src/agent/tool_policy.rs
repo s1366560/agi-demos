@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::ports::{CoreResult, ToolHost, ToolResult};
 use super::types::{HitlRequest, MediaAttachment};
+use crate::ports::{CoreResult, ToolHost, ToolResult};
 
 /// Immutable call identity supplied by the engine, independent of plugin output.
 pub struct ToolPolicyContext<'a> {
@@ -62,7 +62,9 @@ pub trait ToolExecutionPolicy: Send + Sync {
         tools: &dyn ToolHost,
         input_json: &str,
     ) -> CoreResult<ToolResult> {
-        self.execute(context, tools, input_json).await.map(ToolResult::text)
+        self.execute(context, tools, input_json)
+            .await
+            .map(ToolResult::text)
     }
 
     async fn transform_result(

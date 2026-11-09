@@ -1,9 +1,9 @@
 //! Host-captured execution authority; the model supplies only its decision.
-use super::{Owner, hitl};
+use super::{hitl, Owner};
 use crate::local_runtime::{
-    DesktopRun, LocalConversation, LocalRuntimeState,
     knowledge_authority_v2::agent_access::PluginNativeIdentityV2,
-    local_plugin_tool_host_v2::identity::current_child,
+    local_plugin_tool_host_v2::identity::current_child, DesktopRun, LocalConversation,
+    LocalRuntimeState,
 };
 use agistack_core::{
     agent::{
@@ -81,8 +81,14 @@ impl HitlValidationPort for NativeHitlValidation {
         context: &HitlValidationContext<'_>,
         request: &HitlRequest,
     ) -> CoreResult<()> {
-        if request.decision.as_ref().is_some_and(|decision| decision.target.kind == "repl_step") {
-            let state = self.state.upgrade()
+        if request
+            .decision
+            .as_ref()
+            .is_some_and(|decision| decision.target.kind == "repl_step")
+        {
+            let state = self
+                .state
+                .upgrade()
                 .ok_or_else(|| CoreError::Tool("repl_runtime_stopped".into()))?;
             crate::local_runtime::cua_repl::permission_for_request(
                 &state.cua_repl,
@@ -91,7 +97,8 @@ impl HitlValidationPort for NativeHitlValidation {
                 Some(context.session_id),
                 request.kind,
                 request.decision.as_deref(),
-            ).map_err(CoreError::Tool)?;
+            )
+            .map_err(CoreError::Tool)?;
             return Ok(());
         }
         if !request

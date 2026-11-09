@@ -51,7 +51,8 @@ pub(super) fn accept(
         .filter(|value| value.is_object())
         .ok_or_else(invalid)?;
     let request: Value = serde_json::from_str(&request_json).map_err(storage)?;
-    if canonical_uuid(&receipt["change_id"])? != request["change_id"].as_str().ok_or_else(invalid)?
+    if canonical_uuid(&receipt["change_id"])?
+        != request["change_id"].as_str().ok_or_else(invalid)?
     {
         return Err(invalid());
     }

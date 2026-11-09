@@ -10,9 +10,11 @@ impl<E: BridgeEndpoint> BrowserRunToolHost<E> {
         let store = self.session_store.clone();
         let owner = self.owner.clone();
         let current = Arc::new(move || {
-            if owner.as_ref().is_some_and(|owner| !store
-                .session_context_is_current(owner, chrono::Utc::now().timestamp_millis())
-                .unwrap_or(false)) {
+            if owner.as_ref().is_some_and(|owner| {
+                !store
+                    .session_context_is_current(owner, chrono::Utc::now().timestamp_millis())
+                    .unwrap_or(false)
+            }) {
                 return false;
             }
             store.run(&expected.id).is_ok_and(|run| {

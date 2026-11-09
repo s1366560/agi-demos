@@ -154,19 +154,25 @@ mod tests {
         assert_eq!(output["ok"], true, "{output}");
         let descriptors = output["artifacts"].as_array().unwrap();
         assert_eq!(descriptors.len(), 3);
-        assert_eq!(output["outputs"], json!([
-            {"type":"text","text":"before"},
-            {"type":"text","text":"between"},
-            {"type":"text","text":"after"},
-        ]));
-        assert_eq!(output["output_order"], json!([
-            {"source":"text","index":0},
-            {"source":"media","index":0},
-            {"source":"text","index":1},
-            {"source":"media","index":1},
-            {"source":"media","index":2},
-            {"source":"text","index":2},
-        ]));
+        assert_eq!(
+            output["outputs"],
+            json!([
+                {"type":"text","text":"before"},
+                {"type":"text","text":"between"},
+                {"type":"text","text":"after"},
+            ])
+        );
+        assert_eq!(
+            output["output_order"],
+            json!([
+                {"source":"text","index":0},
+                {"source":"media","index":0},
+                {"source":"text","index":1},
+                {"source":"media","index":1},
+                {"source":"media","index":2},
+                {"source":"text","index":2},
+            ])
+        );
         let image_id = descriptors[0]["artifact_id"].as_str().unwrap();
         let audio_id = descriptors[1]["artifact_id"].as_str().unwrap();
         assert_eq!(descriptors[0]["kind"], "image");

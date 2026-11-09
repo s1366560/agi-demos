@@ -137,27 +137,24 @@ async fn real_stdio_collections_follow_opaque_cursors_and_preserve_prompt_conten
         prompt["messages"][1]["content"]["resource"]["uri"],
         "fixture://source"
     );
-    assert!(
-        f.supervisor
-            .get_prompt(&f.scope, &f.server_id, "summarize", json!({"text":42}))
-            .await
-            .is_err()
-    );
-    assert!(
-        f.supervisor
-            .resolve_tool(&f.scope, &f.server_id, "unknown")
-            .is_err()
-    );
+    assert!(f
+        .supervisor
+        .get_prompt(&f.scope, &f.server_id, "summarize", json!({"text":42}))
+        .await
+        .is_err());
+    assert!(f
+        .supervisor
+        .resolve_tool(&f.scope, &f.server_id, "unknown")
+        .is_err());
     let other = McpScope {
         tenant_id: f.scope.tenant_id.clone(),
         project_id: "other-project".into(),
     };
-    assert!(
-        f.supervisor
-            .list_prompts(&other, &f.server_id)
-            .await
-            .is_err()
-    );
+    assert!(f
+        .supervisor
+        .list_prompts(&other, &f.server_id)
+        .await
+        .is_err());
 }
 
 #[tokio::test]
@@ -177,14 +174,13 @@ async fn repeated_or_malformed_cursor_never_publishes_a_partial_catalog() {
                 "local_mcp_malformed_response"
             }
         );
-        assert!(
-            f.supervisor
-                .server(&f.scope, &f.server_id)
-                .unwrap()
-                .unwrap()
-                .discovered_tools
-                .is_empty()
-        );
+        assert!(f
+            .supervisor
+            .server(&f.scope, &f.server_id)
+            .unwrap()
+            .unwrap()
+            .discovered_tools
+            .is_empty());
     }
 }
 

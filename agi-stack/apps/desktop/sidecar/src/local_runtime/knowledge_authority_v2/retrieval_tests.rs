@@ -4,10 +4,10 @@ use agistack_core::knowledge::{
     retrieval::*,
 };
 
-#[path = "retrieval_lifecycle_tests.rs"]
-mod lifecycle;
 #[path = "agent_access_tests.rs"]
 mod agent_access_tests;
+#[path = "retrieval_lifecycle_tests.rs"]
+mod lifecycle;
 #[path = "retrieval_rpc_tests.rs"]
 mod rpc;
 

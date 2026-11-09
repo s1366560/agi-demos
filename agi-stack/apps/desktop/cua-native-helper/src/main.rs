@@ -1,7 +1,7 @@
 mod app_icon;
-mod audio_recordings;
 #[cfg(any(target_os = "windows", test))]
 mod audio_mix;
+mod audio_recordings;
 mod backend;
 #[cfg(target_os = "linux")]
 mod linux;

@@ -2,9 +2,9 @@
 use std::time::Duration;
 
 use agistack_core::ports::CoreResult;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, tool_err};
+use crate::host::{tool_err, Backend, BridgeEndpoint, BrowserToolHost};
 
 impl<E: BridgeEndpoint> BrowserToolHost<E> {
     pub(crate) async fn facade_wait(

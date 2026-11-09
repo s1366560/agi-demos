@@ -191,13 +191,11 @@ fn latest_issued_terminal_is_displayed_after_execution_lease_is_revoked() {
     assert!(leases.session_status("session-b", "run-a").is_none());
     assert!(leases.session_status("session-a", "run-b").is_none());
     assert!(leases.status().unwrap().get("revoked_binding").is_none());
-    assert!(
-        !leases
-            .status()
-            .unwrap()
-            .to_string()
-            .contains("generation-a")
-    );
+    assert!(!leases
+        .status()
+        .unwrap()
+        .to_string()
+        .contains("generation-a"));
 
     terminal["phase"] = json!("idle");
     terminal["state"] = json!("suppressed");
@@ -615,32 +613,26 @@ fn snapshot_binds_locked_status_only_to_the_matching_owner_session_and_run() {
         "generation-a"
     );
     assert!(terminal["locked_use"].get("generation").is_none());
-    assert!(
-        terminal_snapshot["locked_use"]
-            .get("revoked_binding")
-            .is_none()
-    );
+    assert!(terminal_snapshot["locked_use"]
+        .get("revoked_binding")
+        .is_none());
     let other_snapshot = api::snapshot(&state, &other_owner).unwrap();
     assert!(other_snapshot["sessions"][0].get("locked_use").is_none());
 
     selected.stopped.store(true, Ordering::SeqCst);
     let stopped = api::snapshot(&state, &owner).unwrap();
-    assert!(
-        stopped["sessions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|s| s.get("locked_use").is_none())
-    );
+    assert!(stopped["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|s| s.get("locked_use").is_none()));
     leases.record_status(&native_status("other-owner", "run-c", "generation-c"));
     let current = api::snapshot(&state, &owner).unwrap();
-    assert!(
-        current["sessions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|s| s.get("locked_use").is_none())
-    );
+    assert!(current["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|s| s.get("locked_use").is_none()));
     let other_snapshot = api::snapshot(&state, &other_owner).unwrap();
     assert_eq!(
         other_snapshot["sessions"][0]["locked_use"]["phase"],
