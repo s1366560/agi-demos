@@ -1,4 +1,5 @@
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { act } from '@testing-library/react';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { NewMemory } from '../../../pages/project/NewMemory';
 import { fireEvent, screen, render } from '../../utils';
@@ -10,6 +11,14 @@ vi.mock('../../../services/api', () => ({
 }));
 
 describe('NewMemory', () => {
+  afterEach(async () => {
+    // React 19 commits passive effects on a later macrotask that reads
+    // window.event. Flush it before happy-dom deletes window.
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+  });
+
   beforeEach(() => {
     window.localStorage.clear();
     vi.clearAllMocks();

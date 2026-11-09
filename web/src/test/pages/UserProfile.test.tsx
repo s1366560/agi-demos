@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { UserProfile } from '../../pages/UserProfile';
 import { authAPI } from '../../services/api';
@@ -46,6 +46,14 @@ const baseUser: User = {
 
 describe('UserProfile', () => {
   const setUser = vi.fn();
+
+  afterEach(async () => {
+    // React 19 commits passive effects on a later macrotask that reads
+    // window.event. Flush it before happy-dom deletes window.
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
