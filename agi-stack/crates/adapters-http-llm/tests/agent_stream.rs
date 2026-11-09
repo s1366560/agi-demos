@@ -71,7 +71,7 @@ async fn streamed_malformed_answer_is_not_repaired_or_concatenated() {
     let server = tokio::spawn(async move {
         let (mut socket, _) = listener.accept().await.unwrap();
         let mut request = [0; 8192];
-        socket.read(&mut request).await.unwrap();
+        let _amount = socket.read(&mut request).await.unwrap();
         let body = format!(
             "{}data: [DONE]\n\n",
             sse(r#"{"kind":"finish","answer":"partial"#)
