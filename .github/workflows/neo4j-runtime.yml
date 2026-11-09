@@ -63,6 +63,11 @@ jobs:
       LMSTUDIO_SMALL_MODEL: memstack-e2e
       LMSTUDIO_EMBEDDING_MODEL: memstack-e2e
       LMSTUDIO_BASE_URL: http://localhost:8010/v1
+      WORKSPACE_CORE_BASE_URL: http://127.0.0.1:4321
+      WORKSPACE_CORE_SERVICE_TOKEN: neo4j-workspace-core
+      WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN: neo4j-provider-webhook
+      WORKSPACE_CORE_PROVIDER_EVENT_TOKEN: neo4j-provider-event
+      WORKSPACE_CORE_AGENT_REGISTRY_TOKEN: neo4j-agent-registry
       OPENAI_FIXTURE_BASE: http://localhost:8010
       EMBEDDING_DIMENSION: 1024
       E2E_EMBEDDING_DIMENSIONS: 1024
@@ -155,6 +160,9 @@ jobs:
           nohup uv run uvicorn scripts.fake_openai_server:app \
             --host 127.0.0.1 --port 8010 > neo4j-runtime-logs/fake-openai.log 2>&1 &
           echo $! > neo4j-runtime-logs/fake-openai.pid
+          nohup uv run python scripts/e2e_fake_workspace_core.py \
+            > neo4j-runtime-logs/fake-workspace-core.log 2>&1 &
+          echo $! > neo4j-runtime-logs/fake-workspace-core.pid
           nohup uv run uvicorn src.infrastructure.adapters.primary.web.main:app \
             --host 127.0.0.1 --port 8000 > neo4j-runtime-logs/api.log 2>&1 &
           echo $! > neo4j-runtime-logs/api.pid
