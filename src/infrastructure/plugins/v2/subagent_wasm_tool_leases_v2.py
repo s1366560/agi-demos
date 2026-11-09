@@ -11,8 +11,8 @@ from collections.abc import Sequence
 
 from src.infrastructure.agent.processor import ToolDefinition
 
+from . import boundary
 from .agent_operation_tool_contributions import _OperationToolAdapterV2
-from .boundary import current_operation_context_v2
 from .runtime import RuntimeV2Error
 from .tool_set import TOOL_SET_CATALOG_SERVICE_V2, ToolSetContributionCatalogProtocolV2
 from .wasm_tool_runtime import _WasmOperationToolV2
@@ -31,7 +31,7 @@ async def rebind_inherited_wasm_tool_leases_v2(
             result.append(definition)
             continue
         captured = adapter.definition._tool_instance
-        operation = current_operation_context_v2()
+        operation = boundary.current_operation_context_v2()
         if operation is captured.operation:
             result.append(definition)
             continue
