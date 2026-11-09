@@ -143,6 +143,9 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
 
+      - name: Install pinned Python
+        run: uv python install
+
       - name: Install Python dependencies
         run: uv sync --extra dev --frozen
 
