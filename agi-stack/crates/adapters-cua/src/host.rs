@@ -253,7 +253,7 @@ impl CuaToolHost {
                     image_size = Some(dimensions);
                     media.push(MediaAttachment {
                         artifact_path: path.to_string_lossy().into_owned(),
-                        mime_type: mime.into(),
+                        mime_type: mime,
                     });
                 }
             }

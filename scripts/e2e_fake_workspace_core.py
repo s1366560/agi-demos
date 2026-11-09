@@ -34,14 +34,36 @@ _BODY = _payload()
 
 
 class _Handler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:
-        capability = self.path.startswith("/internal/v1/capabilities/workspace-public-api")
-        body = _BODY if capability else b"{}"
+    def _read_body(self) -> None:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length > 0:
+            _ = self.rfile.read(length)
+
+    def _send(self, body: bytes) -> None:
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_GET(self) -> None:
+        capability = self.path.startswith("/internal/v1/capabilities/workspace-public-api")
+        self._send(_BODY if capability else b"{}")
+
+    def do_POST(self) -> None:
+        self._read_body()
+        self._send(b"{}")
+
+    def do_PUT(self) -> None:
+        self._read_body()
+        self._send(b"{}")
+
+    def do_PATCH(self) -> None:
+        self._read_body()
+        self._send(b"{}")
+
+    def do_DELETE(self) -> None:
+        self._send(b"{}")
 
     def log_message(self, format: str, *args: object) -> None:
         return

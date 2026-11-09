@@ -713,7 +713,13 @@ def mock_redis_client():
 
 
 @pytest.fixture
-def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_engine):
+def test_app(
+    mock_neo4j_client,
+    mock_graph_service,
+    test_engine,
+    mock_workflow_engine,
+    monkeypatch: pytest.MonkeyPatch,
+):
     """Create a test FastAPI application."""
 
     from src.configuration.di_container import DIContainer
@@ -723,6 +729,9 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
         get_graph_service,
         get_graph_store,
         get_neo4j_client,
+    )
+    from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
+        get_current_user_from_header_or_query,
     )
     from src.infrastructure.adapters.primary.web.main import create_app
     from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
@@ -808,6 +817,16 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
     app.dependency_overrides[get_graph_service] = override_get_graph_service
     app.dependency_overrides[get_graph_store] = override_get_graph_service
     app.dependency_overrides[get_current_user] = override_get_current_user
+    # Feature-gated routes authenticate through the header-or-query dependency.
+    app.dependency_overrides[get_current_user_from_header_or_query] = override_get_current_user
+
+    async def admit_without_published_scope(**_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.dependencies.feature_operation_endpoint_v2.admit_feature_endpoint_v2",
+        admit_without_published_scope,
+    )
     app.dependency_overrides[workflow_engine_authority_dependency_v2] = lambda: mock_workflow_engine
 
     return app

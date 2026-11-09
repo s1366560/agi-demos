@@ -99,7 +99,7 @@ wasm-web: ## Web:wasm-bindgen 浏览器包 + node 冒烟(core-as-guest,~124 KB)
 desktop: desktop-check desktop-bundle desktop-bundle-smoke ## 桌面:构建 Electron 安装包并验证 sidecar
 	@echo "==> 桌面可安装客户端构建完成:$(DESKTOP_APP_DIR)/release/"
 
-desktop-check: desktop-deps ## 桌面:Rust sidecar 与 Electron/renderer 测试
+desktop-check: desktop-deps desktop-cua-repl ## 桌面:Rust sidecar 与 Electron/renderer 测试
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
 	$(CARGO) build -p agistack-desktop-sidecar
 	$(CARGO) test -p agistack-desktop-sidecar

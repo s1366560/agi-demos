@@ -333,6 +333,8 @@ class WasmToolHost:
             timer.start()
             instance = self._wasmtime.Instance(store, self._module, [])
             memory = instance.exports(store)["memory"]
+            if not isinstance(memory, self._wasmtime.Memory):
+                raise WasmHostError("invoke export requires a linear memory")
             memory.write(store, encoded, input_offset)
             produced = cast(Callable[[object, int], object], instance.exports(store)["invoke"])(
                 store, len(encoded)

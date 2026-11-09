@@ -162,6 +162,10 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
 
+      - name: Install Python test dependencies
+        working-directory: .
+        run: uv sync --extra dev --frozen
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
