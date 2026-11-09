@@ -6,14 +6,20 @@ from typing import Any
 
 from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
+    PlatformPluginGovernanceRepository,
+)
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.marketplace_governance_v2 import (
     CatalogProjectionRowV2,
     MarketplaceReviewQueueV2,
     project_catalog_v2,
+    projection_row_from_package_v2,
     update_available_v2,
 )
 
@@ -46,9 +52,12 @@ def review_queue_v2(request: Request) -> MarketplaceReviewQueueV2:
     return queue
 
 
-def _rows(request: Request) -> tuple[CatalogProjectionRowV2, ...]:
-    raw = getattr(request.app.state, "marketplace_projection_rows_v2", ())
-    return tuple(raw)
+async def _rows(request: Request, db: AsyncSession) -> tuple[CatalogProjectionRowV2, ...]:
+    raw = getattr(request.app.state, "marketplace_projection_rows_v2", None)
+    if raw:
+        return tuple(raw)
+    packages = await PlatformPluginGovernanceRepository(db).list_packages(include_revoked=True)
+    return tuple(projection_row_from_package_v2(package) for package in packages)
 
 
 async def marketplace_projection_v2(
@@ -56,8 +65,9 @@ async def marketplace_projection_v2(
     q: str = "",
     permission: str | None = None,
     _current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    rows = project_catalog_v2(_rows(request), query=q, permission=permission)
+    rows = project_catalog_v2(await _rows(request, db), query=q, permission=permission)
     return {
         "items": [
             {"plugin_id": row.plugin_id, "version": row.version, "permissions": list(row.permissions)}
@@ -70,9 +80,10 @@ async def marketplace_updates_v2(
     body: UpdateQueryV2,
     request: Request,
     _current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     installed = {item.plugin_id: item.version for item in body.installed}
-    return {"updates": list(update_available_v2(installed, _rows(request)))}
+    return {"updates": list(update_available_v2(installed, await _rows(request, db)))}
 
 
 async def submit_marketplace_review_v2(

@@ -68,6 +68,29 @@ class MarketplaceReviewQueueV2:
         return updated
 
 
+def projection_row_from_package_v2(package: object) -> CatalogProjectionRowV2:
+    """Read one governance row without trusting a caller-supplied scan flag."""
+    plugin_id = str(getattr(package, "plugin_id", ""))
+    version = str(getattr(package, "version", ""))
+    revoked = bool(getattr(package, "revoked", False))
+    manifest = getattr(package, "manifest", {})
+    permissions: list[str] = []
+    manifests = manifest.get("manifests", []) if isinstance(manifest, dict) else []
+    if isinstance(manifests, list):
+        for item in manifests:
+            if not isinstance(item, dict):
+                continue
+            declared = item.get("permissions", [])
+            if isinstance(declared, list):
+                permissions.extend(value for value in declared if isinstance(value, str))
+    return CatalogProjectionRowV2(
+        plugin_id=plugin_id,
+        version=version,
+        permissions=tuple(dict.fromkeys(permissions)),
+        revoked=revoked,
+    )
+
+
 def project_catalog_v2(
     rows: tuple[CatalogProjectionRowV2, ...] | list[CatalogProjectionRowV2],
     *,
