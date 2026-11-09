@@ -93,3 +93,111 @@ def assert_supported_schema_v2(record: NamespaceRecordV2) -> None:
 
 def _identity(key: NamespaceKeyV2) -> tuple[str, str, str, str]:
     return (key.plugin_id, key.tenant_id, key.project_id, key.item_key)
+
+
+class SqlPluginNamespaceStoreV2:
+    """SQL store. The session is the host's; plugins never see it."""
+
+    def __init__(self, session: object) -> None:
+        self._session = session
+
+    def get(self, key: NamespaceKeyV2) -> NamespaceRecordV2 | None:
+        from sqlalchemy import select
+
+        from src.infrastructure.adapters.secondary.persistence.platform_plugin_namespace_model_v2 import (
+            PlatformPluginNamespaceRecordModelV2,
+        )
+
+        row = self._session.scalar(  # type: ignore[attr-defined]
+            select(PlatformPluginNamespaceRecordModelV2).where(
+                PlatformPluginNamespaceRecordModelV2.plugin_id == key.plugin_id,
+                PlatformPluginNamespaceRecordModelV2.tenant_id == key.tenant_id,
+                PlatformPluginNamespaceRecordModelV2.project_id == key.project_id,
+                PlatformPluginNamespaceRecordModelV2.item_key == key.item_key,
+            )
+        )
+        if row is None:
+            return None
+        return NamespaceRecordV2(schema_version=row.schema_version, document=dict(row.document))
+
+    def put(self, key: NamespaceKeyV2, record: NamespaceRecordV2) -> None:
+        from sqlalchemy import select
+
+        from src.infrastructure.adapters.secondary.persistence.platform_plugin_namespace_model_v2 import (
+            PlatformPluginNamespaceRecordModelV2,
+        )
+
+        row = self._session.scalar(  # type: ignore[attr-defined]
+            select(PlatformPluginNamespaceRecordModelV2).where(
+                PlatformPluginNamespaceRecordModelV2.plugin_id == key.plugin_id,
+                PlatformPluginNamespaceRecordModelV2.tenant_id == key.tenant_id,
+                PlatformPluginNamespaceRecordModelV2.project_id == key.project_id,
+                PlatformPluginNamespaceRecordModelV2.item_key == key.item_key,
+            )
+        )
+        if row is None:
+            self._session.add(  # type: ignore[attr-defined]
+                PlatformPluginNamespaceRecordModelV2(
+                    plugin_id=key.plugin_id,
+                    tenant_id=key.tenant_id,
+                    project_id=key.project_id,
+                    item_key=key.item_key,
+                    schema_version=record.schema_version,
+                    document=dict(record.document),
+                )
+            )
+        else:
+            row.schema_version = record.schema_version
+            row.document = dict(record.document)
+        self._session.flush()  # type: ignore[attr-defined]
+
+    def delete(self, key: NamespaceKeyV2) -> None:
+        found = self.get(key)
+        if found is None:
+            return
+        from sqlalchemy import delete
+
+        from src.infrastructure.adapters.secondary.persistence.platform_plugin_namespace_model_v2 import (
+            PlatformPluginNamespaceRecordModelV2,
+        )
+
+        self._session.execute(  # type: ignore[attr-defined]
+            delete(PlatformPluginNamespaceRecordModelV2).where(
+                PlatformPluginNamespaceRecordModelV2.plugin_id == key.plugin_id,
+                PlatformPluginNamespaceRecordModelV2.tenant_id == key.tenant_id,
+                PlatformPluginNamespaceRecordModelV2.project_id == key.project_id,
+                PlatformPluginNamespaceRecordModelV2.item_key == key.item_key,
+            )
+        )
+        self._session.flush()  # type: ignore[attr-defined]
+
+    def list_keys(self, *, plugin_id: str, tenant_id: str, project_id: str) -> tuple[str, ...]:
+        from sqlalchemy import select
+
+        from src.infrastructure.adapters.secondary.persistence.platform_plugin_namespace_model_v2 import (
+            PlatformPluginNamespaceRecordModelV2,
+        )
+
+        rows = self._session.scalars(  # type: ignore[attr-defined]
+            select(PlatformPluginNamespaceRecordModelV2.item_key)
+            .where(
+                PlatformPluginNamespaceRecordModelV2.plugin_id == plugin_id,
+                PlatformPluginNamespaceRecordModelV2.tenant_id == tenant_id,
+                PlatformPluginNamespaceRecordModelV2.project_id == project_id,
+            )
+            .order_by(PlatformPluginNamespaceRecordModelV2.item_key)
+        )
+        return tuple(rows)
+
+    def purge(self, *, plugin_id: str, tenant_id: str, project_id: str) -> int:
+        keys = self.list_keys(plugin_id=plugin_id, tenant_id=tenant_id, project_id=project_id)
+        for item_key in keys:
+            self.delete(
+                NamespaceKeyV2(
+                    plugin_id=plugin_id,
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    item_key=item_key,
+                )
+            )
+        return len(keys)
