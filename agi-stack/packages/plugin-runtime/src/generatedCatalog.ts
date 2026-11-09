@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:e8147dfc93cc57702cc647f33ce323944e62a11958b6f4b5ba57df68ce',
-  'b6e42a","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:6a9d4eede27ddfd0dbe5b33f853cdeee53aee38f690f5a9598a606f3e0',
+  'ab6c6c","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -378,8 +378,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '168271e9df16c441a7f1d53498ab4b87f8d04fa3e0ef9f6","entrypoint":"src.infrastructure.pl',
   'ugins.v2.agent_skill_mcp_service:_apply_skill_mcp_manager_v2","module_ref":"builtin:',
   '//memstack/agent/skill-mcp-manager","plugin_id":"memstack-runtime-kernel","plugin_ve',
-  'rsion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:ba9ea8cffab65c2c129d',
-  'ddb99d4558621ca94904df564ef2c5d9fe0d19505aac","artifact_source":"repo+python://src/i',
+  'rsion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:7a4e7c38def23c989e1b',
+  'ee0029f5c8778bb434dccacc73dfaa8b555b952d5a8a","artifact_source":"repo+python://src/i',
   'nfrastructure/plugins/v2/darwinian_evolver_capability.py","contract":{"config_schema',
   '":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":f',
   'alse,"properties":{"cache_dir":{"minLength":1,"type":"string"},"default_concurrency"',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:e8147dfc93cc57702cc647f33ce323944e62a11958b6f4b5ba57df68ceb6e42a' as const;
+  'sha256:6a9d4eede27ddfd0dbe5b33f853cdeee53aee38f690f5a9598a606f3e0ab6c6c' as const;

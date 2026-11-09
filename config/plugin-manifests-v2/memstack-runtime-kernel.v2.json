@@ -13560,7 +13560,7 @@
       },
       "contract_digest": "sha256:a6b2e5e45be045d1d226d87fe1b7e834155c171974b28794dbac778dcc1bc6fb",
       "artifact": {
-        "digest": "sha256:ba9ea8cffab65c2c129dddb99d4558621ca94904df564ef2c5d9fe0d19505aac",
+        "digest": "sha256:7a4e7c38def23c989e1bee0029f5c8778bb434dccacc73dfaa8b555b952d5a8a",
         "source": "repo+python://src/infrastructure/plugins/v2/darwinian_evolver_capability.py"
       }
     },
