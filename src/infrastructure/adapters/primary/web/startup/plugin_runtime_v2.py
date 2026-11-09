@@ -157,7 +157,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913, PLR0915
             )
             if not isinstance(route_builder, RouteTableBuilderV2):
                 raise TypeError("plugin runtime v2 staged an invalid route table builder")
-            contributed_routes = route_builder.freeze().definitions
+            contributed_routes = route_builder.seal()
             graph = build_builtin_route_graph_v2(
                 workspace_core_settings=workspace_core_settings,
                 route_definitions=contributed_routes,

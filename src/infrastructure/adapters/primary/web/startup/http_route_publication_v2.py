@@ -257,7 +257,7 @@ class HttpRoutePublicationCoordinatorV2:
             )
             if not isinstance(builder, RouteTableBuilderV2):
                 raise TypeError("plugin runtime v2 staged an invalid route table builder")
-            contributed_routes = builder.freeze().definitions
+            contributed_routes = builder.seal()
             graph = build_builtin_route_graph_v2(
                 workspace_core_settings=self._workspace_core_settings,
                 route_definitions=contributed_routes,

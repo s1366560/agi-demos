@@ -153,13 +153,19 @@ class RouteTableBuilderV2:
     def __init__(self) -> None:
         self._definitions: list[RouteContributionV2] = []
         self._frozen: RouteTableV2 | None = None
+        self._sealed = False
 
     @property
     def definitions(self) -> tuple[RouteContributionV2, ...]:
         return tuple(self._definitions)
 
+    def seal(self) -> tuple[RouteContributionV2, ...]:
+        """Close contributions without compiling a throwaway FastAPI graph."""
+        self._sealed = True
+        return tuple(self._definitions)
+
     def contribute(self, definition: RouteContributionV2) -> Callable[[], Awaitable[None]]:
-        if self._frozen is not None:
+        if self._sealed or self._frozen is not None:
             raise RuntimeV2Error(
                 "route_table_frozen",
                 "route contributions are closed after the generation table is frozen",

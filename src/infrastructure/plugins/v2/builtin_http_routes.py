@@ -99,6 +99,35 @@ class BuiltinRouteGraphV2:
     route_signatures: tuple[tuple[str, str, tuple[str, ...]], ...]
 
 
+# Identical contribution identities compile the same private graph. Rebuilding
+# FastAPI routes and OpenAPI for every generation was the multi-second cost
+# behind each startup publication test.
+_ROUTE_GRAPH_CACHE: dict[tuple[object, ...], BuiltinRouteGraphV2] = {}
+
+
+def _route_graph_cache_key(
+    route_definitions: Sequence[RouteContributionV2],
+    required_v2_row_ids: Collection[str],
+    dependency_overrides: Mapping[Callable[..., Any], Callable[..., Any]] | None,
+) -> tuple[object, ...] | None:
+    if dependency_overrides:
+        return None
+    return (
+        tuple(sorted(required_v2_row_ids)),
+        tuple(
+            (
+                definition.owner_entry_id,
+                definition.path,
+                definition.methods,
+                definition.name,
+                definition.replaces_builtin_row_id,
+                f"{definition.endpoint.__module__}.{getattr(definition.endpoint, '__qualname__', '')}",
+            )
+            for definition in route_definitions
+        ),
+    )
+
+
 def build_builtin_route_graph_v2(
     *,
     workspace_core_settings: object,
@@ -108,6 +137,11 @@ def build_builtin_route_graph_v2(
 ) -> BuiltinRouteGraphV2:
     """Build one private graph exclusively from the generation's V2 contributions."""
     _ = workspace_core_settings
+    cache_key = _route_graph_cache_key(route_definitions, required_v2_row_ids, dependency_overrides)
+    if cache_key is not None:
+        cached = _ROUTE_GRAPH_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
     private_app = FastAPI(
         docs_url=None,
         redoc_url=None,
@@ -126,7 +160,7 @@ def build_builtin_route_graph_v2(
     ordered_definitions = _definitions_before_root_catch_all_v2(definitions)
     install_route_definitions_v2(private_app, ordered_definitions)
     mounted = _ordered_builtin_row_ids_v2(ordered_definitions)
-    return BuiltinRouteGraphV2(
+    graph = BuiltinRouteGraphV2(
         table=RouteTableV2.from_fastapi_graph(
             private_app,
             definitions=ordered_definitions,
@@ -136,6 +170,9 @@ def build_builtin_route_graph_v2(
         v2_owned_row_ids=mounted,
         route_signatures=route_signatures_v2(private_app.router.routes),
     )
+    if cache_key is not None:
+        _ROUTE_GRAPH_CACHE[cache_key] = graph
+    return graph
 
 
 def _builtin_row_owners_v2(
@@ -165,22 +202,24 @@ def _definitions_before_root_catch_all_v2(
     catch_all = tuple(
         definition for definition in definitions if definition.path == _ROOT_PREVIEW_CATCH_ALL
     )
-    ordered: list[RouteContributionV2] = []
-    for definition in regular:
-        _, _, parameters = compile_path(definition.path)
+    compiled = tuple((definition, compile_path(definition.path)) for definition in regular)
+    ordered: list[tuple[RouteContributionV2, tuple[Any, str, dict[str, Any]]]] = []
+    for definition, compiled_path in compiled:
+        _pattern, _format, parameters = compiled_path
         insertion = len(ordered)
         if not parameters:
-            for index, previous in enumerate(ordered):
-                pattern, _, previous_parameters = compile_path(previous.path)
+            methods = set(definition.methods)
+            for index, (previous, previous_path) in enumerate(ordered):
+                previous_pattern, _previous_format, previous_parameters = previous_path
                 if (
                     previous_parameters
-                    and set(previous.methods).intersection(definition.methods)
-                    and pattern.fullmatch(definition.path)
+                    and methods.intersection(previous.methods)
+                    and previous_pattern.fullmatch(definition.path)
                 ):
                     insertion = index
                     break
-        ordered.insert(insertion, definition)
-    return (*ordered, *catch_all)
+        ordered.insert(insertion, (definition, compiled_path))
+    return (*(item for item, _compiled in ordered), *catch_all)
 
 
 def _ordered_builtin_row_ids_v2(
