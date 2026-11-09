@@ -86,5 +86,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Keep the promoted administrator; revocation is a separate explicit migration."""
-    return
+    """A later revocation needs an explicit authorization decision of its own."""
+    raise RuntimeError(
+        "Administrator promotion is forward-only; use an explicitly scoped follow-up migration "
+        "to revoke access without demoting an administrator who was already privileged"
+    )

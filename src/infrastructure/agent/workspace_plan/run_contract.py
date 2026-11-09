@@ -147,7 +147,7 @@ class WorkspaceRunContract:
             ("code_root", normalized_code_root),
             ("worktree_path", normalized_worktree_path),
         ):
-            if value == workspace_root:
+            if _filesystem_absolute_path(value) == _filesystem_absolute_path(workspace_root):
                 return WorkspacePathValidation(
                     allowed=False,
                     reason=f"{label} cannot equal workspace_root",
@@ -286,6 +286,12 @@ def _normalize_absolute_path(value: object) -> str | None:
 
 
 def _canonical_absolute_path(path: str) -> str:
+    """Keep the configured path. Do not follow host symlinks such as /workspace."""
+    return posixpath.normpath(path)
+
+
+def _filesystem_absolute_path(path: str) -> str:
+    """Resolve a path for containment checks so a symlink cannot escape the root."""
     try:
         return Path(path).expanduser().resolve(strict=False).as_posix()
     except (OSError, RuntimeError, ValueError):
@@ -294,7 +300,9 @@ def _canonical_absolute_path(path: str) -> str:
 
 def _is_within_root(path: str, root: str) -> bool:
     try:
-        return posixpath.commonpath([root, path]) == root
+        return posixpath.commonpath(
+            [_filesystem_absolute_path(root), _filesystem_absolute_path(path)]
+        ) == _filesystem_absolute_path(root)
     except ValueError:
         return False
 

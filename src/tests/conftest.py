@@ -1050,6 +1050,33 @@ def test_sandbox_id() -> str:
     return "test-sandbox-12345"
 
 
+def _compile_gettext_catalogs() -> None:
+    """Compile gitignored .mo catalogs so locale tests see the .po translations."""
+    from pathlib import Path
+
+    locales = Path(__file__).resolve().parents[1] / "infrastructure" / "i18n" / "locales"
+    if not locales.is_dir():
+        return
+    from babel.messages.mofile import write_mo
+    from babel.messages.pofile import read_po
+
+    for po_path in locales.glob("*/LC_MESSAGES/messages.po"):
+        mo_path = po_path.with_suffix(".mo")
+        if mo_path.is_file() and mo_path.stat().st_mtime >= po_path.stat().st_mtime:
+            continue
+        with po_path.open("rb") as source, mo_path.open("wb") as destination:
+            write_mo(destination, read_po(source))
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Build message catalogs before tests read them."""
+    del config
+    _compile_gettext_catalogs()
+    from src.infrastructure.i18n.translator import clear_translation_cache
+
+    clear_translation_cache()
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> object:
     """Bound one test when CI sets PYTEST_TEST_TIMEOUT. Local runs stay unbounded."""

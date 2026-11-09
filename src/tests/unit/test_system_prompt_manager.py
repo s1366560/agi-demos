@@ -609,9 +609,10 @@ class TestSystemPromptManager:
         # Act
         prompt = await manager.build_system_prompt(context)
 
-        # Assert - subagent section should be completely absent
+        # Assert - the subagent catalog is absent. Architecture text may still
+        # mention the word SubAgent outside that section.
         assert "planner" not in prompt
-        assert "SubAgent" not in prompt
+        assert "### Subagents" not in prompt
 
     async def test_forced_skill_adds_skill_reminder_at_end(self, manager, context):
         """When forced skill is active, a <skill-reminder> block appears at the end of the prompt."""

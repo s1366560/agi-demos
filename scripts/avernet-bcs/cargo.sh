@@ -26,7 +26,10 @@ readonly RUSTUP_BIN="$(command -v rustup || true)"
 # During that one-time initialization rustup must be able to update the proxy
 # binaries beside the rustup executable. Keep the BCS crate cache isolated for
 # normal Cargo commands, but retain the existing proxy home for installation.
-readonly RUSTUP_PROXY_CARGO_HOME="${AVERNET_BCS_RUSTUP_PROXY_CARGO_HOME:-${CARGO_HOME:-$(cd "$(dirname "${RUSTUP_BIN}")/.." && pwd)}}"
+# The proxy home is the cargo directory that owns the rustup binary. An
+# unrelated CARGO_HOME (for example a system toolchain) cannot update those
+# proxy binaries.
+readonly RUSTUP_PROXY_CARGO_HOME="${AVERNET_BCS_RUSTUP_PROXY_CARGO_HOME:-$(cd "$(dirname "${RUSTUP_BIN}")/.." && pwd)}"
 
 export RUSTUP_HOME="${AVERNET_BCS_RUSTUP_HOME:-${TOOL_ROOT}/rustup}"
 export CARGO_HOME="${AVERNET_BCS_CARGO_HOME:-${TOOL_ROOT}/cargo}"

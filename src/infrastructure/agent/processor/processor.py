@@ -1757,6 +1757,12 @@ class SessionProcessor:
                     )
                     if self._abort_event is not None:
                         self._abort_event.set()
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": f"[Control] Run killed: {reason}",
+                        }
+                    )
                     if msg.target_agent_id:
                         events.append(
                             SubAgentKilledEvent(

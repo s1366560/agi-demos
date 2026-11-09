@@ -180,8 +180,20 @@ class SandboxMCPServerToolAdapter(AgentTool):
         uri = self.resource_uri
         if not uri:
             return ""
-
-        return await agent_mcp_resource(self._sandbox_id, self._server_name, uri)
+        if self._resource_cache is not None:
+            cached = await self._resource_cache.get(uri)
+            if cached is not None:
+                return cached
+            try:
+                html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
+                html = html or ""
+                if html:
+                    await self._resource_cache.put(uri, html, ttl=self._cache_ttl_seconds)
+                return html
+            except Exception as exc:
+                logger.warning("fetch_resource_html failed for %s: %s", uri, exc)
+                return ""
+        return await self._fetch_resource_html_inline(uri)
 
     async def _fetch_resource_html_inline(self, uri: str) -> str:
         """Legacy inline caching path for fetch_resource_html."""
@@ -197,7 +209,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         # Cache miss or expired - fetch fresh
         self._cache_stats["misses"] += 1
         try:
-            html = await agent_mcp_resource(self._sandbox_id, self._server_name, uri)
+            html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
             html = html or ""
 
             # Cache successful result
@@ -235,7 +247,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         if self._resource_cache is not None:
 
             async def _fetch(uri: str) -> str:
-                html = await agent_mcp_resource(self._sandbox_id, self._server_name, uri)
+                html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
                 return html or ""
 
             uri = self.resource_uri

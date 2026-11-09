@@ -228,15 +228,13 @@ class TestE2EToolKillSteerViaTools:
 
         from src.infrastructure.agent.subagent.run_registry import SubAgentRunStatus
 
-        active_run = MagicMock()
-        active_run.run_id = "run-target"
-        active_run.status = SubAgentRunStatus.RUNNING
-        active_run.to_event_data.return_value = {"run_id": "run-target"}
+        cancelled_run = MagicMock()
+        cancelled_run.run_id = "run-target"
+        cancelled_run.status = SubAgentRunStatus.CANCELLED
+        cancelled_run.to_event_data.return_value = {"run_id": "run-target"}
 
         registry = MagicMock()
-        registry.get_run.return_value = active_run
-        cancelled_run = MagicMock()
-        cancelled_run.to_event_data.return_value = {"run_id": "run-target"}
+        registry.get_run.return_value = cancelled_run
         registry.mark_cancelled.return_value = cancelled_run
 
         cancel_cb = AsyncMock(return_value=True)
@@ -249,9 +247,11 @@ class TestE2EToolKillSteerViaTools:
             cancel_callback=cancel_cb,
             control_channel=channel,
         )
-        count = await _ctrl_exec_cancellations(ctx, {"run-target": "root"}, "target")
+        cancelled, pending = await _ctrl_exec_cancellations(
+            ctx, {"run-target": "root"}, "target"
+        )
 
-        assert count == 1
+        assert (cancelled, pending) == (1, 0)
         channel.send_control.assert_awaited_once()
         sent: ControlMessage = channel.send_control.call_args[0][0]
         assert sent.message_type == ControlMessageType.KILL
