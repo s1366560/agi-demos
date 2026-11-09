@@ -62,7 +62,7 @@ def test_neo4j_runtime_job_is_dedicated_pinned_and_restartable() -> None:
     workflow = yaml.safe_load(NEO4J_RUNTIME_WORKFLOW_PATH.read_text(encoding="utf-8"))
 
     job = workflow["jobs"]["neo4j-runtime"]
-    assert job["runs-on"] == "ubuntu-latest"
+    assert job["runs-on"] == "ubuntu-24.04"
     assert "if" not in job
     assert job.get("continue-on-error") is not True
 
@@ -106,7 +106,9 @@ def test_neo4j_runtime_job_runs_required_web_desktop_matched_state() -> None:
     setup_pnpm = next(
         step for step in steps if str(step.get("uses", "")).startswith("pnpm/action-setup@")
     )
-    assert setup_pnpm["with"]["version"] == "11.15.1"
+    assert "version" not in setup_pnpm.get("with", {})
+    package_manager = (REPOSITORY_ROOT / "web" / "package.json").read_text(encoding="utf-8")
+    assert '"packageManager": "pnpm@11.15.1' in package_manager
     setup_node = next(
         step for step in steps if str(step.get("uses", "")).startswith("actions/setup-node@")
     )
