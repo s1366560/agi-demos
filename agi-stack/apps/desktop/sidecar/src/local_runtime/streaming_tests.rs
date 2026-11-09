@@ -199,7 +199,7 @@ async fn anthropic_agent_wrapper_delivers_answer_before_message_stop() {
     let server = tokio::spawn(async move {
         let (mut socket, _) = listener.accept().await.unwrap();
         let mut request = [0; 8192];
-        socket.read(&mut request).await.unwrap();
+        let _amount = socket.read(&mut request).await.unwrap();
         let delta = |fragment: &str| {
             format!(
                 "data: {}\n\n",

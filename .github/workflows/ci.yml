@@ -397,6 +397,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install desktop renderer dependencies
+        working-directory: .
+        run: pnpm --dir agi-stack/apps/desktop install --frozen-lockfile --ignore-scripts
+
       - name: Typecheck
         run: pnpm run type-check
 

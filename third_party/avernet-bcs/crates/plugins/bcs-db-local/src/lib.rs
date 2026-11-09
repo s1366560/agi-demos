@@ -183,8 +183,7 @@ fn query_with_connection(connection: &Connection, statement: DbStatement) -> DbR
         .map_err(|err| DbError::Backend(format!("prepare sqlite query: {}", err)))?;
     let column_names: Vec<String> = prepared
         .column_names()
-        .iter()
-        .map(|name| (*name).to_string())
+        .map(|name| name.to_string())
         .collect();
     let mut rows = prepared
         .query(params_from_iter(params))

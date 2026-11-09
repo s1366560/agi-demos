@@ -392,7 +392,7 @@ fn linux_appimage_process_matches(pid: u32, target: &Path, image: &Path) -> Reco
         "update candidate process environment",
     ) {
         Ok(bytes) => bytes,
-        Err(error) if process_image_path(pid)?.is_none() => return Ok(false),
+        Err(_) if process_image_path(pid)?.is_none() => return Ok(false),
         Err(error) => return Err(error),
     };
     let value = |name: &[u8]| {

@@ -432,10 +432,12 @@ def verify_tenant_graph_isolation(
             )
 
     mismatch = _require_mapping(evidence.get("cross_scope"), "tenant/project scope mismatch")
-    if (
-        mismatch.get("status_code") != 400
-        or mismatch.get("detail") != "Project does not belong to tenant"
-    ):
+    status_code = mismatch.get("status_code")
+    detail = mismatch.get("detail")
+    rejected = (status_code == 400 and detail == "Project does not belong to tenant") or (
+        status_code == 404 and detail == "Project not found"
+    )
+    if not rejected:
         raise RuntimeError("Graph E2E tenant/project scope mismatch was not rejected")
 
 

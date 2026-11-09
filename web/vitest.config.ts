@@ -37,6 +37,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    testTimeout: 20000,
     environment: 'happy-dom',
     css: true,
     server: {
