@@ -40,7 +40,7 @@ const IS_CURRENT_SQL: &str = concat!(
     "SELECT EXISTS( \
     SELECT 1 FROM agistack_cron_scheduler_owners \
     WHERE scope_id = $1 AND owner_kind = 'rust' AND owner_id = $2 \
-      AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at >= $5 \
+      AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at = $5 \
       AND lease_expires_at > $6 AND lease_expires_at > clock_timestamp() ",
     verified_cutover_sql!(""),
     ")"

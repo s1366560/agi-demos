@@ -366,6 +366,45 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
             created_at timestamptz DEFAULT now(), updated_at timestamptz)",
         "CREATE INDEX IF NOT EXISTS ix_cron_jobs_project_enabled \
             ON cron_jobs (project_id, enabled)",
+        "CREATE OR REPLACE FUNCTION agistack_bump_cron_job_revisions() \
+            RETURNS trigger LANGUAGE plpgsql AS $$ \
+            BEGIN \
+                NEW.revision := OLD.revision + 1; \
+                IF ROW(NEW.enabled, NEW.schedule_type, NEW.schedule_config::jsonb, \
+                       NEW.timezone, NEW.stagger_seconds) IS DISTINCT FROM \
+                   ROW(OLD.enabled, OLD.schedule_type, OLD.schedule_config::jsonb, \
+                       OLD.timezone, OLD.stagger_seconds) THEN \
+                    NEW.schedule_revision := OLD.schedule_revision + 1; \
+                ELSE \
+                    NEW.schedule_revision := OLD.schedule_revision; \
+                END IF; \
+                RETURN NEW; \
+            END; $$",
+        "DROP TRIGGER IF EXISTS trg_agistack_bump_cron_job_revisions ON cron_jobs",
+        "CREATE TRIGGER trg_agistack_bump_cron_job_revisions \
+            BEFORE UPDATE ON cron_jobs \
+            FOR EACH ROW EXECUTE FUNCTION agistack_bump_cron_job_revisions()",
+        "CREATE TABLE IF NOT EXISTS agistack_desktop_workspace_contexts ( \
+            user_id text PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, \
+            tenant_id text NOT NULL, project_id text NOT NULL, \
+            revision bigint NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(), \
+            CONSTRAINT ck_desktop_workspace_context_revision CHECK (revision >= 0))",
+        "CREATE INDEX IF NOT EXISTS ix_desktop_workspace_context_scope \
+            ON agistack_desktop_workspace_contexts (tenant_id, project_id)",
+        "CREATE TABLE IF NOT EXISTS agistack_desktop_workspace_context_events ( \
+            id text PRIMARY KEY, user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE, \
+            actor_api_key_id text, from_tenant_id text, from_project_id text, \
+            to_tenant_id text NOT NULL, to_project_id text NOT NULL, \
+            revision bigint NOT NULL, idempotency_key varchar(255) NOT NULL, \
+            value_json jsonb NOT NULL DEFAULT '{}'::jsonb, \
+            created_at timestamptz NOT NULL DEFAULT now(), \
+            CONSTRAINT ck_desktop_workspace_context_event_revision CHECK (revision > 0), \
+            CONSTRAINT uq_desktop_workspace_context_event_intent \
+                UNIQUE (user_id, idempotency_key), \
+            CONSTRAINT uq_desktop_workspace_context_event_revision \
+                UNIQUE (user_id, revision))",
+        "CREATE INDEX IF NOT EXISTS ix_desktop_workspace_context_events_user_revision \
+            ON agistack_desktop_workspace_context_events (user_id, revision DESC)",
         "CREATE TABLE IF NOT EXISTS cron_job_runs (\
             id text PRIMARY KEY, job_id text NOT NULL, project_id text NOT NULL, \
             status varchar(50) NOT NULL, trigger_type varchar(50) DEFAULT 'scheduled', \
@@ -431,8 +470,6 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
         "ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS role text DEFAULT 'member'",
         "ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS permissions json DEFAULT '{}'::json",
         "ALTER TABLE user_projects ALTER COLUMN id SET DEFAULT gen_random_uuid()::text",
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_projects_user_id_project_id \
-            ON user_projects (user_id, project_id)",
         "CREATE TABLE IF NOT EXISTS api_keys (\
             id text PRIMARY KEY, key_hash text, name text, user_id text, \
             created_at timestamptz DEFAULT now(), expires_at timestamptz, \
@@ -664,11 +701,12 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
         "CREATE TABLE IF NOT EXISTS workspace_plan_outbox (\
             id text PRIMARY KEY, plan_id text, workspace_id text NOT NULL, \
             event_type varchar(80) NOT NULL, payload_json json DEFAULT '{}'::json NOT NULL, \
-            status varchar(20) DEFAULT 'pending' NOT NULL, attempt_count integer DEFAULT 0 NOT NULL, \
+            status varchar(32) DEFAULT 'pending' NOT NULL, attempt_count integer DEFAULT 0 NOT NULL, \
             max_attempts integer DEFAULT 5 NOT NULL, lease_owner varchar(255), \
             lease_expires_at timestamptz, last_error text, next_attempt_at timestamptz, \
             processed_at timestamptz, metadata_json json DEFAULT '{}'::json NOT NULL, \
             created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz)",
+        "ALTER TABLE workspace_plan_outbox ALTER COLUMN status TYPE varchar(32)",
         "CREATE INDEX IF NOT EXISTS ix_workspace_plan_outbox_plan \
             ON workspace_plan_outbox (plan_id)",
         "CREATE INDEX IF NOT EXISTS ix_workspace_plan_outbox_workspace_status \

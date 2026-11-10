@@ -113,6 +113,7 @@ describe('AgentDashboard', () => {
     );
     await waitFor(() => {
       expect(mockCanModifyConfig).toHaveBeenCalled();
+      expect(screen.queryByText('Loading runtime traces')).not.toBeInTheDocument();
     });
   };
 
@@ -275,7 +276,7 @@ describe('AgentDashboard', () => {
     });
 
     await renderDashboard();
-    fireEvent.click(screen.getByRole('button', { name: 'Select trace' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Select trace' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('trace-chain-view')).toBeInTheDocument();
@@ -313,7 +314,7 @@ describe('AgentDashboard', () => {
     mockGetTraceChain.mockRejectedValue(new Error('chain unavailable'));
 
     await renderDashboard();
-    fireEvent.click(screen.getByRole('button', { name: 'Select trace' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Select trace' }));
 
     expect(await screen.findByText('Failed to load trace details')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry loading trace' })).toBeInTheDocument();

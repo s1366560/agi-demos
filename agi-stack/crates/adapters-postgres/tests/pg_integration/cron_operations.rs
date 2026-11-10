@@ -381,6 +381,9 @@ async fn cron_operation_dispatch_ack_reconciles_an_already_terminal_runtime() {
 }
 
 async fn ensure_cron_operation_table(pool: &PgPool) {
+    ensure_python_shaped_tables(pool).await;
+    ensure_identity_tables(pool).await;
+    ensure_project_read_tables(pool).await;
     ensure_legacy_cron_admission_fixture(pool).await;
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS agistack_cron_operations ( \

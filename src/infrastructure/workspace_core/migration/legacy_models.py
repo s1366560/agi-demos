@@ -676,7 +676,7 @@ class WorkspacePlanOutboxModel(LegacyWorkspaceBase):
     )
     event_type: Mapped[str] = mapped_column(String(80), nullable=False)
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)

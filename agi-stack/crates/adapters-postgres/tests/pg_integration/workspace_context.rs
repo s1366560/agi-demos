@@ -14,6 +14,8 @@ async fn workspace_context_is_revision_fenced_idempotent_and_membership_scoped()
         return;
     };
     ensure_python_shaped_tables(&pool).await;
+    ensure_identity_tables(&pool).await;
+    ensure_project_read_tables(&pool).await;
     let schema_ready = sqlx::query_scalar::<_, bool>(
         "SELECT to_regclass('public.agistack_desktop_workspace_contexts') IS NOT NULL \
          AND to_regclass('public.agistack_desktop_workspace_context_events') IS NOT NULL",

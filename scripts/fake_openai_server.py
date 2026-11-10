@@ -96,6 +96,23 @@ async def fixture_stats() -> dict[str, int]:
     return dict(_fixture_stats)
 
 
+def _declared_tool_names(tools: object) -> set[str]:
+    """Return function names declared on an OpenAI tools array."""
+    if not isinstance(tools, list):
+        return set()
+    names: set[str] = set()
+    for raw_tool in cast("list[object]", tools):
+        if not isinstance(raw_tool, Mapping):
+            continue
+        function = cast("Mapping[str, object]", raw_tool).get("function")
+        if not isinstance(function, Mapping):
+            continue
+        name = cast("Mapping[str, object]", function).get("name")
+        if isinstance(name, str):
+            names.add(name)
+    return names
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request) -> Response:
     """Return a deterministic response without inspecting or logging secrets."""
@@ -106,29 +123,37 @@ async def chat_completions(request: Request) -> Response:
     _fixture_stats["chat_requests"] += 1
 
     is_streaming = body.get("stream") is True
-    tools = body.get("tools")
-    has_route_request_tool = False
-    has_goal_judge_tool = False
-    if isinstance(tools, list):
-        for raw_tool in cast("list[object]", tools):
-            if not isinstance(raw_tool, Mapping):
-                continue
-            function = cast("Mapping[str, object]", raw_tool).get("function")
-            if not isinstance(function, Mapping):
-                continue
-            function_mapping = cast("Mapping[str, object]", function)
-            if function_mapping.get("name") == "route_request":
-                has_route_request_tool = True
-            elif function_mapping.get("name") == "submit_goal_completion_judgment_v2":
-                has_goal_judge_tool = True
-
+    tool_names = _declared_tool_names(body.get("tools"))
     content = E2E_AGENT_RESPONSE if is_streaming else E2E_GOAL_RESPONSE
     if is_streaming:
         return StreamingResponse(_stream_completion(content), media_type="text/event-stream")
 
     message: dict[str, object] = {"role": "assistant", "content": content}
     finish_reason = "stop"
-    if has_goal_judge_tool and not has_route_request_tool:
+    if "select_workspace_context" in tool_names:
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-memstack-e2e-workspace-context",
+                    "type": "function",
+                    "function": {
+                        "name": "select_workspace_context",
+                        "arguments": json.dumps(
+                            {
+                                "candidate_index": 0,
+                                "rationale": "Deterministic E2E workspace context selection.",
+                                "evidence": ["candidate_index:0"],
+                            },
+                            separators=(",", ":"),
+                        ),
+                    },
+                }
+            ],
+        }
+        finish_reason = "tool_calls"
+    elif "submit_goal_completion_judgment_v2" in tool_names and "route_request" not in tool_names:
         message = {
             "role": "assistant",
             "content": None,
@@ -150,7 +175,7 @@ async def chat_completions(request: Request) -> Response:
             ],
         }
         finish_reason = "tool_calls"
-    elif has_route_request_tool:
+    elif "route_request" in tool_names:
         message = {
             "role": "assistant",
             "content": None,

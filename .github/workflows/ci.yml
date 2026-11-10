@@ -317,7 +317,7 @@ jobs:
             uv run pytest "${args[@]}" \
               -m "not integration" \
               --timeout=120 \
-              --timeout-method=thread \
+              --timeout-method=signal \
               --durations=20 \
               --cov=src \
               --cov-report= \

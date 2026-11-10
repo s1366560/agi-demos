@@ -112,6 +112,34 @@ def test_fake_openai_returns_goal_completion_judgment_tool_call() -> None:
     }
 
 
+def test_fake_openai_returns_workspace_context_selection_tool_call() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "memstack-e2e",
+                "messages": [{"role": "user", "content": "select"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {"name": "select_workspace_context", "parameters": {}},
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    choice = response.json()["choices"][0]
+    assert choice["finish_reason"] == "tool_calls"
+    tool_call = choice["message"]["tool_calls"][0]
+    assert tool_call["function"]["name"] == "select_workspace_context"
+    assert json.loads(tool_call["function"]["arguments"]) == {
+        "candidate_index": 0,
+        "rationale": "Deterministic E2E workspace context selection.",
+        "evidence": ["candidate_index:0"],
+    }
+
+
 def test_fake_openai_returns_openai_compatible_sse_stream() -> None:
     with TestClient(app) as client:
         response = client.post(
