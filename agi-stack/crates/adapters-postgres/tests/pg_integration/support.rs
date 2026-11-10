@@ -376,6 +376,19 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
             ON cron_job_runs (job_id, status)",
         "CREATE INDEX IF NOT EXISTS ix_cron_job_runs_project_started \
             ON cron_job_runs (project_id, started_at)",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS accepted_at timestamptz DEFAULT now()",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS job_revision bigint DEFAULT 1",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS schedule_revision bigint",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS scheduled_for timestamptz",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS runtime_execution_id text",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS request_receipt_id text",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS runtime_revision bigint DEFAULT 0",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS runtime_lease_owner varchar(255)",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS runtime_lease_token varchar(255)",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS runtime_lease_expires_at timestamptz",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS deadline_at timestamptz",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS last_heartbeat_at timestamptz",
         "CREATE TABLE IF NOT EXISTS webhooks (\
             id text PRIMARY KEY, tenant_id text NOT NULL, name text NOT NULL, url text NOT NULL, \
             secret text, events json DEFAULT '[]'::json NOT NULL, is_active boolean DEFAULT true, \

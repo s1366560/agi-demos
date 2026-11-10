@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -49,6 +50,11 @@ def _scope() -> ScopeV2:
 @pytest.mark.unit
 def test_profile_v2_compose_p95_within_budget() -> None:
     """Measure production composition alone, not the whole service's latency SLO."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("COVERAGE") and not key.startswith("COV_")
+    }
     result = subprocess.run(
         [
             sys.executable,
@@ -60,6 +66,7 @@ def test_profile_v2_compose_p95_within_budget() -> None:
         text=True,
         timeout=120,
         check=False,
+        env=env,
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     measurements = json.loads(result.stdout)
