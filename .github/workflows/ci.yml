@@ -563,7 +563,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
       REDIS_URL: redis://localhost:6379
-      LLM_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+      LLM_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef # gitleaks:allow -- isolated CI fixture
 
     services:
       postgres:
