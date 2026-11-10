@@ -49,8 +49,10 @@ let identitySourceKey = '';
 function scopeFromLocation(): { tenantId?: string; projectId?: string } {
   if (typeof window === 'undefined') return {};
   const match = /^\/tenant\/([^/]+)(?:\/project\/([^/]+))?/.exec(window.location.pathname);
-  if (!match) return {};
-  return { tenantId: match[1], projectId: match[2] };
+  const tenantId = match?.[1];
+  if (tenantId === undefined) return {};
+  const projectId = match?.[2];
+  return projectId === undefined ? { tenantId } : { tenantId, projectId };
 }
 
 function refreshIdentity(): void {

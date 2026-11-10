@@ -763,7 +763,7 @@ jobs:
         continue-on-error: true
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: '3.12.13'
+          python-version: '3.12'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
@@ -776,7 +776,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4 5; do
-            if uv python install 3.12.13; then
+            if uv python install 3.12; then
               exit 0
             fi
             sleep $((attempt * 8))
@@ -785,7 +785,7 @@ jobs:
 
       - name: Install repository Python for desktop contract fixtures
         working-directory: .
-        run: uv sync --frozen --no-dev
+        run: uv sync --frozen --no-dev --python 3.12
 
       - name: Cache Cargo
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
