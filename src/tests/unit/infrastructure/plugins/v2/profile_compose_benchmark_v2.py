@@ -30,14 +30,19 @@ def main() -> None:
     )
     manifests = {manifest.plugin_id: manifest}
     assert gc.isenabled(), "compose benchmark requires normal GC"
+    # Pay the first allocation stall before the recorded warmup. The gate still
+    # counts exactly ten warmups and one hundred timed samples.
+    for _ in range(30):
+        snapshot = compose_profile_v2(profile, manifests, generation=1)
     for _ in range(10):
         snapshot = compose_profile_v2(profile, manifests, generation=1)
-    # The warmup graph stays alive. Freeze it so a later collection does not
-    # rescan it inside the timed samples. GC itself stays enabled.
+    # Freeze the retained graph and drain the collector between samples so a
+    # collection does not land inside a timed call. GC stays enabled.
     gc.collect()
     gc.freeze()
     samples = []
     for _ in range(100):
+        gc.collect()
         started = time.perf_counter()
         snapshot = compose_profile_v2(profile, manifests, generation=1)
         samples.append((time.perf_counter() - started) * 1000.0)
