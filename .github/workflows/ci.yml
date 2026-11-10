@@ -810,9 +810,10 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 70
     env:
-      # One release profile for the sidecar tests and the installer bundle.
-      # debug=0 keeps the release link from writing full debuginfo.
-      DESKTOP_RELEASE: "1"
+      # Sidecar tests require cfg(debug_assertions); a release test profile
+      # rejects the local knowledge host. Keep the debug test build and only
+      # drop debuginfo so the later release bundle links faster.
+      CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_RELEASE_DEBUG: "0"
     defaults:
       run:

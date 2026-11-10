@@ -34,8 +34,9 @@ DESKTOP_SIDECAR_NAME := agistack-desktop-sidecar
 DESKTOP_WORKSPACE_CORE_DEBUG ?= $(AVERNET_BCS_TARGET_DIR)/debug/memstack-workspace-core
 DESKTOP_WORKSPACE_CORE_RELEASE ?= $(AVERNET_BCS_TARGET_DIR)/release/memstack-workspace-core
 endif
-# CI sets DESKTOP_RELEASE=1 so desktop-test and desktop-bundle share one release
-# profile. Local development keeps the debug profile.
+# Optional. Sidecar tests require debug assertions, so CI keeps the debug
+# profile for desktop-test and only drops debuginfo. Set DESKTOP_RELEASE=1
+# only when the caller does not need those tests.
 ifeq ($(DESKTOP_RELEASE),1)
 DESKTOP_CARGO_PROFILE_FLAG := --release
 DESKTOP_SIDECAR_BIN := $(abspath target/release/$(DESKTOP_SIDECAR_NAME))
