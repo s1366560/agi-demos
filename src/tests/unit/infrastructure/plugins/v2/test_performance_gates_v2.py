@@ -21,8 +21,7 @@ from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_prof
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2
 
-_ITERATIONS = 40
-_BATCHES = 3
+_ITERATIONS = 100
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
@@ -71,16 +70,13 @@ def test_profile_v2_compose_p95_within_budget() -> None:
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     measurements = json.loads(result.stdout)
-    batches = measurements["batches_ms"]
+    samples = measurements["samples_ms"]
     assert measurements["gc_enabled"] is True
-    assert measurements["warmup"] == 5
-    assert len(batches) == _BATCHES
-    assert all(len(samples) == _ITERATIONS for samples in batches)
-    batch_p95 = [_p95(samples) for samples in batches]
-    p95 = sorted(batch_p95)[len(batch_p95) // 2]
+    assert measurements["warmup"] == 10
+    assert len(samples) == _ITERATIONS
+    p95 = _p95(samples)
     assert p95 < 100.0, (
-        f"protocol-v2 profile compose median batch p95 {p95:.2f}ms exceeds 100ms; "
-        f"batch_p95={batch_p95}"
+        f"protocol-v2 profile compose p95 {p95:.2f}ms exceeds 100ms; samples={samples}"
     )
 
 
