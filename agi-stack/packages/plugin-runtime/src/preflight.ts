@@ -38,10 +38,6 @@ async function verifyGeneratedCatalogDigestV2(): Promise<void> {
   }
 }
 
-// The catalog is immutable. Start the check when the runtime module loads so
-// the first authenticated view overlaps it with the distribution request.
-void validateGeneratedCatalogDigestV2();
-
 export function generatedTargetCatalogV2(
   target: DataPlaneTargetV2
 ): ReadonlyMap<string, PluginModuleCatalogEntryV2> {
