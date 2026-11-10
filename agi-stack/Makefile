@@ -53,7 +53,7 @@ endif
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-icons desktop-cua-helper run-desktop run-desktop-electron desktop-grants desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
+.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-test desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-icons desktop-cua-helper run-desktop run-desktop-electron desktop-grants desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -99,13 +99,15 @@ wasm-web: ## Web:wasm-bindgen 浏览器包 + node 冒烟(core-as-guest,~124 KB)
 desktop: desktop-check desktop-bundle desktop-bundle-smoke ## 桌面:构建 Electron 安装包并验证 sidecar
 	@echo "==> 桌面可安装客户端构建完成:$(DESKTOP_APP_DIR)/release/"
 
-desktop-check: desktop-deps desktop-cua-repl ## 桌面:Rust sidecar 与 Electron/renderer 测试
+desktop-check: desktop-test ## 桌面:Rust sidecar、renderer 测试，以及一次 Electron 构建
+	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:electron
+	@echo "==> Electron 外壳与 sidecar 验证通过"
+
+desktop-test: desktop-deps desktop-cua-repl ## 桌面:Rust sidecar 与 renderer 测试，不重复打 Electron 包
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
 	$(CARGO) build -p agistack-desktop-sidecar
 	$(CARGO) test -p agistack-desktop-sidecar
 	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(abspath target/debug/agistack-desktop-sidecar) AGISTACK_REAL_WORKSPACE_CORE=$(DESKTOP_WORKSPACE_CORE_DEBUG) $(PNPM) test
-	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:electron
-	@echo "==> Electron 外壳与 sidecar 验证通过"
 
 desktop-browser-qa: desktop-deps ## 桌面:执行浏览器交互集成测试
 	cd $(DESKTOP_APP_DIR) && CI=true $(PNPM) run qa:browser
