@@ -626,21 +626,44 @@ async def _clear_message_delivery(test_dsn: str) -> None:
         await connection.close()
 
 
+def _message_delivery_downgrade_error(alembic_config: Config, head_revision: str) -> DBAPIError:
+    """Reach the delivery guard without revoking the forward-only administrator promotion."""
+    try:
+        command.downgrade(alembic_config, _MESSAGE_DELIVERY_PARENT_REVISION)
+    except DBAPIError as error:
+        return error
+    except RuntimeError as error:
+        if "Administrator promotion is forward-only" not in str(error):
+            raise
+    else:
+        raise RuntimeError("message delivery downgrade accepted durable delivery data")
+
+    # The promotion is data-only and its downgrade rolls the whole transaction back.
+    # Continue the schema probe from its parent without changing that product refusal.
+    parent = ScriptDirectory.from_config(alembic_config).get_revision("d10a27f4c901").down_revision
+    if not isinstance(parent, str):
+        raise RuntimeError("forward-only promotion is not a single linear revision")
+    command.stamp(alembic_config, parent)
+    try:
+        try:
+            command.downgrade(alembic_config, _MESSAGE_DELIVERY_PARENT_REVISION)
+        except DBAPIError as error:
+            return error
+        else:
+            raise RuntimeError("message delivery downgrade accepted durable delivery data")
+    finally:
+        command.stamp(alembic_config, head_revision)
+
+
 def _message_delivery_downgrade_guard(
     alembic_config: Config,
     test_dsn: str,
     head_revision: str,
 ) -> None:
     asyncio.run(_seed_message_delivery(test_dsn))
-    try:
-        command.downgrade(alembic_config, _MESSAGE_DELIVERY_PARENT_REVISION)
-    except DBAPIError as error:
-        if "contains durable delivery data" not in str(error.orig):
-            raise RuntimeError(
-                "message delivery downgrade failed for an unexpected reason"
-            ) from error
-    else:
-        raise RuntimeError("message delivery downgrade accepted durable delivery data")
+    error = _message_delivery_downgrade_error(alembic_config, head_revision)
+    if "contains durable delivery data" not in str(error.orig):
+        raise RuntimeError("message delivery downgrade failed for an unexpected reason") from error
 
     tables, triggers, revision = asyncio.run(_schema_contract(test_dsn))
     if (tables, triggers, revision) != (
