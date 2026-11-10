@@ -316,19 +316,59 @@ jobs:
             rest-c) shard_files 2 4 "${files[@]}" ;;
             rest-d) shard_files 3 4 "${files[@]}" ;;
           esac
-          # A hung test that ignores SIGALRM still dies here, and SIGQUIT
-          # prints every thread stack before the job timeout deletes the log.
+          mkdir -p shard-logs
+          pytest_log="shard-logs/${{ matrix.shard }}-pytest.log"
+          resource_log="shard-logs/${{ matrix.shard }}-resources.log"
+          # plugins-g has been cancelled at the job limit twice with no step log.
+          # A separate heartbeat keeps writing if pytest, or the runner agent,
+          # stops flushing stdout. SIGKILL is the timeout signal so a stuck
+          # child is not left waiting on SIGQUIT.
+          if [ "${{ matrix.shard }}" = "plugins-g" ]; then
+            (
+              while true; do
+                {
+                  echo "===== heartbeat $(date -u +%Y-%m-%dT%H:%M:%SZ) ====="
+                  free -h || true
+                  ps -eo pid,ppid,stat,rss,etime,cmd --sort=-rss | head -n 30 || true
+                } | tee -a "$resource_log"
+                sleep 60
+              done
+            ) &
+            echo $! > shard-logs/heartbeat.pid
+          fi
+          pytest_verbose=()
+          if [ "${{ matrix.shard }}" = "plugins-g" ]; then
+            pytest_verbose=(-v)
+          fi
+          set +e
           COVERAGE_FILE="coverage-${{ matrix.shard }}" \
             PYTHONFAULTHANDLER=1 \
-            timeout --signal=QUIT --kill-after=30s 25m \
+            timeout --signal=KILL --kill-after=15s 18m \
             uv run pytest "${args[@]}" \
+              "${pytest_verbose[@]}" \
               -m "not integration" \
               --timeout=120 \
               --timeout-method=signal \
               --durations=20 \
               --cov=src \
               --cov-report= \
-              --cov-fail-under=0
+              --cov-fail-under=0 \
+              2>&1 | tee "$pytest_log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ -f shard-logs/heartbeat.pid ]; then
+            kill "$(cat shard-logs/heartbeat.pid)" 2>/dev/null || true
+            wait "$(cat shard-logs/heartbeat.pid)" 2>/dev/null || true
+          fi
+          exit "$status"
+
+      - name: Upload plugins-g shard diagnostics
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-shard-diagnostics
+          path: shard-logs/
+          if-no-files-found: warn
 
       - name: Upload shard coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
