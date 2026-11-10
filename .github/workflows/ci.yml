@@ -315,7 +315,11 @@ jobs:
             rest-c) shard_files 2 4 "${files[@]}" ;;
             rest-d) shard_files 3 4 "${files[@]}" ;;
           esac
+          # A hung test that ignores SIGALRM still dies here, and SIGQUIT
+          # prints every thread stack before the job timeout deletes the log.
           COVERAGE_FILE="coverage-${{ matrix.shard }}" \
+            PYTHONFAULTHANDLER=1 \
+            timeout --signal=QUIT --kill-after=30s 25m \
             uv run pytest "${args[@]}" \
               -m "not integration" \
               --timeout=120 \
