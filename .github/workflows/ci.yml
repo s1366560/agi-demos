@@ -149,7 +149,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [plugins-a, plugins-b, adapters-a, adapters-b, agent, rest-a, rest-b, rest-c, rest-d]
+        shard: [plugins-a, plugins-b, plugins-c, adapters-a, adapters-b, agent, rest-a, rest-b, rest-c, rest-d]
     env:
       UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
       PYTEST_TEST_TIMEOUT: "600"
@@ -272,7 +272,7 @@ jobs:
             fi
           }
           case "${{ matrix.shard }}" in
-            plugins-a|plugins-b)
+            plugins-a|plugins-b|plugins-c)
               mapfile -t files < <(find src/tests/unit/infrastructure/plugins -name 'test_*.py' | sort)
               ;;
             adapters-a|adapters-b)
@@ -289,8 +289,11 @@ jobs:
               ;;
           esac
           case "${{ matrix.shard }}" in
-            plugins-a|adapters-a) shard_files 0 2 "${files[@]}" ;;
-            plugins-b|adapters-b) shard_files 1 2 "${files[@]}" ;;
+            plugins-a) shard_files 0 3 "${files[@]}" ;;
+            plugins-b) shard_files 1 3 "${files[@]}" ;;
+            plugins-c) shard_files 2 3 "${files[@]}" ;;
+            adapters-a) shard_files 0 2 "${files[@]}" ;;
+            adapters-b) shard_files 1 2 "${files[@]}" ;;
             rest-a) shard_files 0 4 "${files[@]}" ;;
             rest-b) shard_files 1 4 "${files[@]}" ;;
             rest-c) shard_files 2 4 "${files[@]}" ;;
@@ -385,6 +388,7 @@ jobs:
 
       - name: Run container integration tests
         run: |
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
           COVERAGE_FILE=coverage-containers \
             uv run pytest src/tests/unit/routers/agent/test_workspace_file_permission_v2.py \
               -m integration \
@@ -740,7 +744,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.agi == 'true'
     runs-on: macos-latest
-    timeout-minutes: 50
+    timeout-minutes: 70
     defaults:
       run:
         working-directory: agi-stack
