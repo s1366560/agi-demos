@@ -355,6 +355,7 @@ async def get_web_public_view_v2(
                 profile_snapshot_v2_to_payload(snapshot),
                 authority_id=current_user.id,
                 authorized_scope=scope,
+                applicable_only=True,
             )
         except (ValueError, RuntimeV2Error) as error:
             raise instance_error_v2(error) from error

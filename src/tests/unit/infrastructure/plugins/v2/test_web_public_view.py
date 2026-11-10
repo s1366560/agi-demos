@@ -90,6 +90,18 @@ def test_scoped_override_is_anonymous_after_authorization_and_keeps_scope_bound_
             payload, authority_id="private-user-canary", authorized_scope=other_scope
         )
     assert caught.value.code == "web_view_scope_unauthorized"
+    applicable = project_web_public_view_v2(
+        payload,
+        authority_id="private-user-canary",
+        authorized_scope=other_scope,
+        applicable_only=True,
+    )
+    applicable_snapshot = parse_profile_snapshot_v2(applicable["snapshot"])
+    assert all(
+        entry.config.get("id") != "web.feature.tenant-providers"
+        for entry in applicable_snapshot.entries
+    )
+    assert len(applicable_snapshot.entries) > 60
 
 
 def test_real_bootstrap_projects_feature_entries_and_validates_its_own_digest():
