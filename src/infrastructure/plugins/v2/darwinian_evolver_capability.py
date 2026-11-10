@@ -18,7 +18,7 @@ DARWINIAN_EVOLVER_DEFAULTS_SERVICE_V2 = "service:darwinian-evolver-defaults"
 
 _DARWINIAN_EVOLVER_SOURCE_V2 = "builtin-darwinian-evolver-skill"
 _DARWINIAN_EVOLVER_SKILL_DIGEST_V2 = (
-    "sha256:d7301e628666fa78c2e741f70583a103ce57cb1f7fefb4152ca73cffd5cdc550"
+    "sha256:bab43cec32aaa0dc0bdceff4484461f842e55d5762f5ab5fd7699ae9c728578d"
 )
 _SKILL_DIRECTORY_V2 = Path(__file__).resolve().parent / "skills" / "darwinian-evolver"
 _DARWINIAN_EVOLVER_DEFAULTS_V2: dict[str, object] = {

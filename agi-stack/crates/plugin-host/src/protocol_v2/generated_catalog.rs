@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:6a9d4eede27ddfd0dbe5b33f853cdeee53aee38f690f5a9598a606f3e0ab6c",
-    "6c\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:571261b5af226a8080a04a8965e47c1d04490ef3b87072808885e9a58a4228",
+    "4d\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -342,8 +342,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "168271e9df16c441a7f1d53498ab4b87f8d04fa3e0ef9f6\",\"entrypoint\":\"src.infrastructure.plugin",
     "s.v2.agent_skill_mcp_service:_apply_skill_mcp_manager_v2\",\"module_ref\":\"builtin://memsta",
     "ck/agent/skill-mcp-manager\",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.",
-    "0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:7a4e7c38def23c989e1bee0029f5c8778bb4",
-    "34dccacc73dfaa8b555b952d5a8a\",\"artifact_source\":\"repo+python://src/infrastructure/plugin",
+    "0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:816cb9224b1a69e9c5716672a1ef3565fe6d",
+    "e273d477118c4a0bc34374d6dcd3\",\"artifact_source\":\"repo+python://src/infrastructure/plugin",
     "s/v2/darwinian_evolver_capability.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://js",
     "on-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"cache_di",
     "r\":{\"minLength\":1,\"type\":\"string\"},\"default_concurrency\":{\"minimum\":1,\"type\":\"integer\"},",
@@ -4785,4 +4785,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "rsion\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:6a9d4eede27ddfd0dbe5b33f853cdeee53aee38f690f5a9598a606f3e0ab6c6c";
+    "sha256:571261b5af226a8080a04a8965e47c1d04490ef3b87072808885e9a58a42284d";
