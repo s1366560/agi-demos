@@ -149,7 +149,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [plugins-a, plugins-b, plugins-c, adapters-a, adapters-b, agent, rest-a, rest-b, rest-c, rest-d]
+        shard: [plugins-a, plugins-b, plugins-c, plugins-d, adapters-a, adapters-b, agent, rest-a, rest-b, rest-c, rest-d]
     env:
       UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
       PYTEST_TEST_TIMEOUT: "600"
@@ -272,7 +272,7 @@ jobs:
             fi
           }
           case "${{ matrix.shard }}" in
-            plugins-a|plugins-b|plugins-c)
+            plugins-a|plugins-b|plugins-c|plugins-d)
               mapfile -t files < <(find src/tests/unit/infrastructure/plugins -name 'test_*.py' | sort)
               ;;
             adapters-a|adapters-b)
@@ -289,9 +289,10 @@ jobs:
               ;;
           esac
           case "${{ matrix.shard }}" in
-            plugins-a) shard_files 0 3 "${files[@]}" ;;
-            plugins-b) shard_files 1 3 "${files[@]}" ;;
-            plugins-c) shard_files 2 3 "${files[@]}" ;;
+            plugins-a) shard_files 0 4 "${files[@]}" ;;
+            plugins-b) shard_files 1 4 "${files[@]}" ;;
+            plugins-c) shard_files 2 4 "${files[@]}" ;;
+            plugins-d) shard_files 3 4 "${files[@]}" ;;
             adapters-a) shard_files 0 2 "${files[@]}" ;;
             adapters-b) shard_files 1 2 "${files[@]}" ;;
             rest-a) shard_files 0 4 "${files[@]}" ;;
