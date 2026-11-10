@@ -298,6 +298,7 @@ jobs:
           esac
           COVERAGE_FILE="coverage-${{ matrix.shard }}" \
             uv run pytest "${args[@]}" \
+              -m "not integration" \
               --cov=src \
               --cov-report= \
               --cov-fail-under=0
@@ -309,10 +310,99 @@ jobs:
           path: coverage-${{ matrix.shard }}
           if-no-files-found: error
 
+  container-integration:
+    name: Backend container integration
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: memstack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpassword
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      NEO4J_URI: bolt://localhost:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: testpassword
+    services:
+      neo4j:
+        image: neo4j:5.26
+        env:
+          NEO4J_AUTH: neo4j/testpassword
+          NEO4J_PLUGINS: '["apoc"]'
+        ports:
+          - 7687:7687
+          - 7474:7474
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p testpassword 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: memstack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra neo4j
+
+      - name: Run container integration tests
+        run: |
+          COVERAGE_FILE=coverage-containers \
+            uv run pytest src/tests/unit/routers/agent/test_workspace_file_permission_v2.py \
+              -m integration \
+              --cov=src \
+              --cov-report= \
+              --cov-fail-under=0
+
+      - name: Upload container coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-containers
+          path: coverage-containers
+          if-no-files-found: error
+
   coverage:
     name: Backend coverage
-    needs: unit
-    if: needs.unit.result == 'success'
+    needs: [unit, container-integration]
+    if: needs.unit.result == 'success' && needs.container-integration.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -545,7 +635,7 @@ jobs:
         run: cargo test -p agistack-adapters-cua --test cloud_catalog --test cloud_permission_bridge
 
       - name: Install desktop native libraries
-        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libxkbcommon-dev pkg-config
 
       - name: Run strangler gate
         run: PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}" make strangler-gate

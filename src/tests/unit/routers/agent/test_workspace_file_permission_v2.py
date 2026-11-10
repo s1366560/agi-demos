@@ -197,7 +197,7 @@ async def real_file_server(tmp_path):
         await asyncio.wait_for(process.wait(), 10)
 
 
-@pytest.mark.unit
+@pytest.mark.integration
 @pytest.mark.parametrize("pipeline", [False, True])
 @pytest.mark.parametrize("run_kind", ["plan", "chat"])
 @pytest.mark.parametrize(
