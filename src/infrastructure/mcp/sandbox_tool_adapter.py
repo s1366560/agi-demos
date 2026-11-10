@@ -180,8 +180,53 @@ class SandboxMCPServerToolAdapter(AgentTool):
         if not uri:
             return ""
         from src.application.services.marketplace_agent_mcp import agent_mcp_resource
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-        return await agent_mcp_resource(self._sandbox_id, self._server_name, uri)
+        try:
+            return await agent_mcp_resource(self._sandbox_id, self._server_name, uri)
+        except RuntimeV2Error as error:
+            if error.code != "operation_context_not_pinned":
+                raise
+        return await self._fetch_cached_resource_html(uri)
+
+    async def _fetch_cached_resource_html(self, uri: str) -> str:
+        """Cache sandbox UI HTML when no pinned operation requires authorization."""
+        if self._resource_cache is not None:
+            cached = await self._resource_cache.get(uri)
+            if cached is not None:
+                return cached
+            try:
+                html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
+                html = html or ""
+                if html:
+                    await self._resource_cache.put(uri, html, ttl=self._cache_ttl_seconds)
+                return html
+            except Exception as exc:
+                logger.warning("fetch_resource_html failed for %s: %s", uri, exc)
+                return ""
+        return await self._fetch_resource_html_inline(uri)
+
+    async def _fetch_resource_html_inline(self, uri: str) -> str:
+        """Legacy inline caching path for fetch_resource_html."""
+        import time
+
+        if self._cache_ttl_seconds > 0 and self._cached_html is not None:
+            cache_age = time.time() - (self._cache_fetched_at or 0)
+            if cache_age < self._cache_ttl_seconds:
+                self._cache_stats["hits"] += 1
+                return self._cached_html
+        self._cache_stats["misses"] += 1
+        try:
+            html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
+            html = html or ""
+            if self._cache_ttl_seconds > 0 and html:
+                self._cached_html = html
+                self._cache_fetched_at = time.time()
+            self._cache_stats["last_fetch_at"] = time.time()
+            return html
+        except Exception as exc:
+            logger.warning("fetch_resource_html failed for %s: %s", uri, exc)
+            return ""
 
     def invalidate_resource_cache(self) -> None:
         """Invalidate the cached resource HTML."""
