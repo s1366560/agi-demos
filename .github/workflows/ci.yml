@@ -149,7 +149,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [plugins-a, plugins-b, plugins-c, plugins-d, plugins-e, plugins-f, plugins-g, plugins-h, adapters-a, adapters-b, agent, rest-a, rest-b, rest-c, rest-d]
+        shard: [plugins-a, plugins-b, plugins-c, plugins-d, plugins-e, plugins-f, plugins-g, plugins-h, plugins-i, plugins-j, plugins-k, plugins-l, plugins-m, plugins-n, plugins-o, plugins-p, adapters-a, adapters-b, agent, rest-a, rest-b, rest-c, rest-d]
     env:
       UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
       PYTEST_TEST_TIMEOUT: "120"
@@ -273,7 +273,7 @@ jobs:
             fi
           }
           case "${{ matrix.shard }}" in
-            plugins-a|plugins-b|plugins-c|plugins-d|plugins-e|plugins-f|plugins-g|plugins-h)
+            plugins-a|plugins-b|plugins-c|plugins-d|plugins-e|plugins-f|plugins-g|plugins-h|plugins-i|plugins-j|plugins-k|plugins-l|plugins-m|plugins-n|plugins-o|plugins-p)
               mapfile -t files < <(find src/tests/unit/infrastructure/plugins -name 'test_*.py' | sort)
               ;;
             adapters-a|adapters-b)
@@ -290,14 +290,22 @@ jobs:
               ;;
           esac
           case "${{ matrix.shard }}" in
-            plugins-a) shard_files 0 8 "${files[@]}" ;;
-            plugins-b) shard_files 1 8 "${files[@]}" ;;
-            plugins-c) shard_files 2 8 "${files[@]}" ;;
-            plugins-d) shard_files 3 8 "${files[@]}" ;;
-            plugins-e) shard_files 4 8 "${files[@]}" ;;
-            plugins-f) shard_files 5 8 "${files[@]}" ;;
-            plugins-g) shard_files 6 8 "${files[@]}" ;;
-            plugins-h) shard_files 7 8 "${files[@]}" ;;
+            plugins-a) shard_files 0 16 "${files[@]}" ;;
+            plugins-b) shard_files 1 16 "${files[@]}" ;;
+            plugins-c) shard_files 2 16 "${files[@]}" ;;
+            plugins-d) shard_files 3 16 "${files[@]}" ;;
+            plugins-e) shard_files 4 16 "${files[@]}" ;;
+            plugins-f) shard_files 5 16 "${files[@]}" ;;
+            plugins-g) shard_files 6 16 "${files[@]}" ;;
+            plugins-h) shard_files 7 16 "${files[@]}" ;;
+            plugins-i) shard_files 8 16 "${files[@]}" ;;
+            plugins-j) shard_files 9 16 "${files[@]}" ;;
+            plugins-k) shard_files 10 16 "${files[@]}" ;;
+            plugins-l) shard_files 11 16 "${files[@]}" ;;
+            plugins-m) shard_files 12 16 "${files[@]}" ;;
+            plugins-n) shard_files 13 16 "${files[@]}" ;;
+            plugins-o) shard_files 14 16 "${files[@]}" ;;
+            plugins-p) shard_files 15 16 "${files[@]}" ;;
             adapters-a) shard_files 0 2 "${files[@]}" ;;
             adapters-b) shard_files 1 2 "${files[@]}" ;;
             rest-a) shard_files 0 4 "${files[@]}" ;;
@@ -828,6 +836,10 @@ jobs:
       - name: Install Playwright Chromium for desktop browser tests
         working-directory: agi-stack/apps/desktop
         run: corepack pnpm exec playwright install chromium
+
+      - name: Materialize repository database URL for desktop Python fixtures
+        working-directory: .
+        run: printf 'DATABASE_URL=%s\n' 'postgresql+asyncpg://postgres:testpassword@127.0.0.1:5432/memstack' > .env
 
       - name: Run desktop unit and integration tests
         run: make desktop-check
