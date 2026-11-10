@@ -417,6 +417,9 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
         "ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS id text",
         "ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS role text DEFAULT 'member'",
         "ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS permissions json DEFAULT '{}'::json",
+        "ALTER TABLE user_projects ALTER COLUMN id SET DEFAULT gen_random_uuid()::text",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_projects_user_id_project_id \
+            ON user_projects (user_id, project_id)",
         "CREATE TABLE IF NOT EXISTS api_keys (\
             id text PRIMARY KEY, key_hash text, name text, user_id text, \
             created_at timestamptz DEFAULT now(), expires_at timestamptz, \

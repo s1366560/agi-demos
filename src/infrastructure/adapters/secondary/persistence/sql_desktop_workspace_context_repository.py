@@ -70,28 +70,32 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
         self._validate_user_id(user_id)
         result = await self._session.execute(
             refresh_select_statement(
-                select(Project.tenant_id, Project.id, UserTenant.role)
-                .select_from(UserTenant)
-                .join(Project, Project.tenant_id == UserTenant.tenant_id)
-                .join(
-                    UserProject,
+                select(Project.tenant_id, Project.id, UserProject.role, UserTenant.role)
+                .select_from(UserProject)
+                .join(Project, Project.id == UserProject.project_id)
+                .outerjoin(
+                    UserTenant,
                     and_(
-                        UserProject.project_id == Project.id,
-                        UserProject.user_id == UserTenant.user_id,
+                        UserTenant.user_id == UserProject.user_id,
+                        UserTenant.tenant_id == Project.tenant_id,
                     ),
                 )
-                .where(UserTenant.user_id == user_id)
+                .where(UserProject.user_id == user_id)
                 .order_by(Project.tenant_id.asc(), Project.id.asc())
             )
         )
-        return tuple(
-            WorkspaceContextCandidate(
-                tenant_id=str(row[0]),
-                project_id=str(row[1]),
-                membership_role=str(row[2] or "member"),
+        candidates: dict[str, WorkspaceContextCandidate] = {}
+        for tenant_id, project_id, project_role, tenant_role in result.all():
+            project_key = str(project_id)
+            role = str(tenant_role or project_role or "member")
+            if project_key in candidates and tenant_role is None:
+                continue
+            candidates[project_key] = WorkspaceContextCandidate(
+                tenant_id=str(tenant_id),
+                project_id=project_key,
+                membership_role=role,
             )
-            for row in result.all()
-        )
+        return tuple(candidates.values())
 
     @override
     async def initialize(
@@ -300,27 +304,30 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
     ) -> str | None:
         result = await self._session.execute(
             refresh_select_statement(
-                select(UserTenant.role)
-                .select_from(UserTenant)
-                .join(Project, Project.tenant_id == UserTenant.tenant_id)
-                .join(
-                    UserProject,
+                select(UserProject.role, UserTenant.role)
+                .select_from(UserProject)
+                .join(Project, Project.id == UserProject.project_id)
+                .outerjoin(
+                    UserTenant,
                     and_(
-                        UserProject.project_id == Project.id,
-                        UserProject.user_id == UserTenant.user_id,
+                        UserTenant.user_id == UserProject.user_id,
+                        UserTenant.tenant_id == Project.tenant_id,
                     ),
                 )
                 .where(
-                    UserTenant.user_id == user_id,
-                    UserTenant.tenant_id == tenant_id,
+                    UserProject.user_id == user_id,
+                    Project.tenant_id == tenant_id,
                     Project.id == project_id,
                 )
                 .order_by(UserTenant.created_at.asc(), UserTenant.id.asc())
                 .limit(1)
             )
         )
-        role = result.scalar_one_or_none()
-        return None if role is None else str(role or "member")
+        row = result.first()
+        if row is None:
+            return None
+        project_role, tenant_role = row
+        return str(tenant_role or project_role or "member")
 
     async def _load_event(
         self,

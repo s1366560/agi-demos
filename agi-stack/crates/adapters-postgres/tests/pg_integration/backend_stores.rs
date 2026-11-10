@@ -492,8 +492,8 @@ async fn backend_store_repositories_create_update_count_and_soft_delete() {
 async fn clean_backend_store_rows(pool: &PgPool) {
     for sql in [
         "DELETE FROM projects WHERE id LIKE 'backend_store_%'",
-        "DELETE FROM graph_stores WHERE id LIKE 'backend_store_%'",
-        "DELETE FROM retrieval_stores WHERE id LIKE 'backend_store_%'",
+        "DELETE FROM graph_stores WHERE id LIKE 'backend_store_%' OR tenant_id LIKE 'backend_store_%'",
+        "DELETE FROM retrieval_stores WHERE id LIKE 'backend_store_%' OR tenant_id LIKE 'backend_store_%'",
         "DELETE FROM user_roles WHERE id LIKE 'backend_store_%'",
         "DELETE FROM user_tenants WHERE id LIKE 'backend_store_%'",
         "DELETE FROM users WHERE id LIKE 'backend_store_%'",
