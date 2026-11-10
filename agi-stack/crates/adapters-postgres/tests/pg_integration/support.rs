@@ -853,10 +853,21 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
          BEFORE DELETE ON workspace_messages FOR EACH ROW \
          EXECUTE FUNCTION tombstone_task_session_creation_receipt()",
     ] {
-        sqlx::query(ddl)
-            .execute(pool)
-            .await
-            .unwrap_or_else(|e| panic!("ddl failed: {ddl}\n{e}"));
+        let mut attempt = 0;
+        loop {
+            match sqlx::query(ddl).execute(pool).await {
+                Ok(_) => break,
+                Err(error)
+                    if attempt < 6
+                        && (error.to_string().contains("pg_type_typname_nsp_index")
+                            || error.to_string().contains("pg_class_relname_nsp_index")) =>
+                {
+                    attempt += 1;
+                    tokio::time::sleep(std::time::Duration::from_millis(40 * attempt)).await;
+                }
+                Err(error) => panic!("ddl failed: {ddl}\n{error}"),
+            }
+        }
     }
     ensure_aux_schema(pool).await.expect("aux schema");
 }
