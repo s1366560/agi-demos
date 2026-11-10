@@ -1,4 +1,4 @@
-import { canonicalJsonV2, digestV2 } from './canonical';
+import { canonicalJsonV2, digestCachedV2 } from './canonical';
 import { RuntimeV2Error } from './errors';
 import type {
   DataPlaneTargetV2,
@@ -17,9 +17,16 @@ import {
 } from './generatedCatalog';
 import { jsonSchemaValidationIssueV2 } from './schema';
 
-export async function validateGeneratedCatalogDigestV2(): Promise<void> {
+let catalogDigestValidation: Promise<void> | undefined;
+
+export function validateGeneratedCatalogDigestV2(): Promise<void> {
+  catalogDigestValidation ??= verifyGeneratedCatalogDigestV2();
+  return catalogDigestValidation;
+}
+
+async function verifyGeneratedCatalogDigestV2(): Promise<void> {
   const { catalog_digest: _digest, ...payload } = PLUGIN_MODULE_CATALOG_V2;
-  const expected = `sha256:${await digestV2(payload)}`;
+  const expected = `sha256:${await digestCachedV2(payload)}`;
   if (
     PLUGIN_MODULE_CATALOG_V2.catalog_digest !== expected ||
     PLUGIN_MODULE_CATALOG_DIGEST_V2 !== expected
@@ -30,6 +37,10 @@ export async function validateGeneratedCatalogDigestV2(): Promise<void> {
     );
   }
 }
+
+// The catalog is immutable. Start the check when the runtime module loads so
+// the first authenticated view overlaps it with the distribution request.
+void validateGeneratedCatalogDigestV2();
 
 export function generatedTargetCatalogV2(
   target: DataPlaneTargetV2
@@ -48,6 +59,11 @@ export async function validateTargetModulesV2(
 ): Promise<ReadonlyMap<string, PluginModuleV2>> {
   const modules = new Map<string, PluginModuleV2>();
   const moduleRefs = new Set<string>();
+  const targeted: Array<{
+    manifest: (typeof snapshot.manifests)[number];
+    module: PluginModuleV2;
+    catalogModule: PluginModuleCatalogEntryV2;
+  }> = [];
   for (const manifest of snapshot.manifests) {
     for (const module of manifest.modules) {
       if (moduleRefs.has(module.module_ref)) {
@@ -66,37 +82,47 @@ export async function validateTargetModulesV2(
           `module ${module.module_ref} is absent from ${target} catalog`
         );
       }
-      const expected = `sha256:${await digestV2(module.contract)}`;
-      const catalogContractDigest = `sha256:${await digestV2(catalogModule.contract)}`;
-      if (
-        module.contract_digest !== expected ||
-        catalogModule.contract_digest !== expected ||
-        catalogContractDigest !== expected
-      ) {
-        throw new RuntimeV2Error(
-          'contract_digest_mismatch',
-          `module ${module.module_ref} contract digest differs across manifest and catalog`
-        );
-      }
-      if (catalogModule.artifact_digest !== module.artifact.digest) {
-        throw new RuntimeV2Error(
-          'artifact_digest_mismatch',
-          `module ${module.module_ref} artifact digest differs from target catalog`
-        );
-      }
-      if (
-        catalogModule.plugin_id !== manifest.plugin_id ||
-        catalogModule.plugin_version !== manifest.version ||
-        catalogModule.module_ref !== module.module_ref ||
-        catalogModule.entrypoint !== module.entrypoint ||
-        catalogModule.artifact_source !== module.artifact.source ||
-        !sameTargetsV2(catalogModule.targets, module.targets)
-      ) {
-        throw new RuntimeV2Error(
-          'catalog_module_mismatch',
-          `module ${module.module_ref} metadata differs from target catalog`
-        );
-      }
+      targeted.push({ manifest, module, catalogModule });
+    }
+  }
+  const digested = await Promise.all(
+    targeted.map(async (item) => ({
+      ...item,
+      expectedBody: await digestCachedV2(item.module.contract),
+      catalogBody: await digestCachedV2(item.catalogModule.contract),
+    }))
+  );
+  for (const { manifest, module, catalogModule, expectedBody, catalogBody } of digested) {
+    const expected = `sha256:${expectedBody}`;
+    const catalogContractDigest = `sha256:${catalogBody}`;
+    if (
+      module.contract_digest !== expected ||
+      catalogModule.contract_digest !== expected ||
+      catalogContractDigest !== expected
+    ) {
+      throw new RuntimeV2Error(
+        'contract_digest_mismatch',
+        `module ${module.module_ref} contract digest differs across manifest and catalog`
+      );
+    }
+    if (catalogModule.artifact_digest !== module.artifact.digest) {
+      throw new RuntimeV2Error(
+        'artifact_digest_mismatch',
+        `module ${module.module_ref} artifact digest differs from target catalog`
+      );
+    }
+    if (
+      catalogModule.plugin_id !== manifest.plugin_id ||
+      catalogModule.plugin_version !== manifest.version ||
+      catalogModule.module_ref !== module.module_ref ||
+      catalogModule.entrypoint !== module.entrypoint ||
+      catalogModule.artifact_source !== module.artifact.source ||
+      !sameTargetsV2(catalogModule.targets, module.targets)
+    ) {
+      throw new RuntimeV2Error(
+        'catalog_module_mismatch',
+        `module ${module.module_ref} metadata differs from target catalog`
+      );
     }
   }
   return modules;

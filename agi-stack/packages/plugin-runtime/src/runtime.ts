@@ -192,8 +192,11 @@ export class LoaderV2 {
   }
 
   async stage(snapshot: ProfileSnapshotV2): Promise<RuntimeGenerationV2> {
-    if (this.usesGeneratedCatalog) await validateGeneratedCatalogDigestV2();
+    const catalogDigest = this.usesGeneratedCatalog
+      ? validateGeneratedCatalogDigestV2()
+      : undefined;
     const modulesByKey = await validateTargetModulesV2(snapshot, this.target, this.targetCatalog);
+    await catalogDigest;
     const entries = enabledTargetEntries(snapshot, this.target);
     const definitions = new Map<string, PluginDefinitionV2>();
     const modules = new Map<string, PluginModuleV2>();
