@@ -5197,7 +5197,7 @@ class SessionProcessor:
                     tool_execution_id=tool_part.tool_execution_id,
                 )
                 return
-            if hook_result.args is not None:
+            if hook_result.args is not None and hook_result.args != arguments:
                 arguments = hook_result.args
             if hook_result.decision == HookDecision.ASK:
                 # Publish the rewritten call before the chat approval. The chat
@@ -5213,8 +5213,10 @@ class SessionProcessor:
                 )
                 yield await anext(pending_hook_review)
                 hook_reply = await anext(pending_hook_review)
-                granted = isinstance(hook_reply, AgentPermissionRepliedEvent) and hook_reply.granted
-                if not granted:
+                if (
+                    not isinstance(hook_reply, AgentPermissionRepliedEvent)
+                    or not hook_reply.granted
+                ):
                     yield hook_reply
                     async for extra in pending_hook_review:
                         yield extra
