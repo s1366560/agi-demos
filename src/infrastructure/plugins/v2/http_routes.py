@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from threading import RLock
@@ -12,13 +11,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.datastructures import Default
 from fastapi.params import Depends as DependsParam
-from fastapi.routing import (
-    APIRoute,
-    APIWebSocketRoute,
-    get_websocket_app,
-    request_response,
-    websocket_session,
-)
+from fastapi.routing import APIRoute
 from starlette.responses import Response
 from starlette.routing import BaseRoute, Match, Router, WebSocketRoute
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -120,13 +113,18 @@ class RouteTableV2:
         app: FastAPI,
         *,
         definitions: Sequence[RouteContributionV2] = (),
+        openapi: Mapping[str, Any] | None = None,
     ) -> RouteTableV2:
         """Freeze an already assembled private FastAPI graph without re-registering routes."""
         instance = cls.__new__(cls)
         instance._definitions = tuple(definitions)
         instance._routes = tuple(app.router.routes)
         instance._app = Router(routes=list(instance._routes))
-        instance._openapi = MappingProxyType(build_openapi_schema_v2(app))
+        instance._openapi = (
+            openapi
+            if isinstance(openapi, MappingProxyType)
+            else MappingProxyType(openapi if openapi is not None else build_openapi_schema_v2(app))
+        )
         return instance
 
     @property
@@ -152,45 +150,6 @@ class RouteTableV2:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         await self._app(scope, receive, send)
-
-    def with_dependency_overrides(
-        self,
-        overrides: Mapping[Callable[..., Any], Callable[..., Any]],
-    ) -> RouteTableV2:
-        """Reuse compiled routes and OpenAPI, with this call's override snapshot."""
-        provider = FastAPI(
-            docs_url=None,
-            redoc_url=None,
-            openapi_url=None,
-            title="MemStack Plugin Routes",
-        )
-        provider.dependency_overrides.update(dict(overrides))
-        routes: list[BaseRoute] = []
-        for route in self._routes:
-            if isinstance(route, APIRoute):
-                bound = copy.copy(route)
-                bound.dependency_overrides_provider = provider
-                bound.app = request_response(bound.get_route_handler())
-                routes.append(bound)
-            elif isinstance(route, APIWebSocketRoute):
-                bound = copy.copy(route)
-                bound.dependency_overrides_provider = provider
-                bound.app = websocket_session(
-                    get_websocket_app(
-                        dependant=bound.dependant,
-                        dependency_overrides_provider=provider,
-                        embed_body_fields=bound._embed_body_fields,
-                    )
-                )
-                routes.append(bound)
-            else:
-                routes.append(route)
-        instance = RouteTableV2.__new__(RouteTableV2)
-        instance._definitions = self._definitions
-        instance._routes = tuple(routes)
-        instance._app = Router(routes=list(instance._routes))
-        instance._openapi = self._openapi
-        return instance
 
 
 class RouteTableBuilderV2:

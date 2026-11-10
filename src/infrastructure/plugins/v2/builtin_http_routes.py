@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import FastAPI
@@ -144,9 +144,14 @@ def build_builtin_route_graph_v2(
         _ROUTE_GRAPH_CACHE[cache_key] = cached
     if not dependency_overrides:
         return cached
-    return replace(
-        cached,
-        table=cached.table.with_dependency_overrides(dependency_overrides),
+    # Overrides are applied while the routes are registered. Rebinding a cached
+    # route leaves sibling dependencies on the original call, so requests miss
+    # the snapshot and fall through to header authentication.
+    return _compile_builtin_route_graph_v2(
+        route_definitions=route_definitions,
+        required_v2_row_ids=required_v2_row_ids,
+        dependency_overrides=dependency_overrides,
+        openapi=cached.table._openapi,
     )
 
 
@@ -154,6 +159,8 @@ def _compile_builtin_route_graph_v2(
     *,
     route_definitions: Sequence[RouteContributionV2],
     required_v2_row_ids: Collection[str],
+    dependency_overrides: Mapping[Callable[..., Any], Callable[..., Any]] | None = None,
+    openapi: Mapping[str, Any] | None = None,
 ) -> BuiltinRouteGraphV2:
     private_app = FastAPI(
         docs_url=None,
@@ -161,6 +168,8 @@ def _compile_builtin_route_graph_v2(
         openapi_url=None,
         title="MemStack Builtin Routes V2",
     )
+    if dependency_overrides:
+        private_app.dependency_overrides.update(dict(dependency_overrides))
     definitions = tuple(route_definitions)
     row_owners = _builtin_row_owners_v2(definitions)
     missing_required = sorted(set(required_v2_row_ids) - set(row_owners))
@@ -176,6 +185,7 @@ def _compile_builtin_route_graph_v2(
         table=RouteTableV2.from_fastapi_graph(
             private_app,
             definitions=ordered_definitions,
+            openapi=openapi,
         ),
         mounted_row_ids=mounted,
         static_mounted_row_ids=(),
