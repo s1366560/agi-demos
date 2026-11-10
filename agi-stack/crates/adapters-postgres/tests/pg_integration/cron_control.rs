@@ -70,16 +70,16 @@ async fn cron_control_discovers_scope_and_admits_each_schedule_revision_once() {
         .await
         .expect("renew cron control authority")
         .expect("current authority renews");
-    assert!(repo
-        .admit_reconcile_operations(&stale_authority, &scope, 10, now)
-        .await
-        .expect("stale authority is fenced")
-        .is_empty());
     let second = repo
         .admit_reconcile_operations(&authority, &scope, 10, now)
         .await
         .expect("admit next schedule revision");
     assert_eq!(second.len(), 1);
+    assert!(repo
+        .admit_reconcile_operations(&stale_authority, &scope, 10, now)
+        .await
+        .expect("same revision is admitted once")
+        .is_empty());
     assert_eq!(second[0].schedule_revision, 3);
 
     let revisions = sqlx::query_scalar::<_, i64>(
