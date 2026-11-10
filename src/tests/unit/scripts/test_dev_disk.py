@@ -6,9 +6,11 @@ import fcntl
 import importlib.util
 import json
 import os
+import pty
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -406,16 +408,40 @@ def test_real_offline_cargo_waits_for_cleaner_profile_lock(repo: Path) -> None:
             "--target-dir",
             str(repo / "agi-stack/target"),
         ]
-        with subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        ) as process:
-            try:
-                process.communicate(timeout=2)
-                pytest.fail("Cargo unexpectedly bypassed the profile lock")
-            except subprocess.TimeoutExpired:
-                process.terminate()
-                _, errors = process.communicate(timeout=5)
-                assert "file lock" in errors, errors
+        master, slave = pty.openpty()
+        try:
+            with subprocess.Popen(command, stdout=slave, stderr=slave) as process:
+                os.close(slave)
+                slave = -1
+                os.set_blocking(master, False)
+                deadline = time.monotonic() + 15
+                captured = bytearray()
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        pytest.fail(
+                            "Cargo unexpectedly bypassed the profile lock: "
+                            + captured.decode(errors="replace")
+                        )
+                    try:
+                        captured.extend(os.read(master, 4096))
+                    except BlockingIOError:
+                        time.sleep(0.05)
+                        continue
+                    if b"file lock" in captured:
+                        process.terminate()
+                        process.wait(timeout=5)
+                        break
+                else:
+                    process.terminate()
+                    process.wait(timeout=5)
+                    pytest.fail(
+                        "Cargo did not report the profile lock: "
+                        + captured.decode(errors="replace")
+                    )
+        finally:
+            if slave >= 0:
+                os.close(slave)
+            os.close(master)
     finally:
         os.close(lock)
         os.close(parent)
