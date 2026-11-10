@@ -37,7 +37,8 @@ window.render=()=>app.render(window.qa.mode==='desktop'?<PlatformPluginToolResul
 window.unmount=()=>app.unmount();window.render();`;
 const hook = `export const t=(x)=>x;export const useI18n=()=>({t});export const useTranslation=()=>({t});export const useOptionalDesktopRendererGenerationV2=()=>window.qa.generation;export const usePlatformPluginUiSlots=()=>({slots:window.qa.slots,error:null,loading:false});export const useComputerUseDevice=()=>({client:window.qa.client});export const useTimelineInspection=()=>({sessionKey:window.qa.owner});`;
 (async () => {
-  await esbuild.build({
+  await Promise.race([
+    esbuild.build({
     stdin: { contents: entry, resolveDir: root, loader: "tsx" },
     outfile: path.join(here, "browser-regression.bundle.js"),
     bundle: true,
@@ -70,7 +71,11 @@ const hook = `export const t=(x)=>x;export const useI18n=()=>({t});export const 
         },
       },
     ],
-  });
+  }),
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("desktop browser bundle timed out")), 90_000);
+    }),
+  ]);
   const server = http.createServer((request, response) => {
     if (request.url === "/bundle.js") {
       response.setHeader("content-type", "text/javascript");
@@ -83,7 +88,7 @@ const hook = `export const t=(x)=>x;export const useI18n=()=>({t});export const 
     }
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, timeout: 20_000 });
   const page = await browser.newPage();
   page.setDefaultTimeout(5000);
   const errors = [];

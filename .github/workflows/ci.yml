@@ -786,6 +786,14 @@ jobs:
       - name: Install desktop dependencies
         run: make desktop-deps
 
+      - name: Install web packages used by desktop component tests
+        working-directory: web
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium for desktop browser tests
+        working-directory: agi-stack/apps/desktop
+        run: corepack pnpm exec playwright install chromium
+
       - name: Run desktop unit and integration tests
         run: make desktop-check
 
