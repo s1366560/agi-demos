@@ -7,6 +7,7 @@ import json
 import uuid
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import asdict
 from enum import Enum
 from functools import cache, lru_cache
@@ -109,7 +110,9 @@ def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
     if isinstance(digest, str) and (cached := _PARSED_SNAPSHOTS.get(digest)) is not None:
         if digest == _snapshot_digest(payload):
             _PARSED_SNAPSHOTS.move_to_end(digest)
-            return cached
+            # Callers mutate frozen snapshots for negative cases. The cache keeps
+            # the validated object and hands out a copy.
+            return deepcopy(cached)
     _validate_schema("ProfileSnapshotV2", payload)
     _validate_snapshot_semantics(payload)
     expected_digest = _snapshot_digest(payload)
@@ -121,6 +124,7 @@ def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
     snapshot = _snapshot_from_payload(payload)
     _PARSED_SNAPSHOTS[expected_digest] = snapshot
     _PARSED_SNAPSHOTS.move_to_end(expected_digest)
+    snapshot = deepcopy(snapshot)
     while len(_PARSED_SNAPSHOTS) > _PARSED_SNAPSHOT_LIMIT:
         _PARSED_SNAPSHOTS.popitem(last=False)
     return snapshot
