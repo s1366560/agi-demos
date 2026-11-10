@@ -1,4 +1,4 @@
-import { cleanup } from '@testing-library/react';
+import { act, cleanup } from '@testing-library/react';
 import { afterEach, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
@@ -2379,9 +2379,19 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+// React 19 reads `window.event` from a macrotask scheduled during commit.
+// Capture setImmediate before a test can replace it, and flush that callback
+// while happy-dom's window still exists.
+const flushReactPassiveEffects = globalThis.setImmediate.bind(globalThis);
+
 // Cleanup after each test
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  await act(async () => {
+    await new Promise((resolve) => {
+      flushReactPassiveEffects(resolve);
+    });
+  });
 
   // Clear localStorage and sessionStorage after each test
   localStorageMock.clear();
