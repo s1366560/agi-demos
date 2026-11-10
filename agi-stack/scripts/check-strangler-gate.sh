@@ -91,10 +91,11 @@ step "checking portable core wasm build"
 if [ "$RUN_FULL_TESTS" = "1" ]; then
   step "checking full workspace tests"
   # pg_integration shares one database and creates tables in parallel. Postgres
-  # catalog inserts then race. That binary runs alone, one test at a time.
-  "$CARGO" test --workspace --exclude agistack-adapters-postgres
+  # catalog inserts then race, so that binary runs alone, one test at a time.
+  # It also creates llm_providers, which later server tests clean against.
   "$CARGO" test -p agistack-adapters-postgres --lib
   "$CARGO" test -p agistack-adapters-postgres --tests -- --test-threads=1
+  "$CARGO" test --workspace --exclude agistack-adapters-postgres
 else
   echo "skipping full workspace tests because AGISTACK_STRANGLER_GATE_FULL_TESTS=$RUN_FULL_TESTS"
 fi

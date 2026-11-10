@@ -2381,15 +2381,8 @@ beforeEach(() => {
 
 // React 19 reads `window.event` from a macrotask scheduled during commit.
 // Capture setImmediate before a test can replace it, and flush that callback
-// while happy-dom's window still exists. A callback that loses the race with
-// environment teardown must not touch `window`.
-const nativeSetImmediate = globalThis.setImmediate.bind(globalThis);
-globalThis.setImmediate = ((callback: (...args: unknown[]) => void, ...args: unknown[]) =>
-  nativeSetImmediate(() => {
-    if (typeof window === 'undefined') return;
-    callback(...args);
-  }, ...args)) as typeof setImmediate;
-const flushReactPassiveEffects = nativeSetImmediate;
+// while happy-dom's window still exists.
+const flushReactPassiveEffects = globalThis.setImmediate.bind(globalThis);
 
 // Cleanup after each test
 afterEach(async () => {
