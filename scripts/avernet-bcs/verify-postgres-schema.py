@@ -630,8 +630,13 @@ def _downgrade_past_forward_only_promotion(
     alembic_config: Config,
     target_revision: str,
     head_revision: str,
-) -> DBAPIError:
-    """Downgrade to target without revoking the forward-only administrator promotion."""
+) -> DBAPIError | None:
+    """Downgrade to target without revoking the forward-only administrator promotion.
+
+    A successful downgrade leaves the version at the target. A database guard that
+    rolls the transaction back is returned, and the head pointer is restored so it
+    still matches the unchanged schema.
+    """
     try:
         command.downgrade(alembic_config, target_revision)
     except DBAPIError as error:
@@ -640,23 +645,21 @@ def _downgrade_past_forward_only_promotion(
         if "Administrator promotion is forward-only" not in str(error):
             raise
     else:
-        raise RuntimeError(f"downgrade to {target_revision} was accepted")
+        return None
 
-    # The promotion is data-only and its downgrade rolls the whole transaction back.
-    # Continue from its parent in this disposable database, then restore the head pointer.
     parent = ScriptDirectory.from_config(alembic_config).get_revision("d10a27f4c901").down_revision
     if not isinstance(parent, str):
         raise RuntimeError("forward-only promotion is not a single linear revision")
     command.stamp(alembic_config, parent)
     try:
-        try:
-            command.downgrade(alembic_config, target_revision)
-        except DBAPIError as error:
-            return error
-        else:
-            raise RuntimeError(f"downgrade to {target_revision} was accepted")
-    finally:
+        command.downgrade(alembic_config, target_revision)
+    except DBAPIError as error:
         command.stamp(alembic_config, head_revision)
+        return error
+    except BaseException:
+        command.stamp(alembic_config, head_revision)
+        raise
+    return None
 
 
 def _message_delivery_downgrade_guard(
@@ -668,7 +671,7 @@ def _message_delivery_downgrade_guard(
     error = _downgrade_past_forward_only_promotion(
         alembic_config, _MESSAGE_DELIVERY_PARENT_REVISION, head_revision
     )
-    if "contains durable delivery data" not in str(error.orig):
+    if error is None or "contains durable delivery data" not in str(error.orig):
         raise RuntimeError("message delivery downgrade failed for an unexpected reason") from error
 
     tables, triggers, revision = asyncio.run(_schema_contract(test_dsn))
@@ -738,7 +741,7 @@ def _message_authority_downgrade_guard(
     error = _downgrade_past_forward_only_promotion(
         alembic_config, _MESSAGE_AUTHORITY_PARENT_REVISION, head_revision
     )
-    if "contains new message authority data" not in str(error.orig):
+    if error is None or "contains new message authority data" not in str(error.orig):
         raise RuntimeError("message authority downgrade failed for an unexpected reason") from error
 
     tables, triggers, revision = asyncio.run(_schema_contract(test_dsn))
@@ -908,13 +911,21 @@ def main() -> None:
                 return
             _message_delivery_downgrade_guard(alembic_config, test_dsn, head_revision)
             _message_authority_downgrade_guard(alembic_config, test_dsn, head_revision)
-            command.downgrade(alembic_config, _TASK_SESSION_SAGA_PARENT_REVISION)
+            saga_error = _downgrade_past_forward_only_promotion(
+                alembic_config, _TASK_SESSION_SAGA_PARENT_REVISION, head_revision
+            )
+            if saga_error is not None:
+                raise RuntimeError("task session downgrade failed") from saga_error
             asyncio.run(_task_session_saga_downgrade_contract(test_dsn))
             command.upgrade(alembic_config, "head")
             if not args.skip_cargo_contract:
                 _run_cargo_contract(repository_root, test_url)
 
-            command.downgrade(alembic_config, _PARENT_REVISION)
+            parent_error = _downgrade_past_forward_only_promotion(
+                alembic_config, _PARENT_REVISION, head_revision
+            )
+            if parent_error is not None:
+                raise RuntimeError("full downgrade failed") from parent_error
             schema_exists, revision = asyncio.run(_downgrade_contract(test_dsn))
             if schema_exists or revision != _PARENT_REVISION:
                 raise RuntimeError(
