@@ -26,9 +26,26 @@ PNPM_INSTALL_ARGS ?= --frozen-lockfile
 AVERNET_BCS_TARGET_DIR ?= $(abspath ../.cache/avernet-bcs/target)
 export AVERNET_BCS_TARGET_DIR
 ifeq ($(OS),Windows_NT)
+DESKTOP_SIDECAR_NAME := agistack-desktop-sidecar.exe
 DESKTOP_WORKSPACE_CORE_DEBUG ?= $(AVERNET_BCS_TARGET_DIR)/debug/memstack-workspace-core.exe
+DESKTOP_WORKSPACE_CORE_RELEASE ?= $(AVERNET_BCS_TARGET_DIR)/release/memstack-workspace-core.exe
 else
+DESKTOP_SIDECAR_NAME := agistack-desktop-sidecar
 DESKTOP_WORKSPACE_CORE_DEBUG ?= $(AVERNET_BCS_TARGET_DIR)/debug/memstack-workspace-core
+DESKTOP_WORKSPACE_CORE_RELEASE ?= $(AVERNET_BCS_TARGET_DIR)/release/memstack-workspace-core
+endif
+# CI sets DESKTOP_RELEASE=1 so desktop-test and desktop-bundle share one release
+# profile. Local development keeps the debug profile.
+ifeq ($(DESKTOP_RELEASE),1)
+DESKTOP_CARGO_PROFILE_FLAG := --release
+DESKTOP_SIDECAR_BIN := $(abspath target/release/$(DESKTOP_SIDECAR_NAME))
+DESKTOP_WORKSPACE_CORE_BIN := $(DESKTOP_WORKSPACE_CORE_RELEASE)
+DESKTOP_WORKSPACE_CORE_SCRIPT := build:workspace-core
+else
+DESKTOP_CARGO_PROFILE_FLAG :=
+DESKTOP_SIDECAR_BIN := $(abspath target/debug/$(DESKTOP_SIDECAR_NAME))
+DESKTOP_WORKSPACE_CORE_BIN := $(DESKTOP_WORKSPACE_CORE_DEBUG)
+DESKTOP_WORKSPACE_CORE_SCRIPT := build:workspace-core:debug
 endif
 # Android NDK(本机默认;生产建议 cargo-ndk)。覆盖:make android NDK=/path/to/ndk
 NDK          ?= $(HOME)/Library/Android/sdk/ndk/30.0.14904198
@@ -104,10 +121,10 @@ desktop-check: desktop-test ## 桌面:Rust sidecar、renderer 测试，以及一
 	@echo "==> Electron 外壳与 sidecar 验证通过"
 
 desktop-test: desktop-deps desktop-cua-repl ## 桌面:Rust sidecar 与 renderer 测试，不重复打 Electron 包
-	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
-	$(CARGO) build -p agistack-desktop-sidecar
-	$(CARGO) test -p agistack-desktop-sidecar
-	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(abspath target/debug/agistack-desktop-sidecar) AGISTACK_REAL_WORKSPACE_CORE=$(DESKTOP_WORKSPACE_CORE_DEBUG) $(PNPM) test
+	cd $(DESKTOP_APP_DIR) && $(PNPM) run $(DESKTOP_WORKSPACE_CORE_SCRIPT)
+	$(CARGO) build $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar
+	$(CARGO) test $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar
+	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(DESKTOP_SIDECAR_BIN) AGISTACK_REAL_WORKSPACE_CORE=$(DESKTOP_WORKSPACE_CORE_BIN) $(PNPM) test
 
 desktop-browser-qa: desktop-deps ## 桌面:执行浏览器交互集成测试
 	cd $(DESKTOP_APP_DIR) && CI=true $(PNPM) run qa:browser

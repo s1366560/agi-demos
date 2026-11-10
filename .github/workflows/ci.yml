@@ -769,6 +769,11 @@ jobs:
     if: needs.changes.outputs.agi == 'true'
     runs-on: macos-latest
     timeout-minutes: 70
+    env:
+      # One release profile for the sidecar tests and the installer bundle.
+      # debug=0 keeps the release link from writing full debuginfo.
+      DESKTOP_RELEASE: "1"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
     defaults:
       run:
         working-directory: agi-stack
