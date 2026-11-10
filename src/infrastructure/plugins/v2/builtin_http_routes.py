@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from fastapi import FastAPI
@@ -108,10 +108,7 @@ _ROUTE_GRAPH_CACHE: dict[tuple[object, ...], BuiltinRouteGraphV2] = {}
 def _route_graph_cache_key(
     route_definitions: Sequence[RouteContributionV2],
     required_v2_row_ids: Collection[str],
-    dependency_overrides: Mapping[Callable[..., Any], Callable[..., Any]] | None,
-) -> tuple[object, ...] | None:
-    if dependency_overrides:
-        return None
+) -> tuple[object, ...]:
     return (
         tuple(sorted(required_v2_row_ids)),
         tuple(
@@ -137,18 +134,33 @@ def build_builtin_route_graph_v2(
 ) -> BuiltinRouteGraphV2:
     """Build one private graph exclusively from the generation's V2 contributions."""
     _ = workspace_core_settings
-    cache_key = _route_graph_cache_key(route_definitions, required_v2_row_ids, dependency_overrides)
-    if cache_key is not None:
-        cached = _ROUTE_GRAPH_CACHE.get(cache_key)
-        if cached is not None:
-            return cached
+    cache_key = _route_graph_cache_key(route_definitions, required_v2_row_ids)
+    cached = _ROUTE_GRAPH_CACHE.get(cache_key)
+    if cached is None:
+        cached = _compile_builtin_route_graph_v2(
+            route_definitions=route_definitions,
+            required_v2_row_ids=required_v2_row_ids,
+        )
+        _ROUTE_GRAPH_CACHE[cache_key] = cached
+    if not dependency_overrides:
+        return cached
+    return replace(
+        cached,
+        table=cached.table.with_dependency_overrides(dependency_overrides),
+    )
+
+
+def _compile_builtin_route_graph_v2(
+    *,
+    route_definitions: Sequence[RouteContributionV2],
+    required_v2_row_ids: Collection[str],
+) -> BuiltinRouteGraphV2:
     private_app = FastAPI(
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
         title="MemStack Builtin Routes V2",
     )
-    private_app.dependency_overrides.update(dict(dependency_overrides or {}))
     definitions = tuple(route_definitions)
     row_owners = _builtin_row_owners_v2(definitions)
     missing_required = sorted(set(required_v2_row_ids) - set(row_owners))
@@ -170,8 +182,6 @@ def build_builtin_route_graph_v2(
         v2_owned_row_ids=mounted,
         route_signatures=route_signatures_v2(private_app.router.routes),
     )
-    if cache_key is not None:
-        _ROUTE_GRAPH_CACHE[cache_key] = graph
     return graph
 
 
