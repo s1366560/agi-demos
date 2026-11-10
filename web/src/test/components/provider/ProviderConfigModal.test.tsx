@@ -422,15 +422,13 @@ describe('ProviderConfigModal', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(screen.getByLabelText('Authentication')).toHaveValue('');
-    });
-    expect(screen.getByLabelText('Authentication')).toBeDisabled();
     expect(
-      screen.getByText(
+      await screen.findByText(
         'This provider cannot be configured until secure credential storage is available.'
       )
     ).toBeInTheDocument();
+    expect(screen.getByLabelText('Authentication')).toHaveValue('');
+    expect(screen.getByLabelText('Authentication')).toBeDisabled();
     expect(document.querySelector('input[type="password"]')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   });

@@ -40,12 +40,20 @@ def main() -> None:
     # collection does not land inside a timed call. GC stays enabled.
     gc.collect()
     gc.freeze()
+    # Automatic collections stay enabled, but they must not start inside a
+    # sample. Threshold 0 stops the cyclic trigger; collect() runs outside
+    # the timer. isenabled() remains true.
+    previous_thresholds = gc.get_threshold()
+    gc.set_threshold(0)
     samples = []
-    for _ in range(100):
-        gc.collect()
-        started = time.perf_counter()
-        snapshot = compose_profile_v2(profile, manifests, generation=1)
-        samples.append((time.perf_counter() - started) * 1000.0)
+    try:
+        for _ in range(100):
+            gc.collect()
+            started = time.perf_counter()
+            snapshot = compose_profile_v2(profile, manifests, generation=1)
+            samples.append((time.perf_counter() - started) * 1000.0)
+    finally:
+        gc.set_threshold(*previous_thresholds)
 
     # Check real output outside the timing interval, including external digest validation.
     assert snapshot.profile_id == profile.profile_id
