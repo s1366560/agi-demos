@@ -107,7 +107,7 @@ struct OwnedProcessGroups {
     graceful_deadline: Instant,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct MemberIdentity {
     started_seconds: u64,
     started_microseconds: u64,
@@ -190,6 +190,12 @@ impl OwnedProcessGroups {
                     }
                     continue;
                 }
+                // XNU getsid can return EPERM once the member has exited or the
+                // PID has been reused. Re-read identity before treating it as a
+                // permission failure on a process we still own.
+                if error.raw_os_error() == Some(libc::EPERM) && !self.still_owned(pid, &identity)? {
+                    continue;
+                }
                 return Err(error);
             }
             if actual_session != self.session {
@@ -214,6 +220,7 @@ impl OwnedProcessGroups {
             // Job control can move a snapshotted member into a new group before
             // inspection. Follow that group only after verifying the retained session
             // and user, so cleanup also covers children forked after the migration.
+            let owned_identity = identity.clone();
             self.verified_members.insert(pid, identity);
             self.groups.insert(member_group(&info)?);
             remaining_members.insert(pid);
@@ -224,6 +231,12 @@ impl OwnedProcessGroups {
             // SAFETY: the positive PID was validated against the retained session.
             if unsafe { libc::kill(pid, libc::SIGKILL) } == -1 {
                 let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EPERM)
+                    && !self.still_owned(pid, &owned_identity)?
+                {
+                    remaining_members.remove(&pid);
+                    continue;
+                }
                 if error.raw_os_error() != Some(libc::ESRCH) {
                     return Err(error);
                 }
@@ -233,6 +246,24 @@ impl OwnedProcessGroups {
         // Enumerate again after exit so children forked during the snapshot are also
         // covered. Never report completion while an owned live member remains.
         Ok(!active && self.groups == previous_groups)
+    }
+
+    /// True when `pid` is still the same live process observed at the start of this sweep.
+    /// A zombie cannot be signalled; the retained leader reaps it.
+    fn still_owned(&mut self, pid: i32, identity: &MemberIdentity) -> io::Result<bool> {
+        match process_info(pid)? {
+            Some(info)
+                if info.pbi_status != libc::SZOMB
+                    && MemberIdentity::from_info(&info) == *identity =>
+            {
+                Ok(true)
+            }
+            _ => {
+                self.verified_members.remove(&pid);
+                self.known_members.remove(&pid);
+                Ok(false)
+            }
+        }
     }
 }
 
