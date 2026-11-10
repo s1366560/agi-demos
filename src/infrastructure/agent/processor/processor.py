@@ -4665,6 +4665,7 @@ class SessionProcessor:
                 **self.config.runtime_context,
                 "run_id": self._run_id,
                 "round": max(1, self._step_count),
+                "tool_hooks_resolved": bool(getattr(self, "_tool_hooks_resolved", False)),
             },
         )
 
@@ -5018,6 +5019,37 @@ class SessionProcessor:
                         # ProcessorEvent-compatible.
                         pending_pipeline_events.append(legacy_evt)
 
+    async def _pipeline_before_hooks(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> Any:
+        """Run pipeline before-hooks so the persisted review stores rewritten arguments."""
+        from src.infrastructure.agent.tools.context import ToolContext
+
+        assert self._tool_pipeline is not None
+        context = self._langfuse_context or {}
+        preview = ToolContext(
+            session_id=session_id,
+            message_id=call_id,
+            call_id=call_id,
+            agent_name=context.get("agent_name", "main"),
+            conversation_id=context.get("conversation_id") or session_id,
+            abort_signal=self._abort_event or asyncio.Event(),
+            project_id=context.get("project_id", ""),
+            tenant_id=context.get("tenant_id", ""),
+            user_id=context.get("user_id", ""),
+            api_auth_token=self.config.api_auth_token,
+            runtime_context={
+                **self.config.runtime_context,
+                "run_id": self._run_id,
+                "round": max(1, self._step_count),
+            },
+        )
+        return await self._tool_pipeline._hooks.run_before(tool_name, arguments, preview)
+
     # ── _execute_tool orchestrator ────────────────────────────────────
 
     async def _execute_tool(  # noqa: PLR0912, PLR0915, PLR0911
@@ -5038,6 +5070,7 @@ class SessionProcessor:
         6. Tool invocation + observe event emission
         7. Side-effect emission (artifacts, todowrite, plugins)
         """
+        self._tool_hooks_resolved = False
         raw_tool_name = tool_name
         tool_name = self._canonicalize_tool_name(tool_name)
         if raw_tool_name != tool_name:
@@ -5145,6 +5178,48 @@ class SessionProcessor:
                 tool_execution_id=tool_part.tool_execution_id,
             )
             return
+        hook_review: tuple[AsyncIterator[ProcessorEvent], AgentPermissionRepliedEvent] | None = None
+        if chat_decision == "ask" and self._tool_pipeline is not None:
+            from src.infrastructure.agent.tools.hooks import HookDecision
+
+            hook_result = await self._pipeline_before_hooks(
+                session_id, call_id, tool_name, arguments
+            )
+            if hook_result.decision == HookDecision.DENY:
+                tool_part.status = ToolState.ERROR
+                tool_part.error = hook_result.reason or "Tool execution stopped by hook"
+                tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    call_id=call_id,
+                    error=tool_part.error,
+                    status=ToolState.ERROR.value,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+                return
+            if hook_result.args is not None:
+                arguments = hook_result.args
+            if hook_result.decision == HookDecision.ASK:
+                # Publish the rewritten call before the chat approval. The chat
+                # reply stays buffered so the next stream event is that approval.
+                self._tool_hooks_resolved = True
+                pending_hook_review = self._ask_tool_permission(
+                    session_id,
+                    call_id,
+                    tool_name,
+                    arguments,
+                    tool_part,
+                    tool_def,
+                )
+                yield await anext(pending_hook_review)
+                hook_reply = await anext(pending_hook_review)
+                granted = isinstance(hook_reply, AgentPermissionRepliedEvent) and hook_reply.granted
+                if not granted:
+                    yield hook_reply
+                    async for extra in pending_hook_review:
+                        yield extra
+                    return
+                hook_review = (pending_hook_review, hook_reply)
         if chat_decision == "ask" or policy_kind == "ask":
             from copy import deepcopy
 
@@ -5173,6 +5248,11 @@ class SessionProcessor:
                     )
                     return
             finally:
+                if hook_review is not None:
+                    pending_hook_review, hook_reply = hook_review
+                    yield hook_reply
+                    async for extra in pending_hook_review:
+                        yield extra
                 await self._flush_tool_part_hitl_completions(tool_part)
 
         approval_context = (
