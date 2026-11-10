@@ -253,6 +253,7 @@ jobs:
         run: printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
 
       - name: Run unit shard
+        timeout-minutes: 20
         run: |
           set -euo pipefail
           # Interleave files so one directory's slow cases do not land in one shard.
