@@ -233,6 +233,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev --extra neo4j
 
+      - name: Install TypeScript for the contract scanner
+        run: |
+          set -euo pipefail
+          target=web/node_modules/typescript/lib/typescript.js
+          if [ -f "$target" ]; then
+            exit 0
+          fi
+          npm install --no-package-lock --prefix /tmp/memstack-ts typescript@5.9.3
+          mkdir -p web/node_modules
+          ln -s /tmp/memstack-ts/node_modules/typescript web/node_modules/typescript
+
       - name: Configure repository test database
         env:
           DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
