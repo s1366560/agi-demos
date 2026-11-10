@@ -176,7 +176,7 @@ async def test_invalid_public_configuration_returns_fixed_safe_error(
     assert "private-extra" not in response.text
 
 
-async def test_scoped_web_view_reads_configuration_without_publishing(
+async def test_scoped_web_view_uses_accepted_generation_without_composing(
     authenticated_views,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -185,39 +185,18 @@ async def test_scoped_web_view_reads_configuration_without_publishing(
     payload.pop("digest")
     payload["digest"] = hashlib.sha256(canonical_json_v2(payload)).hexdigest()
     snapshot = parse_profile_snapshot_v2(payload)
-    published = False
-
-    class _Configuration:
-        def __init__(self) -> None:
-            self.snapshot = snapshot
-
-    class _Service:
-        async def initialize(self, actor_id: str) -> None:
-            assert actor_id
-
-        async def configuration(self) -> _Configuration:
-            return _Configuration()
-
-        async def effective_snapshot(self) -> object:
-            nonlocal published
-            published = True
-            raise AssertionError("web view must not publish the agent runtime")
-
-    class _Runtime:
-        def instances(self, scope: ScopeV2) -> _Service:
-            assert scope.kind is ScopeKindV2.ROOT
-            return _Service()
 
     async def scope(*_args: object, **_kwargs: object) -> ScopeV2:
-        return ScopeV2(kind=ScopeKindV2.ROOT)
+        return ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-1")
 
-    monkeypatch.setattr(platform_plugins_v2, "instance_runtime_v2", lambda _request: _Runtime())
+    monkeypatch.setattr(
+        platform_plugins_v2, "_accepted_runtime_snapshot_v2", lambda _request: snapshot
+    )
     monkeypatch.setattr(platform_plugins_v2, "resolve_plugin_read_scope_v2", scope)
     response = await client.get(
         f"{_PATH}?tenant_id=tenant-1",
         headers={"Authorization": f"Bearer {keys[0]}"},
     )
-    assert published is False
     assert response.status_code == 200
     assert "entries" in response.json()["snapshot"]
 

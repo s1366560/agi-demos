@@ -22,6 +22,7 @@ from src.application.schemas.platform_plugins import (
 )
 from src.domain.model.plugins.generated_v2 import (
     DesiredBundleSetV2,
+    ProfileSnapshotV2,
     ScopeKindV2,
     ScopeV2,
     SnapshotApplyReceiptV2,
@@ -40,7 +41,6 @@ from src.infrastructure.adapters.primary.web.dependencies.plugin_scope_auth_v2 i
 )
 from src.infrastructure.adapters.primary.web.routers.platform_plugin_instances_v2 import (
     instance_error_v2,
-    instance_runtime_v2,
     instance_scope_v2,
 )
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
@@ -94,6 +94,16 @@ from src.infrastructure.plugins.v2.scope import parse_scope_v2, scope_v2_to_payl
 from src.infrastructure.plugins.v2.web_public_view import project_web_public_view_v2
 
 router = APIRouter(prefix="/v2", tags=["Platform Plugins V2"])
+
+
+def _accepted_runtime_snapshot_v2(request: Request) -> ProfileSnapshotV2:
+    """Return the snapshot already admitted for this process, without composing a scope."""
+    host = getattr(request.app.state, "platform_plugin_runtime_v2", None)
+    distribution = getattr(host, "current_distribution", None)
+    snapshot = getattr(distribution, "snapshot", None)
+    if not isinstance(snapshot, ProfileSnapshotV2):
+        raise RuntimeV2Error("scope_not_admitted", "scope has no accepted configuration")
+    return snapshot
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -326,7 +336,7 @@ async def get_web_public_view_v2(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Return public configuration from the authenticated scope's accepted source."""
+    """Return the running generation's public Web routes for an authorized scope."""
     response.headers["Cache-Control"] = "private, no-store"
     if project_id is not None and tenant_id is None:
         raise HTTPException(422, detail=_("A tenant is required for project plugin configuration"))
@@ -337,13 +347,10 @@ async def get_web_public_view_v2(
                 current_user=current_user,
                 requested_scope=instance_scope_v2(tenant_id, project_id),
             )
-            service = instance_runtime_v2(request).instances(scope)
-            await service.initialize(current_user.id)
-            # The shell only needs the accepted document. Publishing here starts
-            # the agent graph runtime and holds the page blank until indices exist.
-            snapshot = (await service.configuration()).snapshot
-            # Archive loading and publication await IO: recheck revocable authority.
-            await resolve_plugin_read_scope_v2(db, current_user=current_user, requested_scope=scope)
+            # The shell renders from the generation this process already accepted.
+            # Composing or publishing the scope here keeps that generation undefined,
+            # so the project list and entity header stay on the loader.
+            snapshot = _accepted_runtime_snapshot_v2(request)
             return project_web_public_view_v2(
                 profile_snapshot_v2_to_payload(snapshot),
                 authority_id=current_user.id,
