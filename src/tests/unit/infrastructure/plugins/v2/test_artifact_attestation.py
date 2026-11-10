@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
@@ -199,7 +200,7 @@ async def test_entry_preflight_rejects_before_python_import(
     (tmp_path / "artifact_fixture_v2.py").write_bytes(source_bytes)
     monkeypatch.syspath_prepend(str(tmp_path))
     sys.modules.pop("artifact_fixture_v2", None)
-    snapshot = _snapshot(source_bytes)
+    snapshot = deepcopy(_snapshot(source_bytes))
     object.__setattr__(snapshot.entries[0], "config", {"unexpected": True})
 
     with pytest.raises(RuntimeV2Error) as error:
