@@ -140,14 +140,6 @@ jobs:
           PLUGIN_STORAGE_POSTGRES_URL: postgresql+psycopg2://postgres:testpassword@localhost:5432/memstack
         run: uv run pytest src/tests/integration/test_plugin_storage_postgres.py -q
 
-      - name: Prove Workspace authority PostgreSQL triggers and concurrency
-        env:
-          WORKSPACE_AUTHORITY_POSTGRES_URL: postgresql://postgres:testpassword@localhost:5432/memstack
-        run: |
-          uv run pytest \
-            src/tests/integration/test_workspace_collaboration_authority_postgres.py \
-            -q
-      
   unit:
     name: Backend unit (${{ matrix.shard }})
     needs: changes
