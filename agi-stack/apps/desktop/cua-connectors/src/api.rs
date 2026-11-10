@@ -386,7 +386,8 @@ mod tests {
         let task = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut bytes = [0; 8192];
-            stream.read(&mut bytes).await.unwrap();
+            let read = stream.read(&mut bytes).await.unwrap();
+            assert!(read > 0);
             drop(stream);
             assert!(
                 tokio::time::timeout(std::time::Duration::from_millis(100), listener.accept())
