@@ -152,7 +152,8 @@ jobs:
         shard: [plugins-a, plugins-b, plugins-c, plugins-d, adapters-a, adapters-b, agent, rest-a, rest-b, rest-c, rest-d]
     env:
       UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
-      PYTEST_TEST_TIMEOUT: "600"
+      PYTEST_TEST_TIMEOUT: "120"
+      PYTHONUNBUFFERED: "1"
       NEO4J_URI: bolt://localhost:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: testpassword
@@ -303,6 +304,7 @@ jobs:
           COVERAGE_FILE="coverage-${{ matrix.shard }}" \
             uv run pytest "${args[@]}" \
               -m "not integration" \
+              --durations=20 \
               --cov=src \
               --cov-report= \
               --cov-fail-under=0
@@ -480,8 +482,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        with:
-          version: 11.15.1
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -627,8 +627,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        with:
-          version: 11.15.1
 
       - name: Set up Node for Electron bridge validation
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -760,10 +758,30 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Python
+        id: setup-python
+        continue-on-error: true
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.13'
+
       - name: Set up uv
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
         with:
           enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
 
       - name: Install repository Python for desktop contract fixtures
         working-directory: .
@@ -788,8 +806,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        with:
-          version: 11.15.1
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0

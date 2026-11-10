@@ -1077,9 +1077,8 @@ def pytest_configure(config: pytest.Config) -> None:
     clear_translation_cache()
 
 
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_call(item: pytest.Item) -> object:
-    """Bound one test when CI sets PYTEST_TEST_TIMEOUT. Local runs stay unbounded."""
+def _bounded_pytest_phase(item: pytest.Item, phase: str) -> object:
+    """Fail a hung setup, call, or teardown when CI sets PYTEST_TEST_TIMEOUT."""
     raw = os.environ.get("PYTEST_TEST_TIMEOUT")
     if not raw or not hasattr(signal, "SIGALRM"):
         yield
@@ -1087,7 +1086,8 @@ def pytest_runtest_call(item: pytest.Item) -> object:
     seconds = int(raw)
 
     def _handler(signum: int, frame: object) -> None:
-        raise TimeoutError(f"pytest test exceeded {seconds}s: {item.nodeid}")
+        del signum, frame
+        raise TimeoutError(f"pytest {phase} exceeded {seconds}s: {item.nodeid}")
 
     previous = signal.signal(signal.SIGALRM, _handler)
     signal.alarm(seconds)
@@ -1096,3 +1096,21 @@ def pytest_runtest_call(item: pytest.Item) -> object:
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, previous)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item: pytest.Item) -> object:
+    """Bound fixture setup. The call-only alarm never fired for a hung fixture."""
+    yield from _bounded_pytest_phase(item, "setup")
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> object:
+    """Bound the test body when CI sets PYTEST_TEST_TIMEOUT."""
+    yield from _bounded_pytest_phase(item, "call")
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item: pytest.Item) -> object:
+    """Bound fixture teardown when CI sets PYTEST_TEST_TIMEOUT."""
+    yield from _bounded_pytest_phase(item, "teardown")
