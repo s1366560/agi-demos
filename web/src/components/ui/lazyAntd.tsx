@@ -70,7 +70,10 @@ function createLazyComponent(
   }) as LazyExoticComponent<LazyComponent> & NamedComponent;
 
   LazyComponent.displayName = displayName;
-  return LazyComponent as unknown as LazyComponent;
+  // A raw lazy() suspends the nearest route boundary. That boundary also wraps
+  // the generation host, so the first antd chunk unmounts the shell and aborts
+  // the web-view that just returned.
+  return withSuspense(LazyComponent as unknown as LazyComponent);
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

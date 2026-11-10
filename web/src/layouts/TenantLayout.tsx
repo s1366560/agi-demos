@@ -17,7 +17,7 @@
  * - Workspace switcher
  */
 
-import React, { useEffect, useLayoutEffect, useState, useCallback, memo, useRef } from 'react';
+import React, { Suspense, useEffect, useLayoutEffect, useState, useCallback, memo, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -474,11 +474,13 @@ export const TenantLayout: React.FC = memo(() => {
       </a>
       <div className="flex h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark">
         {/* Sidebar - Agent Conversation History (Primary Navigation) */}
-        <TenantChatSidebar
-          tenantId={tenantId}
-          collapsed={sidebarCollapsed}
-          onCollapsedChange={setSidebarCollapsed}
-        />
+        <Suspense fallback={null}>
+          <TenantChatSidebar
+            tenantId={tenantId}
+            collapsed={sidebarCollapsed}
+            onCollapsedChange={setSidebarCollapsed}
+          />
+        </Suspense>
 
         {/* Mobile sidebar drawer */}
         <MobileSidebarDrawer
@@ -487,7 +489,9 @@ export const TenantLayout: React.FC = memo(() => {
             setMobileSidebarOpen(false);
           }}
         >
-          <TenantChatSidebar tenantId={tenantId} mobile />
+          <Suspense fallback={null}>
+            <TenantChatSidebar tenantId={tenantId} mobile />
+          </Suspense>
         </MobileSidebarDrawer>
 
         {/* Main Content */}

@@ -44,12 +44,41 @@ const identityLifecycle = new WebPublicViewIdentityV2(
   }
 );
 
+let identitySourceKey = '';
+
+function scopeFromLocation(): { tenantId?: string; projectId?: string } {
+  if (typeof window === 'undefined') return {};
+  const match = /^\/tenant\/([^/]+)(?:\/project\/([^/]+))?/.exec(window.location.pathname);
+  if (!match) return {};
+  return { tenantId: match[1], projectId: match[2] };
+}
+
 function refreshIdentity(): void {
-  const tenantId = useTenantStore.getState().currentTenant?.id;
+  const locationScope = scopeFromLocation();
+  const tenantId = useTenantStore.getState().currentTenant?.id ?? locationScope.tenantId;
   const project = useProjectStore.getState().currentProject;
-  const projectId = project && project.tenant_id === tenantId ? project.id : undefined;
+  const projectId =
+    project && project.tenant_id === tenantId
+      ? project.id
+      : locationScope.tenantId === tenantId
+        ? locationScope.projectId
+        : undefined;
+  const authenticated = useAuthStore.getState().isAuthenticated;
+  const token = useAuthStore.getState().token;
+  const userId = useAuthStore.getState().user?.id;
+  const sourceKey = JSON.stringify([
+    hostEnabled && authenticated,
+    token ?? null,
+    userId ?? null,
+    tenantId ?? null,
+    projectId ?? null,
+  ]);
+  // A replayed effect used to replace the same identity, abort the web-view, and
+  // push the shell back to the loader after the response had already succeeded.
+  if (sourceKey === identitySourceKey) return;
+  identitySourceKey = sourceKey;
   void identityLifecycle.replace(
-    hostEnabled && useAuthStore.getState().isAuthenticated
+    hostEnabled && authenticated
       ? (signal) => fetchWebPluginDistributionV2(signal, tenantId, projectId)
       : undefined
   );

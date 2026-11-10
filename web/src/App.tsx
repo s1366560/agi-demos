@@ -50,11 +50,11 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <Suspense fallback={<PageLoader />}>
-          <WebPluginGenerationHostV2
-            composition={WEB_RENDERER_APP_COMPOSITION_V2}
-            enabled={isAuthenticated}
-          >
+        <WebPluginGenerationHostV2
+          composition={WEB_RENDERER_APP_COMPOSITION_V2}
+          enabled={isAuthenticated}
+        >
+          <Suspense fallback={<PageLoader />}>
             <WebRouteAuthorityProviderV2 enabled={isAuthenticated}>
               {({ routeArtifacts, status }) => (
                 <WebNavigationAuthorityProviderV2 enabled={isAuthenticated}>
@@ -146,8 +146,8 @@ function App() {
                 </WebNavigationAuthorityProviderV2>
               )}
             </WebRouteAuthorityProviderV2>
-          </WebPluginGenerationHostV2>
-        </Suspense>
+          </Suspense>
+        </WebPluginGenerationHostV2>
       </ThemeProvider>
     </ErrorBoundary>
   );
