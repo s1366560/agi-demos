@@ -180,7 +180,7 @@ test('agent timeline and workspace messages share artifact reference rendering',
 test('artifact-only replies do not expose the internal assistant event type as prose', () => {
   assert.match(
     timelineSource,
-    /const content\s*=\s*kind === 'user' \|\| kind === 'agent'[\s\S]*item\.content \?\? ''[\s\S]*timelinePayloadPreview\(item\)/,
+    /const content\s*=\s*kind === 'agent'[\s\S]*localizePlanReadyMessage\(item\.content, t\)[\s\S]*kind === 'user'[\s\S]*timelinePayloadPreview\(item\)/,
   );
 });
 

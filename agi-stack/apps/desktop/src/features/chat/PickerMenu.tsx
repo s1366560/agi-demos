@@ -2,6 +2,11 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { CheckIcon, ChevronDownIcon } from '@radix-ui/react-icons';
 
+import {
+  resolvePickerMenuPlacement,
+  type PickerMenuPlacement,
+} from './pickerMenuPlacement';
+
 export type PickerMenuOption = {
   value: string;
   label: string;
@@ -33,6 +38,8 @@ export function PickerMenu({
   footer,
 }: PickerMenuProps) {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<PickerMenuPlacement>('up');
+  const [sideAlign, setSideAlign] = useState<'top' | 'bottom'>('bottom');
   const anchorRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const selected = options.find((option) => option.value === value);
@@ -66,14 +73,41 @@ export function PickerMenu({
         aria-haspopup="menu"
         aria-label={`${label} ${selected?.label ?? value}`}
         disabled={disabled || options.length === 0}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (!open) {
+            const anchor = anchorRef.current?.getBoundingClientRect();
+            if (anchor) {
+              const nextPlacement = resolvePickerMenuPlacement({
+                anchor,
+                viewport: {
+                  width: window.innerWidth,
+                  height: window.innerHeight,
+                },
+                menuWidth: 264,
+                menuHeight: 350,
+              });
+              setPlacement(nextPlacement);
+              setSideAlign(
+                anchor.top + 350 <= window.innerHeight - 8
+                  ? 'top'
+                  : 'bottom',
+              );
+            }
+          }
+          setOpen((current) => !current);
+        }}
       >
         {hideLabel ? null : <span>{label}</span>}
         <b>{selected?.label ?? value}</b>
         <ChevronDownIcon aria-hidden="true" />
       </button>
       {open ? (
-        <div className="picker-menu" id={menuId} role="menu" aria-label={label}>
+        <div
+          className={`picker-menu placement-${placement} align-${sideAlign}`}
+          id={menuId}
+          role="menu"
+          aria-label={label}
+        >
           <div className="picker-menu-header">{label}</div>
           <div className="picker-menu-items">
             {options.map((option) => {

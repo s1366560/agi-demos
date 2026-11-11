@@ -15,6 +15,12 @@ const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const { SessionPlanReview, SessionTaskListReview } = require(
   '/tmp/agistack-desktop-test-dist/src/features/session/SessionPlanReview.js'
 );
+const { draftPlanReviewNotice, localizePlanReadyMessage } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/session/sessionPlanApprovalModel.js'
+);
+const { SessionPlanDraftNotice } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/chat/SessionPlanDraftNotice.js'
+);
 
 const plan = {
   id: 'plan-version-3',
@@ -147,6 +153,49 @@ test('approved plan stays readable without retaining a Plan to Build action', ()
   });
   assert.match(markup, /Plan approved/);
   assert.doesNotMatch(markup, /Approve version 3/);
+});
+
+test('draft plan notice exposes the first steps and remaining count', () => {
+  assert.deepEqual(draftPlanReviewNotice(plan), {
+    taskCount: 2,
+    preview: ['Review the persisted plan', 'Start the bound run'],
+    remaining: 0,
+  });
+  const longPlan = {
+    ...plan,
+    tasks: [
+      ...plan.tasks,
+      { id: 'task-3', content: 'Verify the result', status: 'pending', priority: 'low' },
+      { id: 'task-4', content: 'Report the outcome', status: 'pending', priority: 'low' },
+    ],
+  };
+  assert.equal(draftPlanReviewNotice(longPlan)?.remaining, 1);
+  assert.equal(draftPlanReviewNotice({ ...plan, status: 'approved' }), null);
+  assert.equal(draftPlanReviewNotice({ ...plan, tasks: [] }), null);
+});
+
+test('localizes the legacy plan-ready sentence without rewriting other messages', () => {
+  const t = (key) => (key === 'session.planReadyForReview' ? 'LOCALIZED' : key);
+  assert.equal(localizePlanReadyMessage('Plan ready for review.', t), 'LOCALIZED');
+  assert.equal(localizePlanReadyMessage('  Plan ready for review.  ', t), 'LOCALIZED');
+  assert.equal(localizePlanReadyMessage('A normal answer.', t), 'A normal answer.');
+  assert.equal(localizePlanReadyMessage(null, t), '');
+});
+
+test('draft plan notice renders steps and a review action', () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(
+      I18nProvider,
+      null,
+      React.createElement(SessionPlanDraftNotice, {
+        plan,
+        onOpenPlanReview: () => {},
+      }),
+    ),
+  );
+  assert.match(markup, /Plan ready for review/);
+  assert.match(markup, /Review the persisted plan/);
+  assert.match(markup, /Review plan/);
 });
 
 test('select changes capture event values before entering functional state updates', () => {

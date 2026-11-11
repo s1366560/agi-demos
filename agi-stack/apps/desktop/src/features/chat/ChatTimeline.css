@@ -1762,6 +1762,15 @@
   overflow: visible;
 }
 
+/* The model switch lives in the composer footer. Anchor its menu above the
+   textarea instead of above the chip so choosing a model never hides the
+   prompt being edited. */
+.session-chat-narrative .composer-model-popover {
+  bottom: calc(100% + 124px);
+  left: 0;
+  right: auto;
+}
+
 .composer-model-heading {
   display: flex;
   align-items: center;

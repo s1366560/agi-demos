@@ -295,6 +295,7 @@ import {
   applyConversationTitleUpdate,
   readConversationTitleStreamEvent,
 } from './features/chat/conversationTitleEventModel';
+import { compactConversationTitle } from './features/chat/conversationTitleModel';
 import { coalesceStreamingTextEvents } from './features/chat/streamingTextEventModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
 import { localLlmUnconfiguredFromProviders } from './features/chat/localLlmReadinessModel';
@@ -805,6 +806,7 @@ export function App() {
   const [sessionProjectionState, setSessionProjectionState] = useState<SessionProjectionLoadState>(
     emptySessionProjectionState,
   );
+  const [sessionProjectionSlow, setSessionProjectionSlow] = useState(false);
   const [sessionDisplayProjection, setSessionDisplayProjection] =
     useState<ConversationSessionProjection | null>(null);
   const [sessionProjectionRefreshRevision, setSessionProjectionRefreshRevision] = useState(0);
@@ -5419,7 +5421,9 @@ export function App() {
     chatDisabledReason ??
     (selectedConversation
       ? sessionProjectionState.status === 'idle' || sessionProjectionState.status === 'loading'
-        ? t('session.authorityLoading')
+        ? sessionProjectionSlow && config.mode === 'local'
+          ? null
+          : t('session.authorityLoading')
         : sessionProjectionState.status === 'error'
           ? t('session.authorityError')
           : !(
@@ -5440,9 +5444,26 @@ export function App() {
       actionLabel: t('session.localLlmUnconfiguredAction'),
     };
   }, [localLlmUnconfigured, selectedConversation, t]);
+  useEffect(() => {
+    if (sessionProjectionState.status !== 'loading') {
+      setSessionProjectionSlow(false);
+      return undefined;
+    }
+    setSessionProjectionSlow(false);
+    const timer = window.setTimeout(() => setSessionProjectionSlow(true), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [sessionProjectionState.status, sessionProjectionState.conversationId]);
   const sessionAuthorityNotice = useMemo(() => {
     if (!selectedConversation || sessionProjectionState.status === 'ready') return null;
     if (sessionProjectionState.status === 'idle' || sessionProjectionState.status === 'loading') {
+      if (sessionProjectionSlow) {
+        return {
+          tone: 'warning' as const,
+          title: t('session.authoritySlowTitle'),
+          description: t('session.authoritySlowDescription'),
+          actionLabel: t('session.authorityRetryLoading'),
+        };
+      }
       return {
         tone: 'loading' as const,
         title: t('session.authorityLoading'),
@@ -5455,7 +5476,7 @@ export function App() {
       description: t('session.authorityErrorDescription'),
       actionLabel: t('session.authorityRetry'),
     };
-  }, [selectedConversation, sessionProjectionState.status, t]);
+  }, [selectedConversation, sessionProjectionSlow, sessionProjectionState.status, t]);
   const availableChangeScopes = useMemo<readonly RunChangeScope[]>(
     () =>
       config.mode === 'cloud'
@@ -5904,12 +5925,13 @@ export function App() {
   );
   const hasWorkspaceScope = Boolean(config.workspaceId.trim());
   const hasProjectScope = Boolean(config.projectId.trim());
-  const sessionTitle =
+  const sessionTitle = compactConversationTitle(
     selectedConversation?.title ??
-    selectedWorkspace?.name ??
-    selectedWorkspace?.title ??
-    selectedWorkspace?.id ??
-    (showRuntimeConfig ? 'Connection setup' : 'New session');
+      selectedWorkspace?.name ??
+      selectedWorkspace?.title ??
+      selectedWorkspace?.id ??
+      (showRuntimeConfig ? 'Connection setup' : 'New session'),
+  );
   const sessionInfoLabel = hasWorkspaceScope
     ? config.workspaceId.trim()
     : hasProjectScope
@@ -6620,6 +6642,7 @@ export function App() {
     runInputRequestRef,
     selectedConversation,
     sessionChatDisabledReason,
+    allowSendWhileAuthorityPending: sessionProjectionSlow && config.mode === 'local',
     sessionProjection,
     sessionTaskListPlanRecovery,
     setAgentConversationSession,
@@ -7271,7 +7294,9 @@ export function App() {
       timelineState: selectedConversation ? sessionTimeline : null,
       agentTaskSignals,
       workflowCounts: chatWorkflowCounts,
-      sessionTitle: selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined),
+      sessionTitle: compactConversationTitle(
+        selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined),
+      ),
       scopeLabel: selectedConversation
         ? `Agent session / ${workspaceLabel(selectedWorkspace ?? undefined)}`
         : 'Workspace conversation',
@@ -7300,6 +7325,12 @@ export function App() {
       runtimeTargetOptions: runtimeTargetComposerOptions,
       composeAheadFallbackAllowed: false,
       canonicalRunStatus: currentArtifactRun?.status ?? null,
+      draftPlan:
+        displaySessionProjection?.currentPlan?.status === 'draft'
+          ? displaySessionProjection.currentPlan
+          : null,
+      onOpenPlanReview: () => openRightCanvasPanel('plan'),
+      allowSendWhileAuthorityPending: sessionProjectionSlow && config.mode === 'local',
       runInputDelivery: effectiveRunInputDeliveryValue,
       runInputDeliveryOptions,
       runInputs,
@@ -7339,7 +7370,7 @@ export function App() {
       authorityNotice: sessionAuthorityNotice ?? sessionLocalLlmNotice,
       onAuthorityAction: sessionLocalLlmNotice
         ? openProviderSettings
-        : sessionProjectionState.status === 'error'
+        : sessionProjectionState.status === 'error' || sessionProjectionSlow
           ? invalidateSessionAuthority
           : undefined,
       onWorkflowSelect: selectChatWorkflowTarget,
