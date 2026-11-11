@@ -1573,8 +1573,8 @@ test('cloud client validates structured Search and Automation authorities', asyn
       snapshot.capabilities.search,
       withObservedAuthority(
         withScope(
-          withoutAuthorityRevision(
-            availableCapability([
+          {
+            ...availableCapability([
               'semantic',
               'advanced',
               'graph_traversal',
@@ -1582,7 +1582,8 @@ test('cloud client validates structured Search and Automation authorities', asyn
               'temporal',
               'faceted',
             ]),
-          ),
+            authority_revision: 41,
+          },
           scope,
         ),
         'cloud_service',

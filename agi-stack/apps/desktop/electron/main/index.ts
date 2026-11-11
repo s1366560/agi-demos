@@ -1022,10 +1022,8 @@ async function executeDesktopCommand(
         const unavailable = command === 'platform_plugin_renderer_delivery_current_v2'
           ? desktopRendererDeliveryUnavailableV2(error)
           : null;
-        if (!unavailable) {
-          recordQaIpc('error', null);
-          throw error;
-        }
+        if (!unavailable) recordQaIpc('error', null);
+        if (!unavailable) throw error;
         result = unavailable;
         recordQaIpc('ok', result);
       }

@@ -29,7 +29,7 @@ test('route and capability consumers share one generation-backed operations faca
   assert.match(workbench, /tenantOverviewOperationsV2/u);
   assert.match(provider, /snapshotOperationsV2: DesktopWorkbenchSnapshotOperationsV2/u);
   assert.match(provider, /desktop_workbench_snapshot_operations_required/u);
-  assert.match(provider, /operations\.loadSnapshot\(\{ config, signal:/u);
+  assert.match(provider, /operations\.loadSnapshot\(\{\s*config,\s*signal:/u);
   assert.match(app, /snapshotOperationsV2:\s*desktopWorkbenchSnapshotOperationsV2/u);
   assert.match(snapshotAuthority, /createDesktopWorkbenchSnapshotDependenciesV2\(operationConfig, \(\) => actions\)/u);
   assert.match(dependencies, /createDesktopTenantOverviewOperationsV2\(resolveActions\)/u);

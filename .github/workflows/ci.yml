@@ -663,6 +663,32 @@ jobs:
             shard-logs/test_workspace_context_services_v2.status
           if-no-files-found: warn
 
+      - name: plugins-g ordered group files 1-10
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 10
+        run: bash scripts/ci/plugins_g_ordered_group.sh 0 10
+
+      - name: Upload plugins-g ordered group files 1-10
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-ordered-group-1-10
+          path: shard-logs/
+          if-no-files-found: warn
+
+      - name: plugins-g ordered group files 11-19
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 10
+        run: bash scripts/ci/plugins_g_ordered_group.sh 10 9
+
+      - name: Upload plugins-g ordered group files 11-19
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-ordered-group-11-19
+          path: shard-logs/
+          if-no-files-found: warn
+
       - name: plugins-g full shard
         if: matrix.shard == 'plugins-g'
         timeout-minutes: 20
