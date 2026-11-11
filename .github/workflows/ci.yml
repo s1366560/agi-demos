@@ -269,6 +269,7 @@ jobs:
           if-no-files-found: error
 
       - name: Run unit shard
+        if: matrix.shard != 'plugins-g'
         timeout-minutes: 20
         run: |
           set -euo pipefail
@@ -335,10 +336,8 @@ jobs:
           mkdir -p shard-logs
           pytest_log="shard-logs/${{ matrix.shard }}-pytest.log"
           # GNU timeout puts pytest in a new process group, so the runner cannot
-          # reap it (job 130340536360). plugins-g uses a foreground watchdog
-          # script instead of backgrounding a function: the command is not
-          # exec'd, its output goes to the log file, and heartbeats stay off
-          # the step pipe so a full pipe cannot block the deadline.
+          # reap it (job 130340536360). plugins-g is not this step: each of its
+          # files is a later step whose name stays visible if that file hangs.
           run_pytest() {
             local method="$1"
             shift
@@ -358,34 +357,311 @@ jobs:
           }
           echo "shard ${{ matrix.shard }} pytest start $(date -u +%H:%M:%S)"
           set +e
-          if [[ "${{ matrix.shard }}" == "plugins-g" ]]; then
-            echo "::notice title=plugins-g-pytest-start::files=${#args[@]} timeout=120 method=thread"
-            bash scripts/ci/plugins_g_shard_watch.sh \
-              --log "$pytest_log" \
-              --deadline 960 \
-              -- \
-              env COVERAGE_FILE="coverage-${{ matrix.shard }}" \
-                PYTHONFAULTHANDLER=1 \
-                PYTHONUNBUFFERED=1 \
-                uv run pytest "${args[@]}" \
-                  -m "not integration" \
-                  --timeout=120 \
-                  --timeout-method=thread \
-                  -v \
-                  --durations=20 \
-                  --cov=src \
-                  --cov-report= \
-                  --cov-fail-under=0
-            status=$?
-          else
-            run_pytest signal
-            status=$?
-          fi
+          run_pytest signal
+          status=$?
           set -e
           echo "----- ${{ matrix.shard }} pytest status ${status} -----"
           echo "----- ${{ matrix.shard }} pytest log tail -----"
           tail -n 200 "$pytest_log" || true
           exit "$status"
+
+      - name: plugins-g collect
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 5
+        run: bash scripts/ci/plugins_g_collect.sh
+
+      - name: Upload plugins-g collected tests
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-collected
+          path: shard-logs/plugins-g-collected.txt
+          if-no-files-found: warn
+
+      - name: plugins-g test test_package_registry.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/test_package_registry.py
+
+      - name: Upload plugins-g test_package_registry.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_package_registry
+          path: |
+            shard-logs/test_package_registry.log
+            shard-logs/test_package_registry.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_agent_di_facade_retirement_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_agent_di_facade_retirement_v2.py
+
+      - name: Upload plugins-g test_agent_di_facade_retirement_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_agent_di_facade_retirement_v2
+          path: |
+            shard-logs/test_agent_di_facade_retirement_v2.log
+            shard-logs/test_agent_di_facade_retirement_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_agent_orchestration_runtime_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_agent_orchestration_runtime_v2.py
+
+      - name: Upload plugins-g test_agent_orchestration_runtime_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_agent_orchestration_runtime_v2
+          path: |
+            shard-logs/test_agent_orchestration_runtime_v2.log
+            shard-logs/test_agent_orchestration_runtime_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_agent_todo_redis_authority_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_agent_todo_redis_authority_v2.py
+
+      - name: Upload plugins-g test_agent_todo_redis_authority_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_agent_todo_redis_authority_v2
+          path: |
+            shard-logs/test_agent_todo_redis_authority_v2.log
+            shard-logs/test_agent_todo_redis_authority_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_artifact_http_services_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_artifact_http_services_v2.py
+
+      - name: Upload plugins-g test_artifact_http_services_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_artifact_http_services_v2
+          path: |
+            shard-logs/test_artifact_http_services_v2.log
+            shard-logs/test_artifact_http_services_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_builtin_artifacts_http_routes_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_builtin_artifacts_http_routes_v2.py
+
+      - name: Upload plugins-g test_builtin_artifacts_http_routes_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_builtin_artifacts_http_routes_v2
+          path: |
+            shard-logs/test_builtin_artifacts_http_routes_v2.log
+            shard-logs/test_builtin_artifacts_http_routes_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_builtin_graph_http_routes_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_builtin_graph_http_routes_v2.py
+
+      - name: Upload plugins-g test_builtin_graph_http_routes_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_builtin_graph_http_routes_v2
+          path: |
+            shard-logs/test_builtin_graph_http_routes_v2.log
+            shard-logs/test_builtin_graph_http_routes_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_builtin_plugin_marketplace_http_routes_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_builtin_plugin_marketplace_http_routes_v2.py
+
+      - name: Upload plugins-g test_builtin_plugin_marketplace_http_routes_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_builtin_plugin_marketplace_http_routes_v2
+          path: |
+            shard-logs/test_builtin_plugin_marketplace_http_routes_v2.log
+            shard-logs/test_builtin_plugin_marketplace_http_routes_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_builtin_task_session_http_routes_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_builtin_task_session_http_routes_v2.py
+
+      - name: Upload plugins-g test_builtin_task_session_http_routes_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_builtin_task_session_http_routes_v2
+          path: |
+            shard-logs/test_builtin_task_session_http_routes_v2.log
+            shard-logs/test_builtin_task_session_http_routes_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_channel_adapters.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_channel_adapters.py
+
+      - name: Upload plugins-g test_channel_adapters.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_channel_adapters
+          path: |
+            shard-logs/test_channel_adapters.log
+            shard-logs/test_channel_adapters.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_cron_services_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_cron_services_v2.py
+
+      - name: Upload plugins-g test_cron_services_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_cron_services_v2
+          path: |
+            shard-logs/test_cron_services_v2.log
+            shard-logs/test_cron_services_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_host_receipt_gate_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_host_receipt_gate_v2.py
+
+      - name: Upload plugins-g test_host_receipt_gate_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_host_receipt_gate_v2
+          path: |
+            shard-logs/test_host_receipt_gate_v2.log
+            shard-logs/test_host_receipt_gate_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_marketplace_mcp_boundary.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_marketplace_mcp_boundary.py
+
+      - name: Upload plugins-g test_marketplace_mcp_boundary.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_marketplace_mcp_boundary
+          path: |
+            shard-logs/test_marketplace_mcp_boundary.log
+            shard-logs/test_marketplace_mcp_boundary.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_profile_composition_cache_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_profile_composition_cache_v2.py
+
+      - name: Upload plugins-g test_profile_composition_cache_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_profile_composition_cache_v2
+          path: |
+            shard-logs/test_profile_composition_cache_v2.log
+            shard-logs/test_profile_composition_cache_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_runtime.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_runtime.py
+
+      - name: Upload plugins-g test_runtime.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_runtime
+          path: |
+            shard-logs/test_runtime.log
+            shard-logs/test_runtime.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_scoped_publication_models.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_scoped_publication_models.py
+
+      - name: Upload plugins-g test_scoped_publication_models.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_scoped_publication_models
+          path: |
+            shard-logs/test_scoped_publication_models.log
+            shard-logs/test_scoped_publication_models.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_skill_evolution_repository_services_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_skill_evolution_repository_services_v2.py
+
+      - name: Upload plugins-g test_skill_evolution_repository_services_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_skill_evolution_repository_services_v2
+          path: |
+            shard-logs/test_skill_evolution_repository_services_v2.log
+            shard-logs/test_skill_evolution_repository_services_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_tool_execution_policy.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_tool_execution_policy.py
+
+      - name: Upload plugins-g test_tool_execution_policy.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_tool_execution_policy
+          path: |
+            shard-logs/test_tool_execution_policy.log
+            shard-logs/test_tool_execution_policy.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_workspace_context_services_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_workspace_context_services_v2.py
+
+      - name: Upload plugins-g test_workspace_context_services_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_workspace_context_services_v2
+          path: |
+            shard-logs/test_workspace_context_services_v2.log
+            shard-logs/test_workspace_context_services_v2.status
+          if-no-files-found: warn
 
       - name: Upload plugins-g shard diagnostics
         if: always() && matrix.shard == 'plugins-g'
@@ -927,31 +1203,12 @@ jobs:
       - name: Run desktop unit and integration tests
         run: |
           set -euo pipefail
-          # Release sidecar and Workspace Core use different target directories
-          # from each other. Starting them now lets cargo's target lock wait
-          # until the debug build in desktop-test finishes, then compile the
-          # release artifacts during the test run. The bundle step still builds
-          # and packages the same binaries; a finished release target makes
-          # that cargo invocation a check instead of a second full compile.
-          release_log="${RUNNER_TEMP}/desktop-release-preload.log"
-          (
-            cargo build --release -p agistack-desktop-sidecar
-          ) >"$release_log" 2>&1 &
-          sidecar_pid=$!
-          (
-            bash ../scripts/avernet-bcs/cargo.sh build --release \
-              -p memstack-workspace-core --bin memstack-workspace-core
-          ) >>"$release_log" 2>&1 &
-          core_pid=$!
-          status=0
-          make desktop-test || status=$?
-          wait "$sidecar_pid" || status=$?
-          wait "$core_pid" || status=$?
-          if [[ "$status" -ne 0 ]]; then
-            echo "----- desktop release preload log -----"
-            tail -n 200 "$release_log" || true
-            exit "$status"
-          fi
+          # Two CI runs failed a different 10s wait while this step's release
+          # compile was still running. A local pass under load does not prove
+          # the overlap is safe, so tests do not share the runner with it.
+          # The bundle step still builds the same release binaries. The 10s
+          # waits stay as they are.
+          make desktop-test
 
       - name: Build desktop bundle
         run: make desktop-bundle
