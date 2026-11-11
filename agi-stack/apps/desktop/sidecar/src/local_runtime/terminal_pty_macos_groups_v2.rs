@@ -18,9 +18,10 @@ const TERMINAL_EXIT_GRACE: Duration = Duration::from_millis(200);
 /// Process inspection never reaps the retained leader; foreground and migrated
 /// groups remain owned until every live member has exited or has been killed.
 /// With valid owned group/session identities, both Ok and Err return only after
-/// cleanup is confirmed. Err preserves failures observed before recovery; repeated
-/// inspection/signalling failures keep this call and its owner alive. Confirmed
-/// foreign sessions are excluded without signalling them.
+/// cleanup is confirmed. Err preserves non-EPERM failures observed before
+/// recovery. Raw EPERM is the XNU exit race and is dropped once no live member
+/// remains. Repeated inspection failures keep this call and its owner alive.
+/// Confirmed foreign sessions are excluded without signalling them.
 pub(super) fn finish_owned_groups(
     groups: impl IntoIterator<Item = i32>,
     session: i32,
@@ -58,7 +59,12 @@ fn finish_with_retries(mut poll: impl FnMut() -> io::Result<bool>) -> io::Result
             }
             Ok(false) => {}
             Err(error) => {
-                if failures.insert(error.to_string()) {
+                // Raw EPERM is the XNU exit race. Do not keep it once a later
+                // sweep confirms the owned group is empty. Every other error,
+                // including a foreign-session rejection, stays on the result.
+                if !super::pty_cleanup_error_remains_after_exit(&error) {
+                    tracing::debug!(%error, "owned PTY group signal raced member exit");
+                } else if failures.insert(error.to_string()) {
                     tracing::error!(%error, "owned PTY group cleanup is still pending");
                 }
             }
@@ -359,6 +365,21 @@ mod tests {
             });
         }
         command.spawn().expect("spawn owned session")
+    }
+
+    #[test]
+    fn raw_eperm_is_not_retained_after_the_group_is_confirmed_empty() {
+        let mut polls = 0;
+        let result = finish_with_retries(|| {
+            polls += 1;
+            if polls == 1 {
+                Err(io::Error::from_raw_os_error(libc::EPERM))
+            } else {
+                Ok(true)
+            }
+        });
+        assert_eq!(polls, 2);
+        result.expect("exiting member EPERM does not fail confirmed cleanup");
     }
 
     #[test]

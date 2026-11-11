@@ -17,6 +17,24 @@ async fn ready_terminal() -> TerminalPtyV2 {
     terminal
 }
 
+#[cfg(unix)]
+#[test]
+fn eperm_after_confirmed_exit_is_not_a_cleanup_failure() {
+    let error = std::io::Error::from_raw_os_error(libc::EPERM);
+    assert!(!super::pty_cleanup_error_remains_after_exit(&error));
+}
+
+#[cfg(unix)]
+#[test]
+fn described_permission_failure_remains_a_cleanup_failure() {
+    let error = std::io::Error::new(
+        std::io::ErrorKind::PermissionDenied,
+        "PTY group member is outside the owned session",
+    );
+    assert!(error.raw_os_error().is_none());
+    assert!(super::pty_cleanup_error_remains_after_exit(&error));
+}
+
 #[tokio::test]
 async fn configured_default_shell_starts_and_closes() {
     let started = std::time::Instant::now();

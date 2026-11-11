@@ -145,9 +145,13 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
-    # plugins-g stays under the 120s per-test signal timeout but the shard's
-    # combined coverage run needs more than 40 minutes on a 2-core runner.
-    timeout-minutes: 60
+    # Longest successful unit job on run 42876598409 was adapters-b, 12.1
+    # minutes. plugins-g was cancelled at this 60 minute cap on 42769476886,
+    # 42774866782, 42782329724, 42789007022, 42796068831, 42839522141,
+    # 42852169680, 42864773566, and 42876598409: the pytest pipeline did not
+    # return after the 18 minute kill. 30 minutes still covers the measured
+    # 12 minute jobs and that 18 minute limit.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -319,33 +323,53 @@ jobs:
           mkdir -p shard-logs
           pytest_log="shard-logs/${{ matrix.shard }}-pytest.log"
           resource_log="shard-logs/${{ matrix.shard }}-resources.log"
-          # plugins-g has been cancelled at the job limit twice with no step log.
-          # A separate heartbeat keeps writing if pytest, or the runner agent,
-          # stops flushing stdout. SIGKILL is the timeout signal so a stuck
-          # child is not left waiting on SIGQUIT.
-          if [ "${{ matrix.shard }}" = "plugins-g" ]; then
-            (
-              while true; do
-                {
-                  echo "===== heartbeat $(date -u +%Y-%m-%dT%H:%M:%SZ) ====="
-                  free -h || true
-                  ps -eo pid,ppid,stat,rss,etime,cmd --sort=-rss | head -n 30 || true
-                } | tee -a "$resource_log"
-                sleep 60
-              done
-            ) &
-            echo $! > shard-logs/heartbeat.pid
-          fi
-          pytest_verbose=()
-          if [ "${{ matrix.shard }}" = "plugins-g" ]; then
-            pytest_verbose=(-v)
-          fi
+          # Run pytest in its own session and write the log to a file. A pipe
+          # to tee kept the step open after `timeout` killed only `uv`: the
+          # grandchild still held the pipe, `if: always()` never uploaded
+          # diagnostics, and plugins-g hit the 60 minute job cap. SIGKILL goes
+          # to this session id only.
+          session=""
+          watchdog=""
+          heartbeat=""
+          # A nested setsid() leaves the grandchild outside the original session,
+          # which is what kept the old `timeout | tee` step open. Walk ppid
+          # before signalling so those children die with the shard.
+          kill_tree() {
+            local pid="$1"
+            local child
+            while read -r child; do
+              [ -n "$child" ] || continue
+              kill_tree "$child"
+            done < <(ps -o pid= --ppid "$pid" 2>/dev/null || true)
+            kill -KILL "$pid" 2>/dev/null || true
+          }
+          cleanup_shard() {
+            if [ -n "$session" ]; then
+              kill_tree "$session"
+            fi
+            if [ -n "$watchdog" ]; then
+              kill "$watchdog" 2>/dev/null || true
+            fi
+            if [ -n "$heartbeat" ]; then
+              kill "$heartbeat" 2>/dev/null || true
+            fi
+          }
+          trap cleanup_shard EXIT INT TERM
+          (
+            while true; do
+              {
+                echo "===== heartbeat $(date -u +%Y-%m-%dT%H:%M:%SZ) ====="
+                ps -eo pid,ppid,stat,rss,etime,cmd --sort=-rss | head -n 20 || true
+              } >> "$resource_log"
+              sleep 30
+            done
+          ) &
+          heartbeat=$!
           set +e
-          COVERAGE_FILE="coverage-${{ matrix.shard }}" \
+          setsid --wait env \
+            COVERAGE_FILE="coverage-${{ matrix.shard }}" \
             PYTHONFAULTHANDLER=1 \
-            timeout --signal=KILL --kill-after=15s 18m \
             uv run pytest "${args[@]}" \
-              "${pytest_verbose[@]}" \
               -m "not integration" \
               --timeout=120 \
               --timeout-method=signal \
@@ -353,12 +377,29 @@ jobs:
               --cov=src \
               --cov-report= \
               --cov-fail-under=0 \
-              2>&1 | tee "$pytest_log"
-          status=${PIPESTATUS[0]}
+              > "$pytest_log" 2>&1 &
+          session=$!
+          (
+            sleep 1080
+            echo "unit shard exceeded 18 minutes; killing session $session" >> "$pytest_log"
+            kill_tree "$session"
+          ) &
+          watchdog=$!
+          wait "$session"
+          status=$?
           set -e
-          if [ -f shard-logs/heartbeat.pid ]; then
-            kill "$(cat shard-logs/heartbeat.pid)" 2>/dev/null || true
-            wait "$(cat shard-logs/heartbeat.pid)" 2>/dev/null || true
+          kill "$heartbeat" 2>/dev/null || true
+          wait "$heartbeat" 2>/dev/null || true
+          kill "$watchdog" 2>/dev/null || true
+          wait "$watchdog" 2>/dev/null || true
+          heartbeat=""
+          watchdog=""
+          session=""
+          echo "----- ${{ matrix.shard }} pytest log tail -----"
+          tail -n 120 "$pytest_log" || true
+          if [ "$status" -eq 137 ] || [ "$status" -eq 124 ] || [ "$status" -eq 9 ]; then
+            echo "unit shard killed after the 18 minute limit" >&2
+            exit 1
           fi
           exit "$status"
 
