@@ -446,6 +446,110 @@ test('main cloud-request path injects its real revoke callback and releases the 
   assert.deepEqual(events, ['cua-clear', 'revoke', 'execute', 'release']);
 });
 
+test('qa cloud request log stores the real result and stays closed without the gate', async () => {
+  const request = () => ({ method: 'GET', path: '/api/v1/graph/entities/?tenant_id=t&project_id=p' });
+  const invoke = commandCase('cloud_request', {
+    authorizedCloudRequestOwner: () => 7,
+    sidecarSupervisor: { invoke() {} },
+    net: { fetch() {} },
+    cloudRequestExecutions: {
+      begin: () => ({ signal: new AbortController().signal, release() {} }),
+    },
+    sandboxDesktopGrants: { withAuthorityTransition: async (operation) => operation() },
+    executeVaultBoundCloudRequest: async () => ({
+      status: 200,
+      body: {
+        entities: [{ id: 'entity-1', name: 'Ariadne Vale' }],
+        access_token: 'ms_sk_' + 'ab'.repeat(32),
+        password: 'adminpassword',
+        note: 'Bearer fixture-session',
+      },
+    }),
+  });
+  delete globalThis.__agistackQaCloudRequests;
+  delete process.env.AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG;
+  assert.deepEqual(await invoke({}, { requestId: 'one', request: request() }), {
+    status: 200,
+    body: {
+      entities: [{ id: 'entity-1', name: 'Ariadne Vale' }],
+      access_token: 'ms_sk_' + 'ab'.repeat(32),
+      password: 'adminpassword',
+      note: 'Bearer fixture-session',
+    },
+  });
+  assert.equal(globalThis.__agistackQaCloudRequests, undefined);
+  const timeout = commandCase('cloud_request', {
+    authorizedCloudRequestOwner: () => 7,
+    sidecarSupervisor: { invoke() {} },
+    net: { fetch() {} },
+    cloudRequestExecutions: {
+      begin: () => ({ signal: new AbortController().signal, release() {} }),
+    },
+    sandboxDesktopGrants: { withAuthorityTransition: async (operation) => operation() },
+    executeVaultBoundCloudRequest: async () => {
+      throw new Error('cloud request timed out');
+    },
+  });
+  process.env.AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG = '1';
+  try {
+    await assert.rejects(timeout({}, { requestId: 'timeout', request: request() }), /cloud request timed out/);
+    assert.equal(globalThis.__agistackQaCloudRequests, undefined);
+    const live = await invoke({}, { requestId: 'two', request: request() });
+    assert.equal(live.body.access_token.startsWith('ms_sk_'), true);
+    assert.deepEqual(globalThis.__agistackQaCloudRequests, [{
+      path: '/api/v1/graph/entities/?tenant_id=t&project_id=p',
+      method: 'GET',
+      status: 200,
+      body: {
+        entities: [{ id: 'entity-1', name: 'Ariadne Vale' }],
+        access_token: '[redacted]',
+        password: '[redacted]',
+        note: '[redacted]',
+      },
+    }]);
+    assert.equal(JSON.stringify(globalThis.__agistackQaCloudRequests).includes('ms_sk_'), false);
+    assert.equal(JSON.stringify(globalThis.__agistackQaCloudRequests).includes('adminpassword'), false);
+  } finally {
+    delete process.env.AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG;
+    delete globalThis.__agistackQaCloudRequests;
+  }
+});
+
+test('qa renderer ipc log records outcome and digest without the delivery payload', async () => {
+  delete globalThis.__agistackQaRendererIpc;
+  process.env.AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG = '1';
+  const invoke = commandCase('platform_plugin_renderer_receipt_submit_v2', {
+    command: 'platform_plugin_renderer_delivery_current_v2',
+    authorizedCloudRequestOwner: () => 7,
+    sidecarSupervisor: {
+      invoke: async () => ({
+        snapshot: { digest: 'digest-1', entries: [{ token: 'ms_sk_' + 'cd'.repeat(32) }] },
+        delivery_token: 'secret-token',
+      }),
+    },
+    rendererDeliveryAdmissionV2: { assertAdmitted() {} },
+    rendererDeliveryOwnersV2: new Map(),
+    randomUUID: () => 'owner-1',
+    desktopRendererDeliveryUnavailableV2: () => null,
+  });
+  try {
+    const result = await invoke({}, {});
+    assert.equal(result.delivery_token, 'secret-token');
+    assert.equal(globalThis.__agistackQaRendererIpc.length, 1);
+    const event = globalThis.__agistackQaRendererIpc[0];
+    assert.equal(event.command, 'platform_plugin_renderer_delivery_current_v2');
+    assert.equal(event.outcome, 'ok');
+    assert.equal(event.digest, 'digest-1');
+    assert.equal(typeof event.elapsed_ms, 'number');
+    const serialized = JSON.stringify(event);
+    assert.equal(serialized.includes('ms_sk_'), false);
+    assert.equal(serialized.includes('secret-token'), false);
+  } finally {
+    delete process.env.AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG;
+    delete globalThis.__agistackQaRendererIpc;
+  }
+});
+
 test('actual request broker and registry keep new grants blocked through blanking and pending POST response', async () => {
   const { SandboxDesktopGrantRegistry } = load(
     new URL('../electron/main/sandboxDesktopGrantRegistry.ts', import.meta.url),

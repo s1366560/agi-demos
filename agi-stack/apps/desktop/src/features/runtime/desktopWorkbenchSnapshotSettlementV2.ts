@@ -1,3 +1,8 @@
+function traceCapabilitySnapshot(message: string): void {
+  if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') return;
+  console.info(message);
+}
+
 export function requireActiveWorkbenchSnapshotV2(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Workbench snapshot cancelled', 'AbortError');
 }
@@ -5,8 +10,27 @@ export function requireActiveWorkbenchSnapshotV2(signal?: AbortSignal): void {
 export async function settleWorkbenchSnapshotBranchesV2<T extends readonly unknown[]>(
   branches: T,
   signal?: AbortSignal,
+  names?: readonly string[],
 ): Promise<{ -readonly [P in keyof T]: Awaited<T[P]> }> {
-  const results = await Promise.allSettled(branches);
+  const started = performance.now();
+  const observed = branches.map((branch, index) => {
+    const name = names?.[index] ?? String(index);
+    return Promise.resolve(branch).then(
+      (value) => {
+        traceCapabilitySnapshot(
+          `[desktop-capability-snapshot] ${name} ok ${Math.round(performance.now() - started)}ms`,
+        );
+        return value;
+      },
+      (error: unknown) => {
+        traceCapabilitySnapshot(
+          `[desktop-capability-snapshot] ${name} fail ${Math.round(performance.now() - started)}ms`,
+        );
+        throw error;
+      },
+    );
+  }) as unknown as T;
+  const results = await Promise.allSettled(observed);
   requireActiveWorkbenchSnapshotV2(signal);
   const rejected = results.find((result) => result.status === 'rejected');
   if (rejected?.status === 'rejected') throw rejected.reason;

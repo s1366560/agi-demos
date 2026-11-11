@@ -223,9 +223,24 @@ jobs:
           nohup uv run uvicorn scripts.fake_openai_server:app \
             --host 127.0.0.1 --port 8010 > neo4j-runtime-logs/fake-openai.log 2>&1 &
           echo $! > neo4j-runtime-logs/fake-openai.pid
-          nohup uv run python scripts/e2e_fake_workspace_core.py \
-            > neo4j-runtime-logs/fake-workspace-core.log 2>&1 &
-          echo $! > neo4j-runtime-logs/fake-workspace-core.pid
+          export WORKSPACE_CORE_BIN="${GITHUB_WORKSPACE}/.cache/avernet-bcs/target/debug/memstack-workspace-core"
+          export WORKSPACE_CORE_PORT=4321
+          export AVERNET_SECRET_PRINCIPAL_SIGNING_KEY_VALUE="${AVERNET_SECRET_PRINCIPAL_SIGNING_KEY_VALUE:-neo4j-gate-signing-key}"
+          export BCS_SECRET_WORKSPACE_CORE_GROUP_SESSION_WS_JWT="${BCS_SECRET_WORKSPACE_CORE_GROUP_SESSION_WS_JWT:-neo4j-gate-group-session}"
+          nohup bash scripts/neo4j-workspace-core.sh \
+            > neo4j-runtime-logs/workspace-core.log 2>&1 &
+          echo $! > neo4j-runtime-logs/workspace-core.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS -H "Authorization: Bearer ${WORKSPACE_CORE_SERVICE_TOKEN}" \
+              http://127.0.0.1:4321/health >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              tail -200 neo4j-runtime-logs/workspace-core.log
+              exit 1
+            fi
+            sleep 1
+          done
           nohup uv run uvicorn src.infrastructure.adapters.primary.web.main:app \
             --host 127.0.0.1 --port 8000 > neo4j-runtime-logs/api.log 2>&1 &
           echo $! > neo4j-runtime-logs/api.pid

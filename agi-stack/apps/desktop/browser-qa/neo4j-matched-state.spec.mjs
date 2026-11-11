@@ -32,11 +32,53 @@ async function openDesktopElectron(desktopBaseURL) {
       ...process.env,
       ELECTRON_RENDERER_URL: desktopBaseURL,
       AGISTACK_SIDECAR_PATH: sidecarPath,
+      AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG: "1",
     },
     timeout: 120_000,
   });
   const page = await app.firstWindow();
-  return { app, page };
+  const lines = [];
+  const note = (line) => {
+    lines.push(line);
+  };
+  page.on("console", (message) => {
+    const type = message.type();
+    const text = message.text();
+    if (
+      type === "warning" ||
+      type === "error" ||
+      text.startsWith("[desktop-plugin-generation]") ||
+      text.startsWith("[desktop-capability-snapshot]")
+    ) {
+      note(redactNote(`${type}: ${text}`));
+    }
+  });
+  page.on("pageerror", (error) => note(redactNote(`pageerror: ${error.message}`)));
+  page.on("response", (response) => {
+    const url = response.url();
+    if (!url.includes("/workspaces") && !url.includes("workspace-context")) return;
+    void response
+      .text()
+      .then((body) => {
+        note(
+          redactNote(
+            `response ${response.status()} ${url.split("?")[0]} ${body.slice(0, 180)}`,
+          ),
+        );
+      })
+      .catch(() => {
+        note(`response ${response.status()} ${url.split("?")[0]} <unread>`);
+      });
+  });
+  for (const stream of [app.process().stdout, app.process().stderr]) {
+    stream?.on("data", (chunk) => {
+      const text = String(chunk);
+      if (/workspace core|sidecar|capability|error/i.test(text)) {
+        note(redactNote(`process: ${text.trim()}`));
+      }
+    });
+  }
+  return { app, page, lines };
 }
 const FIXTURE_NAMES = Object.freeze([
   "Ariadne Vale",
@@ -103,6 +145,7 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
       const desktop = await openDesktopElectron(desktopBaseURL);
       desktopApp = desktop.app;
       const desktopPage = desktop.page;
+      const desktopNotes = desktop.lines;
       await Promise.all([
         installApiOriginRewrite(webPage),
         installApiOriginRewrite(desktopPage),
@@ -117,6 +160,7 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
         desktopPage,
         "desktop",
         expectedScope,
+        desktop.app,
       );
       try {
         const webRecords = await exerciseWeb(
@@ -148,6 +192,30 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
         writeJson(evidenceRoot, "matched-state-network.json", networkEvidence);
         captureNeo4jQueryEvidence(evidenceRoot, projectId);
       } finally {
+        const rendererIpc = desktopApp
+          ? await desktopApp
+              .evaluate(() => {
+                const queued = globalThis.__agistackQaRendererIpc ?? [];
+                globalThis.__agistackQaRendererIpc = [];
+                return queued;
+              })
+              .catch(() => [])
+          : [];
+        for (const event of rendererIpc) {
+          desktopNotes.push(
+            redactNote(
+              `ipc ${event.command} ${event.outcome} ${event.elapsed_ms}ms digest=${event.digest || "none"}`,
+            ),
+          );
+        }
+        const noteText = JSON.stringify(desktopNotes);
+        expect(noteText).not.toContain("Authorization");
+        expect(noteText).not.toContain("Bearer ");
+        expect(noteText).not.toContain(token);
+        expect(noteText).not.toContain("adminpassword");
+        writeJson(evidenceRoot, "desktop-runtime-notes.json", {
+          lines: desktopNotes,
+        });
         webTracker.dispose();
         desktopTracker.dispose();
       }
@@ -554,22 +622,42 @@ async function exerciseDesktop(page, tracker, evidenceRoot, scope, fixture) {
       `.desktop-production-route-stage[data-route-id="${routeId}"]`,
     );
     await expect(stage).toBeVisible();
-    if (kind === "search") {
-      await stage
-        .locator('[data-action="search-query"]')
-        .fill(FIXTURE_NAMES[0]);
-      await stage.locator('[data-action="search-submit"]').click();
-      await expect(
-        stage.getByText(fixture.search.fixture_matches[0]).first(),
-      ).toBeVisible();
-    } else if (kind === "communities") {
-      await expect(
-        stage.getByText(fixture.communities.names[0]).first(),
-      ).toBeVisible();
-    } else {
+    const expectInStage = async (assertion) => {
+      try {
+        await assertion();
+      } catch (error) {
+        const state = await stage.getAttribute("data-route-state");
+        const reason = await stage
+          .locator("[data-reason-code]")
+          .getAttribute("data-reason-code")
+          .catch(() => null);
+        const text = await stage.innerText();
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${message}\nroute-state=${state}\nreason=${reason}\n${text.slice(0, 600)}`,
+        );
+      }
+    };
+    await expectInStage(async () => {
+      if (kind === "search") {
+        await stage
+          .locator('[data-action="search-query"]')
+          .fill(FIXTURE_NAMES[0]);
+        await stage.locator('[data-action="search-submit"]').click();
+        await expect(
+          stage.getByText(fixture.search.fixture_matches[0]).first(),
+        ).toBeVisible();
+        return;
+      }
+      if (kind === "communities") {
+        await expect(
+          stage.getByText(fixture.communities.names[0]).first(),
+        ).toBeVisible();
+        return;
+      }
       for (const name of FIXTURE_NAMES)
         await expect(stage.getByText(name).first()).toBeVisible();
-    }
+    });
     records[kind] = await tracker.waitFor(kind, startIndex);
     assertNetworkRecord(records[kind], kind, scope, fixture[kind]);
     await page.screenshot({
@@ -580,7 +668,7 @@ async function exerciseDesktop(page, tracker, evidenceRoot, scope, fixture) {
   return records;
 }
 
-function createKnowledgeTracker(page, surface, expectedScope) {
+function createKnowledgeTracker(page, surface, expectedScope, electronApp) {
   const records = [];
   const pending = new Set();
   const onResponse = (response) => {
@@ -615,6 +703,32 @@ function createKnowledgeTracker(page, surface, expectedScope) {
     pending.add(task);
     void task.finally(() => pending.delete(task));
   };
+  const recordMainCloudRequest = (entry) => {
+    let url;
+    try {
+      url = new URL(entry.path, API_BASE);
+    } catch {
+      return;
+    }
+    const kind = knowledgeKind(entry.method, url.pathname);
+    if (!kind) return;
+    records.push({
+      surface,
+      kind,
+      endpoint: url.pathname,
+      method: entry.method,
+      status: entry.status,
+      canonical_scope: {
+        tenant_id: expectedScope.tenantId,
+        project_id: expectedScope.projectId,
+      },
+      request_scope: {
+        tenant_id: url.searchParams.get("tenant_id"),
+        project_id: url.searchParams.get("project_id"),
+      },
+      response: summarizeResponse(kind, entry.body),
+    });
+  };
   page.on("response", onResponse);
   return Object.freeze({
     dispose() {
@@ -623,13 +737,26 @@ function createKnowledgeTracker(page, surface, expectedScope) {
     recordCount() {
       return records.length;
     },
+    async drainMainCloudRequests() {
+      if (!electronApp) return;
+      const fresh = await electronApp
+        .evaluate(() => {
+          const queued = globalThis.__agistackQaCloudRequests ?? [];
+          globalThis.__agistackQaCloudRequests = [];
+          return queued;
+        })
+        .catch(() => []);
+      for (const entry of fresh) recordMainCloudRequest(entry);
+    },
     async waitFor(kind, startIndex) {
       await expect
-        .poll(
-          () =>
+        .poll(async () => {
+          await this.drainMainCloudRequests();
+          return (
             records.slice(startIndex).find((record) => record.kind === kind) ??
-            null,
-        )
+            null
+          );
+        })
         .not.toBeNull();
       await Promise.all([...pending]);
       return records.slice(startIndex).find((record) => record.kind === kind);
@@ -639,17 +766,15 @@ function createKnowledgeTracker(page, surface, expectedScope) {
 
 function knowledgeResponseKind(response) {
   const request = response.request();
-  const path = new URL(request.url()).pathname;
-  if (request.method() === "GET" && path === "/api/v1/graph/entities/")
-    return "entities";
-  if (request.method() === "GET" && path === "/api/v1/graph/communities/")
+  return knowledgeKind(request.method(), new URL(request.url()).pathname);
+}
+
+function knowledgeKind(method, path) {
+  if (method === "GET" && path === "/api/v1/graph/entities/") return "entities";
+  if (method === "GET" && path === "/api/v1/graph/communities/")
     return "communities";
-  if (request.method() === "GET" && path === "/api/v1/graph/memory/graph")
-    return "graph";
-  if (
-    request.method() === "POST" &&
-    path === "/api/v1/search-enhanced/advanced"
-  )
+  if (method === "GET" && path === "/api/v1/graph/memory/graph") return "graph";
+  if (method === "POST" && path === "/api/v1/search-enhanced/advanced")
     return "search";
   return null;
 }
@@ -844,6 +969,17 @@ async function requireJsonResponse(response, action) {
     `${action} failed with HTTP ${response.status()}`,
   ).toBeTruthy();
   return JSON.parse(body);
+}
+
+function redactNote(text) {
+  return String(text)
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/ms_(?:sk|dp)_[0-9a-f]+/gi, "[redacted]")
+    .replace(/adminpassword/g, "[redacted]")
+    .replace(
+      /(password|token|secret|api_key|authorization)(["']?\s*[:=]\s*["']?)[^\s"',}]+/gi,
+      "$1$2[redacted]",
+    );
 }
 
 function writeJson(root, name, value) {

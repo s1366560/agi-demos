@@ -325,12 +325,13 @@ jobs:
           # GNU timeout puts pytest in a new process group, so the runner cannot
           # reap it (job 130340536360). Leaving pytest in this group is required.
           # On 81b336526, plugins-g job 130376252017 was still inside this step
-          # at 20m34s, so timeout-minutes did not end it either. Every other
-          # unit shard on that run had already passed. A pytest-timeout signal
-          # handler deadlocks with coverage's sysmon tracer once one test blocks
-          # past 120s, and a stuck signal handler ignores the runner's SIGTERM.
-          # plugins-g uses the thread method so that hang is reported, and a
-          # same-group SIGKILL if the process is still alive after 16 minutes.
+          # at 20m34s, so timeout-minutes did not end it either. A sibling
+          # watchdog then lost the race: wait returned when SIGTERM killed the
+          # function shell, and the shell's pkill of that watchdog cancelled the
+          # delayed SIGKILL. A child that ignores SIGTERM was reparented into
+          # this process group and the runner never finished the step. plugins-g
+          # therefore polls from this shell, prints whether pytest has written a
+          # log, and SIGKILLs the saved tree itself before exiting.
           run_pytest() {
             local method="$1"
             shift
@@ -353,40 +354,72 @@ jobs:
           if [[ "${{ matrix.shard }}" == "plugins-g" ]]; then
             run_pytest thread -v &
             pytest_pid=$!
-            # The step log was BlobNotFound after the job was cancelled, so the
-            # process tree has to be printed while the shell is still alive.
-            {
-              echo "plugins-g pytest_pid=${pytest_pid} pgid=$(ps -o pgid= -p "$pytest_pid" | awk '{$1=$1; print}')"
-              ps -eo pid,ppid,stat,wchan:20,cmd --ppid "$pytest_pid"
-              ps -eo pid,ppid,stat,wchan:20,cmd | awk 'NR==1 || /pytest|uv run/'
-            } | tee -a "$pytest_log"
-            # uv does not exec. A pytest child that ignores SIGTERM keeps uv
-            # alive, uv is then reparented, and a later lookup of the dead
-            # function's direct children finds nobody. Snapshot the tree first
-            # and signal those pids even after they leave the function.
+            echo "plugins-g shell=$$ pytest_pid=${pytest_pid} pgid=$(ps -o pgid= -p "$$" | awk '{$1=$1; print}')"
             collect_descendants() {
               local pid="$1"
               local child
               local -a children=()
               mapfile -t children < <(ps -o pid= --ppid "$pid" 2>/dev/null | awk '{$1=$1; print}')
               for child in "${children[@]}"; do
+                [[ -n "$child" ]] || continue
                 collect_descendants "$child"
                 echo "$child"
               done
             }
-            (
-              sleep 960
-              mapfile -t tree < <(collect_descendants "$pytest_pid")
-              kill -TERM "$pytest_pid" "${tree[@]}" 2>/dev/null || true
-              sleep 20
-              kill -KILL "$pytest_pid" "${tree[@]}" 2>/dev/null || true
-            ) &
-            watchdog_pid=$!
-            wait "$pytest_pid"
-            status=$?
-            pkill -P "$watchdog_pid" 2>/dev/null || true
-            kill "$watchdog_pid" 2>/dev/null || true
-            wait "$watchdog_pid" 2>/dev/null || true
+            tree=()
+            status=0
+            sleep 1
+            if [[ -s "$pytest_log" ]]; then
+              echo "plugins-g pytest log started: $(head -n 1 "$pytest_log")"
+            else
+              echo "plugins-g pytest log empty after 1s"
+              ps -eo pid,ppid,stat,wchan:24,cmd --ppid "$pytest_pid" || true
+            fi
+            deadline=$((SECONDS + 960))
+            while kill -0 "$pytest_pid" 2>/dev/null; do
+              if (( SECONDS >= deadline )); then
+                mapfile -t tree < <(collect_descendants "$pytest_pid")
+                echo "plugins-g watchdog $(date -u +%H:%M:%S) TERM ${pytest_pid} ${tree[*]-}"
+                ps -eo pid,ppid,pgid,stat,wchan:24,cmd | awk 'NR==1 || /pytest|uv run/' || true
+                if [[ -s "$pytest_log" ]]; then
+                  echo "plugins-g pytest log has started: $(head -n 1 "$pytest_log")"
+                else
+                  echo "plugins-g pytest log is still empty"
+                fi
+                if ((${#tree[@]})); then
+                  kill -TERM "$pytest_pid" "${tree[@]}" 2>/dev/null || true
+                else
+                  kill -TERM "$pytest_pid" 2>/dev/null || true
+                fi
+                sleep 20
+                saved=()
+                if ((${#tree[@]})); then saved=("${tree[@]}"); fi
+                mapfile -t tree < <(collect_descendants "$pytest_pid")
+                if ((${#saved[@]})); then tree+=("${saved[@]}"); fi
+                echo "plugins-g watchdog $(date -u +%H:%M:%S) KILL ${pytest_pid} ${tree[*]-}"
+                if ((${#tree[@]})); then
+                  kill -KILL "$pytest_pid" "${tree[@]}" 2>/dev/null || true
+                else
+                  kill -KILL "$pytest_pid" 2>/dev/null || true
+                fi
+                break
+              fi
+              sleep 15
+              if [[ -s "$pytest_log" ]]; then
+                echo "plugins-g heartbeat $(date -u +%H:%M:%S) $(head -n 1 "$pytest_log")"
+              else
+                echo "plugins-g heartbeat $(date -u +%H:%M:%S) log empty"
+              fi
+            done
+            wait "$pytest_pid" 2>/dev/null || status=$?
+            if ((${#tree[@]})); then
+              for pid in "${tree[@]}"; do
+                if kill -0 "$pid" 2>/dev/null; then
+                  echo "plugins-g survivor ${pid} $(ps -o stat=,wchan:24=,cmd= -p "$pid" 2>/dev/null || true)"
+                  kill -KILL "$pid" 2>/dev/null || true
+                fi
+              done
+            fi
           else
             run_pytest signal
             status=$?

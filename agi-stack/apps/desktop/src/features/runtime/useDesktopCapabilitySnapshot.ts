@@ -9,28 +9,69 @@ export type DesktopCapabilityLoadState = {
   snapshot: DesktopCapabilitySnapshot | null;
 };
 
+export type DesktopCapabilityGenerationStatus =
+  | 'admitted'
+  | 'degraded'
+  | 'empty'
+  | 'error'
+  | 'loading'
+  | 'ready';
+
 export function useDesktopCapabilitySnapshot(
   client: DesktopWorkbenchCapabilityClient,
   enabled: boolean,
+  generationStatus: DesktopCapabilityGenerationStatus = 'admitted',
+  generationDigest = 'admitted',
+  generationError?: unknown,
 ): DesktopCapabilityLoadState {
   const [snapshot, setSnapshot] = useState<DesktopCapabilitySnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const reload = useCallback(() => setAttempt((current) => current + 1), []);
+  const waitingForGeneration =
+    generationStatus === 'loading' ||
+    ((generationStatus === 'ready' || generationStatus === 'degraded') &&
+      generationDigest.trim() === '');
+  const generationFailureCode =
+    generationStatus === 'empty'
+      ? 'desktop_renderer_generation_empty'
+      : generationStatus === 'error'
+        ? capabilitySnapshotFailureCode(generationError)
+        : '';
 
   useEffect(() => {
-    setSnapshot(null);
     if (!enabled) {
+      setSnapshot(null);
       setLoading(false);
+      return undefined;
+    }
+    if (waitingForGeneration) {
+      setLoading(true);
+      return undefined;
+    }
+    if (generationFailureCode) {
+      setSnapshot(null);
+      setLoading(false);
+      console.warn('[desktop-capability-snapshot]', generationFailureCode);
       return undefined;
     }
 
     const controller = new AbortController();
+    const started = performance.now();
+    traceCapabilitySnapshot(
+      `[desktop-capability-snapshot] load digest=${generationDigest || 'none'}`,
+    );
+    setSnapshot(null);
     setLoading(true);
     void client
       .loadSnapshot(controller.signal)
       .then((nextSnapshot) => {
-        if (!controller.signal.aborted) setSnapshot(nextSnapshot);
+        if (!controller.signal.aborted) {
+          traceCapabilitySnapshot(
+            `[desktop-capability-snapshot] loaded ${Math.round(performance.now() - started)}ms`,
+          );
+          setSnapshot(nextSnapshot);
+        }
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
@@ -42,9 +83,21 @@ export function useDesktopCapabilitySnapshot(
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [attempt, client, enabled]);
+  }, [
+    attempt,
+    client,
+    enabled,
+    generationDigest,
+    generationFailureCode,
+    waitingForGeneration,
+  ]);
 
   return { loading, reload, snapshot };
+}
+
+function traceCapabilitySnapshot(message: string): void {
+  if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') return;
+  console.info(message);
 }
 
 function capabilitySnapshotFailureCode(error: unknown): string {

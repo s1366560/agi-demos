@@ -83,3 +83,66 @@ test('scope change hides the old generation, discards late views and refreshes a
     host.remove();
   }
 });
+
+test('cloud receipt delay still publishes the generation before the receipt returns', async () => {
+  const originalFetch = globalThis.fetch;
+  let releaseReceipt;
+  const receipt = new Promise((resolve) => { releaseReceipt = resolve; });
+  let deliveries = 0;
+  const observations = [];
+  let latest;
+  globalThis.fetch = async () => { throw new Error('cloud generation must use ipc'); };
+  window.__MEMSTACK_DESKTOP__ = { core: { invoke: async (command) => {
+    if (command === 'platform_plugin_renderer_delivery_current_v2') {
+      deliveries += 1;
+      return {
+        source: 'cloud',
+        authority_id: 'authority-1',
+        delivery_token: 'delivery-1',
+        distribution: {
+          schema_version: 2,
+          descriptor: { profile_id: profile.profile_id, generation: profile.generation, digest: profile.digest },
+          snapshot: profile,
+          envelope: {
+            version: 1,
+            nonce: 'nonce-1',
+            snapshot_digest: profile.digest,
+            type_url: 'types.memstack.ai/plugin.profile.v2',
+          },
+        },
+      };
+    }
+    if (command === 'platform_plugin_renderer_receipt_submit_v2') return receipt;
+    return undefined;
+  } } };
+  const host = document.createElement('div'); document.body.append(host);
+  const root = createRoot(host);
+  const cloudConfig = { ...baseConfig, mode: 'cloud', apiKey: '', localApiToken: '' };
+  function Harness({ config }) {
+    const state = useDesktopPluginGenerationV2(config, true, 'user-a');
+    latest = state;
+    observations.push({ status: state.status, digest: state.generation?.snapshot.digest });
+    return React.createElement('span', null, state.status);
+  }
+  const flush = async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); };
+  const waitFor = async (predicate) => { for (const deadline = Date.now() + 5000; Date.now() < deadline && !predicate();) await flush(); assert.ok(predicate(), JSON.stringify({ status: latest?.status, error: latest?.error?.message, deliveries })); };
+  activateDesktopPluginGenerationRootV2();
+  try {
+    await act(async () => root.render(React.createElement(Harness, { config: cloudConfig })));
+    await waitFor(() => latest.status === 'ready' && latest.generation?.snapshot.digest === profile.digest);
+    assert.equal(deliveries, 1);
+    assert.equal(observations.some((item) => item.status === 'ready' && item.digest === undefined), false);
+    const switched = { ...cloudConfig, projectId: 'project-b' };
+    await act(async () => root.render(React.createElement(Harness, { config: switched })));
+    assert.equal(latest.generation, undefined);
+    assert.equal(latest.status, 'loading');
+    releaseReceipt(undefined);
+    await flush();
+  } finally {
+    await act(async () => root.unmount());
+    await deactivateDesktopPluginGenerationRootV2();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    globalThis.fetch = originalFetch;
+    host.remove();
+  }
+});

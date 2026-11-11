@@ -817,7 +817,7 @@ async function executeDesktopCommand(
       if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
       const lease = cloudRequestExecutions.begin(ownerId, args?.requestId);
       try {
-        return await executeVaultBoundCloudRequest(args?.request, {
+        const result = await executeVaultBoundCloudRequest(args?.request, {
           loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
           fetch: (url, init) => net.fetch(url, init),
           signal: lease.signal,
@@ -826,6 +826,42 @@ async function executeDesktopCommand(
             return withDesktopAuthorityTransitionV2(operation);
           },
         });
+        if (process.env.AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG === '1') {
+          const redactQaValue = (value: unknown): unknown => {
+            if (Array.isArray(value)) return value.map((item) => redactQaValue(item));
+            if (value && typeof value === 'object') {
+              const redacted: Record<string, unknown> = {};
+              for (const [key, nested] of Object.entries(value)) {
+                redacted[key] = /token|password|secret|authorization|credential|api[_-]?key|cookie/i.test(key)
+                  ? '[redacted]'
+                  : redactQaValue(nested);
+              }
+              return redacted;
+            }
+            if (typeof value === 'string' && /^(Bearer\s+\S+|ms_(?:sk|dp)_[0-9a-f]+)$/i.test(value)) {
+              return '[redacted]';
+            }
+            return value;
+          };
+          const observed = ((globalThis as { __agistackQaCloudRequests?: Array<{
+            path: string;
+            method: string;
+            status: number;
+            body: unknown;
+          }> }).__agistackQaCloudRequests ??= []);
+          if (observed.length >= 200) observed.shift();
+          const request = args?.request;
+          const record = request && typeof request === 'object'
+            ? request as { path?: unknown; method?: unknown }
+            : {};
+          observed.push({
+            path: typeof record.path === 'string' ? record.path : '',
+            method: typeof record.method === 'string' ? record.method : 'GET',
+            status: typeof result.status === 'number' ? result.status : 0,
+            body: redactQaValue(result.body ?? null),
+          });
+        }
+        return result;
       } finally {
         lease.release();
       }
@@ -949,14 +985,39 @@ async function executeDesktopCommand(
         ? { owner_id: owner }
         : { owner_id: owner, delivery_token: args?.delivery_token, receipt: args?.receipt };
       let result: unknown;
+      const qaIpc = process.env.AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG === '1';
+      const qaIpcStarted = Date.now();
+      const recordQaIpc = (outcome: 'ok' | 'error', value: unknown) => {
+        if (!qaIpc) return;
+        const events = ((globalThis as { __agistackQaRendererIpc?: Array<{
+          command: string;
+          outcome: 'ok' | 'error';
+          elapsed_ms: number;
+          digest: string;
+        }> }).__agistackQaRendererIpc ??= []);
+        if (events.length >= 50) events.shift();
+        let digest = '';
+        if (value && typeof value === 'object') {
+          const record = value as { snapshot?: { digest?: unknown }; distribution?: { snapshot?: { digest?: unknown } } };
+          const direct = record.snapshot?.digest;
+          const nested = record.distribution?.snapshot?.digest;
+          digest = typeof direct === 'string' ? direct : typeof nested === 'string' ? nested : '';
+        }
+        events.push({ command, outcome, elapsed_ms: Date.now() - qaIpcStarted, digest });
+      };
       try {
         result = await sidecarSupervisor.invoke(command, payload);
+        recordQaIpc('ok', result);
       } catch (error) {
         const unavailable = command === 'platform_plugin_renderer_delivery_current_v2'
           ? desktopRendererDeliveryUnavailableV2(error)
           : null;
-        if (!unavailable) throw error;
+        if (!unavailable) {
+          recordQaIpc('error', null);
+          throw error;
+        }
         result = unavailable;
+        recordQaIpc('ok', result);
       }
       if (rendererDeliveryOwnersV2.get(ownerId) !== owner) {
         throw new Error('desktop_renderer_delivery_owner_retired');

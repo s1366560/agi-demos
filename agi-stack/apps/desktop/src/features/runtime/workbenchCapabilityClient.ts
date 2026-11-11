@@ -843,7 +843,37 @@ export function createDesktopWorkbenchCapabilityClient(
         tenantRemainingCapabilityClient.load(signal),
         p2ThirdBatchCapabilityClient.load(signal),
         loadAuxiliaryCloudCapabilities(config, cloudRequestBroker, signal),
-      ] as const, signal);
+      ] as const, signal, [
+        'search',
+        'automation',
+        'workspace-collaboration',
+        'project-overview',
+        'runtime-pool',
+        'runtime-instances',
+        'runtime-clusters',
+        'runtime-deployments',
+        'backend-stores',
+        'dead-letter-queue',
+        'instance-templates',
+        'unified-runtimes',
+        'tenant-overview',
+        'tenant-analytics',
+        'tenant-agent-dashboard',
+        'tenant-agent-bindings',
+        'tenant-projects',
+        'tenant-tasks',
+        'management',
+        'project-workspaces',
+        'project-blackboard',
+        'project-knowledge',
+        'project-agent',
+        'project-administration',
+        'agent-workspace',
+        'tenant-admin',
+        'tenant-remaining',
+        'p2-third-batch',
+        'auxiliary-cloud',
+      ]);
       const tenantScope = tenantCapabilityScope(config);
       const projectScope = projectCapabilityScope(config);
       const workspaceScope = workspaceCapabilityScope(config);
