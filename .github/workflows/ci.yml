@@ -360,13 +360,26 @@ jobs:
               ps -eo pid,ppid,stat,wchan:20,cmd --ppid "$pytest_pid"
               ps -eo pid,ppid,stat,wchan:20,cmd | awk 'NR==1 || /pytest|uv run/'
             } | tee -a "$pytest_log"
+            # uv does not exec. A pytest child that ignores SIGTERM keeps uv
+            # alive, uv is then reparented, and a later lookup of the dead
+            # function's direct children finds nobody. Snapshot the tree first
+            # and signal those pids even after they leave the function.
+            collect_descendants() {
+              local pid="$1"
+              local child
+              local -a children=()
+              mapfile -t children < <(ps -o pid= --ppid "$pid" 2>/dev/null | awk '{$1=$1; print}')
+              for child in "${children[@]}"; do
+                collect_descendants "$child"
+                echo "$child"
+              done
+            }
             (
               sleep 960
-              mapfile -t children < <(ps -o pid= --ppid "$pytest_pid" | awk '{$1=$1; print}' || true)
-              kill -TERM "$pytest_pid" "${children[@]}" 2>/dev/null || true
+              mapfile -t tree < <(collect_descendants "$pytest_pid")
+              kill -TERM "$pytest_pid" "${tree[@]}" 2>/dev/null || true
               sleep 20
-              mapfile -t children < <(ps -o pid= --ppid "$pytest_pid" | awk '{$1=$1; print}' || true)
-              kill -KILL "$pytest_pid" "${children[@]}" 2>/dev/null || true
+              kill -KILL "$pytest_pid" "${tree[@]}" 2>/dev/null || true
             ) &
             watchdog_pid=$!
             wait "$pytest_pid"
