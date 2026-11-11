@@ -229,6 +229,7 @@ import {
 import {
   negotiateCapabilityContract,
 } from './capabilityVersion';
+import { withProjectAuthorityRevision } from './projectAuthorityRevision';
 
 export type DesktopCapabilitySnapshotObserver = (
   snapshot: DesktopCapabilitySnapshot,
@@ -946,6 +947,7 @@ export function createDesktopWorkbenchCapabilityClient(
               withProjectAuthorityRevision(
                 search,
                 projectKnowledgeCapabilities['project-project-entities'],
+                projectScope,
               ),
               projectScope,
             ),
@@ -987,6 +989,7 @@ export function createDesktopWorkbenchCapabilityClient(
               withProjectAuthorityRevision(
                 search,
                 projectKnowledgeCapabilities['project-project-entities'],
+                projectScope,
               ),
               projectScope,
             ),
@@ -2358,6 +2361,7 @@ export function projectRouteObservationSnapshot(
       withProjectAuthorityRevision(
         search,
         projectKnowledgeCapabilities['project-project-entities'],
+        projectScope,
       ),
       projectScope,
     ),
@@ -2384,20 +2388,6 @@ export function projectRouteObservationSnapshot(
     runtime_state: runtimeStateForMode(config.mode, false),
     capabilities,
   };
-}
-
-function withProjectAuthorityRevision(
-  capability: DesktopCapabilityAvailability,
-  revisionSource: DesktopCapabilityAvailability | undefined,
-): DesktopCapabilityAvailability {
-  if (
-    capability.authority_revision !== null ||
-    (capability.availability !== 'available' && capability.availability !== 'degraded') ||
-    typeof revisionSource?.authority_revision !== 'number'
-  ) {
-    return capability;
-  }
-  return { ...capability, authority_revision: revisionSource.authority_revision };
 }
 
 function observationPendingEntry(

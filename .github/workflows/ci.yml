@@ -256,6 +256,37 @@ jobs:
           DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
         run: printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
 
+      - name: Record plugins-g shard boundary
+        if: matrix.shard == 'plugins-g'
+        run: |
+          set -euo pipefail
+          mkdir -p shard-prelude
+          mapfile -t files < <(find src/tests/unit/infrastructure/plugins -name 'test_*.py' | sort)
+          shard_count=0
+          for i in "${!files[@]}"; do
+            if (( i % 16 == 6 )); then shard_count=$((shard_count + 1)); fi
+          done
+          {
+            echo "sha=$(git rev-parse HEAD)"
+            echo "workflow_sha256=$(sha256sum .github/workflows/ci.yml | awk '{print $1}')"
+            echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "runner=${RUNNER_NAME:-unknown} os=${RUNNER_OS:-unknown} arch=${RUNNER_ARCH:-unknown}"
+            echo "nproc=$(nproc)"
+            echo "plugins_g_shard_files=${shard_count}"
+            echo "shell_has_inline_watchdog=$(grep -c 'plugins-g watchdog' .github/workflows/ci.yml)"
+            echo "shell_backgrounds_pytest=$(grep -c 'run_pytest thread -v &' .github/workflows/ci.yml)"
+            df -h .
+          } > shard-prelude/summary.txt
+          echo "::notice title=plugins-g-boundary::sha=$(git rev-parse --short HEAD) files=${shard_count} watchdog=$(grep -c 'plugins-g watchdog' .github/workflows/ci.yml)"
+
+      - name: Upload plugins-g shard boundary
+        if: matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-shard-boundary
+          path: shard-prelude/summary.txt
+          if-no-files-found: error
+
       - name: Run unit shard
         timeout-minutes: 20
         run: |
@@ -352,9 +383,11 @@ jobs:
           echo "shard ${{ matrix.shard }} pytest start $(date -u +%H:%M:%S)"
           set +e
           if [[ "${{ matrix.shard }}" == "plugins-g" ]]; then
+            echo "::notice title=plugins-g-pytest-start::files=${#args[@]} timeout=120 method=thread"
             run_pytest thread -v &
             pytest_pid=$!
             echo "plugins-g shell=$$ pytest_pid=${pytest_pid} pgid=$(ps -o pgid= -p "$$" | awk '{$1=$1; print}')"
+            echo "::notice title=plugins-g-pytest-pid::pid=${pytest_pid} shell=$$"
             collect_descendants() {
               local pid="$1"
               local child
@@ -378,8 +411,11 @@ jobs:
             deadline=$((SECONDS + 960))
             while kill -0 "$pytest_pid" 2>/dev/null; do
               if (( SECONDS >= deadline )); then
+                echo "::notice title=plugins-g-watchdog::deadline reached, signaling ${pytest_pid}"
+                kill -TERM "$pytest_pid" 2>/dev/null || true
                 mapfile -t tree < <(collect_descendants "$pytest_pid")
                 echo "plugins-g watchdog $(date -u +%H:%M:%S) TERM ${pytest_pid} ${tree[*]-}"
+                if ((${#tree[@]})); then kill -TERM "${tree[@]}" 2>/dev/null || true; fi
                 ps -eo pid,ppid,pgid,stat,wchan:24,cmd | awk 'NR==1 || /pytest|uv run/' || true
                 if [[ -s "$pytest_log" ]]; then
                   echo "plugins-g pytest log has started: $(head -n 1 "$pytest_log")"

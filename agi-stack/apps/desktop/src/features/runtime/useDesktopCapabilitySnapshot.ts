@@ -63,10 +63,8 @@ export function useDesktopCapabilitySnapshot(
     );
     setSnapshot(null);
     setLoading(true);
-    let published = false;
     const publish = (nextSnapshot: DesktopCapabilitySnapshot) => {
       if (controller.signal.aborted) return;
-      published = true;
       setSnapshot(nextSnapshot);
       setLoading(false);
     };
@@ -83,7 +81,7 @@ export function useDesktopCapabilitySnapshot(
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
           console.warn('[desktop-capability-snapshot]', capabilitySnapshotFailureCode(error));
-          if (!published) setSnapshot(null);
+          setSnapshot(null);
           setLoading(false);
         }
       })

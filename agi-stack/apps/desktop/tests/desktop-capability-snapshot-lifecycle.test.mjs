@@ -189,6 +189,31 @@ test('a slow remaining branch does not delay the entity observation', async () =
   assert.equal(finished, true);
   assert.equal(h.render(client, true, { status: 'ready', digest: 'digest-1' }).snapshot, full);
 });
+test('a later snapshot failure revokes the earlier observation', async () => {
+  let rejectSlow;
+  const slow = new Promise((_resolve, reject) => { rejectSlow = reject; });
+  const entity = Object.freeze({ id: 'entities' });
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const client = {
+      loadSnapshot(_signal, observe) {
+        observe(entity);
+        return slow;
+      },
+    };
+    const h = harness(client);
+    h.render(client, true, { status: 'ready', digest: 'digest-1' });
+    assert.equal(h.render(client, true, { status: 'ready', digest: 'digest-1' }).snapshot, entity);
+    rejectSlow(Object.assign(new Error('later branch failed'), { code: 'tenant_admin_authority_unavailable' }));
+    await flush();
+    assert.equal(h.render(client, true, { status: 'ready', digest: 'digest-1' }).snapshot, null);
+    assert.deepEqual(warnings, [['[desktop-capability-snapshot]', 'tenant_admin_authority_unavailable']]);
+  } finally {
+    console.warn = original;
+  }
+});
 test('loading generation does not lease a capability snapshot', () => {
   let calls = 0;
   const client = { loadSnapshot() { calls++; return Promise.resolve({ id: 'early' }); } };

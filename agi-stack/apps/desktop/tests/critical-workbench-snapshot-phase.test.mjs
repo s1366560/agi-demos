@@ -18,6 +18,7 @@ function load(path) {
 
 const settlement = load('../src/features/runtime/desktopWorkbenchSnapshotSettlementV2.ts');
 const routeModel = load('../src/features/navigation/desktopRouteHostModel.ts');
+const revision = load('../src/features/runtime/projectAuthorityRevision.ts');
 
 function deferred() {
   let resolve;
@@ -96,6 +97,61 @@ test('remaining snapshot branches leave room for the current route', async () =>
   const results = await settlement.settleWorkbenchSnapshotBranchesLimitedV2(starters, 2);
   assert.deepEqual(results, [0, 1, 2, 3, 4, 5]);
   assert.equal(max, 2);
+});
+function scope(tenant, project) {
+  return { tenant_id: tenant, project_id: project, workspace_id: null, instance_id: null };
+}
+function capability(overrides) {
+  return {
+    availability: 'available',
+    reason_code: null,
+    authority_revision: 4,
+    provenance: 'observed',
+    allowed_actions: ['search'],
+    scope: scope('tenant-a', 'project-a'),
+    ...overrides,
+  };
+}
+test('authority revision is reused only for the same live project and tenant', () => {
+  const search = capability({ authority_revision: null, scope: scope(null, null) });
+  const sameProject = capability({ authority_revision: 9 });
+  const otherProject = capability({ authority_revision: 9, scope: scope('tenant-a', 'project-b') });
+  const otherTenant = capability({ authority_revision: 9, scope: scope('tenant-b', 'project-a') });
+  const expired = capability({ availability: 'unavailable', reason_code: 'authority_expired', authority_revision: 9 });
+  const expected = scope('tenant-a', 'project-a');
+  assert.equal(revision.withProjectAuthorityRevision(search, sameProject, expected).authority_revision, 9);
+  assert.equal(revision.withProjectAuthorityRevision(search, otherProject, expected).authority_revision, null);
+  assert.equal(revision.withProjectAuthorityRevision(search, otherTenant, expected).authority_revision, null);
+  assert.equal(revision.withProjectAuthorityRevision(search, expired, expected).authority_revision, null);
+  assert.equal(revision.canReuseProjectAuthorityRevision(expired, expected), false);
+});
+test('pending observation is not an available route capability', () => {
+  const pending = {
+    availability: 'unavailable',
+    reason_code: 'capability_observation_pending',
+    authority_revision: null,
+    provenance: 'declared',
+    authority_source: 'renderer',
+    allowed_actions: [],
+    scope: scope('tenant-a', 'project-a'),
+  };
+  const access = routeModel.evaluateDesktopRouteAccess({
+    match: {
+      context: { tenantId: 'tenant-a', projectId: 'project-a' },
+      definition: {
+        requiredPermission: [['authenticated']],
+        localPolicy: 'allowed',
+        capability: 'tenant-tenant-tasks',
+        scope: ['project'],
+      },
+    },
+    mode: 'cloud',
+    permissions: new Set(['authenticated']),
+    capability: pending,
+  });
+  assert.equal(access.status, 'unavailable');
+  assert.equal(access.reasonCode, 'capability_observation_pending');
+  assert.notEqual(access.status, 'allowed');
 });
 test('an unchanged entity observation does not look like a new route capability', () => {
   const capability = {

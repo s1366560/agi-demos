@@ -117,6 +117,7 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
     );
     await waitForSyncedEpisode(request, token, episodeName);
     await rebuildCommunities(request, token, projectId);
+    await selectFixtureWorkspace(request, token, tenantId, projectId);
 
     const fixture = await loadFixtureSnapshot(
       request,
@@ -474,6 +475,28 @@ async function primeWebSession(page, token, user) {
       }),
     );
   }, authStorage);
+}
+
+async function selectFixtureWorkspace(request, token, tenantId, projectId) {
+  const current = await request.get(`${API_BASE}/api/v1/workspace-context`, {
+    headers: authorizationHeaders(token),
+  });
+  const body = await requireJsonResponse(current, "read workspace context");
+  const context = body.context ?? body;
+  if (context.project_id === projectId && context.tenant_id === tenantId) return;
+  const switched = await request.post(`${API_BASE}/api/v1/workspace-context/switch`, {
+    headers: {
+      ...authorizationHeaders(token),
+      "Content-Type": "application/json",
+    },
+    data: {
+      tenant_id: tenantId,
+      project_id: projectId,
+      expected_revision: context.revision,
+      idempotency_key: `neo4j-gate-${projectId}`,
+    },
+  });
+  await requireJsonResponse(switched, "select fixture workspace");
 }
 
 async function primeDesktopPreferences(page) {
