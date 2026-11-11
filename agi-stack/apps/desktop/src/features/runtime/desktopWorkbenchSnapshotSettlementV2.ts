@@ -1,10 +1,62 @@
+import type { DesktopCapabilitySnapshot } from './capabilitySnapshot';
+
 function traceCapabilitySnapshot(message: string): void {
-  if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') return;
+  const env = (globalThis as { process?: { env?: { NODE_ENV?: string } } }).process?.env
+    ?.NODE_ENV;
+  if (env === 'production') return;
   console.info(message);
+}
+
+export async function runCriticalWorkbenchSnapshotPhase<TCritical, TRemaining>(input: {
+  critical: () => Promise<TCritical>;
+  remaining: (critical: TCritical) => Promise<TRemaining>;
+  project: (critical: TCritical, remaining: TRemaining | undefined) => DesktopCapabilitySnapshot;
+  observe?: (snapshot: DesktopCapabilitySnapshot) => void;
+}): Promise<DesktopCapabilitySnapshot> {
+  const critical = await input.critical();
+  input.observe?.(input.project(critical, undefined));
+  const remaining = await input.remaining(critical);
+  return input.project(critical, remaining);
 }
 
 export function requireActiveWorkbenchSnapshotV2(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Workbench snapshot cancelled', 'AbortError');
+}
+
+export async function settleWorkbenchSnapshotBranchesLimitedV2<T>(
+  start: readonly (() => Promise<T>)[],
+  limit: number,
+  signal?: AbortSignal,
+  names?: readonly string[],
+): Promise<T[]> {
+  const results = new Array<T>(start.length);
+  let cursor = 0;
+  let failure: unknown;
+  const worker = async () => {
+    while (cursor < start.length && failure === undefined) {
+      requireActiveWorkbenchSnapshotV2(signal);
+      const index = cursor;
+      cursor += 1;
+      const started = performance.now();
+      const name = names?.[index] ?? String(index);
+      try {
+        results[index] = await start[index]();
+        traceCapabilitySnapshot(
+          `[desktop-capability-snapshot] ${name} ok ${Math.round(performance.now() - started)}ms`,
+        );
+      } catch (error) {
+        traceCapabilitySnapshot(
+          `[desktop-capability-snapshot] ${name} fail ${Math.round(performance.now() - started)}ms`,
+        );
+        failure ??= error;
+      }
+    }
+  };
+  const workers = Array.from({ length: Math.min(Math.max(limit, 1), start.length) }, () => worker());
+  await Promise.all(workers);
+  requireActiveWorkbenchSnapshotV2(signal);
+  if (failure !== undefined) throw failure;
+  return results;
 }
 
 export async function settleWorkbenchSnapshotBranchesV2<T extends readonly unknown[]>(

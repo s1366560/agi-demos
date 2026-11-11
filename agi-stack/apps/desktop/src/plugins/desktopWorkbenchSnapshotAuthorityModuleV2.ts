@@ -7,7 +7,10 @@ import {
 
 import type { DesktopCapabilitySnapshot } from '../features/runtime/capabilitySnapshot';
 import { createDesktopWorkbenchSnapshotDependenciesV2 } from '../features/runtime/desktopWorkbenchSnapshotDependenciesV2';
-import type { DesktopWorkbenchCapabilityClient } from '../features/runtime/workbenchCapabilityClient';
+import type {
+  DesktopCapabilitySnapshotObserver,
+  DesktopWorkbenchCapabilityClient,
+} from '../features/runtime/workbenchCapabilityClient';
 import type { DesktopRuntimeConfig } from '../types';
 import type { DesktopRendererGenerationActionsV2 } from './desktopRendererGenerationContextV2';
 
@@ -29,6 +32,7 @@ export interface DesktopWorkbenchSnapshotOperationsV2 {
     input: Readonly<{
       config: DesktopRuntimeConfig;
       signal: AbortSignal;
+      observe?: DesktopCapabilitySnapshotObserver;
     }>,
   ) => Promise<DesktopCapabilitySnapshot>;
 }
@@ -99,7 +103,9 @@ export function createDesktopWorkbenchSnapshotOperationsV2(
           if (!active || consumed) throw snapshotErrorV2('operation_released');
           consumed = true;
           signal.throwIfAborted();
-          const snapshot = await service.bindOperation(config, childActions).loadSnapshot(signal);
+          const snapshot = await service
+            .bindOperation(config, childActions)
+            .loadSnapshot(signal, input.observe);
           signal.throwIfAborted();
           return snapshot;
         });

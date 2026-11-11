@@ -852,13 +852,23 @@ async function executeDesktopCommand(
           if (observed.length >= 200) observed.shift();
           const request = args?.request;
           const record = request && typeof request === 'object'
-            ? request as { path?: unknown; method?: unknown }
+            ? request as { path?: unknown; method?: unknown; body?: unknown }
             : {};
+          const requestBody = record.body && typeof record.body === 'object'
+            ? record.body as { tenant_id?: unknown; project_id?: unknown }
+            : null;
+          const requestScope = requestBody
+            ? {
+                tenant_id: typeof requestBody.tenant_id === 'string' ? requestBody.tenant_id : null,
+                project_id: typeof requestBody.project_id === 'string' ? requestBody.project_id : null,
+              }
+            : null;
           observed.push({
             path: typeof record.path === 'string' ? record.path : '',
             method: typeof record.method === 'string' ? record.method : 'GET',
             status: typeof result.status === 'number' ? result.status : 0,
             body: redactQaValue(result.body ?? null),
+            ...(requestScope ? { request_scope: requestScope } : {}),
           });
         }
         return result;

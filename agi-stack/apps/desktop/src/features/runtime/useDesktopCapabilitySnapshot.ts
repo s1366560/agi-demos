@@ -63,20 +63,28 @@ export function useDesktopCapabilitySnapshot(
     );
     setSnapshot(null);
     setLoading(true);
+    let published = false;
+    const publish = (nextSnapshot: DesktopCapabilitySnapshot) => {
+      if (controller.signal.aborted) return;
+      published = true;
+      setSnapshot(nextSnapshot);
+      setLoading(false);
+    };
     void client
-      .loadSnapshot(controller.signal)
+      .loadSnapshot(controller.signal, publish)
       .then((nextSnapshot) => {
         if (!controller.signal.aborted) {
           traceCapabilitySnapshot(
             `[desktop-capability-snapshot] loaded ${Math.round(performance.now() - started)}ms`,
           );
-          setSnapshot(nextSnapshot);
+          publish(nextSnapshot);
         }
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
           console.warn('[desktop-capability-snapshot]', capabilitySnapshotFailureCode(error));
-          setSnapshot(null);
+          if (!published) setSnapshot(null);
+          setLoading(false);
         }
       })
       .finally(() => {
@@ -96,7 +104,9 @@ export function useDesktopCapabilitySnapshot(
 }
 
 function traceCapabilitySnapshot(message: string): void {
-  if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') return;
+  const env = (globalThis as { process?: { env?: { NODE_ENV?: string } } }).process?.env
+    ?.NODE_ENV;
+  if (env === 'production') return;
   console.info(message);
 }
 

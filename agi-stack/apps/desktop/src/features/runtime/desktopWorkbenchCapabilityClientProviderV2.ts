@@ -62,8 +62,12 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
     throw new TypeError('desktop_workbench_snapshot_operations_required');
   }
   const client: DesktopWorkbenchCapabilityClient = Object.freeze({
-    loadSnapshot(signal?: AbortSignal) {
-      return operations.loadSnapshot({ config, signal: signal ?? new AbortController().signal });
+    loadSnapshot(signal, observe) {
+      return operations.loadSnapshot({
+        config,
+        signal: signal ?? new AbortController().signal,
+        observe,
+      });
     },
   });
   return Object.freeze({ client });

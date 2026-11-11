@@ -162,6 +162,33 @@ test('capability client publication ignores generation action identity', () => {
   assert.equal(block.includes('desktopRendererGenerationV2.actions'), false);
   assert.equal(block.includes('snapshotOperationsV2'), true);
 });
+test('a slow remaining branch does not delay the entity observation', async () => {
+  let release;
+  const slow = new Promise((resolve) => { release = resolve; });
+  const entity = Object.freeze({
+    id: 'entities',
+    capabilities: { 'project-project-entities': { availability: 'degraded' } },
+  });
+  const full = Object.freeze({ id: 'full' });
+  const client = {
+    loadSnapshot(_signal, observe) {
+      observe(entity);
+      return slow.then(() => full);
+    },
+  };
+  const h = harness(client);
+  h.render(client, true, { status: 'ready', digest: 'digest-1' });
+  const published = h.render(client, true, { status: 'ready', digest: 'digest-1' });
+  assert.equal(published.snapshot, entity);
+  assert.equal(published.loading, false);
+  let finished = false;
+  release();
+  const pending = slow.then(() => { finished = true; });
+  await pending;
+  await flush();
+  assert.equal(finished, true);
+  assert.equal(h.render(client, true, { status: 'ready', digest: 'digest-1' }).snapshot, full);
+});
 test('loading generation does not lease a capability snapshot', () => {
   let calls = 0;
   const client = { loadSnapshot() { calls++; return Promise.resolve({ id: 'early' }); } };

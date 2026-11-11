@@ -12,6 +12,8 @@ const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:8000";
 
 function desktopElectronArgs() {
   const args = [desktopAppRoot];
+  const userDataDir = process.env.AGISTACK_DESKTOP_QA_USER_DATA_DIR;
+  if (userDataDir) args.push(`--user-data-dir=${userDataDir}`);
   if (process.env.CI === "true" && process.platform === "linux") {
     args.push("--no-sandbox", "--disable-dev-shm-usage");
   }
@@ -142,6 +144,9 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
 
     try {
       const webPage = await webContext.newPage();
+      const userDataDir = resolve(evidenceRoot, "electron-user-data");
+      mkdirSync(userDataDir, { recursive: true, mode: 0o700 });
+      process.env.AGISTACK_DESKTOP_QA_USER_DATA_DIR = userDataDir;
       const desktop = await openDesktopElectron(desktopBaseURL);
       desktopApp = desktop.app;
       const desktopPage = desktop.page;
@@ -640,10 +645,8 @@ async function exerciseDesktop(page, tracker, evidenceRoot, scope, fixture) {
     };
     await expectInStage(async () => {
       if (kind === "search") {
-        await stage
-          .locator('[data-action="search-query"]')
-          .fill(FIXTURE_NAMES[0]);
-        await stage.locator('[data-action="search-submit"]').click();
+        await stage.locator(".desktop-search__query input").fill(FIXTURE_NAMES[0]);
+        await stage.locator('.desktop-search__query button[type="submit"]').click();
         await expect(
           stage.getByText(fixture.search.fixture_matches[0]).first(),
         ).toBeVisible();
@@ -712,6 +715,8 @@ function createKnowledgeTracker(page, surface, expectedScope, electronApp) {
     }
     const kind = knowledgeKind(entry.method, url.pathname);
     if (!kind) return;
+    const bodyScope =
+      entry.body && typeof entry.body === "object" ? entry.body : null;
     records.push({
       surface,
       kind,
@@ -723,8 +728,16 @@ function createKnowledgeTracker(page, surface, expectedScope, electronApp) {
         project_id: expectedScope.projectId,
       },
       request_scope: {
-        tenant_id: url.searchParams.get("tenant_id"),
-        project_id: url.searchParams.get("project_id"),
+        tenant_id:
+          url.searchParams.get("tenant_id") ??
+          entry.request_scope?.tenant_id ??
+          bodyScope?.tenant_id ??
+          null,
+        project_id:
+          url.searchParams.get("project_id") ??
+          entry.request_scope?.project_id ??
+          bodyScope?.project_id ??
+          null,
       },
       response: summarizeResponse(kind, entry.body),
     });
