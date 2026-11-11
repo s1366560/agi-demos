@@ -1443,12 +1443,15 @@ async function drainPendingOAuthCallback(): Promise<void> {
 function handleFatalStartup(error: unknown): void {
   const detail = error instanceof Error ? error.message : String(error);
   console.error('Electron desktop startup failed', error);
-  try {
-    dialog.showErrorBox('agi-stack Desktop failed to start', detail);
-  } finally {
-    process.exitCode = 1;
-    app.quit();
+  if (process.env.CI !== 'true') {
+    try {
+      dialog.showErrorBox('agi-stack Desktop failed to start', detail);
+    } catch {
+      // A display that cannot present the dialog must not keep the process alive.
+    }
   }
+  process.exitCode = 1;
+  app.exit(1);
 }
 
 async function bootstrapApplication(): Promise<void> {

@@ -18,7 +18,7 @@ jobs:
   neo4j-runtime:
     name: Neo4j ingest, isolation, restart, and recovery
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 70
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -131,6 +131,51 @@ jobs:
           pnpm --dir web install --frozen-lockfile
           pnpm --dir agi-stack/apps/desktop install --frozen-lockfile
 
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Restore desktop sidecar build cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agi-stack/target
+            .cache/avernet-bcs
+          key: neo4j-desktop-runtime-${{ runner.os }}-${{ hashFiles('agi-stack/Cargo.lock', 'third_party/avernet-bcs/Cargo.lock') }}
+          restore-keys: neo4j-desktop-runtime-${{ runner.os }}-
+
+      - name: Build the desktop sidecar used by the matched-state gate
+        working-directory: agi-stack
+        env:
+          CARGO_PROFILE_DEV_DEBUG: "0"
+        run: cargo build -p agistack-desktop-sidecar
+
+      - name: Install Workspace Core native libraries
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libsqlite3-dev
+
+      - name: Build the Workspace Core helper required by sidecar startup
+        env:
+          CARGO_PROFILE_DEV_DEBUG: "0"
+        run: bash scripts/avernet-bcs/cargo.sh build -p memstack-workspace-core --bin memstack-workspace-core
+
+      - name: Build Electron main and preload
+        working-directory: agi-stack/apps/desktop
+        run: corepack pnpm exec electron-vite build
+
+      - name: Save desktop sidecar build cache
+        if: success()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agi-stack/target
+            .cache/avernet-bcs
+          key: neo4j-desktop-runtime-${{ runner.os }}-${{ hashFiles('agi-stack/Cargo.lock', 'third_party/avernet-bcs/Cargo.lock') }}
+
       - name: Install Chromium
         run: pnpm --dir agi-stack/apps/desktop exec playwright install --with-deps chromium
 
@@ -193,11 +238,31 @@ jobs:
       - name: Verify real graph mutation, search, traversal, and communities
         run: uv run python -m scripts.verify_e2e_graph
 
+      - name: Provision desktop data-plane grants
+        run: |
+          set -euo pipefail
+          install -d -m 0700 agi-stack/.local/desktop-grants
+          rm -f agi-stack/.local/desktop-grants/grants.env \
+            agi-stack/.local/desktop-grants/grants.metadata.json
+          PYTHONPATH=. uv run python scripts/bootstrap-local-desktop-grants.py \
+            --api-base http://127.0.0.1:8000 \
+            --output agi-stack/.local/desktop-grants/grants.env \
+            --metadata-output agi-stack/.local/desktop-grants/grants.metadata.json
+
       - name: Verify Web and Desktop Neo4j matched state
         env:
           NEO4J_MATCHED_STATE_EVIDENCE_DIR: ${{ github.workspace }}/neo4j-runtime-logs/matched-state
           NEO4J_RUNTIME_CONTAINER: memstack-neo4j-runtime
-        run: pnpm --dir agi-stack/apps/desktop run qa:neo4j-matched-state
+          AGISTACK_SIDECAR_PATH: ${{ github.workspace }}/agi-stack/target/debug/agistack-desktop-sidecar
+          AGISTACK_WORKSPACE_CORE_PATH: ${{ github.workspace }}/.cache/avernet-bcs/target/debug/memstack-workspace-core
+          ELECTRON_RENDERER_URL: http://127.0.0.1:5196
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          . agi-stack/.local/desktop-grants/grants.env
+          set +a
+          xvfb-run -a pnpm --dir agi-stack/apps/desktop run qa:neo4j-matched-state
 
       - name: Freeze persistent sentinel and online indexes
         run: |

@@ -45,7 +45,7 @@ export default defineConfig({
         inline: [/katex/],
       },
     },
-    setupFiles: './src/test/setup.ts',
+    setupFiles: ['./src/test/setup-macrotask.ts', './src/test/setup.ts'],
     include: ['src/test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', '**/.{idea,git,cache,output,temp}/**'],
     coverage: {

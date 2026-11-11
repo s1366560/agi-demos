@@ -2379,42 +2379,28 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-// React 19 reads `window.event` from a macrotask scheduled during commit.
-// Track those callbacks and drain them while happy-dom's window still exists.
-const nativeSetImmediate = globalThis.setImmediate.bind(globalThis);
-const nativeClearImmediate = globalThis.clearImmediate.bind(globalThis);
-const pendingReactMacrotasks = new Set<ReturnType<typeof setImmediate>>();
-
-globalThis.setImmediate = ((callback: (...args: unknown[]) => void, ...args: unknown[]) => {
-  let handle!: ReturnType<typeof setImmediate>;
-  handle = nativeSetImmediate(
-    (...inner: unknown[]) => {
-      pendingReactMacrotasks.delete(handle);
-      callback(...inner);
-    },
-    ...args
-  );
-  pendingReactMacrotasks.add(handle);
-  return handle;
-}) as typeof setImmediate;
+beforeEach(() => {
+  globalThis.__memstackReactMacrotasksOpen = true;
+});
 
 // Cleanup after each test
 afterEach(async () => {
   cleanup();
+  const pending = globalThis.__memstackPendingReactMacrotasks;
+  const wait = globalThis.__memstackNativeSetImmediate;
   // React 19 can schedule another macrotask from inside the one we flush.
-  // One pass left ConversationParticipantsPanel's focused-agent update to
-  // read window after happy-dom tore it down (run 42975961576).
-  for (let pass = 0; pass < 8 && pendingReactMacrotasks.size > 0; pass += 1) {
+  for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
     await act(async () => {
       await new Promise((resolve) => {
-        nativeSetImmediate(resolve);
+        wait(resolve);
       });
     });
   }
-  for (const handle of pendingReactMacrotasks) {
-    nativeClearImmediate(handle);
+  globalThis.__memstackReactMacrotasksOpen = false;
+  for (const handle of pending) {
+    globalThis.__memstackClearReactMacrotask(handle);
   }
-  pendingReactMacrotasks.clear();
+  pending.clear();
 
   // Clear localStorage and sessionStorage after each test
   localStorageMock.clear();

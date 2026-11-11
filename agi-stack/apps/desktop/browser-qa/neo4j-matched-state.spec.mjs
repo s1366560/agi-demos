@@ -1,11 +1,43 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { expect, test } from "@playwright/test";
+import { _electron as electron, expect, test } from "@playwright/test";
+
+const desktopAppRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:8000";
+
+function desktopElectronArgs() {
+  const args = [desktopAppRoot];
+  if (process.env.CI === "true" && process.platform === "linux") {
+    args.push("--no-sandbox", "--disable-dev-shm-usage");
+  }
+  return args;
+}
+
+async function openDesktopElectron(desktopBaseURL) {
+  const sidecarPath = process.env.AGISTACK_SIDECAR_PATH;
+  if (!sidecarPath) {
+    throw new Error(
+      "AGISTACK_SIDECAR_PATH must point at the built agistack-desktop-sidecar binary",
+    );
+  }
+  const app = await electron.launch({
+    args: desktopElectronArgs(),
+    cwd: desktopAppRoot,
+    env: {
+      ...process.env,
+      ELECTRON_RENDERER_URL: desktopBaseURL,
+      AGISTACK_SIDECAR_PATH: sidecarPath,
+    },
+    timeout: 120_000,
+  });
+  const page = await app.firstWindow();
+  return { app, page };
+}
 const FIXTURE_NAMES = Object.freeze([
   "Ariadne Vale",
   "Deterministic Graph Labs",
@@ -64,15 +96,13 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
       locale: "en-US",
       viewport: { width: 1440, height: 900 },
     });
-    const desktopContext = await browser.newContext({
-      colorScheme: "light",
-      locale: "en-US",
-      viewport: { width: 1440, height: 900 },
-    });
+    let desktopApp = null;
 
     try {
       const webPage = await webContext.newPage();
-      const desktopPage = await desktopContext.newPage();
+      const desktop = await openDesktopElectron(desktopBaseURL);
+      desktopApp = desktop.app;
+      const desktopPage = desktop.page;
       await Promise.all([
         installApiOriginRewrite(webPage),
         installApiOriginRewrite(desktopPage),
@@ -122,7 +152,10 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
         desktopTracker.dispose();
       }
     } finally {
-      await Promise.allSettled([webContext.close(), desktopContext.close()]);
+      await Promise.allSettled([
+        webContext.close(),
+        desktopApp ? desktopApp.close() : Promise.resolve(),
+      ]);
     }
   } finally {
     if (token && episodeName) {
