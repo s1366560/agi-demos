@@ -827,8 +827,11 @@ jobs:
     env:
       # Sidecar tests require cfg(debug_assertions); a release test profile
       # rejects the local knowledge host. Keep the debug test build and only
-      # drop debuginfo so the later release bundle links faster.
+      # drop debuginfo. cargo test uses the test profile, so DEV_DEBUG alone
+      # left the 7m30s test rebuild as "unoptimized + debuginfo" on run
+      # 42957928259.
       CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_PROFILE_RELEASE_DEBUG: "0"
     defaults:
       run:
@@ -912,7 +915,33 @@ jobs:
         run: printf 'DATABASE_URL=%s\n' 'postgresql+asyncpg://postgres:testpassword@127.0.0.1:5432/memstack' > .env
 
       - name: Run desktop unit and integration tests
-        run: make desktop-test
+        run: |
+          set -euo pipefail
+          # Release sidecar and Workspace Core use different target directories
+          # from each other. Starting them now lets cargo's target lock wait
+          # until the debug build in desktop-test finishes, then compile the
+          # release artifacts during the test run. The bundle step still builds
+          # and packages the same binaries; a finished release target makes
+          # that cargo invocation a check instead of a second full compile.
+          release_log="${RUNNER_TEMP}/desktop-release-preload.log"
+          (
+            cargo build --release -p agistack-desktop-sidecar
+          ) >"$release_log" 2>&1 &
+          sidecar_pid=$!
+          (
+            bash ../scripts/avernet-bcs/cargo.sh build --release \
+              -p memstack-workspace-core --bin memstack-workspace-core
+          ) >>"$release_log" 2>&1 &
+          core_pid=$!
+          status=0
+          make desktop-test || status=$?
+          wait "$sidecar_pid" || status=$?
+          wait "$core_pid" || status=$?
+          if [[ "$status" -ne 0 ]]; then
+            echo "----- desktop release preload log -----"
+            tail -n 200 "$release_log" || true
+            exit "$status"
+          fi
 
       - name: Build desktop bundle
         run: make desktop-bundle
