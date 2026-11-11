@@ -433,10 +433,25 @@ async function installApiOriginRewrite(page) {
 }
 
 async function authenticateDesktop(page, desktopBaseURL) {
-  const response = await page.goto(desktopBaseURL, {
-    waitUntil: "domcontentloaded",
+  // Electron loads this URL before the test can navigate. A second goto or
+  // reload while that load is still committing is aborted and detaches the
+  // frame (net::ERR_ABORTED). Wait until the document is there, then reload
+  // so init scripts apply. If the reload is aborted but the document stayed,
+  // continue into the same login assertions.
+  await page.waitForURL((url) => String(url).startsWith(desktopBaseURL), {
+    timeout: 60_000,
   });
-  expect(response?.status()).toBeLessThan(400);
+  let response = null;
+  try {
+    response = await page.reload({
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("ERR_ABORTED") || page.isClosed()) throw error;
+  }
+  if (response) expect(response.status()).toBeLessThan(400);
   const login = page.locator(".desktop-login-card");
   await expect(login).toBeVisible();
   await login

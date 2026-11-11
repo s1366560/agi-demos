@@ -353,6 +353,13 @@ jobs:
           if [[ "${{ matrix.shard }}" == "plugins-g" ]]; then
             run_pytest thread -v &
             pytest_pid=$!
+            # The step log was BlobNotFound after the job was cancelled, so the
+            # process tree has to be printed while the shell is still alive.
+            {
+              echo "plugins-g pytest_pid=${pytest_pid} pgid=$(ps -o pgid= -p "$pytest_pid" | awk '{$1=$1; print}')"
+              ps -eo pid,ppid,stat,wchan:20,cmd --ppid "$pytest_pid"
+              ps -eo pid,ppid,stat,wchan:20,cmd | awk 'NR==1 || /pytest|uv run/'
+            } | tee -a "$pytest_log"
             (
               sleep 960
               mapfile -t children < <(ps -o pid= --ppid "$pytest_pid" | awk '{$1=$1; print}' || true)
