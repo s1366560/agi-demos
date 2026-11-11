@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# GitHub-hosted Ubuntu lists azure.archive.ubuntu.com first. When that name
-# does not resolve, apt retries it until the job timeout, and Playwright
-# --with-deps exits before any browser test runs. Point apt at the public
-# archive instead. Package installation still has to succeed.
+# GitHub-hosted Ubuntu reads /etc/apt/apt-mirrors.txt. On 2026-11-11 Canonical
+# DNS stopped resolving ubuntu.com, so azure.archive.ubuntu.com,
+# archive.ubuntu.com, and security.ubuntu.com all failed. apt retried until
+# the job cap and Playwright never reached a test. These mirrors are outside
+# that zone. apt still verifies Ubuntu's signed InRelease; nothing is marked
+# trusted.
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -10,26 +12,21 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 0
 fi
 
-rewrite() {
-  local path="$1"
-  sudo sed -i \
-    -e 's|https://azure.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' \
-    -e 's|http://azure.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' \
-    "$path"
-}
-
-if [[ -f /etc/apt/apt-mirrors.txt ]]; then
-  rewrite /etc/apt/apt-mirrors.txt
-  echo "ubuntu archive mirror: $(tr '\n' ' ' < /etc/apt/apt-mirrors.txt)"
-else
-  echo "ubuntu archive mirror: apt-mirrors.txt absent"
+if [[ ! -f /etc/apt/apt-mirrors.txt ]]; then
+  echo "ubuntu archive mirror: apt-mirrors.txt absent" >&2
+  exit 1
 fi
 
-if [[ -f /etc/apt/sources.list ]]; then
-  rewrite /etc/apt/sources.list
-fi
+sudo tee /etc/apt/apt-mirrors.txt >/dev/null <<'EOF'
+http://mirror.math.princeton.edu/pub/ubuntu/	priority:1
+http://mirror.us.leaseweb.net/ubuntu/	priority:2
+http://ubuntu.osuosl.org/ubuntu/	priority:3
+EOF
 
-shopt -s nullglob
-for path in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
-  rewrite "$path"
-done
+sudo tee /etc/apt/apt.conf.d/99-ci-mirror-failover >/dev/null <<'EOF'
+Acquire::Retries "0";
+Acquire::http::Timeout "15";
+Acquire::https::Timeout "15";
+EOF
+
+echo "ubuntu archive mirror: $(tr '\n' ' ' < /etc/apt/apt-mirrors.txt)"
