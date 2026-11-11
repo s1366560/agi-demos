@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test } from "@playwright/test";
 
+import { fixtureWorkspaceSwitch } from "./fixtureWorkspaceSelection.mjs";
+
 const desktopAppRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:8000";
@@ -483,18 +485,14 @@ async function selectFixtureWorkspace(request, token, tenantId, projectId) {
   });
   const body = await requireJsonResponse(current, "read workspace context");
   const context = body.context ?? body;
-  if (context.project_id === projectId && context.tenant_id === tenantId) return;
+  const switchBody = fixtureWorkspaceSwitch(context, tenantId, projectId);
+  if (switchBody === null) return;
   const switched = await request.post(`${API_BASE}/api/v1/workspace-context/switch`, {
     headers: {
       ...authorizationHeaders(token),
       "Content-Type": "application/json",
     },
-    data: {
-      tenant_id: tenantId,
-      project_id: projectId,
-      expected_revision: context.revision,
-      idempotency_key: `neo4j-gate-${projectId}`,
-    },
+    data: switchBody,
   });
   await requireJsonResponse(switched, "select fixture workspace");
 }

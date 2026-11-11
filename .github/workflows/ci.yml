@@ -258,26 +258,7 @@ jobs:
 
       - name: Record plugins-g shard boundary
         if: matrix.shard == 'plugins-g'
-        run: |
-          set -euo pipefail
-          mkdir -p shard-prelude
-          mapfile -t files < <(find src/tests/unit/infrastructure/plugins -name 'test_*.py' | sort)
-          shard_count=0
-          for i in "${!files[@]}"; do
-            if (( i % 16 == 6 )); then shard_count=$((shard_count + 1)); fi
-          done
-          {
-            echo "sha=$(git rev-parse HEAD)"
-            echo "workflow_sha256=$(sha256sum .github/workflows/ci.yml | awk '{print $1}')"
-            echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "runner=${RUNNER_NAME:-unknown} os=${RUNNER_OS:-unknown} arch=${RUNNER_ARCH:-unknown}"
-            echo "nproc=$(nproc)"
-            echo "plugins_g_shard_files=${shard_count}"
-            echo "shell_has_inline_watchdog=$(grep -c 'plugins-g watchdog' .github/workflows/ci.yml)"
-            echo "shell_backgrounds_pytest=$(grep -c 'run_pytest thread -v &' .github/workflows/ci.yml)"
-            df -h .
-          } > shard-prelude/summary.txt
-          echo "::notice title=plugins-g-boundary::sha=$(git rev-parse --short HEAD) files=${shard_count} watchdog=$(grep -c 'plugins-g watchdog' .github/workflows/ci.yml)"
+        run: bash scripts/ci/plugins_g_shard_prelude.sh shard-prelude/summary.txt
 
       - name: Upload plugins-g shard boundary
         if: matrix.shard == 'plugins-g'
@@ -354,15 +335,10 @@ jobs:
           mkdir -p shard-logs
           pytest_log="shard-logs/${{ matrix.shard }}-pytest.log"
           # GNU timeout puts pytest in a new process group, so the runner cannot
-          # reap it (job 130340536360). Leaving pytest in this group is required.
-          # On 81b336526, plugins-g job 130376252017 was still inside this step
-          # at 20m34s, so timeout-minutes did not end it either. A sibling
-          # watchdog then lost the race: wait returned when SIGTERM killed the
-          # function shell, and the shell's pkill of that watchdog cancelled the
-          # delayed SIGKILL. A child that ignores SIGTERM was reparented into
-          # this process group and the runner never finished the step. plugins-g
-          # therefore polls from this shell, prints whether pytest has written a
-          # log, and SIGKILLs the saved tree itself before exiting.
+          # reap it (job 130340536360). plugins-g uses a foreground watchdog
+          # script instead of backgrounding a function: the command is not
+          # exec'd, its output goes to the log file, and heartbeats stay off
+          # the step pipe so a full pipe cannot block the deadline.
           run_pytest() {
             local method="$1"
             shift
@@ -384,78 +360,23 @@ jobs:
           set +e
           if [[ "${{ matrix.shard }}" == "plugins-g" ]]; then
             echo "::notice title=plugins-g-pytest-start::files=${#args[@]} timeout=120 method=thread"
-            run_pytest thread -v &
-            pytest_pid=$!
-            echo "plugins-g shell=$$ pytest_pid=${pytest_pid} pgid=$(ps -o pgid= -p "$$" | awk '{$1=$1; print}')"
-            echo "::notice title=plugins-g-pytest-pid::pid=${pytest_pid} shell=$$"
-            collect_descendants() {
-              local pid="$1"
-              local child
-              local -a children=()
-              mapfile -t children < <(ps -o pid= --ppid "$pid" 2>/dev/null | awk '{$1=$1; print}')
-              for child in "${children[@]}"; do
-                [[ -n "$child" ]] || continue
-                collect_descendants "$child"
-                echo "$child"
-              done
-            }
-            tree=()
-            status=0
-            sleep 1
-            if [[ -s "$pytest_log" ]]; then
-              echo "plugins-g pytest log started: $(head -n 1 "$pytest_log")"
-            else
-              echo "plugins-g pytest log empty after 1s"
-              ps -eo pid,ppid,stat,wchan:24,cmd --ppid "$pytest_pid" || true
-            fi
-            deadline=$((SECONDS + 960))
-            while kill -0 "$pytest_pid" 2>/dev/null; do
-              if (( SECONDS >= deadline )); then
-                echo "::notice title=plugins-g-watchdog::deadline reached, signaling ${pytest_pid}"
-                kill -TERM "$pytest_pid" 2>/dev/null || true
-                mapfile -t tree < <(collect_descendants "$pytest_pid")
-                echo "plugins-g watchdog $(date -u +%H:%M:%S) TERM ${pytest_pid} ${tree[*]-}"
-                if ((${#tree[@]})); then kill -TERM "${tree[@]}" 2>/dev/null || true; fi
-                ps -eo pid,ppid,pgid,stat,wchan:24,cmd | awk 'NR==1 || /pytest|uv run/' || true
-                if [[ -s "$pytest_log" ]]; then
-                  echo "plugins-g pytest log has started: $(head -n 1 "$pytest_log")"
-                else
-                  echo "plugins-g pytest log is still empty"
-                fi
-                if ((${#tree[@]})); then
-                  kill -TERM "$pytest_pid" "${tree[@]}" 2>/dev/null || true
-                else
-                  kill -TERM "$pytest_pid" 2>/dev/null || true
-                fi
-                sleep 20
-                saved=()
-                if ((${#tree[@]})); then saved=("${tree[@]}"); fi
-                mapfile -t tree < <(collect_descendants "$pytest_pid")
-                if ((${#saved[@]})); then tree+=("${saved[@]}"); fi
-                echo "plugins-g watchdog $(date -u +%H:%M:%S) KILL ${pytest_pid} ${tree[*]-}"
-                if ((${#tree[@]})); then
-                  kill -KILL "$pytest_pid" "${tree[@]}" 2>/dev/null || true
-                else
-                  kill -KILL "$pytest_pid" 2>/dev/null || true
-                fi
-                break
-              fi
-              sleep 15
-              if [[ -s "$pytest_log" ]]; then
-                echo "plugins-g heartbeat $(date -u +%H:%M:%S) $(head -n 1 "$pytest_log")"
-              else
-                echo "plugins-g heartbeat $(date -u +%H:%M:%S) log empty"
-              fi
-            done
-            wait "$pytest_pid" 2>/dev/null || status=$?
-            if ((${#tree[@]})); then
-              for pid in "${tree[@]}"; do
-                if kill -0 "$pid" 2>/dev/null; then
-                  echo "plugins-g survivor ${pid} $(ps -o stat=,wchan:24=,cmd= -p "$pid" 2>/dev/null || true)"
-                  kill -KILL "$pid" 2>/dev/null || true
-                fi
-              done
-            fi
+            bash scripts/ci/plugins_g_shard_watch.sh \
+              --log "$pytest_log" \
+              --deadline 960 \
+              -- \
+              env COVERAGE_FILE="coverage-${{ matrix.shard }}" \
+                PYTHONFAULTHANDLER=1 \
+                PYTHONUNBUFFERED=1 \
+                uv run pytest "${args[@]}" \
+                  -m "not integration" \
+                  --timeout=120 \
+                  --timeout-method=thread \
+                  -v \
+                  --durations=20 \
+                  --cov=src \
+                  --cov-report= \
+                  --cov-fail-under=0
+            status=$?
           else
             run_pytest signal
             status=$?
