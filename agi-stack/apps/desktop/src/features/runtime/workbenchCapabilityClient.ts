@@ -813,22 +813,22 @@ export function createDesktopWorkbenchCapabilityClient(
         ),
         () => loadTenantAnalyticsCapability(
           config,
-          () => tenantAnalyticsOperationsV2,
+          tenantAnalyticsOperationsV2,
           signal,
         ),
         () => loadTenantAgentDashboardCapability(
           config,
-          () => tenantAgentDashboardOperationsV2,
+          tenantAgentDashboardOperationsV2,
           signal,
         ),
         () => loadTenantAgentBindingsCapability(
           config,
-          () => tenantAgentBindingsOperationsV2,
+          tenantAgentBindingsOperationsV2,
           signal,
         ),
         () => loadTenantProjectsCapability(
           config,
-          () => tenantProjectsOperationsV2,
+          tenantProjectsOperationsV2,
           signal,
         ),
         () => loadTenantTasksCapability(config, tenantTasksOperationsV2, signal),

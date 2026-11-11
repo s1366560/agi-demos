@@ -23,13 +23,15 @@ export function requireActiveWorkbenchSnapshotV2(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Workbench snapshot cancelled', 'AbortError');
 }
 
-export async function settleWorkbenchSnapshotBranchesLimitedV2<T>(
-  start: readonly (() => Promise<T>)[],
+export async function settleWorkbenchSnapshotBranchesLimitedV2<
+  const T extends readonly (() => Promise<unknown>)[],
+>(
+  start: T,
   limit: number,
   signal?: AbortSignal,
   names?: readonly string[],
-): Promise<T[]> {
-  const results = new Array<T>(start.length);
+): Promise<{ -readonly [Index in keyof T]: Awaited<ReturnType<T[Index]>> }> {
+  const results: unknown[] = new Array(start.length);
   let cursor = 0;
   let failure: unknown;
   const worker = async () => {
@@ -56,7 +58,7 @@ export async function settleWorkbenchSnapshotBranchesLimitedV2<T>(
   await Promise.all(workers);
   requireActiveWorkbenchSnapshotV2(signal);
   if (failure !== undefined) throw failure;
-  return results;
+  return results as { -readonly [Index in keyof T]: Awaited<ReturnType<T[Index]>> };
 }
 
 export async function settleWorkbenchSnapshotBranchesV2<T extends readonly unknown[]>(
