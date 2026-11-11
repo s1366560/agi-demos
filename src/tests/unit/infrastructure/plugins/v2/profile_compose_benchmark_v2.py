@@ -47,6 +47,13 @@ def main() -> None:
     gc.set_threshold(0)
     samples = []
     try:
+        # Run 42965115893: after this threshold change, samples 1-16 were
+        # 103-158ms and every later sample was under 96ms. The tail p95 was
+        # 86.5ms. Those first timed calls still include the post-threshold
+        # collector cost, so settle them before the recorded hundred.
+        for _ in range(20):
+            gc.collect()
+            compose_profile_v2(profile, manifests, generation=1)
         for _ in range(100):
             gc.collect()
             started = time.perf_counter()

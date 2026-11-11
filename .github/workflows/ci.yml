@@ -322,17 +322,14 @@ jobs:
           esac
           mkdir -p shard-logs
           pytest_log="shard-logs/${{ matrix.shard }}-pytest.log"
-          # Stay in the step process group and write the log to a file.
-          # Job 130317482690 put pytest in a new session; that session was
-          # still alive when the 30 minute job cap cancelled plugins-g, and
-          # the log blob was never stored. A pipe to tee has the same shape:
-          # a setsid grandchild keeps the step open after timeout returns.
-          # Foreground timeout with a file redirect returns when its direct
-          # child dies, so the diagnostics upload can run.
+          # GNU timeout puts pytest in a new process group. The runner's step
+          # timeout then cannot reap it. Job 130340536360 stayed in this step
+          # from 05:26:43 until the job cap at 06:00:46, and the log blob was
+          # never stored. Keep pytest in this step's process group and let
+          # timeout-minutes end a hang so the diagnostics upload still runs.
           set +e
           COVERAGE_FILE="coverage-${{ matrix.shard }}" \
             PYTHONFAULTHANDLER=1 \
-            timeout --signal=KILL --kill-after=20s 18m \
             uv run pytest "${args[@]}" \
               -m "not integration" \
               --timeout=120 \
@@ -346,10 +343,6 @@ jobs:
           set -e
           echo "----- ${{ matrix.shard }} pytest log tail -----"
           tail -n 200 "$pytest_log" || true
-          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
-            echo "unit shard exceeded 18 minutes" >&2
-            exit 1
-          fi
           exit "$status"
 
       - name: Upload plugins-g shard diagnostics
