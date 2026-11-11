@@ -663,6 +663,11 @@ jobs:
             shard-logs/test_workspace_context_services_v2.status
           if-no-files-found: warn
 
+      - name: plugins-g full shard
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 20
+        run: bash scripts/ci/plugins_g_full_shard.sh
+
       - name: Upload plugins-g shard diagnostics
         if: always() && matrix.shard == 'plugins-g'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

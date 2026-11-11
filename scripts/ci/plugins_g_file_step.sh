@@ -6,6 +6,11 @@ set -euo pipefail
 file="${1:?plugins-g test file}"
 base="$(basename "$file" .py)"
 mkdir -p shard-logs
+if [[ ! -f "$file" ]]; then
+  printf 'file=%s status=missing\n' "$file" > "shard-logs/${base}.status"
+  echo "plugins-g missing ${file}" >&2
+  exit 1
+fi
 log="shard-logs/${base}.log"
 append=()
 if [[ -f coverage-plugins-g ]]; then
