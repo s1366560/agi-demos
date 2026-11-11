@@ -322,25 +322,57 @@ jobs:
           esac
           mkdir -p shard-logs
           pytest_log="shard-logs/${{ matrix.shard }}-pytest.log"
-          # GNU timeout puts pytest in a new process group. The runner's step
-          # timeout then cannot reap it. Job 130340536360 stayed in this step
-          # from 05:26:43 until the job cap at 06:00:46, and the log blob was
-          # never stored. Keep pytest in this step's process group and let
-          # timeout-minutes end a hang so the diagnostics upload still runs.
+          # GNU timeout puts pytest in a new process group, so the runner cannot
+          # reap it (job 130340536360). Leaving pytest in this group is required.
+          # On 81b336526, plugins-g job 130376252017 was still inside this step
+          # at 20m34s, so timeout-minutes did not end it either. Every other
+          # unit shard on that run had already passed. A pytest-timeout signal
+          # handler deadlocks with coverage's sysmon tracer once one test blocks
+          # past 120s, and a stuck signal handler ignores the runner's SIGTERM.
+          # plugins-g uses the thread method so that hang is reported, and a
+          # same-group SIGKILL if the process is still alive after 16 minutes.
+          run_pytest() {
+            local method="$1"
+            shift
+            COVERAGE_FILE="coverage-${{ matrix.shard }}" \
+              PYTHONFAULTHANDLER=1 \
+              PYTHONUNBUFFERED=1 \
+              uv run pytest "${args[@]}" \
+                -m "not integration" \
+                --timeout=120 \
+                --timeout-method="$method" \
+                --durations=20 \
+                --cov=src \
+                --cov-report= \
+                --cov-fail-under=0 \
+                "$@" \
+                > "$pytest_log" 2>&1
+          }
+          echo "shard ${{ matrix.shard }} pytest start $(date -u +%H:%M:%S)"
           set +e
-          COVERAGE_FILE="coverage-${{ matrix.shard }}" \
-            PYTHONFAULTHANDLER=1 \
-            uv run pytest "${args[@]}" \
-              -m "not integration" \
-              --timeout=120 \
-              --timeout-method=signal \
-              --durations=20 \
-              --cov=src \
-              --cov-report= \
-              --cov-fail-under=0 \
-              > "$pytest_log" 2>&1
-          status=$?
+          if [[ "${{ matrix.shard }}" == "plugins-g" ]]; then
+            run_pytest thread -v &
+            pytest_pid=$!
+            (
+              sleep 960
+              mapfile -t children < <(ps -o pid= --ppid "$pytest_pid" | awk '{$1=$1; print}' || true)
+              kill -TERM "$pytest_pid" "${children[@]}" 2>/dev/null || true
+              sleep 20
+              mapfile -t children < <(ps -o pid= --ppid "$pytest_pid" | awk '{$1=$1; print}' || true)
+              kill -KILL "$pytest_pid" "${children[@]}" 2>/dev/null || true
+            ) &
+            watchdog_pid=$!
+            wait "$pytest_pid"
+            status=$?
+            pkill -P "$watchdog_pid" 2>/dev/null || true
+            kill "$watchdog_pid" 2>/dev/null || true
+            wait "$watchdog_pid" 2>/dev/null || true
+          else
+            run_pytest signal
+            status=$?
+          fi
           set -e
+          echo "----- ${{ matrix.shard }} pytest status ${status} -----"
           echo "----- ${{ matrix.shard }} pytest log tail -----"
           tail -n 200 "$pytest_log" || true
           exit "$status"
