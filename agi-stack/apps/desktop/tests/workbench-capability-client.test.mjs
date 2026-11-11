@@ -1569,6 +1569,10 @@ test('cloud client validates structured Search and Automation authorities', asyn
       workspace_id: null,
       instance_id: null,
     };
+    // Search has no revision of its own. The entity fixture for this same
+    // project returns scopeRevision 41, and that live revision is reused.
+    // A different tenant or project, an unavailable source, or a pending
+    // observation still stays closed.
     assert.deepEqual(
       snapshot.capabilities.search,
       withObservedAuthority(
