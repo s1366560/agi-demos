@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:571261b5af226a8080a04a8965e47c1d04490ef3b87072808885e9a58a4228'
-    '4d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:9fa6d95cc1fc9a2f067783838bd693cbd5f8ecd6630fc2162c4035fc88c95e'
+    'e4","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -2627,7 +2627,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'a62d4b19a64763e1ee3e1a3","entrypoint":"applyDesktopVoiceSessionAuthorityV2","module_ref"'
     ':"builtin://memstack/desktop/voice-session-authority","plugin_id":"memstack-renderer-tar'
     'get-hosts","plugin_version":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"'
-    'sha256:49a9b4c4bcec9407ec3a821e4bbef6abd031ecee9f79bf142803a07f26744c0f","artifact_sourc'
+    'sha256:744e8a0128bbd46cdd954a410584380f6a9296cc36d376c2c89137f31b7646ca","artifact_sourc'
     'e":"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkbenchSnapshotAuthori'
     'tyModuleV2.ts","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/202'
     '0-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"same-genera'
@@ -4788,7 +4788,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:571261b5af226a8080a04a8965e47c1d04490ef3b87072808885e9a58a42284d"
+    "sha256:9fa6d95cc1fc9a2f067783838bd693cbd5f8ecd6630fc2162c4035fc88c95ee4"
 )
 # fmt: on
 

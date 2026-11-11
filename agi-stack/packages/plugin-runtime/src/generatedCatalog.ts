@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:571261b5af226a8080a04a8965e47c1d04490ef3b87072808885e9a58a',
-  '42284d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:9fa6d95cc1fc9a2f067783838bd693cbd5f8ecd6630fc2162c4035fc88',
+  'c95ee4","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -2768,8 +2768,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'igest":"sha256:fb49dd480ae1ebabbbac02578672f1b597d43c9aea62d4b19a64763e1ee3e1a3","en',
   'trypoint":"applyDesktopVoiceSessionAuthorityV2","module_ref":"builtin://memstack/des',
   'ktop/voice-session-authority","plugin_id":"memstack-renderer-target-hosts","plugin_v',
-  'ersion":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:49a9b4c4b',
-  'cec9407ec3a821e4bbef6abd031ecee9f79bf142803a07f26744c0f","artifact_source":"repo+typ',
+  'ersion":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:744e8a012',
+  '8bbd46cdd954a410584380f6a9296cc36d376c2c89137f31b7646ca","artifact_source":"repo+typ',
   'escript://agi-stack/apps/desktop/src/plugins/desktopWorkbenchSnapshotAuthorityModule',
   'V2.ts","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12',
   '/schema","additionalProperties":false,"properties":{"strategy":{"const":"same-genera',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:571261b5af226a8080a04a8965e47c1d04490ef3b87072808885e9a58a42284d' as const;
+  'sha256:9fa6d95cc1fc9a2f067783838bd693cbd5f8ecd6630fc2162c4035fc88c95ee4' as const;

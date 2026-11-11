@@ -927,31 +927,11 @@ jobs:
       - name: Run desktop unit and integration tests
         run: |
           set -euo pipefail
-          # Release sidecar and Workspace Core use different target directories
-          # from each other. Starting them now lets cargo's target lock wait
-          # until the debug build in desktop-test finishes, then compile the
-          # release artifacts during the test run. The bundle step still builds
-          # and packages the same binaries; a finished release target makes
-          # that cargo invocation a check instead of a second full compile.
-          release_log="${RUNNER_TEMP}/desktop-release-preload.log"
-          (
-            cargo build --release -p agistack-desktop-sidecar
-          ) >"$release_log" 2>&1 &
-          sidecar_pid=$!
-          (
-            bash ../scripts/avernet-bcs/cargo.sh build --release \
-              -p memstack-workspace-core --bin memstack-workspace-core
-          ) >>"$release_log" 2>&1 &
-          core_pid=$!
-          status=0
-          make desktop-test || status=$?
-          wait "$sidecar_pid" || status=$?
-          wait "$core_pid" || status=$?
-          if [[ "$status" -ne 0 ]]; then
-            echo "----- desktop release preload log -----"
-            tail -n 200 "$release_log" || true
-            exit "$status"
-          fi
+          # Job 130419031174 failed signed_plugin_review_and_fork_continuations
+          # with a 10s elapsed timeout while cargo release was still compiling
+          # in this step. The 10s wait stays. Release builds run in the bundle
+          # step, after these tests.
+          make desktop-test
 
       - name: Build desktop bundle
         run: make desktop-bundle

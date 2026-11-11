@@ -3794,7 +3794,7 @@
       "entrypoint": "applyDesktopWorkbenchSnapshotAuthorityV2",
       "artifact": {
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkbenchSnapshotAuthorityModuleV2.ts",
-        "digest": "sha256:49a9b4c4bcec9407ec3a821e4bbef6abd031ecee9f79bf142803a07f26744c0f"
+        "digest": "sha256:744e8a0128bbd46cdd954a410584380f6a9296cc36d376c2c89137f31b7646ca"
       },
       "targets": [
         "desktop-renderer"
