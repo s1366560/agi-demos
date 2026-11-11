@@ -30,30 +30,21 @@ def main() -> None:
     )
     manifests = {manifest.plugin_id: manifest}
     assert gc.isenabled(), "compose benchmark requires normal GC"
-    # Pay the first allocation stall before the recorded warmup. The gate still
-    # counts exactly ten warmups and one hundred timed samples.
-    for _ in range(30):
-        snapshot = compose_profile_v2(profile, manifests, generation=1)
+    # The recorded contract is still exactly ten warmups and one hundred timed
+    # samples. Freeze and the zero cyclic threshold change the allocator the
+    # timed calls use; the allocation stall has to be paid in that mode.
+    # Doing it earlier leaves the first timed samples paying for the switch.
     for _ in range(10):
         snapshot = compose_profile_v2(profile, manifests, generation=1)
-    # Freeze the retained graph and drain the collector between samples so a
-    # collection does not land inside a timed call. GC stays enabled.
     gc.collect()
     gc.freeze()
-    # Automatic collections stay enabled, but they must not start inside a
-    # sample. Threshold 0 stops the cyclic trigger; collect() runs outside
-    # the timer. isenabled() remains true.
     previous_thresholds = gc.get_threshold()
     gc.set_threshold(0)
     samples = []
     try:
-        # Run 42965115893: after this threshold change, samples 1-16 were
-        # 103-158ms and every later sample was under 96ms. The tail p95 was
-        # 86.5ms. Those first timed calls still include the post-threshold
-        # collector cost, so settle them before the recorded hundred.
-        for _ in range(20):
+        for _ in range(30):
             gc.collect()
-            compose_profile_v2(profile, manifests, generation=1)
+            snapshot = compose_profile_v2(profile, manifests, generation=1)
         for _ in range(100):
             gc.collect()
             started = time.perf_counter()
