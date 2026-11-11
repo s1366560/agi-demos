@@ -1035,7 +1035,10 @@ jobs:
         run: cargo test -p agistack-adapters-cua --test cloud_catalog --test cloud_permission_bridge
 
       - name: Install desktop native libraries
-        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-good libxkbcommon-dev pkg-config
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/ci/use_ubuntu_archive_mirror.sh"
+          sudo apt-get update
+          sudo apt-get install -y libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-good libxkbcommon-dev pkg-config
 
       - name: Run strangler gate
         run: PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}" make strangler-gate
