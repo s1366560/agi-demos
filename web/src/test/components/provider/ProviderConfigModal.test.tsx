@@ -544,8 +544,12 @@ describe('ProviderConfigModal', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Advanced Embedding Settings' }));
+    // Editing an existing provider moves to Credentials after the load effect.
+    // Clicking Next before that effect lands on Credentials, where the models
+    // step's advanced embedding controls are not mounted.
+    await screen.findByRole('button', { name: 'Back' });
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced Embedding Settings' }));
     expect(screen.queryByText('Provider Options (JSON)')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save Provider' }));
