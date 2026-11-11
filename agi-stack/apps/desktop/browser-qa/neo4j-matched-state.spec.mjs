@@ -449,7 +449,13 @@ async function authenticateDesktop(page, desktopBaseURL) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes("ERR_ABORTED") || page.isClosed()) throw error;
+    const stillOnRenderer = String(page.url()).startsWith(desktopBaseURL);
+    // Only an abort that left this renderer document in place can continue.
+    // A closed page, a different error, or a navigation off the renderer
+    // must surface here instead of failing later as a missing login card.
+    if (!message.includes("ERR_ABORTED") || page.isClosed() || !stillOnRenderer) {
+      throw error;
+    }
   }
   if (response) expect(response.status()).toBeLessThan(400);
   const login = page.locator(".desktop-login-card");
@@ -458,10 +464,18 @@ async function authenticateDesktop(page, desktopBaseURL) {
     .locator('[data-parity-target-id="email_entry"]')
     .fill("admin@memstack.ai");
   await login.locator('input[type="password"]').fill("adminpassword");
-  await login.locator(".desktop-login-submit").click();
-  await expect(page.locator(".desktop-login-screen")).toHaveCount(0, {
-    timeout: 20_000,
-  });
+  const submit = login.locator('button.desktop-login-submit[type="submit"]');
+  const loginScreen = page.locator(".desktop-login-screen");
+  try {
+    // Session restore disables this button while it is in flight, then
+    // removes the card. A disabled or detached control is a failure only
+    // while the login screen is still present.
+    await expect(submit).toBeEnabled({ timeout: 20_000 });
+    await submit.click({ timeout: 15_000 });
+  } catch (error) {
+    if ((await loginScreen.count()) !== 0 || page.isClosed()) throw error;
+  }
+  await expect(loginScreen).toHaveCount(0, { timeout: 20_000 });
 }
 
 async function exerciseWeb(

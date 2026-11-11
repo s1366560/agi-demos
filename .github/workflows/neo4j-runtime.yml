@@ -83,6 +83,10 @@ jobs:
       LANGFUSE_ENABLED: false
       MCP_ENABLED: false
       CI: true
+      # Desktop sidecar and renderer ACK this roster. A publication that only
+      # requires python-api-v2 rejects those receipts with 409
+      # data_plane_not_required, and the native route stays on the loader.
+      PLUGIN_V2_REQUIRED_DATA_PLANE_IDS: python-api-v2,desktop-sidecar-v2,desktop-renderer-v2
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

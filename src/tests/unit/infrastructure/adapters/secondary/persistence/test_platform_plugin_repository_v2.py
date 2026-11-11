@@ -498,3 +498,35 @@ async def test_v2_publication_nonce_cannot_change_roster_or_deadline(
                 ack_deadline_seconds=60,
             ),
         )
+
+
+@pytest.mark.unit
+async def test_startup_restore_requires_the_same_data_plane_roster(
+    db_session: AsyncSession,
+) -> None:
+    publication, distribution = await _publication(generation=1, version=1)
+    now = datetime(2026, 8, 22, 12, 0, tzinfo=UTC)
+    repository = PlatformPluginRepositoryV2(db_session)
+    original = PlatformPluginPublicationPolicyV2(
+        required_data_plane_ids=("python-api-v2",),
+        ack_deadline_seconds=30,
+    )
+    await repository.record_publication(publication, policy=original, now=now)
+
+    class _OpenSession:
+        async def __aenter__(self) -> AsyncSession:
+            return db_session
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    from src.infrastructure.adapters.primary.web.startup.root_profile_startup_v2 import (
+        _durable_roster_matches_policy,
+    )
+
+    assert await _durable_roster_matches_policy(_OpenSession, distribution, original)
+    widened = PlatformPluginPublicationPolicyV2(
+        required_data_plane_ids=("python-api-v2", "desktop-sidecar-v2", "desktop-renderer-v2"),
+        ack_deadline_seconds=30,
+    )
+    assert not await _durable_roster_matches_policy(_OpenSession, distribution, widened)
