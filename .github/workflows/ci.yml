@@ -322,53 +322,17 @@ jobs:
           esac
           mkdir -p shard-logs
           pytest_log="shard-logs/${{ matrix.shard }}-pytest.log"
-          resource_log="shard-logs/${{ matrix.shard }}-resources.log"
-          # Run pytest in its own session and write the log to a file. A pipe
-          # to tee kept the step open after `timeout` killed only `uv`: the
-          # grandchild still held the pipe, `if: always()` never uploaded
-          # diagnostics, and plugins-g hit the 60 minute job cap. SIGKILL goes
-          # to this session id only.
-          session=""
-          watchdog=""
-          heartbeat=""
-          # A nested setsid() leaves the grandchild outside the original session,
-          # which is what kept the old `timeout | tee` step open. Walk ppid
-          # before signalling so those children die with the shard.
-          kill_tree() {
-            local pid="$1"
-            local child
-            while read -r child; do
-              [ -n "$child" ] || continue
-              kill_tree "$child"
-            done < <(ps -o pid= --ppid "$pid" 2>/dev/null || true)
-            kill -KILL "$pid" 2>/dev/null || true
-          }
-          cleanup_shard() {
-            if [ -n "$session" ]; then
-              kill_tree "$session"
-            fi
-            if [ -n "$watchdog" ]; then
-              kill "$watchdog" 2>/dev/null || true
-            fi
-            if [ -n "$heartbeat" ]; then
-              kill "$heartbeat" 2>/dev/null || true
-            fi
-          }
-          trap cleanup_shard EXIT INT TERM
-          (
-            while true; do
-              {
-                echo "===== heartbeat $(date -u +%Y-%m-%dT%H:%M:%SZ) ====="
-                ps -eo pid,ppid,stat,rss,etime,cmd --sort=-rss | head -n 20 || true
-              } >> "$resource_log"
-              sleep 30
-            done
-          ) &
-          heartbeat=$!
+          # Stay in the step process group and write the log to a file.
+          # Job 130317482690 put pytest in a new session; that session was
+          # still alive when the 30 minute job cap cancelled plugins-g, and
+          # the log blob was never stored. A pipe to tee has the same shape:
+          # a setsid grandchild keeps the step open after timeout returns.
+          # Foreground timeout with a file redirect returns when its direct
+          # child dies, so the diagnostics upload can run.
           set +e
-          setsid --wait env \
-            COVERAGE_FILE="coverage-${{ matrix.shard }}" \
+          COVERAGE_FILE="coverage-${{ matrix.shard }}" \
             PYTHONFAULTHANDLER=1 \
+            timeout --signal=KILL --kill-after=20s 18m \
             uv run pytest "${args[@]}" \
               -m "not integration" \
               --timeout=120 \
@@ -377,28 +341,13 @@ jobs:
               --cov=src \
               --cov-report= \
               --cov-fail-under=0 \
-              > "$pytest_log" 2>&1 &
-          session=$!
-          (
-            sleep 1080
-            echo "unit shard exceeded 18 minutes; killing session $session" >> "$pytest_log"
-            kill_tree "$session"
-          ) &
-          watchdog=$!
-          wait "$session"
+              > "$pytest_log" 2>&1
           status=$?
           set -e
-          kill "$heartbeat" 2>/dev/null || true
-          wait "$heartbeat" 2>/dev/null || true
-          kill "$watchdog" 2>/dev/null || true
-          wait "$watchdog" 2>/dev/null || true
-          heartbeat=""
-          watchdog=""
-          session=""
           echo "----- ${{ matrix.shard }} pytest log tail -----"
-          tail -n 120 "$pytest_log" || true
-          if [ "$status" -eq 137 ] || [ "$status" -eq 124 ] || [ "$status" -eq 9 ]; then
-            echo "unit shard killed after the 18 minute limit" >&2
+          tail -n 200 "$pytest_log" || true
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo "unit shard exceeded 18 minutes" >&2
             exit 1
           fi
           exit "$status"
