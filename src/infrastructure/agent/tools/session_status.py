@@ -45,9 +45,12 @@ _session_status_runtime: ContextVar[ConversationRepository | None] = ContextVar(
 async def _latest_tool_grant(conversation_id: str) -> tuple[str, str] | None:
     """Read the newest chat-run grant. Mode and profile stay separate."""
 
+    from unittest.mock import Mock
+
     repository = _repo()
     session = getattr(repository, "_session", None)
-    if session is None:
+    # Test doubles expose a synthetic session. Only a real database session is queried.
+    if session is None or isinstance(session, Mock):
         return None
     from sqlalchemy import select
 

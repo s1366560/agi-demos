@@ -42,10 +42,7 @@ export function SessionContextRail({ viewModel }: SessionContextRailProps) {
           ? null
           : executionModeLabel(viewModel.executionMode, t),
     },
-    {
-      label: t('session.permission'),
-      value: viewModel.permissionLabel ?? t('session.permissionUnrecorded'),
-    },
+    { label: t('session.permission'), value: viewModel.permissionLabel },
     {
       label: t('session.loadedToolActivity'),
       value:

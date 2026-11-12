@@ -75,6 +75,30 @@ def _todo_optional_datetime(value: Any) -> datetime | None:
     return None
 
 
+def _fill_missing_completion_time(
+    updates: dict[str, Any],
+    existing_task: Any,
+) -> None:
+    """Record a completion time only when the caller omitted one."""
+
+    raw_status = updates.get("status")
+    if isinstance(raw_status, TaskStatus):
+        next_status = raw_status
+    elif isinstance(raw_status, str):
+        try:
+            next_status = TaskStatus(raw_status)
+        except ValueError:
+            return
+    else:
+        return
+    if (
+        next_status == TaskStatus.COMPLETED
+        and "completed_at" not in updates
+        and not getattr(existing_task, "completed_at", None)
+    ):
+        updates["completed_at"] = datetime.now(UTC)
+
+
 def _completed_at_for_status(status: TaskStatus, explicit: datetime | None) -> datetime | None:
     """Keep a caller-supplied time and fill only a missing completed timestamp."""
 
@@ -273,14 +297,7 @@ async def _todowrite_handle_update(
         for field in ("started_at", "completed_at"):
             if field in updates:
                 updates[field] = _todo_optional_datetime(updates[field])
-        next_status = updates.get("status", existing_task.status)
-        if not isinstance(next_status, TaskStatus):
-            next_status = TaskStatus(str(next_status))
-        if next_status == TaskStatus.COMPLETED and not existing_task.completed_at:
-            updates["completed_at"] = _completed_at_for_status(
-                next_status,
-                updates.get("completed_at"),
-            )
+        _fill_missing_completion_time(updates, existing_task)
     updated = await repo.update(todo_id, **updates)
     if updated and updates.keys() - _TODO_PROGRESS_FIELDS:
         replacement = await repo.find_by_conversation(conversation_id)

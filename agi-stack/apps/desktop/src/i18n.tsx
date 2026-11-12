@@ -2509,7 +2509,6 @@ const enUS: Record<string, string> = {
   // prototype mission-control refactor 2026-09 (phase 5a: context rail snapshot rows)
   'session.currentStage': 'Current stage',
   'session.permission': 'Permission',
-  'session.permissionUnrecorded': 'Not recorded',
   'session.linkedClaimCount': '{count} linked claims',
   'session.evidenceCoverage': 'Citation and source coverage',
   'session.changedFilesLabel': 'Changed files',
@@ -6847,7 +6846,6 @@ const zhCN: Record<string, string> = {
   // prototype mission-control refactor 2026-09 (phase 5a: context rail snapshot rows)
   'session.currentStage': '当前阶段',
   'session.permission': '权限',
-  'session.permissionUnrecorded': '未记录',
   'session.linkedClaimCount': '{count} 条已关联引用',
   'session.evidenceCoverage': '引用与来源覆盖',
   'session.changedFilesLabel': '变更文件',
