@@ -282,6 +282,12 @@ class ProviderService:
                 target_base_url,
                 target_provider_type,
             )
+            if (
+                target_provider_type not in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
+                and isinstance(validated_base_url, str)
+                and not validated_base_url.startswith("https://")
+            ):
+                raise ValueError("HTTPS is required for credentialed providers")
             if "base_url" in config.model_fields_set:
                 config.base_url = validated_base_url
 

@@ -7,19 +7,16 @@ import shlex
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
-from typing import Any, Protocol, SupportsInt, cast
+from typing import Any, Protocol, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_task import WorkspaceTask
-from src.infrastructure.agent.workspace.code_context import load_workspace_code_context
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     ACTIVE_EXECUTION_ROOT,
     ATTEMPT_WORKTREE,
-    ROOT_GOAL_TASK_ID,
     WORKTREE_SETUP,
 )
-from src.infrastructure.agent.workspace_plan.run_contract import WorkspaceRunContract
 from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 _GENERATED_DIRTY_PATH_PATTERNS = (
@@ -203,7 +200,7 @@ class WorkspaceWorktreeManager:
         self._runner_factory = runner_factory
         self._preparation_agent = preparation_agent
 
-    async def prepare_attempt(  # noqa: C901, PLR0911, PLR0912
+    async def prepare_attempt(
         self,
         *,
         workspace_id: str,
@@ -231,186 +228,7 @@ class WorkspaceWorktreeManager:
                 base_ref=base_ref,
             )
 
-        workspace = legacy_workspace_runtime_retired("worktree Workspace lookup")
-        if workspace is None:
-            return _context(
-                setup_status="skipped",
-                setup_reason="workspace not found",
-                attempt_id=attempt_id,
-                base_ref=base_ref,
-            )
-
-        root_metadata: Mapping[str, Any] = {}
-        root_task_id = _mapping_string(metadata, ROOT_GOAL_TASK_ID)
-        if root_task_id:
-            root_task = legacy_workspace_runtime_retired("worktree root task lookup")
-            if root_task is not None and root_task.workspace_id == workspace_id:
-                root_metadata = dict(root_task.metadata or {})
-
-        workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
-        code_context = load_workspace_code_context(
-            project_id=workspace.project_id,
-            root_metadata=root_metadata,
-            workspace_metadata=workspace_metadata,
-        )
-        sandbox_code_root = code_context.sandbox_code_root
-        if not sandbox_code_root:
-            return _context(
-                setup_status="skipped",
-                setup_reason="sandbox_code_root is not available for this workspace",
-                attempt_id=attempt_id,
-                base_ref=base_ref,
-            )
-
-        resolved_attempt_id = str(attempt_id) if attempt_id else None
-        if not worktree_path_template:
-            worktree_path = default_attempt_worktree_path(
-                sandbox_code_root=sandbox_code_root,
-                attempt_id=str(resolved_attempt_id),
-            )
-        else:
-            worktree_path = worktree_path_template.replace(
-                "${sandbox_code_root}", sandbox_code_root
-            )
-        if not branch_name:
-            branch_name = worktree_branch_name(
-                node_id=task.id,
-                attempt_id=str(resolved_attempt_id),
-            )
-        if "${sandbox_code_root}" in worktree_path:
-            return _context(
-                setup_status="skipped",
-                setup_reason="worktree_path still contains an unresolved sandbox_code_root placeholder",
-                workspace_root=None,
-                sandbox_code_root=sandbox_code_root,
-                worktree_path=worktree_path,
-                branch_name=branch_name,
-                base_ref=base_ref,
-                attempt_id=resolved_attempt_id,
-            )
-
-        contract = WorkspaceRunContract.from_sources(
-            workspace_metadata=workspace_metadata,
-            root_metadata=root_metadata,
-        )
-        path_validation = contract.validate_paths(
-            code_root=sandbox_code_root,
-            worktree_path=worktree_path,
-        )
-        if not path_validation.allowed:
-            return _context(
-                setup_status="failed",
-                setup_reason=(
-                    "workspace run contract rejected worker launch path: "
-                    f"{path_validation.reason}; "
-                    f"workspace_root={path_validation.workspace_root}; "
-                    f"code_root={path_validation.code_root}; "
-                    f"worktree_path={path_validation.worktree_path}"
-                ),
-                workspace_root=path_validation.workspace_root,
-                sandbox_code_root=path_validation.code_root or sandbox_code_root,
-                worktree_path=path_validation.worktree_path or worktree_path,
-                branch_name=branch_name,
-                base_ref=base_ref,
-                attempt_id=resolved_attempt_id,
-            )
-
-        protected_worktree_names = await self.active_attempt_worktree_names(workspace_id)
-        command = worktree_setup_command(
-            sandbox_code_root=sandbox_code_root,
-            worktree_path=worktree_path,
-            branch_name=branch_name,
-            base_ref=base_ref,
-            protected_worktree_names=protected_worktree_names,
-        )
-        if self._preparation_agent is not None:
-            try:
-                prepared = await self._preparation_agent.prepare_worktree(
-                    AttemptWorktreePreparationRequest(
-                        workspace_id=workspace_id,
-                        task_id=task.id,
-                        attempt_id=resolved_attempt_id,
-                        workspace_root=path_validation.workspace_root,
-                        sandbox_code_root=sandbox_code_root,
-                        worktree_path=worktree_path,
-                        branch_name=branch_name,
-                        base_ref=base_ref,
-                        original_base_ref=base_ref,
-                        setup_command=command,
-                        diagnostics_command=worktree_post_setup_diagnostics_command(
-                            sandbox_code_root=sandbox_code_root,
-                            resolved_base_ref=base_ref,
-                        ),
-                    ),
-                )
-            except Exception:
-                prepared = None
-            if prepared is not None and not prepared.setup_failed:
-                return prepared
-        try:
-            result = await self._runner_factory(
-                project_id=workspace.project_id,
-                tenant_id=workspace.tenant_id,
-            ).run_command(command, timeout=120)
-        except Exception as exc:
-            return _context(
-                setup_status="failed",
-                setup_reason=str(exc),
-                workspace_root=path_validation.workspace_root,
-                sandbox_code_root=sandbox_code_root,
-                worktree_path=worktree_path,
-                branch_name=branch_name,
-                base_ref=base_ref,
-                attempt_id=resolved_attempt_id,
-            )
-
-        stdout = str(result.get("stdout") or "")
-        stderr = str(result.get("stderr") or "")
-        raw_exit_code = result.get("exit_code") or 0
-        exit_code = (
-            int(raw_exit_code)
-            if isinstance(raw_exit_code, str | bytes | bytearray | SupportsInt)
-            else 1
-        )
-        if exit_code != 0:
-            return _context(
-                setup_status="failed",
-                setup_reason=compact_command_output(stderr or stdout),
-                workspace_root=path_validation.workspace_root,
-                sandbox_code_root=sandbox_code_root,
-                worktree_path=worktree_path,
-                branch_name=branch_name,
-                base_ref=base_ref,
-                attempt_id=resolved_attempt_id,
-            )
-        diagnostics = await self._collect_post_setup_diagnostics(
-            project_id=workspace.project_id,
-            tenant_id=workspace.tenant_id,
-            sandbox_code_root=sandbox_code_root,
-            original_base_ref=base_ref,
-            setup_output=stdout,
-        )
-        return _context(
-            setup_status="fallback_used" if diagnostics.get("fallback_reason") else "prepared",
-            setup_output=compact_command_output(stdout),
-            workspace_root=path_validation.workspace_root,
-            sandbox_code_root=sandbox_code_root,
-            worktree_path=worktree_path,
-            branch_name=branch_name,
-            base_ref=base_ref,
-            attempt_id=resolved_attempt_id,
-            diagnostics={
-                "original_base_ref": base_ref,
-                "resolved_base_ref": _mapping_string(diagnostics, "resolved_base_ref")
-                or base_ref,
-                "fallback_reason": _mapping_string(diagnostics, "fallback_reason"),
-                "git_fsck_summary": _mapping_string(diagnostics, "git_fsck_summary"),
-                "pruned_worktrees_count": _mapping_int(
-                    diagnostics,
-                    "pruned_worktrees_count",
-                ),
-            },
-        )
+        legacy_workspace_runtime_retired("worktree Workspace lookup")
 
     async def active_attempt_worktree_names(self, workspace_id: str) -> tuple[str, ...]:
         del workspace_id
@@ -509,22 +327,19 @@ def worktree_setup_command(
                 "git rev-parse --verify HEAD >/dev/null 2>&1"
                 "||{ git add -A; git commit --allow-empty -m init >/dev/null; }"
             ),
-            (
-                'git cat-file -e "$R^{tree}" 2>/dev/null'
-                " || { echo base_ref_unusable=$R; R=HEAD; }"
-            ),
+            ('git cat-file -e "$R^{tree}" 2>/dev/null || { echo base_ref_unusable=$R; R=HEAD; }'),
             (
                 'RC=$(git ls-tree -r --name-only "$R" 2>/dev/null|head -2|wc -l);'
                 'if [ "$RC" -le 1 ];then '
-                'for FB in github/main origin/main memstack-source-publish/main main master;do '
+                "for FB in github/main origin/main memstack-source-publish/main main master;do "
                 'FC=$(git ls-tree -r --name-only "$FB" 2>/dev/null|head -2|wc -l);'
                 '[ "$FC" -gt "$RC" ]&&{ echo base_ref_sparse=$R;echo fallback_base_ref=$FB;R=$FB;break;};'
-                'done; fi'
+                "done; fi"
             ),
             'N=$(basename "$PWD")',
             'F=$(dirname "$PWD")/.memstack/git-remotes/$N.git',
             (
-                'git remote get-url origin >/dev/null 2>&1'
+                "git remote get-url origin >/dev/null 2>&1"
                 '||{ mkdir -p "$(dirname "$F")"; git init --bare "$F" >/dev/null; '
                 'git remote add origin "$F"; }'
             ),
@@ -619,9 +434,9 @@ def worktree_integration_command(
             "    fi",
             "  fi",
             '  if [ "$staged_bootstrap_only" = "true" ]; then',
-            '    git config user.email >/dev/null 2>&1 || '
+            "    git config user.email >/dev/null 2>&1 || "
             + 'git config user.email "workspace-integration@example.invalid"',
-            '    git config user.name >/dev/null 2>&1 || '
+            "    git config user.name >/dev/null 2>&1 || "
             + 'git config user.name "Workspace Integration"',
             '    git commit -m "chore: checkpoint workspace baseline before integration" >/dev/null',
             '    echo "baseline_dirty_committed=true"',
@@ -707,21 +522,21 @@ def _generated_dirty_path_shell_helpers(*, include_cleaner: bool = True) -> list
         "    *) return 1 ;;",
         "  esac",
         "}",
-            "classify_dirty_paths() {",
-            '  dirty_paths="$1"',
-            "  dirty_generated_only=false",
-            "  dirty_has_generated=false",
-            '  if [ -n "$dirty_paths" ]; then',
-            "    dirty_generated_only=true",
-            "    while IFS= read -r dirty_path; do",
-            '      [ -n "$dirty_path" ] || continue',
-            '      if is_generated_dirty_path "$dirty_path"; then',
-            "        dirty_has_generated=true",
-            "      else",
-            "        dirty_generated_only=false",
-            "      fi",
-            "    done <<EOF_GENERATED_DIRTY_PATHS",
-            "$dirty_paths",
+        "classify_dirty_paths() {",
+        '  dirty_paths="$1"',
+        "  dirty_generated_only=false",
+        "  dirty_has_generated=false",
+        '  if [ -n "$dirty_paths" ]; then',
+        "    dirty_generated_only=true",
+        "    while IFS= read -r dirty_path; do",
+        '      [ -n "$dirty_path" ] || continue',
+        '      if is_generated_dirty_path "$dirty_path"; then',
+        "        dirty_has_generated=true",
+        "      else",
+        "        dirty_generated_only=false",
+        "      fi",
+        "    done <<EOF_GENERATED_DIRTY_PATHS",
+        "$dirty_paths",
         "EOF_GENERATED_DIRTY_PATHS",
         "  fi",
         "}",
@@ -855,9 +670,7 @@ def _context(
         resolved_base_ref=_mapping_string(structured, "resolved_base_ref"),
         fallback_reason=_mapping_string(structured, "fallback_reason"),
         git_fsck_summary=(
-            compact_command_output(git_fsck_summary, limit=500)
-            if git_fsck_summary
-            else None
+            compact_command_output(git_fsck_summary, limit=500) if git_fsck_summary else None
         ),
         pruned_worktrees_count=_mapping_int(structured, "pruned_worktrees_count"),
     )

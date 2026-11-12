@@ -12,7 +12,16 @@ impl LocalRuntimeState {
         base_llm: Arc<dyn LlmPort>,
         max_rounds: u64,
     ) -> Result<Option<subagent_agent_tool_host::SubagentAgentToolHost>, String> {
-        self.subagent_agent_tool_host_with_boundary(conversation, run, parent_profile, base_tool_hosts, base_llm, max_rounds, None).await
+        self.subagent_agent_tool_host_with_boundary(
+            conversation,
+            run,
+            parent_profile,
+            base_tool_hosts,
+            base_llm,
+            max_rounds,
+            None,
+        )
+        .await
     }
 
     pub(super) async fn subagent_agent_tool_host_with_boundary(
@@ -177,8 +186,15 @@ impl LocalRuntimeState {
                 )
                 .with_permission_request_tools(child_permission_request_tools),
             );
-            let child_tool_host=cua_repl::wrap_tools(self,child_tool_host,conversation,run,&profile,boundary.clone());
-            computer_use_v2::apply_guidance(&mut profile,&*child_tool_host);
+            let child_tool_host = cua_repl::wrap_tools(
+                self,
+                child_tool_host,
+                conversation,
+                run,
+                &profile,
+                boundary.clone(),
+            );
+            computer_use_v2::apply_guidance(&mut profile, &*child_tool_host);
             let child_llm: Arc<dyn LlmPort> = Arc::new(execution_profile::ProfiledLlm::new(
                 Arc::clone(&base_llm),
                 &profile,
@@ -198,10 +214,21 @@ impl LocalRuntimeState {
                 self.checkpoints.clone(),
                 self.clock.clone(),
             )
-            .with_hitl_validation(computer_use_v2::hitl_validation::NativeHitlValidation::capture(
-                self, conversation, Some(run), &run.message_id, Some(resource_id.to_owned())))
+            .with_hitl_validation(
+                computer_use_v2::hitl_validation::NativeHitlValidation::capture(
+                    self,
+                    conversation,
+                    Some(run),
+                    &run.message_id,
+                    Some(resource_id.to_owned()),
+                ),
+            )
             .with_max_rounds(max_rounds);
-            let engine = if let Some(boundary) = boundary.as_ref() { boundary.wrap_engine(engine) } else { engine };
+            let engine = if let Some(boundary) = boundary.as_ref() {
+                boundary.wrap_engine(engine)
+            } else {
+                engine
+            };
             targets.push(
                 subagent_agent_tool_host::SubagentToolTarget::new(
                     resource,

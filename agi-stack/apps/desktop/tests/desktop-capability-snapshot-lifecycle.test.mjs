@@ -43,9 +43,13 @@ function harness(client, enabled = true) {
   new Function('require', 'module', 'exports', ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText)((name) => { assert.equal(name, 'react'); return react; }, module, module.exports);
-  const render = (nextClient = client, nextEnabled = enabled) => {
+  const render = (nextClient = client, nextEnabled = enabled, generation) => {
     client = nextClient; enabled = nextEnabled; cursor = 0; pending = [];
-    const value = module.exports.useDesktopCapabilitySnapshot(client, enabled);
+    const value = generation === undefined
+      ? module.exports.useDesktopCapabilitySnapshot(client, enabled)
+      : module.exports.useDesktopCapabilitySnapshot(
+        client, enabled, generation.status, generation.digest, generation.error,
+      );
     const effects = pending; pending = []; effects.forEach((effect) => effect());
     return value;
   };
@@ -118,23 +122,157 @@ test('actual App publication retries a rejected empty generation when the host b
   let readyCalls = 0;
   const empty = { loadSnapshot: async () => { throw new Error('generation_unavailable'); } };
   const ready = { loadSnapshot: async () => { readyCalls++; return { id: 'ready' }; } };
-  const first = publish(empty); const h = harness(first); h.render(); await flush();
+  const first = publish(empty);
+  const h = harness(first);
+  h.render(first, true, { status: 'ready', digest: 'digest-a' });
+  await flush();
   assert.equal(h.render().snapshot, null);
-  h.render(publish(ready)); await flush();
+  const same = publish(ready);
+  assert.equal(same, first, 'generation action identity must keep the capability client');
+  h.render(same, true, { status: 'ready', digest: 'digest-b' });
+  await flush();
   assert.equal(readyCalls, 1);
   assert.deepEqual(h.render().snapshot, { id: 'ready' });
-  assert.equal(publish(ready), publish(ready), 'same generation rerender must retain client identity');
 });
 test('actual App HMR publication aborts old generation before its late snapshot completion', async () => {
-  const publish = appPublication(); const pending = deferred(); let oldSignal;
+  const publish = appPublication();
+  const pending = deferred();
+  let oldSignal;
   const old = { loadSnapshot: ({ signal }) => { oldSignal = signal; return pending.promise; } };
   const next = { loadSnapshot: async () => ({ id: 'new-generation' }) };
-  const h = harness(publish(old)); h.render(); h.render(publish(next)); await flush();
+  const first = publish(old);
+  const h = harness(first);
+  h.render(first, true, { status: 'ready', digest: 'digest-old' });
+  const same = publish(next);
+  assert.equal(same, first);
+  h.render(same, true, { status: 'ready', digest: 'digest-new' });
+  await flush();
   assert.equal(oldSignal.aborted, true);
-  pending.resolve({ id: 'old-generation' }); await flush();
+  pending.resolve({ id: 'old-generation' });
+  await flush();
   assert.deepEqual(h.render().snapshot, { id: 'new-generation' });
 });
 
+test('capability client publication ignores generation action identity', () => {
+  const source = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('const desktopWorkbenchCapabilityClientV2 = useMemo(');
+  assert.notEqual(start, -1);
+  const end = source.indexOf('const sandboxRuntime = useSandboxRuntimeSurface(', start);
+  const block = source.slice(start, end);
+  assert.equal(block.includes('desktopRendererGenerationV2.actions'), false);
+  assert.equal(block.includes('snapshotOperationsV2'), true);
+});
+test('a slow remaining branch does not delay the entity observation', async () => {
+  let release;
+  const slow = new Promise((resolve) => { release = resolve; });
+  const entity = Object.freeze({
+    id: 'entities',
+    capabilities: { 'project-project-entities': { availability: 'degraded' } },
+  });
+  const full = Object.freeze({ id: 'full' });
+  const client = {
+    loadSnapshot(_signal, observe) {
+      observe(entity);
+      return slow.then(() => full);
+    },
+  };
+  const h = harness(client);
+  h.render(client, true, { status: 'ready', digest: 'digest-1' });
+  const published = h.render(client, true, { status: 'ready', digest: 'digest-1' });
+  assert.equal(published.snapshot, entity);
+  assert.equal(published.loading, false);
+  let finished = false;
+  release();
+  const pending = slow.then(() => { finished = true; });
+  await pending;
+  await flush();
+  assert.equal(finished, true);
+  assert.equal(h.render(client, true, { status: 'ready', digest: 'digest-1' }).snapshot, full);
+});
+test('a later snapshot failure revokes the earlier observation', async () => {
+  let rejectSlow;
+  const slow = new Promise((_resolve, reject) => { rejectSlow = reject; });
+  const entity = Object.freeze({ id: 'entities' });
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const client = {
+      loadSnapshot(_signal, observe) {
+        observe(entity);
+        return slow;
+      },
+    };
+    const h = harness(client);
+    h.render(client, true, { status: 'ready', digest: 'digest-1' });
+    assert.equal(h.render(client, true, { status: 'ready', digest: 'digest-1' }).snapshot, entity);
+    rejectSlow(Object.assign(new Error('later branch failed'), { code: 'tenant_admin_authority_unavailable' }));
+    await flush();
+    assert.equal(h.render(client, true, { status: 'ready', digest: 'digest-1' }).snapshot, null);
+    assert.deepEqual(warnings, [['[desktop-capability-snapshot]', 'tenant_admin_authority_unavailable']]);
+  } finally {
+    console.warn = original;
+  }
+});
+test('loading generation does not lease a capability snapshot', () => {
+  let calls = 0;
+  const client = { loadSnapshot() { calls++; return Promise.resolve({ id: 'early' }); } };
+  const h = harness(client);
+  const waiting = { status: 'loading', digest: '' };
+  h.render(client, true, waiting);
+  const state = h.render(client, true, waiting);
+  assert.equal(calls, 0);
+  assert.equal(state.snapshot, null);
+  assert.equal(state.loading, true);
+});
+test('delayed generation and a route switch drop the previous snapshot', async () => {
+  const first = deferred();
+  const second = deferred();
+  const signals = [];
+  let calls = 0;
+  const client = {
+    loadSnapshot(signal) {
+      signals.push(signal);
+      calls += 1;
+      return calls === 1 ? first.promise : second.promise;
+    },
+  };
+  const h = harness(client);
+  h.render(client, true, { status: 'loading', digest: '' });
+  assert.equal(calls, 0);
+  h.render(client, true, { status: 'ready', digest: 'digest-a' });
+  assert.equal(calls, 1);
+  h.render(client, true, { status: 'loading', digest: '' });
+  assert.equal(signals[0].aborted, true);
+  first.resolve({ id: 'old-route' });
+  await flush();
+  assert.equal(h.render(client, true, { status: 'loading', digest: '' }).snapshot, null);
+  h.render(client, true, { status: 'ready', digest: 'digest-b' });
+  second.resolve({ id: 'new-route' });
+  await flush();
+  assert.equal(calls, 2);
+  assert.deepEqual(h.render(client, true, { status: 'ready', digest: 'digest-b' }).snapshot, { id: 'new-route' });
+});
+test('a ready generation loads once and an empty generation fails closed', async () => {
+  const original = console.warn;
+  const observations = [];
+  console.warn = (...args) => observations.push(args);
+  try {
+    let calls = 0;
+    const client = { loadSnapshot() { calls++; return Promise.resolve({ id: 'ready' }); } };
+    const h = harness(client);
+    const ready = { status: 'ready', digest: 'digest-1' };
+    h.render(client, true, { status: 'loading', digest: '' });
+    h.render(client, true, ready);
+    await flush();
+    assert.equal(calls, 1);
+    assert.deepEqual(h.render(client, true, ready).snapshot, { id: 'ready' });
+    h.render(client, true, { status: 'empty', digest: '' });
+    assert.equal(calls, 1);
+    assert.equal(h.render(client, true, { status: 'empty', digest: '' }).snapshot, null);
+    assert.deepEqual(observations, [['[desktop-capability-snapshot]', 'desktop_renderer_generation_empty']]);
+  } finally { console.warn = original; }
+});
 test('snapshot diagnostics log only protocol codes and retain fail-closed state', async () => {
   const original = console.warn;
   const observations = [];

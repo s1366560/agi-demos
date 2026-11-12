@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { render, screen } from '@/test/utils';
-import { fireEvent } from '@testing-library/react';
+import { act, fireEvent } from '@testing-library/react';
 
 const setFocusedAgent = vi.fn();
 const rosterState = {
@@ -77,7 +77,10 @@ describe('ConversationParticipantsPanel', () => {
 
     render(<ConversationParticipantsPanel conversationId="c1" />);
 
-    fireEvent.click(screen.getByRole('button', { name: /focused agent/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /focused agent/i }));
+      await Promise.resolve();
+    });
     expect(setFocusedAgent).toHaveBeenCalledWith('agent-1');
   });
 });

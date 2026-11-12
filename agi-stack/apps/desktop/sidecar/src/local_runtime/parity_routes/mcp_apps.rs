@@ -19,10 +19,10 @@ use crate::local_runtime::mcp_supervisor::{
 };
 
 const CONTRACT_VERSION: &str = "desktop-local-mcp-v2";
-#[path = "mcp_protocol.rs"]
-mod protocol;
 #[path = "mcp_apps_native.rs"]
 pub(in crate::local_runtime) mod native;
+#[path = "mcp_protocol.rs"]
+mod protocol;
 
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()

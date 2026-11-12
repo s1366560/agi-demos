@@ -175,23 +175,19 @@ async fn download_wait_returns_start_and_path_waits_for_completed_own_tab() {
     fixture
         .restored("Page.setDownloadBehavior", "behavior", json!("default"))
         .await;
-    assert!(
-        fixture
-            .host
-            .facade_artifact_operation(Backend::Chrome, 8, "download.path", &args, &fixture.input)
-            .await
-            .is_err()
-    );
+    assert!(fixture
+        .host
+        .facade_artifact_operation(Backend::Chrome, 8, "download.path", &args, &fixture.input)
+        .await
+        .is_err());
     let other = fixture.root.join("other-run");
     std::fs::create_dir(&other).unwrap();
     let input = json!({"_artifact_root":other});
-    assert!(
-        fixture
-            .host
-            .facade_artifact_operation(Backend::Chrome, 7, "download.path", &args, &input)
-            .await
-            .is_err()
-    );
+    assert!(fixture
+        .host
+        .facade_artifact_operation(Backend::Chrome, 7, "download.path", &args, &input)
+        .await
+        .is_err());
 }
 
 #[tokio::test]
@@ -206,16 +202,14 @@ async fn cancellation_and_timeout_restore_download_interception() {
         .await;
     let result = fixture.wait("download", 10).await.unwrap();
     assert!(result.unwrap_err().to_string().contains("timed out"));
-    assert!(
-        fixture
-            .host
-            .state
-            .facade_artifacts
-            .lock()
-            .unwrap()
-            .downloading
-            .is_empty()
-    );
+    assert!(fixture
+        .host
+        .state
+        .facade_artifacts
+        .lock()
+        .unwrap()
+        .downloading
+        .is_empty());
 }
 
 #[tokio::test]
@@ -272,43 +266,37 @@ async fn file_chooser_upload_enforces_owner_workspace_and_navigation() {
     let file = fixture.root.join("allowed.txt");
     std::fs::write(&file, b"upload").unwrap();
     let args = vec![handle["id"].clone(), json!([file])];
-    assert!(
-        fixture
-            .host
-            .facade_artifact_operation(
-                Backend::Chrome,
-                8,
-                "filechooser.setFiles",
-                &args,
-                &fixture.input
-            )
-            .await
-            .is_err()
-    );
+    assert!(fixture
+        .host
+        .facade_artifact_operation(
+            Backend::Chrome,
+            8,
+            "filechooser.setFiles",
+            &args,
+            &fixture.input
+        )
+        .await
+        .is_err());
     let blocked = json!({"_artifact_root":fixture.root,"_authorized_file_roots":[fixture.root],"_blocked_file_roots":[fixture.root]});
-    assert!(
-        fixture
-            .host
-            .facade_artifact_operation(Backend::Chrome, 7, "filechooser.setFiles", &args, &blocked)
-            .await
-            .is_err()
-    );
+    assert!(fixture
+        .host
+        .facade_artifact_operation(Backend::Chrome, 7, "filechooser.setFiles", &args, &blocked)
+        .await
+        .is_err());
     *fixture.host.endpoint.loader.lock().unwrap() = "navigated".into();
-    assert!(
-        fixture
-            .host
-            .facade_artifact_operation(
-                Backend::Chrome,
-                7,
-                "filechooser.setFiles",
-                &args,
-                &fixture.input
-            )
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("navigated")
-    );
+    assert!(fixture
+        .host
+        .facade_artifact_operation(
+            Backend::Chrome,
+            7,
+            "filechooser.setFiles",
+            &args,
+            &fixture.input
+        )
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("navigated"));
     *fixture.host.endpoint.loader.lock().unwrap() = "loader-1".into();
     fixture
         .host
@@ -321,25 +309,28 @@ async fn file_chooser_upload_enforces_owner_workspace_and_navigation() {
         )
         .await
         .unwrap();
-    assert!(
-        fixture
-            .host
-            .facade_artifact_operation(
-                Backend::Chrome,
-                7,
-                "filechooser.setFiles",
-                &args,
-                &fixture.input
-            )
-            .await
-            .is_err()
-    );
-    assert!(
-        fixture.host.endpoint.requests.lock().unwrap().iter().any(
+    assert!(fixture
+        .host
+        .facade_artifact_operation(
+            Backend::Chrome,
+            7,
+            "filechooser.setFiles",
+            &args,
+            &fixture.input
+        )
+        .await
+        .is_err());
+    assert!(fixture
+        .host
+        .endpoint
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .any(
             |request| request["params"]["method"] == "DOM.setFileInputFiles"
                 && request["params"]["params"]["backendNodeId"] == 15
-        )
-    );
+        ));
 }
 
 #[test]

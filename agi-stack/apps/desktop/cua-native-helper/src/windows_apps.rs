@@ -1,9 +1,10 @@
 //! Exact AppsFolder inventory and native launch. No model command line or path is accepted.
 use crate::backend::{App, NativeError, Result};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use windows::{
+    core::{w, Interface, HSTRING, PCWSTR, PWSTR},
     Data::Xml::Dom::{XmlDocument, XmlElement},
     Management::Deployment::PackageManager,
     Win32::{
@@ -14,7 +15,6 @@ use windows::{
             WindowsAndMessaging::SW_SHOWNORMAL,
         },
     },
-    core::{HSTRING, Interface, PCWSTR, PWSTR, w},
 };
 
 struct Installed {

@@ -405,8 +405,7 @@ impl SqliteKnowledgeRepository {
             .map_err(storage)?;
         rows.map(|row| {
             let object_id = row.map_err(storage)?;
-            let object = local_object(&conn, scope, &object_id)?
-                .ok_or(KnowledgeError::NotFound)?;
+            let object = local_object(&conn, scope, &object_id)?.ok_or(KnowledgeError::NotFound)?;
             synced(&conn, scope, object)
         })
         .collect()

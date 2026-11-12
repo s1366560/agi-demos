@@ -18,7 +18,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2ScopeHeadModel,
 )
 from src.infrastructure.adapters.secondary.persistence.plugin_scope_columns_v2 import (
-    PluginScopeColumnsV2,
+    PluginScopeColumnsV2 as PluginScopeColumnsV2,
 )
 from src.infrastructure.plugins.v2.scope import scope_key_v2, validate_scope_v2
 
@@ -59,17 +59,21 @@ class ScopeLedgerBindingV2:
     async def lock(self, session: AsyncSession) -> PlatformPluginV2ScopeHeadModel:
         """Atomically create then lock the head before any publication or receipt write."""
         dialect = session.get_bind().dialect.name
+        values = {**self.fields, "version_high_watermark": 0}
         if dialect == "postgresql":
-            statement = postgres_insert(PlatformPluginV2ScopeHeadModel)
+            _ = await session.execute(
+                postgres_insert(PlatformPluginV2ScopeHeadModel)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=["scope_key"])
+            )
         elif dialect == "sqlite":
-            statement = sqlite_insert(PlatformPluginV2ScopeHeadModel)
+            _ = await session.execute(
+                sqlite_insert(PlatformPluginV2ScopeHeadModel)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=["scope_key"])
+            )
         else:
             raise ValueError("plugin v2 scope ledger requires PostgreSQL or SQLite")
-        _ = await session.execute(
-            statement.values(**self.fields, version_high_watermark=0).on_conflict_do_nothing(
-                index_elements=["scope_key"]
-            )
-        )
         result = await session.execute(
             refresh_select_statement(
                 select(PlatformPluginV2ScopeHeadModel)
@@ -78,6 +82,8 @@ class ScopeLedgerBindingV2:
             )
         )
         head = result.scalar_one()
+        if not isinstance(head, PlatformPluginV2ScopeHeadModel):
+            raise TypeError("plugin v2 scope head is missing")
         self.require_row(head)
         # Existing imports/legacy publications can predate this head's creation.
         maximum = await session.scalar(

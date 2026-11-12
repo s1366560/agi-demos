@@ -58,9 +58,11 @@ export function normalizeSearchCapabilityContract(
     !isExactRecord(input, [
       'service_version',
       'contract_version',
+      'graph_backend',
       'search_types',
       'filters',
     ]) ||
+    !isGraphBackendDeclaration(input.graph_backend) ||
     !isExactRecord(input.search_types, Object.keys(SEARCH_CONTRACT)) ||
     !isExactRecord(input.filters, ['entity_types', 'relationship_types']) ||
     !isStringArray(input.filters.entity_types) ||
@@ -146,6 +148,23 @@ export function normalizeLocalSearchCapabilityContract(
     allowedActions: LOCAL_SEARCH_SUPPORTED_TYPES,
     authorityRevision: input.projection_revision,
   });
+}
+
+function isGraphBackendDeclaration(input: unknown): boolean {
+  if (
+    !isExactRecord(input, ['status', 'reason_code', 'retryable', 'allowed_actions']) ||
+    typeof input.retryable !== 'boolean' ||
+    !isStringArray(input.allowed_actions)
+  ) {
+    return false;
+  }
+  if (input.status === 'available') return input.reason_code === null;
+  return (
+    input.status === 'degraded' &&
+    typeof input.reason_code === 'string' &&
+    input.reason_code.trim() === input.reason_code &&
+    input.reason_code.length > 0
+  );
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

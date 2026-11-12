@@ -1,6 +1,7 @@
 """Pytest configuration and shared fixtures for testing."""
 
 import os
+import signal
 
 # The module-level production app must always use Avernet and fail closed.
 os.environ.setdefault("WORKSPACE_CORE_BASE_URL", "http://workspace-core.test")
@@ -713,7 +714,13 @@ def mock_redis_client():
 
 
 @pytest.fixture
-def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_engine):
+def test_app(
+    mock_neo4j_client,
+    mock_graph_service,
+    test_engine,
+    mock_workflow_engine,
+    monkeypatch: pytest.MonkeyPatch,
+):
     """Create a test FastAPI application."""
 
     from src.configuration.di_container import DIContainer
@@ -723,6 +730,9 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
         get_graph_service,
         get_graph_store,
         get_neo4j_client,
+    )
+    from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
+        get_current_user_from_header_or_query,
     )
     from src.infrastructure.adapters.primary.web.main import create_app
     from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
@@ -808,6 +818,16 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
     app.dependency_overrides[get_graph_service] = override_get_graph_service
     app.dependency_overrides[get_graph_store] = override_get_graph_service
     app.dependency_overrides[get_current_user] = override_get_current_user
+    # Feature-gated routes authenticate through the header-or-query dependency.
+    app.dependency_overrides[get_current_user_from_header_or_query] = override_get_current_user
+
+    async def admit_without_published_scope(**_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.dependencies.feature_operation_endpoint_v2.admit_feature_endpoint_v2",
+        admit_without_published_scope,
+    )
     app.dependency_overrides[workflow_engine_authority_dependency_v2] = lambda: mock_workflow_engine
 
     return app
@@ -1028,3 +1048,69 @@ async def test_tenant_in_db(test_db: AsyncSession, test_user: User) -> dict:
 def test_sandbox_id() -> str:
     """Provide a test sandbox ID for sandbox-related tests."""
     return "test-sandbox-12345"
+
+
+def _compile_gettext_catalogs() -> None:
+    """Compile gitignored .mo catalogs so locale tests see the .po translations."""
+    from pathlib import Path
+
+    locales = Path(__file__).resolve().parents[1] / "infrastructure" / "i18n" / "locales"
+    if not locales.is_dir():
+        return
+    from babel.messages.mofile import write_mo
+    from babel.messages.pofile import read_po
+
+    for po_path in locales.glob("*/LC_MESSAGES/messages.po"):
+        mo_path = po_path.with_suffix(".mo")
+        if mo_path.is_file() and mo_path.stat().st_mtime >= po_path.stat().st_mtime:
+            continue
+        with po_path.open("rb") as source, mo_path.open("wb") as destination:
+            write_mo(destination, read_po(source))
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Build message catalogs before tests read them."""
+    del config
+    _compile_gettext_catalogs()
+    from src.infrastructure.i18n.translator import clear_translation_cache
+
+    clear_translation_cache()
+
+
+def _bounded_pytest_phase(item: pytest.Item, phase: str) -> object:
+    """Fail a hung setup, call, or teardown when CI sets PYTEST_TEST_TIMEOUT."""
+    raw = os.environ.get("PYTEST_TEST_TIMEOUT")
+    if not raw or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+    seconds = int(raw)
+
+    def _handler(signum: int, frame: object) -> None:
+        del signum, frame
+        raise TimeoutError(f"pytest {phase} exceeded {seconds}s: {item.nodeid}")
+
+    previous = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item: pytest.Item) -> object:
+    """Bound fixture setup. The call-only alarm never fired for a hung fixture."""
+    yield from _bounded_pytest_phase(item, "setup")
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> object:
+    """Bound the test body when CI sets PYTEST_TEST_TIMEOUT."""
+    yield from _bounded_pytest_phase(item, "call")
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item: pytest.Item) -> object:
+    """Bound fixture teardown when CI sets PYTEST_TEST_TIMEOUT."""
+    yield from _bounded_pytest_phase(item, "teardown")

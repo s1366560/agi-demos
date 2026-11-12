@@ -26,13 +26,16 @@ def upgrade() -> None:
     _runtime_tables()
     _missing_columns()
     # Avernet workspace IDs are authority references, not legacy workspaces IDs.
-    op.execute(
-        sa.text("ALTER TABLE artifacts DROP CONSTRAINT IF EXISTS artifacts_workspace_id_fkey")
-    )
+    if sa.inspect(op.get_bind()).has_table("artifacts"):
+        op.execute(
+            sa.text("ALTER TABLE artifacts DROP CONSTRAINT IF EXISTS artifacts_workspace_id_fkey")
+        )
 
 
 def _event_timeline() -> None:
     inspector = sa.inspect(op.get_bind())
+    if not inspector.has_table("agent_execution_events"):
+        return
     columns = {column["name"] for column in inspector.get_columns("agent_execution_events")}
     timeline = {"event_time_us", "event_counter"}
     if not timeline.issubset(columns):
@@ -106,24 +109,27 @@ def _missing_columns() -> None:
         ),
     }
     for table, definitions in additions.items():
+        if not inspector.has_table(table):
+            continue
         present = {column["name"] for column in inspector.get_columns(table)}
         for definition in definitions:
             if definition.name not in present:
                 op.add_column(table, definition)
-    op.execute(
-        sa.text("CREATE INDEX IF NOT EXISTS ix_messages_reply_to_id ON messages (reply_to_id)")
-    )
-    if not any(
-        foreign_key["constrained_columns"] == ["reply_to_id"]
-        for foreign_key in inspector.get_foreign_keys("messages")
-    ):
-        op.create_foreign_key(
-            "messages_reply_to_id_fkey",
-            "messages",
-            "messages",
-            ["reply_to_id"],
-            ["id"],
+    if inspector.has_table("messages"):
+        op.execute(
+            sa.text("CREATE INDEX IF NOT EXISTS ix_messages_reply_to_id ON messages (reply_to_id)")
         )
+        if not any(
+            foreign_key["constrained_columns"] == ["reply_to_id"]
+            for foreign_key in inspector.get_foreign_keys("messages")
+        ):
+            op.create_foreign_key(
+                "messages_reply_to_id_fkey",
+                "messages",
+                "messages",
+                ["reply_to_id"],
+                ["id"],
+            )
 
 
 def _runtime_tables() -> None:
@@ -151,7 +157,12 @@ def _runtime_tables() -> None:
         for column in ("action", "resource_type", "tenant_id", "timestamp"):
             op.create_index(f"ix_audit_logs_{column}", "audit_logs", [column])
         op.create_index("ix_audit_logs_tenant_action", "audit_logs", ["tenant_id", "action"])
-    if not inspector.has_table("prompt_templates"):
+    if (
+        inspector.has_table("users")
+        and inspector.has_table("tenants")
+        and inspector.has_table("projects")
+        and not inspector.has_table("prompt_templates")
+    ):
         op.create_table(
             "prompt_templates",
             sa.Column("id", sa.String(), nullable=False),
@@ -182,7 +193,5 @@ def _runtime_tables() -> None:
 
 
 def downgrade() -> None:
-    """Retained preexisting ORM structures cannot safely be distinguished."""
-    raise RuntimeError(
-        "Runtime bootstrap repair is forward-only; restore a database backup to undo it"
-    )
+    """Retained runtime tables stay in place; they are not dropped on the way down."""
+    return

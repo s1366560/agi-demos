@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from feishu_client import FeishuClient  # type: ignore[import-not-found]
+    from feishu_client import FeishuClient
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class FeishuDocClient:
         if folder_token:
             data["folder_token"] = folder_token
 
-        response = self._client.docx.document.create(data=data)  # type: ignore[attr-defined]
+        response = self._client.docx.document.create(data=data)
 
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create document: {response.get('msg')}")
@@ -53,7 +53,7 @@ class FeishuDocClient:
         Returns:
             Document metadata
         """
-        response = self._client.docx.document.get(path={"document_token": document_token})  # type: ignore[attr-defined]
+        response = self._client.docx.document.get(path={"document_token": document_token})
 
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get document: {response.get('msg')}")
@@ -74,7 +74,7 @@ class FeishuDocClient:
         Returns:
             Document content as string
         """
-        response = self._client.docx.document.raw_content.get(  # type: ignore[attr-defined]
+        response = self._client.docx.document.raw_content.get(
             path={"document_token": document_token}, params={"lang": lang}
         )
 
@@ -103,7 +103,7 @@ class FeishuDocClient:
             if page_token:
                 params["page_token"] = page_token
 
-            response = self._client.docx.document.blocks.list(  # type: ignore[attr-defined]
+            response = self._client.docx.document.blocks.list(
                 path={"document_token": document_token}, params=params
             )
 
@@ -129,7 +129,7 @@ class FeishuDocClient:
         Returns:
             Block data
         """
-        response = self._client.docx.document.blocks.get(  # type: ignore[attr-defined]
+        response = self._client.docx.document.blocks.get(
             path={"document_token": document_token, "block_id": block_id}
         )
 
@@ -170,7 +170,7 @@ class FeishuDocClient:
         if index > 0:
             data["index"] = index
 
-        response = self._client.docx.document.blocks.children.create(  # type: ignore[attr-defined]
+        response = self._client.docx.document.blocks.children.create(
             path={"document_token": document_token, "block_id": parent_block_id}, data=data
         )
 
@@ -192,7 +192,7 @@ class FeishuDocClient:
             block_id: Block ID
             content: New block content
         """
-        response = self._client.docx.document.blocks.patch(  # type: ignore[attr-defined]
+        response = self._client.docx.document.blocks.patch(
             path={"document_token": document_token, "block_id": block_id}, data=content
         )
 
@@ -206,7 +206,7 @@ class FeishuDocClient:
             document_token: Document token
             block_id: Block ID
         """
-        response = self._client.docx.document.blocks.delete(  # type: ignore[attr-defined]
+        response = self._client.docx.document.blocks.delete(
             path={"document_token": document_token, "block_id": block_id}
         )
 

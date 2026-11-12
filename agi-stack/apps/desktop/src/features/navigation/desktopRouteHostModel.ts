@@ -2,6 +2,38 @@ import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapsho
 import type { DesktopRouteContext, DesktopRouteMatch } from './desktopRouteRegistry';
 import type { DesktopRoutePermissionAuthorityReasonCode } from './desktopRoutePermissionAuthority';
 
+export function desktopRouteCapabilityObservationUnchanged(
+  current: DesktopCapabilityAvailability | null | undefined,
+  next: DesktopCapabilityAvailability | null,
+): boolean {
+  if (!current || !next) return false;
+  if (
+    current.availability !== next.availability ||
+    current.reason_code !== next.reason_code ||
+    current.authority_revision !== next.authority_revision ||
+    current.provenance !== next.provenance ||
+    current.authority_source !== next.authority_source
+  ) {
+    return false;
+  }
+  const currentActions = current.allowed_actions;
+  const nextActions = next.allowed_actions;
+  if (
+    currentActions.length !== nextActions.length ||
+    currentActions.some((action, index) => action !== nextActions[index])
+  ) {
+    return false;
+  }
+  const currentScope = current.scope;
+  const nextScope = next.scope;
+  return (
+    currentScope.tenant_id === nextScope.tenant_id &&
+    currentScope.project_id === nextScope.project_id &&
+    currentScope.workspace_id === nextScope.workspace_id &&
+    currentScope.instance_id === nextScope.instance_id
+  );
+}
+
 export type DesktopRouteRuntimeMode = 'cloud' | 'local' | 'local_online' | 'local_offline';
 
 export type DesktopRouteAccessResult =

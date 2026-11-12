@@ -1,16 +1,16 @@
 //! Native UIA control-view snapshots and exact, explicitly selected pattern operations.
-use crate::backend::{NativeError, Observation, Result, required};
-use serde_json::{Value, json};
+use crate::backend::{required, NativeError, Observation, Result};
+use serde_json::{json, Value};
 use windows::{
+    core::BSTR,
     Win32::{
         Foundation::HWND,
         System::{
-            Com::{CLSCTX_INPROC_SERVER, CoCreateInstance},
+            Com::{CoCreateInstance, CLSCTX_INPROC_SERVER},
             Ole::*,
         },
         UI::Accessibility::*,
     },
-    core::BSTR,
 };
 
 fn error() -> NativeError {

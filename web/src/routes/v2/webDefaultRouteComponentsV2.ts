@@ -9,8 +9,9 @@ export const TenantOverview = lazy(() =>
     default: m.TenantOverview,
   }))
 );
+const projectListModule = import('../../pages/tenant/ProjectList');
 export const ProjectList = lazy(() =>
-  import('../../pages/tenant/ProjectList').then((m) => ({ default: m.ProjectList }))
+  projectListModule.then((m) => ({ default: m.ProjectList }))
 );
 export const BackendStores = lazy(() =>
   import('../../pages/tenant/BackendStores').then((m) => ({ default: m.BackendStores }))

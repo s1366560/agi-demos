@@ -1,11 +1,89 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { expect, test } from "@playwright/test";
+import { _electron as electron, expect, test } from "@playwright/test";
+
+import { fixtureWorkspaceSwitch } from "./fixtureWorkspaceSelection.mjs";
+
+const desktopAppRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:8000";
+
+function desktopElectronArgs() {
+  const args = [desktopAppRoot];
+  const userDataDir = process.env.AGISTACK_DESKTOP_QA_USER_DATA_DIR;
+  if (userDataDir) args.push(`--user-data-dir=${userDataDir}`);
+  if (process.env.CI === "true" && process.platform === "linux") {
+    args.push("--no-sandbox", "--disable-dev-shm-usage");
+  }
+  return args;
+}
+
+async function openDesktopElectron(desktopBaseURL) {
+  const sidecarPath = process.env.AGISTACK_SIDECAR_PATH;
+  if (!sidecarPath) {
+    throw new Error(
+      "AGISTACK_SIDECAR_PATH must point at the built agistack-desktop-sidecar binary",
+    );
+  }
+  const app = await electron.launch({
+    args: desktopElectronArgs(),
+    cwd: desktopAppRoot,
+    env: {
+      ...process.env,
+      ELECTRON_RENDERER_URL: desktopBaseURL,
+      AGISTACK_SIDECAR_PATH: sidecarPath,
+      AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG: "1",
+    },
+    timeout: 120_000,
+  });
+  const page = await app.firstWindow();
+  const lines = [];
+  const note = (line) => {
+    lines.push(line);
+  };
+  page.on("console", (message) => {
+    const type = message.type();
+    const text = message.text();
+    if (
+      type === "warning" ||
+      type === "error" ||
+      text.startsWith("[desktop-plugin-generation]") ||
+      text.startsWith("[desktop-capability-snapshot]")
+    ) {
+      note(redactNote(`${type}: ${text}`));
+    }
+  });
+  page.on("pageerror", (error) => note(redactNote(`pageerror: ${error.message}`)));
+  page.on("response", (response) => {
+    const url = response.url();
+    if (!url.includes("/workspaces") && !url.includes("workspace-context")) return;
+    void response
+      .text()
+      .then((body) => {
+        note(
+          redactNote(
+            `response ${response.status()} ${url.split("?")[0]} ${body.slice(0, 180)}`,
+          ),
+        );
+      })
+      .catch(() => {
+        note(`response ${response.status()} ${url.split("?")[0]} <unread>`);
+      });
+  });
+  for (const stream of [app.process().stdout, app.process().stderr]) {
+    stream?.on("data", (chunk) => {
+      const text = String(chunk);
+      if (/workspace core|sidecar|capability|error/i.test(text)) {
+        note(redactNote(`process: ${text.trim()}`));
+      }
+    });
+  }
+  return { app, page, lines };
+}
 const FIXTURE_NAMES = Object.freeze([
   "Ariadne Vale",
   "Deterministic Graph Labs",
@@ -41,6 +119,7 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
     );
     await waitForSyncedEpisode(request, token, episodeName);
     await rebuildCommunities(request, token, projectId);
+    await selectFixtureWorkspace(request, token, tenantId, projectId);
 
     const fixture = await loadFixtureSnapshot(
       request,
@@ -64,15 +143,17 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
       locale: "en-US",
       viewport: { width: 1440, height: 900 },
     });
-    const desktopContext = await browser.newContext({
-      colorScheme: "light",
-      locale: "en-US",
-      viewport: { width: 1440, height: 900 },
-    });
+    let desktopApp = null;
 
     try {
       const webPage = await webContext.newPage();
-      const desktopPage = await desktopContext.newPage();
+      const userDataDir = resolve(evidenceRoot, "electron-user-data");
+      mkdirSync(userDataDir, { recursive: true, mode: 0o700 });
+      process.env.AGISTACK_DESKTOP_QA_USER_DATA_DIR = userDataDir;
+      const desktop = await openDesktopElectron(desktopBaseURL);
+      desktopApp = desktop.app;
+      const desktopPage = desktop.page;
+      const desktopNotes = desktop.lines;
       await Promise.all([
         installApiOriginRewrite(webPage),
         installApiOriginRewrite(desktopPage),
@@ -87,6 +168,7 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
         desktopPage,
         "desktop",
         expectedScope,
+        desktop.app,
       );
       try {
         const webRecords = await exerciseWeb(
@@ -118,11 +200,38 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
         writeJson(evidenceRoot, "matched-state-network.json", networkEvidence);
         captureNeo4jQueryEvidence(evidenceRoot, projectId);
       } finally {
+        const rendererIpc = desktopApp
+          ? await desktopApp
+              .evaluate(() => {
+                const queued = globalThis.__agistackQaRendererIpc ?? [];
+                globalThis.__agistackQaRendererIpc = [];
+                return queued;
+              })
+              .catch(() => [])
+          : [];
+        for (const event of rendererIpc) {
+          desktopNotes.push(
+            redactNote(
+              `ipc ${event.command} ${event.outcome} ${event.elapsed_ms}ms digest=${event.digest || "none"}`,
+            ),
+          );
+        }
+        const noteText = JSON.stringify(desktopNotes);
+        expect(noteText).not.toContain("Authorization");
+        expect(noteText).not.toContain("Bearer ");
+        expect(noteText).not.toContain(token);
+        expect(noteText).not.toContain("adminpassword");
+        writeJson(evidenceRoot, "desktop-runtime-notes.json", {
+          lines: desktopNotes,
+        });
         webTracker.dispose();
         desktopTracker.dispose();
       }
     } finally {
-      await Promise.allSettled([webContext.close(), desktopContext.close()]);
+      await Promise.allSettled([
+        webContext.close(),
+        desktopApp ? desktopApp.close() : Promise.resolve(),
+      ]);
     }
   } finally {
     if (token && episodeName) {
@@ -370,6 +479,24 @@ async function primeWebSession(page, token, user) {
   }, authStorage);
 }
 
+async function selectFixtureWorkspace(request, token, tenantId, projectId) {
+  const current = await request.get(`${API_BASE}/api/v1/workspace-context`, {
+    headers: authorizationHeaders(token),
+  });
+  const body = await requireJsonResponse(current, "read workspace context");
+  const context = body.context ?? body;
+  const switchBody = fixtureWorkspaceSwitch(context, tenantId, projectId);
+  if (switchBody === null) return;
+  const switched = await request.post(`${API_BASE}/api/v1/workspace-context/switch`, {
+    headers: {
+      ...authorizationHeaders(token),
+      "Content-Type": "application/json",
+    },
+    data: switchBody,
+  });
+  await requireJsonResponse(switched, "select fixture workspace");
+}
+
 async function primeDesktopPreferences(page) {
   await page.addInitScript(() => {
     window.localStorage.setItem("agistack.desktop.locale", "en");
@@ -400,20 +527,49 @@ async function installApiOriginRewrite(page) {
 }
 
 async function authenticateDesktop(page, desktopBaseURL) {
-  const response = await page.goto(desktopBaseURL, {
-    waitUntil: "domcontentloaded",
+  // Electron loads this URL before the test can navigate. A second goto or
+  // reload while that load is still committing is aborted and detaches the
+  // frame (net::ERR_ABORTED). Wait until the document is there, then reload
+  // so init scripts apply. If the reload is aborted but the document stayed,
+  // continue into the same login assertions.
+  await page.waitForURL((url) => String(url).startsWith(desktopBaseURL), {
+    timeout: 60_000,
   });
-  expect(response?.status()).toBeLessThan(400);
+  let response = null;
+  try {
+    response = await page.reload({
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const stillOnRenderer = String(page.url()).startsWith(desktopBaseURL);
+    // Only an abort that left this renderer document in place can continue.
+    // A closed page, a different error, or a navigation off the renderer
+    // must surface here instead of failing later as a missing login card.
+    if (!message.includes("ERR_ABORTED") || page.isClosed() || !stillOnRenderer) {
+      throw error;
+    }
+  }
+  if (response) expect(response.status()).toBeLessThan(400);
   const login = page.locator(".desktop-login-card");
   await expect(login).toBeVisible();
   await login
     .locator('[data-parity-target-id="email_entry"]')
     .fill("admin@memstack.ai");
   await login.locator('input[type="password"]').fill("adminpassword");
-  await login.locator(".desktop-login-submit").click();
-  await expect(page.locator(".desktop-login-screen")).toHaveCount(0, {
-    timeout: 20_000,
-  });
+  const submit = login.locator('button.desktop-login-submit[type="submit"]');
+  const loginScreen = page.locator(".desktop-login-screen");
+  try {
+    // Session restore disables this button while it is in flight, then
+    // removes the card. A disabled or detached control is a failure only
+    // while the login screen is still present.
+    await expect(submit).toBeEnabled({ timeout: 20_000 });
+    await submit.click({ timeout: 15_000 });
+  } catch (error) {
+    if ((await loginScreen.count()) !== 0 || page.isClosed()) throw error;
+  }
+  await expect(loginScreen).toHaveCount(0, { timeout: 20_000 });
 }
 
 async function exerciseWeb(
@@ -492,22 +648,40 @@ async function exerciseDesktop(page, tracker, evidenceRoot, scope, fixture) {
       `.desktop-production-route-stage[data-route-id="${routeId}"]`,
     );
     await expect(stage).toBeVisible();
-    if (kind === "search") {
-      await stage
-        .locator('[data-action="search-query"]')
-        .fill(FIXTURE_NAMES[0]);
-      await stage.locator('[data-action="search-submit"]').click();
-      await expect(
-        stage.getByText(fixture.search.fixture_matches[0]).first(),
-      ).toBeVisible();
-    } else if (kind === "communities") {
-      await expect(
-        stage.getByText(fixture.communities.names[0]).first(),
-      ).toBeVisible();
-    } else {
+    const expectInStage = async (assertion) => {
+      try {
+        await assertion();
+      } catch (error) {
+        const state = await stage.getAttribute("data-route-state");
+        const reason = await stage
+          .locator("[data-reason-code]")
+          .getAttribute("data-reason-code")
+          .catch(() => null);
+        const text = await stage.innerText();
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${message}\nroute-state=${state}\nreason=${reason}\n${text.slice(0, 600)}`,
+        );
+      }
+    };
+    await expectInStage(async () => {
+      if (kind === "search") {
+        await stage.locator(".desktop-search__query input").fill(FIXTURE_NAMES[0]);
+        await stage.locator('.desktop-search__query button[type="submit"]').click();
+        await expect(
+          stage.getByText(fixture.search.fixture_matches[0]).first(),
+        ).toBeVisible();
+        return;
+      }
+      if (kind === "communities") {
+        await expect(
+          stage.getByText(fixture.communities.names[0]).first(),
+        ).toBeVisible();
+        return;
+      }
       for (const name of FIXTURE_NAMES)
         await expect(stage.getByText(name).first()).toBeVisible();
-    }
+    });
     records[kind] = await tracker.waitFor(kind, startIndex);
     assertNetworkRecord(records[kind], kind, scope, fixture[kind]);
     await page.screenshot({
@@ -518,7 +692,7 @@ async function exerciseDesktop(page, tracker, evidenceRoot, scope, fixture) {
   return records;
 }
 
-function createKnowledgeTracker(page, surface, expectedScope) {
+function createKnowledgeTracker(page, surface, expectedScope, electronApp) {
   const records = [];
   const pending = new Set();
   const onResponse = (response) => {
@@ -553,6 +727,42 @@ function createKnowledgeTracker(page, surface, expectedScope) {
     pending.add(task);
     void task.finally(() => pending.delete(task));
   };
+  const recordMainCloudRequest = (entry) => {
+    let url;
+    try {
+      url = new URL(entry.path, API_BASE);
+    } catch {
+      return;
+    }
+    const kind = knowledgeKind(entry.method, url.pathname);
+    if (!kind) return;
+    const bodyScope =
+      entry.body && typeof entry.body === "object" ? entry.body : null;
+    records.push({
+      surface,
+      kind,
+      endpoint: url.pathname,
+      method: entry.method,
+      status: entry.status,
+      canonical_scope: {
+        tenant_id: expectedScope.tenantId,
+        project_id: expectedScope.projectId,
+      },
+      request_scope: {
+        tenant_id:
+          url.searchParams.get("tenant_id") ??
+          entry.request_scope?.tenant_id ??
+          bodyScope?.tenant_id ??
+          null,
+        project_id:
+          url.searchParams.get("project_id") ??
+          entry.request_scope?.project_id ??
+          bodyScope?.project_id ??
+          null,
+      },
+      response: summarizeResponse(kind, entry.body),
+    });
+  };
   page.on("response", onResponse);
   return Object.freeze({
     dispose() {
@@ -561,13 +771,26 @@ function createKnowledgeTracker(page, surface, expectedScope) {
     recordCount() {
       return records.length;
     },
+    async drainMainCloudRequests() {
+      if (!electronApp) return;
+      const fresh = await electronApp
+        .evaluate(() => {
+          const queued = globalThis.__agistackQaCloudRequests ?? [];
+          globalThis.__agistackQaCloudRequests = [];
+          return queued;
+        })
+        .catch(() => []);
+      for (const entry of fresh) recordMainCloudRequest(entry);
+    },
     async waitFor(kind, startIndex) {
       await expect
-        .poll(
-          () =>
+        .poll(async () => {
+          await this.drainMainCloudRequests();
+          return (
             records.slice(startIndex).find((record) => record.kind === kind) ??
-            null,
-        )
+            null
+          );
+        })
         .not.toBeNull();
       await Promise.all([...pending]);
       return records.slice(startIndex).find((record) => record.kind === kind);
@@ -577,17 +800,15 @@ function createKnowledgeTracker(page, surface, expectedScope) {
 
 function knowledgeResponseKind(response) {
   const request = response.request();
-  const path = new URL(request.url()).pathname;
-  if (request.method() === "GET" && path === "/api/v1/graph/entities/")
-    return "entities";
-  if (request.method() === "GET" && path === "/api/v1/graph/communities/")
+  return knowledgeKind(request.method(), new URL(request.url()).pathname);
+}
+
+function knowledgeKind(method, path) {
+  if (method === "GET" && path === "/api/v1/graph/entities/") return "entities";
+  if (method === "GET" && path === "/api/v1/graph/communities/")
     return "communities";
-  if (request.method() === "GET" && path === "/api/v1/graph/memory/graph")
-    return "graph";
-  if (
-    request.method() === "POST" &&
-    path === "/api/v1/search-enhanced/advanced"
-  )
+  if (method === "GET" && path === "/api/v1/graph/memory/graph") return "graph";
+  if (method === "POST" && path === "/api/v1/search-enhanced/advanced")
     return "search";
   return null;
 }
@@ -782,6 +1003,17 @@ async function requireJsonResponse(response, action) {
     `${action} failed with HTTP ${response.status()}`,
   ).toBeTruthy();
   return JSON.parse(body);
+}
+
+function redactNote(text) {
+  return String(text)
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/ms_(?:sk|dp)_[0-9a-f]+/gi, "[redacted]")
+    .replace(/adminpassword/g, "[redacted]")
+    .replace(
+      /(password|token|secret|api_key|authorization)(["']?\s*[:=]\s*["']?)[^\s"',}]+/gi,
+      "$1$2[redacted]",
+    );
 }
 
 function writeJson(root, name, value) {

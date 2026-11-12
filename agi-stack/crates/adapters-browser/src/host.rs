@@ -165,10 +165,11 @@ pub(crate) struct TabLease {
 /// Mutable host state shared with the notification feeder task. Every
 /// per-tab dimension is keyed by `(backend, tabId)`: the same tab id on two
 /// backends refers to different tabs.
+type InputStateMap =
+    HashMap<(Backend, u64), Arc<tokio::sync::Mutex<crate::input_visibility::InputState>>>;
+
 pub(crate) struct HostState {
-    pub(crate) input_states: Mutex<
-        HashMap<(Backend, u64), Arc<tokio::sync::Mutex<crate::input_visibility::InputState>>>,
-    >,
+    pub(crate) input_states: Mutex<InputStateMap>,
     /// Tabs we have already sent `attach` for (attach is idempotent, but the
     /// memo avoids a round trip per tool call).
     pub(crate) attached: Mutex<HashSet<(Backend, u64)>>,

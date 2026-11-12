@@ -18,7 +18,9 @@ use serde_json::{Map, Value};
 pub enum KnowledgeCloudChoice {
     KeepCurrent {},
     UseProposed {},
-    Merged { content: KnowledgeMergeContent },
+    Merged {
+        content: KnowledgeMergeContent,
+    },
     /// The cloud keeps its version and saves the proposed version as a copy.
     KeepBoth {},
 }

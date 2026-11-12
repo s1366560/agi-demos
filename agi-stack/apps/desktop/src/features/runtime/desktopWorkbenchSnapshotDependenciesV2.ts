@@ -5,6 +5,7 @@ import { createDesktopAutomationOperationsV2 } from '../../plugins/desktopAutoma
 import { createProjectWorkspacesV2Client } from '../project-workspaces/projectWorkspacesV2Client';
 import {
   createDesktopWorkbenchCapabilityClient,
+  type DesktopCapabilitySnapshotObserver,
   type DesktopWorkbenchCapabilityClient,
 } from './workbenchCapabilityClient';
 import {
@@ -279,10 +280,10 @@ export function createDesktopWorkbenchSnapshotDependenciesV2(
   });
 
   return Object.freeze({
-    async loadSnapshot(signal?: AbortSignal) {
+    async loadSnapshot(signal?: AbortSignal, observe?: DesktopCapabilitySnapshotObserver) {
       tracker.begin(signal);
       try {
-        return await client.loadSnapshot(signal);
+        return await client.loadSnapshot(signal, observe);
       } finally {
         await tracker.drain();
         requireActiveWorkbenchSnapshotV2(signal);

@@ -6,10 +6,15 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   web-smoke:
     name: Web Playwright Smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: web
@@ -19,8 +24,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        with:
-          version: 11.15.1
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -33,7 +36,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/ci/use_ubuntu_archive_mirror.sh"
+          pnpm exec playwright install --with-deps chromium
 
       - name: Run backend-independent smoke tests
         env:
@@ -50,7 +55,7 @@ jobs:
 
   backend-e2e:
     name: Backend-dependent Playwright Smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -136,22 +141,44 @@ jobs:
       MCP_ENABLED: false
       RAY_ENABLE_UV_RUN_RUNTIME_ENV: '0'
       CI: true
+      WORKSPACE_CORE_BASE_URL: http://127.0.0.1:4321
+      WORKSPACE_CORE_SERVICE_TOKEN: e2e-workspace-core
+      WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN: e2e-provider-webhook
+      WORKSPACE_CORE_PROVIDER_EVENT_TOKEN: e2e-provider-event
+      WORKSPACE_CORE_AGENT_REGISTRY_TOKEN: e2e-agent-registry
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
+        id: setup-python
+        continue-on-error: true
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.12.13'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
+
       - name: Install backend dependencies
         run: uv sync --extra dev --dev --frozen
+
+      - name: Configure repository test database
+        run: printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
 
       - name: Build lightweight authenticated Sandbox fixture
         run: |
@@ -174,6 +201,9 @@ jobs:
           nohup uv run uvicorn scripts.fake_openai_server:app \
             --host 127.0.0.1 --port 8010 > backend-e2e-logs/fake-openai.log 2>&1 &
           echo $! > backend-e2e-logs/fake-openai.pid
+          nohup uv run python scripts/e2e_fake_workspace_core.py \
+            > backend-e2e-logs/fake-workspace-core.log 2>&1 &
+          echo $! > backend-e2e-logs/fake-workspace-core.pid
           for attempt in $(seq 1 30); do
             if curl -fsS http://localhost:8010/v1/models; then
               exit 0
@@ -212,8 +242,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        with:
-          version: 11.15.1
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -228,11 +256,13 @@ jobs:
 
       - name: Install Chromium
         working-directory: web
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/ci/use_ubuntu_archive_mirror.sh"
+          pnpm exec playwright install --with-deps chromium
 
       - name: Run backend-dependent smoke
         working-directory: web
-        run: pnpm exec playwright test e2e/backend-smoke.spec.ts
+        run: pnpm exec playwright test e2e/backend-smoke.spec.ts e2e/optional-business-lifecycle.spec.ts
 
       - name: Stop local-runtime API
         run: |
@@ -312,7 +342,8 @@ jobs:
           for pid_file in \
             backend-e2e-logs/api.pid \
             backend-e2e-logs/agent-actor.pid \
-            backend-e2e-logs/fake-openai.pid; do
+            backend-e2e-logs/fake-openai.pid \
+            backend-e2e-logs/fake-workspace-core.pid; do
             if [ -f "$pid_file" ]; then
               kill "$(cat "$pid_file")" 2>/dev/null || true
             fi

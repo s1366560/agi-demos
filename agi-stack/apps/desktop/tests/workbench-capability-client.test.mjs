@@ -58,6 +58,12 @@ function createDesktopWorkbenchCapabilityClient(automationApi, config, options) 
 const searchContract = {
   service_version: '0.1.0',
   contract_version: '2.0.0',
+  graph_backend: {
+    status: 'available',
+    reason_code: null,
+    retryable: false,
+    allowed_actions: ['search', 'traverse', 'rebuild_communities'],
+  },
   search_types: {
     semantic: {
       description: 'Semantic search',
@@ -1563,12 +1569,16 @@ test('cloud client validates structured Search and Automation authorities', asyn
       workspace_id: null,
       instance_id: null,
     };
+    // Search has no revision of its own. The entity fixture for this same
+    // project returns scopeRevision 41, and that live revision is reused.
+    // A different tenant or project, an unavailable source, or a pending
+    // observation still stays closed.
     assert.deepEqual(
       snapshot.capabilities.search,
       withObservedAuthority(
         withScope(
-          withoutAuthorityRevision(
-            availableCapability([
+          {
+            ...availableCapability([
               'semantic',
               'advanced',
               'graph_traversal',
@@ -1576,7 +1586,8 @@ test('cloud client validates structured Search and Automation authorities', asyn
               'temporal',
               'faceted',
             ]),
-          ),
+            authority_revision: 41,
+          },
           scope,
         ),
         'cloud_service',
@@ -2386,6 +2397,29 @@ test('Search capability normalizer rejects incomplete or drifted advanced parame
   assert.deepEqual(
     normalizeSearchCapabilityContract(driftedParameter),
     unavailableCapability('search_capability_contract_invalid', true),
+  );
+});
+
+test('search capability accepts the published graph backend and rejects an unknown field', () => {
+  const degraded = structuredClone(searchContract);
+  degraded.graph_backend = {
+    status: 'degraded',
+    reason_code: 'graph_backend_unavailable',
+    retryable: true,
+    allowed_actions: ['retry'],
+  };
+  assert.equal(normalizeSearchCapabilityContract(degraded).availability, 'available');
+  const unknown = structuredClone(searchContract);
+  unknown.extra = true;
+  assert.equal(
+    normalizeSearchCapabilityContract(unknown).reason_code,
+    'search_capability_contract_invalid',
+  );
+  const missing = structuredClone(searchContract);
+  delete missing.graph_backend;
+  assert.equal(
+    normalizeSearchCapabilityContract(missing).reason_code,
+    'search_capability_contract_invalid',
   );
 });
 

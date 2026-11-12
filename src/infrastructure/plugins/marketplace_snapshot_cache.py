@@ -304,7 +304,10 @@ class MarketplaceSnapshotCache:
         # Validate every ancestor without resolving symlinks; rmtree does not follow nested
         # symlinks. Only this installation/digest root can be removed, never its parent.
         script = snapshot_removal_script(root)
-        result = await self.sandbox.execute_tool(
+        sandbox = self.sandbox
+        if sandbox is None:
+            raise RuntimeError("snapshot removal requires a sandbox")
+        result = await sandbox.execute_tool(
             project_id=self.project_id,
             tool_name="bash",
             arguments={"command": "python3 -c " + shlex.quote(script), "timeout": 30},

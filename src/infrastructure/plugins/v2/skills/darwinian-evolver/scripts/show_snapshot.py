@@ -59,7 +59,10 @@ def main() -> int:
         sys.exit("not a darwinian-evolver snapshot (missing population_snapshot)")
 
     inner = _trusted_loads(outer["population_snapshot"], class_map=class_map)
-    pairs = inner["organisms"]
+    organisms = inner.get("organisms") if isinstance(inner, dict) else None
+    if not isinstance(organisms, list):
+        sys.exit("darwinian-evolver snapshot is missing organisms")
+    pairs = organisms
     ranked = sorted(pairs, key=lambda pair: getattr(pair[1], "score", 0) or 0, reverse=True)
     if args.top:
         ranked = ranked[: args.top]

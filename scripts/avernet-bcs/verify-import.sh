@@ -220,7 +220,7 @@ find . -type f \
   ! -path './Makefile' \
   -print | sed 's#^\./##' | LC_ALL=C sort > "${actual_paths}"
 
-if ! comm -3 "${expected_paths}" "${actual_paths}" > "${path_diff}"; then
+if ! LC_ALL=C comm -3 "${expected_paths}" "${actual_paths}" > "${path_diff}"; then
   echo "failed to compare Avernet BCS import paths" >&2
   exit 1
 fi

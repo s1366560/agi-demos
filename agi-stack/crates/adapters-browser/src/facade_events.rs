@@ -1,7 +1,7 @@
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, tool_err};
+use crate::host::{tool_err, Backend, BridgeEndpoint, BrowserToolHost};
 use crate::protocol::OnCdpEventParams;
 use agistack_core::ports::CoreResult;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 

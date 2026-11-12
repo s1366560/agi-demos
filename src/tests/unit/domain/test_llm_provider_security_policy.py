@@ -91,6 +91,20 @@ class TestKimiOfficialEndpoints:
         with pytest.raises(ValueError, match="allowed API base path|HTTPS is required"):
             validate_provider_base_url(base_url, ProviderType.KIMI_CODING)
 
+    def test_loopback_http_is_allowed_for_a_local_fake_endpoint(self):
+        assert (
+            validate_provider_base_url("http://127.0.0.1:8010/v1", ProviderType.OPENAI)
+            == "http://127.0.0.1:8010/v1"
+        )
+        assert (
+            validate_provider_base_url("http://localhost:8010/v1", ProviderType.OPENAI)
+            == "http://localhost:8010/v1"
+        )
+
+    def test_remote_http_stays_rejected(self):
+        with pytest.raises(ValueError, match="HTTPS is required"):
+            validate_provider_base_url("http://example.com/v1", ProviderType.OPENAI)
+
     def test_coding_endpoint_not_extended_to_other_families(self):
         with pytest.raises(ValueError, match="allowed API base path"):
             validate_provider_base_url("https://api.kimi.com/coding/v1", ProviderType.OPENAI)

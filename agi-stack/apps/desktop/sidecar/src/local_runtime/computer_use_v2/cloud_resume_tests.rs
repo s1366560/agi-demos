@@ -1,12 +1,12 @@
 //! Real HTTP authority plus authenticated helper protocol, without operating-system access.
 use super::*;
 
+#[path = "cloud_control_tests.rs"]
+mod control_tests;
 #[path = "cloud_resume_race_tests.rs"]
 mod race_tests;
 #[path = "cloud_stop_tests.rs"]
 mod stop_tests;
-#[path = "cloud_control_tests.rs"]
-mod control_tests;
 
 async fn paused_fixture() -> (
     Fixture,

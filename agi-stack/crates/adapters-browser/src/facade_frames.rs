@@ -1,7 +1,7 @@
 //! Resolve frame locators through CDP-owned frame identities, including OOPIFs.
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, tool_err};
+use crate::host::{tool_err, Backend, BridgeEndpoint, BrowserToolHost};
 use agistack_core::ports::CoreResult;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 pub struct FacadeFrameContext {
     pub session_id: Option<String>,
@@ -29,11 +29,19 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         tab: u64,
         args: &[Value],
     ) -> CoreResult<Value> {
-        self.with_input_visibility(backend, tab, self.facade_locator_click_prepared(backend, tab, args)).await
+        self.with_input_visibility(
+            backend,
+            tab,
+            self.facade_locator_click_prepared(backend, tab, args),
+        )
+        .await
     }
 
     async fn facade_locator_click_prepared(
-        &self, backend: Backend, tab: u64, args: &[Value],
+        &self,
+        backend: Backend,
+        tab: u64,
+        args: &[Value],
     ) -> CoreResult<Value> {
         let steps = args
             .first()

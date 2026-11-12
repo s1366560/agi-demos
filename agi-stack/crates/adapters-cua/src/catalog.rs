@@ -1,6 +1,6 @@
 //! Declarative computer-use tool contracts.
 use crate::host::CuaToolEffect;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 pub const TOOL_LIST_APPS: &str = "computer_list_apps";

@@ -122,6 +122,8 @@ def _provide_graph_runtime_v2(
 
 
 async def _close_graph_service_v2(graph_service: object) -> None:
+    if getattr(graph_service, "_process_shared_graph_v2", False):
+        return
     close = getattr(graph_service, "close", None)
     if callable(close):
         result = close()

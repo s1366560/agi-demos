@@ -1,11 +1,11 @@
 use super::views::{ChannelOutboxItemView, ChannelSessionBindingItemView};
 use super::*;
+use crate::response_assertions::assert_parity;
 use agistack_adapters_postgres::{
     ChannelConfigRecord, ChannelObservabilitySummaryRecord, ChannelOutboxRecord,
     ChannelSessionBindingRecord, ChannelStatusRecord, ChannelWebhookEventRecord,
     ChannelWebhookIngressRecord,
 };
-use crate::response_assertions::assert_parity;
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};

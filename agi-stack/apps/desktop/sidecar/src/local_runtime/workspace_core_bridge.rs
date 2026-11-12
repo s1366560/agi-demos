@@ -86,7 +86,7 @@ pub(super) fn install_authority(
     )?;
     let previous_generation = state
         .workspace_core_generation
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
             let next = (current & AUTHORITY_GENERATION_MASK).checked_add(1)?;
             (next <= AUTHORITY_GENERATION_MASK).then_some(next | CUTOVER_GENERATION_BIT)
         })

@@ -2,14 +2,14 @@
 use super::*;
 use crate::local_runtime::knowledge_authority_v2::agent_access::{self, RunAuthorization};
 use agistack_core::agent::tool_policy::ToolPolicyContext;
-#[path = "hitl_validation_tests.rs"]
-mod hitl_validation_tests;
-#[path = "local_stop_dispatch_tests.rs"]
-mod local_stop_dispatch_tests;
 #[path = "consent_preflight_tests.rs"]
 mod consent_preflight_tests;
 #[path = "consent_provenance_tests.rs"]
 mod consent_provenance_tests;
+#[path = "hitl_validation_tests.rs"]
+mod hitl_validation_tests;
+#[path = "local_stop_dispatch_tests.rs"]
+mod local_stop_dispatch_tests;
 #[path = "locked_use_consent_tests.rs"]
 mod locked_use_consent_tests;
 
@@ -107,13 +107,12 @@ async fn old_local_host_cannot_resolve_or_dispatch_after_generic_v2_factory_disa
     agent_access::scope(Some(fixture.authorization.clone()), async {
         let host = tool_host(&fixture.state, &fixture.conversation, None).unwrap();
         cloud_tests::publish_factory(&fixture.state, false).await;
-        assert!(
-            host.call("computer_get_app_state", r#"{"app":"fixture"}"#)
-                .await
-                .unwrap_err()
-                .to_string()
-                .contains("cua_factory_disabled")
-        );
+        assert!(host
+            .call("computer_get_app_state", r#"{"app":"fixture"}"#)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("cua_factory_disabled"));
         assert!(
             !fixture.helper.root.join("requests").exists(),
             "disabled old host must not even resolve an application"

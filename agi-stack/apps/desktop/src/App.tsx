@@ -1945,11 +1945,13 @@ export function App() {
       config,
       snapshotOperationsV2: desktopWorkbenchSnapshotOperationsV2,
     }),
+    // Snapshot operations read the current generation actions through a ref.
+    // A new generation object with the same scope must not abort the in-flight
+    // capability fan-out; that fan-out waits on the slowest branch.
     [
       config,
       desktopWorkbenchSnapshotOperationsV2,
       desktopWorkbenchCapabilityClientProviderV2,
-      desktopRendererGenerationV2.actions,
     ],
   );
   const sandboxRuntime = useSandboxRuntimeSurface(
@@ -2070,6 +2072,9 @@ export function App() {
   const desktopCapabilityState = useDesktopCapabilitySnapshot(
     desktopWorkbenchCapabilityClientV2.client,
     identityAuthenticated && showRuntimeConfig,
+    desktopRendererGenerationV2.meta.status,
+    desktopRendererGenerationV2.meta.digest ?? '',
+    desktopRendererGenerationV2.meta.error,
   );
   const desktopProductionRouteAuthorityV2 = useMemo(
     () =>

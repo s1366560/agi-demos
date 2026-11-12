@@ -519,7 +519,7 @@ impl ToolHost for ScopedComputerUseHost {
                     request_id,
                     session_id: self.session.context.session_id.clone(),
                     engine_session_id: Some(engine_session_id.clone()),
-                    app: target.into(),
+                    app: target,
                     identity_digest: identity,
                     capability: capability.into(),
                     tool_name: tool.into(),

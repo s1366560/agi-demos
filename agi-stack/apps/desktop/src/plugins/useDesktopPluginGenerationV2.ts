@@ -62,6 +62,7 @@ export function useDesktopPluginGenerationV2(
   ]);
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
+  const openedOwner = useRef<typeof owner | null>(null);
   const [readyOwner, setReadyOwner] = useState<typeof owner | null>(null);
   const snapshot = useSyncExternalStore(
     desktopRendererLeaseStoreV2.subscribe,
@@ -95,6 +96,7 @@ export function useDesktopPluginGenerationV2(
 
     let stopped = false;
     let stopPolling: (() => void) | undefined;
+    openedOwner.current = null;
     const start = () => {
       stopPolling?.();
       stopPolling = startDesktopPluginGenerationPollingV2(
@@ -106,22 +108,42 @@ export function useDesktopPluginGenerationV2(
     // Retire the old owner before staging a new scope. Rendering is already blocked
     // synchronously by readyOwner, including while an old network request drains.
     void desktopRendererDistributionReconcilerV2.close().then(() => {
-      if (!stopped && currentOwner.current === owner) start();
+      if (!stopped && currentOwner.current === owner) {
+        openedOwner.current = owner;
+        start();
+      }
     }).catch((error: unknown) => {
-      if (!stopped) desktopRendererStatusStoreV2.fail(error, false);
+      if (!stopped) {
+        console.warn('[desktop-plugin-generation]', generationFailureTextV2(error));
+        desktopRendererStatusStoreV2.fail(error, false);
+      }
     });
     const refresh = () => { if (!stopped && currentOwner.current === owner) start(); };
     window.addEventListener(DESKTOP_PLUGIN_CONFIGURATION_CHANGED_V2, refresh);
     return () => {
       stopped = true;
+      openedOwner.current = null;
       stopPolling?.();
       window.removeEventListener(DESKTOP_PLUGIN_CONFIGURATION_CHANGED_V2, refresh);
       scheduleClose();
     };
   }, [enabled, owner]);
 
+  useEffect(() => {
+    // Cloud apply publishes the lease, then awaits the receipt IPC before onReady.
+    // Show that published generation for the owner whose close already finished.
+    if (!enabled || openedOwner.current !== owner || readyOwner === owner) return;
+    if (snapshot.generation) setReadyOwner(owner);
+  }, [enabled, owner, readyOwner, snapshot.generation]);
+
   const state = projectRendererPluginGenerationStateV2(enabled, readyOwner === owner ? snapshot.generation : undefined, status);
-  if (enabled && readyOwner !== owner && status.status !== 'error') return Object.freeze({ status: 'loading', generation: undefined, error: undefined });
+  const blocked = enabled && readyOwner !== owner && status.status !== 'error';
+  const visibleStatus = blocked ? 'loading' : state.status;
+  const visibleDigest = blocked ? '' : state.generation?.snapshot.digest ?? '';
+  useEffect(() => {
+    console.info(`[desktop-plugin-generation] ${visibleStatus} digest=${visibleDigest || 'none'}`);
+  }, [visibleDigest, visibleStatus]);
+  if (blocked) return Object.freeze({ status: 'loading', generation: undefined, error: undefined });
   return state;
 }
 
@@ -137,10 +159,17 @@ function startDesktopPluginGenerationPollingV2(
     runtime,
     source: async (signal) => {
       sourceSignal = signal;
-      const payload = await fetchDesktopPluginDistributionV2(signal, config);
-      signal.throwIfAborted();
-      if (!isCurrent()) throw new Error('desktop_renderer_owner_changed');
-      return payload;
+      try {
+        const payload = await fetchDesktopPluginDistributionV2(signal, config);
+        signal.throwIfAborted();
+        if (!isCurrent()) throw new Error('desktop_renderer_owner_changed');
+        return payload;
+      } catch (error) {
+        if (!signal.aborted) {
+          console.warn('[desktop-plugin-generation]', generationFailureTextV2(error));
+        }
+        throw error;
+      }
     },
     apply: async (payload) => {
       if (!isCurrent()) throw new Error('desktop_renderer_owner_changed');
@@ -165,6 +194,11 @@ function startDesktopPluginGenerationPollingV2(
     statusStore,
     pollIntervalMs: POLL_INTERVAL_MS,
   });
+}
+
+function generationFailureTextV2(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return 'desktop_plugin_generation_failed';
 }
 
 function localSnapshotDigestV2(payload: unknown): string | null {

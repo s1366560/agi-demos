@@ -1,7 +1,7 @@
 //! UI-only application icons, encoded as owned bounded PNG files.
 use crate::backend::{NativeError, Result};
-use image::{ImageFormat, RgbaImage, imageops::FilterType};
-use serde_json::{Value, json};
+use image::{imageops::FilterType, ImageFormat, RgbaImage};
+use serde_json::{json, Value};
 use std::{
     io::{BufWriter, Write},
     path::Path,

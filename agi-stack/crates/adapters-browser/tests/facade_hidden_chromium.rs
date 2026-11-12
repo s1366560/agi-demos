@@ -1,10 +1,10 @@
 //! Opt in with AGISTACK_NATIVE_CHROMIUM=/path/to/signed/browser executable.
 //! Uses a raw launch and production extension; no Playwright page attachment.
 use agistack_adapters_browser::protocol::BridgeNotification;
-use agistack_adapters_browser::{BridgeEndpoint, BridgeWsClient, BrowserToolHost, facade};
+use agistack_adapters_browser::{facade, BridgeEndpoint, BridgeWsClient, BrowserToolHost};
 use agistack_core::ports::{CoreResult, ToolHost};
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::{process::Stdio, sync::Arc, time::Duration};

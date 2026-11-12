@@ -50,7 +50,7 @@ export function ModelCapabilityCard({
     capabilities: model?.capabilities ?? [],
     modalities: model?.modalities ?? [],
     known: Boolean(model),
-    deprecated: model?.is_deprecated,
+    ...(typeof model?.is_deprecated === 'boolean' ? { deprecated: model.is_deprecated } : {}),
     audioDeclarationAllowed: providerAllowsAudioDeclaration(providerType),
   });
   const tone = assessment.supported

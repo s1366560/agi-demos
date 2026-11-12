@@ -1,6 +1,6 @@
 """Tests for Docker sandbox event monitoring."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -33,3 +33,17 @@ def test_oom_event_does_not_emit_error_status() -> None:
     )
 
     on_status_change.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_stop_closes_the_docker_client_the_monitor_owns() -> None:
+    monitor = DockerEventMonitor()
+    client = Mock()
+    monitor._docker = client
+    monitor._owns_docker = True
+    monitor._running = True
+
+    await monitor.stop()
+
+    client.close.assert_called_once()
+    assert monitor._docker is None

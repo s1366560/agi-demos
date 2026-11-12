@@ -39,18 +39,18 @@ use tower::ServiceExt;
 
 const LAUNCH: &str = "mcp-formal-resume-launch";
 
+#[path = "browser_value_tests.rs"]
+mod browser_value_tests;
 #[path = "formal_callback_error_tests.rs"]
 mod callback_error_tests;
-#[path = "formal_generic_permission_tests.rs"]
-mod generic_permission_tests;
 #[path = "formal_clarification_tests.rs"]
 mod clarification_tests;
 #[path = "formal_control_callback_tests.rs"]
 mod control_callback_tests;
+#[path = "formal_generic_permission_tests.rs"]
+mod generic_permission_tests;
 #[path = "formal_read_wait_tests.rs"]
 mod read_wait_tests;
-#[path = "browser_value_tests.rs"]
-mod browser_value_tests;
 
 struct ResumeLlm {
     code: Option<String>,
@@ -293,7 +293,10 @@ impl FormalFixture {
         if attached {
             state
                 .mcp_app_automation
-                .renderer_operation(&state, json!({"tabId":renderer_id,"operation":"attach","mountNonce":"fixture-mount"}))
+                .renderer_operation(
+                    &state,
+                    json!({"tabId":renderer_id,"operation":"attach","mountNonce":"fixture-mount"}),
+                )
                 .await
                 .unwrap();
         }
@@ -324,9 +327,13 @@ impl FormalFixture {
     async fn pending(&self, code: &str) -> (Value, JoinHandle<CoreResult<Value>>) {
         self.pending_with(code, |state, input| {
             tokio::spawn(async move {
-                state.mcp_app_automation.renderer_operation(&state, input).await
+                state
+                    .mcp_app_automation
+                    .renderer_operation(&state, input)
+                    .await
             })
-        }).await
+        })
+        .await
     }
 
     async fn pending_with(
@@ -371,10 +378,13 @@ impl FormalFixture {
         })
         .await
         .unwrap();
-        let callback = callback(self.state.clone(), json!({
+        let callback = callback(
+            self.state.clone(),
+            json!({
                 "tabId":self.renderer_id,"operation":"tools/call","mountNonce":"fixture-mount",
                 "arguments":{"name":"increment_main","arguments":{"operation_id":"formal-once"}},
-            }));
+            }),
+        );
         let output = tokio::time::timeout(Duration::from_secs(5), cell)
             .await
             .unwrap()

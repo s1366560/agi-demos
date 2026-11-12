@@ -123,5 +123,8 @@ def test_actor_and_local_runtime_use_v2_sandbox_factory() -> None:
     assert "MCPSandboxAdapter(" not in actor_bootstrap_source
     assert "set_mcp_sandbox_adapter" not in actor_bootstrap_source
     assert "sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2" in local_chat_source
-    assert "agent.initialize()" not in local_chat_source.split("admission.admit", maxsplit=1)[0]
+    admitted, marker, after_admit = local_chat_source.partition("admit_agent_turn_v2(")
+    assert marker == "admit_agent_turn_v2("
+    assert "agent.initialize()" not in admitted
+    assert "agent.initialize()" in after_admit
     assert "_bootstrap_mcp_sandbox" not in local_bootstrap_source

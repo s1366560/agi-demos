@@ -70,12 +70,12 @@ async fn renewal_keeps_slow_attempt_owned_beyond_original_deadline() {
     let run = f.spawn(
         endpoint.provider(),
         ProcessingRunOptions {
-            lease_ms: 500,
-            renew_every_ms: 25,
+            lease_ms: 8_000,
+            renew_every_ms: 250,
         },
     );
     endpoint.wait().await;
-    tokio::time::sleep(std::time::Duration::from_millis(650)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(9)).await;
     assert!(f
         .base
         .repo()

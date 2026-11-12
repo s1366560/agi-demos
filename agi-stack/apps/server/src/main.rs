@@ -35,12 +35,11 @@ mod response_assertions;
 
 mod admin_access;
 mod admin_dlq_api;
+mod agent_boundary_v2;
 mod agent_commands_api;
 mod agent_conversations_api;
 mod agent_events_api;
 mod agent_ws;
-mod computer_use_device_v2;
-mod provider_audio_declaration;
 mod artifacts_api;
 mod attachments_api;
 mod audit_api;
@@ -49,6 +48,7 @@ mod background_worker_control_v2;
 mod background_workers_v2;
 mod billing_api;
 mod channel_api;
+mod computer_use_device_v2;
 mod conversation_authority;
 mod conversation_session_api;
 mod cron_api;
@@ -68,6 +68,11 @@ mod deploy_api;
 mod engines_api;
 mod enhanced_search_api;
 mod events_api;
+mod feature_configuration_v2;
+mod feature_operation_http_v2;
+mod feature_operation_owners_v2;
+mod feature_operation_repository_v2;
+mod feature_operation_v2;
 mod gene_api;
 mod graph_api;
 mod graph_stores_api;
@@ -79,13 +84,8 @@ mod llm_providers_api;
 mod maintenance_api;
 mod notifications_api;
 mod plugin_generation_v2;
-mod feature_configuration_v2;
-mod feature_operation_http_v2;
-mod feature_operation_owners_v2;
-mod feature_operation_repository_v2;
-mod feature_operation_v2;
-mod agent_boundary_v2;
 mod prod_api;
+mod provider_audio_declaration;
 mod retrieval_stores_api;
 mod sandbox_api;
 mod schema_api;
@@ -451,7 +451,9 @@ async fn start_plugin_runtime_v2(
         )?
         .as_ref()
         .clone();
-    let admission = state.map(|state| state.agent_generation.clone()).unwrap_or_default();
+    let admission = state
+        .map(|state| state.agent_generation.clone())
+        .unwrap_or_default();
     let manager = admission.shared_manager();
     manager.publish(generation).await;
     let mut runtime = RustServerPluginRuntimeV2 {
@@ -1205,7 +1207,11 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         event_counter: Arc::new(AtomicU64::new(0)),
         ws_messages: Default::default(),
         active_agent_runs: Default::default(),
-        computer_use_devices: computer_use_device_v2::build(workspace_plan_pool.clone(), Arc::clone(&workspace_authority), Arc::clone(&object_store)),
+        computer_use_devices: computer_use_device_v2::build(
+            workspace_plan_pool.clone(),
+            Arc::clone(&workspace_authority),
+            Arc::clone(&object_store),
+        ),
         registry,
         plugins,
         control,

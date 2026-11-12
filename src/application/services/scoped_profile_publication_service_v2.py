@@ -85,17 +85,17 @@ class ScopedProfilePublicationServiceV2:
                 )
         bundles: list[BundleManifestV2] = []
         archives: list[VerifiedBundleArchiveV2] = []
-        for reference in desired.bundles:
-            archive = cast(object, await self._load_bundle(reference))
+        for bundle_reference in desired.bundles:
+            archive = cast(object, await self._load_bundle(bundle_reference))
             if not isinstance(archive, VerifiedBundleArchiveV2):
                 raise RuntimeV2Error(
                     "scope_bundle_unverified", "bundle loader must return a verified archive"
                 )
             manifest = parse_bundle_manifest_v2(bundle_manifest_v2_to_payload(archive.manifest))
             if (manifest.bundle_id, manifest.version, manifest.digest) != (
-                reference.bundle_id,
-                reference.version,
-                reference.digest,
+                bundle_reference.bundle_id,
+                bundle_reference.version,
+                bundle_reference.digest,
             ):
                 raise RuntimeV2Error(
                     "scope_bundle_reference_mismatch",

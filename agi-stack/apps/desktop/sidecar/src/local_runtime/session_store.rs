@@ -1113,9 +1113,8 @@ impl DesktopSessionStore {
                      ORDER BY created_at DESC, id DESC",
                 )
                 .map_err(|error| error.to_string())?;
-            let requests: Vec<DesktopHitlRequest> = typed_rows(
-                statement.query_map([conversation_id], |row| row.get::<_, String>(0)),
-            )?;
+            let requests: Vec<DesktopHitlRequest> =
+                typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))?;
             // Keep unanswered requests as history, without offering an action
             // after their authoritative run has ended.
             requests

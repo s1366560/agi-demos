@@ -112,13 +112,16 @@ async def dispatch_tool_policy_v2(
             "arguments": deepcopy(payload["arguments"]),
             "decision": {"kind": "allow"},
         }
-    else:
+        result = await operation.dispatch(TOOLS_BEFORE_EXECUTE_EVENT_V2, envelope)
+    elif event == TOOLS_RESULT_TRANSFORM_EVENT_V2:
         envelope = {
             **identity,
             "result": deepcopy(payload["result"]),
             "decision": {"kind": "accept"},
         }
-    result = await operation.dispatch(event, envelope)
+        result = await operation.dispatch(TOOLS_RESULT_TRANSFORM_EVENT_V2, envelope)
+    else:
+        raise RuntimeV2Error("tool_policy_event", "tool policy event is not declared")
     if not isinstance(result, Mapping):
         raise RuntimeV2Error("invalid_tool_policy_result", "Tool policy must return an object")
     for name, value in identity.items():

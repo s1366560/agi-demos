@@ -477,6 +477,30 @@ class TestReActAgentBackgroundExecutor:
 @pytest.mark.unit
 class TestReActAgentWorkspaceDelegation:
     @pytest.fixture(autouse=True)
+    def _allow_stream_without_a_database_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """These tests pin an operation but do not persist a plan or chat run."""
+
+        async def _prepare(*_args: object, **_kwargs: object) -> None:
+            return None
+
+        monkeypatch.setattr(
+            "src.application.services.approved_run_tool_permission_v2.current_approved_run_guard_v2",
+            lambda: None,
+        )
+        monkeypatch.setattr(
+            "src.application.services.chat_run_tool_permission_v2.current_chat_run_guard_v2",
+            lambda: None,
+        )
+        monkeypatch.setattr(
+            "src.application.services.approved_run_tool_permission_v2.prepare_approved_run_guard_v2",
+            _prepare,
+        )
+        monkeypatch.setattr(
+            "src.application.services.chat_run_tool_permission_v2.prepare_chat_run_guard_v2",
+            _prepare,
+        )
+
+    @pytest.fixture(autouse=True)
     def _project_agent_capabilities(self):
         async def _resolve(agent, **_kwargs):
             return SimpleNamespace(
@@ -718,7 +742,12 @@ class TestReActAgentWorkspaceDelegation:
                 agent,
                 "_load_selected_agent",
                 new=AsyncMock(
-                    return_value=SimpleNamespace(id="agent-1", name="Atlas", allowed_skills=[])
+                    return_value=SimpleNamespace(
+                        id="agent-1",
+                        name="Atlas",
+                        allowed_skills=[],
+                        allowed_mcp_servers=[],
+                    )
                 ),
             ),
             patch.object(
@@ -767,6 +796,7 @@ class TestReActAgentWorkspaceDelegation:
             agent._stream_memory_context = ""
             events = []
             async for event in agent.stream(
+                canonical_run_id="test-run",
                 conversation_id="conv-1",
                 user_message="Please decompose and execute this workspace goal.",
                 project_id="proj-1",
@@ -827,7 +857,12 @@ class TestReActAgentWorkspaceDelegation:
                 agent,
                 "_load_selected_agent",
                 new=AsyncMock(
-                    return_value=SimpleNamespace(id="agent-1", name="Atlas", allowed_skills=[])
+                    return_value=SimpleNamespace(
+                        id="agent-1",
+                        name="Atlas",
+                        allowed_skills=[],
+                        allowed_mcp_servers=[],
+                    )
                 ),
             ),
             patch.object(
@@ -876,6 +911,7 @@ class TestReActAgentWorkspaceDelegation:
             agent._stream_memory_context = ""
             events = []
             async for event in agent.stream(
+                canonical_run_id="test-run",
                 conversation_id="conv-1",
                 user_message="Execute bound worker task.",
                 project_id="proj-1",
@@ -965,7 +1001,12 @@ class TestReActAgentWorkspaceDelegation:
                 agent,
                 "_load_selected_agent",
                 new=AsyncMock(
-                    return_value=SimpleNamespace(id="agent-1", name="Atlas", allowed_skills=[])
+                    return_value=SimpleNamespace(
+                        id="agent-1",
+                        name="Atlas",
+                        allowed_skills=[],
+                        allowed_mcp_servers=[],
+                    )
                 ),
             ),
             patch.object(
@@ -1010,6 +1051,7 @@ class TestReActAgentWorkspaceDelegation:
             agent._stream_memory_context = ""
             events = []
             async for event in agent.stream(
+                canonical_run_id="test-run",
                 conversation_id="conv-1",
                 user_message="Execute bound worker task.",
                 project_id="proj-1",
@@ -1094,7 +1136,12 @@ class TestReActAgentWorkspaceDelegation:
                 agent,
                 "_load_selected_agent",
                 new=AsyncMock(
-                    return_value=SimpleNamespace(id="agent-1", name="Atlas", allowed_skills=[])
+                    return_value=SimpleNamespace(
+                        id="agent-1",
+                        name="Atlas",
+                        allowed_skills=[],
+                        allowed_mcp_servers=[],
+                    )
                 ),
             ),
             patch.object(
@@ -1160,6 +1207,7 @@ class TestReActAgentWorkspaceDelegation:
             agent._stream_memory_context = ""
             events = []
             async for event in agent.stream(
+                canonical_run_id="test-run",
                 conversation_id="conv-1",
                 user_message="Replan blocked workspace tasks.",
                 project_id="proj-1",
@@ -1242,6 +1290,7 @@ class TestReActAgentWorkspaceDelegation:
                         id="agent-1",
                         name="Atlas",
                         allowed_skills=[],
+                        allowed_mcp_servers=[],
                     )
                 ),
             ),
@@ -1284,6 +1333,7 @@ class TestReActAgentWorkspaceDelegation:
             agent._stream_memory_context = ""
             events = []
             async for event in agent.stream(
+                canonical_run_id="test-run",
                 conversation_id="conv-1",
                 user_message="Use runtime overrides.",
                 project_id="proj-1",
@@ -1333,6 +1383,7 @@ class TestReActAgentWorkspaceDelegation:
                         id="agent-1",
                         name="Atlas",
                         allowed_skills=[],
+                        allowed_mcp_servers=[],
                     )
                 ),
             ),
@@ -1374,6 +1425,7 @@ class TestReActAgentWorkspaceDelegation:
         ):
             agent._stream_memory_context = "stale memory"
             async for _event in agent.stream(
+                canonical_run_id="test-run",
                 conversation_id="conv-1",
                 user_message="Reset stale memory state.",
                 project_id="proj-1",

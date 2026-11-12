@@ -1,9 +1,9 @@
 //! Independent resource owner and passive input mirror supervising the injection worker.
 use crate::{
     backend::{NativeError, Result},
-    input_watchdog::{Driver, Ownership, Request, Response, Watchdog, read_frame, write_frame},
+    input_watchdog::{read_frame, write_frame, Driver, Ownership, Request, Response, Watchdog},
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
     path::PathBuf,

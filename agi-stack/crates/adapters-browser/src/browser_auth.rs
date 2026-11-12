@@ -1,7 +1,7 @@
 //! Host-only credential handoff. These entry points are never exposed as generic browser tools.
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, HostState, backend_of, tool_err};
+use crate::host::{backend_of, tool_err, Backend, BridgeEndpoint, BrowserToolHost, HostState};
 use agistack_core::ports::CoreResult;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

@@ -492,7 +492,8 @@ class TestAgentSendTool:
         result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="hello")
         assert result.is_error is True
         data = json.loads(result.output)
-        assert "Internal error" in data["error"]
+        assert data["error"] == "Agent session delivery failed"
+        assert "Unexpected" not in result.output
 
 
 @pytest.mark.unit

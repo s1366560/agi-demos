@@ -222,8 +222,15 @@ impl fmt::Debug for ActivePlatformPluginGenerationLeaseV2 {
 }
 
 impl ActivePlatformPluginGenerationLeaseV2 {
-    pub(super) fn resolve_service<T: std::any::Any + Send + Sync>(&self, service: &str, version: &str, scope: &ScopeV2, isolation: Option<&str>) -> Result<Arc<T>, agistack_plugin_host::RuntimeV2Error> {
-        self.runtime_generation.resolve_versioned(service, version, scope, isolation)
+    pub(super) fn resolve_service<T: std::any::Any + Send + Sync>(
+        &self,
+        service: &str,
+        version: &str,
+        scope: &ScopeV2,
+        isolation: Option<&str>,
+    ) -> Result<Arc<T>, agistack_plugin_host::RuntimeV2Error> {
+        self.runtime_generation
+            .resolve_versioned(service, version, scope, isolation)
     }
     pub(super) fn request_contributors(&self, scope: &ScopeV2) -> serde_json::Value {
         agistack_plugin_host::protocol_v2::tool_policy::request_contributors_v2(
@@ -234,11 +241,17 @@ impl ActivePlatformPluginGenerationLeaseV2 {
     }
 
     pub(super) fn tool_policy(
-        &self, scope: &ScopeV2,
-    ) -> Result<Arc<agistack_plugin_host::protocol_v2::tool_policy::TrustedToolPolicyV2>, agistack_plugin_host::RuntimeV2Error> {
+        &self,
+        scope: &ScopeV2,
+    ) -> Result<
+        Arc<agistack_plugin_host::protocol_v2::tool_policy::TrustedToolPolicyV2>,
+        agistack_plugin_host::RuntimeV2Error,
+    > {
         self.runtime_generation.resolve_versioned(
             agistack_plugin_host::protocol_v2::tool_policy::TOOL_EXECUTION_POLICY_SERVICE_V2,
-            "1.0.0", scope, None,
+            "1.0.0",
+            scope,
+            None,
         )
     }
 

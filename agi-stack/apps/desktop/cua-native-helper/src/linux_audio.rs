@@ -1,12 +1,12 @@
 use crate::backend::{NativeError, Result};
 use gstreamer::{self as gst, prelude::*};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
 };
 use tokio::sync::Mutex;

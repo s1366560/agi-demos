@@ -4,13 +4,13 @@ use crate::{
     client::{CuaCallContext, CuaClient},
 };
 use agistack_core::{
-    CoreError, CoreResult,
     agent::types::MediaAttachment,
     ports::{ToolHost, ToolResult},
     tool_definition::ToolDefinition,
+    CoreError, CoreResult,
 };
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -253,7 +253,7 @@ impl CuaToolHost {
                     image_size = Some(dimensions);
                     media.push(MediaAttachment {
                         artifact_path: path.to_string_lossy().into_owned(),
-                        mime_type: mime.into(),
+                        mime_type: mime,
                     });
                 }
             }

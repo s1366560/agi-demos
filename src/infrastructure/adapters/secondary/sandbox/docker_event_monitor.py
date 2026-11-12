@@ -58,6 +58,7 @@ class DockerEventMonitor:
         """
         self._on_status_change = on_status_change
         self._docker = docker_client
+        self._owns_docker = docker_client is None
         self._running = False
         self._monitor_task: asyncio.Task[None] | None = None
         self._tracked_containers: set[str] = set()
@@ -88,6 +89,12 @@ class DockerEventMonitor:
     async def stop(self) -> None:
         """Stop monitoring Docker events."""
         self._running = False
+        # Closing the client unblocks the events thread blocked in socket recv.
+        # Otherwise process shutdown waits out the default executor join.
+        if self._owns_docker and self._docker is not None:
+            client = self._docker
+            self._docker = None
+            await asyncio.get_running_loop().run_in_executor(None, client.close)
 
         if self._monitor_task:
             self._monitor_task.cancel()

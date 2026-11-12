@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.root_profile_initialization_service_v2 import (
@@ -19,6 +20,9 @@ from src.infrastructure.adapters.primary.web.startup.root_startup_request_v2 imp
 from src.infrastructure.adapters.primary.web.startup.root_startup_restore_v2 import (
     restore_root_startup_v2,
 )
+from src.infrastructure.adapters.secondary.persistence.models import (
+    PlatformPluginV2PublicationModel,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
     PlatformPluginDesiredBundleSetRepositoryV2,
 )
@@ -32,6 +36,7 @@ from src.infrastructure.plugins.v2.composer import compose_profile_v2
 from src.infrastructure.plugins.v2.layer_composer import compose_profile_sources_v2
 from src.infrastructure.plugins.v2.production_bundle import production_bundle_sources_v2
 from src.infrastructure.plugins.v2.protocol import (
+    parse_control_envelope_v2,
     parse_profile_snapshot_v2,
 )
 from src.infrastructure.plugins.v2.reconciler import GenerationPublicationStagerV2
@@ -40,6 +45,7 @@ from src.infrastructure.plugins.v2.runtime_host import (
     PlatformPluginPublicationV2,
     PlatformPluginRuntimeHostV2,
 )
+from src.infrastructure.plugins.v2.scope import scope_key_v2
 
 
 async def publish_configured_root_startup_v2(
@@ -131,6 +137,9 @@ async def publish_configured_root_startup_v2(
         durable_distribution is not None
         and previous is not None
         and candidate.digest == previous.digest
+        and await _durable_roster_matches_policy(
+            session_factory, durable_distribution, publication_policy
+        )
     ):
         restored = await restore_root_startup_v2(
             host,
@@ -164,3 +173,25 @@ async def publish_configured_root_startup_v2(
         ),
         True,
     )
+
+
+async def _durable_roster_matches_policy(
+    session_factory: Callable[[], Any],
+    durable_distribution: Mapping[str, object],
+    policy: PlatformPluginPublicationPolicyV2,
+) -> bool:
+    """A roster change needs a new publication; an existing nonce cannot be rewritten."""
+    envelope = parse_control_envelope_v2(durable_distribution.get("envelope"))
+    root = ScopeV2(kind=ScopeKindV2.ROOT)
+    async with session_factory() as session:
+        row = (
+            await session.scalars(
+                select(PlatformPluginV2PublicationModel).where(
+                    PlatformPluginV2PublicationModel.scope_key == scope_key_v2(root),
+                    PlatformPluginV2PublicationModel.nonce == envelope.nonce,
+                )
+            )
+        ).one_or_none()
+    if row is None:
+        return False
+    return tuple(row.required_data_plane_ids) == policy.required_data_plane_ids

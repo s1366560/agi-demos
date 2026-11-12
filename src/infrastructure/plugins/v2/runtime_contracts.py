@@ -55,9 +55,26 @@ def generated_contract_digest_v2(
     return entry.contract_digest
 
 
+_CATALOG_SOURCE: str | None = None
+_CATALOG_BY_TARGET: dict[DataPlaneTargetV2, dict[str, ModuleCatalogEntryV2]] = {}
+
+
 def generated_target_catalog_v2(
     target: DataPlaneTargetV2,
 ) -> dict[str, ModuleCatalogEntryV2]:
+    """Return the generated catalog for one target.
+
+    Startup resolves this once per module. The embedded catalog is immutable
+    for a process, so repeating the canonical digest over the whole document
+    is wasted work rather than a new attestation.
+    """
+    global _CATALOG_SOURCE
+    if _CATALOG_SOURCE is not PLUGIN_MODULE_CATALOG_V2_JSON:
+        _CATALOG_BY_TARGET.clear()
+        _CATALOG_SOURCE = PLUGIN_MODULE_CATALOG_V2_JSON
+    cached = _CATALOG_BY_TARGET.get(target)
+    if cached is not None:
+        return cached
     payload = cast(dict[str, Any], json.loads(PLUGIN_MODULE_CATALOG_V2_JSON))
     embedded_digest = payload.pop("catalog_digest", None)
     expected_digest = f"sha256:{hashlib.sha256(canonical_json_v2(payload)).hexdigest()}"
@@ -87,6 +104,7 @@ def generated_target_catalog_v2(
                 f"module {entry.module_ref} appears more than once in target catalog",
             )
         entries[entry.module_ref] = entry
+    _CATALOG_BY_TARGET[target] = entries
     return entries
 
 

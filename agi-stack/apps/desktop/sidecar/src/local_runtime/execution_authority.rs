@@ -82,8 +82,10 @@ impl ExecutionAuthority {
         self.current()?;
         let result = self.inner().call(tool, input_json).await?;
         if let Some(permission) = result.permission_required.as_ref() {
-            if result.control_outcome.is_some() || result.control_generation.is_some()
-                || permission.binding() != &permission_binding(tool, input_json)? {
+            if result.control_outcome.is_some()
+                || result.control_generation.is_some()
+                || permission.binding() != &permission_binding(tool, input_json)?
+            {
                 return Err(CoreError::Tool("permission_binding_mismatch".into()));
             }
         }
@@ -133,11 +135,15 @@ pub(crate) fn current_step_origin() -> Option<StepOrigin> {
 }
 
 /// Capture the action identity before a host binds or normalizes its arguments.
-pub(crate) fn permission_binding(tool: &str, input_json: &str) -> CoreResult<agistack_core::ports::PermissionBinding> {
+pub(crate) fn permission_binding(
+    tool: &str,
+    input_json: &str,
+) -> CoreResult<agistack_core::ports::PermissionBinding> {
     Ok(agistack_core::ports::PermissionBinding {
         tool_name: tool.into(),
         input_digest: agistack_core::ports::permission_input_digest(input_json)?,
-        engine_session_id: super::computer_use_v2::call_identity::active().ok()
+        engine_session_id: super::computer_use_v2::call_identity::active()
+            .ok()
             .map(|identity| identity.engine_session_id().to_string()),
         cell_id: current_step_origin().map(|origin| origin.cell_id),
         step_id: current_step_id(),
@@ -267,35 +273,82 @@ mod tests {
     #[tokio::test]
     async fn permission_witness_requires_exact_entry_identity_for_local_and_cloud_calls() {
         use agistack_core::ports::{PermissionKind, PermissionRequired};
-        struct Pending { scope: ExecutionScope, changed: &'static str }
+        struct Pending {
+            scope: ExecutionScope,
+            changed: &'static str,
+        }
         #[async_trait]
         impl ScopedExecution for Pending {
-            fn scope(&self) -> &ExecutionScope { &self.scope }
-            fn current(&self) -> CoreResult<()> { Ok(()) }
-            fn allowed_mcp_servers(&self) -> Vec<String> { vec![] }
+            fn scope(&self) -> &ExecutionScope {
+                &self.scope
+            }
+            fn current(&self) -> CoreResult<()> {
+                Ok(())
+            }
+            fn allowed_mcp_servers(&self) -> Vec<String> {
+                vec![]
+            }
             async fn call(&self, tool: &str, input: &str) -> CoreResult<ToolResult> {
                 let mut binding = permission_binding(tool, input)?;
                 match self.changed {
                     "tool" => binding.tool_name = "other".into(),
-                    "input" => binding.input_digest = agistack_core::ports::permission_input_digest("{\"value\":2}")?,
+                    "input" => {
+                        binding.input_digest =
+                            agistack_core::ports::permission_input_digest("{\"value\":2}")?
+                    }
                     "engine" => binding.engine_session_id = Some("foreign".into()),
                     "cell" => binding.cell_id = Some("foreign".into()),
                     "step" => binding.step_id = Some("foreign".into()),
-                    "equivalent" => binding.input_digest = agistack_core::ports::permission_input_digest("{ \"value\": 1.0 }")?,
-                    _ => {},
+                    "equivalent" => {
+                        binding.input_digest =
+                            agistack_core::ports::permission_input_digest("{ \"value\": 1.0 }")?
+                    }
+                    _ => {}
                 }
-                let mut result = PermissionRequired::new(PermissionKind::NativeConsent, binding, serde_json::json!({"error":"cua_permission_required"})).into_result();
-                if self.changed == "control" { result.control_generation = Some("unexpected".into()); }
+                let mut result = PermissionRequired::new(
+                    PermissionKind::NativeConsent,
+                    binding,
+                    serde_json::json!({"error":"cua_permission_required"}),
+                )
+                .into_result();
+                if self.changed == "control" {
+                    result.control_generation = Some("unexpected".into());
+                }
                 Ok(result)
             }
         }
         for cloud in [false, true] {
-            for changed in ["none", "equivalent", "tool", "input", "engine", "cell", "step", "control"] {
-                let pending = Arc::new(Pending { scope: fixture(false).scope.clone(), changed });
-                let authority = if cloud { ExecutionAuthority::CloudClaim(pending) } else { ExecutionAuthority::LocalRun(pending) };
+            for changed in [
+                "none",
+                "equivalent",
+                "tool",
+                "input",
+                "engine",
+                "cell",
+                "step",
+                "control",
+            ] {
+                let pending = Arc::new(Pending {
+                    scope: fixture(false).scope.clone(),
+                    changed,
+                });
+                let authority = if cloud {
+                    ExecutionAuthority::CloudClaim(pending)
+                } else {
+                    ExecutionAuthority::LocalRun(pending)
+                };
                 let result = authority.call("computer_click", "{\"value\":1}").await;
-                if matches!(changed, "none" | "equivalent") { assert!(result.unwrap().permission_required.is_some()); }
-                else { assert!(result.unwrap_err().to_string().contains("permission_binding_mismatch"), "{changed}"); }
+                if matches!(changed, "none" | "equivalent") {
+                    assert!(result.unwrap().permission_required.is_some());
+                } else {
+                    assert!(
+                        result
+                            .unwrap_err()
+                            .to_string()
+                            .contains("permission_binding_mismatch"),
+                        "{changed}"
+                    );
+                }
             }
         }
     }

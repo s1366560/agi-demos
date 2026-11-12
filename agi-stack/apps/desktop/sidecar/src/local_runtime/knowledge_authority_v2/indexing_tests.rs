@@ -12,12 +12,12 @@ use axum::{
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Notify;
 
+#[path = "agent_semantic_tests.rs"]
+mod agent_semantic_tests;
 #[path = "embedding_configuration_tests.rs"]
 mod embedding_configuration_tests;
 #[path = "indexing_lifecycle_tests.rs"]
 mod lifecycle;
-#[path = "agent_semantic_tests.rs"]
-mod agent_semantic_tests;
 #[path = "processing_rpc_tests.rs"]
 mod processing_rpc_tests;
 #[path = "embedding_profile_tests.rs"]

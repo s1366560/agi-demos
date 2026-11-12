@@ -33,6 +33,7 @@ _EXPECTED_TARGET_MODULES = {
     ),
     "desktop-sidecar": frozenset(
         {
+            "builtin://memstack/computer-use/native",
             "builtin://memstack/desktop-sidecar/http-routes",
             "builtin://memstack/desktop-sidecar/local-capability",
             "builtin://memstack/desktop-sidecar/knowledge-authority",
@@ -43,6 +44,8 @@ _EXPECTED_TARGET_MODULES = {
             "builtin://memstack/web/renderer-host",
             "builtin://memstack/web/renderer-contribution-registry",
             "builtin://memstack/web/renderer-contribution",
+            "builtin://memstack/web/renderer-feature",
+            "builtin://memstack/web/renderer-management",
         }
     ),
     "desktop-renderer": frozenset(
@@ -87,6 +90,8 @@ _EXPECTED_TARGET_MODULES = {
             "builtin://memstack/desktop/renderer-host",
             "builtin://memstack/desktop/renderer-contribution-registry",
             "builtin://memstack/desktop/renderer-contribution",
+            "builtin://memstack/desktop/renderer-feature",
+            "builtin://memstack/desktop/renderer-management",
             "builtin://memstack/desktop/session-projection-authority",
             "builtin://memstack/desktop/session-run-changes-authority",
             "builtin://memstack/desktop/session-run-input-authority",
@@ -190,7 +195,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
     web_routes_index = next(
         index
         for index, entry in enumerate(entries)
-        if entry["entry_id"] == "builtin-web-default-routes"
+        if entry["entry_id"] == "builtin-web-feature-core"
     )
     shell_index = next(
         index
@@ -285,7 +290,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
     desktop_routes_index = next(
         index
         for index, entry in enumerate(entries)
-        if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
+        if entry["entry_id"] == "builtin-desktop-feature-tenant-creation"
     )
     for worker in ("skill-evolution-worker", "channel-outbox-worker", "cron-scheduler-worker"):
         entry = next(
@@ -296,7 +301,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         assert entry["enabled"] is True
         assert entry["config"] == {"autostart": True}
         assert entry["scope"]["kind"] == "root"
-    assert len(entries) == 440
+    assert len(entries) == 578
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",

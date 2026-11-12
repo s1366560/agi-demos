@@ -1,7 +1,7 @@
 //! First-party native factory registered with the ordinary V2 generation loader.
 use agistack_plugin_host::protocol_v2::{
-    ContextV2, PLUGIN_MODULE_CATALOG_V2_JSON, PluginDefinitionV2, PluginModuleRuntimeV2,
-    RuntimeV2Error,
+    ContextV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeV2Error,
+    PLUGIN_MODULE_CATALOG_V2_JSON,
 };
 use async_trait::async_trait;
 use serde_json::Value;

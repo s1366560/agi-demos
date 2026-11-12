@@ -77,15 +77,17 @@ def test_artifacts_row_preserves_route_order_and_openapi() -> None:
 
 
 @pytest.mark.parametrize(
-    "content,headers",
+    ("content", "headers"),
     (
-        (
+        pytest.param(
             b"{" + b"x" * MAX_EDITABLE_ARTIFACT_REQUEST_BYTES + b"}",
             {"Content-Type": "application/json"},
+            id="buffered",
         ),
-        (
+        pytest.param(
             iter((b"{", b"x" * MAX_EDITABLE_ARTIFACT_REQUEST_BYTES, b"}")),
             {"Content-Type": "application/json", "Transfer-Encoding": "chunked"},
+            id="chunked",
         ),
     ),
 )

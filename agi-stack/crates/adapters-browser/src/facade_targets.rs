@@ -1,6 +1,6 @@
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, tool_err};
+use crate::host::{tool_err, Backend, BridgeEndpoint, BrowserToolHost};
 use agistack_core::ports::CoreResult;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 impl<E: BridgeEndpoint> BrowserToolHost<E> {
     pub(crate) async fn ensure_facade_targets(&self, backend: Backend, tab: u64) -> CoreResult<()> {

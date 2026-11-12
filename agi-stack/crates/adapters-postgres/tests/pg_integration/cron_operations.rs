@@ -66,18 +66,17 @@ async fn cron_operations_enforce_scope_and_fenced_lease_transitions() {
         .expect("wrong scope claim")
         .is_empty());
 
-    assert!(repo
+    let first_claim = repo
         .claim_due(scope, &stale_authority, 10, "worker-1", 30, now)
         .await
-        .expect("stale authority claim is fenced")
-        .is_empty());
-
-    let first_claim = repo
-        .claim_due(scope, &authority, 10, "worker-1", 30, now)
-        .await
-        .expect("first claim")
+        .expect("extended scheduler lease keeps the acquired snapshot authorized")
         .pop()
         .expect("operation claimed");
+    assert!(repo
+        .claim_due(scope, &authority, 10, "worker-1", 30, now)
+        .await
+        .expect("second claim while the operation lease is active")
+        .is_empty());
     let first_token = first_claim
         .lease_token
         .as_deref()
@@ -381,6 +380,9 @@ async fn cron_operation_dispatch_ack_reconciles_an_already_terminal_runtime() {
 }
 
 async fn ensure_cron_operation_table(pool: &PgPool) {
+    ensure_python_shaped_tables(pool).await;
+    ensure_identity_tables(pool).await;
+    ensure_project_read_tables(pool).await;
     ensure_legacy_cron_admission_fixture(pool).await;
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS agistack_cron_operations ( \

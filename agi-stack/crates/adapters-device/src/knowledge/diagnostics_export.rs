@@ -59,9 +59,7 @@ fn count(tx: &Transaction<'_>, sql: &str, scope: &KnowledgeScope) -> KnowledgeRe
 fn cursor(tx: &Transaction<'_>, table: &str, scope: &KnowledgeScope) -> KnowledgeResult<u64> {
     Ok(tx
         .query_row(
-            &format!(
-                "SELECT cursor FROM {table} WHERE tenant_id=?1 AND project_id=?2"
-            ),
+            &format!("SELECT cursor FROM {table} WHERE tenant_id=?1 AND project_id=?2"),
             params![scope.tenant_id, scope.project_id],
             |row| row.get(0),
         )

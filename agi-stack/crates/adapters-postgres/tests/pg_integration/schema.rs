@@ -248,9 +248,13 @@ async fn clean_schema_rows(pool: &PgPool) {
 
 async fn seed_schema_access(pool: &PgPool, user_id: &str, project_id: &str, role: &str) {
     sqlx::query(
-        "INSERT INTO user_projects (user_id, project_id, role) \
-         VALUES ($1, $2, $3) \
-         ON CONFLICT (user_id, project_id) DO UPDATE SET role = EXCLUDED.role",
+        "WITH updated AS ( \
+            UPDATE user_projects SET role = $3 \
+            WHERE user_id = $1 AND project_id = $2 RETURNING id \
+         ) \
+         INSERT INTO user_projects (id, user_id, project_id, role, permissions) \
+         SELECT gen_random_uuid()::text, $1, $2, $3, '{}'::json \
+         WHERE NOT EXISTS (SELECT 1 FROM updated)",
     )
     .bind(user_id)
     .bind(project_id)

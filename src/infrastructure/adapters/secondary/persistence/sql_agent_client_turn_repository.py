@@ -68,13 +68,21 @@ class SqlAgentClientTurnRepository(AgentClientTurnRepository):
             "status": AgentClientTurnStatus.ACCEPTED.value,
         }
         dialect_name = self._session.get_bind().dialect.name
+        conflict = ["conversation_id", "client_message_id"]
         if dialect_name == "sqlite":
-            statement = sqlite_insert(AgentClientTurnModel).values(**values)
+            statement = (
+                sqlite_insert(AgentClientTurnModel)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=conflict)
+                .returning(AgentClientTurnModel)
+            )
         else:
-            statement = pg_insert(AgentClientTurnModel).values(**values)
-        statement = statement.on_conflict_do_nothing(
-            index_elements=["conversation_id", "client_message_id"]
-        ).returning(AgentClientTurnModel)
+            statement = (
+                pg_insert(AgentClientTurnModel)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=conflict)
+                .returning(AgentClientTurnModel)
+            )
 
         result = await self._session.execute(statement)
         inserted = result.scalar_one_or_none()

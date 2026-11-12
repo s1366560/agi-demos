@@ -25,8 +25,8 @@ mod oauth;
 mod protocol;
 #[cfg(test)]
 mod protocol_tests;
-pub(in crate::local_runtime) use protocol::McpToolBinding;
 pub(super) use marketplace_generations::McpCatalogLease;
+pub(in crate::local_runtime) use protocol::McpToolBinding;
 mod remote_common;
 pub(in crate::local_runtime) mod stdio;
 mod store;
@@ -42,8 +42,8 @@ use remote_common::{
     validate_remote_input, InitializedServer,
 };
 use stdio::StdioRuntime;
-use store::{CredentialStageStatus, McpStore};
 pub(in crate::local_runtime) use store::ManualOAuthFlow;
+use store::{CredentialStageStatus, McpStore};
 use websocket::WebSocketRuntime;
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
@@ -335,15 +335,23 @@ impl McpRuntime {
 
 impl McpSupervisor {
     pub(in crate::local_runtime) fn manual_oauth_flow(
-        &self, scope: &McpScope, server_id: &str, user_id: &str,
+        &self,
+        scope: &McpScope,
+        server_id: &str,
+        user_id: &str,
     ) -> Result<Option<ManualOAuthFlow>, String> {
         self.store.manual_oauth_flow(scope, server_id, user_id)
     }
 
     pub(in crate::local_runtime) fn save_manual_oauth_flow(
-        &self, scope: &McpScope, server_id: &str, user_id: &str, flow: &ManualOAuthFlow,
+        &self,
+        scope: &McpScope,
+        server_id: &str,
+        user_id: &str,
+        flow: &ManualOAuthFlow,
     ) -> Result<(), String> {
-        self.store.save_manual_oauth_flow(scope, server_id, user_id, flow)
+        self.store
+            .save_manual_oauth_flow(scope, server_id, user_id, flow)
     }
     pub(super) fn new(
         session_store: DesktopSessionStore,
@@ -471,10 +479,26 @@ impl McpSupervisor {
             .collect())
     }
 
-    pub(in crate::local_runtime) fn computer_use_managed_servers(&self,scope:&McpScope)->McpResult<std::collections::BTreeSet<String>> {
-        let db=self.store.session_store.connection().map_err(|_|storage_error())?;
-        let mut query=db.prepare("SELECT id FROM desktop_cua_accounts_v2 WHERE tenant_id=?1 AND project_id=?2").map_err(|_|storage_error())?;
-        let result=query.query_map(rusqlite::params![scope.tenant_id,scope.project_id],|row|row.get::<_,String>(0)).map_err(|_|storage_error())?.collect::<Result<_,_>>().map_err(|_|storage_error());
+    pub(in crate::local_runtime) fn computer_use_managed_servers(
+        &self,
+        scope: &McpScope,
+    ) -> McpResult<std::collections::BTreeSet<String>> {
+        let db = self
+            .store
+            .session_store
+            .connection()
+            .map_err(|_| storage_error())?;
+        let mut query = db
+            .prepare("SELECT id FROM desktop_cua_accounts_v2 WHERE tenant_id=?1 AND project_id=?2")
+            .map_err(|_| storage_error())?;
+        let result = query
+            .query_map(
+                rusqlite::params![scope.tenant_id, scope.project_id],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|_| storage_error())?
+            .collect::<Result<_, _>>()
+            .map_err(|_| storage_error());
         result
     }
 
@@ -782,7 +806,10 @@ impl McpSupervisor {
         };
         let mut resources = Vec::new();
         for server in servers {
-            resources.extend(self.list_collection(scope, &server, "resources/list", "resources").await?);
+            resources.extend(
+                self.list_collection(scope, &server, "resources/list", "resources")
+                    .await?,
+            );
         }
         Ok(resources)
     }

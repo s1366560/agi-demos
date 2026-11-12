@@ -1,7 +1,7 @@
 //! Secure browser handoff exercised through real Chromium, with non-secret fixture values.
-use agistack_adapters_browser::{BridgeWsClient, BrowserToolHost, facade};
+use agistack_adapters_browser::{facade, BridgeWsClient, BrowserToolHost};
 use agistack_core::ports::ToolHost;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -79,12 +79,10 @@ async fn credentials_are_pinned_filled_submitted_and_protected() {
         .unwrap();
     let image = host.browser_auth_qr_image(&qr).await.unwrap();
     assert!(image.starts_with("data:image/png;base64,iVBOR"));
-    assert!(
-        call(&host, "tab.screenshot", json!([]))
-            .await
-            .unwrap_err()
-            .contains("browser_auth_protected")
-    );
+    assert!(call(&host, "tab.screenshot", json!([]))
+        .await
+        .unwrap_err()
+        .contains("browser_auth_protected"));
     assert_eq!(
         host.submit_browser_auth(&qr, None, &BTreeMap::new())
             .await
@@ -98,16 +96,14 @@ async fn credentials_are_pinned_filled_submitted_and_protected() {
         .prepare_browser_auth("chrome", 1, "auth-fixture", &request)
         .await
         .unwrap();
-    assert!(
-        call(
-            &host,
-            "playwright.evaluate",
-            json!(["document.querySelector('input').value"])
-        )
-        .await
-        .unwrap_err()
-        .contains("browser_auth_protected")
-    );
+    assert!(call(
+        &host,
+        "playwright.evaluate",
+        json!(["document.querySelector('input').value"])
+    )
+    .await
+    .unwrap_err()
+    .contains("browser_auth_protected"));
     let result = host
         .submit_browser_auth(
             &prepared,
@@ -120,15 +116,13 @@ async fn credentials_are_pinned_filled_submitted_and_protected() {
     assert!(!result.to_string().contains("fixture-only-nonsecret"));
     host.finish_browser_auth(&prepared, false).await;
     drop(prepared);
-    assert!(
-        call(
-            &host,
-            "playwright.evaluate",
-            json!(["document.body.innerText"])
-        )
-        .await
-        .is_err()
-    );
+    assert!(call(
+        &host,
+        "playwright.evaluate",
+        json!(["document.body.innerText"])
+    )
+    .await
+    .is_err());
     call(
         &host,
         "tab.goto",
@@ -145,11 +139,9 @@ async fn credentials_are_pinned_filled_submitted_and_protected() {
         .await
         .unwrap();
     drop(abandoned);
-    assert!(
-        call(&host, "playwright.domSnapshot", json!([]))
-            .await
-            .is_ok()
-    );
+    assert!(call(&host, "playwright.domSnapshot", json!([]))
+        .await
+        .is_ok());
     let _ = tokio::process::Command::new("kill")
         .arg("-TERM")
         .arg(child.id().unwrap().to_string())

@@ -1,4 +1,4 @@
-import { canonicalJsonV2, digestV2 } from './canonical';
+import { canonicalJsonV2, digestCachedV2 } from './canonical';
 import { PluginProtocolV2Error } from './errors';
 import type {
   DataPlaneTargetV2,
@@ -91,17 +91,19 @@ export function validateManifestContractsV2(manifests: ReadonlyArray<PluginManif
 export async function validateManifestContractDigestsV2(
   manifests: ReadonlyArray<PluginManifestV2>
 ): Promise<void> {
-  for (const manifest of manifests) {
-    for (const module of manifest.modules) {
-      const expected = `sha256:${await digestV2(module.contract)}`;
-      if (module.contract_digest !== expected) {
-        throw new PluginProtocolV2Error(
-          'contract_digest_mismatch',
-          `module ${module.module_ref} contract digest mismatch: expected ${expected}`
-        );
-      }
-    }
-  }
+  await Promise.all(
+    manifests.flatMap((manifest) =>
+      manifest.modules.map(async (module) => {
+        const expected = `sha256:${await digestCachedV2(module.contract)}`;
+        if (module.contract_digest !== expected) {
+          throw new PluginProtocolV2Error(
+            'contract_digest_mismatch',
+            `module ${module.module_ref} contract digest mismatch: expected ${expected}`
+          );
+        }
+      })
+    )
+  );
 }
 
 function parsePluginModuleV2(value: unknown, index: number): PluginModuleV2 {

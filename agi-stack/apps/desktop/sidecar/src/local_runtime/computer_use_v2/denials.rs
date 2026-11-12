@@ -1,6 +1,6 @@
 //! A refused native request closes its whole trusted run; transport changes cannot reset consent.
 use super::*;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 pub(super) fn initialize(db: &Connection) -> Result<(), String> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS desktop_cua_denials_v2(user_id TEXT NOT NULL,tenant_id TEXT NOT NULL,project_id TEXT NOT NULL,device_id TEXT NOT NULL,run_id TEXT NOT NULL,request_id TEXT NOT NULL,PRIMARY KEY(user_id,tenant_id,project_id,device_id,run_id));").map_err(|error|error.to_string())
 }

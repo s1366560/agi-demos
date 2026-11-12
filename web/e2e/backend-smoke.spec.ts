@@ -50,7 +50,12 @@ test.describe('backend-dependent smoke', () => {
     await page.waitForURL(/\/tenant/);
 
     await page.goto(`/tenant/${tenantId}/projects`);
-    await page.getByPlaceholder(/Search by project name/i).fill(projectName);
+    // The Vite dev graph for this route keeps the page loader up for about
+    // 12s on CI after the modules have downloaded. The search field is part
+    // of the rendered list, so wait for that render before typing.
+    const search = page.getByPlaceholder(/Search by project name/i);
+    await expect(search).toBeVisible({ timeout: 20_000 });
+    await search.fill(projectName);
     await expect(page.getByRole('link', { name: projectName })).toBeVisible();
   });
 });

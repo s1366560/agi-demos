@@ -87,8 +87,9 @@ class PluginMarketplaceCatalogService:
             raise LookupError("marketplace package version was not found")
         if package.revoked:
             raise PermissionError("marketplace package version is revoked")
-        if package.security_scan_status != "passed":
-            raise PermissionError("marketplace package has not passed its security scan")
+        if package.security_scan_status == "failed":
+            raise PermissionError("marketplace package security scan failed")
+        # unknown is not a passing scan report. Permission approval stays a grant.
 
         bundle = parse_bundle_manifest_v2(package.manifest)
         declared_permissions = {

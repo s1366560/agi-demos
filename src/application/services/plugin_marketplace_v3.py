@@ -268,7 +268,8 @@ class PluginMarketplaceV3:
             return packages
 
     async def catalog(self, source_id: str | None = None) -> dict[str, Any]:
-        items, errors = [], []
+        items: list[dict[str, Any]] = []
+        errors: list[dict[str, str]] = []
         for source in await self.sources():
             if source_id and source["id"] != source_id:
                 continue
@@ -486,7 +487,9 @@ class PluginMarketplaceV3:
             for index, server_id in enumerate(payload.get("owned_servers", [])):
                 config = list(servers.values())[index]
                 server = await self.mcp.runtime_service.update_server(
-                    server_id=server_id, tenant_id=self.tenant_id, enabled=True,
+                    server_id=server_id,
+                    tenant_id=self.tenant_id,
+                    enabled=True,
                     transport_config={k: v for k, v in config.items() if k != "type"},
                 )
                 if server.runtime_status == "error":
@@ -513,7 +516,9 @@ class PluginMarketplaceV3:
             self.mcp.tool_cache.invalidate(self.tenant_id)
         from src.application.services.marketplace_oauth_runtime import marketplace_activation
 
-        with marketplace_activation(self.tenant_id, self.project_id, payload.get("owned_servers", [])):
+        with marketplace_activation(
+            self.tenant_id, self.project_id, payload.get("owned_servers", [])
+        ):
             await self._verify_apps(payload)
         payload["status"] = "enabled"
         payload.pop("error", None)

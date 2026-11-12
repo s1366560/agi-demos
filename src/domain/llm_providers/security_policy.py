@@ -135,6 +135,15 @@ def _extra_official_base_paths(provider_type: object, value: str) -> frozenset[s
     return endpoints.get(candidate.hostname.casefold())
 
 
+def _hostname_is_loopback(hostname: str) -> bool:
+    if hostname.casefold() == "localhost":
+        return True
+    try:
+        return ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
 def _validate_provider_transport(
     *,
     scheme: str,
@@ -142,20 +151,14 @@ def _validate_provider_transport(
     provider_family: str,
 ) -> None:
     """Validate remote HTTPS and loopback-only local HTTP transports."""
-    spec = family_security(provider_family)
-    is_local_provider = bool(spec and spec.local_http)
-    if not is_local_provider and scheme != "https":
-        raise ValueError("HTTPS is required for credentialed providers")
-    if not is_local_provider or scheme != "http":
+    if scheme == "https":
         return
-    is_loopback = hostname.casefold() == "localhost"
-    if not is_loopback:
-        try:
-            is_loopback = ip_address(hostname).is_loopback
-        except ValueError:
-            is_loopback = False
-    if not is_loopback:
+    if scheme == "http" and _hostname_is_loopback(hostname):
+        return
+    spec = family_security(provider_family)
+    if spec and spec.local_http:
         raise ValueError("HTTP is only allowed for local provider endpoints")
+    raise ValueError("HTTPS is required for credentialed providers")
 
 
 def _allowed_provider_base_paths(provider_type: object, value: str) -> frozenset[str]:

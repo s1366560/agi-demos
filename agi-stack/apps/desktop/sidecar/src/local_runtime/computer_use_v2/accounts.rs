@@ -1,13 +1,13 @@
 //! Connector account metadata shares the existing native OAuth and encrypted MCP vault.
 use super::Owner;
 use crate::local_runtime::{
-    LocalRuntimeState,
     mcp_supervisor::{self, McpScope, McpServerDefinitionInput, McpTransport},
     plugin_marketplace_v3::oauth,
+    LocalRuntimeState,
 };
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::sync::Arc;
 static MUTATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -357,18 +357,14 @@ mod tests {
         let google = provider_metadata("google").unwrap();
         assert_eq!(google["_memstack_send_resource"], false);
         let microsoft = provider_metadata("microsoft365").unwrap();
-        assert!(
-            microsoft["scope"]
-                .as_str()
-                .unwrap()
-                .contains("Calendars.ReadWrite")
-        );
-        assert!(
-            microsoft["token_endpoint"]
-                .as_str()
-                .unwrap()
-                .contains("/common/")
-        );
+        assert!(microsoft["scope"]
+            .as_str()
+            .unwrap()
+            .contains("Calendars.ReadWrite"));
+        assert!(microsoft["token_endpoint"]
+            .as_str()
+            .unwrap()
+            .contains("/common/"));
         assert!(provider_metadata("name_contains_google").is_err());
     }
     #[test]

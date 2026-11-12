@@ -574,7 +574,8 @@ impl DesktopSessionStore {
 
     #[cfg(test)]
     pub(super) fn revoke_session(&self, credential: &str, now_ms: i64) -> Result<bool, String> {
-        self.revoke_session_with_id(credential, now_ms).map(|id| id.is_some())
+        self.revoke_session_with_id(credential, now_ms)
+            .map(|id| id.is_some())
     }
 
     pub(super) fn revoke_session_with_id(

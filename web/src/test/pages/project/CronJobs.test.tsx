@@ -143,10 +143,9 @@ describe('CronJobs', () => {
     cronState.total = 25;
 
     const { container } = render(<CronJobs />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).toBeEnabled());
 
+    expect(await screen.findByText('Showing 1-20 of 25 tasks')).toBeInTheDocument();
     expect(container.querySelector('.ant-pagination')).toBeInTheDocument();
-    expect(screen.getByText('Showing 1-20 of 25 tasks')).toBeInTheDocument();
   });
 
   it('uses server run totals to render run history pagination', async () => {

@@ -114,7 +114,8 @@ impl AnthropicLlm {
     where
         F: FnMut(&str),
     {
-        self.complete_with_media_stream(system, user, &[], on_delta).await
+        self.complete_with_media_stream(system, user, &[], on_delta)
+            .await
     }
 
     /// Preserve native Messages image blocks and the existing SSE text contract.
@@ -136,7 +137,8 @@ impl AnthropicLlm {
             }
             if !self.vision_supported {
                 return Err(CoreError::Llm(
-                    "vision_unsupported: configured model does not accept image observations".into(),
+                    "vision_unsupported: configured model does not accept image observations"
+                        .into(),
                 ));
             }
             let mut blocks = vec![json!({"type":"text","text":user.into()})];
@@ -155,54 +157,55 @@ impl AnthropicLlm {
             stream: true,
         };
         crate::request_log::record_request("anthropic.messages", &body, async {
-        let url = format!("{}/messages", self.base_url);
-        let mut headers = HeaderMap::new();
-        let version = HeaderValue::from_str(&self.version)
-            .map_err(|e| CoreError::Llm(format!("bad anthropic version header: {e}")))?;
-        headers.insert("anthropic-version", version);
-        if let Some(key) = &self.api_key {
-            let value = HeaderValue::from_str(key)
-                .map_err(|e| CoreError::Llm(format!("bad anthropic api key header: {e}")))?;
-            headers.insert("x-api-key", value);
-        }
+            let url = format!("{}/messages", self.base_url);
+            let mut headers = HeaderMap::new();
+            let version = HeaderValue::from_str(&self.version)
+                .map_err(|e| CoreError::Llm(format!("bad anthropic version header: {e}")))?;
+            headers.insert("anthropic-version", version);
+            if let Some(key) = &self.api_key {
+                let value = HeaderValue::from_str(key)
+                    .map_err(|e| CoreError::Llm(format!("bad anthropic api key header: {e}")))?;
+                headers.insert("x-api-key", value);
+            }
 
-        let resp = self
-            .client
-            .post(url)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| CoreError::Llm(e.to_string()))?;
-        let resp = resp
-            .error_for_status()
-            .map_err(|e| CoreError::Llm(e.to_string()))?;
-        let mut chunks = resp.bytes_stream();
-        let mut line_buffer = Vec::new();
-        let mut content = String::new();
-        let mut done = false;
+            let resp = self
+                .client
+                .post(url)
+                .headers(headers)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| CoreError::Llm(e.to_string()))?;
+            let resp = resp
+                .error_for_status()
+                .map_err(|e| CoreError::Llm(e.to_string()))?;
+            let mut chunks = resp.bytes_stream();
+            let mut line_buffer = Vec::new();
+            let mut content = String::new();
+            let mut done = false;
 
-        while let Some(chunk) = chunks.next().await {
-            let chunk = chunk.map_err(|e| CoreError::Llm(e.to_string()))?;
-            line_buffer.extend_from_slice(&chunk);
-            while let Some(newline_index) = line_buffer.iter().position(|b| *b == b'\n') {
-                let line: Vec<u8> = line_buffer.drain(..=newline_index).collect();
-                if handle_anthropic_stream_line(&line, &mut content, &mut on_delta)? {
-                    done = true;
+            while let Some(chunk) = chunks.next().await {
+                let chunk = chunk.map_err(|e| CoreError::Llm(e.to_string()))?;
+                line_buffer.extend_from_slice(&chunk);
+                while let Some(newline_index) = line_buffer.iter().position(|b| *b == b'\n') {
+                    let line: Vec<u8> = line_buffer.drain(..=newline_index).collect();
+                    if handle_anthropic_stream_line(&line, &mut content, &mut on_delta)? {
+                        done = true;
+                        break;
+                    }
+                }
+                if done {
                     break;
                 }
             }
-            if done {
-                break;
+
+            if !done && !line_buffer.is_empty() {
+                handle_anthropic_stream_line(&line_buffer, &mut content, &mut on_delta)?;
             }
-        }
 
-        if !done && !line_buffer.is_empty() {
-            handle_anthropic_stream_line(&line_buffer, &mut content, &mut on_delta)?;
-        }
-
-        Ok(content)
-        }).await
+            Ok(content)
+        })
+        .await
     }
 }
 

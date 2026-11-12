@@ -26,9 +26,27 @@ PNPM_INSTALL_ARGS ?= --frozen-lockfile
 AVERNET_BCS_TARGET_DIR ?= $(abspath ../.cache/avernet-bcs/target)
 export AVERNET_BCS_TARGET_DIR
 ifeq ($(OS),Windows_NT)
+DESKTOP_SIDECAR_NAME := agistack-desktop-sidecar.exe
 DESKTOP_WORKSPACE_CORE_DEBUG ?= $(AVERNET_BCS_TARGET_DIR)/debug/memstack-workspace-core.exe
+DESKTOP_WORKSPACE_CORE_RELEASE ?= $(AVERNET_BCS_TARGET_DIR)/release/memstack-workspace-core.exe
 else
+DESKTOP_SIDECAR_NAME := agistack-desktop-sidecar
 DESKTOP_WORKSPACE_CORE_DEBUG ?= $(AVERNET_BCS_TARGET_DIR)/debug/memstack-workspace-core
+DESKTOP_WORKSPACE_CORE_RELEASE ?= $(AVERNET_BCS_TARGET_DIR)/release/memstack-workspace-core
+endif
+# Optional. Sidecar tests require debug assertions, so CI keeps the debug
+# profile for desktop-test and only drops debuginfo. Set DESKTOP_RELEASE=1
+# only when the caller does not need those tests.
+ifeq ($(DESKTOP_RELEASE),1)
+DESKTOP_CARGO_PROFILE_FLAG := --release
+DESKTOP_SIDECAR_BIN := $(abspath target/release/$(DESKTOP_SIDECAR_NAME))
+DESKTOP_WORKSPACE_CORE_BIN := $(DESKTOP_WORKSPACE_CORE_RELEASE)
+DESKTOP_WORKSPACE_CORE_SCRIPT := build:workspace-core
+else
+DESKTOP_CARGO_PROFILE_FLAG :=
+DESKTOP_SIDECAR_BIN := $(abspath target/debug/$(DESKTOP_SIDECAR_NAME))
+DESKTOP_WORKSPACE_CORE_BIN := $(DESKTOP_WORKSPACE_CORE_DEBUG)
+DESKTOP_WORKSPACE_CORE_SCRIPT := build:workspace-core:debug
 endif
 # Android NDK(本机默认;生产建议 cargo-ndk)。覆盖:make android NDK=/path/to/ndk
 NDK          ?= $(HOME)/Library/Android/sdk/ndk/30.0.14904198
@@ -53,7 +71,7 @@ endif
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-icons desktop-cua-helper run-desktop run-desktop-electron desktop-grants desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
+.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-test desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-icons desktop-cua-helper run-desktop run-desktop-electron desktop-grants desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -99,13 +117,15 @@ wasm-web: ## Web:wasm-bindgen 浏览器包 + node 冒烟(core-as-guest,~124 KB)
 desktop: desktop-check desktop-bundle desktop-bundle-smoke ## 桌面:构建 Electron 安装包并验证 sidecar
 	@echo "==> 桌面可安装客户端构建完成:$(DESKTOP_APP_DIR)/release/"
 
-desktop-check: desktop-deps ## 桌面:Rust sidecar 与 Electron/renderer 测试
-	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
-	$(CARGO) build -p agistack-desktop-sidecar
-	$(CARGO) test -p agistack-desktop-sidecar
-	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(abspath target/debug/agistack-desktop-sidecar) AGISTACK_REAL_WORKSPACE_CORE=$(DESKTOP_WORKSPACE_CORE_DEBUG) $(PNPM) test
+desktop-check: desktop-test ## 桌面:Rust sidecar、renderer 测试，以及一次 Electron 构建
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:electron
 	@echo "==> Electron 外壳与 sidecar 验证通过"
+
+desktop-test: desktop-deps desktop-cua-repl ## 桌面:Rust sidecar 与 renderer 测试，不重复打 Electron 包
+	cd $(DESKTOP_APP_DIR) && $(PNPM) run $(DESKTOP_WORKSPACE_CORE_SCRIPT)
+	$(CARGO) build $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar
+	$(CARGO) test $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar
+	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(DESKTOP_SIDECAR_BIN) AGISTACK_REAL_WORKSPACE_CORE=$(DESKTOP_WORKSPACE_CORE_BIN) $(PNPM) test
 
 desktop-browser-qa: desktop-deps ## 桌面:执行浏览器交互集成测试
 	cd $(DESKTOP_APP_DIR) && CI=true $(PNPM) run qa:browser
@@ -159,8 +179,10 @@ android: ## 移动:交叉编译真实 aarch64 Android .so + Kotlin 绑定(需 ND
 	AR_aarch64_linux_android="$(NDK_TC)/llvm-ar" \
 	  $(CARGO) build -p agistack-bindings-uniffi --target $(ANDROID_TARGET) --release
 	$(CARGO) build -p agistack-bindings-uniffi >/dev/null
-	$(CARGO) run -q -p agistack-bindings-uniffi --bin uniffi-bindgen -- generate \
-	  --library target/debug/libagistack_mobile.dylib --language kotlin --out-dir target/kotlin
+	@host_lib=target/debug/libagistack_mobile.dylib; \
+	  if [ ! -f "$$host_lib" ]; then host_lib=target/debug/libagistack_mobile.so; fi; \
+	  $(CARGO) run -q -p agistack-bindings-uniffi --bin uniffi-bindgen -- generate \
+	    --library "$$host_lib" --language kotlin --out-dir target/kotlin
 	@file target/$(ANDROID_TARGET)/release/libagistack_mobile.so
 	@echo "==> 产物:target/$(ANDROID_TARGET)/release/libagistack_mobile.so + target/kotlin/"
 

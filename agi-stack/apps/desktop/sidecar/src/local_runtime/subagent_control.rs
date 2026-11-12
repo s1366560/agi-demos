@@ -75,10 +75,30 @@ impl SubagentControls {
         Ok(control)
     }
 
-    pub(super) fn plugin_execution_current(&self, execution_id: &str, conversation_id: &str, run: &DesktopRun, subagent_id: &str, parent: Option<&Arc<LocalRunControl>>) -> bool {
-        let Some(parent) = parent else { return false; };
-        let Some(control) = self.get(execution_id) else { return false; };
-        control.conversation_id == conversation_id && control.parent_run_id == run.id && control.parent_revision == run.revision && control.subagent_id == subagent_id && Arc::ptr_eq(&control.parent, parent) && parent.directive.load(Ordering::Acquire) == LocalRunControl::CONTINUE && control.inner.lock().is_ok_and(|inner| !inner.cancelled && !inner.terminal)
+    pub(super) fn plugin_execution_current(
+        &self,
+        execution_id: &str,
+        conversation_id: &str,
+        run: &DesktopRun,
+        subagent_id: &str,
+        parent: Option<&Arc<LocalRunControl>>,
+    ) -> bool {
+        let Some(parent) = parent else {
+            return false;
+        };
+        let Some(control) = self.get(execution_id) else {
+            return false;
+        };
+        control.conversation_id == conversation_id
+            && control.parent_run_id == run.id
+            && control.parent_revision == run.revision
+            && control.subagent_id == subagent_id
+            && Arc::ptr_eq(&control.parent, parent)
+            && parent.directive.load(Ordering::Acquire) == LocalRunControl::CONTINUE
+            && control
+                .inner
+                .lock()
+                .is_ok_and(|inner| !inner.cancelled && !inner.terminal)
     }
 
     fn get(&self, execution_id: &str) -> Option<Arc<SubagentControl>> {

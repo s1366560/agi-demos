@@ -160,7 +160,7 @@ impl TerminalHub {
         let sequence =
             match self
                 .sequence
-                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
                     current.checked_add(1)
                 }) {
                 Ok(previous) => previous.saturating_add(1),

@@ -22,6 +22,7 @@ from threading import Lock, Timer
 from typing import cast
 
 from .governance import ResourceQuotaEnforcer
+from .sdk_path import invoke_memory_offsets
 
 logger = logging.getLogger("plugin_audit")
 
@@ -105,14 +106,28 @@ class WasmToolHost:
         except wasmtime.WasmtimeError as exc:
             raise WasmHostError(f"invalid wasm artifact for {plugin_id}: {exc}") from exc
         if self._module.imports:
-            raise WasmHostError("wasm score modules cannot import functions, memory, or WASI")
+            raise WasmHostError("wasm modules cannot import functions, memory, or WASI")
         exports = {export.name: export.type for export in self._module.exports}
         score_type = exports.get("score")
-        if not (
+        invoke_type = exports.get("invoke")
+        score_ok = (
             isinstance(score_type, wasmtime.FuncType)
             and [str(value) for value in score_type.params] == ["i32"]
             and [str(value) for value in score_type.results] == ["i32"]
-        ):
+        )
+        invoke_ok = (
+            isinstance(invoke_type, wasmtime.FuncType)
+            and [str(value) for value in invoke_type.params] == ["i32"]
+            and [str(value) for value in invoke_type.results] == ["i32"]
+            and "memory" in exports
+        )
+        if score_ok and invoke_ok:
+            raise WasmHostError("wasm artifact must export exactly one of score or invoke")
+        if score_ok:
+            self._abi = "score"
+        elif invoke_ok:
+            self._abi = "invoke"
+        else:
             raise WasmHostError(f"wasm artifact for {plugin_id} must export score(i32) -> i32")
 
     @classmethod
@@ -142,6 +157,8 @@ class WasmToolHost:
         self, tool_id: str, input_json: str, *, tenant_id: str | None = None
     ) -> WasmCallOutcome:
         """Invoke the exported ``score`` with fuel + quota accounting."""
+        if self._abi != "score":
+            raise WasmHostError("score calls require the score export")
         if not tool_id.strip():
             raise WasmHostError("tool_id must be non-empty")
         input_bytes = len(input_json.encode("utf-8"))
@@ -231,6 +248,103 @@ class WasmToolHost:
             if (time.monotonic() - started) * 1000 >= self._wall_time_ms:
                 raise WasmHostError("wasm wall-clock deadline exceeded")
             return score, store.get_fuel()
+        finally:
+            if timer is not None:
+                timer.cancel()
+                timer.join()
+            store.close()
+
+    def invoke_json(self, tool_id: str, input_json: str, *, tenant_id: str | None = None) -> str:
+        """Run the structured ``invoke`` ABI and return UTF-8 JSON text."""
+        if self._abi != "invoke":
+            raise WasmHostError("structured invoke requires the invoke export")
+        if not tool_id.strip():
+            raise WasmHostError("tool_id must be non-empty")
+        encoded = input_json.encode("utf-8")
+        if len(encoded) > 64 * 1024:
+            raise WasmHostError("wasm input exceeds the byte budget")
+        input_offset, output_offset = invoke_memory_offsets()
+        if output_offset < len(encoded):
+            raise WasmHostError("wasm input overlaps the output region")
+        locked = self._call_lock.acquire(timeout=self._wall_time_ms / 1000)
+        started = time.monotonic()
+        acquired = False
+        error: str | None = None
+        try:
+            if not locked:
+                raise WasmHostError("wasm wall-clock deadline exceeded while waiting")
+            if self._closed:
+                raise WasmHostError("wasm host is closed")
+            if self._quota is not None:
+                self._quota.acquire(
+                    self._plugin_id,
+                    wasm_fuel=self._fuel_budget,
+                    wasm_memory_bytes=self._memory_limit,
+                    wall_time_ms=self._wall_time_ms,
+                    network_requests=0,
+                )
+                acquired = True
+            output = self._invoke_memory(encoded, input_offset, output_offset, started)
+            return output
+        except (self._wasmtime.WasmtimeError, self._wasmtime.Trap) as exc:
+            error = str(exc)
+            raise WasmHostError(f"wasm execution failed for {self._plugin_id}: {exc}") from exc
+        except Exception as exc:
+            error = str(exc)
+            raise
+        finally:
+            if locked:
+                self._call_lock.release()
+            if self._quota is not None and acquired:
+                self._quota.release(
+                    self._plugin_id, wall_time_ms=int((time.monotonic() - started) * 1000)
+                )
+            self._audit(
+                {
+                    "event": "wasm_invoke_call",
+                    "plugin_id": self._plugin_id,
+                    "tenant_id": tenant_id if tenant_id is not None else self._tenant_id,
+                    "tool_id": tool_id,
+                    "result": "error" if error is not None else "ok",
+                    **({"error": error} if error is not None else {}),
+                }
+            )
+
+    def _invoke_memory(
+        self, encoded: bytes, input_offset: int, output_offset: int, started: float
+    ) -> str:
+        store = self._wasmtime.Store(self._engine)
+        timer: Timer | None = None
+        try:
+            store.set_limits(
+                memory_size=self._memory_limit,
+                table_elements=10_000,
+                instances=1,
+                tables=1,
+                memories=1,
+            )
+            store.set_fuel(self._fuel_budget)
+            store.set_epoch_deadline(1)
+            remaining_seconds = self._wall_time_ms / 1000 - (time.monotonic() - started)
+            if remaining_seconds <= 0:
+                raise WasmHostError("wasm wall-clock deadline exceeded")
+            timer = Timer(remaining_seconds, self._engine.increment_epoch)
+            timer.daemon = True
+            timer.start()
+            instance = self._wasmtime.Instance(store, self._module, [])
+            memory = instance.exports(store)["memory"]
+            if not isinstance(memory, self._wasmtime.Memory):
+                raise WasmHostError("invoke export requires a linear memory")
+            memory.write(store, encoded, input_offset)
+            produced = cast(Callable[[object, int], object], instance.exports(store)["invoke"])(
+                store, len(encoded)
+            )
+            if not isinstance(produced, int) or produced <= 0 or produced > 65536:
+                raise WasmHostError("invoke export returned an invalid output length")
+            if (time.monotonic() - started) * 1000 >= self._wall_time_ms:
+                raise WasmHostError("wasm wall-clock deadline exceeded")
+            raw = bytes(memory.read(store, output_offset, output_offset + produced))
+            return raw.decode("utf-8")
         finally:
             if timer is not None:
                 timer.cancel()

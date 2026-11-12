@@ -13,14 +13,12 @@ impl AudioFixture {
         let mut cloud = Fixture::new().await;
         let helper = Helper::new(false);
         Arc::get_mut(&mut cloud.state).unwrap().app_data_dir = Some(helper.root.join("app-data"));
-        assert!(
-            cloud
-                .state
-                .computer_use
-                .client
-                .set(helper.client.clone())
-                .is_ok()
-        );
+        assert!(cloud
+            .state
+            .computer_use
+            .client
+            .set(helper.client.clone())
+            .is_ok());
         let owner = cloud.owner();
         let context = CuaCallContext {
             user_id: owner.user_id.clone(),
@@ -123,7 +121,9 @@ async fn authenticated_audio_stop_remains_local_after_cloud_disconnect_without_n
                 "{binding}/{method}"
             );
         }
-        assert!(!calls.iter().any(|call| call["method"] == "resume_session" || call["method"] == "reset_session"));
+        assert!(!calls
+            .iter()
+            .any(|call| call["method"] == "resume_session" || call["method"] == "reset_session"));
         // The cache cannot grant resume or broaden any other offline operation.
         assert_eq!(
             fixture

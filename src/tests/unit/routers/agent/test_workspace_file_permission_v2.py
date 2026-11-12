@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import secrets
 import subprocess
 from pathlib import Path
@@ -47,6 +48,51 @@ from src.tests.unit.infrastructure.plugins.v2.test_wasm_tool_runtime import (  #
 )
 from src.tests.unit.routers.agent.test_plan_approval_request_contract import _approval_fixture
 
+_CONFINED_IMAGE = "agistack-confined-file-test:py312"
+_SLIM_DOCKERFILE = """
+FROM python:3.12-slim
+RUN pip install --no-cache-dir 'aiohttp>=3.9' 'aiofiles>=24.1' 'pydantic>=2.5' 'watchfiles>=0.21'
+"""
+
+
+async def _confined_test_image() -> str:
+    """Use the production sandbox image, or a slim Python image with the same mounts."""
+    probe = await asyncio.create_subprocess_exec(
+        "docker",
+        "image",
+        "inspect",
+        "sandbox-mcp-server:latest",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    if await probe.wait() == 0:
+        return "sandbox-mcp-server:latest"
+    probe = await asyncio.create_subprocess_exec(
+        "docker",
+        "image",
+        "inspect",
+        _CONFINED_IMAGE,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    if await probe.wait() == 0:
+        return _CONFINED_IMAGE
+    build = await asyncio.create_subprocess_exec(
+        "docker",
+        "build",
+        "-t",
+        _CONFINED_IMAGE,
+        "-",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _stdout, stderr = await build.communicate(_SLIM_DOCKERFILE.encode())
+    if build.returncode != 0:
+        raise RuntimeError(stderr.decode(errors="replace")[-2000:])
+    return _CONFINED_IMAGE
+
+
 _SERVER = """
 import asyncio, json, sys
 from src.server.websocket_server import MCPWebSocketServer, AuthConfig
@@ -76,6 +122,7 @@ async def real_file_server(tmp_path):
     token = secrets.token_hex(32)
     repository = Path(__file__).resolve().parents[5]
     container_name = "agistack-confined-test-" + secrets.token_hex(8)
+    image = await _confined_test_image()
     process = await asyncio.create_subprocess_exec(
         "docker",
         "run",
@@ -83,6 +130,8 @@ async def real_file_server(tmp_path):
         "-i",
         "--name",
         container_name,
+        "--user",
+        f"{os.getuid()}:{os.getgid()}",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "-p",
@@ -95,7 +144,9 @@ async def real_file_server(tmp_path):
         "/app",
         "--entrypoint",
         "python",
-        "sandbox-mcp-server:latest",
+        "-e",
+        "PYTHONPATH=/app",
+        image,
         "-c",
         _SERVER,
         stdin=asyncio.subprocess.PIPE,
@@ -106,8 +157,11 @@ async def real_file_server(tmp_path):
     try:
         process.stdin.write((json.dumps({"root": "/workspace", "token": token}) + "\n").encode())
         await process.stdin.drain()
-        line = await asyncio.wait_for(process.stdout.readline(), 10)
-        assert int(line.decode().strip()) == 8765
+        line = await asyncio.wait_for(process.stdout.readline(), 20)
+        port_text = line.decode().strip()
+        if not port_text:
+            raise RuntimeError(f"{image} exited {process.returncode} before publishing its port")
+        assert int(port_text) == 8765
         mapping = await asyncio.to_thread(
             subprocess.check_output, ["docker", "port", container_name, "8765/tcp"], text=True
         )
@@ -143,7 +197,7 @@ async def real_file_server(tmp_path):
         await asyncio.wait_for(process.wait(), 10)
 
 
-@pytest.mark.unit
+@pytest.mark.integration
 @pytest.mark.parametrize("pipeline", [False, True])
 @pytest.mark.parametrize("run_kind", ["plan", "chat"])
 @pytest.mark.parametrize(

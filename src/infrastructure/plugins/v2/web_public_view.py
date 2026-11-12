@@ -46,7 +46,11 @@ _PUBLIC_PERMISSIONS_V2 = frozenset({"ui.conversation.renderer", "ui.render", "ui
 
 
 def project_web_public_view_v2(
-    snapshot_payload: object, *, authority_id: str, authorized_scope: ScopeV2 | None = None
+    snapshot_payload: object,
+    *,
+    authority_id: str,
+    authorized_scope: ScopeV2 | None = None,
+    applicable_only: bool = False,
 ) -> dict[str, Any]:
     """Project public configuration after the caller authorizes this exact scope."""
     scope = authorized_scope or ScopeV2(kind=ScopeKindV2.ROOT)
@@ -72,13 +76,11 @@ def project_web_public_view_v2(
         manifest, module = module_rows[(entry.plugin_ref, entry.module_ref)]
         if DataPlaneTargetV2.WEB not in module.targets:
             continue
+        if not _entry_applies_to_scope_v2(entry, scope, applicable_only=applicable_only):
+            continue
         if entry.module_ref not in _BROWSER_PUBLIC_CONFIG_MODULES_V2:
             raise RuntimeV2Error(
                 "web_view_module_not_public", "Web module has no public config declaration"
-            )
-        if not scope_contains_v2(entry.scope, scope):
-            raise RuntimeV2Error(
-                "web_view_scope_unauthorized", "Web entry belongs to an unauthorized scope"
             )
         _attest_public_module(module, catalog, manifest.plugin_id, manifest.version)
         if module.contract.config_schema.get("additionalProperties") is not False:
@@ -117,6 +119,23 @@ def project_web_public_view_v2(
         }
     )
     return {"schema_version": 2, "target": "web", "view_id": view_id, "snapshot": wire}
+
+
+def _entry_applies_to_scope_v2(
+    entry: ProfileEntryV2, scope: ScopeV2, *, applicable_only: bool
+) -> bool:
+    """Keep entries that cover the authorized scope.
+
+    A scope-specific snapshot must not contain a foreign entry. A process-wide
+    snapshot does, and those entries are omitted instead of failing the view.
+    """
+    if scope_contains_v2(entry.scope, scope):
+        return True
+    if applicable_only:
+        return False
+    raise RuntimeV2Error(
+        "web_view_scope_unauthorized", "Web entry belongs to an unauthorized scope"
+    )
 
 
 def _attest_public_module(

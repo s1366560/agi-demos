@@ -30,7 +30,7 @@ test('route and capability consumers share one generation-backed analytics facad
   assert.match(workbench, /desktop_tenant_analytics_authority_required/u);
   assert.match(provider, /snapshotOperationsV2: DesktopWorkbenchSnapshotOperationsV2/u);
   assert.match(provider, /desktop_workbench_snapshot_operations_required/u);
-  assert.match(provider, /operations\.loadSnapshot\(\{ config, signal:/u);
+  assert.match(provider, /operations\.loadSnapshot\(\{\s*config,\s*signal:/u);
   assert.match(app, /snapshotOperationsV2:\s*desktopWorkbenchSnapshotOperationsV2/u);
   assert.match(snapshotAuthority, /createDesktopWorkbenchSnapshotDependenciesV2\(operationConfig, \(\) => actions\)/u);
   assert.match(dependencies, /createDesktopTenantAnalyticsOperationsV2\(resolveActions\)/u);

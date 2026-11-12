@@ -28,7 +28,7 @@ if TYPE_CHECKING:
         DoomLoopDetectorProtocol,
         PermissionManagerProtocol,
     )
-    from src.infrastructure.agent.tools.hooks import ToolHookRegistry
+    from src.infrastructure.agent.tools.hooks import HookResult, ToolHookRegistry
     from src.infrastructure.agent.tools.result import ToolEvent, ToolResult
     from src.infrastructure.agent.tools.truncation import OutputTruncator
 
@@ -142,8 +142,7 @@ class ToolPipeline:
 
         logger.debug("Pipeline start: tool=%s", tool.name)
 
-        # Step 1 ---- Pre-hooks -------------------------------------------
-        hook_result = await self._hooks.run_before(tool.name, args, ctx)
+        hook_result, hook_approved = await self._before_hook_result(tool, args, ctx)
 
         if hook_result.decision == HookDecision.DENY:
             logger.warning(
@@ -159,8 +158,7 @@ class ToolPipeline:
         if invalid_arguments is not None:
             yield ToolEvent.completed(tool.name, invalid_arguments)
             return
-        hook_approved = False
-        if hook_result.decision == HookDecision.ASK:
+        if not hook_approved and hook_result.decision == HookDecision.ASK:
             response: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
             reviewed_args = deepcopy(effective_args)
             yield ToolEvent(
@@ -214,6 +212,19 @@ class ToolPipeline:
         with confirmation:
             async for event in self._execute_and_finalize(tool, effective_args, ctx):
                 yield event
+
+    async def _before_hook_result(
+        self,
+        tool: ToolInfoProtocol,
+        args: dict[str, Any],
+        ctx: ToolContext,
+    ) -> tuple[HookResult, bool]:
+        """Skip a second review when the processor already stored the rewritten call."""
+        from src.infrastructure.agent.tools.hooks import HookDecision, HookResult
+
+        if ctx.runtime_context.get("tool_hooks_resolved"):
+            return HookResult(decision=HookDecision.CONTINUE, args=args), True
+        return await self._hooks.run_before(tool.name, args, ctx), False
 
     # ------------------------------------------------------------------
     # Private helpers

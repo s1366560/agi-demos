@@ -83,20 +83,16 @@ async fn assert_rejected_without_card(
     );
     checkpoint.status = SessionStatus::AwaitingInput;
     checkpoint.pending_hitl = Some(request.clone());
-    assert!(
-        fixture
-            .state
-            .persist_pending_hitl(&fixture.conversation.id, None, &checkpoint)
-            .is_err()
-    );
-    assert!(
-        fixture
-            .state
-            .session_store
-            .hitl_request(&request.id)
-            .unwrap()
-            .is_none()
-    );
+    assert!(fixture
+        .state
+        .persist_pending_hitl(&fixture.conversation.id, None, &checkpoint)
+        .is_err());
+    assert!(fixture
+        .state
+        .session_store
+        .hitl_request(&request.id)
+        .unwrap()
+        .is_none());
     assert_eq!(
         fixture
             .state
@@ -218,7 +214,7 @@ async fn actual_native_request_persists_and_generic_human_requests_remain_compat
 
 #[tokio::test]
 async fn actual_fenced_child_native_request_validates_persists_and_prepares() {
-    use crate::local_runtime::local_plugin_tool_host_v2::identity::{ChildIdentityV2, child_scope};
+    use crate::local_runtime::local_plugin_tool_host_v2::identity::{child_scope, ChildIdentityV2};
     let fixture = Fixture::new().await;
     let (conversation, run) =
         crate::local_runtime::tests::seed_controlled_run(&fixture.state, "native-child-hitl");
@@ -335,16 +331,14 @@ async fn actual_fenced_child_native_request_validates_persists_and_prepares() {
                 .persist_pending_hitl(&conversation.id, Some(&run.id), &checkpoint)
                 .unwrap()
                 .unwrap();
-            assert!(
-                hitl::prepare(
-                    &fixture.state,
-                    &auth,
-                    &saved,
-                    &json!({"action":"allow","granted":true,"scope":"once"})
-                )
-                .unwrap()
-                .is_some()
-            );
+            assert!(hitl::prepare(
+                &fixture.state,
+                &auth,
+                &saved,
+                &json!({"action":"allow","granted":true,"scope":"once"})
+            )
+            .unwrap()
+            .is_some());
         })
         .await;
     })

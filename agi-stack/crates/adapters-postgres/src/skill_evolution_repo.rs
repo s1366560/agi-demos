@@ -827,6 +827,11 @@ impl PgSkillEvolutionRepository {
         &self,
         worker_id: &str,
     ) -> CoreResult<Option<SkillEvolutionRunRecord>> {
+        let returning = RUN_COLS
+            .split(", ")
+            .map(|column| format!("runs.{column}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let sql = format!(
             "WITH candidate AS (\
                 SELECT id FROM agistack_skill_evolution_runs \
@@ -845,7 +850,7 @@ impl PgSkillEvolutionRepository {
                  updated_at = now() \
              FROM candidate \
              WHERE runs.id = candidate.id \
-             RETURNING {RUN_COLS}"
+             RETURNING {returning}"
         );
         let row = sqlx::query(&sql)
             .bind(worker_id)

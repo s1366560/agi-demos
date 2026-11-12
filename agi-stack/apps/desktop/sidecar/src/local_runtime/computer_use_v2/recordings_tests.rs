@@ -257,7 +257,7 @@ async fn independent_stop_saves_once_and_is_available_with_disabled_plugin_and_c
     let fixture = Fixture::new().await;
     assert!(
         !store::instance(
-            &*fixture.state.session_store.connection().unwrap(),
+            &fixture.state.session_store.connection().unwrap(),
             &fixture.owner
         )
         .unwrap()

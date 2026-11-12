@@ -60,9 +60,9 @@ const assertFrontendToolchain = (job) => {
   assert.deepEqual(
     pnpmSetupSteps(job).map((step) => ({
       uses: step.uses,
-      version: step.with.version,
+      version: step.with?.version,
     })),
-    [{ uses: PNPM_SETUP_ACTION, version: PNPM_VERSION }],
+    [{ uses: PNPM_SETUP_ACTION, version: undefined }],
   );
   assert.deepEqual(
     nodeSetupSteps(job).map((step) => ({
@@ -126,7 +126,7 @@ test('all JavaScript projects and delivery paths use one integrity-pinned pnpm t
 
   const releasePnpmSteps = Object.values(releaseWorkflow.jobs).flatMap(pnpmSetupSteps);
   assert.ok(releasePnpmSteps.length > 0);
-  assert.ok(releasePnpmSteps.every((step) => step.with.version === PNPM_VERSION));
+  assert.ok(releasePnpmSteps.every((step) => step.with?.version === undefined));
   assert.ok(releasePnpmSteps.every((step) => step.uses === PNPM_SETUP_ACTION));
   const releaseNodeSteps = Object.values(releaseWorkflow.jobs).flatMap(nodeSetupSteps);
   assert.ok(releaseNodeSteps.length > 0);

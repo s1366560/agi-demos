@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/computer-use/native",
       "entrypoint": "ComputerUseModuleV2::apply",
       "artifact": {
-        "digest": "sha256:e049ead01f944c99291cbd3a0da63e8869c48ee52e68ab5f245e0fc403c44c97",
+        "digest": "sha256:d7f6cf2fe05467e87d633fceabdc2cb94104c8bea3598b4dac3b9775e22f4aef",
         "source": "repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/computer_use_v2/module.rs"
       },
       "targets": [

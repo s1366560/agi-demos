@@ -349,7 +349,8 @@ pub(super) fn desktop_loader(
             desktop_sidecar_host_definition_v2(),
             super::knowledge_authority_v2::definition(app_data_dir, local_acceptance)
                 .expect("the built-in knowledge contract is statically valid"),
-            super::computer_use_v2::definition().expect("the built-in computer-use contract is statically valid"),
+            super::computer_use_v2::definition()
+                .expect("the built-in computer-use contract is statically valid"),
         ],
     )
 }
@@ -415,7 +416,9 @@ fn local_bootstrap_snapshot(state: &LocalRuntimeState) -> Result<LocalBootstrapS
     })
 }
 
-pub(super) fn local_current_snapshot(state: &LocalRuntimeState) -> Result<ProfileSnapshotV2, String> {
+pub(super) fn local_current_snapshot(
+    state: &LocalRuntimeState,
+) -> Result<ProfileSnapshotV2, String> {
     local_bootstrap_snapshot(state).map(|candidate| candidate.snapshot)
 }
 

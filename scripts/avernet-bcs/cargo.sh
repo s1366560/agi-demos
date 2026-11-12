@@ -26,7 +26,10 @@ readonly RUSTUP_BIN="$(command -v rustup || true)"
 # During that one-time initialization rustup must be able to update the proxy
 # binaries beside the rustup executable. Keep the BCS crate cache isolated for
 # normal Cargo commands, but retain the existing proxy home for installation.
-readonly RUSTUP_PROXY_CARGO_HOME="${AVERNET_BCS_RUSTUP_PROXY_CARGO_HOME:-${CARGO_HOME:-$(cd "$(dirname "${RUSTUP_BIN}")/.." && pwd)}}"
+# The proxy home is the cargo directory that owns the rustup binary. An
+# unrelated CARGO_HOME (for example a system toolchain) cannot update those
+# proxy binaries.
+readonly RUSTUP_PROXY_CARGO_HOME="${AVERNET_BCS_RUSTUP_PROXY_CARGO_HOME:-$(cd "$(dirname "${RUSTUP_BIN}")/.." && pwd)}"
 
 export RUSTUP_HOME="${AVERNET_BCS_RUSTUP_HOME:-${TOOL_ROOT}/rustup}"
 export CARGO_HOME="${AVERNET_BCS_CARGO_HOME:-${TOOL_ROOT}/cargo}"
@@ -98,7 +101,7 @@ install_protoc() {
   trap 'rm -rf "${temp_dir:?}"' RETURN
   archive="${temp_dir}/protoc.zip"
 
-  curl --fail --location --silent --show-error \
+  curl --fail --location --retry 3 --retry-delay 2 --max-time 60 --silent --show-error \
     "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${platform}.zip" \
     --output "${archive}"
   actual="$(shasum -a 256 "${archive}" | awk '{print $1}')"
@@ -119,10 +122,25 @@ install_protoc() {
 }
 
 if ! rustup toolchain list | grep -q "^${RUST_VERSION}-"; then
-  CARGO_HOME="${RUSTUP_PROXY_CARGO_HOME}" rustup toolchain install "${RUST_VERSION}" \
-    --profile minimal \
-    --component clippy \
-    --component rustfmt >&2
+  # rustup retries a stalled download without an upper bound. Bound the install
+  # so a hung toolchain fetch fails the job instead of occupying the runner.
+  (
+    CARGO_HOME="${RUSTUP_PROXY_CARGO_HOME}" rustup toolchain install "${RUST_VERSION}" \
+      --profile minimal \
+      --component clippy \
+      --component rustfmt >&2 &
+    install_pid=$!
+    for _ in $(seq 1 180); do
+      if ! kill -0 "${install_pid}" 2>/dev/null; then
+        wait "${install_pid}"
+        exit $?
+      fi
+      sleep 1
+    done
+    kill -TERM "${install_pid}" 2>/dev/null || true
+    echo "rustup toolchain install exceeded 180s" >&2
+    exit 124
+  )
 fi
 
 readonly PROTOC_BIN="$(install_protoc)"

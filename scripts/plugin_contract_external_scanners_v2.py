@@ -75,7 +75,7 @@ def check_external_entrypoint_v2(
     try:
         result = subprocess.run(
             command,
-            cwd=ROOT,
+            cwd=RUST_SCANNER_MANIFEST_V2.parent if language == "rust" else ROOT,
             check=False,
             capture_output=True,
             input=json.dumps(request, separators=(",", ":")),

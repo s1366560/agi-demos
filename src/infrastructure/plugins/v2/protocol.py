@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict
 from enum import Enum
@@ -88,6 +89,10 @@ def plugin_contract_digest_v2(contract: PluginContractV2) -> str:
     return f"sha256:{hashlib.sha256(canonical_json_v2(payload)).hexdigest()}"
 
 
+_PARSED_SNAPSHOTS: OrderedDict[str, tuple[bytes, ProfileSnapshotV2]] = OrderedDict()
+_PARSED_SNAPSHOT_LIMIT = 32
+
+
 def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
     """Validate and parse one v2 snapshot; v1 is intentionally rejected."""
     if not isinstance(payload, dict):
@@ -97,15 +102,29 @@ def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
             "incompatible_schema_version",
             "plugin snapshot schema_version must be 2; v1 is not accepted",
         )
+    # The default profile embeds the whole kernel manifest. Re-walking that schema
+    # on every compose is what pushed profile p95 past 100ms. A verified digest
+    # already proves the bytes match a snapshot that passed validation.
+    digest = payload.get("digest")
+    body = _snapshot_canonical(payload)
+    expected_from_body = hashlib.sha256(body).hexdigest()
+    if isinstance(digest, str) and (cached := _PARSED_SNAPSHOTS.get(digest)) is not None:
+        if digest == expected_from_body and cached[0] == body:
+            _PARSED_SNAPSHOTS.move_to_end(digest)
+            return cached[1]
     _validate_schema("ProfileSnapshotV2", payload)
     _validate_snapshot_semantics(payload)
-    expected_digest = _snapshot_digest(payload)
-    if payload["digest"] != expected_digest:
+    if payload["digest"] != expected_from_body:
         raise PluginProtocolV2Error(
             "digest_mismatch",
-            f"snapshot digest mismatch: expected {expected_digest}",
+            f"snapshot digest mismatch: expected {expected_from_body}",
         )
-    return _snapshot_from_payload(payload)
+    snapshot = _snapshot_from_payload(payload)
+    _PARSED_SNAPSHOTS[expected_from_body] = (body, snapshot)
+    _PARSED_SNAPSHOTS.move_to_end(expected_from_body)
+    while len(_PARSED_SNAPSHOTS) > _PARSED_SNAPSHOT_LIMIT:
+        _PARSED_SNAPSHOTS.popitem(last=False)
+    return snapshot
 
 
 def parse_plugin_manifest_v2(payload: object) -> PluginManifestV2:
@@ -266,7 +285,15 @@ def build_profile_snapshot_v2(
         "manifests": [_json_value(asdict(manifest)) for manifest in manifests],
         "entries": [_json_value(asdict(entry)) for entry in entries],
     }
-    payload["digest"] = hashlib.sha256(canonical_json_v2(payload)).hexdigest()
+    # Build already canonicalized this payload. Parse would walk it again
+    # only to prove the digest. Reuse the verified bytes on a cache hit.
+    canonical = canonical_json_v2(payload)
+    digest = hashlib.sha256(canonical).hexdigest()
+    cached = _PARSED_SNAPSHOTS.get(digest)
+    if cached is not None and cached[0] == canonical:
+        _PARSED_SNAPSHOTS.move_to_end(digest)
+        return cached[1]
+    payload["digest"] = digest
     return parse_profile_snapshot_v2(payload)
 
 
@@ -462,9 +489,13 @@ def _scope_contains(parent: Mapping[str, Any], child: Mapping[str, Any]) -> bool
     return True
 
 
-def _snapshot_digest(payload: Mapping[str, Any]) -> str:
+def _snapshot_canonical(payload: Mapping[str, Any]) -> bytes:
     digest_payload = {key: value for key, value in payload.items() if key != "digest"}
-    return hashlib.sha256(canonical_json_v2(digest_payload)).hexdigest()
+    return canonical_json_v2(digest_payload)
+
+
+def _snapshot_digest(payload: Mapping[str, Any]) -> str:
+    return hashlib.sha256(_snapshot_canonical(payload)).hexdigest()
 
 
 def _snapshot_from_payload(payload: Mapping[str, Any]) -> ProfileSnapshotV2:

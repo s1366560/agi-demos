@@ -34,7 +34,8 @@ pub(super) fn tool_kind(tool: &str) -> TimelineToolKind {
         .and_then(|definition| definition.input_schema)
         .and_then(|schema| schema.get("x-agistack-display-kind").cloned())
         .and_then(|kind| kind.as_str().map(str::to_owned))
-        .as_deref() == Some("repl_output")
+        .as_deref()
+        == Some("repl_output")
     {
         TimelineToolKind::ReplOutput
     } else if SEARCH_TOOLS.contains(&tool) {
@@ -206,7 +207,6 @@ const COMMAND_TOOLS: &[&str] = &[
 
 /// Desktop computer-use family (adapters-cua). Rendered with its own
 /// presentation kind and, for `computer_get_app_state`, a screenshot block.
-
 
 /// Computer-use row extras: the target app is the row title and a result
 /// summary counts serialized AX elements. `redacted_output` may be empty for

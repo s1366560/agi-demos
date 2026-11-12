@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useSyncExternalStore,
 } from 'react';
 
@@ -9,7 +10,10 @@ import {
   createDesktopHashRouteHost,
   type DesktopHashRouteHostOptions,
 } from './desktopHashRouteHost';
-import type { DesktopRouteHostState } from './desktopRouteHostModel';
+import {
+  desktopRouteCapabilityObservationUnchanged,
+  type DesktopRouteHostState,
+} from './desktopRouteHostModel';
 
 export type DesktopHashRouteHostReactAdapter<TModule> = Readonly<{
   getSnapshot: () => DesktopRouteHostState<TModule>;
@@ -40,15 +44,40 @@ export function createDesktopHashRouteHostReactAdapter<TModule>(
 export function useDesktopHashRouteHost<TModule>(
   options: DesktopHashRouteHostOptions<TModule>,
 ): DesktopHashRouteHostHookState<TModule> {
-  const adapter = useMemo(
-    () => createDesktopHashRouteHostReactAdapter(options),
-    [options],
-  );
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const adapterRef = useRef<DesktopHashRouteHostReactAdapter<TModule> | null>(null);
+  const stateRef = useRef<DesktopRouteHostState<TModule>>({ status: 'idle' });
+  const retainedMode = useRef(options.mode);
+  const retainedPermissions = useRef(options.permissions);
+  const adapter = useMemo(() => {
+    const current = stateRef.current;
+    const previous = adapterRef.current;
+    if (
+      previous &&
+      retainedMode.current === options.mode &&
+      samePermissionSet(retainedPermissions.current, options.permissions) &&
+      shouldRetainDesktopRouteHost(current, options)
+    ) {
+      return previous;
+    }
+    const liveOptions = new Proxy({} as DesktopHashRouteHostOptions<TModule>, {
+      get(_target, property: string) {
+        return optionsRef.current[property as keyof DesktopHashRouteHostOptions<TModule>];
+      },
+    });
+    const created = createDesktopHashRouteHostReactAdapter(liveOptions);
+    adapterRef.current = created;
+    retainedMode.current = options.mode;
+    retainedPermissions.current = options.permissions;
+    return created;
+  }, [options]);
   const state = useSyncExternalStore(
     adapter.subscribe,
     adapter.getSnapshot,
     adapter.getSnapshot,
   );
+  stateRef.current = state;
   const retry = useCallback(() => adapter.retry(), [adapter]);
 
   useEffect(() => {
@@ -57,4 +86,28 @@ export function useDesktopHashRouteHost<TModule>(
   }, [adapter]);
 
   return useMemo(() => ({ state, retry }), [retry, state]);
+}
+
+function samePermissionSet(
+  current: ReadonlySet<string>,
+  next: ReadonlySet<string>,
+): boolean {
+  if (current.size !== next.size) return false;
+  for (const permission of current) {
+    if (!next.has(permission)) return false;
+  }
+  return true;
+}
+
+function shouldRetainDesktopRouteHost<TModule>(
+  state: DesktopRouteHostState<TModule>,
+  options: DesktopHashRouteHostOptions<TModule>,
+): boolean {
+  if (state.status !== 'ready' && state.status !== 'degraded' && state.status !== 'loading') {
+    return false;
+  }
+  return desktopRouteCapabilityObservationUnchanged(
+    state.capability,
+    options.resolveCapability(state.match.definition.capability, state.match.context),
+  );
 }

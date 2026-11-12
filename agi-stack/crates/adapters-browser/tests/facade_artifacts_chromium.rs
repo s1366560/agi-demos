@@ -1,8 +1,8 @@
 //! Real downloads and native file chooser delivery, including an out-of-process frame.
-use agistack_adapters_browser::{BridgeWsClient, BrowserToolHost, facade};
+use agistack_adapters_browser::{facade, BridgeWsClient, BrowserToolHost};
 use agistack_core::ports::ToolHost;
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-use serde_json::{Value, json};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use serde_json::{json, Value};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::{path::Path, process::Stdio, sync::Arc, time::Duration};
@@ -143,11 +143,9 @@ async fn real_download_and_cross_origin_file_chooser_use_scoped_files() {
         "media fixture\n"
     );
     let inline = call(&host,&root,"playwright.locator",json!([[{"kind":"getByRole","args":["img",{"name":"Inline media","exact":true}]}],"downloadMedia",[]])).await;
-    assert!(
-        std::fs::read(inline.as_str().unwrap())
-            .unwrap()
-            .starts_with(b"\x89PNG")
-    );
+    assert!(std::fs::read(inline.as_str().unwrap())
+        .unwrap()
+        .starts_with(b"\x89PNG"));
     call(&host, &root, "playwright.domSnapshot", json!([])).await;
     assert_eq!(
         call(

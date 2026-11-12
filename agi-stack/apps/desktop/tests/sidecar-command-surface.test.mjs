@@ -21,7 +21,10 @@ const electronPreloadSource = readFileSync(
 );
 
 test('the private sidecar command surface exposes only local-runtime capabilities', () => {
-  assert.match(controlSource, /local_requests\.dispatch\(&state\.runtime, &request, &output_tx\)/u);
+  assert.match(
+    controlSource,
+    /local_requests\s*\.dispatch\(\s*&state\.runtime,\s*&request,\s*&output_tx\s*\)/u,
+  );
   assert.match(localControlSource, /local_runtime_status[\s\S]*runtime\.status\(\)/u);
   assert.match(controlSource, /local_runtime_configure/u);
   assert.match(controlSource, /trusted_session_(?:save|load|clear)/u);

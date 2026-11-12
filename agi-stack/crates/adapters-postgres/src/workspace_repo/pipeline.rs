@@ -125,7 +125,7 @@ impl PgWorkspaceRepository {
         sqlx::query(&format!(
             "UPDATE workspace_pipeline_runs \
              SET status = $2, reason = $3, completed_at = $4, updated_at = $4, \
-                 metadata_json = metadata_json || $5 \
+                 metadata_json = (metadata_json::jsonb || $5::jsonb)::json \
              WHERE id = $1 \
              RETURNING {PIPELINE_RUN_COLS}"
         ))
@@ -195,7 +195,7 @@ impl PgWorkspaceRepository {
                  log_ref = $6, artifact_refs_json = $7, completed_at = $8, updated_at = $8, \
                  duration_ms = GREATEST(0, CAST(EXTRACT(EPOCH FROM \
                      ($8 - COALESCE(started_at, $8))) * 1000 AS integer)), \
-                 metadata_json = metadata_json || $9 \
+                 metadata_json = (metadata_json::jsonb || $9::jsonb)::json \
              WHERE id = $1 \
              RETURNING {PIPELINE_STAGE_RUN_COLS}"
         ))

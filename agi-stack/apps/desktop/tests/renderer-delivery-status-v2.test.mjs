@@ -39,6 +39,24 @@ test('transport failures, scope failures and prose containing the code are not r
   }
 });
 
+test('unavailable delivery stays failed and every other error still propagates', () => {
+  const missingGrant = new Error('renderer_credential_required');
+  const unavailable = desktopRendererDeliveryUnavailableV2(missingGrant);
+  assert.deepEqual(unavailable, {
+    status: 'unavailable',
+    reason_code: 'renderer_credential_required',
+  });
+  const transport = new Error('renderer_transport_unavailable');
+  assert.equal(desktopRendererDeliveryUnavailableV2(transport), null);
+  const deliver = (error) => {
+    const translated = desktopRendererDeliveryUnavailableV2(error);
+    if (!translated) throw error;
+    return translated;
+  };
+  assert.deepEqual(deliver(missingGrant), unavailable);
+  assert.throws(() => deliver(transport), (error) => error === transport);
+});
+
 test('only delivery fetch translates the missing grant and renderer rejects before reconciliation', () => {
   const main = readFileSync(new URL('../electron/main/index.ts', import.meta.url), 'utf8');
   const hook = readFileSync(new URL('../src/plugins/useDesktopPluginGenerationV2.ts', import.meta.url), 'utf8');

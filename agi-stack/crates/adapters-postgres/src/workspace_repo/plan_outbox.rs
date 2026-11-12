@@ -83,6 +83,11 @@ impl PgWorkspaceRepository {
             return Ok(Vec::new());
         }
         let lease_expires_at = add_seconds(now, lease_seconds.max(1));
+        let returning = PLAN_OUTBOX_COLS
+            .split(", ")
+            .map(|column| format!("outbox.{column}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let rows = sqlx::query(&format!(
             "WITH due AS ( \
                  SELECT id FROM workspace_plan_outbox \
@@ -111,7 +116,7 @@ impl PgWorkspaceRepository {
                  updated_at = $1 \
              FROM due \
              WHERE outbox.id = due.id \
-             RETURNING {PLAN_OUTBOX_COLS}"
+             RETURNING {returning}"
         ))
         .bind(now)
         .bind(limit)
@@ -230,7 +235,8 @@ impl PgWorkspaceRepository {
             "UPDATE workspace_plan_outbox \
              SET status = $2, lease_owner = NULL, lease_expires_at = NULL, \
                  last_error = NULL, next_attempt_at = NULL, \
-                 metadata_json = COALESCE(metadata_json, '{}'::jsonb) || $3, updated_at = $4 \
+                 metadata_json = (COALESCE(metadata_json::jsonb, '{}'::jsonb) || $3::jsonb)::json, \
+                 updated_at = $4 \
              WHERE id = $1 AND status = 'processing'",
         );
         if lease_owner.is_some() {
@@ -261,8 +267,9 @@ impl PgWorkspaceRepository {
             "UPDATE workspace_plan_outbox \
              SET status = $2, lease_owner = NULL, lease_expires_at = NULL, \
                  last_error = NULL, next_attempt_at = NULL, \
-                 payload_json = COALESCE(payload_json, '{}'::jsonb) || $3, \
-                 metadata_json = COALESCE(metadata_json, '{}'::jsonb) || $4, updated_at = $5 \
+                 payload_json = (COALESCE(payload_json::jsonb, '{}'::jsonb) || $3::jsonb)::json, \
+                 metadata_json = (COALESCE(metadata_json::jsonb, '{}'::jsonb) || $4::jsonb)::json, \
+                 updated_at = $5 \
              WHERE id = $1 AND status = 'processing'",
         );
         if lease_owner.is_some() {

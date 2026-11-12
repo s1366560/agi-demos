@@ -10,6 +10,17 @@ export async function digestV2(value: unknown): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+const digestByIdentity = new WeakMap<object, Promise<string>>();
+
+/** Reuse a digest when the same immutable object is checked more than once. */
+export function digestCachedV2(value: object): Promise<string> {
+  const cached = digestByIdentity.get(value);
+  if (cached !== undefined) return cached;
+  const pending = digestV2(value);
+  digestByIdentity.set(value, pending);
+  return pending;
+}
+
 function serialize(value: unknown, ancestors: Set<object>): string {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') {
     return JSON.stringify(value);

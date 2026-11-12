@@ -1,7 +1,7 @@
 //! Installed XDG DesktopAppInfo identities. GIO parses Exec argv and launches without a shell.
 use crate::backend::{App, NativeError, Result};
 use gio::{glib, prelude::*};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 fn invalid() -> NativeError {
@@ -115,15 +115,13 @@ mod tests {
             gio::glib::shell_parse_argv("/usr/bin/app '$(echo hidden)' '$TOKEN' ';'").unwrap();
         assert_eq!(parsed[1], std::ffi::OsStr::new("$(echo hidden)"));
         assert_eq!(parsed[2], std::ffi::OsStr::new("$TOKEN"));
-        assert!(
-            super::start(&crate::backend::App::new(
-                "/tmp/arbitrary".into(),
-                "Unregistered".into(),
-                None,
-                Some("/usr/bin/true".into())
-            ))
-            .is_err()
-        );
+        assert!(super::start(&crate::backend::App::new(
+            "/tmp/arbitrary".into(),
+            "Unregistered".into(),
+            None,
+            Some("/usr/bin/true".into())
+        ))
+        .is_err());
     }
 }
 

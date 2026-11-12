@@ -83,9 +83,7 @@ async fn serve(listener: TcpListener) {
                     "capabilities": ["cdp"]
                 }
             });
-            ws.send(Message::Text(reply.to_string().into()))
-                .await
-                .unwrap();
+            ws.send(Message::Text(reply.to_string())).await.unwrap();
             let notification = json!({
                 "jsonrpc": "2.0",
                 "method": "onCDPEvent",
@@ -95,7 +93,7 @@ async fn serve(listener: TcpListener) {
                     "params": {"entry": {"level": "info", "text": "hello from page", "timestamp": 1.0}}
                 }
             });
-            ws.send(Message::Text(notification.to_string().into()))
+            ws.send(Message::Text(notification.to_string()))
                 .await
                 .unwrap();
         }
@@ -104,9 +102,7 @@ async fn serve(listener: TcpListener) {
         let (id, method) = read_request(&mut ws).await;
         assert_eq!(method, "ping");
         let reply = json!({"jsonrpc": "2.0", "id": id, "result": {}});
-        ws.send(Message::Text(reply.to_string().into()))
-            .await
-            .unwrap();
+        ws.send(Message::Text(reply.to_string())).await.unwrap();
         if connection == 0 {
             drop(ws); // hard drop: client must detect and reconnect
             continue;
@@ -119,9 +115,7 @@ async fn serve(listener: TcpListener) {
                     let value: Value = serde_json::from_str(&text).unwrap();
                     if let Some(id) = value.get("id").and_then(Value::as_u64) {
                         let reply = json!({"jsonrpc": "2.0", "id": id, "result": {}});
-                        ws.send(Message::Text(reply.to_string().into()))
-                            .await
-                            .unwrap();
+                        ws.send(Message::Text(reply.to_string())).await.unwrap();
                     }
                 }
                 Ok(Message::Close(_)) | Err(_) => break,

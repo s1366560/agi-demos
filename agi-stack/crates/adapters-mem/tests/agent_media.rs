@@ -1,6 +1,6 @@
 use std::sync::{
-    Arc,
     atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 
 use agistack_adapters_mem::{FixedClock, InMemoryCheckpointStore, ScriptedLlm, StubLlm};

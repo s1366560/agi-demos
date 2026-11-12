@@ -90,11 +90,7 @@ fn keep_both_settles_outbox_records_copy_and_converges_object_to_cloud_version()
             .await
             .unwrap();
         assert_eq!((result.applied, result.conflicts), (1, 0));
-        let saved = repo
-            .get(&scope(), "memory-copy-1")
-            .await
-            .unwrap()
-            .unwrap();
+        let saved = repo.get(&scope(), "memory-copy-1").await.unwrap().unwrap();
         assert_eq!(saved.content, "local proposal");
         assert_eq!(saved.version, 1);
         assert_eq!(repo.pull_cursor(&scope(), &target()).await.unwrap(), 3);
@@ -182,7 +178,10 @@ fn forged_keep_both_receipts_leave_the_object_paused_until_a_valid_receipt_settl
         variants.push(bumped);
         variants.push(keep_both_response(&record, copy_version(&record, "memory")));
         let mut missing = good.clone();
-        missing["receipt"].as_object_mut().unwrap().remove("sequence");
+        missing["receipt"]
+            .as_object_mut()
+            .unwrap()
+            .remove("sequence");
         variants.push(missing);
         let mut zero = good.clone();
         zero["receipt"]["sequence"] = json!(0);
@@ -273,8 +272,8 @@ fn keep_both_delete_proposal_is_refused_before_any_send() {
         let id = uuid::Uuid::new_v4().to_string();
         let verified = json!({"id":id,"memory_id":"memory","proposed":proposed,"current":remote(2,false),"observed_current":remote(2,false),"resolved_change_id":null});
         repo.accept_push_receipt(&scope(),&target(),push.local_sequence,json!({"replayed":false,"receipt":{"status":"conflict","change_id":push.change_id,"conflict_id":id}}),Some(verified.clone())).await.unwrap();
-        assert!(
-            repo.prepare_cloud_resolution_durable(
+        assert!(repo
+            .prepare_cloud_resolution_durable(
                 &scope(),
                 &target(),
                 "actor",
@@ -286,8 +285,7 @@ fn keep_both_delete_proposal_is_refused_before_any_send() {
                 ),
                 verified,
             )
-            .is_err()
-        );
+            .is_err());
         assert_eq!(repo.push_conflicts(&scope(), 10).await.unwrap().len(), 1);
     });
 }

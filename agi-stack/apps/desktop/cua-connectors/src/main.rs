@@ -4,7 +4,10 @@ mod contracts;
 
 use api::{Connector, Provider};
 use serde_json::{json, Value};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{btree_map::Entry, BTreeMap},
+    sync::Arc,
+};
 use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader},
     task::{AbortHandle, JoinSet},
@@ -116,18 +119,20 @@ async fn main() {
                 }else if request.get("id").is_none(){None}
                 else {
                     let id=request["id"].clone();let key=id.to_string();
-                    if pending.contains_key(&key){Some(error(id,-32600,"duplicate_request_id"))}
-                    else if method=="initialize" {
-                        if connector.is_some(){Some(error(id,-32600,"already_initialized"))}
-                        else {match initialized(provider,&mut request){Ok((client,result))=>{connector=Some(Arc::new(client));Some(response(id,result))},Err(code)=>Some(error(id,-32602,code))}}
-                    }else if let Some(client)=connector.as_ref() {
-                        match method.as_str(){
-                            "ping"=>Some(response(id,json!({}))),
-                            "tools/list"=>Some(response(id,json!({"tools":contracts::tools()}))),
-                            "tools/call"=>{let client=Arc::clone(client);let params=request["params"].take();let task_key=key.clone();pending.insert(key,tasks.spawn(async move{(task_key,tool_call(client,id,params).await)}));None},
-                            _=>Some(error(id,-32601,"method_not_found")),
-                        }
-                    }else{Some(error(id,-32002,"initialize_required"))}
+                    match pending.entry(key.clone()) {
+                        Entry::Occupied(_)=>Some(error(id,-32600,"duplicate_request_id")),
+                        Entry::Vacant(slot)=>if method=="initialize" {
+                            if connector.is_some(){Some(error(id,-32600,"already_initialized"))}
+                            else {match initialized(provider,&mut request){Ok((client,result))=>{connector=Some(Arc::new(client));Some(response(id,result))},Err(code)=>Some(error(id,-32602,code))}}
+                        }else if let Some(client)=connector.as_ref() {
+                            match method.as_str(){
+                                "ping"=>Some(response(id,json!({}))),
+                                "tools/list"=>Some(response(id,json!({"tools":contracts::tools()}))),
+                                "tools/call"=>{let client=Arc::clone(client);let params=request["params"].take();let task_key=key.clone();slot.insert(tasks.spawn(async move{(task_key,tool_call(client,id,params).await)}));None},
+                                _=>Some(error(id,-32601,"method_not_found")),
+                            }
+                        }else{Some(error(id,-32002,"initialize_required"))},
+                    }
                 }
             }
         };

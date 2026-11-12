@@ -5,8 +5,8 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use serde_json::Value;
 
+use super::tool_policy::TrustedToolPolicyV2;
 use super::{ContextV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeV2Error};
-use super::tool_policy::{TrustedToolPolicyV2, TOOL_EXECUTION_POLICY_SERVICE_V2};
 
 pub const RUST_SERVER_HOST_MODULE_REF_V2: &str = "builtin://memstack/rust-server/generation-host";
 pub const RUST_SERVER_HTTP_ROUTES_MODULE_REF_V2: &str =
@@ -16,6 +16,28 @@ pub const DESKTOP_SIDECAR_HOST_MODULE_REF_V2: &str =
 pub const DESKTOP_SIDECAR_HTTP_ROUTES_MODULE_REF_V2: &str =
     "builtin://memstack/desktop-sidecar/http-routes";
 pub const RUST_SERVER_HOST_SERVICE_V2: &str = "service:rust-server.runtime-descriptor";
+const TOOL_EXECUTION_POLICY_SERVICE_V2: &str = "service:tool-execution-policy";
+
+const fn same_service_v2(left: &str, right: &str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut index = 0;
+    while index < left.len() {
+        if left[index] != right[index] {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+const _: () = assert!(same_service_v2(
+    TOOL_EXECUTION_POLICY_SERVICE_V2,
+    super::tool_policy::TOOL_EXECUTION_POLICY_SERVICE_V2
+));
 pub const RUST_SERVER_HTTP_ROUTES_SERVICE_V2: &str = "service:rust-server.http-route-contribution";
 pub const DESKTOP_SIDECAR_HOST_SERVICE_V2: &str = "service:desktop-sidecar.local-capability";
 pub const DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2: &str =

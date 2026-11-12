@@ -9,7 +9,9 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::push::{valid_identifier, KnowledgeSyncTarget, PreparedKnowledgePush, MAX_REMOTE_REVISION};
+use super::push::{
+    valid_identifier, KnowledgeSyncTarget, PreparedKnowledgePush, MAX_REMOTE_REVISION,
+};
 use super::{KnowledgeResult, KnowledgeScope};
 use crate::knowledge::KnowledgeError;
 

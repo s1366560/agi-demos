@@ -2,7 +2,6 @@
 pub(super) mod identity;
 mod operation_guard;
 mod timeline_metadata;
-pub(super) use timeline_metadata::PluginTimelineMetadataV2;
 use super::knowledge_authority_v2::agent_access::PluginNativeIdentityV2;
 use super::{
     tool_authority::{ToolEffect, ToolMetadata},
@@ -25,6 +24,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
+pub(super) use timeline_metadata::PluginTimelineMetadataV2;
 
 struct Authority {
     state: Arc<LocalRuntimeState>,

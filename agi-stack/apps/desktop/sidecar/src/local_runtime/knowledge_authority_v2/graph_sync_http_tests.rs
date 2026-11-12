@@ -75,7 +75,10 @@ async fn graph_mutate(
     cloud.mutations.lock().unwrap().push(body.clone());
     let request: Value = serde_json::from_str(&body).unwrap();
     let id = request["change_id"].as_str().unwrap().to_string();
-    let receipt = if cloud.conflict_next.swap(false, std::sync::atomic::Ordering::SeqCst) {
+    let receipt = if cloud
+        .conflict_next
+        .swap(false, std::sync::atomic::Ordering::SeqCst)
+    {
         let conflict_id = Uuid::new_v4().to_string();
         let mut proposed = request.clone();
         proposed.as_object_mut().unwrap().remove("change_id");
@@ -157,13 +160,12 @@ async fn changes(headers: HeaderMap) -> Json<Value> {
     check_auth(&headers);
     Json(json!({"changes":[],"next_cursor":0,"has_more":false}))
 }
-async fn graph_changes(
-    State(cloud): State<Arc<Cloud>>,
-    headers: HeaderMap,
-) -> Json<Value> {
+async fn graph_changes(State(cloud): State<Arc<Cloud>>, headers: HeaderMap) -> Json<Value> {
     check_auth(&headers);
     let events = std::mem::take(&mut *cloud.events.lock().unwrap());
-    let next = events.last().map_or(0, |event| event["sequence"].as_u64().unwrap());
+    let next = events
+        .last()
+        .map_or(0, |event| event["sequence"].as_u64().unwrap());
     Json(json!({"changes":events,"next_cursor":next,"has_more":false}))
 }
 
@@ -358,10 +360,7 @@ async fn graph_pull_rides_sync_pull_and_serves_the_synced_projection() {
     )
     .await;
     assert_eq!(listed.0, StatusCode::OK);
-    assert_eq!(
-        listed.1["result"]["items"][0]["object_id"],
-        "cloud-memory"
-    );
+    assert_eq!(listed.1["result"]["items"][0]["object_id"], "cloud-memory");
     drop(operation);
     state.platform_plugin_authority_v2.deactivate().await;
     server.abort();
@@ -376,7 +375,8 @@ async fn graph_push_conflict_resolves_through_the_cloud_and_settles_locally() {
     extract(&operation).await;
     let (cloud, base, server) = cloud(vec![]).await;
     super::push_http_tests::install_broker(&state, &directory, base);
-    cloud.conflict_next
+    cloud
+        .conflict_next
         .store(true, std::sync::atomic::Ordering::SeqCst);
     let pushed = rpc(
         Arc::clone(&state),

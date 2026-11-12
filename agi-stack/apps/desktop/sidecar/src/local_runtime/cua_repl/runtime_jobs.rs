@@ -87,12 +87,7 @@ mod tests {
             ),
             ("browser.operation", "iab", "playwright.locator", "waitFor"),
             ("process.spawn", "mcpapps", "playwright.locator", "waitFor"),
-            (
-                "browser.operation",
-                "mcpapps",
-                "capability.cdp.send",
-                "",
-            ),
+            ("browser.operation", "mcpapps", "capability.cdp.send", ""),
         ]
         .into_iter()
         .enumerate()

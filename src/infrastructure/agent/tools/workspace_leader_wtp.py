@@ -313,27 +313,11 @@ async def workspace_assign_task_tool(
     # Failures are logged upstream; the envelope was already durably published.
     launch_info: dict[str, Any] = {"scheduled": False}
     try:
-        from src.infrastructure.agent.workspace.worker_launch import schedule_worker_session
         from src.infrastructure.workspace_core.legacy_runtime import (
             legacy_workspace_runtime_retired,
         )
 
-        task_repo = legacy_workspace_runtime_retired("Workspace task assignment launch lookup")
-        task = await task_repo.find_by_id(task_id)
-        if task is None:
-            launch_info = {"scheduled": False, "reason": "task_not_found"}
-        else:
-            actor_user_id = _runtime_string(ctx, "user_id") or ctx.user_id or ""
-            await schedule_worker_session(
-                workspace_id=workspace_id,
-                task=task,
-                worker_agent_id=worker_agent_id,
-                actor_user_id=actor_user_id,
-                leader_agent_id=leader_agent_id,
-                attempt_id=attempt_id,
-                extra_instructions=description if description else None,
-            )
-            launch_info = {"scheduled": True}
+        legacy_workspace_runtime_retired("Workspace task assignment launch lookup")
     except Exception as exc:
         logger.warning(
             "workspace_assign_task: schedule_worker_session failed (task=%s): %s",

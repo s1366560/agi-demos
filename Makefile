@@ -586,6 +586,11 @@ check: format lint test ## Run all quality checks
 
 plugin-v2-contract-gate: ## Verify generated V2 catalogs and contract completeness
 	@echo " Verifying protocol-v2 plugin contracts..."
+	@if [ ! -f web/node_modules/typescript/package.json ] && [ ! -d scripts/node_modules/typescript ]; then \
+		mkdir -p /tmp/memstack-contract-typescript; \
+		npm install --prefix /tmp/memstack-contract-typescript typescript@5.9.3 --no-save --no-package-lock; \
+		ln -sfn /tmp/memstack-contract-typescript/node_modules scripts/node_modules; \
+	fi
 	uv run python scripts/check_plugin_contract_completeness_v2.py
 	@echo " Protocol-v2 plugin contracts verified"
 

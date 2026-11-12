@@ -17,7 +17,7 @@ from src.domain.model.plugins.generated_v2 import (
     SnapshotApplyReceiptV2,
 )
 from src.infrastructure.adapters.primary.web.dependencies import create_api_key
-from src.infrastructure.adapters.primary.web.routers import platform_plugins
+from src.infrastructure.adapters.primary.web.routers import platform_plugins, platform_plugins_v2
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_data_plane_credential_repository_v2 import (
@@ -174,6 +174,31 @@ async def test_invalid_public_configuration_returns_fixed_safe_error(
     assert response.json()["detail"]["code"] == "web_public_view_unavailable"
     assert "private-secret-canary" not in response.text
     assert "private-extra" not in response.text
+
+
+async def test_scoped_web_view_uses_accepted_generation_without_composing(
+    authenticated_views,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    client, keys, _workload = authenticated_views
+    payload = json.loads((_ROOT / "shared/profiles/memstack-default-bootstrap.v2.json").read_text())
+    payload.pop("digest")
+    payload["digest"] = hashlib.sha256(canonical_json_v2(payload)).hexdigest()
+    snapshot = parse_profile_snapshot_v2(payload)
+
+    async def scope(*_args: object, **_kwargs: object) -> ScopeV2:
+        return ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-1")
+
+    monkeypatch.setattr(
+        platform_plugins_v2, "_accepted_runtime_snapshot_v2", lambda _request: snapshot
+    )
+    monkeypatch.setattr(platform_plugins_v2, "resolve_plugin_read_scope_v2", scope)
+    response = await client.get(
+        f"{_PATH}?tenant_id=tenant-1",
+        headers={"Authorization": f"Bearer {keys[0]}"},
+    )
+    assert response.status_code == 200
+    assert "entries" in response.json()["snapshot"]
 
 
 def test_real_builtin_route_contribution_registers_public_view():

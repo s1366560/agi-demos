@@ -207,7 +207,7 @@ class PlatformPluginDataPlaneCredentialRepositoryV2:
             )
         )
         credential = result.scalar_one_or_none()
-        if credential is None:
+        if not isinstance(credential, PlatformPluginV2DataPlaneCredentialModel):
             raise PlatformPluginDataPlaneCredentialV2Error(
                 "credential_not_found",
                 "plugin v2 data-plane credential is unknown",

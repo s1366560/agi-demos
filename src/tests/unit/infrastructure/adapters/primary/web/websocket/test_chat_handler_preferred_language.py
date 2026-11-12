@@ -293,6 +293,7 @@ class StopContext:
 
     def __init__(self, task: asyncio.Task[None]) -> None:
         self.connection_manager = StopConnectionManager(task)
+        self.container = SimpleNamespace(redis_client=None)
         self.sent: list[dict[str, Any]] = []
 
     async def send_json(self, message: dict[str, Any]) -> None:

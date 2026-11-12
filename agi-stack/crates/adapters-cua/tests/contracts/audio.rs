@@ -3,19 +3,17 @@ use serde_json::json;
 
 #[test]
 fn only_audio_stop_declares_owned_recording_release_and_remains_a_mutation() {
-    use agistack_adapters_cua::{CuaToolEffect, OWNED_RECORDING_RELEASE_TOOLS, tool_effects};
+    use agistack_adapters_cua::{tool_effects, CuaToolEffect, OWNED_RECORDING_RELEASE_TOOLS};
     assert_eq!(OWNED_RECORDING_RELEASE_TOOLS, &["computer_audio_stop"]);
     assert_eq!(
         tool_effects()[OWNED_RECORDING_RELEASE_TOOLS[0]],
         CuaToolEffect::Mutate
     );
-    assert!(
-        validate_tool_input(
-            "computer_audio_stop",
-            &json!({"recording_id":"owned-recording", "path":"/tmp/export.wav"})
-        )
-        .is_err()
-    );
+    assert!(validate_tool_input(
+        "computer_audio_stop",
+        &json!({"recording_id":"owned-recording", "path":"/tmp/export.wav"})
+    )
+    .is_err());
 }
 
 #[test]
@@ -23,13 +21,11 @@ fn audio_duration_is_bounded_and_optional_for_existing_callers() {
     for source in ["microphone", "system", "mixed"] {
         assert!(validate_tool_input("computer_audio_start", &json!({"source":source})).is_ok());
         for duration in [100, 60_000, 300_000] {
-            assert!(
-                validate_tool_input(
-                    "computer_audio_start",
-                    &json!({"source":source,"max_duration_ms":duration})
-                )
-                .is_ok()
-            );
+            assert!(validate_tool_input(
+                "computer_audio_start",
+                &json!({"source":source,"max_duration_ms":duration})
+            )
+            .is_ok());
         }
     }
     for duration in [
@@ -39,13 +35,11 @@ fn audio_duration_is_bounded_and_optional_for_existing_callers() {
         json!("100"),
         json!(100.5),
     ] {
-        assert!(
-            validate_tool_input(
-                "computer_audio_start",
-                &json!({"source":"system","max_duration_ms":duration})
-            )
-            .is_err()
-        );
+        assert!(validate_tool_input(
+            "computer_audio_start",
+            &json!({"source":"system","max_duration_ms":duration})
+        )
+        .is_err());
     }
 }
 
@@ -149,13 +143,11 @@ process.stdout.write(JSON.stringify({{ calls, rejected }}));
 #[test]
 fn continuity_renewal_is_never_exposed_as_a_model_tool() {
     assert!(validate_tool_input("computer_locked_use", &json!({"enabled":true})).is_ok());
-    assert!(
-        validate_tool_input(
-            "computer_locked_use",
-            &json!({"enabled":true,"generation":"model-created"})
-        )
-        .is_err()
-    );
+    assert!(validate_tool_input(
+        "computer_locked_use",
+        &json!({"enabled":true,"generation":"model-created"})
+    )
+    .is_err());
     for method in [
         "locked_use_enable",
         "locked_use_renew",

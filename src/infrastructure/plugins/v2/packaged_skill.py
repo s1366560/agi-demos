@@ -18,7 +18,15 @@ _SKILLS_ROOT = Path(__file__).resolve().parent / "skills"
 def packaged_skill_digest_v2(skill_name: str) -> str:
     """Return a framed digest covering SKILL.md and every packaged resource."""
     skill_dir = _skill_directory_v2(skill_name)
-    files = tuple(sorted(path for path in skill_dir.rglob("*") if path.is_file()))
+    files = tuple(
+        sorted(
+            path
+            for path in skill_dir.rglob("*")
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and path.suffix != ".pyc"
+        )
+    )
     if not files or not (skill_dir / "SKILL.md").is_file():
         raise RuntimeV2Error(
             "packaged_skill_missing",

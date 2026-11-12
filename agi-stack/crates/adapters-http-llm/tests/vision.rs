@@ -1,16 +1,16 @@
 use std::sync::{
-    Arc, Mutex,
     atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
 };
 
-use agistack_adapters_http_llm::{AnthropicLlm, HttpLlm, with_model_request_log};
+use agistack_adapters_http_llm::{with_model_request_log, AnthropicLlm, HttpLlm};
 use agistack_core::{
     agent::types::{MediaAttachment, Role, TranscriptEntry},
     model_request::{ModelRequestLog, ModelRequestStatus},
     ports::{CoreResult, LlmPort},
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-use serde_json::{Value, json};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use serde_json::{json, Value};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -134,10 +134,8 @@ async fn openai_decision_uses_real_image_blocks_without_logging_image_bytes() {
         let image = ImageFile::new();
         let (base, wire) = server(stream, false).await;
         let model = HttpLlm::new(base, "configured-vision-model");
-        let transcript = vec![
-            TranscriptEntry::new(0, Role::Observation, "screen text")
-                .with_media(vec![image.attachment()]),
-        ];
+        let transcript = vec![TranscriptEntry::new(0, Role::Observation, "screen text")
+            .with_media(vec![image.attachment()])];
         let log = Arc::new(Log::default());
         let deltas = Mutex::new(String::new());
         if stream {

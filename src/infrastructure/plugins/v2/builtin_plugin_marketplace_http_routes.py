@@ -15,6 +15,13 @@ from src.application.schemas.plugin_marketplace import (
     MarketplacePackageRevocationResponse,
     MarketplacePackageUninstallResponse,
 )
+from src.infrastructure.adapters.primary.web.routers.marketplace_governance_http_v2 import (
+    decide_marketplace_review_v2,
+    list_marketplace_reviews_v2,
+    marketplace_projection_v2,
+    marketplace_updates_v2,
+    submit_marketplace_review_v2,
+)
 from src.infrastructure.adapters.primary.web.routers.plugin_marketplace import (
     approve_package,
     get_package,
@@ -78,8 +85,44 @@ def plugin_marketplace_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
         for route in router.routes
         if isinstance(route, APIRoute)
     )
+    governance = "/api/v1/plugin-marketplace/governance"
     return (
         *unified_routes,
+        _plugin_marketplace_route_v2(
+            path=governance,
+            methods=("GET",),
+            endpoint=marketplace_projection_v2,
+            name="marketplace_projection_v2",
+            response_model=dict[str, Any],
+        ),
+        _plugin_marketplace_route_v2(
+            path=f"{governance}/updates",
+            methods=("POST",),
+            endpoint=marketplace_updates_v2,
+            name="marketplace_updates_v2",
+            response_model=dict[str, Any],
+        ),
+        _plugin_marketplace_route_v2(
+            path=f"{governance}/reviews",
+            methods=("POST",),
+            endpoint=submit_marketplace_review_v2,
+            name="submit_marketplace_review_v2",
+            response_model=dict[str, str],
+        ),
+        _plugin_marketplace_route_v2(
+            path=f"{governance}/reviews",
+            methods=("GET",),
+            endpoint=list_marketplace_reviews_v2,
+            name="list_marketplace_reviews_v2",
+            response_model=dict[str, Any],
+        ),
+        _plugin_marketplace_route_v2(
+            path=f"{governance}/reviews/{{review_id}}/decision",
+            methods=("POST",),
+            endpoint=decide_marketplace_review_v2,
+            name="decide_marketplace_review_v2",
+            response_model=dict[str, str],
+        ),
         _plugin_marketplace_route_v2(
             path=prefix,
             methods=("GET",),

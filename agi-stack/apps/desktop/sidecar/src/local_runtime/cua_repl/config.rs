@@ -1,4 +1,4 @@
-use super::super::{LocalRuntimeState, authority_store::DesktopPermissionProfile};
+use super::super::{authority_store::DesktopPermissionProfile, LocalRuntimeState};
 use super::sandbox::Sandbox;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

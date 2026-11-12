@@ -2,7 +2,7 @@ use std::{
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, MutexGuard, atomic::AtomicU64, atomic::Ordering},
+    sync::{atomic::AtomicU64, atomic::Ordering, Mutex, MutexGuard},
 };
 
 use super::*;
@@ -249,28 +249,22 @@ fn server_llm_audio_support_requires_exact_startup_configuration() {
     };
     let model = "operator-declared-audio-model";
     let declared = format!("[\"{model}\"]");
-    assert!(
-        configured(Some(&declared), model)
-            .unwrap()
-            .0
-            .supports_audio_input()
-    );
+    assert!(configured(Some(&declared), model)
+        .unwrap()
+        .0
+        .supports_audio_input());
     assert!(!configured(None, model).unwrap().0.supports_audio_input());
-    assert!(
-        !configured(Some(&declared), "doubao-seed-2-1-lite-260915")
-            .unwrap()
-            .0
-            .supports_audio_input()
-    );
+    assert!(!configured(Some(&declared), "doubao-seed-2-1-lite-260915")
+        .unwrap()
+        .0
+        .supports_audio_input());
     let error = match configured(Some("[\"*\"]"), model) {
         Ok(_) => panic!("wildcard audio capability must fail at startup"),
         Err(error) => error,
     };
-    assert!(
-        error
-            .to_string()
-            .contains("invalid audio input model identifiers")
-    );
+    assert!(error
+        .to_string()
+        .contains("invalid audio input model identifiers"));
     let stub = select_llm_and_embedding_from(&|_| None).unwrap();
     assert!(!stub.0.supports_audio_input());
 }

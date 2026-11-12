@@ -18,9 +18,10 @@ const TERMINAL_EXIT_GRACE: Duration = Duration::from_millis(200);
 /// Process inspection never reaps the retained leader; foreground and migrated
 /// groups remain owned until every live member has exited or has been killed.
 /// With valid owned group/session identities, both Ok and Err return only after
-/// cleanup is confirmed. Err preserves failures observed before recovery; repeated
-/// inspection/signalling failures keep this call and its owner alive. Confirmed
-/// foreign sessions are excluded without signalling them.
+/// cleanup is confirmed. Err preserves non-EPERM failures observed before
+/// recovery. Raw EPERM is the XNU exit race and is dropped once no live member
+/// remains. Repeated inspection failures keep this call and its owner alive.
+/// Confirmed foreign sessions are excluded without signalling them.
 pub(super) fn finish_owned_groups(
     groups: impl IntoIterator<Item = i32>,
     session: i32,
@@ -58,7 +59,12 @@ fn finish_with_retries(mut poll: impl FnMut() -> io::Result<bool>) -> io::Result
             }
             Ok(false) => {}
             Err(error) => {
-                if failures.insert(error.to_string()) {
+                // Raw EPERM is the XNU exit race. Do not keep it once a later
+                // sweep confirms the owned group is empty. Every other error,
+                // including a foreign-session rejection, stays on the result.
+                if !super::pty_cleanup_error_remains_after_exit(&error) {
+                    tracing::debug!(%error, "owned PTY group signal raced member exit");
+                } else if failures.insert(error.to_string()) {
                     tracing::error!(%error, "owned PTY group cleanup is still pending");
                 }
             }
@@ -107,7 +113,7 @@ struct OwnedProcessGroups {
     graceful_deadline: Instant,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct MemberIdentity {
     started_seconds: u64,
     started_microseconds: u64,
@@ -190,6 +196,12 @@ impl OwnedProcessGroups {
                     }
                     continue;
                 }
+                // XNU getsid can return EPERM once the member has exited or the
+                // PID has been reused. Re-read identity before treating it as a
+                // permission failure on a process we still own.
+                if error.raw_os_error() == Some(libc::EPERM) && !self.still_owned(pid, &identity)? {
+                    continue;
+                }
                 return Err(error);
             }
             if actual_session != self.session {
@@ -214,6 +226,7 @@ impl OwnedProcessGroups {
             // Job control can move a snapshotted member into a new group before
             // inspection. Follow that group only after verifying the retained session
             // and user, so cleanup also covers children forked after the migration.
+            let owned_identity = identity.clone();
             self.verified_members.insert(pid, identity);
             self.groups.insert(member_group(&info)?);
             remaining_members.insert(pid);
@@ -224,6 +237,12 @@ impl OwnedProcessGroups {
             // SAFETY: the positive PID was validated against the retained session.
             if unsafe { libc::kill(pid, libc::SIGKILL) } == -1 {
                 let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EPERM)
+                    && !self.still_owned(pid, &owned_identity)?
+                {
+                    remaining_members.remove(&pid);
+                    continue;
+                }
                 if error.raw_os_error() != Some(libc::ESRCH) {
                     return Err(error);
                 }
@@ -233,6 +252,24 @@ impl OwnedProcessGroups {
         // Enumerate again after exit so children forked during the snapshot are also
         // covered. Never report completion while an owned live member remains.
         Ok(!active && self.groups == previous_groups)
+    }
+
+    /// True when `pid` is still the same live process observed at the start of this sweep.
+    /// A zombie cannot be signalled; the retained leader reaps it.
+    fn still_owned(&mut self, pid: i32, identity: &MemberIdentity) -> io::Result<bool> {
+        match process_info(pid)? {
+            Some(info)
+                if info.pbi_status != libc::SZOMB
+                    && MemberIdentity::from_info(&info) == *identity =>
+            {
+                Ok(true)
+            }
+            _ => {
+                self.verified_members.remove(&pid);
+                self.known_members.remove(&pid);
+                Ok(false)
+            }
+        }
     }
 }
 
@@ -328,6 +365,21 @@ mod tests {
             });
         }
         command.spawn().expect("spawn owned session")
+    }
+
+    #[test]
+    fn raw_eperm_is_not_retained_after_the_group_is_confirmed_empty() {
+        let mut polls = 0;
+        let result = finish_with_retries(|| {
+            polls += 1;
+            if polls == 1 {
+                Err(io::Error::from_raw_os_error(libc::EPERM))
+            } else {
+                Ok(true)
+            }
+        });
+        assert_eq!(polls, 2);
+        result.expect("exiting member EPERM does not fail confirmed cleanup");
     }
 
     #[test]

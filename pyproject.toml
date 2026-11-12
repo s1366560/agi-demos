@@ -81,6 +81,8 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.12.0",
+    "pytest-xdist>=3.8.0",
+    "pytest-timeout>=2.3.1",
     "responses>=0.24.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
@@ -195,6 +197,8 @@ ignore = [
 
 # Delayed import exemptions (logging config etc.)
 "src/infrastructure/adapters/primary/web/main.py" = ["E402"]
+"src/infrastructure/plugins/v2/signed_optional_business_v2.py" = ["E402", "I001"]
+"src/infrastructure/adapters/primary/web/routers/optional_business_http_v2.py" = ["E402", "I001"]
 "src/infrastructure/adapters/secondary/ray/__init__.py" = ["E402"]
 "src/infrastructure/llm/litellm/litellm_client.py" = ["E402", "ANN401"]
 "src/tests/unit/infrastructure/llm/conftest.py" = ["E402"]
@@ -602,6 +606,7 @@ ignore_missing_imports = true
 [dependency-groups]
 dev = [
     "basedpyright>=1.38.1",
+    "pytest-timeout>=2.3.1",
     "watchdog>=6.0.0",
 ]
 

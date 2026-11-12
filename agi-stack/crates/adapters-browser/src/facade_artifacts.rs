@@ -2,16 +2,16 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{
-    Arc,
     atomic::{AtomicU64, Ordering},
+    Arc,
 };
 use std::time::{Duration, Instant};
 
 use agistack_core::ports::CoreResult;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::{broadcast, oneshot, watch};
 
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, HostState, tool_err};
+use crate::host::{tool_err, Backend, BridgeEndpoint, BrowserToolHost, HostState};
 use crate::protocol::{BridgeNotification, OnCdpDetachParams, OnCdpEventParams};
 
 #[path = "facade_download.rs"]
@@ -125,11 +125,7 @@ async fn cdp_session<E: BridgeEndpoint>(
             endpoint.request("executeCdp", request).await
         } else {
             endpoint
-                .request_on(
-                    &backend.wire_name(),
-                    "executeCdp",
-                    request,
-                )
+                .request_on(&backend.wire_name(), "executeCdp", request)
                 .await
         }
     })
@@ -257,7 +253,9 @@ async fn next_event(
             .map_err(|_| tool_err("browser artifact event stream was interrupted"))?;
         if notification.method == "onBrowserDisconnected" {
             if Backend::from_wire(notification.params["backend"].as_str()) == owner.backend {
-                return Err(tool_err("browser instance disconnected during artifact operation"));
+                return Err(tool_err(
+                    "browser instance disconnected during artifact operation",
+                ));
             }
         } else if notification.method == "onCDPDetach" {
             if let Ok(detach) = serde_json::from_value::<OnCdpDetachParams>(notification.params) {

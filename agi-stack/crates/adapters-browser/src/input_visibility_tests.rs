@@ -1,7 +1,7 @@
 use super::*;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use tokio::sync::{Notify, broadcast};
+use tokio::sync::{broadcast, Notify};
 
 struct Endpoint {
     hidden: bool,
@@ -91,7 +91,7 @@ impl BridgeEndpoint for Endpoint {
         if params["params"]["type"] == "mouseReleased"
             && self
                 .fail_releases
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
                     count.checked_sub(1)
                 })
                 .is_ok()

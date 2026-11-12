@@ -5,10 +5,7 @@ fn export_audit_timeline(f: &Fixture) -> Vec<Value> {
         "knowledge-diagnostics-export:{}:{}",
         f.auth.workspace.tenant_id, f.auth.workspace.project_id
     );
-    f.state
-        .session_store
-        .timeline(&conversation, 10)
-        .unwrap()
+    f.state.session_store.timeline(&conversation, 10).unwrap()
 }
 
 #[tokio::test]
@@ -42,7 +39,12 @@ async fn diagnostics_export_reports_whitelisted_failures_success_and_sync_state(
         result["application"]["module_ref"],
         "builtin://memstack/desktop-sidecar/knowledge-authority"
     );
-    assert!(result["application"]["knowledge_schema_version"].as_u64().unwrap() >= 19);
+    assert!(
+        result["application"]["knowledge_schema_version"]
+            .as_u64()
+            .unwrap()
+            >= 19
+    );
     assert_eq!(result["scope"]["tenant_id"], f.auth.workspace.tenant_id);
     assert_eq!(result["scope"]["project_id"], f.auth.workspace.project_id);
     // Index failure stage with the exact task descriptor.
@@ -51,7 +53,10 @@ async fn diagnostics_export_reports_whitelisted_failures_success_and_sync_state(
     assert_eq!(failed_index["failure"], "provider_unavailable");
     assert_eq!(result["index"]["coverage"]["failed_sources"], 1);
     assert_eq!(result["index"]["truncated"], false);
-    assert!(result["processing"]["failed"].as_array().unwrap().is_empty());
+    assert!(result["processing"]["failed"]
+        .as_array()
+        .unwrap()
+        .is_empty());
     // The fixture's applied extraction is the last processing success.
     assert_eq!(result["processing"]["last_success_ms"], 101);
     assert_eq!(result["index"]["last_success_ms"], Value::Null);
@@ -172,7 +177,13 @@ async fn diagnostics_export_never_leaks_planted_credentials_or_memory_content() 
     ] {
         assert!(!serialized.contains(planted), "{planted}");
     }
-    assert_eq!(export.1["result"]["processing"]["failed"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        export.1["result"]["processing"]["failed"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -184,8 +195,7 @@ async fn diagnostics_export_is_capability_gated_and_records_failed_audit() {
             .inner
             .lock()
             .unwrap()
-            .validation_actions =
-            Some(actions.iter().map(|action| (*action).to_owned()).collect());
+            .validation_actions = Some(actions.iter().map(|action| (*action).to_owned()).collect());
     };
     restrict(&["failed_processing"]);
     let denied = query(&f, json!({"operation":"diagnostics_export"})).await;

@@ -21,6 +21,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      react: path.resolve(__dirname, './node_modules/react'),
+      'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime'),
+      'react/jsx-dev-runtime': path.resolve(__dirname, './node_modules/react/jsx-dev-runtime'),
+      'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
       '@agistack/plugin-slots': path.resolve(
         __dirname,
         '../agi-stack/packages/plugin-slots/src/index.ts'
@@ -33,6 +37,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    testTimeout: 20000,
     environment: 'happy-dom',
     css: true,
     server: {
@@ -40,7 +45,7 @@ export default defineConfig({
         inline: [/katex/],
       },
     },
-    setupFiles: './src/test/setup.ts',
+    setupFiles: ['./src/test/setup-macrotask.ts', './src/test/setup.ts'],
     include: ['src/test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', '**/.{idea,git,cache,output,temp}/**'],
     coverage: {

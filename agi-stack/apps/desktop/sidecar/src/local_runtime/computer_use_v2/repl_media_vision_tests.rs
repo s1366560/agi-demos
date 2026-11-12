@@ -5,7 +5,7 @@ use crate::local_runtime::{
     cua_repl,
     knowledge_authority_v2::agent_access::{self, RunAuthorization},
 };
-use agistack_adapters_browser::{BridgeEndpoint, BrowserToolHost, protocol::BridgeNotification};
+use agistack_adapters_browser::{protocol::BridgeNotification, BridgeEndpoint, BrowserToolHost};
 use agistack_adapters_http_llm::HttpLlm;
 use agistack_core::{
     agent::{
@@ -15,8 +15,8 @@ use agistack_core::{
     ports::{LlmPort, ToolHost},
 };
 use async_trait::async_trait;
-use axum::{Json, Router, extract::State, routing::post};
-use base64::{Engine, engine::general_purpose::STANDARD};
+use axum::{extract::State, routing::post, Json, Router};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
@@ -165,12 +165,10 @@ async fn bare_browser_jpeg_is_scoped_and_reaches_model_as_jpeg() {
     foreign.user_id = "other-user".into();
     assert!(artifacts::preview(&state, &foreign, id).is_err());
     state.cua_repl.shutdown();
-    assert!(
-        artifacts::preview(&state, &owner, id).unwrap()["data_url"]
-            .as_str()
-            .unwrap()
-            .starts_with("data:image/jpeg;base64,")
-    );
+    assert!(artifacts::preview(&state, &owner, id).unwrap()["data_url"]
+        .as_str()
+        .unwrap()
+        .starts_with("data:image/jpeg;base64,"));
 
     let requests = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()

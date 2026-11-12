@@ -6,8 +6,8 @@ use std::{
     io::{Read, Write},
     process::{ChildStdin, Command, Stdio},
     sync::{
-        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -235,18 +235,16 @@ impl Watchdog {
             Ordering::Release,
         );
         let weak = Arc::downgrade(&inner);
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(Duration::from_millis(250));
-                let Some(inner) = weak.upgrade() else {
-                    break;
-                };
-                if inner
-                    .request("heartbeat", None, false, serde_json::Value::Null)
-                    .is_err()
-                {
-                    break;
-                }
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_millis(250));
+            let Some(inner) = weak.upgrade() else {
+                break;
+            };
+            if inner
+                .request("heartbeat", None, false, serde_json::Value::Null)
+                .is_err()
+            {
+                break;
             }
         });
         Ok(Self { inner })

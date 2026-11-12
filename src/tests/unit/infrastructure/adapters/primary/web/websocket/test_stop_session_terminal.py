@@ -38,6 +38,7 @@ async def test_stop_preserves_subscription_and_requires_real_execution(
         connection_manager=manager,
         send_ack=AsyncMock(),
         send_error=AsyncMock(),
+        container=SimpleNamespace(redis_client=None),
     )
     await chat_handler.StopSessionHandler().handle(context, {"conversation_id": "c"})
     bridge.cancel.assert_not_called()

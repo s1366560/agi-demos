@@ -103,7 +103,7 @@ class SignedMarketplaceScopeV2:
         ).ensure_initialized(self.scope, actor_id)
 
     async def record(self, plugin_id: str) -> MarketplaceRecordV3 | None:
-        return await self.db.scalar(
+        found: MarketplaceRecordV3 | None = await self.db.scalar(
             select(MarketplaceRecordV3)
             .where(
                 MarketplaceRecordV3.tenant_id == self.scope.tenant_id,
@@ -113,6 +113,7 @@ class SignedMarketplaceScopeV2:
             )
             .with_for_update()
         )
+        return found
 
     async def begin(self, plugin_id: str, version: str) -> tuple[Any, dict[str, Any] | None]:
         previous = await self.desired.current_desired_set(self.scope)
@@ -200,6 +201,8 @@ class SignedMarketplaceScopeV2:
                 package = await self.governance.get_package_version(
                     plugin_id, row.payload["version"]
                 )
+                if package is None:
+                    raise ValueError("signed package version is missing")
                 manifest = parse_bundle_manifest_v2(package.manifest)
                 expected = {item.plugin_id for item in manifest.manifests}
                 if not expected.intersection(
@@ -221,7 +224,12 @@ class SignedMarketplaceScopeV2:
                 and candidate is not None
                 and current.desired_set == candidate.desired_set
             )
-            if previous is not None and owns_candidate:
+            if (
+                previous is not None
+                and current is not None
+                and candidate is not None
+                and current.desired_set == candidate.desired_set
+            ):
                 restored = replace(previous.desired_set, revision=current.desired_set.revision + 1)
                 restored = replace(restored, digest=desired_bundle_set_digest_v2(restored))
                 await self.desired.record_desired_set(

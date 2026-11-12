@@ -80,7 +80,10 @@ impl VerifiedCloudTransport {
         self.get(url).await
     }
 
-    pub(super) async fn graph_conflict(&self, id: &str) -> Result<Value, KnowledgeAuthorityErrorV2> {
+    pub(super) async fn graph_conflict(
+        &self,
+        id: &str,
+    ) -> Result<Value, KnowledgeAuthorityErrorV2> {
         self.get(self.project_url(&["knowledge-sync", "graph", "conflicts", id])?)
             .await
     }
@@ -111,8 +114,12 @@ impl VerifiedCloudTransport {
         &self,
         prepared: &PreparedKnowledgePush,
     ) -> Result<(Value, Option<Value>), KnowledgeAuthorityErrorV2> {
-        self.push_to(&["knowledge-sync", "mutations"], &["knowledge-sync", "conflicts"], prepared)
-            .await
+        self.push_to(
+            &["knowledge-sync", "mutations"],
+            &["knowledge-sync", "conflicts"],
+            prepared,
+        )
+        .await
     }
 
     pub(super) async fn graph_push(

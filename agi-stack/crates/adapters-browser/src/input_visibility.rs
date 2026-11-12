@@ -8,10 +8,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agistack_core::ports::CoreResult;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 
-use crate::host::{Backend, BridgeEndpoint, BrowserToolHost, tool_err};
+use crate::host::{tool_err, Backend, BridgeEndpoint, BrowserToolHost};
 
 const FOCUS_METHOD: &str = "Emulation.setFocusEmulationEnabled";
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(10);

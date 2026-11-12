@@ -164,7 +164,10 @@ for line in sys.stdin:
             .await
             .is_err());
         registry
-            .renderer_operation(&state, json!({"tabId":tab,"operation":"attach","mountNonce":"fixture-mount"}))
+            .renderer_operation(
+                &state,
+                json!({"tabId":tab,"operation":"attach","mountNonce":"fixture-mount"}),
+            )
             .await
             .unwrap();
         assert_eq!(
@@ -351,7 +354,10 @@ for line in sys.stdin:
         assert!(registry.renderer_operation(&state, hidden).await.is_err());
         assert_eq!(execution.calls.load(Ordering::SeqCst), 1);
         registry
-            .renderer_operation(&state, json!({"tabId":tab,"operation":"detach","mountNonce":"fixture-mount"}))
+            .renderer_operation(
+                &state,
+                json!({"tabId":tab,"operation":"detach","mountNonce":"fixture-mount"}),
+            )
             .await
             .unwrap();
         assert!(registry
@@ -365,7 +371,10 @@ for line in sys.stdin:
             .to_string()
             .contains("frame_expired"));
         registry
-            .renderer_operation(&state, json!({"tabId":tab,"operation":"attach","mountNonce":"fixture-remount"}))
+            .renderer_operation(
+                &state,
+                json!({"tabId":tab,"operation":"attach","mountNonce":"fixture-remount"}),
+            )
             .await
             .unwrap();
         let new_model_tab = registry.list(&state, &execution.scope)[0]["id"]
@@ -388,7 +397,10 @@ for line in sys.stdin:
         );
         // Duplicate attach for the same live registration is idempotent.
         registry
-            .renderer_operation(&state, json!({"tabId":tab,"operation":"attach","mountNonce":"fixture-remount"}))
+            .renderer_operation(
+                &state,
+                json!({"tabId":tab,"operation":"attach","mountNonce":"fixture-remount"}),
+            )
             .await
             .unwrap();
         assert_eq!(

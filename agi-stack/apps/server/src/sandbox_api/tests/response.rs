@@ -362,7 +362,10 @@ fn interactive_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_desktop_start.json"
     ))
     .unwrap();
-    crate::response_assertions::assert_parity(&desktop_golden, &serde_json::to_value(&desktop).unwrap());
+    crate::response_assertions::assert_parity(
+        &desktop_golden,
+        &serde_json::to_value(&desktop).unwrap(),
+    );
 
     let custom_desktop = DesktopServiceResponse::from_info(&info, "1280x720".to_string());
     assert_eq!(custom_desktop.resolution, "1280x720");
@@ -377,7 +380,10 @@ fn interactive_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_terminal_start.json"
     ))
     .unwrap();
-    crate::response_assertions::assert_parity(&terminal_golden, &serde_json::to_value(&terminal).unwrap());
+    crate::response_assertions::assert_parity(
+        &terminal_golden,
+        &serde_json::to_value(&terminal).unwrap(),
+    );
 
     let stop = SandboxServiceStopResponse { success: true };
     let stop_golden: serde_json::Value = serde_json::from_str(include_str!(
@@ -437,7 +443,10 @@ fn http_service_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_http_service_action.json"
     ))
     .unwrap();
-    crate::response_assertions::assert_parity(&action_golden, &serde_json::to_value(&action).unwrap());
+    crate::response_assertions::assert_parity(
+        &action_golden,
+        &serde_json::to_value(&action).unwrap(),
+    );
 
     let preview = HttpServicePreviewSessionResponse {
         preview_url: append_query_param(
@@ -451,7 +460,10 @@ fn http_service_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_http_service_preview_session.json"
     ))
     .unwrap();
-    crate::response_assertions::assert_parity(&preview_golden, &serde_json::to_value(&preview).unwrap());
+    crate::response_assertions::assert_parity(
+        &preview_golden,
+        &serde_json::to_value(&preview).unwrap(),
+    );
 
     assert_eq!(normalize_http_service_id(Some(" web:1 ")).unwrap(), "web:1");
     assert!(normalize_http_service_id(Some("bad/id")).is_err());
@@ -509,7 +521,10 @@ fn health_stats_and_action_responses_match_goldens() {
         "../../../tests/golden/project_sandbox_health.json"
     ))
     .unwrap();
-    crate::response_assertions::assert_parity(&health_golden, &serde_json::to_value(&health).unwrap());
+    crate::response_assertions::assert_parity(
+        &health_golden,
+        &serde_json::to_value(&health).unwrap(),
+    );
 
     let stats = SandboxStatsResponse {
         project_id: "p1".to_string(),
@@ -533,7 +548,10 @@ fn health_stats_and_action_responses_match_goldens() {
         "../../../tests/golden/project_sandbox_stats.json"
     ))
     .unwrap();
-    crate::response_assertions::assert_parity(&stats_golden, &serde_json::to_value(&stats).unwrap());
+    crate::response_assertions::assert_parity(
+        &stats_golden,
+        &serde_json::to_value(&stats).unwrap(),
+    );
 
     let action = SandboxActionResponse {
         success: true,
@@ -544,7 +562,10 @@ fn health_stats_and_action_responses_match_goldens() {
         "../../../tests/golden/project_sandbox_action.json"
     ))
     .unwrap();
-    crate::response_assertions::assert_parity(&action_golden, &serde_json::to_value(&action).unwrap());
+    crate::response_assertions::assert_parity(
+        &action_golden,
+        &serde_json::to_value(&action).unwrap(),
+    );
 
     let list = ListProjectSandboxesResponse {
         sandboxes: vec![ProjectSandboxResponse::from(sample_info())],

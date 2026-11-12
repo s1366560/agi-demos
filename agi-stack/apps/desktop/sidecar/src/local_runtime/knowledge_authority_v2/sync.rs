@@ -379,9 +379,7 @@ impl KnowledgeOperationV2 {
             "decision": request.decision,
             "content": request.content,
         });
-        let response = transport
-            .graph_resolve(&request.conflict_id, body)
-            .await?;
+        let response = transport.graph_resolve(&request.conflict_id, body).await?;
         let receipt = transport.with_current_session(|| {
             Ok(repository.settle_graph_push_resolution_durable(
                 &self.scope,

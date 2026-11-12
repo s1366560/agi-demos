@@ -20,14 +20,33 @@ from darwinian_evolver.cli_common import (
     register_hyperparameter_args,
 )
 from darwinian_evolver.evolve_problem_loop import EvolveProblemLoop
-from darwinian_evolver.problem import (
-    EvaluationFailureCase,
-    EvaluationResult,
-    Evaluator,
-    Mutator,
-    Organism,
-    Problem,
-)
+
+if TYPE_CHECKING:
+
+    class _DarwinModel:
+        def __init__(self, *args: object, **kwargs: object) -> None: ...
+
+    class Organism(_DarwinModel): ...
+
+    class EvaluationFailureCase(_DarwinModel): ...
+
+    class EvaluationResult(_DarwinModel): ...
+
+    class Evaluator[OrganismT, ResultT, FailureT](_DarwinModel): ...
+
+    class Mutator[OrganismT, FailureT](_DarwinModel): ...
+
+    class Problem[OrganismT, ResultT, FailureT](_DarwinModel): ...
+
+else:
+    from darwinian_evolver.problem import (
+        EvaluationFailureCase,
+        EvaluationResult,
+        Evaluator,
+        Mutator,
+        Organism,
+        Problem,
+    )
 from openai import OpenAI
 
 if TYPE_CHECKING:
@@ -166,7 +185,7 @@ version in the last triple-backtick block of your response.
         return [MyOrganism(artifact=artifact)]
 
 
-def make_problem() -> Problem:
+def make_problem() -> Problem[MyOrganism, EvaluationResult, MyFailureCase]:
     initial = MyOrganism(artifact="TODO: starting artifact here")
     return Problem[MyOrganism, EvaluationResult, MyFailureCase](
         evaluator=MyEvaluator(),

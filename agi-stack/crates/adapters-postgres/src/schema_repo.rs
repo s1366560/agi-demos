@@ -292,7 +292,7 @@ impl PgSchemaRepository {
         let sql = format!(
             "UPDATE {} \
              SET description = COALESCE($3, description), \
-                 schema = COALESCE($4, schema), \
+                 schema = COALESCE($4::json, schema), \
                  updated_at = CASE \
                      WHEN $3::text IS NOT NULL OR $4::json IS NOT NULL THEN now() \
                      ELSE updated_at \

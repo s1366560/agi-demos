@@ -7,9 +7,27 @@ async fn child_read_observer_rejects_late_results_after_native_signout_or_scope_
     for signout in [true, false] {
         let (state, _) = setup().await;
         let (conversation, run) = run(&state).await;
-        let control = state.claim_agent_run(&conversation.id, Some(&run.id)).unwrap();
-        let auth = state.session_store.validate_session_credential(TOKEN, chrono::Utc::now().timestamp_millis()).unwrap().unwrap();
-        let native = RunAuthorization::capture(auth, Some(Arc::new(state.platform_plugin_authority_v2.acquire_generation().unwrap())), &conversation, &run.message_id, Some(&run.id)).unwrap();
+        let control = state
+            .claim_agent_run(&conversation.id, Some(&run.id))
+            .unwrap();
+        let auth = state
+            .session_store
+            .validate_session_credential(TOKEN, chrono::Utc::now().timestamp_millis())
+            .unwrap()
+            .unwrap();
+        let native = RunAuthorization::capture(
+            auth,
+            Some(Arc::new(
+                state
+                    .platform_plugin_authority_v2
+                    .acquire_generation()
+                    .unwrap(),
+            )),
+            &conversation,
+            &run.message_id,
+            Some(&run.id),
+        )
+        .unwrap();
         agent_access::scope(Some(native), async {
             let root = &run.environment.as_ref().unwrap().workspace_path;
             std::fs::write(std::path::Path::new(root).join("observer-read.txt"), "CHILD_READ_BEFORE_SIGNOUT").unwrap();

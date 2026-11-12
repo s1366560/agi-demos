@@ -113,13 +113,18 @@ class RouteTableV2:
         app: FastAPI,
         *,
         definitions: Sequence[RouteContributionV2] = (),
+        openapi: Mapping[str, Any] | None = None,
     ) -> RouteTableV2:
         """Freeze an already assembled private FastAPI graph without re-registering routes."""
         instance = cls.__new__(cls)
         instance._definitions = tuple(definitions)
         instance._routes = tuple(app.router.routes)
         instance._app = Router(routes=list(instance._routes))
-        instance._openapi = MappingProxyType(build_openapi_schema_v2(app))
+        instance._openapi = (
+            openapi
+            if isinstance(openapi, MappingProxyType)
+            else MappingProxyType(openapi if openapi is not None else build_openapi_schema_v2(app))
+        )
         return instance
 
     @property
@@ -153,13 +158,19 @@ class RouteTableBuilderV2:
     def __init__(self) -> None:
         self._definitions: list[RouteContributionV2] = []
         self._frozen: RouteTableV2 | None = None
+        self._sealed = False
 
     @property
     def definitions(self) -> tuple[RouteContributionV2, ...]:
         return tuple(self._definitions)
 
+    def seal(self) -> tuple[RouteContributionV2, ...]:
+        """Close contributions without compiling a throwaway FastAPI graph."""
+        self._sealed = True
+        return tuple(self._definitions)
+
     def contribute(self, definition: RouteContributionV2) -> Callable[[], Awaitable[None]]:
-        if self._frozen is not None:
+        if self._sealed or self._frozen is not None:
             raise RuntimeV2Error(
                 "route_table_frozen",
                 "route contributions are closed after the generation table is frozen",

@@ -3,9 +3,9 @@ use super::Owner;
 use crate::local_runtime::LocalRuntimeState;
 use agistack_adapters_cua::CuaCallContext;
 use agistack_core::ports::{CoreError, CoreResult, ToolResult};
-use base64::{Engine, engine::general_purpose::STANDARD};
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use base64::{engine::general_purpose::STANDARD, Engine};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 pub(super) fn initialize(db: &Connection) -> Result<(), String> {

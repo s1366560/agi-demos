@@ -11,6 +11,7 @@ import { WebFeatureUnavailableV2 } from '../../components/plugins/WebFeatureUnav
 import { deriveTopNavigationItems } from '../../config/navigation';
 
 import { createDefaultBusinessRouteElementsV2 } from './webDefaultBusinessRouteElementsV2';
+import { registerCoreWebFeatureIdsV2 } from './webFeatureIdsV2';
 
 import type { WebNavigationArtifactV2, WebRouteArtifactV2 } from './webRendererArtifactCatalogV2';
 
@@ -30,6 +31,7 @@ const navigationRouteObjects = routeObjects.map(toNavigationMatchRoute);
 export const WEB_FEATURE_IDS_V2: readonly string[] = Object.freeze(
   [...new Set(featureRoutes(routeObjects).map(({ feature }) => feature))].sort()
 );
+registerCoreWebFeatureIdsV2(WEB_FEATURE_IDS_V2);
 
 export function webFeatureRouteArtifactIdV2(feature: string): string {
   return `web.routes.${feature}.v1`;

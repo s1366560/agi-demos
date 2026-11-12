@@ -6,13 +6,41 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Path filter
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      web: ${{ steps.filter.outputs.web }}
+      agi: ${{ steps.filter.outputs.agi }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/ci_path_filter.py
+
   test:
     name: Backend Tests
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
       UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
     
@@ -62,13 +90,29 @@ jobs:
           persist-credentials: false
       
       - name: Set up Python
+        id: setup-python
+        continue-on-error: true
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: '3.12'
+          python-version: '3.12.13'
       
       - name: Install uv
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
-      
+        with:
+          enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
+
       - name: Install dependencies
         run: |
           uv sync --extra dev --extra neo4j
@@ -91,34 +135,721 @@ jobs:
           uv run ruff check src/ sdk/
           uv run mypy src/ --ignore-missing-imports
       
-      - name: Run tests
+      - name: Plugin storage and review Postgres
         env:
-          NEO4J_URI: bolt://localhost:7687
-          NEO4J_USER: neo4j
-          NEO4J_PASSWORD: testpassword
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: memstack
+          PLUGIN_STORAGE_POSTGRES_URL: postgresql+psycopg2://postgres:testpassword@localhost:5432/memstack
+        run: uv run pytest src/tests/integration/test_plugin_storage_postgres.py -q
+
+  unit:
+    name: Backend unit (${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    # Longest successful unit job on run 42876598409 was adapters-b, 12.1
+    # minutes. plugins-g was cancelled at this 60 minute cap on 42769476886,
+    # 42774866782, 42782329724, 42789007022, 42796068831, 42839522141,
+    # 42852169680, 42864773566, and 42876598409: the pytest pipeline did not
+    # return after the 18 minute kill. 30 minutes still covers the measured
+    # 12 minute jobs and that 18 minute limit.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [plugins-a, plugins-b, plugins-c, plugins-d, plugins-e, plugins-f, plugins-g, plugins-h, plugins-i, plugins-j, plugins-k, plugins-l, plugins-m, plugins-n, plugins-o, plugins-p, adapters-a, adapters-b, agent, rest-a, rest-b, rest-c, rest-d]
+    env:
+      UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
+      PYTHONUNBUFFERED: "1"
+      COVERAGE_CORE: sysmon
+      NEO4J_URI: bolt://localhost:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: testpassword
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: memstack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpassword
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      LLM_PROVIDER: gemini
+    services:
+      neo4j:
+        image: neo4j:5.26
+        env:
+          NEO4J_AUTH: neo4j/testpassword
+          NEO4J_PLUGINS: '["apoc"]'
+        ports:
+          - 7687:7687
+          - 7474:7474
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p testpassword 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres:
+        image: postgres:16
+        env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: testpassword
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          LLM_PROVIDER: gemini
-        run: |
-          uv run pytest src/tests/unit \
-            --cov=src \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            --cov-fail-under=72.8
+          POSTGRES_DB: memstack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - name: Prove Workspace authority PostgreSQL triggers and concurrency
-        env:
-          WORKSPACE_AUTHORITY_POSTGRES_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+      - name: Set up Python
+        id: setup-python
+        continue-on-error: true
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
         run: |
-          uv run pytest \
-            src/tests/integration/test_workspace_collaboration_authority_postgres.py \
-            -q
-      
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra neo4j
+
+      - name: Install TypeScript for the contract scanner
+        run: |
+          set -euo pipefail
+          target=web/node_modules/typescript/lib/typescript.js
+          if [ -f "$target" ]; then
+            exit 0
+          fi
+          npm install --no-package-lock --prefix /tmp/memstack-ts typescript@5.9.3
+          mkdir -p web/node_modules
+          ln -s /tmp/memstack-ts/node_modules/typescript web/node_modules/typescript
+
+      - name: Configure repository test database
+        env:
+          DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+        run: printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+
+      - name: Record plugins-g shard boundary
+        if: matrix.shard == 'plugins-g'
+        run: bash scripts/ci/plugins_g_shard_prelude.sh shard-prelude/summary.txt
+
+      - name: Upload plugins-g shard boundary
+        if: matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-shard-boundary
+          path: shard-prelude/summary.txt
+          if-no-files-found: error
+
+      - name: Run unit shard
+        if: matrix.shard != 'plugins-g'
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          # Interleave files so one directory's slow cases do not land in one shard.
+          # Local --durations: adapters 11m, plugins 12m, agent 2m. Rest was still
+          # in the router files at 70% after 23m, so it is cut four ways.
+          shard_files() {
+            local part="$1" parts="$2"
+            shift 2
+            local files=("$@")
+            args=()
+            local i
+            for i in "${!files[@]}"; do
+              if (( i % parts == part )); then
+                args+=("${files[$i]}")
+              fi
+            done
+            if ((${#args[@]} == 0)); then
+              echo "shard ${part}/${parts} collected no tests" >&2
+              exit 1
+            fi
+          }
+          case "${{ matrix.shard }}" in
+            plugins-a|plugins-b|plugins-c|plugins-d|plugins-e|plugins-f|plugins-g|plugins-h|plugins-i|plugins-j|plugins-k|plugins-l|plugins-m|plugins-n|plugins-o|plugins-p)
+              mapfile -t files < <(find src/tests/unit/infrastructure/plugins -name 'test_*.py' | sort)
+              ;;
+            adapters-a|adapters-b)
+              mapfile -t files < <(find src/tests/unit/infrastructure/adapters -name 'test_*.py' | sort)
+              ;;
+            agent)
+              args=(src/tests/unit/infrastructure/agent)
+              ;;
+            rest-a|rest-b|rest-c|rest-d)
+              mapfile -t files < <(find src/tests/unit -name 'test_*.py' \
+                -not -path '*/infrastructure/plugins/*' \
+                -not -path '*/infrastructure/adapters/*' \
+                -not -path '*/infrastructure/agent/*' | sort)
+              ;;
+          esac
+          case "${{ matrix.shard }}" in
+            plugins-a) shard_files 0 16 "${files[@]}" ;;
+            plugins-b) shard_files 1 16 "${files[@]}" ;;
+            plugins-c) shard_files 2 16 "${files[@]}" ;;
+            plugins-d) shard_files 3 16 "${files[@]}" ;;
+            plugins-e) shard_files 4 16 "${files[@]}" ;;
+            plugins-f) shard_files 5 16 "${files[@]}" ;;
+            plugins-g) shard_files 6 16 "${files[@]}" ;;
+            plugins-h) shard_files 7 16 "${files[@]}" ;;
+            plugins-i) shard_files 8 16 "${files[@]}" ;;
+            plugins-j) shard_files 9 16 "${files[@]}" ;;
+            plugins-k) shard_files 10 16 "${files[@]}" ;;
+            plugins-l) shard_files 11 16 "${files[@]}" ;;
+            plugins-m) shard_files 12 16 "${files[@]}" ;;
+            plugins-n) shard_files 13 16 "${files[@]}" ;;
+            plugins-o) shard_files 14 16 "${files[@]}" ;;
+            plugins-p) shard_files 15 16 "${files[@]}" ;;
+            adapters-a) shard_files 0 2 "${files[@]}" ;;
+            adapters-b) shard_files 1 2 "${files[@]}" ;;
+            rest-a) shard_files 0 4 "${files[@]}" ;;
+            rest-b) shard_files 1 4 "${files[@]}" ;;
+            rest-c) shard_files 2 4 "${files[@]}" ;;
+            rest-d) shard_files 3 4 "${files[@]}" ;;
+          esac
+          mkdir -p shard-logs
+          pytest_log="shard-logs/${{ matrix.shard }}-pytest.log"
+          # GNU timeout puts pytest in a new process group, so the runner cannot
+          # reap it (job 130340536360). plugins-g is not this step: each of its
+          # files is a later step whose name stays visible if that file hangs.
+          run_pytest() {
+            local method="$1"
+            shift
+            COVERAGE_FILE="coverage-${{ matrix.shard }}" \
+              PYTHONFAULTHANDLER=1 \
+              PYTHONUNBUFFERED=1 \
+              uv run pytest "${args[@]}" \
+                -m "not integration" \
+                --timeout=120 \
+                --timeout-method="$method" \
+                --durations=20 \
+                --cov=src \
+                --cov-report= \
+                --cov-fail-under=0 \
+                "$@" \
+                > "$pytest_log" 2>&1
+          }
+          echo "shard ${{ matrix.shard }} pytest start $(date -u +%H:%M:%S)"
+          set +e
+          run_pytest signal
+          status=$?
+          set -e
+          echo "----- ${{ matrix.shard }} pytest status ${status} -----"
+          echo "----- ${{ matrix.shard }} pytest log tail -----"
+          tail -n 200 "$pytest_log" || true
+          exit "$status"
+
+      - name: plugins-g collect
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 5
+        run: bash scripts/ci/plugins_g_collect.sh
+
+      - name: Upload plugins-g collected tests
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-collected
+          path: shard-logs/plugins-g-collected.txt
+          if-no-files-found: warn
+
+      - name: plugins-g test test_package_registry.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/test_package_registry.py
+
+      - name: Upload plugins-g test_package_registry.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_package_registry
+          path: |
+            shard-logs/test_package_registry.log
+            shard-logs/test_package_registry.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_agent_di_facade_retirement_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_agent_di_facade_retirement_v2.py
+
+      - name: Upload plugins-g test_agent_di_facade_retirement_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_agent_di_facade_retirement_v2
+          path: |
+            shard-logs/test_agent_di_facade_retirement_v2.log
+            shard-logs/test_agent_di_facade_retirement_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_agent_orchestration_runtime_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_agent_orchestration_runtime_v2.py
+
+      - name: Upload plugins-g test_agent_orchestration_runtime_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_agent_orchestration_runtime_v2
+          path: |
+            shard-logs/test_agent_orchestration_runtime_v2.log
+            shard-logs/test_agent_orchestration_runtime_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_agent_todo_redis_authority_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_agent_todo_redis_authority_v2.py
+
+      - name: Upload plugins-g test_agent_todo_redis_authority_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_agent_todo_redis_authority_v2
+          path: |
+            shard-logs/test_agent_todo_redis_authority_v2.log
+            shard-logs/test_agent_todo_redis_authority_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_artifact_http_services_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_artifact_http_services_v2.py
+
+      - name: Upload plugins-g test_artifact_http_services_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_artifact_http_services_v2
+          path: |
+            shard-logs/test_artifact_http_services_v2.log
+            shard-logs/test_artifact_http_services_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_builtin_artifacts_http_routes_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_builtin_artifacts_http_routes_v2.py
+
+      - name: Upload plugins-g test_builtin_artifacts_http_routes_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_builtin_artifacts_http_routes_v2
+          path: |
+            shard-logs/test_builtin_artifacts_http_routes_v2.log
+            shard-logs/test_builtin_artifacts_http_routes_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_builtin_graph_http_routes_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_builtin_graph_http_routes_v2.py
+
+      - name: Upload plugins-g test_builtin_graph_http_routes_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_builtin_graph_http_routes_v2
+          path: |
+            shard-logs/test_builtin_graph_http_routes_v2.log
+            shard-logs/test_builtin_graph_http_routes_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_builtin_plugin_marketplace_http_routes_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_builtin_plugin_marketplace_http_routes_v2.py
+
+      - name: Upload plugins-g test_builtin_plugin_marketplace_http_routes_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_builtin_plugin_marketplace_http_routes_v2
+          path: |
+            shard-logs/test_builtin_plugin_marketplace_http_routes_v2.log
+            shard-logs/test_builtin_plugin_marketplace_http_routes_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_builtin_task_session_http_routes_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_builtin_task_session_http_routes_v2.py
+
+      - name: Upload plugins-g test_builtin_task_session_http_routes_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_builtin_task_session_http_routes_v2
+          path: |
+            shard-logs/test_builtin_task_session_http_routes_v2.log
+            shard-logs/test_builtin_task_session_http_routes_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_channel_adapters.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_channel_adapters.py
+
+      - name: Upload plugins-g test_channel_adapters.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_channel_adapters
+          path: |
+            shard-logs/test_channel_adapters.log
+            shard-logs/test_channel_adapters.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_cron_services_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_cron_services_v2.py
+
+      - name: Upload plugins-g test_cron_services_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_cron_services_v2
+          path: |
+            shard-logs/test_cron_services_v2.log
+            shard-logs/test_cron_services_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_host_receipt_gate_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_host_receipt_gate_v2.py
+
+      - name: Upload plugins-g test_host_receipt_gate_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_host_receipt_gate_v2
+          path: |
+            shard-logs/test_host_receipt_gate_v2.log
+            shard-logs/test_host_receipt_gate_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_marketplace_mcp_boundary.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_marketplace_mcp_boundary.py
+
+      - name: Upload plugins-g test_marketplace_mcp_boundary.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_marketplace_mcp_boundary
+          path: |
+            shard-logs/test_marketplace_mcp_boundary.log
+            shard-logs/test_marketplace_mcp_boundary.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_profile_composition_cache_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_profile_composition_cache_v2.py
+
+      - name: Upload plugins-g test_profile_composition_cache_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_profile_composition_cache_v2
+          path: |
+            shard-logs/test_profile_composition_cache_v2.log
+            shard-logs/test_profile_composition_cache_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_runtime.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_runtime.py
+
+      - name: Upload plugins-g test_runtime.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_runtime
+          path: |
+            shard-logs/test_runtime.log
+            shard-logs/test_runtime.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_scoped_publication_models.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_scoped_publication_models.py
+
+      - name: Upload plugins-g test_scoped_publication_models.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_scoped_publication_models
+          path: |
+            shard-logs/test_scoped_publication_models.log
+            shard-logs/test_scoped_publication_models.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_skill_evolution_repository_services_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_skill_evolution_repository_services_v2.py
+
+      - name: Upload plugins-g test_skill_evolution_repository_services_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_skill_evolution_repository_services_v2
+          path: |
+            shard-logs/test_skill_evolution_repository_services_v2.log
+            shard-logs/test_skill_evolution_repository_services_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_tool_execution_policy.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_tool_execution_policy.py
+
+      - name: Upload plugins-g test_tool_execution_policy.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_tool_execution_policy
+          path: |
+            shard-logs/test_tool_execution_policy.log
+            shard-logs/test_tool_execution_policy.status
+          if-no-files-found: warn
+
+      - name: plugins-g test test_workspace_context_services_v2.py
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 8
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_workspace_context_services_v2.py
+
+      - name: Upload plugins-g test_workspace_context_services_v2.py
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-test_workspace_context_services_v2
+          path: |
+            shard-logs/test_workspace_context_services_v2.log
+            shard-logs/test_workspace_context_services_v2.status
+          if-no-files-found: warn
+
+      - name: plugins-g ordered group files 1-10
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 10
+        run: bash scripts/ci/plugins_g_ordered_group.sh 0 10
+
+      - name: Upload plugins-g ordered group files 1-10
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-ordered-group-1-10
+          path: shard-logs/
+          if-no-files-found: warn
+
+      - name: plugins-g ordered group files 11-19
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 10
+        run: bash scripts/ci/plugins_g_ordered_group.sh 10 9
+
+      - name: Upload plugins-g ordered group files 11-19
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-ordered-group-11-19
+          path: shard-logs/
+          if-no-files-found: warn
+
+      - name: plugins-g full shard
+        if: matrix.shard == 'plugins-g'
+        timeout-minutes: 20
+        run: bash scripts/ci/plugins_g_full_shard.sh
+
+      - name: Upload plugins-g shard diagnostics
+        if: always() && matrix.shard == 'plugins-g'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugins-g-shard-diagnostics
+          path: shard-logs/
+          if-no-files-found: warn
+
+      - name: Upload shard coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-${{ matrix.shard }}
+          path: coverage-${{ matrix.shard }}
+          if-no-files-found: error
+
+  container-integration:
+    name: Backend container integration
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: memstack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpassword
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      NEO4J_URI: bolt://localhost:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: testpassword
+    services:
+      neo4j:
+        image: neo4j:5.26
+        env:
+          NEO4J_AUTH: neo4j/testpassword
+          NEO4J_PLUGINS: '["apoc"]'
+        ports:
+          - 7687:7687
+          - 7474:7474
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p testpassword 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: memstack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra neo4j
+
+      - name: Run container integration tests
+        run: |
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+          COVERAGE_FILE=coverage-containers \
+            uv run pytest src/tests/unit/routers/agent/test_workspace_file_permission_v2.py \
+              -m integration \
+              --cov=src \
+              --cov-report= \
+              --cov-fail-under=0
+
+      - name: Upload container coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-containers
+          path: coverage-containers
+          if-no-files-found: error
+
+  coverage:
+    name: Backend coverage
+    needs: [unit, container-integration]
+    if: needs.unit.result == 'success' && needs.container-integration.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        id: setup-python
+        continue-on-error: true
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
+
+      - name: Install dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: Download shard coverage
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      - name: Combine coverage
+        run: |
+          uv run coverage combine coverage-*
+          uv run coverage report --fail-under=72.8
+          uv run coverage xml
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4.6.0
         with:
@@ -128,7 +859,10 @@ jobs:
 
   web:
     name: Web Typecheck, Tests & Build
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: web
@@ -141,8 +875,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        with:
-          version: 11.15.1
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -151,8 +883,41 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
 
+      - name: Set up Python
+        id: setup-python
+        continue-on-error: true
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
+
+      - name: Install Python test dependencies
+        working-directory: .
+        run: uv sync --extra dev --frozen
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install desktop renderer dependencies
+        working-directory: .
+        run: pnpm --dir agi-stack/apps/desktop install --frozen-lockfile --ignore-scripts
 
       - name: Typecheck
         run: pnpm run type-check
@@ -165,14 +930,17 @@ jobs:
 
   agi-stack-strangler-gate:
     name: agi-stack Strangler Gate
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: agi-stack
     env:
       DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
       REDIS_URL: redis://localhost:6379
-      LLM_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+      LLM_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef # gitleaks:allow -- isolated CI fixture
 
     services:
       postgres:
@@ -204,6 +972,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Cache Cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agi-stack/target
+          key: cargo-strangler-${{ runner.os }}-${{ hashFiles('agi-stack/Cargo.lock') }}
+          restore-keys: cargo-strangler-${{ runner.os }}-
+
       - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal
@@ -212,14 +990,29 @@ jobs:
           rustup target add wasm32-unknown-unknown
 
       - name: Set up Python for cloud contract validation
+        id: setup-python
+        continue-on-error: true
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: '3.12'
+          python-version: '3.12.13'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
         with:
           enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12.13; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
 
       - name: Install cloud contract Python dependencies
         working-directory: .
@@ -227,8 +1020,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        with:
-          version: 11.15.1
 
       - name: Set up Node for Electron bridge validation
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -243,12 +1034,21 @@ jobs:
       - name: Validate native catalog against Python cloud admission
         run: cargo test -p agistack-adapters-cua --test cloud_catalog --test cloud_permission_bridge
 
+      - name: Install desktop native libraries
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/ci/use_ubuntu_archive_mirror.sh"
+          sudo apt-get update
+          sudo apt-get install -y libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-good libxkbcommon-dev pkg-config
+
       - name: Run strangler gate
-        run: make strangler-gate
+        run: PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}" make strangler-gate
 
   agi-stack-bench:
     name: agi-stack Bench Scorecard
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: agi-stack
@@ -285,7 +1085,20 @@ jobs:
           fi
 
       - name: Run go/no-go bench scorecard
-        run: make bench
+        run: |
+          set +e
+          make bench
+          set -e
+          python3 - << 'PY'
+          import json
+          import sys
+          from pathlib import Path
+          report_path = Path("target/bench/scorecard.json")
+          if not report_path.is_file():
+              sys.exit(2)
+          report = json.loads(report_path.read_text())
+          sys.exit(0 if report["summary"]["fail"] == 0 else 2)
+          PY
 
       - name: Publish bench trend summary
         if: always()
@@ -327,7 +1140,19 @@ jobs:
 
   agi-stack-desktop-bundle:
     name: agi-stack Desktop Bundle
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: macos-latest
+    timeout-minutes: 70
+    env:
+      # Sidecar tests require cfg(debug_assertions); a release test profile
+      # rejects the local knowledge host. Keep the debug test build and only
+      # drop debuginfo. cargo test uses the test profile, so DEV_DEBUG alone
+      # left the 7m30s test rebuild as "unoptimized + debuginfo" on run
+      # 42957928259.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
     defaults:
       run:
         working-directory: agi-stack
@@ -338,6 +1163,46 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Python
+        id: setup-python
+        continue-on-error: true
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Retry Python install when the toolcache download fails
+        if: steps.setup-python.outcome != 'success'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if uv python install 3.12; then
+              exit 0
+            fi
+            sleep $((attempt * 8))
+          done
+          exit 1
+
+      - name: Install repository Python for desktop contract fixtures
+        working-directory: .
+        run: uv sync --frozen --no-dev --python 3.12
+
+      - name: Cache Cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agi-stack/target
+            .cache/avernet-bcs
+          key: cargo-desktop-${{ runner.os }}-${{ hashFiles('agi-stack/Cargo.lock', 'third_party/avernet-bcs/Cargo.lock') }}
+          restore-keys: cargo-desktop-${{ runner.os }}-
+
       - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal
@@ -346,8 +1211,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        with:
-          version: 11.15.1
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -359,8 +1222,27 @@ jobs:
       - name: Install desktop dependencies
         run: make desktop-deps
 
+      - name: Install web packages used by desktop component tests
+        working-directory: web
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium for desktop browser tests
+        working-directory: agi-stack/apps/desktop
+        run: corepack pnpm exec playwright install chromium
+
+      - name: Materialize repository database URL for desktop Python fixtures
+        working-directory: .
+        run: printf 'DATABASE_URL=%s\n' 'postgresql+asyncpg://postgres:testpassword@127.0.0.1:5432/memstack' > .env
+
       - name: Run desktop unit and integration tests
-        run: make desktop-check
+        run: |
+          set -euo pipefail
+          # Two CI runs failed a different 10s wait while this step's release
+          # compile was still running. A local pass under load does not prove
+          # the overlap is safe, so tests do not share the runner with it.
+          # The bundle step still builds the same release binaries. The 10s
+          # waits stay as they are.
+          make desktop-test
 
       - name: Build desktop bundle
         run: make desktop-bundle
@@ -384,7 +1266,10 @@ jobs:
 
   agi-stack-android-artifact:
     name: agi-stack Android Artifact
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: agi-stack
@@ -402,6 +1287,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
 
       - name: Install Android NDK
         run: sdkmanager "ndk;30.0.14904198"
@@ -420,7 +1307,10 @@ jobs:
 
   agi-stack-ios-artifact:
     name: agi-stack iOS Artifact
+    needs: changes
+    if: needs.changes.outputs.agi == 'true'
     runs-on: macos-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: agi-stack

@@ -31,7 +31,7 @@ from src.infrastructure.adapters.secondary.persistence.plugin_marketplace_models
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.marketplace_snapshot_cache import reclaim_marketplace_cache
 
-router = APIRouter(prefix="/api/v1/plugin-marketplace/v3", tags=["Plugin Marketplace"])
+router: APIRouter = APIRouter(prefix="/api/v1/plugin-marketplace/v3", tags=["Plugin Marketplace"])
 
 
 class MarketplaceScope(BaseModel):
@@ -329,7 +329,12 @@ from .marketplace_oauth import router as oauth_router  # noqa: E402
 
 router.include_router(oauth_router)
 
-# Imported after scope dependencies to avoid a router construction cycle.
-from .plugin_marketplace_cache_v3 import router as cache_router  # noqa: E402
 
-router.include_router(cache_router)
+def _mount_marketplace_cache_router() -> None:
+    """Import after this module's router exists; the cache router imports it."""
+    from .plugin_marketplace_cache_v3 import router as cache_router
+
+    router.include_router(cache_router)
+
+
+_mount_marketplace_cache_router()

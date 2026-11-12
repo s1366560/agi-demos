@@ -359,7 +359,7 @@ impl PgBackendStoreRepository {
             "UPDATE {} SET \
                 name = CASE WHEN $3 THEN $4 ELSE name END, \
                 connection_config_encrypted = CASE WHEN $5 THEN $6 ELSE connection_config_encrypted END, \
-                index_config = CASE WHEN $7 THEN $8 ELSE index_config END, \
+                index_config = CASE WHEN $7 THEN $8::json ELSE index_config END, \
                 updated_at = now() \
              WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL \
              RETURNING {STORE_COLS}",

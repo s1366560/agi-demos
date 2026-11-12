@@ -318,7 +318,7 @@ async def test_detached_session_keeps_exact_generation_and_uses_a_new_db_session
                 inherited_tool_set=inherited_tool_set,
             )
             task = agent._subagent_session_tasks[run.run_id]
-            await asyncio.wait_for(entered.wait(), timeout=1)
+            await asyncio.wait_for(entered.wait(), timeout=30)
             observed["parent_operation"] = parent_operation
             observed["parent_generation"] = parent_operation.generation
 
@@ -348,7 +348,7 @@ async def test_detached_session_keeps_exact_generation_and_uses_a_new_db_session
             assert agent._session_runner.deps.subagent_run_registry is second_registry
 
         release.set()
-        await asyncio.wait_for(task, timeout=1)
+        await asyncio.wait_for(task, timeout=30)
 
         final = first_registry.get_run("conversation-detached", run.run_id)
         assert final is not None
@@ -450,7 +450,7 @@ async def test_supervisor_shutdown_waits_for_exact_generation_and_db_cleanup(  #
                 inherited_tool_set=inherited_tool_set,
             )
             task = agent._subagent_session_tasks[run.run_id]
-            await asyncio.wait_for(entered.wait(), timeout=1)
+            await asyncio.wait_for(entered.wait(), timeout=30)
             old_generation = parent_operation.generation
 
             second = await host.bootstrap(

@@ -11,6 +11,7 @@ import {
 
 import {
   requireActiveWorkbenchSnapshotV2,
+  settleWorkbenchSnapshotBranchesLimitedV2,
   settleWorkbenchSnapshotBranchesV2,
 } from './desktopWorkbenchSnapshotSettlementV2';
 import type { McpServersRouteAuthority } from '../settings-routes/mcpServersRouteClient';
@@ -215,6 +216,7 @@ import type { DesktopBackendStoresOperationsV2 } from '../../plugins/desktopBack
 import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
 import {
+  DESKTOP_CAPABILITY_NAMES,
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_MINIMUM_CONTRACT_VERSION,
   parseDesktopCapabilitySnapshot,
@@ -227,9 +229,19 @@ import {
 import {
   negotiateCapabilityContract,
 } from './capabilityVersion';
+import { withProjectAuthorityRevision } from './projectAuthorityRevision';
+
+export type DesktopCapabilitySnapshotObserver = (
+  snapshot: DesktopCapabilitySnapshot,
+) => void;
+
+export const CAPABILITY_OBSERVATION_PENDING = 'capability_observation_pending';
 
 export type DesktopWorkbenchCapabilityClient = {
-  loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot>;
+  loadSnapshot(
+    signal?: AbortSignal,
+    observe?: DesktopCapabilitySnapshotObserver,
+  ): Promise<DesktopCapabilitySnapshot>;
 };
 
 export {
@@ -712,10 +724,21 @@ export function createDesktopWorkbenchCapabilityClient(
   return {
     async loadSnapshot(
       signal?: AbortSignal,
+      observe?: DesktopCapabilitySnapshotObserver,
     ): Promise<DesktopCapabilitySnapshot> {
       requireActiveWorkbenchSnapshotV2(signal);
+      const [search, projectKnowledgeCapabilities] = await settleWorkbenchSnapshotBranchesV2(
+        [
+          loadSearchCapability(config, signal),
+          loadProjectKnowledgeCapabilities(projectKnowledgeClients, config, signal),
+        ] as const,
+        signal,
+        ['search', 'project-knowledge'],
+      );
+      observe?.(
+        projectRouteObservationSnapshot(config, search, projectKnowledgeCapabilities),
+      );
       const [
-        search,
         automationCapabilities,
         workspaceCollaboration,
         projectOverview,
@@ -736,7 +759,6 @@ export function createDesktopWorkbenchCapabilityClient(
         managementRouteCapabilities,
         projectWorkspaces,
         projectBlackboard,
-        projectKnowledgeCapabilities,
         projectAgentCapabilities,
         projectAdministrationCapabilities,
         agentWorkspace,
@@ -744,106 +766,128 @@ export function createDesktopWorkbenchCapabilityClient(
         tenantRemainingCapabilities,
         p2ThirdBatchCapabilities,
         auxiliaryCloudCapabilities,
-      ] = await settleWorkbenchSnapshotBranchesV2([
-        loadSearchCapability(config, signal),
-        loadAutomationCapabilities(automationApi, config.projectId, signal),
-        loadWorkspaceCollaborationCapability(
+      ] = await settleWorkbenchSnapshotBranchesLimitedV2([
+        () => loadAutomationCapabilities(automationApi, config.projectId, signal),
+        () => loadWorkspaceCollaborationCapability(
           config,
           projectBlackboardOperationsV2,
           signal,
         ),
-        loadProjectOverviewCapability(
+        () => loadProjectOverviewCapability(
           config,
           projectOverviewOperationsV2,
           signal,
         ),
-        loadRuntimePoolCapability(config, runtimePoolOperationsV2, signal),
-        loadRuntimeInstancesCapability(
+        () => loadRuntimePoolCapability(config, runtimePoolOperationsV2, signal),
+        () => loadRuntimeInstancesCapability(
           config,
           runtimeInstancesOperationsV2,
           signal,
         ),
-        loadRuntimeClustersCapability(
+        () => loadRuntimeClustersCapability(
           config,
           runtimeClustersOperationsV2,
           signal,
         ),
-        loadRuntimeDeploymentsCapability(
+        () => loadRuntimeDeploymentsCapability(
           config,
           runtimeDeploymentsOperationsV2,
           signal,
         ),
-        loadBackendStoresCapability(config, backendStoresOperationsV2, signal),
-        loadDeadLetterQueueCapability(
+        () => loadBackendStoresCapability(config, backendStoresOperationsV2, signal),
+        () => loadDeadLetterQueueCapability(
           config,
           deadLetterQueueOperationsV2,
           signal,
         ),
-        loadInstanceTemplatesCapability(
+        () => loadInstanceTemplatesCapability(
           config,
           instanceTemplatesOperationsV2,
           signal,
         ),
-        loadUnifiedRuntimesCapability(config, unifiedRuntimesOperationsV2, signal),
-        loadTenantOverviewCapability(
+        () => loadUnifiedRuntimesCapability(config, unifiedRuntimesOperationsV2, signal),
+        () => loadTenantOverviewCapability(
           config,
           options.tenantOverviewOperationsV2,
           signal,
         ),
-        loadTenantAnalyticsCapability(
+        () => loadTenantAnalyticsCapability(
           config,
           tenantAnalyticsOperationsV2,
           signal,
         ),
-        loadTenantAgentDashboardCapability(
+        () => loadTenantAgentDashboardCapability(
           config,
           tenantAgentDashboardOperationsV2,
           signal,
         ),
-        loadTenantAgentBindingsCapability(
+        () => loadTenantAgentBindingsCapability(
           config,
           tenantAgentBindingsOperationsV2,
           signal,
         ),
-        loadTenantProjectsCapability(
+        () => loadTenantProjectsCapability(
           config,
           tenantProjectsOperationsV2,
           signal,
         ),
-        loadTenantTasksCapability(config, tenantTasksOperationsV2, signal),
-        loadManagementRouteCapabilities(managementRouteClients, config, signal),
-        loadProjectWorkspacesCapability(
+        () => loadTenantTasksCapability(config, tenantTasksOperationsV2, signal),
+        () => loadManagementRouteCapabilities(managementRouteClients, config, signal),
+        () => loadProjectWorkspacesCapability(
           projectWorkspacesClient,
           config,
           signal,
         ),
-        loadProjectBlackboardCapability(
+        () => loadProjectBlackboardCapability(
           projectBlackboardOperationsV2,
           config,
           signal,
         ),
-        loadProjectKnowledgeCapabilities(
-          projectKnowledgeClients,
-          config,
-          signal,
-        ),
-        loadProjectAgentCapabilities(projectAgentClients, config, signal),
-        loadProjectAdministrationCapabilities(
+        () => loadProjectAgentCapabilities(projectAgentClients, config, signal),
+        () => loadProjectAdministrationCapabilities(
           projectAdministrationClients,
           config,
           signal,
         ),
-        loadAgentWorkspaceCapability(
+        () => loadAgentWorkspaceCapability(
           agentWorkspaceJourneyClient,
           agentWorkspaceClient,
           config,
           signal,
         ),
-        tenantAdminCapabilityClient.load(signal),
-        tenantRemainingCapabilityClient.load(signal),
-        p2ThirdBatchCapabilityClient.load(signal),
-        loadAuxiliaryCloudCapabilities(config, cloudRequestBroker, signal),
-      ] as const, signal);
+        () => tenantAdminCapabilityClient.load(signal),
+        () => tenantRemainingCapabilityClient.load(signal),
+        () => p2ThirdBatchCapabilityClient.load(signal),
+        () => loadAuxiliaryCloudCapabilities(config, cloudRequestBroker, signal),
+      ], 2, signal, [
+        'automation',
+        'workspace-collaboration',
+        'project-overview',
+        'runtime-pool',
+        'runtime-instances',
+        'runtime-clusters',
+        'runtime-deployments',
+        'backend-stores',
+        'dead-letter-queue',
+        'instance-templates',
+        'unified-runtimes',
+        'tenant-overview',
+        'tenant-analytics',
+        'tenant-agent-dashboard',
+        'tenant-agent-bindings',
+        'tenant-projects',
+        'tenant-tasks',
+        'management',
+        'project-workspaces',
+        'project-blackboard',
+        'project-agent',
+        'project-administration',
+        'agent-workspace',
+        'tenant-admin',
+        'tenant-remaining',
+        'p2-third-batch',
+        'auxiliary-cloud',
+      ]);
       const tenantScope = tenantCapabilityScope(config);
       const projectScope = projectCapabilityScope(config);
       const workspaceScope = workspaceCapabilityScope(config);
@@ -898,7 +942,16 @@ export function createDesktopWorkbenchCapabilityClient(
           'project-project-cron-jobs': observed(
             withCapabilityScope(automationCapabilities.cronJobs, projectScope),
           ),
-          search: observed(withCapabilityScope(search, projectScope)),
+          search: observed(
+            withCapabilityScope(
+              withProjectAuthorityRevision(
+                search,
+                projectKnowledgeCapabilities['project-project-entities'],
+                projectScope,
+              ),
+              projectScope,
+            ),
+          ),
           workspace_collaboration: observed(
             withCapabilityScope(workspaceCollaboration, workspaceScope),
           ),
@@ -932,7 +985,14 @@ export function createDesktopWorkbenchCapabilityClient(
             withCapabilityScope(projectOverview, projectScope),
           ),
           'project-project-search': observed(
-            withCapabilityScope(search, projectScope),
+            withCapabilityScope(
+              withProjectAuthorityRevision(
+                search,
+                projectKnowledgeCapabilities['project-project-entities'],
+                projectScope,
+              ),
+              projectScope,
+            ),
           ),
           'project-project-workspaces': observed(projectWorkspaces),
           'project-blackboard-dynamic-project-blackboard':
@@ -2273,6 +2333,79 @@ function observedPrimaryAuthorityForMode(
   mode: DesktopRuntimeConfig['mode'],
 ): 'cloud_service' | 'sidecar' {
   return mode === 'local' ? 'sidecar' : 'cloud_service';
+}
+
+export function projectRouteObservationSnapshot(
+  config: DesktopRuntimeConfig,
+  search: DesktopCapabilityAvailability,
+  projectKnowledgeCapabilities: Readonly<Record<string, DesktopCapabilityAvailability>>,
+): DesktopCapabilitySnapshot {
+  const projectScope = projectCapabilityScope(config);
+  const primaryAuthoritySource = observedPrimaryAuthorityForMode(config.mode);
+  const observed = (
+    capability: DesktopCapabilityAvailability,
+  ): DesktopCapabilitySnapshotEntry =>
+    withObservedAuthority(capability, primaryAuthoritySource, []);
+  const declared = (
+    capability: DesktopCapabilityAvailability,
+  ): DesktopCapabilitySnapshotEntry => withDeclaredAuthority(capability);
+  const projected = (
+    capability: DesktopCapabilityAvailability,
+  ): DesktopCapabilitySnapshotEntry =>
+    capability.provenance === 'observed' ? observed(capability) : declared(capability);
+  const capabilities = Object.fromEntries(
+    DESKTOP_CAPABILITY_NAMES.map((name) => [name, observationPendingEntry(projectScope)]),
+  ) as Record<(typeof DESKTOP_CAPABILITY_NAMES)[number], DesktopCapabilitySnapshotEntry>;
+  const scopedSearch = observed(
+    withCapabilityScope(
+      withProjectAuthorityRevision(
+        search,
+        projectKnowledgeCapabilities['project-project-entities'],
+        projectScope,
+      ),
+      projectScope,
+    ),
+  );
+  capabilities.search = scopedSearch;
+  capabilities['project-project-search'] = scopedSearch;
+  capabilities['project-project-team'] = (
+    config.mode === 'local' ? declared : observed
+  )(projectKnowledgeCapabilities['project-project-team']);
+  capabilities['project-project-memories'] = (
+    config.mode === 'local' ? projected : observed
+  )(projectKnowledgeCapabilities['project-project-memories']);
+  capabilities['project-project-entities'] = (
+    config.mode === 'local' ? declared : observed
+  )(projectKnowledgeCapabilities['project-project-entities']);
+  capabilities['project-project-communities'] = (
+    config.mode === 'local' ? projected : observed
+  )(projectKnowledgeCapabilities['project-project-communities']);
+  capabilities['project-project-graph'] = (
+    config.mode === 'local' ? projected : observed
+  )(projectKnowledgeCapabilities['project-project-graph']);
+  return {
+    version: DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
+    runtime_state: runtimeStateForMode(config.mode, false),
+    capabilities,
+  };
+}
+
+function observationPendingEntry(
+  scope: DesktopCapabilityScope,
+): DesktopCapabilitySnapshotEntry {
+  return {
+    availability: 'unavailable',
+    reason_code: CAPABILITY_OBSERVATION_PENDING,
+    service_version: null,
+    contract_version: null,
+    allowed_actions: Object.freeze([]),
+    scope: { ...scope },
+    authority_revision: null,
+    retryable: true,
+    authority_source: 'renderer',
+    supporting_authority_sources: Object.freeze([]),
+    provenance: 'declared',
+  };
 }
 
 function runtimeStateForMode(

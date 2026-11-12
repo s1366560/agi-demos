@@ -94,10 +94,13 @@ async def test_verified_slot_cannot_be_downgraded_and_nack_retains_last_good():
         assert first.accepted
         with pytest.raises(RuntimeV2Error, match="trust mode"):
             await registry.publish(scope, snapshot, control_envelope_v2(snapshot, version=2))
-        with pytest.raises(RuntimeV2Error, match="no verified"):
-            await registry.publish(
-                scope, snapshot, control_envelope_v2(snapshot, version=2), verified_archives=()
-            )
+        rejected = await registry.publish(
+            scope, snapshot, control_envelope_v2(snapshot, version=2), verified_archives=()
+        )
+        assert not rejected.accepted
+        assert rejected.receipt.error_code == "artifact_verification_failed"
+        assert rejected.receipt.error_message is not None
+        assert "no verified" in rejected.receipt.error_message
         repeated = await registry.publish(
             scope, snapshot, control_envelope_v2(snapshot, version=2), verified_archives=(archive,)
         )

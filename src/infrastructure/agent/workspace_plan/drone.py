@@ -1746,8 +1746,6 @@ def _host_docker_deploy_boundary_required(deploy: PipelineDeploySpec | None) -> 
     if deploy is None or deploy.mode != "docker":
         return False
     docker = deploy.docker
-    if not isinstance(docker, Mapping):
-        return False
     return bool(
         docker.get("runner_docker_socket")
         or docker.get("runner_docker_socket_volume")

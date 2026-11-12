@@ -174,7 +174,7 @@ def test_standalone_manifest_rejects_conflicting_event_contracts() -> None:
 
 @pytest.mark.unit
 async def test_loader_rejects_invalid_config_before_any_apply() -> None:
-    snapshot = _snapshot()
+    snapshot = deepcopy(_snapshot())
     invalid_entry = snapshot.entries[0]
     object.__setattr__(invalid_entry, "config", {"label": ""})
     calls: list[str] = []
@@ -207,7 +207,7 @@ async def test_loader_requires_exact_declared_injects(
     inject: dict[str, str],
     expected_code: str,
 ) -> None:
-    snapshot = _snapshot()
+    snapshot = deepcopy(_snapshot())
     object.__setattr__(snapshot.entries[1], "inject", inject)
     calls: list[str] = []
     definitions = _definitions(

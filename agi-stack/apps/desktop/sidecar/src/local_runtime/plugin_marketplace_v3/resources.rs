@@ -30,8 +30,10 @@ fn expand(value: &str, installation: &Installation) -> String {
         )
 }
 fn executable(raw: String) -> Result<String> {
-    if raw=="memstack-cua-cloud-connectors" || raw=="memstack-cua-cloud-connectors.exe" {
-        return mcp_supervisor::stdio::bundled_cloud_connector_path().map(|path|path.to_string_lossy().into_owned()).ok_or("cua_connector_helper_unavailable".into());
+    if raw == "memstack-cua-cloud-connectors" || raw == "memstack-cua-cloud-connectors.exe" {
+        return mcp_supervisor::stdio::bundled_cloud_connector_path()
+            .map(|path| path.to_string_lossy().into_owned())
+            .ok_or("cua_connector_helper_unavailable".into());
     }
     let path = std::path::Path::new(&raw);
     if path.is_absolute() {

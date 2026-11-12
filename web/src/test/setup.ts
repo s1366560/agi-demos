@@ -1,4 +1,4 @@
-import { cleanup } from '@testing-library/react';
+import { act, cleanup } from '@testing-library/react';
 import { afterEach, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
@@ -2379,9 +2379,28 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+beforeEach(() => {
+  globalThis.__memstackReactMacrotasksOpen = true;
+});
+
 // Cleanup after each test
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  const pending = globalThis.__memstackPendingReactMacrotasks;
+  const wait = globalThis.__memstackNativeSetImmediate;
+  // React 19 can schedule another macrotask from inside the one we flush.
+  for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
+    await act(async () => {
+      await new Promise((resolve) => {
+        wait(resolve);
+      });
+    });
+  }
+  globalThis.__memstackReactMacrotasksOpen = false;
+  for (const handle of pending) {
+    globalThis.__memstackClearReactMacrotask(handle);
+  }
+  pending.clear();
 
   // Clear localStorage and sessionStorage after each test
   localStorageMock.clear();

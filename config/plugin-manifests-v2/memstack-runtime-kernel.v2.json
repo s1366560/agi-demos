@@ -998,7 +998,7 @@
       },
       "contract_digest": "sha256:e5912b479000b04123d4cda8d863251fecf07be458cc1eeef9deae903340a3a3",
       "artifact": {
-        "digest": "sha256:b372ac240dccb409459733e066b00d0bff9a7b4273c4b3ffc5843208f27665d7",
+        "digest": "sha256:4dca74c500d64cce09ce0c98bd3f4841d29c85dfe7964ec7ea7be944e2dba83e",
         "source": "repo+python://src/infrastructure/plugins/v2/graph_runtime.py"
       }
     },
@@ -1245,7 +1245,7 @@
       },
       "contract_digest": "sha256:4661b355f90a336a8c26ea3f9cbf11c84fb7aee80847e109245a0bbb150d739c",
       "artifact": {
-        "digest": "sha256:d47e4ab9b6db2ded371cdf2bd7ab05f530beda2422ae0c20578102b366df04a6",
+        "digest": "sha256:884484c77780107eb00694803390e36b2a9f01b5bd93adab6ff148425655adcf",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
       }
     },
@@ -1826,7 +1826,7 @@
       },
       "contract_digest": "sha256:cfe78e125f46fd3b46c434766b00de4d63f0c89e03dbc4ea115365dfd379298c",
       "artifact": {
-        "digest": "sha256:058591db8754c3f12ccb05c1baf252da1c4f1eb2c6b282c50bf0dd2f62eda751",
+        "digest": "sha256:02d383d049972b35f761582842b937dc4d803ec7d2f8f5938377b579f85052bb",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_deploy_services.py"
       }
     },
@@ -1873,7 +1873,7 @@
       },
       "contract_digest": "sha256:6f4934939d317226e7b1434fc6519e905a25f4d2940a6482c8f74b7eb6128b2b",
       "artifact": {
-        "digest": "sha256:058591db8754c3f12ccb05c1baf252da1c4f1eb2c6b282c50bf0dd2f62eda751",
+        "digest": "sha256:02d383d049972b35f761582842b937dc4d803ec7d2f8f5938377b579f85052bb",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_deploy_services.py"
       }
     },
@@ -2454,7 +2454,7 @@
       },
       "contract_digest": "sha256:2390139880f8fcf586e35494cd45cee5ef1f424e285a010d5bbde71b48dae88b",
       "artifact": {
-        "digest": "sha256:a07dc1b0f2b923dec412502b9bd40943094d6bcfca6c43343c3d21327451f9b7",
+        "digest": "sha256:43d99dc52b246c258ef6954b78adf90293ea52c10e6ca10e322e7a3470683975",
         "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
       }
     },
@@ -2501,7 +2501,7 @@
       },
       "contract_digest": "sha256:b24aa25b2711be8734c6b36445a1d657fbf4d02c663a449a02920a7fcabe4465",
       "artifact": {
-        "digest": "sha256:a07dc1b0f2b923dec412502b9bd40943094d6bcfca6c43343c3d21327451f9b7",
+        "digest": "sha256:43d99dc52b246c258ef6954b78adf90293ea52c10e6ca10e322e7a3470683975",
         "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
       }
     },
@@ -5792,7 +5792,7 @@
       },
       "contract_digest": "sha256:ed567a700f800535b39099e52b5b4fc4be0ab1c6d0c7ebc160528edbf7d39a8a",
       "artifact": {
-        "digest": "sha256:8f05af87a1425fb573f60dae2b189a00aa7a0fdd19d53c03f28ccc0a8966d159",
+        "digest": "sha256:4d86e2b011801b16d9aa050cf88456ef501750a8e94a74fe105ca9052a674aa2",
         "source": "repo+python://src/infrastructure/plugins/v2/support_ticket_services.py"
       }
     },
@@ -5839,7 +5839,7 @@
       },
       "contract_digest": "sha256:73c3aeab0b6664997ce6784051213dbc900e87e1050eb41a1186312c891ae67b",
       "artifact": {
-        "digest": "sha256:8f05af87a1425fb573f60dae2b189a00aa7a0fdd19d53c03f28ccc0a8966d159",
+        "digest": "sha256:4d86e2b011801b16d9aa050cf88456ef501750a8e94a74fe105ca9052a674aa2",
         "source": "repo+python://src/infrastructure/plugins/v2/support_ticket_services.py"
       }
     },
@@ -8307,7 +8307,7 @@
       },
       "contract_digest": "sha256:1ebbc48941dde702b3e9c436d32ce2751b068751e844fdad19504c7630f8b61b",
       "artifact": {
-        "digest": "sha256:d94f980f7bf2aee3c6065366995d5bb9e84f97d8ae1d9a1e2d48270d28f90213",
+        "digest": "sha256:b1d059442403db1a354acdc8bb7cd8101bc9bd056e898ed7d381c09f6718fdc3",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_orchestration_runtime.py"
       }
     },
@@ -10260,7 +10260,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:deb85998796a4ff9ef812c8e7fead38dd6ffe360edba4f965012fd43b0a612b4",
+        "digest": "sha256:1db88dba3071c64889247fa87a31221ec334c64d8e9f85b3f70ffc7b26827cd0",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_plugin_marketplace_http_routes.py"
       }
     },
@@ -10294,7 +10294,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:f837a3379e4922f53171ef6b3747fca557c9676f64f36e8abe48409bfaf3fe86",
+        "digest": "sha256:3c2c26b2dcaebe655a6523694e3a6b762b770c6f1b95da1d82dd62a77a7840bd",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_platform_plugins_http_routes.py"
       }
     },
@@ -12165,7 +12165,7 @@
       },
       "contract_digest": "sha256:7c16e01c9ea5f7928f560eff83bbb27e5be54d397698b189c78b339c3be918bc",
       "artifact": {
-        "digest": "sha256:bc94893bb6cd712ed52b53e0d63747b0f757937cae712835717aae82dde5e12b",
+        "digest": "sha256:6a9a9cdca4d80800cef668e17d748453a834876ffe9fb37a5d35dbc22efde0a2",
         "source": "repo+python://src/infrastructure/plugins/v2/github_capabilities.py"
       }
     },
@@ -13396,7 +13396,7 @@
       },
       "contract_digest": "sha256:f4fffb278d76a7fc3673f1a996cd6028643d14217f5663164b899cb1b4f9a1fb",
       "artifact": {
-        "digest": "sha256:bc94893bb6cd712ed52b53e0d63747b0f757937cae712835717aae82dde5e12b",
+        "digest": "sha256:6a9a9cdca4d80800cef668e17d748453a834876ffe9fb37a5d35dbc22efde0a2",
         "source": "repo+python://src/infrastructure/plugins/v2/github_capabilities.py"
       }
     },
@@ -13560,7 +13560,7 @@
       },
       "contract_digest": "sha256:a6b2e5e45be045d1d226d87fe1b7e834155c171974b28794dbac778dcc1bc6fb",
       "artifact": {
-        "digest": "sha256:ba9ea8cffab65c2c129dddb99d4558621ca94904df564ef2c5d9fe0d19505aac",
+        "digest": "sha256:816cb9224b1a69e9c5716672a1ef3565fe6de273d477118c4a0bc34374d6dcd3",
         "source": "repo+python://src/infrastructure/plugins/v2/darwinian_evolver_capability.py"
       }
     },

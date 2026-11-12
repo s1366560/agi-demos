@@ -1,6 +1,6 @@
 use agistack_core::{agent::types::MediaAttachment, ports::ToolResult};
-use base64::{Engine, engine::general_purpose::STANDARD};
-use serde_json::{Value, json};
+use base64::{engine::general_purpose::STANDARD, Engine};
+use serde_json::{json, Value};
 use std::path::Path;
 pub(super) const MEDIA_LIMIT: usize = 10 * 1024 * 1024;
 

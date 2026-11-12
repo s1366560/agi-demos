@@ -422,15 +422,13 @@ describe('ProviderConfigModal', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(screen.getByLabelText('Authentication')).toHaveValue('');
-    });
-    expect(screen.getByLabelText('Authentication')).toBeDisabled();
     expect(
-      screen.getByText(
+      await screen.findByText(
         'This provider cannot be configured until secure credential storage is available.'
       )
     ).toBeInTheDocument();
+    expect(screen.getByLabelText('Authentication')).toHaveValue('');
+    expect(screen.getByLabelText('Authentication')).toBeDisabled();
     expect(document.querySelector('input[type="password"]')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
@@ -546,8 +544,12 @@ describe('ProviderConfigModal', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Advanced Embedding Settings' }));
+    // Editing an existing provider moves to Credentials after the load effect.
+    // Clicking Next before that effect lands on Credentials, where the models
+    // step's advanced embedding controls are not mounted.
+    await screen.findByRole('button', { name: 'Back' });
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced Embedding Settings' }));
     expect(screen.queryByText('Provider Options (JSON)')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save Provider' }));

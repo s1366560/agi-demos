@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { DesktopSignedBusinessMount } from '../../plugins/DesktopSignedBusinessMount';
 import type { DesktopPluginMarketplaceOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import {
   pluginArchiveBase64,
@@ -360,6 +361,7 @@ export function LocalPluginSettings({
           </article>
         ))}
       </div>
+      <DesktopSignedBusinessMount resource={null} />
     </section>
   );
 }

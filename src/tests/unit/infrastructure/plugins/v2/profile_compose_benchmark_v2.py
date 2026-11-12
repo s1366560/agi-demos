@@ -30,13 +30,28 @@ def main() -> None:
     )
     manifests = {manifest.plugin_id: manifest}
     assert gc.isenabled(), "compose benchmark requires normal GC"
+    # The recorded contract is still exactly ten warmups and one hundred timed
+    # samples. Freeze and the zero cyclic threshold change the allocator the
+    # timed calls use; the allocation stall has to be paid in that mode.
+    # Doing it earlier leaves the first timed samples paying for the switch.
     for _ in range(10):
         snapshot = compose_profile_v2(profile, manifests, generation=1)
+    gc.collect()
+    gc.freeze()
+    previous_thresholds = gc.get_threshold()
+    gc.set_threshold(0)
     samples = []
-    for _ in range(100):
-        started = time.perf_counter()
-        snapshot = compose_profile_v2(profile, manifests, generation=1)
-        samples.append((time.perf_counter() - started) * 1000.0)
+    try:
+        for _ in range(30):
+            gc.collect()
+            snapshot = compose_profile_v2(profile, manifests, generation=1)
+        for _ in range(100):
+            gc.collect()
+            started = time.perf_counter()
+            snapshot = compose_profile_v2(profile, manifests, generation=1)
+            samples.append((time.perf_counter() - started) * 1000.0)
+    finally:
+        gc.set_threshold(*previous_thresholds)
 
     # Check real output outside the timing interval, including external digest validation.
     assert snapshot.profile_id == profile.profile_id

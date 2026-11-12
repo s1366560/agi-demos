@@ -47,7 +47,7 @@ class FeishuClient:
         self._drive: Any | None = None
         self._bitable: Any | None = None
 
-    def _get_client(self) -> object:
+    def _get_client(self) -> Any:  # noqa: ANN401 - lark_oapi has no type stubs
         """Lazy load Feishu client."""
         if self._client is None:
             try:

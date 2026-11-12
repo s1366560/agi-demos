@@ -20,6 +20,19 @@ const COMMAND_CAPACITY: usize = 32;
 const INPUT_LIMIT: usize = 64 * 1024;
 type DrainResult = Result<(), String>;
 
+/// Whether a cleanup error must stay visible after the owned group is confirmed empty.
+///
+/// XNU `getsid` and `kill` return `EPERM` when the member has exited or become a
+/// zombie, and `proc_pidinfo` can still report the same live identity for that
+/// instant. A later sweep that finds no live member has finished the resource.
+/// A custom permission failure, including a foreign session, has no raw `EPERM`
+/// and remains observable. A live member that stays unsignalable never reaches
+/// the confirmed-empty return.
+#[cfg(all(unix, any(test, target_os = "macos")))]
+pub(super) fn pty_cleanup_error_remains_after_exit(error: &std::io::Error) -> bool {
+    error.raw_os_error() != Some(libc::EPERM)
+}
+
 #[cfg(target_os = "macos")]
 #[path = "terminal_pty_macos_groups_v2.rs"]
 mod macos_groups;

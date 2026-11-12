@@ -139,7 +139,7 @@ class SubprocessToolHost:
                 timeout=self._timeout,
             )
         except TimeoutError as exc:
-            _ = process.kill()
+            process.kill()
             _ = await process.wait()
             raise SubprocessHostError(
                 f"subprocess tool call timed out after {self._timeout}s"
