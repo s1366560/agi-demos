@@ -96,10 +96,10 @@ async def test_capabilities_fail_closed_with_stable_reason_codes() -> None:
     assert response.schema_version == 1
     assert response.read is True
     assert response.revision_guarded is False
-    assert response.idempotency_guarded is False
+    assert response.idempotency_guarded is True
     assert response.durable_execution is False
-    assert response.create.allowed is False
-    assert response.create.reason_code == "durable_automation_runtime_unavailable"
+    assert response.create.allowed is True
+    assert response.create.reason_code == "durable_command"
     assert response.run_now.allowed is False
     assert response.run_now.reason_code == "durable_automation_execution_unavailable"
 

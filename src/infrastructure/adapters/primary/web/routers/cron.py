@@ -134,10 +134,10 @@ def _execution_capabilities() -> CronJobCapabilitiesResponse:
     return CronJobCapabilitiesResponse(
         read=True,
         revision_guarded=False,
-        idempotency_guarded=False,
+        idempotency_guarded=True,
         durable_execution=False,
         supported_read_trigger_kinds=["manual", "schedule", "event"],
-        create=mutation_unavailable,
+        create=CronActionCapability(allowed=True, reason_code="durable_command"),
         edit=mutation_unavailable,
         toggle=mutation_unavailable,
         run_now=CronActionCapability(
@@ -182,6 +182,7 @@ async def create_cron_job(
             timeout_seconds=body.timeout_seconds,
             max_retries=body.max_retries,
             created_by=cron_application.user_id,
+            idempotency_key=body.idempotency_key,
         )
     except CronMutationUnavailableError as exc:
         _raise_mutation_unavailable(exc)

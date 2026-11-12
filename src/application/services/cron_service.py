@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from src.application.services.automation_command_service import (
+    AutomationActor,
+    AutomationCommandService,
+    CreateAutomationJobCommand,
+)
 from src.domain.model.cron.cron_job import CronJob
 from src.domain.model.cron.cron_job_run import CronJobRun
 from src.domain.model.cron.value_objects import (
@@ -31,9 +36,11 @@ class CronJobService:
         self,
         cron_job_repo: CronJobRepository,
         cron_job_run_repo: CronJobRunRepository,
+        commands: AutomationCommandService | None = None,
     ) -> None:
         self._cron_job_repo = cron_job_repo
         self._cron_job_run_repo = cron_job_run_repo
+        self._commands = commands
 
     # -- Job CRUD -----------------------------------------------------------
 
@@ -56,11 +63,48 @@ class CronJobService:
         timeout_seconds: int = 300,
         max_retries: int = 3,
         created_by: str | None = None,
+        idempotency_key: str | None = None,
     ) -> CronJob:
-        """Reject creation until the durable command path is production-ready."""
-        raise CronMutationUnavailableError(
-            "Create requires durable automation command processing; no job was created"
+        """Persist a job through the durable command path."""
+        if self._commands is None:
+            raise CronMutationUnavailableError(
+                "Create requires durable automation command processing; no job was created"
+            )
+        if not created_by or not created_by.strip():
+            raise CronMutationUnavailableError(
+                "Create requires an authenticated user; no job was created"
+            )
+        if not idempotency_key:
+            raise CronMutationUnavailableError("idempotency_key is required; no job was created")
+        receipt = await self._commands.create_job(
+            actor=AutomationActor(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                user_id=created_by,
+            ),
+            command=CreateAutomationJobCommand(
+                idempotency_key=idempotency_key,
+                name=name,
+                schedule=schedule,
+                payload=payload,
+                description=description,
+                enabled=enabled,
+                delete_after_run=delete_after_run,
+                delivery=delivery,
+                conversation_mode=conversation_mode,
+                conversation_id=conversation_id,
+                timezone=timezone,
+                stagger_seconds=stagger_seconds,
+                timeout_seconds=timeout_seconds,
+                max_retries=max_retries,
+            ),
         )
+        job = await self._cron_job_repo.find_by_id(receipt.job_id)
+        if job is None or job.project_id != project_id or job.tenant_id != tenant_id:
+            raise CronMutationUnavailableError(
+                "Created job is outside the requested project scope; no job was returned"
+            )
+        return job
 
     async def get_job(self, job_id: str) -> CronJob | None:
         """Get a cron job by ID."""

@@ -111,6 +111,12 @@ class CronJobCreate(BaseModel):
     max_retries: int = Field(
         default=3, ge=0, description="Max consecutive failures before disabling"
     )
+    idempotency_key: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Caller key that replays the same create instead of inserting another job",
+    )
 
 
 class CronJobUpdate(BaseModel):

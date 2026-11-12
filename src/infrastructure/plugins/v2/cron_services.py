@@ -205,12 +205,14 @@ class SqlCronPersistenceFactoryV2:
                 "invalid_operation_db_session",
                 "cron services require an AsyncSession operation service",
             )
+        commands = AutomationCommandService(SqlCronAutomationCommandRepository(db))
         return CronPersistenceServicesV2(
             cron_jobs=CronJobService(
                 cron_job_repo=SqlCronJobRepository(db),
                 cron_job_run_repo=SqlCronJobRunRepository(db),
+                commands=commands,
             ),
-            commands=AutomationCommandService(SqlCronAutomationCommandRepository(db)),
+            commands=commands,
             access=SqlCronProjectAccessV2(_session=db),
         )
 

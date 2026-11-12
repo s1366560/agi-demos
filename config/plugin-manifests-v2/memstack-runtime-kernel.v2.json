@@ -5213,7 +5213,7 @@
       },
       "contract_digest": "sha256:ba9a9a2abecf57a64c7d66fe8e704afbb8c9b17b004513d136f67291d4cb9d39",
       "artifact": {
-        "digest": "sha256:75417a546d11607cf74412795b3aaea15d0749f0b71266fd16e69f0c9239c0fa",
+        "digest": "sha256:fab30b2cde87f210224a3a3c98ffaba85357167262be47ead288f2885510c666",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -5254,7 +5254,7 @@
       },
       "contract_digest": "sha256:b9abcc3f544083376ebe560026e8ee49b93cad6a929d0047c4f4014925b23a34",
       "artifact": {
-        "digest": "sha256:75417a546d11607cf74412795b3aaea15d0749f0b71266fd16e69f0c9239c0fa",
+        "digest": "sha256:fab30b2cde87f210224a3a3c98ffaba85357167262be47ead288f2885510c666",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -5311,7 +5311,7 @@
       },
       "contract_digest": "sha256:ea708193b2db19ae2d5780efdba3472323d18ab7dbe4305bbe0962df719d77a2",
       "artifact": {
-        "digest": "sha256:75417a546d11607cf74412795b3aaea15d0749f0b71266fd16e69f0c9239c0fa",
+        "digest": "sha256:fab30b2cde87f210224a3a3c98ffaba85357167262be47ead288f2885510c666",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },

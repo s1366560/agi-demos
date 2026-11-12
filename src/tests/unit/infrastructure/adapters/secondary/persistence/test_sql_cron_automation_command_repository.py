@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from src.application.services.automation_command_service import (
     AutomationActor,
@@ -9,8 +9,10 @@ from src.application.services.automation_command_service import (
     AutomationCommandRevisionConflictError,
     AutomationCommandService,
     AutomationCommandTargetNotFoundError,
+    CreateAutomationJobCommand,
     QueueManualRunCommand,
 )
+from src.domain.model.cron.value_objects import CronPayload, CronSchedule
 from src.infrastructure.adapters.secondary.persistence.models import (
     CronJobModel,
     CronJobRunModel,
@@ -19,6 +21,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.adapters.secondary.persistence.sql_cron_automation_command_repository import (
     SqlCronAutomationCommandRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
+    SqlCronJobRepository,
 )
 
 pytestmark = pytest.mark.unit
@@ -210,3 +215,80 @@ async def test_final_operation_flush_failure_rolls_back_the_reserved_receipt(
     assert await _count(db_session, CronRequestReceiptModel) == 0
     assert await _count(db_session, CronJobRunModel) == 0
     assert await _count(db_session, CronOperationModel) == 0
+
+
+def _create_command(**overrides: object) -> CreateAutomationJobCommand:
+    values: dict[str, object] = {
+        "idempotency_key": "selftest-followthrough-create-1",
+        "name": "selftest-followthrough-temporary",
+        "schedule": CronSchedule.every(interval_seconds=3600),
+        "payload": CronPayload.agent_turn(message="temporary selftest"),
+    }
+    values.update(overrides)
+    return CreateAutomationJobCommand(**values)  # type: ignore[arg-type]
+
+
+async def test_durable_create_is_listed_after_a_new_repository_and_then_removed(
+    db_session,
+    test_project_db,
+    test_user,
+) -> None:
+    service = AutomationCommandService(SqlCronAutomationCommandRepository(db_session))
+    command = _create_command()
+    job_id: str | None = None
+    try:
+        with pytest.raises(ValueError, match="name is required"):
+            await service.create_job(
+                actor=_actor(test_project_db, test_user),
+                command=_create_command(name="  "),
+            )
+        created = await service.create_job(
+            actor=_actor(test_project_db, test_user), command=command
+        )
+        job_id = created.job_id
+        replay = await service.create_job(actor=_actor(test_project_db, test_user), command=command)
+        assert created.duplicate is False
+        assert replay.duplicate is True
+        assert replay.job_id == created.job_id
+
+        visible = SqlCronJobRepository(db_session)
+        listed = await visible.find_by_project(test_project_db.id, include_disabled=True)
+        assert [job.id for job in listed if job.id == job_id] == [job_id]
+        assert await visible.count_by_project(test_project_db.id, include_disabled=True) >= 1
+        assert await visible.find_by_project("other-project") == []
+
+        restarted = SqlCronJobRepository(db_session)
+        restored = await restarted.find_by_id(job_id)
+        assert restored is not None
+        assert restored.project_id == test_project_db.id
+        assert restored.tenant_id == test_project_db.tenant_id
+        assert restored.name == "selftest-followthrough-temporary"
+
+        operation = (
+            await db_session.execute(
+                select(CronOperationModel).where(CronOperationModel.job_id == job_id)
+            )
+        ).scalar_one()
+        assert operation.status == "succeeded"
+        assert operation.operation_kind == "record_create"
+
+        with pytest.raises(AutomationCommandIdempotencyConflictError):
+            await service.create_job(
+                actor=_actor(test_project_db, test_user),
+                command=_create_command(name="different-intent"),
+            )
+    finally:
+        if job_id is not None:
+            await db_session.execute(
+                delete(CronOperationModel).where(CronOperationModel.job_id == job_id)
+            )
+            await db_session.execute(delete(CronJobModel).where(CronJobModel.id == job_id))
+            await db_session.execute(
+                delete(CronRequestReceiptModel).where(CronRequestReceiptModel.resource_id == job_id)
+            )
+            await db_session.flush()
+            assert await restarted_missing(db_session, job_id) is None
+
+
+async def restarted_missing(db_session, job_id: str):
+    return await SqlCronJobRepository(db_session).find_by_id(job_id)

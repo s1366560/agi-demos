@@ -22,7 +22,7 @@ function load(url) {
   return module.exports;
 }
 
-const { isIntentionalCloudCancel } = load(
+const { isIntentionalCloudCancel, settleCloudRequest } = load(
   new URL('../electron/main/cloudRequestPolicy.ts', import.meta.url),
 );
 
@@ -31,6 +31,28 @@ test('user cancel is not a failed cloud request', () => {
   assert.equal(
     isIntentionalCloudCancel(new DOMException('MCP App request cancelled', 'AbortError')),
     true,
+  );
+});
+
+test('settled cloud requests keep cancel, timeout, and success apart', async () => {
+  assert.deepEqual(
+    await settleCloudRequest(async () => {
+      throw new Error('cloud request was cancelled');
+    }),
+    { cancelled: true, kind: 'cancelled' },
+  );
+  assert.deepEqual(await settleCloudRequest(async () => ({ status: 200 })), { status: 200 });
+  await assert.rejects(
+    () => settleCloudRequest(async () => {
+      throw new Error('cloud request timed out');
+    }),
+    /cloud request timed out/u,
+  );
+  await assert.rejects(
+    () => settleCloudRequest(async () => {
+      throw new Error('vendor_balance');
+    }),
+    /vendor_balance/u,
   );
 });
 

@@ -76,7 +76,7 @@ class RetryPolicy:
     NON_RETRYABLE_PATTERNS: ClassVar[list[str]] = [
         r"anthropicexception\s*-\s*400",
         r"expected http/, rtsp/ or ice/",
-        r"vendor_rate_limit",
+        r"vendor_balance",
         r"insufficient balance",
         r"no resource package",
     ]

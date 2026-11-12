@@ -265,6 +265,32 @@ export function isIntentionalCloudCancel(error: unknown): boolean {
   return error.name === 'AbortError' && /cancel/iu.test(error.message);
 }
 
+export function isCancelledCloudRequest(
+  value: unknown,
+): value is { cancelled: true; kind: 'cancelled' } {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      'cancelled' in value &&
+      value.cancelled === true &&
+      'kind' in value &&
+      value.kind === 'cancelled',
+  );
+}
+
+export async function settleCloudRequest<T>(operation: () => Promise<T>): Promise<
+  T | { cancelled: true; kind: 'cancelled' }
+> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isIntentionalCloudCancel(error)) {
+      return { cancelled: true, kind: 'cancelled' };
+    }
+    throw error;
+  }
+}
+
 export async function executeVaultBoundCloudRequest(
   input: unknown,
   dependencies: VaultBoundCloudRequestDependencies,

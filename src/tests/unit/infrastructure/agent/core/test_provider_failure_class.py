@@ -7,27 +7,43 @@ from src.infrastructure.agent.core.llm_stream import classify_provider_failure
 pytestmark = pytest.mark.unit
 
 
-def test_balance_error_is_vendor_rate_limit_without_fallback() -> None:
-    message, code = classify_provider_failure(
+def test_balance_is_distinct_from_retryable_rate_limit() -> None:
+    from src.infrastructure.agent.core.llm_stream import resolve_provider_after_failure
+    from src.infrastructure.agent.retry.policy import RetryPolicy
+
+    balance_message, balance_code, balance_class = classify_provider_failure(
         RuntimeError("RateLimitError: Insufficient balance or no resource package")
     )
-    assert code == "vendor_rate_limit"
-    assert message.startswith("vendor_rate_limit:")
-    assert "No alternate provider was selected" in message
+    limit_message, limit_code, limit_class = classify_provider_failure(
+        RuntimeError("Rate limit exceeded for this minute")
+    )
+    policy = RetryPolicy()
+    assert balance_code == "vendor_balance"
+    assert balance_class == "balance"
+    assert policy.is_retryable(RuntimeError(balance_message)) is False
+    assert limit_code == "vendor_rate_limit"
+    assert limit_class == "rate_limit"
+    assert policy.is_retryable(RuntimeError(limit_message)) is True
+    assert (
+        resolve_provider_after_failure(
+            current_provider="zai",
+            failure_class=balance_class,
+            authorized_fallback=None,
+        )
+        == "zai"
+    )
+    assert (
+        resolve_provider_after_failure(
+            current_provider="zai",
+            failure_class=balance_class,
+            authorized_fallback="backup-provider",
+        )
+        == "zai"
+    )
 
 
 def test_other_errors_keep_their_type_name() -> None:
-    message, code = classify_provider_failure(ValueError("bad request"))
+    message, code, failure_class = classify_provider_failure(ValueError("bad request"))
     assert code == "ValueError"
+    assert failure_class == "other"
     assert message == "bad request"
-
-
-def test_balance_rejection_is_not_retried() -> None:
-    from src.infrastructure.agent.retry.policy import RetryPolicy
-
-    policy = RetryPolicy()
-    message, _code = classify_provider_failure(
-        RuntimeError("RateLimitError: Insufficient balance or no resource package")
-    )
-    assert policy.is_retryable(RuntimeError(message)) is False
-    assert policy.is_retryable(RuntimeError("Rate limit exceeded. Please wait")) is True

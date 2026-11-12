@@ -34,17 +34,17 @@
 - 现象：Zai `Insufficient balance` 走了通用 `LLM stream error`，父运行继续多次模型调用，且没有说明未切换供应商。
 - 复现：`classify_provider_failure(RuntimeError("RateLimitError: Insufficient balance or no resource package"))`。
 - 根因：通用异常只用类型名。余额不足仍命中重试正则里的 `rate limit`。
-- 变更：该类错误标记为 `vendor_rate_limit`，文案写明稍后重试且未选择备用供应商。`vendor_rate_limit`、`insufficient balance`、`no resource package` 进入既有非重试模式。既有 `RateLimitError` 路径仍是 `RATE_LIMIT`，并受 `RetryPolicy` 最多 5 次限制。
-- 回归：`test_provider_failure_class.py`、`test_error_classifier.py` 含在 276 passed。pyright 对改动生产文件 0 errors。
-- 边界：没有启用备用供应商，没有购买额度，没有改 `llm_max_retries` 默认值 3。
+- 变更：余额或资源包不足的稳定字段是 `failure_class=balance`、`code=vendor_balance`，不重试。真正的限流是 `failure_class=rate_limit`、`code=vendor_rate_limit`，仍可重试。错误事件带 `provider_failover=not_authorized`。`resolve_provider_after_failure` 即使测试传入已授权的备用名，也返回当前供应商。
+- 回归：`uv run pytest src/tests/unit/infrastructure/agent/core/test_provider_failure_class.py -q`，2 passed。
+- 边界：没有实际切换供应商，没有购买额度。初始化时缺少配置而落到本地 ollama 的路径没有在这次失败分类里调用。
 
 ## F05 历史读取 / 重开
 
 - 现象：`public.messages` 为 0 被怀疑成历史丢失。
 - 反证：`GET /conversations/{id}/messages` 的 `get_conversation_messages` 调用 `get_events`，读取 `agent_execution_events`。空消息表不是父会话丢失。
-- 变更：补了路由源码契约测试，并在 docstring 写明该口径。没有把父消息改写进 `public.messages`。
-- 回归：`test_conversation_history_source.py` 含在 276 passed。
-- 边界：没有做一次真实浏览器重开。桌面渲染进程本轮不在 `:5173`，没有为这项重启用户桌面。
+- 变更：路由仍读事件流。桌面旅程探针在历史响应含 `timeline` 时记录 `load-history`，不读取 `public.messages`。
+- 回归：`node --test agi-stack/apps/desktop/tests/agent-workspace-journey-authority.test.mjs`，14 passed。其中云端探针的 `conversation-lifecycle` 包含 `load-history`。
+- 边界：这是自动化探针，不是在浏览器里点击重开会话。桌面窗口本轮另行按官方入口启动，不能把该探针写成点击验证。
 
 ## F06 任务完成时间
 
@@ -90,18 +90,18 @@
 ## F11 cron
 
 - 现象：add 失败；status 用 `jobs`，list 用 `items`。
-- 根因：`create_job` 故意抛出 `CronMutationUnavailableError`，因为没有持久自动化命令处理。list/status 键名不一致。
-- 变更：status 同时给出 `jobs` 和 `items`，list 同时给出 `items` 和 `jobs`。add 仍返回“no job was created”。
-- 回归：`test_cron_tool.py` 9 passed，含在 276 passed。
-- 边界：没有启用创建。status 的 total 仍按包含禁用项计数，list 默认不含禁用项。
+- 根因：手动运行已有回执、修订和幂等命令；创建、更新、删除和切换仍在 `CronJobService` 里直接拒绝。
+- 变更：创建改走 `AutomationCommandService.create_job`。同一幂等键重放同一 job，不同内容冲突。任务行、回执和 `record_create` 操作在同一事务写入，操作状态是 `succeeded`，不会被执行队列当成 pending 再跑。status/list 仍同时给出 `jobs` 和 `items`。更新、删除、切换和手动执行仍失败关闭。HTTP 创建要求 `idempotency_key`，能力声明 `create.allowed=true`、`reason_code=durable_command`，`durable_execution` 仍是 false。
+- 回归：`uv run pytest src/tests/unit/infrastructure/adapters/secondary/persistence/test_sql_cron_automation_command_repository.py src/tests/unit/application/services/test_cron_service.py src/tests/unit/infrastructure/agent/tools/test_cron_tool.py src/tests/unit/routers/test_cron_router.py -q`。持久创建测试写入名为 `selftest-followthrough-temporary` 的任务，新的 repository 实例能读回，其他 project 列表为空，最后按该 job id 删除任务、操作和回执。
+- 边界：测试库事务会回滚；清理只按本次 job id。没有改用户已有定时任务，也没有调用正在运行的 API 去创建。调度器执行仍不可用。`cron_services.py` 的产物摘要已用 `scripts/generate_plugin_protocol_v2.py --refresh-artifacts` 刷新。
 
 ## F12 Canvas / A2UI
 
 - 现象：read_only 下全部 UNAUTHORIZED。
-- 可测部分：`canvas_create` 的拒绝包含 `permission_profile=read_only`，且不授权该操作。
-- 变更：只加拒绝测试。没有绕过授权去渲染 Canvas。
-- 回归：`test_chat_tool_denial_message.py` 含在 276 passed。
-- 边界：渲染、增量合并和真实画面未测。
+- 可测部分：`ask` 档对 `canvas_create` 的拒绝保持 `permission_profile=read_only`。已授权的渲染模型能把 v0.8 JSONL 变成 `status=ready` 的表面，标题文本是 `Release approval`，增量更新会替换组件。
+- 变更：没有放宽工具权限，也没有绕过拒绝去调用工具。
+- 回归：`node --test agi-stack/apps/desktop/tests/a2ui-surface-model.test.mjs`，7 passed。拒绝文案测试仍在 `test_chat_tool_denial_message.py`。
+- 边界：通过的是表面模型和权限拒绝，不是 Electron 里打开 Canvas 后的像素。`A2UIViewer` 的真实画面需要父任务在桌面会话中打开含 A2UI 的消息。预期：表面显示 “Release approval”，允许的动作来自持久化 allow-list；`ask` 档直接调用 `canvas_create` 仍被拒绝。
 
 ## F13 MCP 版本文档
 
@@ -115,9 +115,9 @@
 
 - 现象：pip 写 `/opt/sandbox-mcp-venv` 出现 `Errno 13`。
 - 根因：目标目录不可写，不是包缺失，也不是工具未授权。
-- 变更：stderr 含 `Permission denied` 或 `Errno 13` 时前缀 `environment_not_writable`。没有 chmod。
-- 回归：sandbox `test_deps_install_failure.py` 含在 21 passed。
-- 边界：没有在真实沙箱里再跑一次 pip。
+- 变更：stderr 含 `Permission denied` 或 `Errno 13` 时前缀 `environment_not_writable`。没有 chmod，也没有改 `/opt/sandbox-mcp-venv`。
+- 回归：`cd sandbox-mcp-server && uv run pytest tests/tools/test_deps_install_failure.py -q`，3 passed。其中一项把临时目录收成只读后真实写入，捕获操作系统的 Permission denied，再分类，并在 finally 里恢复目录权限后由临时目录删除。
+- 边界：这是隔离临时目录，不是容器里的 `/opt/sandbox-mcp-venv`。没有对用户沙箱执行 pip。
 
 ## F15 browser bridge
 
@@ -131,9 +131,9 @@
 
 - 现象：用户取消被记成 handler 异常 `cloud request was cancelled`。
 - 根因：`abort()` 的拒绝发生在 IPC `await`，套在 `abort()` 外的 try 接不住监听器里的异步抛出。
-- 变更：只在 `cloud_request` 的 await 边界把确切取消或带 cancel 的 `AbortError` 返回 `{cancelled: true, kind: 'cancelled'}`。超时和其他错误继续抛出。
-- 回归：`node --test agi-stack/apps/desktop/tests/cloud-request-cancel-class.test.mjs`，2 passed。
-- 边界：没有在运行中的 Electron 里点击取消。`:5173` 本轮未监听。
+- 变更：`settleCloudRequest` 包住 `cloud_request` 的 await。明确取消返回 `{cancelled: true, kind: 'cancelled'}`。超时和 `vendor_balance` 继续抛出。成功结果原样返回。
+- 回归：`node --test agi-stack/apps/desktop/tests/cloud-request-cancel-class.test.mjs`，3 passed。
+- 边界：这是 IPC 边界函数的集成，不是在 Electron 窗口里点击停止。点击验证需要父任务在桌面会话中发起云请求后取消。预期：取消返回 cancelled，超时仍是错误，其他异常不被吞掉。
 
 ## F17 报告口径
 
@@ -183,9 +183,21 @@
 - 桌面取消分类：2 passed。IAB 不可达桥：7 passed。
 - `uv run pyright --level error` 对 11 个改动生产文件：0 errors。
 
+## 第一阶段边界复核
+
+- F01：`test_chat_run_tool_permission_boundary.py` 在刷新 `cron_services.py` 产物摘要后 17 passed。普通 ask 聊天在声明写入前仍要确认，权限档保持 read_only。
+- F03：`test_agent_run_tool_settlement.py` 仍通过。显式 detached 不关闭，挂接子运行在父结束后取消。
+
 ## 仍未落地
 
 - build 聊天是否可写：保持当前档，不扩大。
 - 除 `detached: true` 以外的正式 detached：保持现有跳过规则。
-- 备用供应商：不切换。
-- Canvas/A2UI 真实渲染、Electron 点击取消、浏览器重开历史、真实沙箱 pip：本轮没有运行中的桌面，也没有为验证重启服务。
+- 备用供应商：分类函数不切换。没有把余额失败接到初始化时的 ollama 回退。
+- cron 的更新、删除、切换和手动执行仍不可用。创建不会启动 durable execution。
+- 浏览器点击重开、Electron 点击取消、A2UIViewer 像素、容器内 pip：自动化探针已做，点击和像素未做。
+
+## 本轮桌面启动
+
+先前 `:5173` 没有监听。`agi-demos-desktop` 会话里的上一次 `make -C agi-stack run-desktop` 已停在 `Electron desktop startup failed Error: sidecar stopped`。本轮在同一会话重新执行官方入口，没有重启 PID 39283 的 Web `:3000` 和 PID 39304 的 API `:8000`。
+
+当前证据：渲染器 `http://127.0.0.1:5173/` 返回 200，监听进程是 electron-vite PID 44242，Electron 主进程 PID 44257。日志有一条非致命的 `iab bridge connect failed ... ECONNREFUSED ... bridge.sock`。没有截图。父任务若要做点击验证：打开桌面里的一条含 A2UI 的会话，预期表面文本为模型测试中的 `Release approval`；对云请求点取消，预期结果是 `{cancelled: true, kind: 'cancelled'}`，超时仍报错。

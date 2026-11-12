@@ -59,14 +59,20 @@ def _get_session_factory() -> Callable[..., Any]:
 
 def _build_service(session: Any) -> CronJobService:
     """Build a ``CronJobService`` from a live DB session."""
+    from src.application.services.automation_command_service import AutomationCommandService
+    from src.infrastructure.adapters.secondary.persistence.sql_cron_automation_command_repository import (
+        SqlCronAutomationCommandRepository,
+    )
     from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
         SqlCronJobRepository,
         SqlCronJobRunRepository,
     )
 
+    commands = AutomationCommandService(SqlCronAutomationCommandRepository(session))
     return CronJobService(
         cron_job_repo=SqlCronJobRepository(session),
         cron_job_run_repo=SqlCronJobRunRepository(session),
+        commands=commands,
     )
 
 
@@ -377,6 +383,7 @@ async def _handle_add(  # noqa: C901, PLR0911
                 timeout_seconds=job.get("timeout_seconds", 300),
                 max_retries=job.get("max_retries", 3),
                 created_by=ctx.user_id,
+                idempotency_key=str(job.get("idempotency_key") or ""),
             )
         except CronMutationUnavailableError as exc:
             return ToolResult(
