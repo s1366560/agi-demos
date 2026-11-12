@@ -198,4 +198,15 @@
 
 先前 `:5173` 没有监听。`agi-demos-desktop` 会话里的上一次 `make -C agi-stack run-desktop` 已停在 `Electron desktop startup failed Error: sidecar stopped`。本轮在同一会话重新执行官方入口，没有重启 PID 39283 的 Web `:3000` 和 PID 39304 的 API `:8000`。
 
-当前证据：渲染器 `http://127.0.0.1:5173/` 返回 200，监听进程是 electron-vite PID 44242，Electron 主进程 PID 44257。Web PID 39283 和 API PID 39304 没有重启。日志有一条非致命的 `iab bridge connect failed ... ECONNREFUSED ... bridge.sock`。没有截图。本轮没有自动化点击工具去操作这个窗口，所以像素和点击仍标未验。父任务步骤见 F05、F12、F16。
+当前证据：渲染器 `http://127.0.0.1:5173/` 返回 200，electron-vite PID 44242，Electron PID 44257。System Events 看到该 Electron 进程的窗口数是 0，所以没有可点击的窗口，也没有截图。Web PID 39283 和 API PID 39304 没有重启。日志里的 `bridge.sock` `ECONNREFUSED` 不阻止渲染器监听。
+
+父任务要补的最小步骤：先确认 Electron PID 44257 出现一个可见窗口。若仍是 0 个窗口，需要在该已运行的桌面进程里把窗口调到前台，不要新开一套 Web/API。窗口出现后：
+
+1. 打开会话 `cd9755fd-39f1-4485-8a96-77d3234179e0`。预期时间线不为空。
+2. 打开一条含 A2UI 的消息。预期组件可见。`ask` 档调用 `canvas_create` 仍应拒绝为 `read_only`。
+3. 对云请求点取消。预期 `{cancelled: true, kind: 'cancelled'}`。超时仍是错误。
+
+与 Desktop CI 拆分的交叉只在这两处，本任务为真实分片故障保留，不改 bundle 去 tag 或手动发布结构：
+
+- `scripts/ci/plugins_g_files.txt`
+- `.github/workflows/ci.yml` 里 plugins-g 从 `test_route_registration_v2.py` 到 `test_workspace_collaboration_proxy_headers_v2.py` 的步骤名。
