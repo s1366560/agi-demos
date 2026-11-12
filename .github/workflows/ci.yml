@@ -588,79 +588,79 @@ jobs:
             shard-logs/test_profile_composition_cache_v2.status
           if-no-files-found: warn
 
-      - name: plugins-g test test_runtime.py
+      - name: plugins-g test test_route_registration_v2.py
         if: matrix.shard == 'plugins-g'
         timeout-minutes: 8
-        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_runtime.py
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_route_registration_v2.py
 
-      - name: Upload plugins-g test_runtime.py
+      - name: Upload plugins-g test_route_registration_v2.py
         if: always() && matrix.shard == 'plugins-g'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: plugins-g-test_runtime
+          name: plugins-g-test_route_registration_v2
           path: |
-            shard-logs/test_runtime.log
-            shard-logs/test_runtime.status
+            shard-logs/test_route_registration_v2.log
+            shard-logs/test_route_registration_v2.status
           if-no-files-found: warn
 
-      - name: plugins-g test test_scoped_publication_models.py
+      - name: plugins-g test test_scoped_publication_coordinator.py
         if: matrix.shard == 'plugins-g'
         timeout-minutes: 8
-        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_scoped_publication_models.py
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_scoped_publication_coordinator.py
 
-      - name: Upload plugins-g test_scoped_publication_models.py
+      - name: Upload plugins-g test_scoped_publication_coordinator.py
         if: always() && matrix.shard == 'plugins-g'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: plugins-g-test_scoped_publication_models
+          name: plugins-g-test_scoped_publication_coordinator
           path: |
-            shard-logs/test_scoped_publication_models.log
-            shard-logs/test_scoped_publication_models.status
+            shard-logs/test_scoped_publication_coordinator.log
+            shard-logs/test_scoped_publication_coordinator.status
           if-no-files-found: warn
 
-      - name: plugins-g test test_skill_evolution_repository_services_v2.py
+      - name: plugins-g test test_skill_evolution_repository_lease_v2.py
         if: matrix.shard == 'plugins-g'
         timeout-minutes: 8
-        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_skill_evolution_repository_services_v2.py
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_skill_evolution_repository_lease_v2.py
 
-      - name: Upload plugins-g test_skill_evolution_repository_services_v2.py
+      - name: Upload plugins-g test_skill_evolution_repository_lease_v2.py
         if: always() && matrix.shard == 'plugins-g'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: plugins-g-test_skill_evolution_repository_services_v2
+          name: plugins-g-test_skill_evolution_repository_lease_v2
           path: |
-            shard-logs/test_skill_evolution_repository_services_v2.log
-            shard-logs/test_skill_evolution_repository_services_v2.status
+            shard-logs/test_skill_evolution_repository_lease_v2.log
+            shard-logs/test_skill_evolution_repository_lease_v2.status
           if-no-files-found: warn
 
-      - name: plugins-g test test_tool_execution_policy.py
+      - name: plugins-g test test_tenant_webhook_services_v2.py
         if: matrix.shard == 'plugins-g'
         timeout-minutes: 8
-        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_tool_execution_policy.py
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_tenant_webhook_services_v2.py
 
-      - name: Upload plugins-g test_tool_execution_policy.py
+      - name: Upload plugins-g test_tenant_webhook_services_v2.py
         if: always() && matrix.shard == 'plugins-g'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: plugins-g-test_tool_execution_policy
+          name: plugins-g-test_tenant_webhook_services_v2
           path: |
-            shard-logs/test_tool_execution_policy.log
-            shard-logs/test_tool_execution_policy.status
+            shard-logs/test_tenant_webhook_services_v2.log
+            shard-logs/test_tenant_webhook_services_v2.status
           if-no-files-found: warn
 
-      - name: plugins-g test test_workspace_context_services_v2.py
+      - name: plugins-g test test_workspace_collaboration_proxy_headers_v2.py
         if: matrix.shard == 'plugins-g'
         timeout-minutes: 8
-        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_workspace_context_services_v2.py
+        run: bash scripts/ci/plugins_g_file_step.sh src/tests/unit/infrastructure/plugins/v2/test_workspace_collaboration_proxy_headers_v2.py
 
-      - name: Upload plugins-g test_workspace_context_services_v2.py
+      - name: Upload plugins-g test_workspace_collaboration_proxy_headers_v2.py
         if: always() && matrix.shard == 'plugins-g'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: plugins-g-test_workspace_context_services_v2
+          name: plugins-g-test_workspace_collaboration_proxy_headers_v2
           path: |
-            shard-logs/test_workspace_context_services_v2.log
-            shard-logs/test_workspace_context_services_v2.status
+            shard-logs/test_workspace_collaboration_proxy_headers_v2.log
+            shard-logs/test_workspace_collaboration_proxy_headers_v2.status
           if-no-files-found: warn
 
       - name: plugins-g ordered group files 1-10
