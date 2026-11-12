@@ -50,6 +50,7 @@ import {
   CloudRequestExecutionRegistry,
   CloudSessionAuthenticationInvalidError,
   executeVaultBoundCloudRequest,
+  isIntentionalCloudCancel,
   projectVaultBoundCloudSession,
   authorizeVaultBoundSandboxDesktopGrant,
 } from './cloudRequestPolicy';
@@ -872,6 +873,11 @@ async function executeDesktopCommand(
           });
         }
         return result;
+      } catch (error) {
+        if (isIntentionalCloudCancel(error)) {
+          return { cancelled: true, kind: 'cancelled' };
+        }
+        throw error;
       } finally {
         lease.release();
       }

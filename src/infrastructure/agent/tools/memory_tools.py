@@ -147,6 +147,14 @@ def _current_memory_search_runtime() -> tuple[Any, Any, str]:
     return None, None, ""
 
 
+def memory_result_matches_category(item: dict[str, Any], category: str | None) -> bool:
+    """A requested category is exact. An omitted category does not filter."""
+
+    if not category:
+        return True
+    return item.get("category") == category
+
+
 def _format_citations(results: list[dict[str, Any]]) -> None:
     """Add citation strings to result dicts, in-place."""
     for r in results:
@@ -296,12 +304,15 @@ async def memory_search_tool(
                 "source_id": r.source_id or "",
                 "created_at": (str(r.created_at) if r.created_at else ""),
             }
+            status = getattr(r, "processing_status", None)
+            if status:
+                item["processing_status"] = str(status)
             results.append(item)
     except Exception as e:
         logger.warning("Memory chunk search failed error_type=%s", type(e).__name__)
 
-    # Also search knowledge graph if available
-    if graph_service and len(results) < max_results:
+    # Graph hits are facts. They must not dilute a different category filter.
+    if graph_service and len(results) < max_results and category in {None, "fact"}:
         await _search_graph_for_tool(
             results,
             query,
@@ -309,6 +320,8 @@ async def memory_search_tool(
             graph_service=graph_service,
             project_id=project_id,
         )
+    if category:
+        results = [item for item in results if memory_result_matches_category(item, category)]
 
     # Format citations
     _format_citations(results)
@@ -319,6 +332,7 @@ async def memory_search_tool(
                 "results": results[:max_results],
                 "total": len(results),
                 "query": query,
+                "category": category,
             },
             ensure_ascii=False,
             default=str,

@@ -207,6 +207,7 @@ async def _handle_status(
                 "enabled": enabled,
                 "disabled": disabled,
                 "jobs": summaries,
+                "items": summaries,
             }
         ),
         metadata={"total": total, "enabled": enabled},
@@ -243,6 +244,7 @@ async def _handle_list(
         output=_json(
             {
                 "items": [_job_summary(j) for j in jobs],
+                "jobs": [_job_summary(j) for j in jobs],
                 "total": total,
             }
         ),

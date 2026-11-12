@@ -67,6 +67,7 @@ async def agent_sessions_tool(
                 "mode": rec.mode.value,
                 "task_summary": rec.task_summary,
                 "created_at": rec.created_at.isoformat(),
+                "last_activity_at": (rec.last_activity_at or rec.created_at).isoformat(),
             }
             for rec in records
         ]

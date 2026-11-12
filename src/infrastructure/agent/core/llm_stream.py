@@ -174,6 +174,25 @@ class ToolCallChunk:
         }
 
 
+def classify_provider_failure(error: BaseException) -> tuple[str, str]:
+    """Label a provider failure without selecting another provider."""
+
+    name = type(error).__name__
+    text = str(error)
+    if (
+        name in {"RateLimitError", "RateLimitExceededError"}
+        or "RateLimit" in text
+        or "Insufficient balance" in text
+        or "no resource package" in text
+    ):
+        return (
+            "vendor_rate_limit: the provider rejected the request for balance or rate limit. "
+            "Retry later. No alternate provider was selected. " + text,
+            "vendor_rate_limit",
+        )
+    return text, name
+
+
 @dataclass
 class StreamEvent:
     """
@@ -547,7 +566,8 @@ class LLMStream:
             yield StreamEvent.error(str(e), code=e.code)
         except Exception as e:
             logger.error(f"LLM stream error: {e}", exc_info=True)
-            yield StreamEvent.error(str(e), code=type(e).__name__)
+            message, code = classify_provider_failure(e)
+            yield StreamEvent.error(message, code=code)
 
     async def _generate_with_client(  # noqa: C901, PLR0912
         self,

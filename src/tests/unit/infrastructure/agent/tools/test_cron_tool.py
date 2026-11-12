@@ -193,3 +193,66 @@ async def test_unbound_cron_template_rejects_legacy_runtime_fallback() -> None:
 
 def test_cron_module_has_no_legacy_configure_seam() -> None:
     assert not hasattr(cron_tool_module, "configure_cron_tool")
+
+
+async def test_status_and_list_share_job_keys_and_add_stays_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = SimpleNamespace(
+        id="job-1",
+        name="nightly",
+        enabled=True,
+        schedule=SimpleNamespace(to_dict=lambda: {"kind": "every"}),
+        payload=SimpleNamespace(kind=SimpleNamespace(value="agent")),
+        timezone="UTC",
+        conversation_mode=SimpleNamespace(value="reuse"),
+        conversation_id=None,
+        state="idle",
+    )
+
+    class _Service:
+        async def count_jobs(self, _project_id: str, *, include_disabled: bool) -> int:
+            _ = include_disabled
+            return 1
+
+        async def list_jobs(self, *_args: object, **_kwargs: object) -> list[object]:
+            return [job]
+
+        async def create_job(self, **_kwargs: object) -> None:
+            raise CronMutationUnavailableError(
+                "Create requires durable automation command processing; no job was created"
+            )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace()
+
+    class _ProjectRepo:
+        def __init__(self, _session: object) -> None:
+            return None
+
+        async def find_by_id(self, _project_id: str) -> SimpleNamespace:
+            return SimpleNamespace(tenant_id="tenant-1")
+
+    monkeypatch.setattr(cron_tool_module, "_build_service", lambda _session: _Service())
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_project_repository.SqlProjectRepository",
+        _ProjectRepo,
+    )
+    tool = make_cron_tool(session_factory=session_factory)
+    status = json.loads((await tool.execute(_make_ctx(), action="status")).output)
+    listed = json.loads((await tool.execute(_make_ctx(), action="list")).output)
+    assert status["jobs"] == status["items"]
+    assert listed["jobs"] == listed["items"]
+    assert status["jobs"][0]["id"] == "job-1"
+    added = await tool.execute(
+        _make_ctx(),
+        action="add",
+        job={
+            "name": "nightly",
+            "schedule": {"kind": "every", "config": {"interval_seconds": 60}},
+            "payload": {"kind": "agent_turn", "config": {"message": "check"}},
+        },
+    )
+    assert added.is_error is True
+    assert "no job was created" in json.loads(added.output)["error"]

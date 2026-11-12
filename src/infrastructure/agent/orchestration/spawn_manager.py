@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
 from typing import Any
 
 from src.domain.model.agent.spawn_mode import SpawnMode
@@ -365,6 +366,7 @@ class SpawnManager:
                 trace_id=old.trace_id,
                 span_id=old.span_id,
                 created_at=old.created_at,
+                last_activity_at=datetime.now(UTC),
             )
             self._records_by_child_session[child_session_id] = updated
 

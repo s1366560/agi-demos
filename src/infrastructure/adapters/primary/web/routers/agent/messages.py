@@ -1595,9 +1595,10 @@ async def get_conversation_messages(
     ),
 ) -> dict[str, Any]:
     """
-    Get conversation timeline from unified event stream with bidirectional pagination.
+    Get conversation timeline from the agent execution event stream.
 
-    Returns timeline of all events in the conversation, ordered by sequence number.
+    An empty ``public.messages`` table does not mean the conversation has no
+    history. This route reads ``agent_execution_events`` through ``get_events``.
     """
     try:
         event_repo = history.service

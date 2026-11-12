@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Awaitable, Callable, Coroutine
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from redis.asyncio import Redis
@@ -357,6 +358,7 @@ class RedisSpawnManager:
             trace_id=old.trace_id,
             span_id=old.span_id,
             created_at=old.created_at,
+            last_activity_at=datetime.now(UTC),
         )
 
         try:

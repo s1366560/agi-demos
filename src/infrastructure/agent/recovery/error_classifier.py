@@ -59,6 +59,9 @@ class ErrorClassifier:
         r"quota.?exceeded",
         r"throttl",
         r"exhausted",
+        r"insufficient balance",
+        r"no resource package",
+        r"vendor_rate_limit",
     ]
 
     # Patterns for context overflow detection

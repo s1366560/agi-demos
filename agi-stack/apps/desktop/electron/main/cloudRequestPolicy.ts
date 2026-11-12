@@ -259,6 +259,12 @@ export async function authorizeVaultBoundSandboxDesktopGrant(
   });
 }
 
+export function isIntentionalCloudCancel(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.message === 'cloud request was cancelled') return true;
+  return error.name === 'AbortError' && /cancel/iu.test(error.message);
+}
+
 export async function executeVaultBoundCloudRequest(
   input: unknown,
   dependencies: VaultBoundCloudRequestDependencies,
