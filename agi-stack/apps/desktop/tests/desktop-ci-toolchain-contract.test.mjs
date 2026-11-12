@@ -21,6 +21,9 @@ const readDesktopFile = (path) => readFileSync(new URL(path, `file://${desktopRo
 const ciWorkflow = parse(readRepositoryFile('.github/workflows/ci.yml'));
 const e2eWorkflow = parse(readRepositoryFile('.github/workflows/e2e.yml'));
 const releaseWorkflow = parse(readRepositoryFile('.github/workflows/desktop-release.yml'));
+const bundleVerifyWorkflow = parse(
+  readRepositoryFile('.github/workflows/desktop-bundle-verify.yml'),
+);
 const rootPackage = JSON.parse(readRepositoryFile('package.json'));
 const webPackage = JSON.parse(readRepositoryFile('web/package.json'));
 const desktopPackage = JSON.parse(readDesktopFile('package.json'));
@@ -121,6 +124,7 @@ test('all JavaScript projects and delivery paths use one integrity-pinned pnpm t
 
   assertFrontendToolchain(ciWorkflow.jobs.web);
   assertFrontendToolchain(ciWorkflow.jobs['agi-stack-desktop-bundle']);
+  assertFrontendToolchain(bundleVerifyWorkflow.jobs.verify);
   assertFrontendToolchain(e2eWorkflow.jobs['web-smoke']);
   assertFrontendToolchain(e2eWorkflow.jobs['backend-e2e']);
 
@@ -141,6 +145,7 @@ test('all JavaScript projects and delivery paths use one integrity-pinned pnpm t
     ci: ciWorkflow,
     e2e: e2eWorkflow,
     release: releaseWorkflow,
+    bundleVerify: bundleVerifyWorkflow,
   });
   assert.doesNotMatch(activeToolchainContract, /pmOnFail["']?\s*[:=]\s*["']?ignore/iu);
 

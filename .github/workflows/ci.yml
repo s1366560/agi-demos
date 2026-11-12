@@ -1237,32 +1237,16 @@ jobs:
       - name: Run desktop unit and integration tests
         run: |
           set -euo pipefail
-          # Two CI runs failed a different 10s wait while this step's release
-          # compile was still running. A local pass under load does not prove
-          # the overlap is safe, so tests do not share the runner with it.
-          # The bundle step still builds the same release binaries. The 10s
-          # waits stay as they are.
+          # Installer compilation stays out of this gate. Signed packages are
+          # built by the protected tag workflow, and the unsigned local bundle
+          # is the manual desktop-bundle-verify workflow.
           make desktop-test
 
-      - name: Build desktop bundle
-        run: make desktop-bundle
+      - name: Verify desktop icons and macOS entitlement resources
+        run: make desktop-icons
 
-      - name: Smoke check desktop bundle
-        run: make desktop-bundle-smoke
-
-      - name: Upload desktop bundle
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: agi-stack-desktop-bundle
-          path: |
-            agi-stack/apps/desktop/release/*.dmg
-            agi-stack/apps/desktop/release/*.zip
-            agi-stack/apps/desktop/release/*.exe
-            agi-stack/apps/desktop/release/*.AppImage
-            agi-stack/apps/desktop/release/*.deb
-            agi-stack/apps/desktop/release/*.blockmap
-            agi-stack/apps/desktop/release/latest*.yml
-          if-no-files-found: error
+      - name: Typecheck and compile the Electron application
+        run: make desktop-electron-build
 
   agi-stack-android-artifact:
     name: agi-stack Android Artifact
