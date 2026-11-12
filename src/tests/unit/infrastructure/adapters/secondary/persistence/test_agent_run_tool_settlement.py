@@ -99,6 +99,79 @@ async def test_terminal_transaction_settles_only_its_unfinished_tool(tool_settle
     assert await settle_cancelled_run_tools(db, run=run) == 0
 
 
+async def test_parent_completion_closes_attached_children_and_keeps_detached(
+    tool_settlement_fixture, test_user, test_project_db
+):
+    db, run, _records, now = tool_settlement_fixture
+    attached = Conversation(
+        id="attached-child",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        user_id=test_user.id,
+        title="Attached child",
+        parent_conversation_id=run.conversation_id,
+    )
+    detached = Conversation(
+        id="detached-child",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        user_id=test_user.id,
+        title="Detached child",
+        parent_conversation_id=run.conversation_id,
+    )
+    db.add_all([attached, detached])
+    await db.commit()
+    attached_run = await ensure_chat_run_authority(
+        db,
+        conversation=attached,
+        run_id="attached-child-run",
+        request_message="work",
+        client_message_id=None,
+        app_model_context=None,
+    )
+    detached_run = await ensure_chat_run_authority(
+        db,
+        conversation=detached,
+        run_id="detached-child-run",
+        request_message="background",
+        client_message_id=None,
+        app_model_context=None,
+    )
+    attached_run.status = "running"
+    detached_run.status = "running"
+    detached_run.authorization_snapshot = {
+        **dict(detached_run.authorization_snapshot),
+        "detached": True,
+    }
+    hanging = ToolExecutionRecord(
+        id="attached-hanging-tool",
+        conversation_id=attached.id,
+        message_id="child-message",
+        call_id="call-attached-hanging",
+        tool_name="bash",
+        tool_input={},
+        status="running",
+        sequence_number=0,
+        started_at=now - timedelta(seconds=3),
+    )
+    db.add(hanging)
+    run.status = "completed"
+    run.completed_at = now
+    await settle_agent_run(
+        db, run=run, started_at=now - timedelta(seconds=2), succeeded=True, completed_at=now
+    )
+    await db.commit()
+    await db.refresh(attached_run)
+    await db.refresh(detached_run)
+    await db.refresh(hanging)
+    assert attached_run.status == "cancelled"
+    assert attached_run.error == "parent_run_ended"
+    assert hanging.status == "cancelled"
+    assert hanging.error == "parent_run_ended"
+    assert detached_run.status == "running"
+    assert detached_run.completed_at is None
+
+
 @pytest.mark.parametrize("status", ["queued", "running", "completed", "failed"])
 async def test_non_cancelled_run_does_not_settle_tools(tool_settlement_fixture, status):
     db, run, records, now = tool_settlement_fixture

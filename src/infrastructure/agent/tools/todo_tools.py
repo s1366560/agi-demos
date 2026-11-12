@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from src.domain.model.agent.task import AgentTask, TaskPriority, TaskStatus
@@ -72,6 +72,40 @@ def _todo_optional_datetime(value: Any) -> datetime | None:
         return value
     if isinstance(value, str) and value.strip():
         return datetime.fromisoformat(value)
+    return None
+
+
+def _fill_missing_completion_time(
+    updates: dict[str, Any],
+    existing_task: Any,
+) -> None:
+    """Record a completion time only when the caller omitted one."""
+
+    raw_status = updates.get("status")
+    if isinstance(raw_status, TaskStatus):
+        next_status = raw_status
+    elif isinstance(raw_status, str):
+        try:
+            next_status = TaskStatus(raw_status)
+        except ValueError:
+            return
+    else:
+        return
+    if (
+        next_status == TaskStatus.COMPLETED
+        and "completed_at" not in updates
+        and not getattr(existing_task, "completed_at", None)
+    ):
+        updates["completed_at"] = datetime.now(UTC)
+
+
+def _completed_at_for_status(status: TaskStatus, explicit: datetime | None) -> datetime | None:
+    """Keep a caller-supplied time and fill only a missing completed timestamp."""
+
+    if explicit is not None:
+        return explicit
+    if status == TaskStatus.COMPLETED:
+        return datetime.now(UTC)
     return None
 
 
@@ -263,6 +297,7 @@ async def _todowrite_handle_update(
         for field in ("started_at", "completed_at"):
             if field in updates:
                 updates[field] = _todo_optional_datetime(updates[field])
+        _fill_missing_completion_time(updates, existing_task)
     updated = await repo.update(todo_id, **updates)
     if updated and updates.keys() - _TODO_PROGRESS_FIELDS:
         replacement = await repo.find_by_conversation(conversation_id)
@@ -311,7 +346,10 @@ async def _todowrite_replace(
             description=td.get("description"),
             estimated_duration_seconds=td.get("estimated_duration_seconds"),
             started_at=_todo_optional_datetime(td.get("started_at")),
-            completed_at=_todo_optional_datetime(td.get("completed_at")),
+            completed_at=_completed_at_for_status(
+                TaskStatus(td.get("status", "pending")),
+                _todo_optional_datetime(td.get("completed_at")),
+            ),
             result_summary=td.get("result_summary"),
             evidence_refs=[str(value) for value in td.get("evidence_refs", [])],
             status=TaskStatus(td.get("status", "pending")),
@@ -369,7 +407,10 @@ async def _todowrite_add(
             description=td.get("description"),
             estimated_duration_seconds=td.get("estimated_duration_seconds"),
             started_at=_todo_optional_datetime(td.get("started_at")),
-            completed_at=_todo_optional_datetime(td.get("completed_at")),
+            completed_at=_completed_at_for_status(
+                TaskStatus(td.get("status", "pending")),
+                _todo_optional_datetime(td.get("completed_at")),
+            ),
             result_summary=td.get("result_summary"),
             evidence_refs=[str(value) for value in td.get("evidence_refs", [])],
             status=TaskStatus(td.get("status", "pending")),

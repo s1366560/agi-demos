@@ -42,6 +42,36 @@ _session_status_runtime: ContextVar[ConversationRepository | None] = ContextVar(
 )
 
 
+async def _latest_tool_grant(conversation_id: str) -> tuple[str, str] | None:
+    """Read the newest chat-run grant. Mode and profile stay separate."""
+
+    from unittest.mock import Mock
+
+    repository = _repo()
+    session = getattr(repository, "_session", None)
+    # Test doubles expose a synthetic session. Only a real database session is queried.
+    if session is None or isinstance(session, Mock):
+        return None
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.secondary.persistence.models import AgentRunAuthorityModel
+
+    result = await session.execute(
+        select(AgentRunAuthorityModel)
+        .where(AgentRunAuthorityModel.conversation_id == conversation_id)
+        .order_by(AgentRunAuthorityModel.created_at.desc())
+        .limit(1)
+    )
+    run = result.scalar_one_or_none()
+    if run is None:
+        return None
+    snapshot = run.authorization_snapshot if isinstance(run.authorization_snapshot, dict) else {}
+    mode = snapshot.get("effective_permission_mode")
+    if not isinstance(mode, str) or not mode:
+        mode = "unbound"
+    return mode, run.permission_profile
+
+
 def _repo() -> ConversationRepository:
     """Return the invocation-bound repository or raise."""
     repository = _session_status_runtime.get()
@@ -89,6 +119,7 @@ def _build_status_card(
         f"  Title        : {conversation.title}",
         f"  Status       : {conversation.status.value}",
         f"  Mode         : {conversation.current_mode.value}",
+        "  Tool grant   : mode does not authorize tools; see permission profile",
         f"  Messages     : {conversation.message_count}",
         "",
         f"  Agent        : {ctx.agent_name}",
@@ -181,6 +212,13 @@ async def session_status_tool(
         )
 
     status_card = _build_status_card(conversation, ctx)
+    grant = await _latest_tool_grant(target_id)
+    if grant is not None:
+        mode, profile = grant
+        status_card = status_card.replace(
+            "  Tool grant   : mode does not authorize tools; see permission profile",
+            f"  Tool grant   : permission_mode={mode} permission_profile={profile}",
+        )
 
     return ToolResult(
         output=status_card,

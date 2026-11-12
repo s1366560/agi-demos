@@ -51,6 +51,19 @@ def _denied() -> RuntimeV2Error:
     )
 
 
+def format_chat_tool_denial(tool_name: str) -> str:
+    """Name the tool and the current grant without widening that grant."""
+
+    guard = current_chat_run_guard_v2()
+    mode = guard.mode if guard is not None else "unbound"
+    profile = PERMISSION_PROFILES.get(mode, "unbound")
+    return (
+        "tool_not_authorized "
+        f"tool={tool_name} permission_mode={mode} permission_profile={profile}. "
+        "This chat run keeps its current profile and does not authorize this tool operation."
+    )
+
+
 def _arguments(arguments: dict[str, Any]) -> str:
     return json.dumps(arguments, sort_keys=True, ensure_ascii=False, allow_nan=False)
 

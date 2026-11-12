@@ -360,6 +360,7 @@ class SessionProcessor:
             yield event.to_sse_format()
     """
 
+    _tool_hooks_resolved: bool = False
     _TOOL_USAGE_REMINDER = (
         "[TOOL REMINDER] The goal is still pending. If you need more information, "
         "verification, or project changes, call the appropriate tool instead of "
@@ -5167,8 +5168,12 @@ class SessionProcessor:
         except RuntimeV2Error:
             chat_decision = "deny"
         if chat_decision == "deny":
+            from src.application.services.chat_run_tool_permission_v2 import (
+                format_chat_tool_denial,
+            )
+
             tool_part.status = ToolState.ERROR
-            tool_part.error = "Chat run does not authorize this tool operation"
+            tool_part.error = format_chat_tool_denial(tool_name)
             tool_part.end_time = time.time()
             yield AgentObserveEvent(
                 tool_name=tool_name,

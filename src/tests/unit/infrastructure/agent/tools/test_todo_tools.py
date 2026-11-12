@@ -445,7 +445,10 @@ async def test_build_progress_updates_persist_and_emit_authoritative_status(
                 "content": "Read workspace",
             }
         ]
-    assert writes == [{"status": "in_progress"}, {"status": "completed"}]
+    assert writes[0] == {"status": "in_progress"}
+    assert set(writes[1]) == {"status", "completed_at"}
+    assert writes[1]["status"] == "completed"
+    assert writes[1]["completed_at"] is not None
 
 
 @pytest.mark.parametrize("action", ["add", "replace"])
