@@ -18,7 +18,9 @@ from src.application.services.automation_command_service import (
     AutomationJobReceipt,
     AutomationRunReceipt,
     CreateAutomationJobCommand,
+    DeleteAutomationJobCommand,
     QueueManualRunCommand,
+    UpdateAutomationJobCommand,
 )
 from src.domain.model.cron.value_objects import CronDelivery, CronRunStatus, TriggerType
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -284,11 +286,180 @@ class SqlCronAutomationCommandRepository:
             duplicate=False,
         )
 
+    async def update_job(
+        self,
+        *,
+        actor: AutomationActor,
+        command: UpdateAutomationJobCommand,
+        request_hash: str,
+    ) -> AutomationJobReceipt:
+        now = datetime.now(UTC)
+        await self._delete_expired_receipt(
+            actor=actor, command=command, now=now, operation="update_job"
+        )
+        existing = await self._find_receipt(actor=actor, command=command, operation="update_job")
+        if existing is not None:
+            return self._replay_job_receipt(existing, request_hash=request_hash)
+        job = await self._require_current_revision(actor=actor, command=command)
+        if command.name is not None:
+            job.name = command.name.strip()
+        if command.description is not None:
+            job.description = command.description
+        if command.enabled is not None:
+            job.enabled = command.enabled
+        if command.schedule is not None:
+            job.schedule_type = command.schedule.kind.value
+            job.schedule_config = dict(command.schedule.config)
+            job.schedule_revision = int(job.schedule_revision) + 1
+        if command.payload is not None:
+            job.payload_type = command.payload.kind.value
+            job.payload_config = dict(command.payload.config)
+        job.revision = int(job.revision) + 1
+        job.updated_at = now
+        return await self._record_job_mutation(
+            actor=actor,
+            command=command,
+            operation="update_job",
+            operation_kind="record_update",
+            job_id=job.id,
+            job_revision=int(job.revision),
+            request_hash=request_hash,
+            now=now,
+        )
+
+    async def delete_job(
+        self,
+        *,
+        actor: AutomationActor,
+        command: DeleteAutomationJobCommand,
+        request_hash: str,
+    ) -> AutomationJobReceipt:
+        now = datetime.now(UTC)
+        await self._delete_expired_receipt(
+            actor=actor, command=command, now=now, operation="delete_job"
+        )
+        existing = await self._find_receipt(actor=actor, command=command, operation="delete_job")
+        if existing is not None:
+            return self._replay_job_receipt(existing, request_hash=request_hash)
+        job = await self._require_current_revision(actor=actor, command=command)
+        job_id = job.id
+        revision = int(job.revision)
+        await self._session.delete(job)
+        return await self._record_job_mutation(
+            actor=actor,
+            command=command,
+            operation="delete_job",
+            operation_kind="record_delete",
+            job_id=job_id,
+            job_revision=revision,
+            request_hash=request_hash,
+            now=now,
+        )
+
+    async def _require_current_revision(
+        self,
+        *,
+        actor: AutomationActor,
+        command: UpdateAutomationJobCommand | DeleteAutomationJobCommand,
+    ) -> CronJobModel:
+        job = await self._find_locked_job(actor=actor, job_id=command.job_id)
+        if job is None:
+            raise AutomationCommandTargetNotFoundError("Automation job not found in project scope")
+        if int(job.revision) != command.expected_revision:
+            raise AutomationCommandRevisionConflictError(
+                expected_revision=command.expected_revision,
+                current_revision=int(job.revision),
+            )
+        return job
+
+    async def _record_job_mutation(
+        self,
+        *,
+        actor: AutomationActor,
+        command: UpdateAutomationJobCommand | DeleteAutomationJobCommand,
+        operation: str,
+        operation_kind: str,
+        job_id: str,
+        job_revision: int,
+        request_hash: str,
+        now: datetime,
+    ) -> AutomationJobReceipt:
+        operation_id = str(uuid.uuid4())
+        receipt_id = str(uuid.uuid4())
+        response: dict[str, object] = {
+            "receipt_id": receipt_id,
+            "operation_id": operation_id,
+            "job_id": job_id,
+            "job_revision": job_revision,
+            "status": "persisted",
+        }
+        receipt = CronRequestReceiptModel(
+            id=receipt_id,
+            tenant_id=actor.tenant_id,
+            project_id=actor.project_id,
+            actor_user_id=actor.user_id,
+            actor_api_key_id=actor.api_key_id,
+            operation=operation,
+            idempotency_key=command.idempotency_key,
+            request_hash=request_hash,
+            resource_kind="cron_job",
+            resource_id=job_id,
+            operation_id=operation_id,
+            http_status=201,
+            response_json_redacted=response,
+            created_at=now,
+            expires_at=now + _RECEIPT_TTL,
+        )
+        try:
+            async with self._session.begin_nested():
+                self._session.add(receipt)
+                await self._session.flush()
+        except IntegrityError:
+            existing = await self._find_receipt(actor=actor, command=command, operation=operation)
+            if existing is None:
+                raise
+            return self._replay_job_receipt(existing, request_hash=request_hash)
+        self._session.add(
+            CronOperationModel(
+                id=operation_id,
+                tenant_id=actor.tenant_id,
+                project_id=actor.project_id,
+                job_id=job_id,
+                job_revision=job_revision,
+                schedule_revision=None,
+                operation_kind=operation_kind,
+                run_id=None,
+                trigger_type=None,
+                input_json={"idempotency_key": command.idempotency_key},
+                status="succeeded",
+                attempt_count=1,
+                max_attempts=1,
+                next_attempt_at=None,
+                actor_user_id=actor.user_id,
+                actor_api_key_id=actor.api_key_id,
+                request_receipt_id=receipt_id,
+                result_json=response,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await self._session.flush()
+        return AutomationJobReceipt(
+            receipt_id=receipt_id,
+            operation_id=operation_id,
+            job_id=job_id,
+            job_revision=job_revision,
+            duplicate=False,
+        )
+
     async def _delete_expired_receipt(
         self,
         *,
         actor: AutomationActor,
-        command: QueueManualRunCommand | CreateAutomationJobCommand,
+        command: QueueManualRunCommand
+        | CreateAutomationJobCommand
+        | UpdateAutomationJobCommand
+        | DeleteAutomationJobCommand,
         now: datetime,
         operation: str = "run_now",
     ) -> None:
@@ -306,7 +477,10 @@ class SqlCronAutomationCommandRepository:
         self,
         *,
         actor: AutomationActor,
-        command: QueueManualRunCommand | CreateAutomationJobCommand,
+        command: QueueManualRunCommand
+        | CreateAutomationJobCommand
+        | UpdateAutomationJobCommand
+        | DeleteAutomationJobCommand,
         operation: str = "run_now",
     ) -> CronRequestReceiptModel | None:
         result = await self._session.execute(

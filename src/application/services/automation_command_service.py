@@ -92,6 +92,29 @@ class CreateAutomationJobCommand:
 
 
 @dataclass(frozen=True, kw_only=True)
+class UpdateAutomationJobCommand:
+    """Revision-guarded partial update of one project-scoped job."""
+
+    job_id: str
+    expected_revision: int
+    idempotency_key: str
+    name: str | None = None
+    description: str | None = None
+    enabled: bool | None = None
+    schedule: CronSchedule | None = None
+    payload: CronPayload | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeleteAutomationJobCommand:
+    """Revision-guarded deletion of one project-scoped job."""
+
+    job_id: str
+    expected_revision: int
+    idempotency_key: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class AutomationJobReceipt:
     """Stable receipt for a persisted or replayed job."""
 
@@ -118,6 +141,22 @@ class AutomationCommandRepository(Protocol):
         *,
         actor: AutomationActor,
         command: CreateAutomationJobCommand,
+        request_hash: str,
+    ) -> AutomationJobReceipt: ...
+
+    async def update_job(
+        self,
+        *,
+        actor: AutomationActor,
+        command: UpdateAutomationJobCommand,
+        request_hash: str,
+    ) -> AutomationJobReceipt: ...
+
+    async def delete_job(
+        self,
+        *,
+        actor: AutomationActor,
+        command: DeleteAutomationJobCommand,
         request_hash: str,
     ) -> AutomationJobReceipt: ...
 
@@ -158,6 +197,70 @@ class AutomationCommandService:
         self._validate_create(command)
         request_hash = self._create_hash(actor=actor, command=command)
         return await self._repository.create_job(
+            actor=actor,
+            command=command,
+            request_hash=request_hash,
+        )
+
+    async def update_job(
+        self,
+        *,
+        actor: AutomationActor,
+        command: UpdateAutomationJobCommand,
+    ) -> AutomationJobReceipt:
+        """Apply one partial update without writing a second revision on replay."""
+        self._validate_actor(actor)
+        self._validate_revision_command(
+            command.job_id, command.expected_revision, command.idempotency_key
+        )
+        if (
+            command.name is None
+            and command.description is None
+            and command.enabled is None
+            and command.schedule is None
+            and command.payload is None
+        ):
+            raise ValueError("update has no fields")
+        if command.name is not None and not command.name.strip():
+            raise ValueError("name is required")
+        request_hash = self._revision_hash(
+            actor=actor,
+            operation="update_job",
+            job_id=command.job_id,
+            expected_revision=command.expected_revision,
+            body={
+                "name": command.name,
+                "description": command.description,
+                "enabled": command.enabled,
+                "schedule": command.schedule.to_dict() if command.schedule else None,
+                "payload": command.payload.to_dict() if command.payload else None,
+            },
+        )
+        return await self._repository.update_job(
+            actor=actor,
+            command=command,
+            request_hash=request_hash,
+        )
+
+    async def delete_job(
+        self,
+        *,
+        actor: AutomationActor,
+        command: DeleteAutomationJobCommand,
+    ) -> AutomationJobReceipt:
+        """Delete one job once. Replaying the same key does not delete another job."""
+        self._validate_actor(actor)
+        self._validate_revision_command(
+            command.job_id, command.expected_revision, command.idempotency_key
+        )
+        request_hash = self._revision_hash(
+            actor=actor,
+            operation="delete_job",
+            job_id=command.job_id,
+            expected_revision=command.expected_revision,
+            body={},
+        )
+        return await self._repository.delete_job(
             actor=actor,
             command=command,
             request_hash=request_hash,
@@ -237,6 +340,43 @@ class AutomationCommandService:
             raise ValueError("idempotency_key must contain 1 to 255 visible ASCII characters")
         if command.conversation_id is not None and not command.conversation_id.strip():
             raise ValueError("conversation_id cannot be blank")
+
+    @classmethod
+    def _revision_hash(
+        cls,
+        *,
+        actor: AutomationActor,
+        operation: str,
+        job_id: str,
+        expected_revision: int,
+        body: dict[str, object],
+    ) -> str:
+        payload = {
+            "schema_version": cls._SCHEMA_VERSION,
+            "operation": operation,
+            "tenant_id": actor.tenant_id,
+            "project_id": actor.project_id,
+            "job_id": job_id,
+            "expected_revision": expected_revision,
+            "body": body,
+        }
+        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _validate_revision_command(
+        job_id: str, expected_revision: int, idempotency_key: str
+    ) -> None:
+        if not job_id.strip():
+            raise ValueError("job_id is required")
+        if expected_revision < 1:
+            raise ValueError("expected_revision must be positive")
+        if (
+            not idempotency_key
+            or len(idempotency_key) > 255
+            or any(ord(character) < 33 or ord(character) > 126 for character in idempotency_key)
+        ):
+            raise ValueError("idempotency_key must contain 1 to 255 visible ASCII characters")
 
     @staticmethod
     def _validate_create(command: CreateAutomationJobCommand) -> None:

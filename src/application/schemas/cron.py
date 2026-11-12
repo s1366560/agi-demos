@@ -122,6 +122,8 @@ class CronJobCreate(BaseModel):
 class CronJobUpdate(BaseModel):
     """Request body for updating a cron job (partial update)."""
 
+    expected_revision: int | None = Field(default=None, ge=1)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
     name: str | None = Field(default=None, description="Job name", min_length=1, max_length=255)
     description: str | None = Field(default=None, description="Job description", max_length=1000)
     enabled: bool | None = Field(default=None, description="Enable/disable")

@@ -95,13 +95,16 @@ async def test_capabilities_fail_closed_with_stable_reason_codes() -> None:
     assert response.contract_version == "2.0.0"
     assert response.schema_version == 1
     assert response.read is True
-    assert response.revision_guarded is False
+    assert response.revision_guarded is True
     assert response.idempotency_guarded is True
-    assert response.durable_execution is False
+    assert response.durable_execution is True
     assert response.create.allowed is True
     assert response.create.reason_code == "durable_command"
-    assert response.run_now.allowed is False
-    assert response.run_now.reason_code == "durable_automation_execution_unavailable"
+    assert response.edit.allowed is True
+    assert response.toggle.allowed is True
+    assert response.delete.allowed is True
+    assert response.run_now.allowed is True
+    assert response.run_now.reason_code == "durable_command"
 
 
 async def test_manual_run_v2_returns_one_durable_receipt(monkeypatch: pytest.MonkeyPatch) -> None:

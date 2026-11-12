@@ -411,6 +411,8 @@ async def _handle_update(  # noqa: PLR0912
     *,
     job_id: str | None,
     patch: dict[str, Any] | None,
+    expected_revision: int | None,
+    idempotency_key: str | None,
 ) -> ToolResult:
     """Update an existing cron job."""
     if not job_id:
@@ -454,7 +456,14 @@ async def _handle_update(  # noqa: PLR0912
     async with factory() as session:
         svc = _build_service(session)
         try:
-            updated = await svc.update_job(job_id, **updates)
+            updated = await svc.update_job(
+                job_id,
+                project_id=ctx.project_id,
+                actor_user_id=ctx.user_id,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+                **updates,
+            )
         except ValueError as exc:
             return ToolResult(
                 output=_json({"error": str(exc)}),
@@ -488,6 +497,8 @@ async def _handle_remove(
     ctx: ToolContext,
     *,
     job_id: str | None,
+    expected_revision: int | None,
+    idempotency_key: str | None,
 ) -> ToolResult:
     """Remove a cron job."""
     if not job_id:
@@ -500,7 +511,13 @@ async def _handle_remove(
     async with factory() as session:
         svc = _build_service(session)
         try:
-            deleted = await svc.delete_job(job_id)
+            deleted = await svc.delete_job(
+                job_id,
+                project_id=ctx.project_id,
+                actor_user_id=ctx.user_id,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+            )
         except CronMutationUnavailableError as exc:
             return ToolResult(
                 output=_json({"error": str(exc)}),
@@ -527,6 +544,8 @@ async def _handle_run(
     *,
     job_id: str | None,
     conversation_id: str | None,
+    expected_revision: int | None,
+    idempotency_key: str | None,
 ) -> ToolResult:
     """Manually trigger a cron job."""
     project_id = ctx.project_id
@@ -554,6 +573,10 @@ async def _handle_run(
             run = await svc.trigger_manual_run(
                 job_id,
                 conversation_id=conversation_id,
+                project_id=project_id,
+                actor_user_id=ctx.user_id,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
             )
         except ValueError as exc:
             return ToolResult(
@@ -812,6 +835,14 @@ def _cron_permission(arguments: dict[str, Any]) -> str | None:
                 "type": "string",
                 "description": "Override conversation ID for 'run' action.",
             },
+            "expected_revision": {
+                "type": "integer",
+                "description": "Current job revision. Required for update, remove, and run.",
+            },
+            "idempotency_key": {
+                "type": "string",
+                "description": "Replay key. Required for update, remove, and run.",
+            },
         },
         "required": ["action"],
     },
@@ -828,6 +859,8 @@ async def cron_tool(  # noqa: PLR0911
     patch: dict[str, Any] | None = None,
     include_disabled: bool = False,
     conversation_id: str | None = None,
+    expected_revision: int | None = None,
+    idempotency_key: str | None = None,
 ) -> ToolResult:
     """Manage scheduled/cron jobs for the current project."""
     if action not in VALID_ACTIONS:
@@ -856,14 +889,27 @@ async def cron_tool(  # noqa: PLR0911
         elif action == "add":
             return await _handle_add(ctx, job=job)
         elif action == "update":
-            return await _handle_update(ctx, job_id=job_id, patch=patch)
+            return await _handle_update(
+                ctx,
+                job_id=job_id,
+                patch=patch,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+            )
         elif action == "remove":
-            return await _handle_remove(ctx, job_id=job_id)
+            return await _handle_remove(
+                ctx,
+                job_id=job_id,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+            )
         elif action == "run":
             return await _handle_run(
                 ctx,
                 job_id=job_id,
                 conversation_id=conversation_id,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
             )
         elif action == "runs":
             return await _handle_runs(ctx, job_id=job_id)

@@ -43,8 +43,8 @@
 - 现象：`public.messages` 为 0 被怀疑成历史丢失。
 - 反证：`GET /conversations/{id}/messages` 的 `get_conversation_messages` 调用 `get_events`，读取 `agent_execution_events`。空消息表不是父会话丢失。
 - 变更：路由仍读事件流。桌面旅程探针在历史响应含 `timeline` 时记录 `load-history`，不读取 `public.messages`。
-- 回归：`node --test agi-stack/apps/desktop/tests/agent-workspace-journey-authority.test.mjs`，14 passed。其中云端探针的 `conversation-lifecycle` 包含 `load-history`。
-- 边界：这是自动化探针，不是在浏览器里点击重开会话。桌面窗口本轮另行按官方入口启动，不能把该探针写成点击验证。
+- 回归：旅程探针 14 passed。对仍在运行的 API 读取该会话 messages，带上项目 `9fa840d9-f0b4-4ab0-9ff1-5aeac420dcb8` 和 `limit=5`，返回 200。响应键包含 `timeline`，本页 5 条且 `has_more=true`。没有打印消息正文。
+- 边界：这证明当前 API 进程返回事件时间线。没有在浏览器里点击重开。父任务接手：桌面已在 `http://127.0.0.1:5173/`，Electron PID 44257。打开会话 `cd9755fd-39f1-4485-8a96-77d3234179e0`。预期时间线不为空。空的 `public.messages` 不是丢失。
 
 ## F06 任务完成时间
 
@@ -91,9 +91,9 @@
 
 - 现象：add 失败；status 用 `jobs`，list 用 `items`。
 - 根因：手动运行已有回执、修订和幂等命令；创建、更新、删除和切换仍在 `CronJobService` 里直接拒绝。
-- 变更：创建改走 `AutomationCommandService.create_job`。同一幂等键重放同一 job，不同内容冲突。任务行、回执和 `record_create` 操作在同一事务写入，操作状态是 `succeeded`，不会被执行队列当成 pending 再跑。status/list 仍同时给出 `jobs` 和 `items`。更新、删除、切换和手动执行仍失败关闭。HTTP 创建要求 `idempotency_key`，能力声明 `create.allowed=true`、`reason_code=durable_command`，`durable_execution` 仍是 false。
-- 回归：`uv run pytest src/tests/unit/infrastructure/adapters/secondary/persistence/test_sql_cron_automation_command_repository.py src/tests/unit/application/services/test_cron_service.py src/tests/unit/infrastructure/agent/tools/test_cron_tool.py src/tests/unit/routers/test_cron_router.py -q`。持久创建测试写入名为 `selftest-followthrough-temporary` 的任务，新的 repository 实例能读回，其他 project 列表为空，最后按该 job id 删除任务、操作和回执。
-- 边界：测试库事务会回滚；清理只按本次 job id。没有改用户已有定时任务，也没有调用正在运行的 API 去创建。调度器执行仍不可用。`cron_services.py` 的产物摘要已用 `scripts/generate_plugin_protocol_v2.py --refresh-artifacts` 刷新。
+- 变更：创建、更新、删除和启停都走持久命令。更新和删除要求当前修订和幂等键；同一键重放不第二次改写；修订过期冲突；其他项目的 actor 找不到任务。启停是把 `enabled` 交给同一条更新命令，禁用后默认列表不含该任务，`include_disabled` 仍能读到。手动运行使用已经存在的 `queue_manual_run`，能力声明改为 `run_now.allowed=true`、`reason_code=durable_command`。关闭该能力的测试仍证明不会写入。工具 `cron` 的 update/remove/run 需要 `expected_revision` 和 `idempotency_key`。
+- 回归：`uv run pytest src/tests/unit/infrastructure/adapters/secondary/persistence/test_sql_cron_automation_command_repository.py src/tests/unit/application/services/test_cron_service.py src/tests/unit/infrastructure/agent/tools/test_cron_tool.py src/tests/unit/routers/test_cron_router.py src/tests/unit/routers/test_cron_execution_admission.py -q`。隔离测试只创建 `selftest-followthrough-temporary`，完成重命名、禁用、一次手动排队、删除，并在 finally 按该 job id 清理。
+- 边界：没有调用正在运行的 API，也没有改用户已有定时任务。排队的手动运行不会在这个测试里真正启动调度器。没有命令仓库的服务仍失败关闭。
 
 ## F12 Canvas / A2UI
 
@@ -125,7 +125,7 @@
 - 反证：`iab-backend-reconnect.test.mjs` 对不可达 socket 记录 `iab bridge connect failed`，失败连接不会打开后的 onClose，也不留下活句柄。
 - 变更：没有改启动路径。
 - 回归：`node --test agi-stack/apps/desktop/tests/iab-backend-reconnect.test.mjs`，7 passed。
-- 边界：本轮桌面进程不在 `:5173`，没有为这项重启 Electron。
+- 边界：当前桌面仍在。`http://127.0.0.1:5173/` 由 PID 44242 监听，Electron PID 44257。启动日志里的 `bridge.sock` `ECONNREFUSED` 与这 7 项测试一致，窗口没有因此退出。没有为这项再重启。
 
 ## F16 取消 IPC
 
@@ -133,7 +133,7 @@
 - 根因：`abort()` 的拒绝发生在 IPC `await`，套在 `abort()` 外的 try 接不住监听器里的异步抛出。
 - 变更：`settleCloudRequest` 包住 `cloud_request` 的 await。明确取消返回 `{cancelled: true, kind: 'cancelled'}`。超时和 `vendor_balance` 继续抛出。成功结果原样返回。
 - 回归：`node --test agi-stack/apps/desktop/tests/cloud-request-cancel-class.test.mjs`，3 passed。
-- 边界：这是 IPC 边界函数的集成，不是在 Electron 窗口里点击停止。点击验证需要父任务在桌面会话中发起云请求后取消。预期：取消返回 cancelled，超时仍是错误，其他异常不被吞掉。
+- 边界：`sandbox-desktop-grant-integration.test.mjs` 会编译真实的 `cloud_request` 分支并注入 `settleCloudRequest`，14 项通过，其中超时仍抛出。这不是在窗口里点击停止。父任务接手：桌面已开在 `http://127.0.0.1:5173/`，Electron PID 44257。在一条会发出云请求的会话里点取消。预期返回 `{cancelled: true, kind: 'cancelled'}`；等待超时仍是错误，不能变成取消。
 
 ## F17 报告口径
 
@@ -190,14 +190,12 @@
 
 ## 仍未落地
 
-- build 聊天是否可写：保持当前档，不扩大。
-- 除 `detached: true` 以外的正式 detached：保持现有跳过规则。
-- 备用供应商：分类函数不切换。没有把余额失败接到初始化时的 ollama 回退。
-- cron 的更新、删除、切换和手动执行仍不可用。创建不会启动 durable execution。
-- 浏览器点击重开、Electron 点击取消、A2UIViewer 像素、容器内 pip：自动化探针已做，点击和像素未做。
+- build 聊天保持当前档。只有显式 `detached: true` 跳过子运行关闭。备用供应商不切换，余额失败也不会落到初始化时的本地 ollama。
+- 容器内 `/opt/sandbox-mcp-venv` 的 pip 仍未跑。已有证据是隔离临时目录的真实 `Permission denied`。父任务若要补容器：在一次性沙箱里对不可写目标执行 pip，预期错误前缀 `environment_not_writable`，不要 chmod。
+- A2UI 像素未验。父任务接手：桌面 PID 44257 已开。打开一条含 A2UI 表面的消息。预期组件可见，允许动作来自持久化 allow-list。`ask` 档直接调用 `canvas_create` 仍应被拒绝为 `read_only`。自动化已证明模型能把夹具变成 `status=ready`、标题 `Release approval`，这不是像素。
 
 ## 本轮桌面启动
 
 先前 `:5173` 没有监听。`agi-demos-desktop` 会话里的上一次 `make -C agi-stack run-desktop` 已停在 `Electron desktop startup failed Error: sidecar stopped`。本轮在同一会话重新执行官方入口，没有重启 PID 39283 的 Web `:3000` 和 PID 39304 的 API `:8000`。
 
-当前证据：渲染器 `http://127.0.0.1:5173/` 返回 200，监听进程是 electron-vite PID 44242，Electron 主进程 PID 44257。日志有一条非致命的 `iab bridge connect failed ... ECONNREFUSED ... bridge.sock`。没有截图。父任务若要做点击验证：打开桌面里的一条含 A2UI 的会话，预期表面文本为模型测试中的 `Release approval`；对云请求点取消，预期结果是 `{cancelled: true, kind: 'cancelled'}`，超时仍报错。
+当前证据：渲染器 `http://127.0.0.1:5173/` 返回 200，监听进程是 electron-vite PID 44242，Electron 主进程 PID 44257。Web PID 39283 和 API PID 39304 没有重启。日志有一条非致命的 `iab bridge connect failed ... ECONNREFUSED ... bridge.sock`。没有截图。本轮没有自动化点击工具去操作这个窗口，所以像素和点击仍标未验。父任务步骤见 F05、F12、F16。

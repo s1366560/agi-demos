@@ -127,24 +127,17 @@ async def get_cron_job_capabilities(
 
 def _execution_capabilities() -> CronJobCapabilitiesResponse:
     """Share the current execution boundary between discovery and command admission."""
-    mutation_unavailable = CronActionCapability(
-        allowed=False,
-        reason_code="durable_automation_runtime_unavailable",
-    )
     return CronJobCapabilitiesResponse(
         read=True,
-        revision_guarded=False,
+        revision_guarded=True,
         idempotency_guarded=True,
-        durable_execution=False,
+        durable_execution=True,
         supported_read_trigger_kinds=["manual", "schedule", "event"],
         create=CronActionCapability(allowed=True, reason_code="durable_command"),
-        edit=mutation_unavailable,
-        toggle=mutation_unavailable,
-        run_now=CronActionCapability(
-            allowed=False,
-            reason_code="durable_automation_execution_unavailable",
-        ),
-        delete=mutation_unavailable,
+        edit=CronActionCapability(allowed=True, reason_code="durable_command"),
+        toggle=CronActionCapability(allowed=True, reason_code="durable_command"),
+        run_now=CronActionCapability(allowed=True, reason_code="durable_command"),
+        delete=CronActionCapability(allowed=True, reason_code="durable_command"),
     )
 
 
@@ -234,6 +227,10 @@ async def update_cron_job(
     try:
         job = await svc.update_job(
             job_id,
+            project_id=project_id,
+            actor_user_id=cron_application.user_id,
+            expected_revision=body.expected_revision,
+            idempotency_key=body.idempotency_key,
             name=body.name,
             description=body.description,
             enabled=body.enabled,
@@ -263,6 +260,8 @@ async def update_cron_job(
 async def delete_cron_job(
     project_id: str,
     job_id: str,
+    expected_revision: int | None = None,
+    idempotency_key: str | None = None,
     cron_application: CronApplicationAuthorityV2 = Depends(
         cron_application_authority_dependency_v2
     ),
@@ -276,7 +275,13 @@ async def delete_cron_job(
         raise HTTPException(status_code=404, detail=_("Cron job not found"))
 
     try:
-        _deleted = await svc.delete_job(job_id)
+        _deleted = await svc.delete_job(
+            job_id,
+            project_id=project_id,
+            actor_user_id=cron_application.user_id,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
     except CronMutationUnavailableError as exc:
         _raise_mutation_unavailable(exc)
     await cron_application.db.commit()
@@ -288,6 +293,8 @@ async def toggle_cron_job(
     project_id: str,
     job_id: str,
     enabled: bool = True,
+    expected_revision: int | None = None,
+    idempotency_key: str | None = None,
     cron_application: CronApplicationAuthorityV2 = Depends(
         cron_application_authority_dependency_v2
     ),
@@ -301,7 +308,14 @@ async def toggle_cron_job(
         raise HTTPException(status_code=404, detail=_("Cron job not found"))
 
     try:
-        job = await svc.toggle_job(job_id, enabled=enabled)
+        job = await svc.toggle_job(
+            job_id,
+            enabled=enabled,
+            project_id=project_id,
+            actor_user_id=cron_application.user_id,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
     except CronMutationUnavailableError as exc:
         _raise_mutation_unavailable(exc)
     await cron_application.db.commit()
