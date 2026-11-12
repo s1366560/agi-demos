@@ -55,6 +55,31 @@ test('available queue intent uses canonical run-input authority', () => {
   );
 });
 
+test('slow local authority can dispatch a new message without a projection', () => {
+  assert.deepEqual(
+    resolveSessionComposerDispatch({
+      requestedDelivery: null,
+      availableDeliveries: [],
+      hasActiveRun: false,
+      canSendConversationMessage: false,
+      canSendRunInput: false,
+      allowConversationMessageWithoutAuthority: true,
+    }),
+    { kind: 'conversation_message' },
+  );
+  assert.deepEqual(
+    resolveSessionComposerDispatch({
+      requestedDelivery: null,
+      availableDeliveries: ['steer_now'],
+      hasActiveRun: true,
+      canSendConversationMessage: false,
+      canSendRunInput: true,
+      allowConversationMessageWithoutAuthority: true,
+    }),
+    { kind: 'blocked', reason: 'run_input_delivery_required' },
+  );
+});
+
 test('terminal session without a stale run-input intent may send a new message', () => {
   assert.deepEqual(
     resolveSessionComposerDispatch({

@@ -17,6 +17,9 @@ export function resolveSessionComposerDispatch(input: {
   hasActiveRun: boolean;
   canSendConversationMessage: boolean;
   canSendRunInput: boolean;
+  /** Local slow-authority fallback: allow a new conversation message before
+   * the projection arrives. Never used for an active run or queue intent. */
+  allowConversationMessageWithoutAuthority?: boolean;
 }): SessionComposerDispatch {
   if (input.requestedDelivery) {
     if (
@@ -42,7 +45,10 @@ export function resolveSessionComposerDispatch(input: {
     };
   }
 
-  if (input.canSendConversationMessage) {
+  if (
+    input.canSendConversationMessage ||
+    input.allowConversationMessageWithoutAuthority
+  ) {
     return { kind: 'conversation_message' };
   }
 

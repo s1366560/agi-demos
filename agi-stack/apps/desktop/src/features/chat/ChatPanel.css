@@ -1983,6 +1983,40 @@
   font-size: 11px;
 }
 
+.session-stop-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 14px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--desktop-border-amber);
+  border-radius: 7px;
+  background: var(--desktop-surface-amber-3);
+  color: var(--desktop-text-pale);
+}
+
+.session-stop-notice > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-stop-notice strong {
+  color: var(--desktop-text);
+  font-size: 11px;
+}
+
+.session-stop-notice span {
+  color: var(--desktop-chat-text-tertiary);
+  font-size: 10px;
+}
+
+.session-stop-notice button {
+  flex: 0 0 auto;
+}
+
 .message-delete-dialog-note {
   margin: 12px 0 0;
   padding: 9px 10px;
