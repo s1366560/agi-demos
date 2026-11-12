@@ -103,6 +103,9 @@ export function useConversationMessaging(params: AgentConversationParams) {
       ),
       canSendConversationMessage,
       canSendRunInput,
+      allowConversationMessageWithoutAuthority: Boolean(
+        params.allowSendWhileAuthorityPending,
+      ),
     });
     if (selectedConversation && composerDispatch.kind === 'blocked') {
       setError(t('session.authorityActionUnavailable'));

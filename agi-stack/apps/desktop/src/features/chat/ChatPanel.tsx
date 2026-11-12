@@ -59,6 +59,8 @@ import type {
   SessionActivityPresence,
   SessionActivityStructuredEvidence,
 } from '../session/sessionNarrativeModel';
+import type { SessionProjectionPlan } from '../session/sessionProjectionTypes';
+import { SessionPlanDraftNotice } from './SessionPlanDraftNotice';
 import {
   classifySessionTimelineWindowChange,
   isSessionTimelinePinnedToLatest,
@@ -290,6 +292,9 @@ type ChatPanelProps = {
   runtimeTargetOptions?: string[];
   composeAheadFallbackAllowed?: boolean;
   canonicalRunStatus?: DesktopRunStatus | null;
+  draftPlan?: SessionProjectionPlan | null;
+  onOpenPlanReview?: () => void;
+  allowSendWhileAuthorityPending?: boolean;
   runInputDelivery: RunInputDelivery | null;
   runInputDeliveryOptions: RunInputDelivery[];
   runInputs: DesktopRunInput[];
@@ -444,6 +449,9 @@ export const ChatPanel = memo(function ChatPanel({
   runtimeTargetOptions,
   composeAheadFallbackAllowed = false,
   canonicalRunStatus = null,
+  draftPlan = null,
+  onOpenPlanReview,
+  allowSendWhileAuthorityPending = false,
   runInputDelivery,
   runInputDeliveryOptions,
   runInputs,
@@ -747,6 +755,10 @@ export const ChatPanel = memo(function ChatPanel({
       stopRequest,
       selectedConversationId ?? '',
     );
+  const runActive =
+    responseStreaming ||
+    canonicalRunStatus === 'running' ||
+    canonicalRunStatus === 'queued';
   useEffect(() => {
     stopEventHeadRef.current = agentControlEventsRef.current[0] ?? null;
     setStopRequest((current) =>
@@ -766,14 +778,20 @@ export const ChatPanel = memo(function ChatPanel({
     );
   }, [agentControlEvents, stopRequest.status]);
   useEffect(() => {
-    if (rawResponseStreaming || stopRequest.status === 'idle') return;
+    if (
+      rawResponseStreaming ||
+      stopRequest.status === 'idle' ||
+      stopRequest.status === 'stopped'
+    ) {
+      return;
+    }
     setStopRequest(EMPTY_AGENT_STOP_REQUEST);
   }, [rawResponseStreaming, stopRequest.status]);
   const stopResponse = useCallback(() => {
     const conversationId = selectedConversationId?.trim() ?? '';
     if (
       !conversationId ||
-      !responseStreaming ||
+      !runActive ||
       stopRequest.status === 'stopping' ||
       !onStopResponse
     ) {
@@ -803,7 +821,7 @@ export const ChatPanel = memo(function ChatPanel({
   }, [
     agentControlEvents,
     onStopResponse,
-    responseStreaming,
+    runActive,
     selectedConversationId,
     stopResponseTarget,
     stopScopeKey,
@@ -834,6 +852,24 @@ export const ChatPanel = memo(function ChatPanel({
       visibleWorkspaceMessages,
     ],
   );
+  const stoppedVisibleMessage = useMemo<VisibleMessageForRetry | null>(() => {
+    if (stopRequest.status !== 'stopped') return null;
+    const targetId = stopRequest.target?.messageId?.trim() ?? '';
+    const targeted = targetId
+      ? visibleActionMessages.find(
+          (message) => message.kind === 'user' && message.id === targetId,
+        )
+      : undefined;
+    return (
+      targeted ??
+      [...visibleActionMessages].reverse().find((message) => message.kind === 'user') ??
+      null
+    );
+  }, [
+    stopRequest.status,
+    stopRequest.target?.messageId,
+    visibleActionMessages,
+  ]);
   const deletionFocusMessages = useMemo<VisibleMessageForRetry[]>(
     () =>
       visibleTimelineState
@@ -1368,6 +1404,29 @@ export const ChatPanel = memo(function ChatPanel({
     t,
     visibleActionMessages,
   ]);
+  const retryFailedTimelineTurn = useCallback(() => {
+    const lastUserMessage = [...visibleActionMessages]
+      .reverse()
+      .find((message) => message.kind === 'user' && message.content.trim());
+    if (!lastUserMessage) {
+      setMessageActionNotice(t('chat.retryNoUserMessage'));
+      return;
+    }
+    setMessageActionNotice(null);
+    handleComposerSend(lastUserMessage.content, []);
+  }, [handleComposerSend, t, visibleActionMessages]);
+  const retryStoppedTurn = useCallback(
+    (message: VisibleMessageForRetry) => {
+      const content = message.kind === 'user' ? message.content.trim() : '';
+      if (!content) {
+        setMessageActionNotice(t('chat.retryNoUserMessage'));
+        return;
+      }
+      setMessageActionNotice(null);
+      handleComposerSend(content, []);
+    },
+    [handleComposerSend, t],
+  );
   const retryVisibleMessage = useCallback(
     (message: VisibleMessageForRetry) => {
       const retryContent = findRetryMessageContent(
@@ -1758,6 +1817,7 @@ export const ChatPanel = memo(function ChatPanel({
                     onEditMessage={editTimelineMessage}
                     onDeleteMessage={requestTimelineMessageDeletion}
                     onRetryMessage={retryTimelineMessage}
+                    onRetryFailedTurn={retryFailedTimelineTurn}
                     onSaveTemplateMessage={saveTimelineMessageAsTemplate}
                     pinnedMessageIds={pinnedMessageIds}
                     onPinMessage={togglePinnedTimelineMessage}
@@ -1931,12 +1991,37 @@ export const ChatPanel = memo(function ChatPanel({
               {stopResponseError}
             </div>
           ) : null}
+          {stopRequest.status === 'stopped' ? (
+            <div className="session-stop-notice" role="status" aria-live="polite">
+              <div>
+                <strong>{t('session.responseStopped')}</strong>
+                <span>{t('session.responseStoppedDescription')}</span>
+              </div>
+              {stoppedVisibleMessage ? (
+                <Button
+                  type="button"
+                  size="1"
+                  variant="soft"
+                  onClick={() => retryStoppedTurn(stoppedVisibleMessage)}
+                  disabled={disabled || sending || Boolean(retryingMessageId)}
+                >
+                  {t('session.retryStoppedResponse')}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           {currentActivity ? (
             <CurrentActivityHeadlineBar
               activity={currentActivity}
               sessionKey={messageActionConversationId}
               presence={activityPresence}
               usage={sessionUsage}
+            />
+          ) : null}
+          {draftPlan && onOpenPlanReview ? (
+            <SessionPlanDraftNotice
+              plan={draftPlan}
+              onOpenPlanReview={onOpenPlanReview}
             />
           ) : null}
           <TaskChecklist items={todoChecklistItems} />
@@ -1992,6 +2077,8 @@ export const ChatPanel = memo(function ChatPanel({
             composeAheadScope={composeAheadScope}
             composeAheadEnabled={composeAheadEnabled}
             responseStreaming={responseStreaming}
+            runActive={runActive}
+            allowSendWhileAuthorityPending={allowSendWhileAuthorityPending}
             stopResponseAvailable={Boolean(onStopResponse)}
             stopResponseSocketConnected={stopResponseTransportConnected ?? agentSocketConnected}
             stopResponseStatus={stopRequest.status}
@@ -2116,6 +2203,8 @@ type ChatComposerProps = {
   composeAheadScope: string | null;
   composeAheadEnabled: boolean;
   responseStreaming: boolean;
+  runActive: boolean;
+  allowSendWhileAuthorityPending: boolean;
   stopResponseAvailable: boolean;
   stopResponseSocketConnected: boolean;
   stopResponseStatus: AgentStopRequestState['status'];
@@ -2172,6 +2261,8 @@ function ChatComposer({
   composeAheadScope,
   composeAheadEnabled,
   responseStreaming,
+  runActive,
+  allowSendWhileAuthorityPending,
   stopResponseAvailable,
   stopResponseSocketConnected,
   stopResponseStatus,
@@ -2336,6 +2427,7 @@ function ChatComposer({
   const composeAheadQueueEligibility = composeAheadEligibility({
     content: input,
     streaming: composeAheadEnabled && responseStreaming,
+    runActive: composeAheadEnabled && runActive,
     disabled: disabled || !executionBinding.ready || executionBinding.pending,
     uploading: uploadingAttachments,
     contextItems,
@@ -2343,9 +2435,10 @@ function ChatComposer({
   });
   const canSendNow =
     !disabled &&
-    executionBinding.ready && !executionBinding.pending &&
+    (allowSendWhileAuthorityPending ||
+      (executionBinding.ready && !executionBinding.pending)) &&
     !sending &&
-    !(composeAheadEnabled && responseStreaming) &&
+    !runActive &&
     !uploadingAttachments &&
     (Boolean(input.trim()) || composerHasSendableAttachment(contextItems));
   const canSubmit = canSendNow || composeAheadQueueEligibility.canQueue;
@@ -3067,7 +3160,7 @@ function ChatComposer({
                 title={disabledReason ?? t('session.runtimeAvailable')}
               />
             ) : null}
-            {responseStreaming &&
+            {runActive &&
             stopResponseAvailable &&
             stopResponseStatus !== 'stopped' ? (
               <Button
@@ -3171,14 +3264,15 @@ function ChatComposer({
                       : t('session.sendMessage')
                 }
                 title={
-                  composeAheadEnabled &&
-                  responseStreaming &&
-                  composeAheadQueueEligibility.reason &&
-                  composeAheadQueueEligibility.reason !== 'empty'
-                    ? t('chat.composeAhead.unsupportedContext')
-                    : runInputDeliveryOptions.length
-                      ? t('session.sendShortcut')
-                      : undefined
+                  runActive
+                    ? t('session.composerRunActiveHint')
+                    : composeAheadEnabled &&
+                        composeAheadQueueEligibility.reason &&
+                        composeAheadQueueEligibility.reason !== 'empty'
+                      ? t('chat.composeAhead.unsupportedContext')
+                      : runInputDeliveryOptions.length
+                        ? t('session.sendShortcut')
+                        : undefined
                 }
                 loading={sending}
                 disabled={!canSubmit}

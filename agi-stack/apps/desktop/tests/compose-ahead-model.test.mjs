@@ -309,6 +309,28 @@ test('current-turn terminal evidence overrides a stale acknowledged task signal'
   );
 });
 
+test('canonical run-active state queues before the first streaming event', () => {
+  const base = {
+    content: 'follow up before the first token',
+    disabled: false,
+    uploading: false,
+    contextItems: [],
+    referenceCount: 0,
+  };
+  assert.deepEqual(
+    composeAheadEligibility({ ...base, streaming: false, runActive: true }),
+    { canQueue: true, reason: null },
+  );
+  assert.deepEqual(
+    composeAheadEligibility({ ...base, streaming: true, runActive: false }),
+    { canQueue: true, reason: null },
+  );
+  assert.equal(
+    composeAheadEligibility({ ...base, streaming: false, runActive: false }).reason,
+    'not_streaming',
+  );
+});
+
 test('compose-ahead scope binds tenant, project, workspace, and conversation identity', () => {
   assert.equal(
     composeAheadConversationScope({
@@ -334,6 +356,9 @@ test('Desktop composer exposes an accessible queue without replacing run-input q
   assert.match(chatPanelSource, /composeAheadQueueStore\.retry/);
   assert.match(chatPanelSource, /dispatchMonitorRef/);
   assert.match(chatPanelSource, /window\.clearTimeout\(dispatchMonitorRef\.current\.timerId\)/);
+  assert.match(chatPanelSource, /runActive=\{runActive\}/);
+  assert.match(chatPanelSource, /canonicalRunStatus === 'running'/);
+  assert.match(chatPanelSource, /runActive: composeAheadEnabled && runActive/);
 });
 
 test('canonical Agent Workspace fails closed instead of auto-sending through compose-ahead', () => {

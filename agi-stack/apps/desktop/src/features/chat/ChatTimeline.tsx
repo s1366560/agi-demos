@@ -39,6 +39,7 @@ import type {
   SessionActivityPresence,
   SessionNarrativeNode,
 } from '../session/sessionNarrativeModel';
+import { localizePlanReadyMessage } from '../session/sessionPlanApprovalModel';
 import { resolveA2UIActionView } from './a2uiAction';
 import type { A2UIActionView } from './a2uiAction';
 import {
@@ -203,6 +204,7 @@ export function AgentTimeline({
   onEditMessage,
   onDeleteMessage,
   onRetryMessage,
+  onRetryFailedTurn,
   onSaveTemplateMessage,
   pinnedMessageIds = EMPTY_PINNED_MESSAGE_IDS,
   onPinMessage,
@@ -230,6 +232,7 @@ export function AgentTimeline({
   onEditMessage?: (item: AgentTimelineItem) => void;
   onDeleteMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
+  onRetryFailedTurn?: () => void;
   onSaveTemplateMessage?: (
     item: AgentTimelineItem,
     returnFocus: HTMLElement,
@@ -682,6 +685,7 @@ export function AgentTimeline({
                 onEditMessage={onEditMessage}
                 onDeleteMessage={onDeleteMessage}
                 onRetryMessage={onRetryMessage}
+                onRetryFailedTurn={onRetryFailedTurn}
                 onSaveTemplateMessage={onSaveTemplateMessage}
                 isPinned={pinnedMessageIdSet.has(item.id)}
                 onPinMessage={onPinMessage}
@@ -1014,6 +1018,7 @@ function TimelineItemView({
   onEditMessage,
   onDeleteMessage,
   onRetryMessage,
+  onRetryFailedTurn,
   onSaveTemplateMessage,
   isPinned = false,
   onPinMessage,
@@ -1031,6 +1036,7 @@ function TimelineItemView({
   onEditMessage?: (item: AgentTimelineItem) => void;
   onDeleteMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
+  onRetryFailedTurn?: () => void;
   onSaveTemplateMessage?: (
     item: AgentTimelineItem,
     returnFocus: HTMLElement,
@@ -1052,10 +1058,32 @@ function TimelineItemView({
   );
   if ((item.isError || item.error || item.type === 'error' || kind === 'runtime') && !timelineHitlType(item) && !agentLifecyclePresentation(item)) {
     const failed = Boolean(item.isError || item.error || item.type === 'error');
+    const payload =
+      item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload)
+        ? (item.payload as Record<string, unknown>)
+        : null;
+    const errorCode =
+      (typeof item.error_code === 'string' ? item.error_code : null) ??
+      (typeof payload?.error_code === 'string' ? payload.error_code : null);
+    const errorText = [
+      item.error,
+      payload?.detail,
+      payload?.error,
+      payload?.message,
+    ]
+      .filter((value): value is string => typeof value === 'string')
+      .join(' ')
+      .toLowerCase();
+    const isRuntimeConflict =
+      errorCode === 'runtime_conflict' ||
+      errorText.includes('conversation already running');
     return <article className={`timeline-notice ${failed ? 'is-error' : ''}`}
       data-timeline-anchor-id={item.id} role={failed ? 'alert' : undefined}>
       {failed && <ExclamationTriangleIcon aria-hidden="true" />}
       <span>{summary}</span>
+      {isRuntimeConflict && onRetryFailedTurn ? (
+        <button type="button" onClick={() => onRetryFailedTurn()}>{t('common.retry')}</button>
+      ) : null}
       <button type="button" onClick={event => inspect([item], event.currentTarget)}>{t('session.inspect')}</button>
     </article>;
   }
@@ -1085,7 +1113,11 @@ function TimelineItemView({
       <NarrativeMessageFrame
         kind={kind}
         time={formatTimelineTime(item)}
-        content={item.content ?? ''}
+        content={
+          kind === 'agent'
+            ? localizePlanReadyMessage(item.content, t)
+            : item.content ?? ''
+        }
         className="timeline-item"
         timelineItemId={item.id}
         streaming={Boolean(item.metadata?.streaming)}
@@ -1359,9 +1391,11 @@ function TimelineItemBody({
   }
 
   const content =
-    kind === 'user' || kind === 'agent'
-      ? (item.content ?? '')
-      : item.content || timelinePayloadPreview(item);
+    kind === 'agent'
+      ? localizePlanReadyMessage(item.content, t)
+      : kind === 'user'
+        ? (item.content ?? '')
+        : item.content || timelinePayloadPreview(item);
   if (item.type === 'thought') {
     return (
       <MarkdownContent

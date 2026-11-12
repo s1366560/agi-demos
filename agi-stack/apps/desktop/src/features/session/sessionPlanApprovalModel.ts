@@ -131,6 +131,42 @@ export function sessionPlanApprovalIdentity(input: SessionPlanApprovalIdentityIn
   ].join(':');
 }
 
+export const PLAN_READY_FOR_REVIEW_CONTENT = 'Plan ready for review.';
+
+export type DraftPlanReviewNotice = {
+  taskCount: number;
+  preview: string[];
+  remaining: number;
+};
+
+/** Compact, render-safe summary for the inline draft-plan notice. */
+export function draftPlanReviewNotice(
+  plan: SessionProjectionPlan | null | undefined,
+): DraftPlanReviewNotice | null {
+  if (!plan || plan.status !== 'draft') return null;
+  const preview = plan.tasks
+    .map((task) => (typeof task.content === 'string' ? task.content.trim() : ''))
+    .filter(Boolean);
+  if (!preview.length) return null;
+  return {
+    taskCount: preview.length,
+    preview: preview.slice(0, 3),
+    remaining: Math.max(0, preview.length - 3),
+  };
+}
+
+/** Legacy local-runtime plan messages are English-only; localize the one
+ * structured sentence the sidecar emits without touching stored history. */
+export function localizePlanReadyMessage(
+  content: string | null | undefined,
+  t: (key: string) => string,
+): string {
+  const trimmed = content?.trim() ?? '';
+  return trimmed === PLAN_READY_FOR_REVIEW_CONTENT
+    ? t('session.planReadyForReview')
+    : (content ?? '');
+}
+
 export function sessionPlanApprovalRequest(
   input: SessionPlanApprovalRequestInput,
 ): ApprovePlanAndStartRequest {

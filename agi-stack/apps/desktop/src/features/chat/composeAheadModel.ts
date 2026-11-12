@@ -195,12 +195,16 @@ export function composeAheadContextSnapshot(
 export function composeAheadEligibility(input: {
   content: string;
   streaming: boolean;
+  /** Canonical run state, independent of the first streaming event. */
+  runActive?: boolean;
   disabled: boolean;
   uploading: boolean;
   contextItems: readonly ComposerContextItem[];
   referenceCount: number;
 }): ComposeAheadEligibility {
-  if (!input.streaming) return { canQueue: false, reason: 'not_streaming' };
+  if (!input.streaming && !input.runActive) {
+    return { canQueue: false, reason: 'not_streaming' };
+  }
   if (input.disabled) return { canQueue: false, reason: 'disabled' };
   if (!input.content.trim()) return { canQueue: false, reason: 'empty' };
   if (input.uploading) return { canQueue: false, reason: 'uploading' };

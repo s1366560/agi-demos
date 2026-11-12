@@ -18,6 +18,10 @@ import {
   type NewThreadComposerInput,
 } from '../features/task/NewThreadComposer';
 import {
+  readNewThreadScopePreference,
+  writeNewThreadScopePreference,
+} from '../features/task/newThreadPreferenceModel';
+import {
   buildPlanningPrompt,
   newTaskAgentTurnTransport,
   type NewTaskAgentTurnOutcome,
@@ -105,9 +109,16 @@ export function useConversationThreads(params: AgentConversationParams) {
 
   const startNewSession = () => {
     setNewThreadError(null);
+    const remembered = readNewThreadScopePreference(config.projectId);
+    const rememberedWorkspaceId =
+      remembered &&
+      (remembered.workspaceId === '' ||
+        newThreadWorkspaces.some((workspace) => workspace.id === remembered.workspaceId))
+        ? remembered.workspaceId
+        : '';
     setNewThreadScope({
       projectId: config.projectId,
-      workspaceId: configuredNewThreadWorkspaceId,
+      workspaceId: configuredNewThreadWorkspaceId || rememberedWorkspaceId,
     });
     switchSection('home');
   };
@@ -126,6 +137,7 @@ export function useConversationThreads(params: AgentConversationParams) {
       projectId: config.projectId,
       workspaceId: nextWorkspaceId,
     });
+    writeNewThreadScopePreference(config.projectId, nextWorkspaceId);
   };
 
   const resumeSessionTaskListReview = () => {

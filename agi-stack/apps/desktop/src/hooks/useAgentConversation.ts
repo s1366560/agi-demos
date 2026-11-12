@@ -62,6 +62,9 @@ export type AgentConversationParams = {
   runInputDelivery: RunInputDelivery | null;
   runInputDeliveryOptions: RunInputDelivery[];
   sessionChatDisabledReason: string | null;
+  /** Local-only fallback: allow a new message while the session projection
+   * is slow, so the first turn is not blocked by a stalled status fetch. */
+  allowSendWhileAuthorityPending?: boolean;
   newThreadWorkspaces: WorkspaceSummary[];
   configuredNewThreadWorkspaceId: string;
   localRuntimeMode: boolean;

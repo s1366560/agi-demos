@@ -20,6 +20,48 @@
   box-shadow: var(--desktop-shadow-popover);
 }
 
+.picker-menu.placement-up {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+}
+
+.picker-menu.placement-down {
+  top: calc(100% + 8px);
+  right: auto;
+  bottom: auto;
+  left: 0;
+}
+
+.picker-menu.placement-right,
+.picker-menu.placement-left {
+  top: auto;
+  bottom: 0;
+  max-height: min(360px, calc(100vh - 64px));
+}
+
+.picker-menu.placement-right.align-top,
+.picker-menu.placement-left.align-top {
+  top: 0;
+  bottom: auto;
+}
+
+.picker-menu.placement-right {
+  right: auto;
+  left: calc(100% + 8px);
+}
+
+.picker-menu.placement-left {
+  right: calc(100% + 8px);
+  left: auto;
+}
+
+.picker-menu.placement-right .picker-menu-items,
+.picker-menu.placement-left .picker-menu-items {
+  max-height: min(300px, calc(100vh - 150px));
+}
+
 .picker-menu-header,
 .plus-menu-header {
   padding: 9px 12px;

@@ -1,0 +1,95 @@
+/* Inline draft-plan gate. Kept separate from the full Plan canvas so the
+   conversation gets a compact, accessible entry point without duplicating
+   the environment/permission controls. */
+.session-plan-draft-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--desktop-border-amber);
+  border-radius: 8px;
+  background: var(--desktop-surface-amber);
+  color: var(--desktop-text-pale);
+}
+
+.session-plan-draft-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 6px;
+  background: var(--desktop-surface-amber-2);
+  color: var(--desktop-amber);
+}
+
+.session-plan-draft-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.session-plan-draft-copy strong {
+  color: var(--desktop-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.session-plan-draft-copy > span {
+  color: var(--desktop-text-pale);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.session-plan-draft-copy ol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.session-plan-draft-copy li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-plan-draft-copy em {
+  margin-top: 2px;
+  color: var(--desktop-amber-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.session-plan-draft-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--desktop-border-amber-2);
+  border-radius: 6px;
+  background: var(--desktop-surface-amber-3);
+  color: var(--desktop-text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.session-plan-draft-action:hover {
+  border-color: var(--desktop-amber);
+  background: var(--desktop-surface-amber-4);
+}
+
+.session-plan-draft-action:focus-visible {
+  outline: 2px solid var(--desktop-amber);
+  outline-offset: 2px;
+}
