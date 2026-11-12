@@ -20,6 +20,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentRunAuthorityModel,
     AgentRunInputModel,
     AgentRunSummaryModel,
+    Conversation,
+    ToolExecutionRecord,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
     ensure_plan_run_authority,
@@ -190,7 +192,78 @@ def _structured_model_breakdown(
     return [by_model[model] for model in sorted(by_model)]
 
 
-async def settle_agent_run(
+def _is_detached_run(run: AgentRunAuthorityModel) -> bool:
+    snapshot = run.authorization_snapshot
+    return isinstance(snapshot, dict) and snapshot.get("detached") is True
+
+
+async def close_attached_child_runs(
+    db: AsyncSession,
+    *,
+    parent: AgentRunAuthorityModel,
+    completed_at: datetime,
+) -> int:
+    """Close still-open child runs when a parent run ends.
+
+    A snapshot with ``detached: true`` stays running. Every other queued or
+    running child of this conversation is cancelled with ``parent_run_ended``
+    and its unfinished tool rows are closed. This does not widen permissions
+    and does not stop runs that are not children of ``parent``.
+    """
+
+    if parent.status not in {"completed", "failed", "cancelled"}:
+        return 0
+    child_ids = select(Conversation.id).where(
+        Conversation.parent_conversation_id == parent.conversation_id,
+        Conversation.tenant_id == parent.tenant_id,
+        Conversation.project_id == parent.project_id,
+    )
+    result = await db.execute(
+        refresh_select_statement(
+            select(AgentRunAuthorityModel)
+            .where(
+                AgentRunAuthorityModel.conversation_id.in_(child_ids),
+                AgentRunAuthorityModel.tenant_id == parent.tenant_id,
+                AgentRunAuthorityModel.project_id == parent.project_id,
+                AgentRunAuthorityModel.status.in_(("queued", "running")),
+            )
+            .with_for_update()
+        )
+    )
+    closed = 0
+    terminal_utc = completed_at.replace(tzinfo=UTC) if completed_at.tzinfo is None else completed_at
+    for child in result.scalars().all():
+        if _is_detached_run(child):
+            continue
+        child.status = "cancelled"
+        child.completed_at = completed_at
+        child.updated_at = completed_at
+        child.error = "parent_run_ended"
+        tool_result = await db.execute(
+            refresh_select_statement(
+                select(ToolExecutionRecord)
+                .where(
+                    ToolExecutionRecord.conversation_id == child.conversation_id,
+                    ToolExecutionRecord.status == "running",
+                    ToolExecutionRecord.completed_at.is_(None),
+                )
+                .with_for_update()
+            )
+        )
+        for record in tool_result.scalars().all():
+            started_at = record.started_at
+            started_utc = (
+                started_at.replace(tzinfo=UTC) if started_at.tzinfo is None else started_at
+            )
+            record.status = "cancelled"
+            record.completed_at = completed_at
+            record.duration_ms = max(0, int((terminal_utc - started_utc).total_seconds() * 1000))
+            record.error = "parent_run_ended"
+        closed += 1
+    return closed
+
+
+async def settle_agent_run(  # noqa: PLR0915
     db: AsyncSession,
     *,
     run: AgentRunAuthorityModel,
@@ -200,6 +273,7 @@ async def settle_agent_run(
 ) -> None:
     """Settle queued inputs and persist an explicit current-run summary."""
 
+    await close_attached_child_runs(db, parent=run, completed_at=completed_at)
     await settle_cancelled_run_tools(db, run=run)
 
     input_result = await db.execute(
@@ -345,6 +419,7 @@ async def settle_agent_plan_run(
 
 __all__ = [
     "apply_run_input_applied_projection",
+    "close_attached_child_runs",
     "settle_agent_plan_run",
     "settle_agent_run",
 ]

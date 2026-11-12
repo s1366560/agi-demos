@@ -64,6 +64,61 @@ class TestGrepTool:
         assert "outside.txt:1: needle" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
+    async def test_grep_star_py_matches_nested_files(self, tmp_path, monkeypatch):
+        """A filename glob matches nested files, not only the first path segment."""
+        workspace = tmp_path / "workspace"
+        src = workspace / "src"
+        nested = src / "pkg"
+        nested.mkdir(parents=True)
+        (src / "a.py").write_text("def root_task():\n    return 1\n", encoding="utf-8")
+        (nested / "models.py").write_text(
+            "from dataclasses import dataclass\n\ndef build_task():\n    return 1\n",
+            encoding="utf-8",
+        )
+        (nested / "notes.txt").write_text("def ignored():\n", encoding="utf-8")
+        monkeypatch.setattr("src.tools.file_tools._EXTRA_ALLOWED_PATHS", [])
+
+        nested_glob = await grep_files(
+            pattern=r"def \w+",
+            path=str(src),
+            glob_pattern="*.py",
+            _workspace_dir=str(workspace),
+        )
+        assert not nested_glob.get("isError")
+        glob_text = nested_glob["content"][0]["text"]
+        assert "a.py" in glob_text
+        assert "models.py" in glob_text
+        assert "notes.txt" not in glob_text
+
+    @pytest.mark.asyncio
+    async def test_grep_word_class_without_glob_on_one_directory(self, tmp_path, monkeypatch):
+        """Word-class regex is independent of nested glob filtering."""
+        workspace = tmp_path / "workspace"
+        flat = workspace / "flat"
+        flat.mkdir(parents=True)
+        (flat / "sample.py").write_text(
+            "class Task:\n    pass\n\ndef build_task():\n    return 1\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("src.tools.file_tools._EXTRA_ALLOWED_PATHS", [])
+
+        word = await grep_files(
+            pattern=r"def \w+",
+            path=str(flat),
+            _workspace_dir=str(workspace),
+        )
+        assert not word.get("isError")
+        assert "build_task" in word["content"][0]["text"]
+
+        substring = await grep_files(
+            pattern="class",
+            path=str(flat),
+            _workspace_dir=str(workspace),
+        )
+        assert not substring.get("isError")
+        assert "class Task" in substring["content"][0]["text"]
+
+    @pytest.mark.asyncio
     async def test_grep_files_skips_default_heavy_directories(self, tmp_path, monkeypatch):
         """Default grep scans should not traverse dependency caches."""
         workspace = tmp_path / "workspace"

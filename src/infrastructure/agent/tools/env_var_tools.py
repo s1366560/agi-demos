@@ -784,7 +784,7 @@ async def get_env_var_tool(
             },
             "context": {
                 "type": "object",
-                "description": "Additional context information",
+                "description": "Extra context as a JSON object. A string is rejected.",
             },
             "save_to_project": {
                 "type": "boolean",

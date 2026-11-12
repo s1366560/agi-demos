@@ -1260,7 +1260,9 @@ def _matches_file_pattern(relative_path: Path, pattern: str | None) -> bool:
     path_text = relative_path.as_posix()
 
     if "/" not in normalized and "**" not in normalized:
-        return len(relative_path.parts) == 1 and fnmatch.fnmatch(relative_path.name, normalized)
+        # Filename globs such as *.py apply at every depth. A one-segment
+        # check hid nested files when the search root was a parent directory.
+        return fnmatch.fnmatch(relative_path.name, normalized)
 
     if fnmatch.fnmatch(path_text, normalized):
         return True
