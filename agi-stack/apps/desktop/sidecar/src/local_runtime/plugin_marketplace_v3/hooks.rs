@@ -95,10 +95,15 @@ impl Hooks {
                 let payload=json!({"event":event,"plugin_id":package.descriptor.id,"version":package.descriptor.version}).to_string();
                 let operation = async {
                     if let Some(mut stdin) = child.stdin.take() {
-                        stdin
-                            .write_all(payload.as_bytes())
-                            .await
-                            .map_err(|_| CoreError::Tool("plugin hook input failed".into()))?;
+                        match stdin.write_all(payload.as_bytes()).await {
+                            Ok(()) => {}
+                            // A hook that exits before reading stdin closes the pipe.
+                            // The process status below is the success signal.
+                            Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {}
+                            Err(_) => {
+                                return Err(CoreError::Tool("plugin hook input failed".into()));
+                            }
+                        }
                     }
                     let status = child
                         .wait()
