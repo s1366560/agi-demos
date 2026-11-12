@@ -256,3 +256,79 @@ async def test_status_and_list_share_job_keys_and_add_stays_unavailable(
     )
     assert added.is_error is True
     assert "no job was created" in json.loads(added.output)["error"]
+
+
+async def test_update_remove_and_run_forward_revision_and_idempotency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.domain.model.cron.cron_job import CronJob
+    from src.domain.model.cron.cron_job_run import CronJobRun
+    from src.domain.model.cron.value_objects import CronRunStatus, TriggerType
+
+    job = CronJob(id="job-1", project_id="project-1", tenant_id="tenant-1", name="kept")
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class _Service:
+        async def update_job(self, job_id: str, **kwargs: object) -> CronJob:
+            calls.append((job_id, kwargs))
+            return job
+
+        async def delete_job(self, job_id: str, **kwargs: object) -> bool:
+            calls.append((job_id, kwargs))
+            return True
+
+        async def get_job(self, job_id: str) -> CronJob:
+            assert job_id == "job-1"
+            return job
+
+        async def trigger_manual_run(self, job_id: str, **kwargs: object) -> CronJobRun:
+            calls.append((job_id, kwargs))
+            return CronJobRun(
+                id="run-1",
+                job_id=job_id,
+                project_id="project-1",
+                status=CronRunStatus.QUEUED,
+                trigger_type=TriggerType.MANUAL,
+            )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    monkeypatch.setattr(cron_tool_module, "_build_service", lambda _session: _Service())
+    monkeypatch.setattr(cron_tool_module, "_try_register_job", AsyncMock())
+    monkeypatch.setattr(cron_tool_module, "_try_unregister_job", AsyncMock())
+    tool = make_cron_tool(session_factory=session_factory)
+    ctx = _make_ctx(user_id="user-1")
+    updated = await tool.execute(
+        ctx,
+        action="update",
+        job_id="job-1",
+        patch={"name": "kept"},
+        expected_revision=2,
+        idempotency_key="revise-1",
+    )
+    removed = await tool.execute(
+        ctx,
+        action="remove",
+        job_id="job-1",
+        expected_revision=3,
+        idempotency_key="delete-1",
+    )
+    ran = await tool.execute(
+        ctx,
+        action="run",
+        job_id="job-1",
+        expected_revision=3,
+        idempotency_key="run-1",
+    )
+    assert updated.is_error is False
+    assert removed.is_error is False
+    assert ran.is_error is False
+    assert calls[0][1]["expected_revision"] == 2
+    assert calls[0][1]["idempotency_key"] == "revise-1"
+    assert calls[0][1]["project_id"] == "project-1"
+    assert calls[0][1]["actor_user_id"] == "user-1"
+    assert calls[1][1]["idempotency_key"] == "delete-1"
+    assert calls[2][1]["expected_revision"] == 3
+    assert calls[2][1]["idempotency_key"] == "run-1"

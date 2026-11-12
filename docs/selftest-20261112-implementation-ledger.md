@@ -92,7 +92,7 @@
 - 现象：add 失败；status 用 `jobs`，list 用 `items`。
 - 根因：手动运行已有回执、修订和幂等命令；创建、更新、删除和切换仍在 `CronJobService` 里直接拒绝。
 - 变更：创建、更新、删除和启停都走持久命令。更新和删除要求当前修订和幂等键；同一键重放不第二次改写；修订过期冲突；其他项目的 actor 找不到任务。启停是把 `enabled` 交给同一条更新命令，禁用后默认列表不含该任务，`include_disabled` 仍能读到。手动运行使用已经存在的 `queue_manual_run`，能力声明改为 `run_now.allowed=true`、`reason_code=durable_command`。关闭该能力的测试仍证明不会写入。工具 `cron` 的 update/remove/run 需要 `expected_revision` 和 `idempotency_key`。
-- 回归：`uv run pytest src/tests/unit/infrastructure/adapters/secondary/persistence/test_sql_cron_automation_command_repository.py src/tests/unit/application/services/test_cron_service.py src/tests/unit/infrastructure/agent/tools/test_cron_tool.py src/tests/unit/routers/test_cron_router.py src/tests/unit/routers/test_cron_execution_admission.py -q`。隔离测试只创建 `selftest-followthrough-temporary`，完成重命名、禁用、一次手动排队、删除，并在 finally 按该 job id 清理。
+- 回归：上述 pytest 在提交 `4d2156ff9` 时已通过，该提交的 PR #19 检查为 40 SUCCESS。另加 `test_update_remove_and_run_forward_revision_and_idempotency`：工具把 `expected_revision`、`idempotency_key`、项目和用户传给更新、删除和手动运行。隔离数据库测试只创建 `selftest-followthrough-temporary`，完成重命名、禁用、一次手动排队、删除，并在 finally 按该 job id 清理。
 - 边界：没有调用正在运行的 API，也没有改用户已有定时任务。排队的手动运行不会在这个测试里真正启动调度器。没有命令仓库的服务仍失败关闭。
 
 ## F12 Canvas / A2UI
