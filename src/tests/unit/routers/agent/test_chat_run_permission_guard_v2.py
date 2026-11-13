@@ -346,3 +346,64 @@ async def test_real_permission_coordinator_publishes_request_before_waiting_for_
             await iterator.aclose()
             for request_id in list(coordinator._pending):
                 coordinator._cleanup_pending_request(request_id)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("mode", "decision"),
+    [("ask", "ask"), ("automatic", "deny"), ("full_access", "allow")],
+)
+async def test_edit_reaches_sandbox_only_for_explicit_full_access(chat_guard_case, mode, decision):
+    """The same SQL snapshot drives admission and sandbox dispatch.
+
+    Remapping edit to the edit category must not execute it for ask or automatic.
+    """
+    from src.infrastructure.agent.tools.context import ToolContext
+    from src.infrastructure.agent.tools.sandbox_tool_wrapper import create_sandbox_mcp_tool
+
+    port = SimpleNamespace(
+        call_tool=AsyncMock(return_value={"content": [{"type": "text", "text": "edited"}]}),
+        get_sandbox=AsyncMock(return_value=None),
+    )
+    tool = create_sandbox_mcp_tool(
+        "qa-sandbox",
+        "edit",
+        {
+            "description": "edit a file",
+            "input_schema": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            },
+        },
+        port,
+    )
+    async with chat_guard_case(mode):
+        from src.application.services.chat_run_tool_permission_v2 import (
+            current_chat_run_guard_v2,
+        )
+
+        guard = current_chat_run_guard_v2()
+        assert guard is not None and guard.mode == mode
+        actual = await decision_for_current_chat_tool_v2(
+            "edit", "edit", {"path": "notes.txt"}, required=True
+        )
+        assert actual == decision
+        if actual == "allow":
+            await tool.execute(
+                ToolContext(
+                    session_id="session",
+                    message_id="message",
+                    call_id="call",
+                    agent_name="agent",
+                    conversation_id="chat-guard-cid",
+                    project_id="project",
+                    tenant_id="tenant",
+                    user_id="user",
+                ),
+                path="notes.txt",
+            )
+    if decision == "allow":
+        port.call_tool.assert_awaited()
+    else:
+        port.call_tool.assert_not_called()

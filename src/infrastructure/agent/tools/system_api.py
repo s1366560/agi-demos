@@ -91,6 +91,20 @@ def _redact_value(value: Any) -> Any:
     return value
 
 
+def openapi_for_published_generation(registry: Any, descriptor: Any) -> dict[str, Any]:
+    """Return the OpenAPI document published for this exact generation."""
+
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    publication = registry.resolve(descriptor)
+    if publication.descriptor != descriptor or publication.openapi.descriptor != descriptor:
+        raise RuntimeV2Error(
+            "route_generation_unavailable",
+            "HTTP route table is unavailable for the pinned plugin generation",
+        )
+    return dict(publication.openapi.schema)
+
+
 def _get_openapi_schema() -> dict[str, Any]:
     from src.infrastructure.adapters.primary.web.main import app
 

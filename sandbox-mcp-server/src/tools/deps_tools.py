@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import signal
 import sys
@@ -68,9 +69,26 @@ def interpreter_prefix_writable(prefix: str | None = None) -> bool:
     return os.access(target, os.W_OK)
 
 
+def local_workspace_wheel(workspace_dir: str, package: str) -> str | None:
+    """Return a wheel path only when it stays inside the workspace."""
+
+    if not package.endswith(".whl"):
+        return None
+    root = os.path.realpath(workspace_dir)
+    candidate = os.path.realpath(
+        package if os.path.isabs(package) else os.path.join(workspace_dir, package)
+    )
+    if candidate != root and not candidate.startswith(root + os.sep):
+        return None
+    if not os.path.isfile(candidate):
+        return None
+    return candidate
+
+
 # Regex to validate pip package specifiers (name with optional version constraints).
 # Allows: pandas, numpy>=2.0, requests[security]==2.31.0, my-pkg~=1.0
 # Blocks: shell metacharacters like ;, &, |, $, `, (, ), etc.
+_LOCAL_WHEEL_RE = re.compile(r"^[A-Za-z0-9_./-]+\.whl$")
 _PIP_PKG_RE = re.compile(
     r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?(\[[A-Za-z0-9,._-]+\])?"
     r"([><=!~]=?[A-Za-z0-9.*+!_-]+)*$"
@@ -101,7 +119,7 @@ def _validate_packages(
         return [], "No packages specified"
 
     if package_type == "pip":
-        pattern = _PIP_PKG_RE
+        pattern = _PIP_PKG_RE if not any(item.endswith(".whl") for item in raw) else _LOCAL_WHEEL_RE
     elif package_type in ("system", "apt"):
         pattern = _SYSTEM_PKG_RE
     elif package_type == "npm":
@@ -248,10 +266,18 @@ async def deps_install(
 
             # Install each package
             for pkg in pkgs:
-                logger.info(f"Installing pip package: {pkg}")
+                logger.info("Installing pip package: %s", pkg)
+                wheel = local_workspace_wheel(_workspace_dir, pkg)
+                if pkg.endswith(".whl") and wheel is None:
+                    msg = "environment_not_writable: wheel path escapes the workspace"
+                    results.append({"package": pkg, "status": "failed", "error": msg})
+                    errors.append(msg)
+                    continue
+                install_spec = wheel or pkg
+                flags = "--no-index --no-deps " if wheel else ""
                 try:
                     stdout, stderr, rc = await _run_subprocess(
-                        f"{pip_cmd} install {pkg}",
+                        f"{shlex.quote(pip_cmd)} install {flags}{shlex.quote(install_spec)}",
                         cwd=_workspace_dir,
                         timeout=timeout,
                     )

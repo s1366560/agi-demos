@@ -92,6 +92,45 @@ JSON 84 行，加总一致：39 PASS、38 UNAUTHORIZED、1 ENV_MISSING、1 NOT_A
 - 原容器 `/opt/sandbox-mcp-venv` 上的真实 pip 拒绝。分类函数有单测，没有在那只读前缀上再跑 pip。
 - API 在线时旧会话 messages 本页 5 条且 `has_more=true`，这不是消息丢失的证明。
 
+## 第二阶段：受控执行证据
+
+这一阶段没有付费模型和用户凭据。替代层只写在每一项下面。报告那次运行的 snapshot 和 SHA 仍然不可得，不能倒推那次进程的版本。
+
+### D2 执行唤醒
+
+入口是生产 `AgentOrchestrator.spawn_agent`：注册 spawn、写 request、调用 spawn executor。执行器用生产 `SessionProcessor._process_step` 调真实工具函数。模型层是测试里的 `LLMStream.generate` 脚本，不调用供应商。history 用进程内 `AgentMessageBusPort`，父会话通过 `get_agent_history` 读取。
+
+- echo：工具输出 `echo: ping`，history 是 request 然后 response，spawn 状态 `completed`。
+- 5 步：`step_1` 到 `step_5` 串成 `step-5:...:start`，`tool_steps == 6`（5 次工具加最后文本）。
+- 工具抛错：父 history 含 `failure_class=backend`，状态 `failed`。
+- 工具先 `sleep(0.2)` 再返回，状态仍是 `completed`。这条路径没有无文本计时器。
+
+未覆盖：插件代际准入、Ray actor、本地队列进程、`ProjectReActAgent.initialize`。模型脚本不可用不能当成这些层正常。父结束时显式 `detached: true` 的子运行跳过，已有 `test_agent_run_tool_settlement.py` 用 SQL snapshot 锁住，本阶段没有重写它。
+
+### D1 三档同一 snapshot
+
+`test_edit_reaches_sandbox_only_for_explicit_full_access` 用 `chat_guard_case` 写入 SQL run authority。`ask` 的决定是 `ask`，`automatic` 是 `deny`，只有 `full_access` 调用 sandbox `call_tool`。守卫的 `mode` 等于写入的档。`edit` 重映射没有让非 full 档执行沙箱写。子运行伪造 `full_access` metadata 仍被 `test_permission_provenance_v2.py` 拒绝。没有把报告那次不可得的 snapshot 写成某个提交。
+
+### D4
+
+`_build_service` 接上真实 `AutomationCommandService` 和测试库。同一幂等键创建两次得到同一个 job，`list_jobs` 能看见它，`CronJobRunModel` 行数是 0，然后按 revision 删除。没有注册 APScheduler，也没有创建 Grok Bot routine。调度器真实执行没有做，不能叫自动化已恢复。
+
+### D3
+
+`openapi_for_published_generation` 只返回 descriptor 完全相同的已发布表。`system_api` list 通过这个函数看到 `/api/value`。另一代仍是 `route_generation_unavailable`。没有启动完整 API 进程。
+
+### D5
+
+本地 wheel `fixturepkg` 装进显式 workspace venv，该 venv 的解释器能 `import fixturepkg`。系统 `sys.prefix` 不是这个 venv。工作区外的 wheel 被拒绝。没有 chmod，没有访问 Mac 上的 `/opt/sandbox-mcp-venv`。
+
+### D7
+
+双份 `pkg` 与 `src/pkg` 时，执行导入的 `__file__` 是 `src/pkg/service.py`，值是 `requested`。只有 `src/pkg` 时模块名仍是 `src.pkg.service`，`__file__` 是那一个文件。覆盖率 pytest 的 cwd 改为 import root，避免工作区根上的同名包抢先。
+
+### D6 / D8
+
+没有新增读取 `os.environ` 来回答 `get_env_var`。托管秘密的 `redacted_preview` 是 `***`，已授权读取仍返回原值，日志测试继续禁止明文。`ANTHROPIC_API_KEY` 对 github 仍是 `not_declared`。
+
 ## 这一轮实际跑过的测试
 
 - `uv run pytest` 上述新测试，加上 `test_execution.py`、`test_sandbox_mcp_rules.py`、`test_rules_enhanced.py`、`test_system_api_tool.py`、`test_env_var_tools.py`：修复后 15 + 4 + 原套件通过。最终相关集合在提交前为 175 项里先有 3 个断言失败，修正 mock 和 frozen dataclass 后再跑新测试通过。

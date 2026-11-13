@@ -559,7 +559,6 @@ async def analyze_coverage(
             import sys
 
             module_name, import_root = _module_import_data(full_path, _workspace_dir)
-            workspace = Path(_workspace_dir).resolve()
 
             candidate_tests = sorted(full_path.parent.glob(f"test*{full_path.stem}*.py"))
             with tempfile.TemporaryDirectory(prefix="coverage-") as temp_dir_str:
@@ -628,7 +627,9 @@ async def analyze_coverage(
                     pytest_args,
                     capture_output=True,
                     text=True,
-                    cwd=str(workspace),
+                    # The import root is the cwd so a sibling package at the
+                    # workspace root cannot shadow this file.
+                    cwd=str(import_root),
                     env=env,
                     timeout=120,
                 )
