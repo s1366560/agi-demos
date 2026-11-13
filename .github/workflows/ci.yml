@@ -785,8 +785,10 @@ jobs:
       - name: Run container integration tests
         run: |
           printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+          PYTHONPATH=. uv run alembic upgrade head
           COVERAGE_FILE=coverage-containers \
             uv run pytest src/tests/unit/routers/agent/test_workspace_file_permission_v2.py \
+              src/tests/integration/scheduler/test_cron_scripted_provider_turn.py \
               -m integration \
               --cov=src \
               --cov-report= \

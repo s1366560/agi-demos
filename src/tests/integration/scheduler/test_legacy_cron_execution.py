@@ -82,6 +82,7 @@ async def test_dispatch_returns_before_true_actor_terminal(
 
     async def dispatch(**kwargs):
         assert kwargs["message_id"] == identity.message_id
+        assert kwargs["canonical_run_id"] == identity.message_id
         assert kwargs["legacy_cron_admission"] == identity.to_wire()
         request = ProjectChatRequest(
             conversation_id=identity.conversation_id,
@@ -96,6 +97,7 @@ async def test_dispatch_returns_before_true_actor_terminal(
     monkeypatch.setattr(
         job_executor, "_get_bootstrapper", lambda: SimpleNamespace(start_chat_actor=dispatch)
     )
+    monkeypatch.setattr(job_executor, "_ensure_cron_chat_authority", AsyncMock())
     from src.infrastructure.adapters.secondary.persistence import sql_conversation_repository
 
     monkeypatch.setattr(

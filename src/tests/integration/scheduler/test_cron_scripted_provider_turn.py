@@ -3,8 +3,8 @@
 Postgres is a private schema on the local server, not an in-memory database.
 The generation Redis client is the project's Redis. LiteLLM completion is
 replaced so no vendor is called. The provider row uses the real encryption
-service and a tenant mapping. The published generation currently stops in
-ProjectReActAgent before that supplier, on duplicate skill sources.
+service and a tenant mapping. The project skill root is the isolated project
+path, so the checkout's unrelated drone skill is not mixed into this generation.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from sqlalchemy import Column, MetaData, String, Table, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.configuration.config import get_settings
@@ -35,6 +36,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Tenant,
     TenantAgentConfig,
     User,
+    UserProject,
+    UserTenant,
 )
 from src.infrastructure.persistence.llm_providers_models import (
     LLMProvider,
@@ -57,6 +60,8 @@ def _tables() -> tuple[Any, ...]:
         User.__table__,
         Tenant.__table__,
         Project.__table__,
+        UserTenant.__table__,
+        UserProject.__table__,
         Conversation.__table__,
         TenantAgentConfig.__table__,
         AgentRunAuthorityModel.__table__,
@@ -77,16 +82,28 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
 ) -> None:
     schema = f"qa_cron_{uuid.uuid4().hex[:8]}"
     url = get_settings().postgres_url
-    admin = create_async_engine(url)
-    async with admin.begin() as connection:
+    database_name = make_url(url).database
+    assert database_name
+    admin = create_async_engine(url, isolation_level="AUTOCOMMIT")
+    async with admin.connect() as connection:
         await connection.execute(text(f"CREATE SCHEMA {schema}"))
-    engine = create_async_engine(url, connect_args={"server_settings": {"search_path": schema}})
+        await connection.execute(
+            text(f'ALTER DATABASE "{database_name}" SET search_path TO {schema}, public')
+        )
+    from src.infrastructure.adapters.secondary.persistence.database import engine as shared_engine
+
+    await shared_engine.dispose()
+    engine = create_async_engine(
+        url,
+        connect_args={"server_settings": {"search_path": f"{schema},public"}},
+    )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     calls: list[str] = []
 
     async def scripted_completion(**kwargs: Any) -> Any:
         messages = kwargs.get("messages") or []
         calls.append(str(messages))
+        calls.append("supplier-return:scripted-ok")
         if kwargs.get("stream"):
 
             async def chunks() -> Any:
@@ -182,6 +199,15 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
                 )
             )
             session.add(
+                UserTenant(
+                    id=f"ut-{suffix}",
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                    role="owner",
+                    permissions={},
+                )
+            )
+            session.add(
                 Project(
                     id=project_id,
                     tenant_id=tenant_id,
@@ -195,6 +221,15 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
                 )
             )
             await session.flush()
+            session.add(
+                UserProject(
+                    id=f"up-{suffix}",
+                    user_id=user_id,
+                    project_id=project_id,
+                    role="owner",
+                    permissions={},
+                )
+            )
             session.add(
                 LLMProvider(
                     id=provider_id,
@@ -274,14 +309,17 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
                 await worker
         finally:
             root.removeHandler(handler)
-        assert calls == []
-        assert sum("Local chat failed" in line for line in captured) >= 2
-        assert any("duplicate sources" in line for line in captured)
+        assert any("system-marker" in call for call in calls), captured[-30:]
+        assert any("agent-marker" in call for call in calls)
+        assert calls.count("supplier-return:scripted-ok") >= 2
+        assert not any("duplicate sources" in line for line in captured)
     finally:
         clear_process_generation_host_v2(host)
         await host.close()
         await engine.dispose()
-        async with admin.begin() as connection:
+        await shared_engine.dispose()
+        async with admin.connect() as connection:
+            await connection.execute(text(f'ALTER DATABASE "{database_name}" RESET search_path'))
             await connection.execute(text(f"DROP SCHEMA {schema} CASCADE"))
         await admin.dispose()
         _ = async_session_factory

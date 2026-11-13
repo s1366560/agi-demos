@@ -306,6 +306,7 @@ async def _execute_agent_turn(
 
     message = job.payload.config.get("message", "")
     message_id = admission.message_id
+    await _ensure_cron_chat_authority(session, conversation, message_id, message)
 
     bootstrapper = _get_bootstrapper()
     _ = await bootstrapper.start_chat_actor(
@@ -315,6 +316,7 @@ async def _execute_agent_turn(
         conversation_context=[],
         correlation_id=f"cron:{job.id}",
         legacy_cron_admission=admission.to_wire(),
+        canonical_run_id=message_id,
     )
 
     logger.info(
@@ -342,15 +344,18 @@ async def _execute_system_event(
 
     content = job.payload.config.get("content", "")
     message_id = admission.message_id
+    user_message = f"[System Event] {content}"
+    await _ensure_cron_chat_authority(session, conversation, message_id, user_message)
 
     bootstrapper = _get_bootstrapper()
     _ = await bootstrapper.start_chat_actor(
         conversation=conversation,
         message_id=message_id,
-        user_message=f"[System Event] {content}",
+        user_message=user_message,
         conversation_context=[],
         correlation_id=f"cron:{job.id}",
         legacy_cron_admission=admission.to_wire(),
+        canonical_run_id=message_id,
     )
 
     logger.info(
@@ -365,6 +370,27 @@ async def _execute_system_event(
 # ---------------------------------------------------------------------------
 
 _bootstrapper_instance: AgentRuntimeBootstrapper | None = None
+
+
+async def _ensure_cron_chat_authority(
+    session: AsyncSession,
+    conversation: object,
+    message_id: str,
+    request_message: str,
+) -> None:
+    """Admit the cron turn through the same chat authority ordinary turns use."""
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+        ensure_chat_run_authority,
+    )
+
+    _ = await ensure_chat_run_authority(
+        session,
+        conversation=conversation,  # type: ignore[arg-type]
+        run_id=message_id,
+        request_message=request_message,
+        client_message_id=message_id,
+        app_model_context=None,
+    )
 
 
 def _get_bootstrapper() -> AgentRuntimeBootstrapper:
