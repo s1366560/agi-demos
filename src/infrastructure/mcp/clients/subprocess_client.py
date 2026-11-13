@@ -25,6 +25,11 @@ from src.infrastructure.mcp.process_boundary import (
     sanitize_subprocess_env,
     spawn_mcp_server_process,
 )
+from src.infrastructure.mcp.protocol import (
+    LATEST_PROTOCOL_VERSION,
+    accept_server_protocol,
+    protocol_version_of,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +155,7 @@ class MCPSubprocessClient:
             result = await self._send_request(
                 "initialize",
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
                     "capabilities": {
                         "extensions": {
                             "io.modelcontextprotocol/ui": {
@@ -178,6 +183,7 @@ class MCPSubprocessClient:
             )
 
             if result and "result" in result:
+                accept_server_protocol(protocol_version_of(result))
                 self.server_info = result["result"].get("serverInfo", {})
 
                 # Send initialized notification

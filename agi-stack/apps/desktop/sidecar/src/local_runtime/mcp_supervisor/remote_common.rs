@@ -23,7 +23,6 @@ use super::{
     McpServerDefinitionInput, McpSupervisorError, McpTransport, SupervisorLimits,
 };
 
-pub(super) const STREAMABLE_HTTP_PROTOCOL_VERSION: &str = "2025-03-26";
 pub(super) const MAX_CORRELATION_MESSAGES: usize = 64;
 
 const RESERVED_REMOTE_HEADERS: [&str; 8] = [

@@ -25,10 +25,15 @@ from src.infrastructure.mcp.clients.subprocess_client import (
     MCPToolResult,
     MCPToolSchema,
 )
+from src.infrastructure.mcp.protocol import (
+    LATEST_PROTOCOL_VERSION,
+    accept_server_protocol,
+    protocol_version_of,
+)
 
 # Type hints only - actual imports are done lazily to avoid Temporal sandbox issues
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +101,7 @@ class MCPHttpClient:
 
         # SSE transport state (using MCP SDK)
         self._exit_stack: AsyncExitStack | None = None
-        self._http_client: httpx.AsyncClient | None = None
+        self._http_client: httpx2.AsyncClient | None = None
         self._read_stream: Any = None
         self._write_stream: Any = None
         self._reader_task: asyncio.Task[None] | None = None
@@ -152,7 +157,7 @@ class MCPHttpClient:
             result = await self._send_request(
                 "initialize",
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
                     "capabilities": {
                         "extensions": {
                             "io.modelcontextprotocol/ui": {
@@ -173,6 +178,7 @@ class MCPHttpClient:
             )
 
             if result and "result" in result:
+                accept_server_protocol(protocol_version_of(result))
                 self.server_info = result["result"].get("serverInfo", {})
 
                 # Send initialized notification
@@ -209,17 +215,17 @@ class MCPHttpClient:
         """Connect using SSE/streamable_http transport via MCP SDK."""
         try:
             # Lazy imports to avoid Temporal workflow sandbox issues
-            import httpx
+            import httpx2
             from mcp.client.streamable_http import streamable_http_client
-            from mcp.types import JSONRPCMessage, JSONRPCRequest
+            from mcp.types import JSONRPCRequest
 
             self._exit_stack = AsyncExitStack()
             await self._exit_stack.__aenter__()
 
             # Create httpx client with headers and explicit TLS verify
-            self._http_client = httpx.AsyncClient(
+            self._http_client = httpx2.AsyncClient(
                 headers=self.headers,
-                timeout=httpx.Timeout(timeout, connect=min(timeout, 10.0)),
+                timeout=httpx2.Timeout(timeout, connect=min(timeout, 10.0)),
                 verify=tls_verify_default(),
             )
             self._http_client = await self._exit_stack.enter_async_context(self._http_client)
@@ -228,7 +234,7 @@ class MCPHttpClient:
             streams = await self._exit_stack.enter_async_context(
                 streamable_http_client(self.url, http_client=self._http_client)
             )
-            self._read_stream, self._write_stream, _ = streams
+            self._read_stream, self._write_stream = streams
 
             # Start message reader task
             self._reader_task = asyncio.create_task(self._read_messages())
@@ -240,17 +246,17 @@ class MCPHttpClient:
                 id=request_id,
                 method="initialize",
                 params={
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
                     "capabilities": {},
                     "clientInfo": {"name": "memstack-mcp-worker", "version": "1.0.0"},
                 },
             )
 
-            from mcp.shared.session import SessionMessage  # type: ignore[attr-defined]
+            from mcp.shared.message import SessionMessage
 
             future = asyncio.get_running_loop().create_future()
             self._pending_requests[request_id] = future
-            await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=init_request)))
+            await self._write_stream.send(SessionMessage(message=init_request))
 
             try:
                 result = await asyncio.wait_for(future, timeout=timeout)
@@ -259,6 +265,7 @@ class MCPHttpClient:
                 raise
 
             if result and hasattr(result, "result"):
+                accept_server_protocol(protocol_version_of(result.result))
                 self.server_info = getattr(result.result, "serverInfo", None)
                 if self.server_info and hasattr(self.server_info, "model_dump"):
                     self.server_info = self.server_info.model_dump()
@@ -273,7 +280,7 @@ class MCPHttpClient:
                     method="notifications/initialized",
                 )
                 await self._write_stream.send(
-                    SessionMessage(message=JSONRPCMessage(root=init_notification))
+                    SessionMessage(message=init_notification)
                 )
 
                 # Pre-fetch tools list
@@ -318,8 +325,8 @@ class MCPHttpClient:
 
     async def _list_tools_sse(self, timeout: float) -> list[MCPToolSchema]:
         """List tools via SSE transport."""
-        from mcp.shared.session import SessionMessage  # type: ignore[attr-defined]
-        from mcp.types import JSONRPCMessage, JSONRPCRequest
+        from mcp.shared.message import SessionMessage
+        from mcp.types import JSONRPCRequest
 
         request_id = next(self._request_id_counter)
         request = JSONRPCRequest(
@@ -333,7 +340,7 @@ class MCPHttpClient:
 
         future = asyncio.get_running_loop().create_future()
         self._pending_requests[request_id] = future
-        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=request)))
+        await self._write_stream.send(SessionMessage(message=request))
 
         try:
             result = await asyncio.wait_for(future, timeout=timeout)
@@ -420,8 +427,8 @@ class MCPHttpClient:
         Raises:
             TimeoutError: If the request times out.
         """
-        from mcp.shared.session import SessionMessage  # type: ignore[attr-defined]
-        from mcp.types import JSONRPCMessage, JSONRPCRequest
+        from mcp.shared.message import SessionMessage
+        from mcp.types import JSONRPCRequest
 
         request_id = next(self._request_id_counter)
         request = JSONRPCRequest(
@@ -433,7 +440,7 @@ class MCPHttpClient:
 
         future = asyncio.get_running_loop().create_future()
         self._pending_requests[request_id] = future
-        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=request)))
+        await self._write_stream.send(SessionMessage(message=request))
 
         try:
             return await asyncio.wait_for(future, timeout=timeout)

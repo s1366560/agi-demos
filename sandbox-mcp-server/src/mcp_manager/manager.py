@@ -17,6 +17,7 @@ from src.mcp_manager.process_tracker import (
     ProcessTracker,
     ServerStatus,
 )
+from src.mcp_protocol import LATEST_PROTOCOL_VERSION, accept_server_protocol
 
 logger = logging.getLogger(__name__)
 
@@ -1009,11 +1010,11 @@ class MCPServerManager:
 
         # Send initialize request
         try:
-            await self._send_stdio_request(
+            result = await self._send_stdio_request(
                 server.name,
                 "initialize",
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
                     "capabilities": {
                         "roots": {"listChanged": True},
                         "extensions": {
@@ -1033,6 +1034,7 @@ class MCPServerManager:
                 },
                 timeout=MCP_INIT_TIMEOUT,
             )
+            accept_server_protocol(result.get("protocolVersion"))
             conn._initialized = True
             logger.info(f"MCP stdio connection initialized for '{server.name}'")
 
@@ -1403,7 +1405,7 @@ class MCPServerManager:
                 server,
                 "initialize",
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
                     "capabilities": {
                         "roots": {"listChanged": True},
                         "extensions": {
@@ -1423,6 +1425,7 @@ class MCPServerManager:
                 },
                 timeout=MCP_INIT_TIMEOUT,
             )
+            accept_server_protocol(result.get("protocolVersion"))
             logger.info(
                 f"MCP network connection initialized for '{server.name}': "
                 f"server={result.get('serverInfo', {}).get('name', 'unknown')}"
@@ -1490,7 +1493,7 @@ class MCPServerManager:
                     "id": req_id,
                     "method": "initialize",
                     "params": {
-                        "protocolVersion": "2024-11-05",
+                        "protocolVersion": LATEST_PROTOCOL_VERSION,
                         "capabilities": {
                             "roots": {"listChanged": True},
                             "extensions": {
@@ -1518,6 +1521,7 @@ class MCPServerManager:
                 f"MCP WebSocket connection initialized for '{server.name}': "
                 f"server={result.get('serverInfo', {}).get('name', 'unknown')}"
             )
+            accept_server_protocol(result.get("protocolVersion"))
 
             # Send initialized notification
             await ws.send_json(
@@ -1684,7 +1688,7 @@ class MCPServerManager:
                     "id": req_id,
                     "method": "initialize",
                     "params": {
-                        "protocolVersion": "2024-11-05",
+                        "protocolVersion": LATEST_PROTOCOL_VERSION,
                         "capabilities": {
                             "roots": {"listChanged": True},
                             "extensions": {
@@ -1711,6 +1715,7 @@ class MCPServerManager:
             )
 
             result = await asyncio.wait_for(future, timeout=MCP_INIT_TIMEOUT)
+            accept_server_protocol(result.get("protocolVersion"))
             conn._initialized = True
             logger.info(
                 f"MCP SSE connection initialized for '{server.name}': "

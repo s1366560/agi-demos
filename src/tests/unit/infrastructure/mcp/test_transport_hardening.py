@@ -497,6 +497,7 @@ class TestSubprocessCancelLadder:
         client._send_request = AsyncMock(  # type: ignore[method-assign]
             return_value={
                 "result": {
+                    "protocolVersion": "2024-11-05",
                     "serverInfo": {"name": "stub", "metadata": response_secret},
                 },
                 "id": 1,

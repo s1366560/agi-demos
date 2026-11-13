@@ -22,7 +22,7 @@ use super::{
         encode_message, malformed_response, next_request_id, remote_headers, request_timeout,
         resolve_remote_endpoint, response_too_large, restart_backoff, retry_delay,
         server_request_rejection, unsupported_client_request, InitializedServer,
-        MAX_CORRELATION_MESSAGES, STREAMABLE_HTTP_PROTOCOL_VERSION,
+        MAX_CORRELATION_MESSAGES,
     },
     McpResult, McpServerDefinition, McpSupervisorError, SupervisorLimits,
 };
@@ -81,7 +81,7 @@ impl WebSocketRuntime {
             .request_inner(
                 "initialize",
                 json!({
-                    "protocolVersion": STREAMABLE_HTTP_PROTOCOL_VERSION,
+                    "protocolVersion": super::MCP_PROTOCOL_VERSION,
                     "capabilities": {},
                     "clientInfo": {
                         "name": "agistack-desktop",
@@ -100,12 +100,9 @@ impl WebSocketRuntime {
             }
         };
         let protocol_version = initialize.get("protocolVersion").and_then(Value::as_str);
-        if !protocol_version.is_some_and(|version| {
-            matches!(
-                version,
-                STREAMABLE_HTTP_PROTOCOL_VERSION | super::MCP_PROTOCOL_VERSION
-            )
-        }) {
+        if !protocol_version
+            .is_some_and(|version| super::supported_protocol_version(version).is_some())
+        {
             self.fail(limits).await;
             return Err(McpSupervisorError::new(
                 "local_mcp_protocol_version_unsupported",

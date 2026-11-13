@@ -17,6 +17,13 @@ import aiohttp
 from aiohttp import web
 from aiohttp.web_log import AccessLogger
 
+from src.mcp_protocol import (
+    LATEST_PROTOCOL_VERSION,
+    SUPPORTED_PROTOCOL_VERSIONS,
+    UnsupportedProtocolVersionError,
+    negotiate_client_offer,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +42,7 @@ class MCPServerInfo:
 
     name: str = "sandbox-mcp-server"
     version: str = "0.1.0"
-    protocol_version: str = "2024-11-05"
+    protocol_version: str = LATEST_PROTOCOL_VERSION
 
 
 @dataclass
@@ -402,6 +409,12 @@ class MCPWebSocketServer:
                 "result": result,
                 "id": request_id,
             }
+        except UnsupportedProtocolVersionError as e:
+            return {
+                "jsonrpc": "2.0",
+                "error": {"code": -32602, "message": str(e)},
+                "id": request_id,
+            }
         except Exception as e:
             logger.error(f"Error handling method {method}: {e}", exc_info=True)
             return {
@@ -434,6 +447,8 @@ class MCPWebSocketServer:
         # MCP protocol methods
         if method == "initialize":
             return await self._handle_initialize(params)
+        elif method == "server/discover":
+            return self._discover()
         elif method == "tools/list":
             return await self._handle_list_tools()
         elif method == "tools/call":
@@ -456,7 +471,7 @@ class MCPWebSocketServer:
     async def _handle_initialize(self, params: dict) -> dict:
         """Handle MCP initialize request."""
         client_info = params.get("clientInfo", {})
-        protocol_version = params.get("protocolVersion", "unknown")
+        protocol_version = negotiate_client_offer(params.get("protocolVersion"))
         capabilities = params.get("capabilities", {})
 
         logger.info(
@@ -467,12 +482,8 @@ class MCPWebSocketServer:
         logger.debug(f"[MCP] initialize - client capabilities: {capabilities}")
 
         response = {
-            "protocolVersion": self._server_info.protocol_version,
-            "capabilities": {
-                "tools": {"listChanged": False},
-                "resources": {"subscribe": False, "listChanged": False},
-                "prompts": {},
-            },
+            "protocolVersion": protocol_version,
+            "capabilities": self._implemented_capabilities(),
             "serverInfo": {
                 "name": self._server_info.name,
                 "version": self._server_info.version,
@@ -486,6 +497,25 @@ class MCPWebSocketServer:
         )
 
         return response
+
+    def _implemented_capabilities(self) -> dict:
+        """Capabilities this server actually implements. No optional features."""
+
+        return {
+            "tools": {"listChanged": False},
+            "resources": {"subscribe": False, "listChanged": False},
+            "prompts": {},
+        }
+
+    def _discover(self) -> dict:
+        return {
+            "protocolVersions": list(SUPPORTED_PROTOCOL_VERSIONS),
+            "capabilities": self._implemented_capabilities(),
+            "serverInfo": {
+                "name": self._server_info.name,
+                "version": self._server_info.version,
+            },
+        }
 
     async def _handle_list_tools(self) -> dict:
         """Handle tools/list request."""
