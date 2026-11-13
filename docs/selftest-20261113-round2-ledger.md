@@ -1,6 +1,6 @@
 # 2026-11-13 完全访问报告第二轮核对
 
-本清单只记录这一轮云端分支相对 PR #19 `161ec6bdf2d9c8bf76332da70e590c7b9649a7de` 的增量。它不代替 `docs/selftest-20261112-implementation-ledger.md`。没有合并 PR #19 或 PR #20，没有改 `.github/workflows/ci.yml` 或 `scripts/ci/plugins_g_files.txt`，也没有访问用户 Mac 上的 3000/8000/5173 进程。
+本清单先记录这一轮云端分支相对 PR #19 `161ec6bdf2d9c8bf76332da70e590c7b9649a7de` 的增量，再记录文末把 `origin/main` 合进来之后的状态。它不代替 `docs/selftest-20261112-implementation-ledger.md`。前面各节写作时没有合并 PR #19 或 PR #20，也没有访问用户 Mac 上的 3000/8000/5173 进程。组合之后的祖先、CI 取舍和补跑结果写在「组合 main 之后」。
 
 ## 基线
 
@@ -138,3 +138,15 @@ JSON 84 行，加总一致：39 PASS、38 UNAUTHORIZED、1 ENV_MISSING、1 NOT_A
 - `test_cron_tool.py` 与 `test_route_generation_unavailable.py`：11 passed。
 - `cd sandbox-mcp-server && PYTHONPATH=. uv run pytest tests/tools/test_deps_install_target.py tests/tools/test_module_origin.py tests/tools/test_deps_install_failure.py`：8 passed。
 - 没有改 compose 的 wall p95 100ms 门禁，CPU 仍只是诊断字段。没有跑完整 CI，也没有创建定时跟踪去等 CI。
+
+## 组合 main 之后
+
+`origin/main` 已是 `a6ae0ab25`（`Merge pull request #20`）。它包含 PR #19 合并 `3b8d8d2a0` 和 PR #20。PR #21 远端在组合前是 `533b7c28`，祖先含 `3b8d8d2a0`，不含 `a6ae0ab25`。这一步在 `533b7c28` 之上先放入 cron 持久终态测试 `6e1f90e99`，再用普通 merge 把 `origin/main` 合进来。没有 rebase，没有强推，没有改 PR base。冲突自动落在 `.github/workflows/ci.yml`：容器作业仍跑 `test_cron_scripted_provider_turn.py`，Desktop 作业保留 PR #20 的 `desktop-test`、`desktop-icons`、`desktop-electron-build`，安装包验证留在手动的 `desktop-bundle-verify.yml`。
+
+`test_cron_scripted_provider_turn.py` 在本机 Postgres 私有 schema 和本机 Redis 上读取执行后的行。两种 payload 都调用脚本 `litellm.acompletion`。`cron_job_runs` 为 `success`，admission 为 `success`/`terminal`，chat authority 为 `completed`，事件日志有 `complete` 和 `assistant_message` 内容 `scripted-ok`。目标检查要求的 `submit_goal_completion_judgment_v2` 由同一脚本返回。结算要读的真实表由 ORM 建出，日志里没有 `UndefinedTable`。这条路径不写会话 `messages` 表，历史在 `agent_execution_events`。容器作业不跑 `alembic upgrade head`。没有真实外部供应商，脚本不能代替付费模型的外部效果。
+
+同一进程里先跑 `test_unpinned_child_bootstrap_failure.py` 再跑 `test_cross_process_child_bootstrap.py` 时，父进程 `_owners` 还留着 2 条，`test_other_process_settles_only_the_registered_spawn` 的 `len(_owners) == 0` 失败。单独跑该文件是 3 passed。这是进程内 owner 表没有在用例之间清空，不是 merge 改过的结算语义。CI 按路径收集时该文件排在 unpinned 文件之前，`533b7c28` 的对应分片已经通过。
+
+这一组合树上实际跑过：上述 D1–D8 相关集合 165 项里 164 passed、1 个是上面的同进程顺序失败；跨进程文件单独 3 passed；`sandbox-mcp-server` 的 deps 与 module origin 10 passed。`deps_install` 仍是 `ask`。
+
+Ray 没有启动。这台 VM 总内存 15Gi，可用约 3.1Gi，hypervisor balloon 约 10Gi。Ray head 与 worker 各按约 4Gi 再加 1Gi object store 配置，现有空闲不够一次拉起。没有用外部付费模型，也没有碰用户机器上的 Mac 容器或 GUI。
