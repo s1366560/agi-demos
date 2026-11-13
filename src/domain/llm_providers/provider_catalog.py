@@ -609,15 +609,6 @@ def probe_default_base_urls() -> dict[str, str]:
     }
 
 
-def official_base_paths() -> dict[str, frozenset[str]]:
-    """Return the exact API paths allowed on each official origin."""
-    return {
-        family: frozenset(spec.official_paths)
-        for family, spec in FAMILY_SECURITY.items()
-        if spec.probe_base_url is not None
-    }
-
-
 def extra_official_endpoints() -> dict[str, dict[str, frozenset[str]]]:
     """Return additional first-party origins and their allowed paths."""
     return {
