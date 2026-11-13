@@ -1390,6 +1390,7 @@ async def _settle_local_bootstrap_failure(
                 child_session_id=request.conversation_id,
                 request_message_id=request.canonical_run_id or request.message_id,
                 parent_session_id=request.parent_session_id,
+                project_id=config.project_id,
                 error=error,
             )
         except Exception as child_error:

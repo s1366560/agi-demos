@@ -304,6 +304,11 @@ class SpawnManager:
         async with self._lock:
             return self._compute_depth_locked(session_id)
 
+    async def parent_owns_child(self, parent_session_id: str, child_session_id: str) -> bool:
+        """Return whether this parent session registered the child spawn."""
+        async with self._lock:
+            return child_session_id in self._children_by_parent.get(parent_session_id, set())
+
     async def has_active_children(self, parent_session_id: str) -> bool:
         """Check if a parent session has any running children."""
         children = await self.find_children(parent_session_id, status="running")

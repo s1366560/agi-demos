@@ -53,12 +53,19 @@ async def test_successful_session_child_stays_running() -> None:
 async def test_bootstrap_failure_names_the_cause_for_the_parent() -> None:
     finalize = AsyncMock()
     error = RuntimeV2Error("route_generation_unavailable", "route table missing")
-    with patch.object(execution, "_finalize_child_session_result", new=finalize):
+    with (
+        patch.object(execution, "_finalize_child_session_result", new=finalize),
+        patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=SimpleNamespace(),
+        ),
+    ):
         await execution.publish_child_bootstrap_failure(
             agent_id="child-agent",
             child_session_id="child",
             request_message_id="message",
             parent_session_id="parent",
+            project_id="project",
             error=error,
         )
     kwargs = finalize.await_args.kwargs

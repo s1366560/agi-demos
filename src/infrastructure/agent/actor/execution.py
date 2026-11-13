@@ -259,17 +259,41 @@ async def publish_child_bootstrap_failure(
     child_session_id: str,
     request_message_id: str,
     parent_session_id: str,
+    project_id: str,
     error: BaseException,
 ) -> None:
-    """Surface a child that was admitted but never entered model execution.
+    """Surface a child that never entered model execution.
 
-    This does not start an explicitly detached run and does not apply a
-    no-output timer. The parent sees a failed spawn status plus a history
-    response that names the structured cause.
+    A pinned operation keeps the generation-scoped finalizer. Before admission
+    pins an operation, the failure is written only through the spawn record
+    created for this parent and child. Neither path starts the child, grants a
+    tool, or applies a no-output timer. An explicitly detached child is failed
+    on its own record and does not close the parent.
     """
     code = getattr(error, "code", None)
     if not isinstance(code, str) or not code:
         code = type(error).__name__
+    error_message = f"failure_class=backend code={code} {error}"
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    try:
+        _ = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+        from src.infrastructure.agent.orchestration.bootstrap_failure_settlement import (
+            settle_unpinned_child_bootstrap_failure,
+        )
+
+        await settle_unpinned_child_bootstrap_failure(
+            child_session_id=child_session_id,
+            child_agent_id=agent_id,
+            parent_session_id=parent_session_id,
+            project_id=project_id,
+            request_message_id=request_message_id,
+            error_message=error_message,
+        )
+        return
     await _finalize_child_session_result(
         agent_id=agent_id,
         child_session_id=child_session_id,
@@ -279,7 +303,7 @@ async def publish_child_bootstrap_failure(
         success=False,
         event_count=0,
         execution_time_ms=0.0,
-        error_message=f"failure_class=backend code={code} {error}",
+        error_message=error_message,
     )
 
 
