@@ -495,7 +495,7 @@ async def system_api_tool(  # noqa: PLR0911
         except RuntimeV2Error as exc:
             if exc.code != "route_generation_unavailable":
                 raise
-            payload = {
+            unavailable = {
                 "status": "unavailable",
                 "failure_class": "backend",
                 "code": exc.code,
@@ -503,9 +503,9 @@ async def system_api_tool(  # noqa: PLR0911
                 "message": str(exc),
             }
             return ToolResult(
-                output=_json(payload),
+                output=_json(unavailable),
                 title="System API generation unavailable",
-                metadata=payload,
+                metadata=unavailable,
                 is_error=True,
             )
         operations = _filter_operations(
