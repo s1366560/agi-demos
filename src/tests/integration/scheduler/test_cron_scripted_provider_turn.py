@@ -39,6 +39,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.adapters.secondary.persistence.plugin_marketplace_models_v3 import (
+    MarketplaceRecordV3,
+)
 from src.infrastructure.persistence.llm_providers_models import (
     LLMProvider,
     TenantProviderMapping,
@@ -73,6 +76,7 @@ def _tables() -> tuple[Any, ...]:
         CronJobRunModel.__table__,
         CronSchedulerOwnerModel.__table__,
         LegacyCronAdmissionModel.__table__,
+        MarketplaceRecordV3.__table__,
     )
 
 
@@ -88,14 +92,14 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
     async with admin.connect() as connection:
         await connection.execute(text(f"CREATE SCHEMA {schema}"))
         await connection.execute(
-            text(f'ALTER DATABASE "{database_name}" SET search_path TO {schema}, public')
+            text(f'ALTER DATABASE "{database_name}" SET search_path TO {schema}')
         )
     from src.infrastructure.adapters.secondary.persistence.database import engine as shared_engine
 
     await shared_engine.dispose()
     engine = create_async_engine(
         url,
-        connect_args={"server_settings": {"search_path": f"{schema},public"}},
+        connect_args={"server_settings": {"search_path": schema}},
     )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     calls: list[str] = []
