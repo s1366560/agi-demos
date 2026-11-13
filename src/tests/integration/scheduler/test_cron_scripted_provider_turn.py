@@ -9,13 +9,14 @@ path, so the checkout's unrelated drone skill is not mixed into this generation.
 
 from __future__ import annotations
 
+import shutil
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sqlalchemy import Column, MetaData, String, Table, text
+from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -26,13 +27,23 @@ from src.infrastructure.adapters.secondary.persistence.legacy_cron_admission_mod
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
+    AgentPlanRunModel,
+    AgentPlanVersionModel,
     AgentRunAuthorityModel,
+    AgentRunInputModel,
+    AgentRunSummaryModel,
+    AgentTaskModel,
     Conversation,
     CronJobModel,
     CronJobRunModel,
     CronSchedulerOwnerModel,
     HITLRequest,
+    MCPServer,
+    Message,
     Project,
+    ProjectSandbox,
+    Skill,
+    SubAgent,
     Tenant,
     TenantAgentConfig,
     User,
@@ -42,6 +53,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.adapters.secondary.persistence.plugin_marketplace_models_v3 import (
     MarketplaceRecordV3,
 )
+from src.infrastructure.agent.plugins.skill_evolution.models import SkillEvolutionSession
 from src.infrastructure.persistence.llm_providers_models import (
     LLMProvider,
     TenantProviderMapping,
@@ -67,8 +79,19 @@ def _tables() -> tuple[Any, ...]:
         UserProject.__table__,
         Conversation.__table__,
         TenantAgentConfig.__table__,
+        AgentPlanVersionModel.__table__,
+        AgentPlanRunModel.__table__,
         AgentRunAuthorityModel.__table__,
         AgentExecutionEvent.__table__,
+        AgentTaskModel.__table__,
+        AgentRunInputModel.__table__,
+        AgentRunSummaryModel.__table__,
+        Message.__table__,
+        Skill.__table__,
+        SubAgent.__table__,
+        MCPServer.__table__,
+        ProjectSandbox.__table__,
+        SkillEvolutionSession.__table__,
         HITLRequest.__table__,
         LLMProvider.__table__,
         TenantProviderMapping.__table__,
@@ -106,7 +129,33 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
 
     async def scripted_completion(**kwargs: Any) -> Any:
         messages = kwargs.get("messages") or []
-        calls.append(str(messages))
+        rendered = str(messages)
+        calls.append(rendered)
+        if "submit_goal_completion_judgment_v2" in rendered:
+            calls.append("supplier-return:goal-judgment")
+            judgment = SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": "submit_goal_completion_judgment_v2",
+                                        "arguments": (
+                                            '{"goal_achieved": true, "rationale": "scripted-ok"}'
+                                        ),
+                                    },
+                                }
+                            ],
+                        ),
+                        finish_reason="tool_calls",
+                    )
+                ],
+                usage=None,
+            )
+            return judgment
         calls.append("supplier-return:scripted-ok")
         if kwargs.get("stream"):
 
@@ -158,12 +207,9 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
         staticmethod(lambda **_kwargs: "local"),
     )
     monkeypatch.setattr("litellm.acompletion", scripted_completion)
+    project_base: Path | None = None
     try:
         async with engine.begin() as connection:
-            stubs = MetaData()
-            for name in ("agent_plan_runs", "agent_plan_versions"):
-                Table(name, stubs, Column("id", String, primary_key=True))
-            await connection.run_sync(stubs.create_all)
             await connection.run_sync(lambda sync: [table.create(sync) for table in _tables()])
         await host.bootstrap(
             profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
@@ -242,7 +288,7 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
                     operation_type="llm",
                     api_key_encrypted=encrypted,
                     base_url="http://127.0.0.1:9",
-                    llm_model="scripted-test",
+                    llm_model="openai/scripted-test",
                     config={},
                     is_active=True,
                     is_default=False,
@@ -292,7 +338,11 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
         import logging
 
         from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
+        from src.infrastructure.agent.state.agent_worker_state import resolve_project_base_path
         from src.infrastructure.scheduler.job_executor import execute_cron_job
+
+        project_base = resolve_project_base_path(project_id)
+        project_base.mkdir(parents=True, exist_ok=True)
 
         captured: list[str] = []
 
@@ -313,11 +363,63 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
                 await worker
         finally:
             root.removeHandler(handler)
+        missing_tables = [
+            line for line in captured if "does not exist" in line or "UndefinedTable" in line
+        ]
+        assert not missing_tables, missing_tables
+        async with factory() as session:
+            runs = (
+                await session.scalars(select(CronJobRunModel).order_by(CronJobRunModel.id))
+            ).all()
+            admissions = (
+                await session.scalars(
+                    select(LegacyCronAdmissionModel).order_by(LegacyCronAdmissionModel.job_id)
+                )
+            ).all()
+            authorities = (
+                await session.scalars(
+                    select(AgentRunAuthorityModel).order_by(AgentRunAuthorityModel.id)
+                )
+            ).all()
+            events = (
+                await session.scalars(
+                    select(AgentExecutionEvent).order_by(
+                        AgentExecutionEvent.event_time_us,
+                        AgentExecutionEvent.event_counter,
+                    )
+                )
+            ).all()
+            messages = (await session.scalars(select(Message).order_by(Message.created_at))).all()
+        assert len(runs) == 2
+        assert {run.status for run in runs} == {"success"}
+        assert all(run.finished_at is not None and run.error_message is None for run in runs)
+        assert {(row.job_id, row.status, row.execution_phase) for row in admissions} == {
+            (f"system-{suffix}", "success", "terminal"),
+            (f"agent-{suffix}", "success", "terminal"),
+        }
+        assert len(authorities) == 2
+        assert {row.status for row in authorities} == {"completed"}
+        assert {row.run_kind for row in authorities} == {"chat"}
+        assert all(row.error is None for row in authorities)
+        for authority in authorities:
+            owned = [event for event in events if event.message_id == authority.id]
+            assert any(event.event_type == "complete" for event in owned), [
+                event.event_type for event in owned
+            ]
+            assert any(
+                event.event_type == "assistant_message"
+                and "scripted-ok" in str(event.event_data.get("content", ""))
+                for event in owned
+            )
+        assert messages == []
+        assert calls.count("supplier-return:goal-judgment") >= 2
         assert any("system-marker" in call for call in calls), captured[-30:]
         assert any("agent-marker" in call for call in calls)
         assert calls.count("supplier-return:scripted-ok") >= 2
         assert not any("duplicate sources" in line for line in captured)
     finally:
+        if project_base is not None:
+            shutil.rmtree(project_base, ignore_errors=True)
         clear_process_generation_host_v2(host)
         await host.close()
         await engine.dispose()
