@@ -2,6 +2,12 @@
 
 Keep normal GC enabled. Avoid importing pytest fixtures or runtime implementations:
 these unrelated object graphs otherwise dominate generation-two collection time.
+
+Samples use process CPU time. Wall time also counts intervals when the runner
+deschedules this process, so a compose that stays near one steady cost can
+report a p95 above the budget during a short preemption window. Collections
+caused by the zero cyclic threshold still run inside the timed compose call
+and remain on the CPU clock.
 """
 
 from __future__ import annotations
@@ -47,9 +53,9 @@ def main() -> None:
             snapshot = compose_profile_v2(profile, manifests, generation=1)
         for _ in range(100):
             gc.collect()
-            started = time.perf_counter()
+            started = time.process_time()
             snapshot = compose_profile_v2(profile, manifests, generation=1)
-            samples.append((time.perf_counter() - started) * 1000.0)
+            samples.append((time.process_time() - started) * 1000.0)
     finally:
         gc.set_threshold(*previous_thresholds)
 
@@ -59,7 +65,16 @@ def main() -> None:
     assert snapshot.manifests == (manifest,)
     assert snapshot.entries
     assert parse_profile_snapshot_v2(profile_snapshot_v2_to_payload(snapshot)) == snapshot
-    print(json.dumps({"samples_ms": samples, "gc_enabled": gc.isenabled(), "warmup": 10}))
+    print(
+        json.dumps(
+            {
+                "samples_ms": samples,
+                "gc_enabled": gc.isenabled(),
+                "warmup": 10,
+                "clock": "process_time",
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

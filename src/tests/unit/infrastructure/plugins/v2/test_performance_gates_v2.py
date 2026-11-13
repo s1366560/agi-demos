@@ -73,6 +73,7 @@ def test_profile_v2_compose_p95_within_budget() -> None:
     samples = measurements["samples_ms"]
     assert measurements["gc_enabled"] is True
     assert measurements["warmup"] == 10
+    assert measurements["clock"] == "process_time"
     assert len(samples) == _ITERATIONS
     p95 = _p95(samples)
     assert p95 < 100.0, (
