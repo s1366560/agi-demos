@@ -24,7 +24,7 @@ JSON 84 行，加总一致：39 PASS、38 UNAUTHORIZED、1 ENV_MISSING、1 NOT_A
 - 原探针：`edit`、`batch_edit`、`patch`、`run_tests` 等返回授权拒绝；`read`、`bash`、`write` 通过。执行体标签是 `builtin:all-access`。
 - 复现：`classify_sandbox_tool_permission("edit")` 原先落到哨兵 `"ask"`。`ChatRunToolPermissionV2.decision` 对不在 `_READ`/`_MUTATION` 里的类别直接 `deny`，所以显式 `full_access` 也到不了放行分支。`bash` 已是 `bash`，`write` 在带 workspace write contract 时是 `workspace_file_write`，两者都能在 `full_access` 下通过。这解释了报告里的分裂，不是标签本身等于授权。
 - 前轮：PR #18/#19 的结构化拒绝保留。`format_chat_tool_denial` 没有改回旧的泛化句子。报告引用的句子是结构化拒绝里的后半句，不是另一套实现。
-- 本轮：已有名字的沙箱工具映射到现有类别（`edit`、`patch`、`write`、`bash`、`read`、`mcp`、`plugin_manager`）。`unknown_tool` 和 `docker_compose` 仍是 `"ask"`，`full_access` 继续拒绝。`ask` 对 `edit` 返回人工确认，`automatic` 只放行 `workspace_file_write` / `workspace_task_write`。`canvas_*` 从 `permission=None` 改为已声明的 `write`。`ask_clarification` 仍是未声明类别，继续拒绝。
+- 本轮：已有名字的沙箱工具映射到现有类别（`edit`、`patch`、`write`、`bash`、`read`、`mcp`、`plugin_manager`）。`unknown_tool`、`docker_compose` 和 `deps_install` 仍是 `"ask"`，`full_access` 继续拒绝。`deps_install` 不进 bash：协议工厂只把已知检查声明成类别，安装动作没有这条声明。`ask` 对 `edit` 返回人工确认，`automatic` 只放行 `workspace_file_write` / `workspace_task_write`。`canvas_*` 从 `permission=None` 改为已声明的 `write`。`ask_clarification` 仍是未声明类别，继续拒绝。
 - 回归：`test_full_access_declared_tool_grant.py`，以及原 sandbox 权限测试。
 - 边界：没有补全局 allowlist，没有 wildcard，没有用 bash 绕过拒绝。子运行天花板仍由 `peer_chat_permission_v2` 取父档与工作区档的较低者。显式 `detached: true` 的跳过逻辑没有改。
 
@@ -34,7 +34,7 @@ JSON 84 行，加总一致：39 PASS、38 UNAUTHORIZED、1 ENV_MISSING、1 NOT_A
 - 复现：spawn 记录创建时默认 `running`，request 在执行器之前写入消息总线。`execute_project_chat` 只有在进入模型循环后才会写终态和 history response。准入或初始化在此之前失败时，本地路径只结算根运行，actor 路径会让后台任务带异常退出，父会话仍看到 running 和一条 request。
 - 前轮：`_record_child_result_history` 是终态清理。它不负责把还没进入模型的子运行唤醒。成功的 session 模式仍保持 running，这是既有测试 `test_finalize_child_session_keeps_session_mode_running`。
 - 本轮：operation 已钉住时仍走原来的 generation finalizer。operation 还没钉住时，不伪造 pin，也不打开全局 Redis。`spawn_agent` 登记的那条父子记录负责把 SpawnRecord 写成 `failed`、注销子 session、把 run 标成 failed，并在同一条消息总线上追加 `failure_class=backend`。已取消、已停止或已完成的记录不被后到的失败覆盖。跨项目或错误父会话直接拒绝。显式 `detached: true` 只失败子记录，父 session 保持注册。
-- 回归：`test_unpinned_child_bootstrap_failure.py` 覆盖同进程 actor 和本地队列。跨进程不使用那张进程内 owner 表。`spawn_agent` 在总线是 Redis 时把同一条 spawn 写进已有的 `RedisSpawnManager`。写完后读不回一致的记录就拒绝启动执行器，内存状态记为 failed。另一个解释器只在会话行、这条 Redis 记录、以及总线上已有的 parent request 三者一致时，才把共享状态写成 `failed`。`test_cross_process_child_bootstrap.py` 用本机 Docker 上的 Postgres 和 Redis，不是 fakeredis，也不是 SQLite。它覆盖跨项目、跨 tenant、错误 child agent、记录缺失、Redis 子 agent 与会话行矛盾、父会话 archived、cancelled 不被覆盖，以及两个进程同时结算只留下一条 response。子进程 owner 表长度是 0。这不是 Ray 集群。
+- 回归：`test_unpinned_child_bootstrap_failure.py` 覆盖同进程 actor 和本地队列。跨进程不使用那张进程内 owner 表。`spawn_agent` 在总线是 Redis 时把同一条 spawn 写进已有的 `RedisSpawnManager`。写完后读不回一致的记录就拒绝启动执行器，内存状态记为 failed。另一个解释器只在会话行、这条 Redis 记录、以及总线上已有的 parent request 三者一致时，才把共享状态写成 `failed`。`test_cross_process_child_bootstrap.py` 用本机 Docker 上的 Postgres 和 Redis，不是 fakeredis，也不是 SQLite。CI 的 unit shard 只写入 `DATABASE_URL`，不跑 Alembic，所以 `users` 不存在时测试按 ORM 建这几张表，结束再删掉；已经有 `users` 的库不动。它覆盖跨项目、跨 tenant、错误 child agent、记录缺失、Redis 子 agent 与会话行矛盾、父会话 archived、cancelled 不被覆盖，以及两个进程同时结算只留下一条 response。子进程 owner 表长度是 0。这不是 Ray 集群。
 - 边界：没有用真实 MiniMax，也没有在用户 Mac 上派生子代理。这次没有启动 Ray head/worker。
 
 ## D3 system_api 代际

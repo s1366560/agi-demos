@@ -1,8 +1,11 @@
 """A second process can fail a spawn only from shared records.
 
 This is not a Ray cluster. The child is a spawned interpreter. It shares the
-local Postgres and Redis with the parent and does not inherit the process-local
-spawn owner map. Redis and Postgres here are the project's local services.
+process Postgres and Redis with the parent and does not inherit the process-local
+spawn owner map. Both are the project's real services, not an in-memory or file
+database. The unit-test Postgres has no Alembic schema, so this file creates the
+ORM tables it writes when ``users`` is absent and drops those tables afterwards.
+A database that already has ``users`` is left unchanged.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ import uuid
 from typing import Any
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import Column, MetaData, String, Table, delete, inspect, text
 
 from src.domain.model.agent.spawn_mode import SpawnMode
 from src.domain.ports.services.agent_message_bus_port import AgentMessageType
@@ -36,6 +39,54 @@ from src.infrastructure.plugins.v2.agent_worker_runtime import (
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 pytestmark = pytest.mark.unit
+
+_PLAN_TABLES = MetaData()
+Table("agent_plan_runs", _PLAN_TABLES, Column("id", String, primary_key=True))
+Table("agent_plan_versions", _PLAN_TABLES, Column("id", String, primary_key=True))
+_APP_TABLES = (
+    User.__table__,
+    Tenant.__table__,
+    Project.__table__,
+    Conversation.__table__,
+    AgentRunAuthorityModel.__table__,
+    ToolExecutionRecord.__table__,
+)
+_CREATED_TABLES = (
+    "tool_execution_records",
+    "agent_run_authorities",
+    "conversations",
+    "projects",
+    "tenants",
+    "users",
+    "agent_plan_versions",
+    "agent_plan_runs",
+)
+
+
+async def _prepare_schema() -> bool:
+    """Create the settler tables only when this database has no migrated schema."""
+    from src.infrastructure.adapters.secondary.persistence.database import engine
+
+    async with engine.begin() as connection:
+
+        def _create(sync: Any) -> bool:
+            if inspect(sync).has_table("users"):
+                return False
+            _PLAN_TABLES.create_all(sync)
+            for table in _APP_TABLES:
+                table.create(sync, checkfirst=True)
+            return True
+
+        return bool(await connection.run_sync(_create))
+
+
+async def _drop_created_schema() -> None:
+    from src.infrastructure.adapters.secondary.persistence.database import engine
+
+    async with engine.begin() as connection:
+        await connection.execute(
+            text("DROP TABLE IF EXISTS " + ", ".join(_CREATED_TABLES) + " CASCADE")
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -321,6 +372,7 @@ def _durable(ids: dict[str, str], **overrides: str) -> dict[str, Any]:
 
 @pytest.mark.asyncio
 async def test_other_process_settles_only_the_registered_spawn() -> None:
+    created_schema = await _prepare_schema()
     assert len(_owners) == 0
     live = await _seed(uuid.uuid4().hex[:12])
     cancelled = await _seed(uuid.uuid4().hex[:12])
@@ -390,6 +442,8 @@ async def test_other_process_settles_only_the_registered_spawn() -> None:
     finally:
         for ids in (live, cancelled, orphan):
             await _cleanup(ids)
+        if created_schema:
+            await _drop_created_schema()
 
 
 def _settle_once(kwargs: dict[str, str]) -> dict[str, Any]:
@@ -423,6 +477,7 @@ async def _reject(kwargs: dict[str, str]) -> str:
 
 @pytest.mark.asyncio
 async def test_concurrent_settlement_keeps_one_response_and_rejects_bad_identity() -> None:
+    created_schema = await _prepare_schema()
     ids = await _seed(uuid.uuid4().hex[:12])
     try:
         assert await _reject(
@@ -482,6 +537,8 @@ async def test_concurrent_settlement_keeps_one_response_and_rejects_bad_identity
         assert [item.message_type for item in history].count(AgentMessageType.RESPONSE) == 1
     finally:
         await _cleanup(ids)
+        if created_schema:
+            await _drop_created_schema()
 
 
 class _FailingSpawnRedis:
