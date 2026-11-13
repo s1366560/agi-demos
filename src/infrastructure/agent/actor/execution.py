@@ -233,10 +233,14 @@ async def _resolve_child_terminal_status(
 
         orchestrator = current_agent_orchestrator_v2()
         record = await orchestrator.get_spawn_record(child_session_id)
+        if record is not None and record.status in {"stopped", "cancelled"}:
+            return None
+        # A failed child is terminal in both run and session mode. A successful
+        # persistent session stays running so follow-up turns can continue.
+        if not success:
+            return "failed"
         if record is None or record.mode != SpawnMode.SESSION:
             return default_status
-        if record.status in {"stopped", "cancelled"}:
-            return None
         return "running"
     except RuntimeV2Error:
         raise
@@ -247,6 +251,36 @@ async def _resolve_child_terminal_status(
             exc_info=True,
         )
         return default_status
+
+
+async def publish_child_bootstrap_failure(
+    *,
+    agent_id: str,
+    child_session_id: str,
+    request_message_id: str,
+    parent_session_id: str,
+    error: BaseException,
+) -> None:
+    """Surface a child that was admitted but never entered model execution.
+
+    This does not start an explicitly detached run and does not apply a
+    no-output timer. The parent sees a failed spawn status plus a history
+    response that names the structured cause.
+    """
+    code = getattr(error, "code", None)
+    if not isinstance(code, str) or not code:
+        code = type(error).__name__
+    await _finalize_child_session_result(
+        agent_id=agent_id,
+        child_session_id=child_session_id,
+        request_message_id=request_message_id,
+        parent_session_id=parent_session_id,
+        result_content="",
+        success=False,
+        event_count=0,
+        execution_time_ms=0.0,
+        error_message=f"failure_class=backend code={code} {error}",
+    )
 
 
 async def _resolve_chat_runtime_overrides(

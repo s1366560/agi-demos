@@ -473,8 +473,27 @@ async def system_api_tool(  # noqa: PLR0911
     timeout_seconds: float | None = 30.0,
 ) -> ToolResult:
     """List, describe, or invoke a MemStack API operation."""
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
     if action == "list":
-        catalog = _operation_catalog()
+        try:
+            catalog = _operation_catalog()
+        except RuntimeV2Error as exc:
+            if exc.code != "route_generation_unavailable":
+                raise
+            payload = {
+                "status": "unavailable",
+                "failure_class": "backend",
+                "code": exc.code,
+                "generation_status": "unpublished",
+                "message": str(exc),
+            }
+            return ToolResult(
+                output=_json(payload),
+                title="System API generation unavailable",
+                metadata=payload,
+                is_error=True,
+            )
         operations = _filter_operations(
             search=search,
             tag=tag,

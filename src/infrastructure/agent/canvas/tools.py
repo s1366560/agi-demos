@@ -199,7 +199,7 @@ def get_canvas_manager() -> CanvasManager:
         },
         "required": ["block_type", "title", "content"],
     },
-    permission=None,
+    permission="write",
     category="canvas",
 )
 async def canvas_create(
@@ -321,7 +321,7 @@ def _resolve_block_id(
         },
         "required": ["block_id"],
     },
-    permission=None,
+    permission="write",
     category="canvas",
 )
 async def canvas_update(
@@ -432,7 +432,7 @@ async def canvas_update(
         },
         "required": ["block_id"],
     },
-    permission=None,
+    permission="write",
     category="canvas",
 )
 async def canvas_delete(
@@ -547,7 +547,7 @@ async def canvas_delete(
         },
         "required": ["title", "components"],
     },
-    permission=None,
+    permission="write",
     category="canvas",
 )
 async def canvas_create_interactive(
