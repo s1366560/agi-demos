@@ -186,6 +186,37 @@ async def test_agent_capability_catalog_rejects_duplicate_names_across_sources()
 
 
 @pytest.mark.unit
+async def test_workspace_drone_and_packaged_drone_stay_distinct_sources() -> None:
+    """The checkout skill and the generation package share a name and differ in body."""
+    workspace = (_ROOT / ".memstack/skills/drone/SKILL.md").read_text(encoding="utf-8")
+    packaged = (_ROOT / "src/infrastructure/plugins/v2/skills/drone/SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert workspace != packaged
+    catalog = AgentCapabilityCatalogV2()
+    _ = catalog.register_skills(
+        "agent-owned-skills",
+        lambda **_kwargs: [_skill("drone")],
+    )
+    _ = catalog.register_skills(
+        "builtin-drone-skill",
+        lambda **_kwargs: [
+            replace(_skill("drone"), description="Packaged generation drone skill")
+        ],
+    )
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await catalog.resolve(
+            agent=SimpleNamespace(),
+            tenant_id="tenant-a",
+            project_id="project-a",
+        )
+
+    assert error.value.code == "agent_capability_conflict"
+    assert "builtin-drone-skill" in str(error.value)
+
+
+@pytest.mark.unit
 async def test_runtime_resolves_agent_state_only_through_explicit_contributions() -> None:
     manager = await _manager(generation=1)
     agent = SimpleNamespace(skills=[_skill()], subagents=[_subagent()])

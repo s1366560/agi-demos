@@ -232,7 +232,16 @@ class LifecycleMixin:
             )
             result = await loader.load_all()
             if result.count > 0:
-                self.skills.extend(loaded.skill for loaded in result.skills)
+                # get_or_create_skills already scanned this project root. Append
+                # only names that are not already on the agent so one filesystem
+                # source is not registered twice. A different source that publishes
+                # the same name still conflicts later.
+                existing_names = {skill.name for skill in self.skills}
+                self.skills.extend(
+                    loaded.skill
+                    for loaded in result.skills
+                    if loaded.skill.name not in existing_names
+                )
                 # P1-Fix3: Update ProcessorConfig.skill_names so /skills
                 # command fallback stays current after lazy filesystem load.
                 self.config.skill_names = [s.name for s in self.skills]
