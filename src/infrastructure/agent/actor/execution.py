@@ -1165,9 +1165,9 @@ async def execute_project_chat(  # noqa: PLR0915
             tenant_agent_config_data=request.tenant_agent_config,
             preferred_language=request.preferred_language,
             api_auth_token=request.api_auth_token,
-            # message_id is the chat message, not an approved plan run. Only an
-            # explicit canonical run may enter the approved-run permission guard.
-            canonical_run_id=request.canonical_run_id,
+            # Chat admission uses the message id as the authority id. Cron creates
+            # that authority before dispatch; a plan run passes its own id.
+            canonical_run_id=run_authority_id,
             plugin_generation=request.plugin_generation,
         ):
             if (
@@ -1562,7 +1562,7 @@ async def continue_project_chat(  # noqa: PLR0912, PLR0915
             conversation_context=conversation_context,
             tenant_id=state.tenant_id,
             message_id=state.message_id,
-            canonical_run_id=state.canonical_run_id,
+            canonical_run_id=run_authority_id,
             plugin_generation=state.plugin_generation,
         ):
             evt_time_us, evt_counter = time_gen.next()
