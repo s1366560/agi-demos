@@ -535,6 +535,14 @@ describe('ProviderConfigModal', () => {
       },
     };
 
+    let resolveTypes: (value: ProviderTypeDescriptor[]) => void = () => {};
+    vi.mocked(providerAPI.listTypes).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveTypes = resolve;
+        })
+    );
+
     render(
       <ProviderConfigModal
         isOpen
@@ -544,11 +552,21 @@ describe('ProviderConfigModal', () => {
       />
     );
 
-    // Editing an existing provider moves to Credentials after the load effect.
-    // Clicking Next before that effect lands on Credentials, where the models
-    // step's advanced embedding controls are not mounted.
+    // Editing loads capabilities after the step has already moved to
+    // Credentials. Next stays disabled until that load finishes, so the
+    // models step and its embedding controls are not mounted yet.
     await screen.findByRole('button', { name: 'Back' });
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    const next = screen.getByRole('button', { name: 'Next' });
+    expect(next).toBeDisabled();
+    expect(
+      screen.queryByRole('button', { name: 'Advanced Embedding Settings' })
+    ).not.toBeInTheDocument();
+
+    resolveTypes(providerTypes);
+    await waitFor(() => {
+      expect(next).toBeEnabled();
+    });
+    fireEvent.click(next);
     fireEvent.click(await screen.findByRole('button', { name: 'Advanced Embedding Settings' }));
     expect(screen.queryByText('Provider Options (JSON)')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));

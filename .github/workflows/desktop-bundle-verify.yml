@@ -1,0 +1,83 @@
+name: Desktop Bundle Verification
+
+# Unsigned local installer check. This is not a release: it has no signing
+# environment, no publish credentials, and no tag authorization bypass.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-bundle-verify-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify unsigned desktop bundle
+    runs-on: macos-latest
+    timeout-minutes: 70
+    permissions:
+      contents: read
+    env:
+      # Match the former pull-request bundle profile: release binaries without
+      # debuginfo. Tests stay on the pull-request gate and are not repeated here.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+    defaults:
+      run:
+        working-directory: agi-stack
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Cache Cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agi-stack/target
+            .cache/avernet-bcs
+          key: cargo-desktop-${{ runner.os }}-${{ hashFiles('agi-stack/Cargo.lock', 'third_party/avernet-bcs/Cargo.lock') }}
+          restore-keys: cargo-desktop-${{ runner.os }}-
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: agi-stack/apps/desktop/pnpm-lock.yaml
+
+      - name: Build unsigned desktop bundle
+        run: make desktop-bundle
+
+      - name: Smoke check desktop bundle
+        run: make desktop-bundle-smoke
+
+      - name: Upload unsigned desktop bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-bundle-verify
+          path: |
+            agi-stack/apps/desktop/release/*.dmg
+            agi-stack/apps/desktop/release/*.zip
+            agi-stack/apps/desktop/release/*.exe
+            agi-stack/apps/desktop/release/*.AppImage
+            agi-stack/apps/desktop/release/*.deb
+            agi-stack/apps/desktop/release/*.blockmap
+            agi-stack/apps/desktop/release/latest*.yml
+          if-no-files-found: error
