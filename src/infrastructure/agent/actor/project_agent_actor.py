@@ -531,9 +531,10 @@ class ProjectAgentActor:
             self._current_conversation_id = request.conversation_id
             self._current_message_id = request.message_id
 
+            execution_started = False
             try:
                 if not self._agent:
-                    return
+                    raise RuntimeError("agent runtime is not initialized")
 
                 async with self._admit_plugin_turn(request) as operation:
                     from src.application.services.wasm_operation_authority_v2 import (
@@ -546,6 +547,7 @@ class ProjectAgentActor:
                         distribution = self._plugin_admission_v2.host.distribution_for_generation(
                             operation.generation
                         )
+                        execution_started = True
                         result = await execute_project_chat(
                             agent,
                             replace(
@@ -565,6 +567,35 @@ class ProjectAgentActor:
                         request.message_id,
                         result.error_message,
                     )
+            except Exception as exc:
+                if not execution_started and request.agent_id and request.parent_session_id:
+                    from src.infrastructure.agent.actor.execution import (
+                        publish_child_bootstrap_failure,
+                    )
+
+                    try:
+                        await publish_child_bootstrap_failure(
+                            agent_id=request.agent_id,
+                            child_session_id=request.conversation_id,
+                            request_message_id=request.canonical_run_id or request.message_id,
+                            parent_session_id=request.parent_session_id,
+                            project_id=self._config.project_id if self._config is not None else "",
+                            tenant_id=self._config.tenant_id if self._config is not None else "",
+                            error=exc,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "[ProjectAgentActor] Failed to publish child bootstrap error",
+                            exc_info=True,
+                        )
+                    logger.error(
+                        "[ProjectAgentActor] Child chat did not start: message_id=%s error=%s",
+                        request.message_id,
+                        exc,
+                        exc_info=True,
+                    )
+                else:
+                    raise
             finally:
                 if self._current_message_id == request.message_id:
                     self._current_conversation_id = None

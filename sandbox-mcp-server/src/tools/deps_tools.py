@@ -11,8 +11,10 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import signal
+import sys
 import time
 from typing import Any, Dict
 
@@ -34,9 +36,82 @@ def classify_install_failure(message: str) -> str:
         )
     return message
 
+
+def classify_venv_creation_failure(message: str) -> str:
+    """Classify a failed ``python -m venv`` without calling it a permission error.
+
+    Missing ensurepip or the venv module is an interpreter packaging gap.
+    Only an actual permission failure stays ``environment_not_writable``.
+    """
+
+    lowered = message.lower()
+    if (
+        "ensurepip" in lowered
+        or "no module named venv" in lowered
+        or "no module named 'venv'" in lowered
+    ):
+        return (
+            "venv_creation_failed: the interpreter cannot create a virtualenv "
+            "because ensurepip or the venv module is unavailable. "
+            "This is not a sandbox write-permission failure. " + message
+        )
+    if "Permission denied" in message or "Errno 13" in message:
+        return classify_install_failure(message)
+    return "venv_creation_failed: " + message
+
+
+_WORKSPACE_VENV_DIR = ".deps-venv"
+
+
+def select_pip_install_target(
+    workspace_dir: str,
+    venv_path: str | None,
+    *,
+    prefix_writable: bool,
+) -> tuple[str | None, str]:
+    """Choose a pip target without changing the system prefix or PYTHONPATH.
+
+    An explicit venv stays on that path. A writable interpreter prefix keeps
+    the default pip. A read-only prefix uses a workspace-local venv instead of
+    chmod on site-packages.
+    """
+    if venv_path:
+        if not os.path.isabs(venv_path):
+            venv_path = os.path.join(workspace_dir, venv_path)
+        return venv_path, "explicit_venv"
+    if prefix_writable:
+        return None, "interpreter_prefix"
+    return os.path.join(workspace_dir, _WORKSPACE_VENV_DIR), "workspace_venv"
+
+
+def interpreter_prefix_writable(prefix: str | None = None) -> bool:
+    """Return whether the interpreter prefix can accept new packages."""
+    candidate = prefix or sys.prefix
+    site = os.path.join(candidate, "lib")
+    target = site if os.path.isdir(site) else candidate
+    return os.access(target, os.W_OK)
+
+
+def local_workspace_wheel(workspace_dir: str, package: str) -> str | None:
+    """Return a wheel path only when it stays inside the workspace."""
+
+    if not package.endswith(".whl"):
+        return None
+    root = os.path.realpath(workspace_dir)
+    candidate = os.path.realpath(
+        package if os.path.isabs(package) else os.path.join(workspace_dir, package)
+    )
+    if candidate != root and not candidate.startswith(root + os.sep):
+        return None
+    if not os.path.isfile(candidate):
+        return None
+    return candidate
+
+
 # Regex to validate pip package specifiers (name with optional version constraints).
 # Allows: pandas, numpy>=2.0, requests[security]==2.31.0, my-pkg~=1.0
 # Blocks: shell metacharacters like ;, &, |, $, `, (, ), etc.
+_LOCAL_WHEEL_RE = re.compile(r"^[A-Za-z0-9_./-]+\.whl$")
 _PIP_PKG_RE = re.compile(
     r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?(\[[A-Za-z0-9,._-]+\])?"
     r"([><=!~]=?[A-Za-z0-9.*+!_-]+)*$"
@@ -67,7 +142,7 @@ def _validate_packages(
         return [], "No packages specified"
 
     if package_type == "pip":
-        pattern = _PIP_PKG_RE
+        pattern = _PIP_PKG_RE if not any(item.endswith(".whl") for item in raw) else _LOCAL_WHEEL_RE
     elif package_type in ("system", "apt"):
         pattern = _SYSTEM_PKG_RE
     elif package_type == "npm":
@@ -135,6 +210,60 @@ async def _run_subprocess(
     return stdout_str, stderr_str, process.returncode or 0
 
 
+def _workspace_owned_venv(workspace_dir: str, venv_path: str) -> bool:
+    expected = os.path.realpath(os.path.join(workspace_dir, _WORKSPACE_VENV_DIR))
+    return os.path.realpath(venv_path) == expected
+
+
+async def _create_venv_or_error(
+    venv_path: str,
+    workspace_dir: str,
+    *,
+    install_scope: str | None,
+    install_target: str | None,
+) -> Dict[str, Any] | None:
+    """Create a venv. Return an error payload, or None when bin/pip exists."""
+
+    pip_cmd = os.path.join(venv_path, "bin", "pip")
+    owned = _workspace_owned_venv(workspace_dir, venv_path)
+    if owned and os.path.isdir(venv_path):
+        shutil.rmtree(venv_path, ignore_errors=True)
+    existed = os.path.exists(venv_path)
+    logger.info("Creating venv at %s", venv_path)
+    try:
+        stdout, stderr, rc = await _run_subprocess(
+            f"python3 -m venv {shlex.quote(venv_path)}",
+            cwd=workspace_dir,
+            timeout=60,
+        )
+    except asyncio.TimeoutError:
+        if not existed or owned:
+            shutil.rmtree(venv_path, ignore_errors=True)
+        return {
+            "content": [{"type": "text", "text": "Error: Timed out creating virtualenv"}],
+            "isError": True,
+            "metadata": {
+                "install_scope": install_scope,
+                "install_target": install_target,
+                "venv_creation": "failed",
+            },
+        }
+    if rc == 0 and os.path.isfile(pip_cmd):
+        return None
+    if not existed or owned:
+        shutil.rmtree(venv_path, ignore_errors=True)
+    message = classify_venv_creation_failure(stderr.strip() or stdout.strip() or f"exit code {rc}")
+    return {
+        "content": [{"type": "text", "text": f"Error: {message}"}],
+        "isError": True,
+        "metadata": {
+            "install_scope": install_scope,
+            "install_target": install_target,
+            "venv_creation": "failed",
+        },
+    }
+
+
 # =============================================================================
 # DEPS_INSTALL TOOL
 # =============================================================================
@@ -177,39 +306,48 @@ async def deps_install(
 
         results: list[dict[str, Any]] = []
         errors: list[str] = []
+        install_scope: str | None = None
+        install_target: str | None = None
 
         if package_type == "pip":
             pip_cmd = "pip"
+            venv_path, install_scope = select_pip_install_target(
+                _workspace_dir,
+                venv_path,
+                prefix_writable=interpreter_prefix_writable(),
+            )
+            install_target = venv_path or sys.prefix
 
             # Handle venv creation / selection
             if venv_path:
                 if not os.path.isabs(venv_path):
                     venv_path = os.path.join(_workspace_dir, venv_path)
 
-                if not os.path.exists(os.path.join(venv_path, "bin", "pip")):
-                    logger.info(f"Creating venv at {venv_path}")
-                    try:
-                        await _run_subprocess(
-                            f"python3 -m venv {venv_path}",
-                            cwd=_workspace_dir,
-                            timeout=60,
-                        )
-                    except asyncio.TimeoutError:
-                        return {
-                            "content": [
-                                {"type": "text", "text": "Error: Timed out creating virtualenv"}
-                            ],
-                            "isError": True,
-                        }
-
                 pip_cmd = os.path.join(venv_path, "bin", "pip")
+                if not os.path.isfile(pip_cmd):
+                    created = await _create_venv_or_error(
+                        venv_path,
+                        _workspace_dir,
+                        install_scope=install_scope,
+                        install_target=install_target,
+                    )
+                    if created is not None:
+                        return created
 
             # Install each package
             for pkg in pkgs:
-                logger.info(f"Installing pip package: {pkg}")
+                logger.info("Installing pip package: %s", pkg)
+                wheel = local_workspace_wheel(_workspace_dir, pkg)
+                if pkg.endswith(".whl") and wheel is None:
+                    msg = "environment_not_writable: wheel path escapes the workspace"
+                    results.append({"package": pkg, "status": "failed", "error": msg})
+                    errors.append(msg)
+                    continue
+                install_spec = wheel or pkg
+                flags = "--no-index --no-deps " if wheel else ""
                 try:
                     stdout, stderr, rc = await _run_subprocess(
-                        f"{pip_cmd} install {pkg}",
+                        f"{shlex.quote(pip_cmd)} install {flags}{shlex.quote(install_spec)}",
                         cwd=_workspace_dir,
                         timeout=timeout,
                     )
@@ -320,6 +458,8 @@ async def deps_install(
                 "errors": errors,
                 "duration_seconds": round(elapsed, 2),
                 "package_type": package_type,
+                "install_scope": install_scope,
+                "install_target": install_target,
             },
         }
 

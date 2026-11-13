@@ -80,7 +80,11 @@ async def execute_cron_job(job_id: str) -> None:
         except Exception:
             if admission_attempted:
                 # Commit/delivery uncertainty is not proof that execution has stopped.
-                logger.warning("[CronExecutor] Job %s delivery unresolved", job_id)
+                logger.warning(
+                    "[CronExecutor] Job %s delivery unresolved",
+                    job_id,
+                    exc_info=True,
+                )
                 return
             await session.rollback()
             await _record_preparation_failure(job, run, session)
@@ -224,14 +228,45 @@ async def _execute_payload(
     session: AsyncSession,
     admission: LegacyCronAdmissionIdentity,
 ) -> None:
-    """Execute the job payload with timeout."""
+    """Execute the job payload with timeout.
+
+    The scheduler has no HTTP operation. When the process host has published a
+    generation, lease that generation for the dispatch so ``start_chat_actor``
+    can attach it. No host leaves the previous unpinned behavior.
+    """
     timeout = job.timeout_seconds or 300
 
-    try:
+    async def _run() -> None:
         await asyncio.wait_for(
             _dispatch_payload(job, conversation_id, session, admission),
             timeout=timeout,
         )
+
+    from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    try:
+        current_process_generation_host_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "process_generation_host_not_configured":
+            raise
+        try:
+            await _run()
+        except TimeoutError as err:
+            raise TimeoutError(f"Cron job {job.id} execution timed out after {timeout}s") from err
+        return
+
+    from src.infrastructure.plugins.v2.boundary import pin_agent_turn_operation_v2
+
+    try:
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"cron-payload:{job.id}:{admission.message_id}",
+            tenant_id=job.tenant_id,
+            project_id=job.project_id,
+            session_id=conversation_id,
+            force_process_host_lease=True,
+        ):
+            await _run()
     except TimeoutError as err:
         raise TimeoutError(f"Cron job {job.id} execution timed out after {timeout}s") from err
 
@@ -271,6 +306,7 @@ async def _execute_agent_turn(
 
     message = job.payload.config.get("message", "")
     message_id = admission.message_id
+    await _ensure_cron_chat_authority(session, conversation, message_id, message)
 
     bootstrapper = _get_bootstrapper()
     _ = await bootstrapper.start_chat_actor(
@@ -280,6 +316,7 @@ async def _execute_agent_turn(
         conversation_context=[],
         correlation_id=f"cron:{job.id}",
         legacy_cron_admission=admission.to_wire(),
+        canonical_run_id=message_id,
     )
 
     logger.info(
@@ -307,15 +344,18 @@ async def _execute_system_event(
 
     content = job.payload.config.get("content", "")
     message_id = admission.message_id
+    user_message = f"[System Event] {content}"
+    await _ensure_cron_chat_authority(session, conversation, message_id, user_message)
 
     bootstrapper = _get_bootstrapper()
     _ = await bootstrapper.start_chat_actor(
         conversation=conversation,
         message_id=message_id,
-        user_message=f"[System Event] {content}",
+        user_message=user_message,
         conversation_context=[],
         correlation_id=f"cron:{job.id}",
         legacy_cron_admission=admission.to_wire(),
+        canonical_run_id=message_id,
     )
 
     logger.info(
@@ -330,6 +370,27 @@ async def _execute_system_event(
 # ---------------------------------------------------------------------------
 
 _bootstrapper_instance: AgentRuntimeBootstrapper | None = None
+
+
+async def _ensure_cron_chat_authority(
+    session: AsyncSession,
+    conversation: object,
+    message_id: str,
+    request_message: str,
+) -> None:
+    """Admit the cron turn through the same chat authority ordinary turns use."""
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+        ensure_chat_run_authority,
+    )
+
+    _ = await ensure_chat_run_authority(
+        session,
+        conversation=conversation,  # type: ignore[arg-type]
+        run_id=message_id,
+        request_message=request_message,
+        client_message_id=message_id,
+        app_model_context=None,
+    )
 
 
 def _get_bootstrapper() -> AgentRuntimeBootstrapper:

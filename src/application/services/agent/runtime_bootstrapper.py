@@ -1381,3 +1381,20 @@ async def _settle_local_bootstrap_failure(
         )
     except Exception as settlement_error:
         logger.warning("[AgentService] Failed to settle bootstrap error: %s", settlement_error)
+    if request.agent_id and request.parent_session_id:
+        from src.infrastructure.agent.actor.execution import publish_child_bootstrap_failure
+
+        try:
+            await publish_child_bootstrap_failure(
+                agent_id=request.agent_id,
+                child_session_id=request.conversation_id,
+                request_message_id=request.canonical_run_id or request.message_id,
+                parent_session_id=request.parent_session_id,
+                project_id=config.project_id,
+                tenant_id=config.tenant_id,
+                error=error,
+            )
+        except Exception as child_error:
+            logger.warning(
+                "[AgentService] Failed to publish child bootstrap error: %s", child_error
+            )

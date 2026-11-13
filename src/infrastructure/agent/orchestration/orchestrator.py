@@ -34,6 +34,7 @@ from src.infrastructure.agent.orchestration.session_registry import (
 )
 from src.infrastructure.agent.orchestration.spawn_manager import SpawnManager
 from src.infrastructure.agent.subagent.spawn_validator import SpawnValidator
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -457,6 +458,17 @@ class AgentOrchestrator:
             conversation_id=child_session_id,
             project_id=project_id,
         )
+        from src.infrastructure.agent.orchestration.bootstrap_failure_settlement import (
+            bind_spawn_bootstrap_owner,
+            unbind_spawn_bootstrap_owner,
+        )
+
+        bind_spawn_bootstrap_owner(
+            child_session_id=child_session_id,
+            orchestrator=self,
+            run_conversation_id=conversation_id,
+            detached=enriched_metadata.get("detached") is True,
+        )
 
         execution_request = SpawnExecutionRequest(
             parent_agent_id=resolved_parent_agent_id,
@@ -487,6 +499,15 @@ class AgentOrchestrator:
                     content=message,
                     message_type=AgentMessageType.REQUEST,
                 )
+                await self._mirror_shared_spawn(
+                    parent_agent_id=resolved_parent_agent_id,
+                    child_agent_id=resolved_target_agent_id,
+                    child_session_id=child_session_id,
+                    project_id=project_id,
+                    parent_session_id=parent_session_id,
+                    mode_value=mode.value,
+                    task_summary=message[:200],
+                )
                 await self._spawn_executor(execution_request)
             except Exception:
                 await _fail_peer_admission(execution_request.admission)
@@ -499,6 +520,8 @@ class AgentOrchestrator:
                     conversation_id=child_session_id,
                     project_id=project_id,
                 )
+                await self._mirror_shared_status(child_session_id, "failed")
+                unbind_spawn_bootstrap_owner(child_session_id)
                 raise
         else:
             await self._message_bus.send_message(
@@ -507,6 +530,15 @@ class AgentOrchestrator:
                 session_id=child_session_id,
                 content=message,
                 message_type=AgentMessageType.REQUEST,
+            )
+            await self._mirror_shared_spawn(
+                parent_agent_id=resolved_parent_agent_id,
+                child_agent_id=resolved_target_agent_id,
+                child_session_id=child_session_id,
+                project_id=project_id,
+                parent_session_id=parent_session_id,
+                mode_value=mode.value,
+                task_summary=message[:200],
             )
 
         logger.info(
@@ -714,6 +746,96 @@ class AgentOrchestrator:
             request = replace(request, admission=await self._session_turn_preflight(request))
         return request
 
+    async def record_unadmitted_child_failure(
+        self,
+        *,
+        child_session_id: str,
+        child_agent_id: str,
+        parent_session_id: str,
+        project_id: str,
+        request_message_id: str,
+        error_message: str,
+        detached: bool,
+        run_conversation_id: str | None,
+    ) -> str:
+        """Record a bootstrap failure on the spawn that already owns this child.
+
+        This does not pin an operation, admit a generation, or start the child.
+        A cancelled or completed record is left unchanged. A detached child is
+        still failed, and the parent session is not closed.
+        """
+        record = await self._spawn_manager.get_record(child_session_id)
+        if record is None:
+            raise RuntimeV2Error(
+                "child_bootstrap_record_missing",
+                "spawn record is not registered for this child session",
+            )
+        if (
+            record.project_id != project_id
+            or record.child_agent_id != child_agent_id
+            or not await self._spawn_manager.parent_owns_child(parent_session_id, child_session_id)
+        ):
+            raise RuntimeV2Error(
+                "child_bootstrap_scope_rejected",
+                "bootstrap failure does not match the registered spawn relationship",
+            )
+        if record.status in {"stopped", "cancelled", "completed"}:
+            return "preserved"
+
+        if record.status == "running":
+            updated = await self._spawn_manager.update_status(
+                child_session_id,
+                "failed",
+                conversation_id=run_conversation_id,
+            )
+            if updated is None:
+                raise RuntimeV2Error(
+                    "child_bootstrap_record_missing",
+                    "spawn record disappeared before bootstrap failure was recorded",
+                )
+            await self._session_registry.unregister(
+                conversation_id=child_session_id,
+                project_id=project_id,
+            )
+
+        terminal_message_id = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"{child_session_id}:{request_message_id}:bootstrap-failure",
+            )
+        )
+        history = await self._message_bus.get_message_history(
+            session_id=child_session_id,
+            limit=50,
+        )
+        already_recorded = any(
+            message.metadata is not None
+            and message.metadata.get("terminal_message_id") == terminal_message_id
+            and message.content == error_message
+            for message in history
+        )
+        if already_recorded:
+            return "already"
+        await self._message_bus.send_message(
+            from_agent_id=child_agent_id,
+            to_agent_id="",
+            session_id=child_session_id,
+            content=error_message,
+            message_type=AgentMessageType.RESPONSE,
+            metadata={
+                "source": "child_bootstrap_failure",
+                "parent_session_id": parent_session_id,
+                "project_id": project_id,
+                "success": False,
+                "detached": detached,
+                "failure_class": "backend",
+                "error_message": error_message,
+                "source_message_id": request_message_id,
+                "terminal_message_id": terminal_message_id,
+            },
+        )
+        return "settled"
+
     async def update_spawn_status(
         self,
         child_session_id: str,
@@ -722,15 +844,64 @@ class AgentOrchestrator:
         conversation_id: str | None = None,
     ) -> SpawnRecord | None:
         """Update lifecycle status for a spawned child session."""
-        return await self._spawn_manager.update_status(
+        updated = await self._spawn_manager.update_status(
             child_session_id=child_session_id,
             new_status=new_status,
             conversation_id=conversation_id,
         )
+        await self._mirror_shared_status(child_session_id, new_status)
+        return updated
 
     async def get_spawn_record(self, child_session_id: str) -> SpawnRecord | None:
-        """Return the spawn record for a child session, if it is tracked."""
-        return await self._spawn_manager.get_record(child_session_id)
+        """Return the spawn record, preferring a shared terminal status."""
+        from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+            prefer_spawn_status,
+            read_shared_spawn,
+        )
+
+        local = await self._spawn_manager.get_record(child_session_id)
+        shared = await read_shared_spawn(self._message_bus, child_session_id)
+        preferred = prefer_spawn_status(local, shared)
+        if not isinstance(preferred, SpawnRecord):
+            return None
+        return preferred
+
+    async def _mirror_shared_spawn(
+        self,
+        *,
+        parent_agent_id: str,
+        child_agent_id: str,
+        child_session_id: str,
+        project_id: str,
+        parent_session_id: str,
+        mode_value: str,
+        task_summary: str,
+    ) -> None:
+        from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+            mirror_shared_spawn,
+        )
+
+        await mirror_shared_spawn(
+            self._message_bus,
+            parent_agent_id=parent_agent_id,
+            child_agent_id=child_agent_id,
+            child_session_id=child_session_id,
+            project_id=project_id,
+            parent_session_id=parent_session_id,
+            mode_value=mode_value,
+            task_summary=task_summary,
+        )
+
+    async def _mirror_shared_status(self, child_session_id: str, status: str) -> None:
+        from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+            mirror_shared_status,
+        )
+
+        await mirror_shared_status(
+            self._message_bus,
+            child_session_id=child_session_id,
+            status=status,
+        )
 
     async def stop_agent(
         self,

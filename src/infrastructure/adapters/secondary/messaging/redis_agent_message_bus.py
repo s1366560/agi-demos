@@ -33,6 +33,13 @@ from src.domain.ports.services.agent_message_bus_port import (
 logger = logging.getLogger(__name__)
 
 
+def redis_client_for_agent_bus(bus: AgentMessageBusPort) -> redis.Redis | None:
+    """Return the client already owned by the Redis agent bus, if this is one."""
+    if isinstance(bus, RedisAgentMessageBusAdapter):
+        return bus._redis
+    return None
+
+
 class RedisAgentMessageBusAdapter(AgentMessageBusPort):
     """
     Redis Streams implementation of AgentMessageBusPort.

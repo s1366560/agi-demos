@@ -53,6 +53,14 @@ from src.infrastructure.security.encryption_service import (
 
 logger = logging.getLogger(__name__)
 
+# Minimum credentials the product itself requires. Caller-supplied names outside
+# this set are reported as not declared, so a GitHub check cannot grow an
+# unrelated provider key into a requirement.
+DECLARED_TOOL_CREDENTIALS: dict[str, tuple[str, ...]] = {
+    "github": ("GITHUB_TOKEN",),
+    "cicd_run_pipeline": (),
+}
+
 __all__ = [
     "check_env_vars_tool",
     "get_env_var_tool",
@@ -685,8 +693,11 @@ async def get_env_var_tool(
                 output=json.dumps(
                     {
                         "status": "found",
+                        "source": "managed_tool_config",
+                        "exists": True,
                         "variable_name": normalized_variable_name,
                         "value": decrypted,
+                        "redacted_preview": ("***" if env_var.is_secret else decrypted),
                         "is_secret": env_var.is_secret,
                         "scope": env_var.scope.value,
                     }
@@ -698,11 +709,16 @@ async def get_env_var_tool(
             output=json.dumps(
                 {
                     "status": "not_found",
+                    "source": "managed_tool_config",
+                    "exists": False,
+                    "scope": "tool",
+                    "process_environment": "not_consulted",
                     "variable_name": normalized_variable_name,
                     "message": (
                         f"Environment variable '{normalized_variable_name}' "
-                        f"not configured for tool '{normalized_tool_name}'. "
-                        "Use request_env_var to ask the user for it."
+                        f"is not configured for tool '{normalized_tool_name}' "
+                        "in managed tool config. This lookup does not read the "
+                        "process environment, so a shell PATH is a different source."
                     ),
                 }
             ),
@@ -1178,6 +1194,29 @@ async def check_env_vars_tool(
         configured = {ev.variable_name for ev in env_vars}
         available = [v for v in normalized_required_vars if v in configured]
         missing = [v for v in normalized_required_vars if v not in configured]
+        declared = DECLARED_TOOL_CREDENTIALS.get(normalized_tool_name)
+        not_declared = [name for name in missing if declared is not None and name not in declared]
+        declared_missing = [name for name in missing if declared is None or name in declared]
+        if declared is not None:
+            message = (
+                "All declared credentials for this tool are configured"
+                if not declared_missing
+                else (
+                    f"Missing declared credentials for '{normalized_tool_name}': "
+                    f"{', '.join(declared_missing)}."
+                )
+            )
+            if not_declared:
+                message += " Not required by this tool: " + ", ".join(not_declared) + "."
+        else:
+            message = (
+                "All required environment variables are configured"
+                if not missing
+                else (
+                    f"Missing environment variables for '{normalized_tool_name}': "
+                    f"{', '.join(missing)}. Use request_env_var to ask for them."
+                )
+            )
 
         return ToolResult(
             output=json.dumps(
@@ -1186,15 +1225,11 @@ async def check_env_vars_tool(
                     "tool_name": normalized_tool_name,
                     "available": available,
                     "missing": missing,
-                    "all_available": len(missing) == 0,
-                    "message": (
-                        "All required environment variables are configured"
-                        if not missing
-                        else (
-                            f"Missing environment variables for '{normalized_tool_name}': "
-                            f"{', '.join(missing)}. Use request_env_var to ask for them."
-                        )
-                    ),
+                    "declared_required": list(declared) if declared is not None else None,
+                    "declared_missing": declared_missing,
+                    "not_declared": not_declared,
+                    "all_available": len(declared_missing) == 0,
+                    "message": message,
                 }
             ),
         )

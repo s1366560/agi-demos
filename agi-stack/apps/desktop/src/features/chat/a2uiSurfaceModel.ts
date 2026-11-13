@@ -492,6 +492,86 @@ function normalizeActionContext(
   return utf8Bytes(serialized) <= MAX_ACTION_CONTEXT_BYTES ? context : null;
 }
 
+export function componentsForA2UIRenderer(
+  components: Record<string, A2UIComponentNode>,
+): Record<string, A2UIComponentNode> {
+  const rendered: Record<string, A2UIComponentNode> = {};
+  for (const [id, node] of Object.entries(components)) {
+    defineOwn(rendered, id, componentForA2UIRenderer(cloneJson(node) as A2UIComponentNode));
+  }
+  return rendered;
+}
+
+export function isSupportedActionContext(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  return supportedContextEntries(value) !== null;
+}
+
+function componentForA2UIRenderer(node: A2UIComponentNode): A2UIComponentNode {
+  const definition = asRecord(node.component);
+  const button = asRecord(definition?.Button);
+  const action = asRecord(button?.action);
+  if (!definition || !button || !action || !Object.prototype.hasOwnProperty.call(action, 'context')) {
+    return node;
+  }
+  action.context = rendererContextArray(action.context);
+  button.action = action;
+  definition.Button = button;
+  node.component = definition;
+  return node;
+}
+
+function rendererContextArray(
+  value: unknown,
+): Array<{ key: string; value: Record<string, unknown> }> {
+  const entries = supportedContextEntries(value);
+  if (!entries) return [{ key: '', value: { literalBoolean: false } }];
+  return entries.map(([key, raw]) => {
+    const value = rendererContextValue(raw);
+    if (!value) return { key: '', value: { literalBoolean: false } };
+    return { key, value };
+  });
+}
+
+function supportedContextEntries(value: unknown): Array<[string, unknown]> | null {
+  if (!isSafeJsonTree(value)) return null;
+  const entries = actionContextEntries(value);
+  if (!entries || entries.length > MAX_ACTION_CONTEXT_ENTRIES) return null;
+  for (const [key, raw] of entries) {
+    if (
+      !key.trim() ||
+      DANGEROUS_KEYS.has(key) ||
+      utf8Bytes(key) > MAX_ACTION_CONTEXT_KEY_BYTES ||
+      rendererContextValue(raw) === null
+    ) {
+      return null;
+    }
+  }
+  return entries;
+}
+
+function rendererContextValue(value: unknown): Record<string, unknown> | null {
+  if (typeof value === 'string') {
+    return utf8Bytes(value) <= MAX_ACTION_CONTEXT_STRING_BYTES ? { literalString: value } : null;
+  }
+  if (typeof value === 'number') return Number.isFinite(value) ? { literalNumber: value } : null;
+  if (typeof value === 'boolean') return { literalBoolean: value };
+  const record = asRecord(value);
+  if (!record) return null;
+  if (typeof record.path === 'string' && record.path.trim().length > 0) {
+    return Object.keys(record).every((key) => key === 'path') ? { path: record.path } : null;
+  }
+  if (typeof record.literalString === 'string') return { literalString: record.literalString };
+  if (typeof record.literalNumber === 'number' && Number.isFinite(record.literalNumber)) {
+    return { literalNumber: record.literalNumber };
+  }
+  if (typeof record.literalBoolean === 'boolean') return { literalBoolean: record.literalBoolean };
+  if (Object.prototype.hasOwnProperty.call(record, 'literal')) {
+    return rendererContextValue(record.literal);
+  }
+  return null;
+}
+
 function actionContextEntries(value: unknown): Array<[string, unknown]> | null {
   if (Array.isArray(value)) {
     const entries: Array<[string, unknown]> = [];

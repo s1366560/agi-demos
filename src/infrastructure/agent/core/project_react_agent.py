@@ -538,20 +538,24 @@ class ProjectReActAgent:
         # Use resolve_project_base_path to find the host-side project path that maps to
         # /workspace inside the sandbox container. This ensures persona files are loaded
         # from the correct filesystem location (host-side bind mount).
+        from src.infrastructure.agent.state.agent_worker_state import (
+            resolve_project_base_path as _resolve_base,
+        )
+
+        # Skill files belong to this project. The process-wide /workspace tree
+        # can contain a different checkout and must not be scanned as this
+        # project's agent-owned skills.
+        _base_path = _resolve_base(self.config.project_id)
         workspace_manager = None
         try:
             from pathlib import Path as _Path
 
             from src.configuration.config import get_settings as _get_ws_settings
-            from src.infrastructure.agent.state.agent_worker_state import (
-                resolve_project_base_path as _resolve_base,
-            )
             from src.infrastructure.agent.workspace.manager import (
                 WorkspaceManager as _WorkspaceManager,
             )
 
             _ws_settings = _get_ws_settings()
-            _base_path = _resolve_base(self.config.project_id)
             _workspace_dir = _base_path / ".memstack" / "workspace"
             _tenant_dir_str = _ws_settings.tenant_workspace_dir if _ws_settings else ""
 
@@ -622,6 +626,7 @@ class ProjectReActAgent:
             _cached_tool_definitions=self._session_context.tool_definitions,
             _cached_system_prompt_manager=self._session_context.system_prompt_manager,
             _cached_subagent_router=self._session_context.subagent_router,
+            project_root=_base_path,
             workspace_manager=workspace_manager,
             message_bus=self._message_bus,
             control_channel=control_channel,

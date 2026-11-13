@@ -19,26 +19,45 @@ logger = logging.getLogger(__name__)
 
 
 def _module_import_data(source_path: Path, workspace_dir: str) -> tuple[str, Path]:
-    """Return an importable module name plus the sys.path root to prepend."""
+    """Return an importable module name plus the sys.path root to prepend.
+
+    When both ``pkg`` and ``src/pkg`` exist, a file under ``src/pkg`` imports
+    from ``src`` so its origin is that file. The other directory is left in place.
+    """
     workspace = Path(workspace_dir).resolve()
+    source = source_path.resolve()
 
     try:
-        relative = source_path.resolve().relative_to(workspace)
+        relative = source.relative_to(workspace)
         module_parts = list(relative.with_suffix("").parts)
         import_root = workspace
     except ValueError:
-        module_parts = [source_path.stem]
-        import_root = source_path.parent
+        module_parts = [source.stem]
+        import_root = source.parent
 
     if module_parts and module_parts[-1] == "__init__":
         module_parts = module_parts[:-1]
 
+    if (
+        len(module_parts) >= 3
+        and module_parts[0] == "src"
+        and (workspace / module_parts[1]).is_dir()
+        and (workspace / "src" / module_parts[1]).is_dir()
+    ):
+        import_root = workspace / "src"
+        module_parts = module_parts[1:]
+
     if not module_parts or not all(part.isidentifier() for part in module_parts):
-        module_parts = [source_path.stem]
-        import_root = source_path.parent
+        module_parts = [source.stem]
+        import_root = source.parent
 
     module_name = ".".join(module_parts)
     return module_name, import_root
+
+
+def module_origin_for(module_name: str, import_root: Path) -> Path:
+    """Return the file a module name resolves to under one import root."""
+    return import_root.joinpath(*module_name.split(".")).with_suffix(".py")
 
 
 def _sample_argument_value(
@@ -180,7 +199,7 @@ async def generate_tests(
             "",
             "import pytest",
             "",
-            f"SOURCE_ROOT = Path(r\"{import_root}\")",
+            f'SOURCE_ROOT = Path(r"{import_root}")',
             "if str(SOURCE_ROOT) not in sys.path:",
             "    sys.path.insert(0, str(SOURCE_ROOT))",
             "",
@@ -391,8 +410,11 @@ async def run_tests(
 
         # Run pytest with verbose output for easier parsing
         import sys
+
         pytest_args = [
-            sys.executable, "-m", "pytest",
+            sys.executable,
+            "-m",
+            "pytest",
             "-v",
             "--tb=short",
         ] + [str(f) for f in test_files]
@@ -431,7 +453,7 @@ async def run_tests(
 
         if failed > 0:
             output_lines.append(f"\nFailed tests: {failed}")
-            output_lines.extend(lines[-min(10, len(lines)):])  # Last 10 lines
+            output_lines.extend(lines[-min(10, len(lines)) :])  # Last 10 lines
 
         return _success_result(
             "\n".join(output_lines),
@@ -535,8 +557,8 @@ async def analyze_coverage(
 
         if use_pytest:
             import sys
+
             module_name, import_root = _module_import_data(full_path, _workspace_dir)
-            workspace = Path(_workspace_dir).resolve()
 
             candidate_tests = sorted(full_path.parent.glob(f"test*{full_path.stem}*.py"))
             with tempfile.TemporaryDirectory(prefix="coverage-") as temp_dir_str:
@@ -555,7 +577,7 @@ async def analyze_coverage(
                                 "from pathlib import Path",
                                 "import sys",
                                 "",
-                                f"IMPORT_ROOT = Path(r\"{import_root}\")",
+                                f'IMPORT_ROOT = Path(r"{import_root}")',
                                 "if str(IMPORT_ROOT) not in sys.path:",
                                 "    sys.path.insert(0, str(IMPORT_ROOT))",
                                 "",
@@ -582,19 +604,32 @@ async def analyze_coverage(
                     *pytest_targets,
                 ]
                 env = os.environ.copy()
+                # Only the root that owns this file. Adding the workspace root
+                # as well lets a sibling pkg/ shadow src/pkg.
                 env["PYTHONPATH"] = os.pathsep.join(
-                    [
-                        str(import_root),
-                        str(workspace),
-                        env.get("PYTHONPATH", ""),
-                    ]
+                    [str(import_root), env.get("PYTHONPATH", "")]
                 ).rstrip(os.pathsep)
+                origin = module_origin_for(module_name, import_root)
+                if origin.resolve() != full_path.resolve():
+                    return _error_result(
+                        "Imported module origin does not match the requested source file",
+                        code="module_origin_mismatch",
+                        hint="Keep the import root aligned with the file being measured.",
+                        metadata={
+                            "requested_path": str(full_path),
+                            "module_name": module_name,
+                            "import_root": str(import_root),
+                            "resolved_origin": str(origin),
+                        },
+                    )
 
                 result = subprocess.run(
                     pytest_args,
                     capture_output=True,
                     text=True,
-                    cwd=str(workspace),
+                    # The import root is the cwd so a sibling package at the
+                    # workspace root cannot shadow this file.
+                    cwd=str(import_root),
                     env=env,
                     timeout=120,
                 )
@@ -602,6 +637,9 @@ async def analyze_coverage(
                 coverage_data = _parse_coverage_json(json_report, full_path)
                 if coverage_data is not None:
                     coverage_data.update(path_metadata)
+                    coverage_data["module_name"] = module_name
+                    coverage_data["import_root"] = str(import_root)
+                    coverage_data["module_origin"] = str(origin)
                     coverage_data["returncode"] = result.returncode
                     coverage_data["used_tests"] = pytest_targets
                     return _success_result(

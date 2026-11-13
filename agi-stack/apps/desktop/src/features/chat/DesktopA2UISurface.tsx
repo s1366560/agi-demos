@@ -5,8 +5,10 @@ import { A2UIViewer, type A2UIViewerProps } from '@copilotkit/a2ui-renderer';
 import { useI18n } from '../../i18n';
 import {
   applyA2UISurfaceMessages,
+  componentsForA2UIRenderer,
   createA2UIActionCommand,
   createEmptyA2UISurfaceState,
+  isSupportedActionContext,
   type A2UIActionCommand,
   type A2UIAllowedAction,
 } from './a2uiSurfaceModel';
@@ -47,7 +49,9 @@ export function DesktopA2UISurface({
   );
   const components = useMemo(
     () =>
-      Object.values(state.components) as unknown as A2UIViewerProps['components'],
+      Object.values(
+        componentsForA2UIRenderer(state.components),
+      ) as unknown as A2UIViewerProps['components'],
     [state.components],
   );
   const interactive =
@@ -81,6 +85,22 @@ export function DesktopA2UISurface({
           className="desktop-a2ui-viewer"
           onAction={(event) => {
             setActionError(false);
+            const source = state.components[event.sourceComponentId];
+            const sourceAction = source?.component.Button;
+            const declared = (
+              sourceAction && typeof sourceAction === 'object'
+                ? (sourceAction as { action?: { context?: unknown } }).action?.context
+                : undefined
+            );
+            if (
+              sourceAction &&
+              typeof sourceAction === 'object' &&
+              'action' in sourceAction &&
+              !isSupportedActionContext(declared)
+            ) {
+              setActionError(true);
+              return;
+            }
             const result = createA2UIActionCommand({
               requestId: requestId ?? '',
               surfaceId: state.surfaceId ?? '',

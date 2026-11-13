@@ -91,6 +91,20 @@ def _redact_value(value: Any) -> Any:
     return value
 
 
+def openapi_for_published_generation(registry: Any, descriptor: Any) -> dict[str, Any]:
+    """Return the OpenAPI document published for this exact generation."""
+
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    publication = registry.resolve(descriptor)
+    if publication.descriptor != descriptor or publication.openapi.descriptor != descriptor:
+        raise RuntimeV2Error(
+            "route_generation_unavailable",
+            "HTTP route table is unavailable for the pinned plugin generation",
+        )
+    return dict(publication.openapi.schema)
+
+
 def _get_openapi_schema() -> dict[str, Any]:
     from src.infrastructure.adapters.primary.web.main import app
 
@@ -473,8 +487,27 @@ async def system_api_tool(  # noqa: PLR0911
     timeout_seconds: float | None = 30.0,
 ) -> ToolResult:
     """List, describe, or invoke a MemStack API operation."""
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
     if action == "list":
-        catalog = _operation_catalog()
+        try:
+            catalog = _operation_catalog()
+        except RuntimeV2Error as exc:
+            if exc.code != "route_generation_unavailable":
+                raise
+            unavailable = {
+                "status": "unavailable",
+                "failure_class": "backend",
+                "code": exc.code,
+                "generation_status": "unpublished",
+                "message": str(exc),
+            }
+            return ToolResult(
+                output=_json(unavailable),
+                title="System API generation unavailable",
+                metadata=unavailable,
+                is_error=True,
+            )
         operations = _filter_operations(
             search=search,
             tag=tag,

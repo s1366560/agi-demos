@@ -314,9 +314,21 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "mcp_server_list_resources",
         "mcp_server_read_resource",
         "mcp_server_discover_tools",
+        "preview_edit",
+        "git_log",
+        "git_diff",
+        "find_definition",
+        "find_references",
+        "call_graph",
+        "dependency_graph",
+        "get_desktop_status",
+        "get_terminal_status",
+        "platform_list_workspace_files",
+        "platform_read_workspace_file",
+        "platform_download_workspace_file",
     }
 
-    # Write-type tools - require user confirmation
+    # Write-type tools - require user confirmation outside full_access.
     write_tools = {
         "file_write",
         "write_file",
@@ -329,9 +341,16 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "rename",
         "mkdir",
         "touch",
+        "write",
+        "import_file",
+        "import_files_batch",
+        "code_index_build",
+        "generate_commit",
     }
+    edit_tools = {"edit", "batch_edit", "edit_by_ast"}
+    patch_tools = {"patch"}
 
-    # Execute/bash tools - require user confirmation
+    # Execute/bash tools - require user confirmation outside full_access.
     execute_tools = {
         "bash",
         "execute",
@@ -341,19 +360,42 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "sh",
         "shell",
         "deps_check",
+        "run_tests",
+        "generate_tests",
+        "analyze_coverage",
+        "start_desktop",
+        "stop_desktop",
+        "restart_desktop",
+        "change_resolution",
+        "start_terminal",
+        "stop_terminal",
+        "restart_terminal",
     }
+    mcp_tools = {
+        "mcp_server_set_log_level",
+        "mcp_server_install",
+        "mcp_server_start",
+        "mcp_server_stop",
+        "mcp_server_call_tool",
+    }
+    plugin_tools = {"plugin_tool_exec"}
 
+    categories = (
+        (read_tools, "read"),
+        (edit_tools, "edit"),
+        (patch_tools, "patch"),
+        (write_tools, "write"),
+        (execute_tools, "bash"),
+        (mcp_tools, "mcp"),
+        (plugin_tools, "plugin_manager"),
+    )
     tool_lower = tool_name.lower()
-
-    if tool_lower in read_tools:
-        return "read"
-    elif tool_lower in write_tools:
-        return "write"
-    elif tool_lower in execute_tools:
-        return "bash"
-    else:
-        # Unknown tools default to ASK for safety
-        return "ask"
+    for names, category in categories:
+        if tool_lower in names:
+            return category
+    # Unknown tools stay outside the declared categories. full_access does not
+    # promote this sentinel into a grant.
+    return "ask"
 
 
 def sandbox_tool_permission_resolver(

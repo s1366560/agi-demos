@@ -233,10 +233,14 @@ async def _resolve_child_terminal_status(
 
         orchestrator = current_agent_orchestrator_v2()
         record = await orchestrator.get_spawn_record(child_session_id)
+        if record is not None and record.status in {"stopped", "cancelled"}:
+            return None
+        # A failed child is terminal in both run and session mode. A successful
+        # persistent session stays running so follow-up turns can continue.
+        if not success:
+            return "failed"
         if record is None or record.mode != SpawnMode.SESSION:
             return default_status
-        if record.status in {"stopped", "cancelled"}:
-            return None
         return "running"
     except RuntimeV2Error:
         raise
@@ -247,6 +251,100 @@ async def _resolve_child_terminal_status(
             exc_info=True,
         )
         return default_status
+
+
+async def publish_child_bootstrap_failure(
+    *,
+    agent_id: str,
+    child_session_id: str,
+    request_message_id: str,
+    parent_session_id: str,
+    project_id: str,
+    tenant_id: str,
+    error: BaseException,
+) -> None:
+    """Surface a child that never entered model execution.
+
+    A pinned operation keeps the generation-scoped finalizer. Before admission
+    pins an operation, the failure is written only through the spawn record
+    created for this parent and child. Neither path starts the child, grants a
+    tool, or applies a no-output timer. An explicitly detached child is failed
+    on its own record and does not close the parent.
+    """
+    code = getattr(error, "code", None)
+    if not isinstance(code, str) or not code:
+        code = type(error).__name__
+    error_message = f"failure_class=backend code={code} {error}"
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    try:
+        _ = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+        from src.infrastructure.agent.orchestration.bootstrap_failure_settlement import (
+            settle_unpinned_child_bootstrap_failure,
+        )
+        from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+            settle_durable_child_bootstrap_failure,
+        )
+
+        try:
+            await settle_durable_child_bootstrap_failure(
+                child_session_id=child_session_id,
+                child_agent_id=agent_id,
+                parent_session_id=parent_session_id,
+                project_id=project_id,
+                tenant_id=tenant_id,
+                request_message_id=request_message_id,
+                error_message=error_message,
+            )
+        except RuntimeV2Error as durable_error:
+            if durable_error.code not in {
+                "child_bootstrap_record_missing",
+                "child_spawn_record_missing",
+            }:
+                raise
+        except Exception:
+            logger.warning(
+                "Shared spawn bootstrap settlement was unavailable for session=%s",
+                child_session_id,
+                exc_info=True,
+            )
+        else:
+            try:
+                await settle_unpinned_child_bootstrap_failure(
+                    child_session_id=child_session_id,
+                    child_agent_id=agent_id,
+                    parent_session_id=parent_session_id,
+                    project_id=project_id,
+                    request_message_id=request_message_id,
+                    error_message=error_message,
+                )
+            except RuntimeV2Error as local_error:
+                if local_error.code != "child_bootstrap_owner_missing":
+                    raise
+            return
+        await settle_unpinned_child_bootstrap_failure(
+            child_session_id=child_session_id,
+            child_agent_id=agent_id,
+            parent_session_id=parent_session_id,
+            project_id=project_id,
+            request_message_id=request_message_id,
+            error_message=error_message,
+        )
+        return
+    await _finalize_child_session_result(
+        agent_id=agent_id,
+        child_session_id=child_session_id,
+        request_message_id=request_message_id,
+        parent_session_id=parent_session_id,
+        result_content="",
+        success=False,
+        event_count=0,
+        execution_time_ms=0.0,
+        error_message=error_message,
+    )
 
 
 async def _resolve_chat_runtime_overrides(
@@ -1067,6 +1165,8 @@ async def execute_project_chat(  # noqa: PLR0915
             tenant_agent_config_data=request.tenant_agent_config,
             preferred_language=request.preferred_language,
             api_auth_token=request.api_auth_token,
+            # Chat admission uses the message id as the authority id. Cron creates
+            # that authority before dispatch; a plan run passes its own id.
             canonical_run_id=run_authority_id,
             plugin_generation=request.plugin_generation,
         ):
