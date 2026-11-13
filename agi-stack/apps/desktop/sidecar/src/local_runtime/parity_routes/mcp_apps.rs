@@ -67,32 +67,32 @@ async fn capabilities(
             "stdio": {
                 "availability": "available",
                 "protocol_negotiation": {
-                    "offered": ["2024-11-05"],
-                    "accepted": ["2024-11-05"],
+                    "offered": ["2026-07-28"],
+                    "accepted": ["2026-07-28", "2026-01-26", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"],
                 },
                 "reason_code": null,
             },
             "http": {
                 "availability": "available",
                 "protocol_negotiation": {
-                    "offered": ["2025-03-26"],
-                    "accepted": ["2025-03-26"],
+                    "offered": ["2026-07-28"],
+                    "accepted": ["2026-07-28", "2026-01-26", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"],
                 },
                 "reason_code": null,
             },
             "sse": {
                 "availability": "available",
                 "protocol_negotiation": {
-                    "offered": ["2024-11-05"],
-                    "accepted": ["2024-11-05"],
+                    "offered": ["2026-07-28"],
+                    "accepted": ["2026-07-28", "2026-01-26", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"],
                 },
                 "reason_code": null,
             },
             "websocket": {
                 "availability": "available",
                 "protocol_negotiation": {
-                    "offered": ["2025-03-26"],
-                    "accepted": ["2025-03-26", "2024-11-05"],
+                    "offered": ["2026-07-28"],
+                    "accepted": ["2026-07-28", "2026-01-26", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"],
                 },
                 "reason_code": null,
             },

@@ -42,7 +42,15 @@ use agistack_core::ports::{CoreError, CoreResult, ToolHost};
 type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 /// The MCP protocol revision this client negotiates.
-const PROTOCOL_VERSION: &str = "2024-11-05";
+const PROTOCOL_VERSION: &str = "2026-07-28";
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &[
+    "2026-07-28",
+    "2026-01-26",
+    "2025-11-25",
+    "2025-06-18",
+    "2025-03-26",
+    "2024-11-05",
+];
 const REQUEST_BUFFER: usize = 32;
 
 /// Map any transport / protocol failure to the port-level [`CoreError::Tool`],
@@ -127,6 +135,15 @@ pub async fn connect(url: &str) -> CoreResult<WsMcpToolHost> {
         .await
         .map_err(gerr)?;
     let init_resp = read_response(&mut ws, 1).await?;
+    let negotiated = init_resp
+        .pointer("/result/protocolVersion")
+        .and_then(Value::as_str)
+        .filter(|version| SUPPORTED_PROTOCOL_VERSIONS.contains(version));
+    if negotiated.is_none() {
+        return Err(CoreError::Tool(
+            "mcp protocol version is unsupported".into(),
+        ));
+    }
     let server_name = init_resp
         .pointer("/result/serverInfo/name")
         .and_then(Value::as_str)

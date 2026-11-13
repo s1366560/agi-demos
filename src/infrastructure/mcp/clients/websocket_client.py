@@ -32,6 +32,11 @@ from src.infrastructure.mcp.clients.subprocess_client import (
     MCPToolResult,
     MCPToolSchema,
 )
+from src.infrastructure.mcp.protocol import (
+    LATEST_PROTOCOL_VERSION,
+    accept_server_protocol,
+    protocol_version_of,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +262,7 @@ class MCPWebSocketClient:
             init_result = await self._send_request(
                 "initialize",
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
                     "capabilities": {
                         "roots": {"listChanged": True},
                         "sampling": {},
@@ -280,6 +285,7 @@ class MCPWebSocketClient:
             )
 
             if init_result:
+                accept_server_protocol(protocol_version_of(init_result))
                 self.server_info = init_result.get("serverInfo", {})
 
                 # Send initialized notification

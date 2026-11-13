@@ -19,8 +19,8 @@ use super::{
         credential_reference, credential_reference_is_scoped, elicitation_unavailable,
         server_request_rejection, unsupported_client_request, InitializedServer,
     },
-    McpCredentialKind, McpResult, McpScope, McpServerDefinition, McpSupervisorError,
-    SupervisorLimits, MCP_PROTOCOL_VERSION,
+    supported_protocol_version, McpCredentialKind, McpResult, McpScope, McpServerDefinition,
+    McpSupervisorError, SupervisorLimits, MCP_PROTOCOL_VERSION,
 };
 
 struct StdioChild {
@@ -128,9 +128,12 @@ impl StdioRuntime {
             .get("protocolVersion")
             .and_then(Value::as_str)
             .ok_or_else(malformed_response)?;
-        if protocol_version.is_empty() {
+        if supported_protocol_version(protocol_version).is_none() {
             self.fail(limits).await;
-            return Err(malformed_response());
+            return Err(McpSupervisorError::new(
+                "local_mcp_protocol_version_unsupported",
+                "MCP stdio protocol version is unsupported",
+            ));
         }
         let server_info = initialize
             .get("serverInfo")

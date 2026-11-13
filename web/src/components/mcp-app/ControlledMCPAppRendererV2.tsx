@@ -8,7 +8,7 @@ import {
 } from '@/plugins/webOperationAdmissionV2';
 
 import type { AppRendererHandle, AppRendererProps } from '@mcp-ui/client';
-import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { RequestOptions } from '@modelcontextprotocol/client';
 
 type Props = AppRendererProps & {
   operation: WebOperationContextV2;

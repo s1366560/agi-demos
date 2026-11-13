@@ -46,7 +46,24 @@ pub(in crate::local_runtime) use store::ManualOAuthFlow;
 use store::{CredentialStageStatus, McpStore};
 use websocket::WebSocketRuntime;
 
-const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
+/// Newest stable MCP revision this supervisor offers.
+pub(super) const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
+/// Revisions a peer may select. Newer first. Unlisted revisions are rejected.
+pub(super) const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &[
+    "2026-07-28",
+    "2026-01-26",
+    "2025-11-25",
+    "2025-06-18",
+    "2025-03-26",
+    "2024-11-05",
+];
+
+pub(super) fn supported_protocol_version(version: &str) -> Option<&'static str> {
+    SUPPORTED_PROTOCOL_VERSIONS
+        .iter()
+        .copied()
+        .find(|candidate| *candidate == version)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct McpScope {

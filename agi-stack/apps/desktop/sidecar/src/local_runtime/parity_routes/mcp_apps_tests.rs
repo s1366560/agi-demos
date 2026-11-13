@@ -1600,12 +1600,19 @@ async fn capability_snapshot_only_advertises_live_transports_and_fails_closed_fo
         );
     }
     assert_eq!(
-        snapshot["transports"]["http"]["protocol_negotiation"]["accepted"],
-        json!(["2025-03-26"])
+        snapshot["transports"]["http"]["protocol_negotiation"]["offered"],
+        json!(["2026-07-28"])
     );
     assert_eq!(
         snapshot["transports"]["websocket"]["protocol_negotiation"]["accepted"],
-        json!(["2025-03-26", "2024-11-05"])
+        json!([
+            "2026-07-28",
+            "2026-01-26",
+            "2025-11-25",
+            "2025-06-18",
+            "2025-03-26",
+            "2024-11-05"
+        ])
     );
     assert_eq!(snapshot["elicitation"]["availability"], "unavailable");
     assert_eq!(

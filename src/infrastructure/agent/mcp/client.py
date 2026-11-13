@@ -20,6 +20,12 @@ from typing import Any, cast, override
 import aiohttp
 import httpx
 
+from src.infrastructure.mcp.protocol import (
+    LATEST_PROTOCOL_VERSION,
+    accept_server_protocol,
+    protocol_version_of,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -187,7 +193,7 @@ class StdioTransport(MCPTransport):
 
         # Step 1: Send initialize request
         init_params = {
-            "protocolVersion": "2026-01-26",
+            "protocolVersion": LATEST_PROTOCOL_VERSION,
             "capabilities": {
                 "roots": {"listChanged": True},
                 "sampling": {},
@@ -208,6 +214,7 @@ class StdioTransport(MCPTransport):
         }
 
         result = await self.send_request("initialize", init_params)
+        accept_server_protocol(protocol_version_of(result))
         logger.info(f"MCP server initialized: {result.get('serverInfo', {})}")
 
         # Step 2: Send initialized notification (no response expected)
@@ -613,7 +620,7 @@ class SSETransport(MCPTransport):
         init_request = InitializeRequest(
             method="initialize",
             params=InitializeRequestParams(
-                protocolVersion="2026-01-26",
+                protocolVersion=LATEST_PROTOCOL_VERSION,
                 capabilities=ClientCapabilities(
                     roots=RootsCapability(listChanged=True),
                     sampling=None,
@@ -658,6 +665,7 @@ class SSETransport(MCPTransport):
         # Wait for response
         try:
             result = await asyncio.wait_for(future, timeout=30.0)
+            accept_server_protocol(protocol_version_of(result))
             logger.info(f"MCP server initialized: {result}")
         except TimeoutError:
             self._pending_requests.pop(request_id, None)
@@ -920,7 +928,7 @@ class WebSocketTransport(MCPTransport):
 
         # Step 1: Send initialize request
         init_params = {
-            "protocolVersion": "2026-01-26",
+            "protocolVersion": LATEST_PROTOCOL_VERSION,
             "capabilities": {
                 "roots": {"listChanged": True},
                 "sampling": {},
@@ -941,6 +949,7 @@ class WebSocketTransport(MCPTransport):
         }
 
         result = await self.send_request("initialize", init_params)
+        accept_server_protocol(protocol_version_of(result))
         logger.info(f"MCP server initialized: {result.get('serverInfo', {})}")
 
         # Step 2: Send initialized notification (no response expected)

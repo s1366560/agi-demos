@@ -21,9 +21,9 @@ use super::{
         response_too_large, restart_backoff, retry_delay, server_request_rejection,
         unsupported_client_request, validate_legacy_message_endpoint, InitializedServer,
         ResolvedEndpoint, SseDecoder, SseEvent, MAX_CORRELATION_MESSAGES,
-        STREAMABLE_HTTP_PROTOCOL_VERSION,
     },
-    McpResult, McpServerDefinition, McpSupervisorError, SupervisorLimits, MCP_PROTOCOL_VERSION,
+    supported_protocol_version, McpResult, McpServerDefinition, McpSupervisorError,
+    SupervisorLimits, MCP_PROTOCOL_VERSION,
 };
 
 struct HttpResponseMessages {
@@ -97,7 +97,7 @@ impl HttpRuntime {
                 credential_vault,
                 "initialize",
                 json!({
-                    "protocolVersion": STREAMABLE_HTTP_PROTOCOL_VERSION,
+                    "protocolVersion": MCP_PROTOCOL_VERSION,
                     "capabilities": {},
                     "clientInfo": {
                         "name": "agistack-desktop",
@@ -118,15 +118,15 @@ impl HttpRuntime {
         let protocol_version = initialize
             .get("protocolVersion")
             .and_then(Value::as_str)
-            .filter(|version| *version == STREAMABLE_HTTP_PROTOCOL_VERSION);
-        if protocol_version.is_none() {
+            .and_then(supported_protocol_version);
+        let Some(protocol_version) = protocol_version else {
             self.fail(server, credential_vault, limits).await;
             return Err(McpSupervisorError::new(
                 "local_mcp_protocol_version_unsupported",
                 "MCP Streamable HTTP protocol version is unsupported",
             ));
-        }
-        self.protocol_version = Some(HeaderValue::from_static(STREAMABLE_HTTP_PROTOCOL_VERSION));
+        };
+        self.protocol_version = Some(HeaderValue::from_static(protocol_version));
         let server_info = initialize
             .get("serverInfo")
             .filter(|value| value.is_object())
@@ -443,7 +443,12 @@ impl SseRuntime {
                 return Err(error);
             }
         };
-        if initialize.get("protocolVersion").and_then(Value::as_str) != Some(MCP_PROTOCOL_VERSION) {
+        if initialize
+            .get("protocolVersion")
+            .and_then(Value::as_str)
+            .and_then(supported_protocol_version)
+            .is_none()
+        {
             self.fail(limits);
             return Err(McpSupervisorError::new(
                 "local_mcp_protocol_version_unsupported",

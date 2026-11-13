@@ -18,6 +18,11 @@ from src.infrastructure.mcp.process_boundary import (
     sanitize_subprocess_env,
     spawn_mcp_server_process,
 )
+from src.infrastructure.mcp.protocol import (
+    LATEST_PROTOCOL_VERSION,
+    accept_server_protocol,
+    protocol_version_of,
+)
 from src.infrastructure.mcp.transport.base import (
     BaseTransport,
     MCPTransportClosedError,
@@ -101,7 +106,7 @@ class StdioTransport(BaseTransport):
 
         # Step 1: Send initialize request
         init_params = {
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": LATEST_PROTOCOL_VERSION,
             "capabilities": {"roots": {"listChanged": True}, "sampling": {}},
             "clientInfo": {"name": "MemStack", "version": "0.2.0"},
         }
@@ -109,6 +114,7 @@ class StdioTransport(BaseTransport):
         result = await self._send_request("initialize", init_params)
         if result is None:  # pyright: ignore[reportUnnecessaryComparison]
             raise MCPTransportError("Initialization failed: no response from server")
+        accept_server_protocol(protocol_version_of(result))
         logger.info(f"MCP server initialized: {result.get('serverInfo', {})}")
 
         # Step 2: Send initialized notification

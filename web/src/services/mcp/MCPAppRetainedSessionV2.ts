@@ -1,5 +1,4 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { Client } from '@modelcontextprotocol/client';
 
 import { createWebSocketUrl } from '@/services/client/urlUtils';
 import { projectSandboxService } from '@/services/projectSandboxService';
@@ -205,10 +204,13 @@ export class MCPAppRetainedSessionV2 {
           ),
           operation,
           onRetire: () => {
-            requests.abort(new McpError(ErrorCode.ConnectionClosed, 'Connection closed'));
+            requests.abort(cancelled());
           },
         });
-        const client = new Client({ name: 'memstack-web', version: '1.0.0' }, { capabilities: {} });
+        const client = new Client(
+          { name: 'memstack-web', version: '1.0.0' },
+          { capabilities: {}, versionNegotiation: { mode: 'auto' } },
+        );
         const request = client.request.bind(client);
         const guardedRequest: Client['request'] = (params, schema, options) => {
           operation.check();

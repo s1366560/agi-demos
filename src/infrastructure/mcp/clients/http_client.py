@@ -25,6 +25,11 @@ from src.infrastructure.mcp.clients.subprocess_client import (
     MCPToolResult,
     MCPToolSchema,
 )
+from src.infrastructure.mcp.protocol import (
+    LATEST_PROTOCOL_VERSION,
+    accept_server_protocol,
+    protocol_version_of,
+)
 
 # Type hints only - actual imports are done lazily to avoid Temporal sandbox issues
 if TYPE_CHECKING:
@@ -152,7 +157,7 @@ class MCPHttpClient:
             result = await self._send_request(
                 "initialize",
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
                     "capabilities": {
                         "extensions": {
                             "io.modelcontextprotocol/ui": {
@@ -173,6 +178,7 @@ class MCPHttpClient:
             )
 
             if result and "result" in result:
+                accept_server_protocol(protocol_version_of(result))
                 self.server_info = result["result"].get("serverInfo", {})
 
                 # Send initialized notification
@@ -240,7 +246,7 @@ class MCPHttpClient:
                 id=request_id,
                 method="initialize",
                 params={
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
                     "capabilities": {},
                     "clientInfo": {"name": "memstack-mcp-worker", "version": "1.0.0"},
                 },
@@ -259,6 +265,7 @@ class MCPHttpClient:
                 raise
 
             if result and hasattr(result, "result"):
+                accept_server_protocol(protocol_version_of(result.result))
                 self.server_info = getattr(result.result, "serverInfo", None)
                 if self.server_info and hasattr(self.server_info, "model_dump"):
                     self.server_info = self.server_info.model_dump()

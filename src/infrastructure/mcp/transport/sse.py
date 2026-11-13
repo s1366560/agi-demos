@@ -15,6 +15,11 @@ import httpx
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 from src.infrastructure.mcp._security import tls_verify_default
+from src.infrastructure.mcp.protocol import (
+    LATEST_PROTOCOL_VERSION,
+    accept_server_protocol,
+    protocol_version_of,
+)
 from src.infrastructure.mcp.transport.base import (
     BaseTransport,
     MCPTransportClosedError,
@@ -92,7 +97,7 @@ class SSETransport(BaseTransport):
             return
 
         init_params: dict[str, Any] = {
-            "protocolVersion": "2026-01-26",
+            "protocolVersion": LATEST_PROTOCOL_VERSION,
             "capabilities": {
                 "roots": {"listChanged": True},
                 "extensions": {
@@ -114,6 +119,7 @@ class SSETransport(BaseTransport):
         result = await self.send_request("initialize", init_params)
         if result is None:  # pyright: ignore[reportUnnecessaryComparison]
             raise MCPTransportError("Initialization failed: no response from server")
+        accept_server_protocol(protocol_version_of(result))
 
         await self._send_notification("notifications/initialized", {})
         self._initialized = True
