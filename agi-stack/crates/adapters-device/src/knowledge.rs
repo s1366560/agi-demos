@@ -23,6 +23,9 @@ mod graph_push;
 mod graph_resolution;
 mod graph_sync;
 mod index;
+#[cfg(test)]
+#[path = "knowledge/lease_deadline_tests.rs"]
+mod lease_deadline_tests;
 mod metadata;
 mod mutations;
 mod processing;

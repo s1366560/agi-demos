@@ -150,3 +150,5 @@ JSON 84 行，加总一致：39 PASS、38 UNAUTHORIZED、1 ENV_MISSING、1 NOT_A
 这一组合树上实际跑过：上述 D1–D8 相关集合 165 项里 164 passed、1 个是上面的同进程顺序失败；跨进程文件单独 3 passed；`sandbox-mcp-server` 的 deps 与 module origin 10 passed。`deps_install` 仍是 `ask`。
 
 Ray 没有启动。这台 VM 总内存 15Gi，可用约 3.1Gi，hypervisor balloon 约 10Gi。Ray head 与 worker 各按约 4Gi 再加 1Gi object store 配置，现有空闲不够一次拉起。没有用外部付费模型，也没有碰用户机器上的 Mac 容器或 GUI。
+
+`a4b368ef3` 的 Strangler Gate 在 `indexing_lifecycle_tests.rs:47` 得到 `Knowledge(Conflict)`。这个错误值同时覆盖三种门：续租开始时 `expires_at_ms > now` 已不成立、`timed` 的第二次时钟越过旧 deadline 因而回滚、以及同一任务在第一次 `.await` 之前同步构造 HTTP 客户端而轮不到 40ms tick。前两种由 `lease_deadline_tests` 用注入时钟分开锁住，200ms 周期没有加长。第三种把 `reqwest::Client` 的同步构造挪到 blocking pool。调用方在构造期间让出，同一任务上的 40ms interval 才能被轮询。正例仍用真实墙钟：暂停满 300ms，并且必须在原始 deadline 之前看到 `expires_at_ms` 被续租推进。取消仍只失败当前 lease。

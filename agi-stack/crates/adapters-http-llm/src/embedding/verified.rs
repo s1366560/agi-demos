@@ -110,12 +110,20 @@ impl HttpEmbedding {
             return Err(VerifiedEmbeddingError::InvalidInput);
         }
         url.set_path(&format!("{}/embeddings", url.path().trim_end_matches('/')));
-        // This stricter client is independent of the legacy port's redirect policy.
-        let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|_| VerifiedEmbeddingError::Transport)?;
+        // Client construction initializes the TLS backend synchronously. Doing that
+        // on the caller blocks the task that also renews a wall-clock index lease,
+        // so a 200ms lease can expire before the first 40ms tick is polled. The
+        // blocking pool keeps that work off the renew task. The 30s request ceiling
+        // is unchanged.
+        let client = tokio::task::spawn_blocking(|| {
+            reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(30))
+                .build()
+        })
+        .await
+        .map_err(|_| VerifiedEmbeddingError::Transport)?
+        .map_err(|_| VerifiedEmbeddingError::Transport)?;
         let mut request = client.post(url).json(&Request {
             model: &self.ep.model,
             input: text,
