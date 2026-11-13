@@ -1,4 +1,4 @@
-import type { CallToolResult } from '@modelcontextprotocol/client';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;

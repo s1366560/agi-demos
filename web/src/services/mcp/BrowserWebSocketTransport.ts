@@ -1,4 +1,4 @@
-import { parseJSONRPCMessage, type JSONRPCMessage } from '@modelcontextprotocol/client';
+import { JSONRPCMessageSchema, type JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
 import {
   WebOperationCleanupErrorV2,
@@ -8,7 +8,7 @@ import {
 import type {
   Transport,
   TransportSendOptions,
-} from '@modelcontextprotocol/client';
+} from '@modelcontextprotocol/sdk/shared/transport.js';
 
 export interface BrowserWebSocketTransportOptions {
   url: string;
@@ -93,7 +93,7 @@ export class BrowserWebSocketTransport implements Transport {
       ws.onmessage = (event) => {
         if (!this.live() || typeof event.data !== 'string') return;
         try {
-          const message = parseJSONRPCMessage(JSON.parse(event.data));
+          const message = JSONRPCMessageSchema.parse(JSON.parse(event.data));
           this.onmessage?.(message);
         } catch (error) {
           this.onerror?.(error instanceof Error ? error : new Error('Invalid MCP message'));

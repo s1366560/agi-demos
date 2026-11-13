@@ -1,7 +1,7 @@
 import { mcpAppAPI } from '@/services/mcpAppService';
 
 import type { WebOperationContextV2 } from '@/plugins/webOperationAdmissionV2';
-import type { CallToolResult } from '@modelcontextprotocol/client';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 /** Select one structural route before dispatch. A dispatched mutation is never replayed. */
 export async function callMcpAppHttpSessionV2(

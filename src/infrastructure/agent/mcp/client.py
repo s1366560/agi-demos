@@ -573,7 +573,7 @@ class SSETransport(MCPTransport):
         """Initialize streamable HTTP client using MCP SDK."""
         from contextlib import AsyncExitStack
 
-        import httpx
+        import httpx2
         from mcp.client.streamable_http import streamable_http_client
 
         self._exit_stack: AsyncExitStack | None = AsyncExitStack()
@@ -581,7 +581,7 @@ class SSETransport(MCPTransport):
 
         try:
             # Create httpx client with headers
-            http_client = httpx.AsyncClient(headers=self.headers, timeout=httpx.Timeout(30.0))
+            http_client = httpx2.AsyncClient(headers=self.headers, timeout=httpx2.Timeout(30.0))
             self._http_client = await self._exit_stack.enter_async_context(http_client)
 
             # Use MCP SDK's streamable_http_client
@@ -589,7 +589,7 @@ class SSETransport(MCPTransport):
             streams = await self._exit_stack.enter_async_context(
                 streamable_http_client(self.url, http_client=self._http_client)
             )
-            self._read_stream, self._write_stream, _ = streams
+            self._read_stream, self._write_stream = streams
 
             # Start reader task to process incoming messages
             self._reader_task = asyncio.create_task(self._read_messages())
@@ -610,7 +610,6 @@ class SSETransport(MCPTransport):
             Implementation,
             InitializeRequest,
             InitializeRequestParams,
-            JSONRPCMessage,
             JSONRPCNotification,
             JSONRPCRequest,
             RootsCapability,
@@ -620,12 +619,12 @@ class SSETransport(MCPTransport):
         init_request = InitializeRequest(
             method="initialize",
             params=InitializeRequestParams(
-                protocolVersion=LATEST_PROTOCOL_VERSION,
+                protocol_version=LATEST_PROTOCOL_VERSION,
                 capabilities=ClientCapabilities(
-                    roots=RootsCapability(listChanged=True),
+                    roots=RootsCapability(list_changed=True),
                     sampling=None,
                 ),
-                clientInfo=Implementation(name="MemStack", version="0.2.0"),
+                client_info=Implementation(name="MemStack", version="0.2.0"),
             ),
         )
 
@@ -660,7 +659,10 @@ class SSETransport(MCPTransport):
             method=init_request.method,
             params=params_dict,
         )
-        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=jsonrpc_request)))  # type: ignore[union-attr]
+        write_stream = self._write_stream
+        if write_stream is None:
+            raise RuntimeError("Streamable HTTP client not initialized")
+        await write_stream.send(SessionMessage(message=jsonrpc_request))
 
         # Wait for response
         try:
@@ -677,7 +679,9 @@ class SSETransport(MCPTransport):
             method="notifications/initialized",
             params={},
         )
-        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=notification)))  # type: ignore[union-attr]
+        if write_stream is None:
+            raise RuntimeError("Streamable HTTP client not initialized")
+        await write_stream.send(SessionMessage(message=notification))
 
     async def _read_messages(self) -> None:
         """Background task to read incoming messages."""
@@ -739,7 +743,7 @@ class SSETransport(MCPTransport):
             raise RuntimeError("Streamable HTTP client not initialized")
 
         from mcp.shared.message import SessionMessage
-        from mcp.types import JSONRPCMessage, JSONRPCRequest
+        from mcp.types import JSONRPCRequest
 
         self._request_id += 1
         request_id = self._request_id
@@ -755,7 +759,7 @@ class SSETransport(MCPTransport):
             method=method,
             params=params,
         )
-        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=request)))
+        await self._write_stream.send(SessionMessage(message=request))
 
         # Wait for response
         try:
@@ -832,7 +836,7 @@ class SSETransport(MCPTransport):
 
         try:
             from mcp.shared.message import SessionMessage
-            from mcp.types import JSONRPCMessage, JSONRPCNotification
+            from mcp.types import JSONRPCNotification
 
             notification = JSONRPCNotification(
                 jsonrpc="2.0",
@@ -840,7 +844,7 @@ class SSETransport(MCPTransport):
                 params={"requestId": request_id, "reason": "Client cancelled"},
             )
             await self._write_stream.send(
-                SessionMessage(message=JSONRPCMessage(root=notification))
+                SessionMessage(message=notification)
             )
         except Exception:
             logger.debug(f"Cannot cancel request {request_id}: transport error")

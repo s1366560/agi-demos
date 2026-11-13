@@ -13,13 +13,13 @@ Stable SDKs that implement that revision, as published on 2026-11-13:
 - Rust `rmcp` 3.10.0: https://crates.io/crates/rmcp/3.10.0
 
 `2026-12-15` is listed as not ready and is not used. The TypeScript v1 package
-`@modelcontextprotocol/sdk` 1.32.2 stays on the maintenance line and does not
-implement `2026-07-28`. The browser session now imports `@modelcontextprotocol/client`
-2.4.0. That package's own `LATEST_PROTOCOL_VERSION` is `2025-11-25`, and its
-`SUPPORTED_PROTOCOL_VERSIONS` stops there. The package README says the v2 line
-implements `2026-07-28`, but the published constants do not. The browser client
-therefore negotiates at most `2025-11-25` and falls back to older revisions.
-`@mcp-ui/client` still loads the v1 server package for its own fixture tests.
+`@modelcontextprotocol/client` 2.4.0 is the current stable TypeScript client
+package, but its published `LATEST_PROTOCOL_VERSION` is `2025-11-25` and its
+`SUPPORTED_PROTOCOL_VERSIONS` stops there. Its request types also diverge from
+the v1 types still used by `@mcp-ui/client`. The browser session therefore
+stays on the latest v1 maintenance release, `@modelcontextprotocol/sdk`
+1.32.2, which negotiates through `2025-11-25`. The Python and Rust paths in
+this tree offer `2026-07-28` directly.
 
 This tree offers `2026-07-28` and still accepts `2026-01-26`, `2025-11-25`,
 `2025-06-18`, `2025-03-26`, and `2024-11-05`. Any other revision is rejected

@@ -11,7 +11,7 @@ import logging
 from contextlib import AsyncExitStack
 from typing import Any, cast, override
 
-import httpx
+import httpx2
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 from src.infrastructure.mcp._security import tls_verify_default
@@ -36,7 +36,7 @@ class SSETransport(BaseTransport):
         """Initialize SSE transport."""
         super().__init__(config)
         self._exit_stack: AsyncExitStack | None = None
-        self._http_client: httpx.AsyncClient | None = None
+        self._http_client: httpx2.AsyncClient | None = None
         self._read_stream: Any | None = None
         self._write_stream: Any | None = None
         self._pending_requests: dict[int, asyncio.Future[Any]] = {}
@@ -70,9 +70,9 @@ class SSETransport(BaseTransport):
         _ = await self._exit_stack.__aenter__()
 
         try:
-            http_client = httpx.AsyncClient(
+            http_client = httpx2.AsyncClient(
                 headers=config.headers or {},
-                timeout=httpx.Timeout(timeout, connect=min(timeout, 10.0)),
+                timeout=httpx2.Timeout(timeout, connect=min(timeout, 10.0)),
                 verify=tls_verify_default(),
             )
             self._http_client = await self._exit_stack.enter_async_context(http_client)
@@ -80,7 +80,7 @@ class SSETransport(BaseTransport):
             streams = await self._exit_stack.enter_async_context(
                 streamable_http_client(config.url, http_client=self._http_client)
             )
-            self._read_stream, self._write_stream, _ = streams
+            self._read_stream, self._write_stream = streams
 
             self._is_open = True
             self._reader_task = asyncio.create_task(self._read_messages())
@@ -130,14 +130,14 @@ class SSETransport(BaseTransport):
             raise MCPTransportClosedError("SSE transport not connected")
 
         from mcp.shared.message import SessionMessage
-        from mcp.types import JSONRPCMessage, JSONRPCNotification
+        from mcp.types import JSONRPCNotification
 
         notification = JSONRPCNotification(
             jsonrpc="2.0",
             method=method,
             params=params,
         )
-        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=notification)))
+        await self._write_stream.send(SessionMessage(message=notification))
 
     async def _read_messages(self) -> None:
         """Read streamable HTTP messages and resolve pending request futures."""
@@ -216,7 +216,7 @@ class SSETransport(BaseTransport):
             raise MCPTransportClosedError("SSE transport not connected")
 
         from mcp.shared.message import SessionMessage
-        from mcp.types import JSONRPCMessage, JSONRPCRequest
+        from mcp.types import JSONRPCRequest
 
         request_id = self._next_request_id()
         future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
@@ -230,7 +230,7 @@ class SSETransport(BaseTransport):
         )
 
         try:
-            await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=request)))
+            await self._write_stream.send(SessionMessage(message=request))
             wait_timeout = timeout or (self.config.timeout_seconds if self.config else 30.0)
             result = await asyncio.wait_for(future, timeout=wait_timeout)
 

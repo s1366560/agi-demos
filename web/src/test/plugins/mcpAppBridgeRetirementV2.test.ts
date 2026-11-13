@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppBridge } from '@mcp-ui/client';
-import { Client, type JSONRPCMessage, type Transport } from '@modelcontextprotocol/client';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { RendererPluginRuntimeV2, webRendererDefinitionsV2 } from '@agistack/plugin-runtime';
 import profile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
 import { WebOperationAdmissionV2 } from '../../plugins/webOperationAdmissionV2';
