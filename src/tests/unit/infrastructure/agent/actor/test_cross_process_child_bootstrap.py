@@ -38,6 +38,16 @@ from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+async def _reset_shared_engine() -> Any:
+    """Drop pooled connections so the next test's loop can open its own."""
+    from src.infrastructure.adapters.secondary.persistence.database import engine
+
+    await engine.dispose()
+    yield
+    await engine.dispose()
+
+
 def _child(operations: list[dict[str, Any]]) -> dict[str, Any]:
     """Run in a fresh interpreter. The parent owner map is not visible here."""
     import asyncio
@@ -380,3 +390,183 @@ async def test_other_process_settles_only_the_registered_spawn() -> None:
     finally:
         for ids in (live, cancelled, orphan):
             await _cleanup(ids)
+
+
+def _settle_once(kwargs: dict[str, str]) -> dict[str, Any]:
+    """One fresh interpreter, so two settlements can overlap."""
+    import asyncio
+
+    from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+        settle_durable_child_bootstrap_failure,
+    )
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    async def _run() -> dict[str, Any]:
+        try:
+            await settle_durable_child_bootstrap_failure(**kwargs)
+        except RuntimeV2Error as exc:
+            return {"ok": False, "code": exc.code}
+        return {"ok": True}
+
+    return asyncio.run(_run())
+
+
+async def _reject(kwargs: dict[str, str]) -> str:
+    from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+        settle_durable_child_bootstrap_failure,
+    )
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await settle_durable_child_bootstrap_failure(**kwargs)
+    return error.value.code
+
+
+@pytest.mark.asyncio
+async def test_concurrent_settlement_keeps_one_response_and_rejects_bad_identity() -> None:
+    ids = await _seed(uuid.uuid4().hex[:12])
+    try:
+        assert await _reject(
+            {**_kwargs(ids), "tenant_id": ids["tenant_id"], "child_session_id": "missing"}
+        ) == "child_bootstrap_record_missing"
+        assert await _reject({**_kwargs(ids), "tenant_id": "other-tenant"}) == (
+            "child_bootstrap_scope_rejected"
+        )
+        assert await _reject(
+            {**_kwargs(ids), "tenant_id": ids["tenant_id"], "child_agent_id": "other-agent"}
+        ) == "child_bootstrap_scope_rejected"
+        client = await agent_worker_redis_runtime_factory_v2()
+        try:
+            await RedisSpawnManager(client).register_spawn(
+                parent_agent_id="parent-agent",
+                child_agent_id="imposter",
+                child_session_id=ids["child_id"],
+                project_id=ids["project_id"],
+                mode=SpawnMode.RUN,
+                parent_session_id=ids["parent_id"],
+            )
+        finally:
+            await client.aclose()
+        assert await _reject({**_kwargs(ids), "tenant_id": ids["tenant_id"]}) == (
+            "child_bootstrap_scope_rejected"
+        )
+        client = await agent_worker_redis_runtime_factory_v2()
+        try:
+            await RedisSpawnManager(client).register_spawn(
+                parent_agent_id="parent-agent",
+                child_agent_id="child-agent",
+                child_session_id=ids["child_id"],
+                project_id=ids["project_id"],
+                mode=SpawnMode.RUN,
+                parent_session_id=ids["parent_id"],
+            )
+        finally:
+            await client.aclose()
+        payload = {**_kwargs(ids), "tenant_id": ids["tenant_id"]}
+        with multiprocessing.get_context("spawn").Pool(2) as pool:
+            results = pool.map(_settle_once, [payload, payload])
+        assert any(item["ok"] for item in results)
+        from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+            settle_durable_child_bootstrap_failure,
+        )
+
+        await settle_durable_child_bootstrap_failure(**payload)
+        client = await agent_worker_redis_runtime_factory_v2()
+        try:
+            history = await RedisAgentMessageBusAdapter(client).get_message_history(
+                ids["child_id"]
+            )
+            record = await RedisSpawnManager(client).get_record(ids["child_id"])
+        finally:
+            await client.aclose()
+        assert record is not None and record.status == "failed"
+        assert [item.message_type for item in history].count(AgentMessageType.RESPONSE) == 1
+    finally:
+        await _cleanup(ids)
+
+
+class _FailingSpawnRedis:
+    """Accepts the request write and then fails the spawn-record pipeline."""
+
+    def pipeline(self) -> _FailingSpawnRedis:
+        return self
+
+    def setex(self, *_args: object, **_kwargs: object) -> _FailingSpawnRedis:
+        return self
+
+    def sadd(self, *_args: object, **_kwargs: object) -> _FailingSpawnRedis:
+        return self
+
+    async def execute(self) -> None:
+        raise ConnectionError("shared spawn write failed")
+
+    async def get(self, _key: str) -> None:
+        return None
+
+    async def smembers(self, _key: str) -> set[str]:
+        return set()
+
+    async def set(self, *_args: object, **_kwargs: object) -> bool:
+        return True
+
+    async def delete(self, *_args: object) -> int:
+        return 1
+
+    async def xadd(self, *_args: object, **_kwargs: object) -> str:
+        return "1-0"
+
+
+@pytest.mark.asyncio
+async def test_failed_shared_registration_does_not_start_the_child() -> None:
+    from unittest.mock import AsyncMock, Mock
+
+    from src.domain.model.agent.agent_role import AgentRole
+    from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
+    from src.infrastructure.agent.orchestration.session_registry import AgentSessionRegistry
+    from src.infrastructure.agent.orchestration.spawn_manager import SpawnManager
+
+    started = False
+
+    async def executor(_request: object) -> None:
+        nonlocal started
+        started = True
+
+    sessions = AgentSessionRegistry()
+    agents = Mock()
+
+    def _agent(agent_id: str, **kwargs: object) -> Mock:
+        agent = Mock()
+        agent.id = agent_id
+        agent.name = agent_id
+        agent.display_name = agent_id
+        agent.tenant_id = kwargs.get("tenant_id") or "tenant"
+        agent.project_id = kwargs.get("project_id") or "project"
+        agent.enabled = True
+        agent.discoverable = True
+        agent.max_spawn_depth = 3
+        agent.role = AgentRole.ORCHESTRATOR
+        return agent
+
+    agents.get_by_id = AsyncMock(side_effect=_agent)
+    agents.get_by_name = AsyncMock(return_value=None)
+    orchestrator = AgentOrchestrator(
+        agents,
+        sessions,
+        SpawnManager(session_registry=sessions),
+        RedisAgentMessageBusAdapter(_FailingSpawnRedis()),  # type: ignore[arg-type]
+        spawn_executor=executor,
+    )
+    await sessions.register(agent_id="parent", conversation_id="parent", project_id="project")
+    with pytest.raises(RuntimeV2Error, match="shared spawn relationship"):
+        await orchestrator.spawn_agent(
+            parent_agent_id="parent",
+            target_agent_id="child",
+            message="ping",
+            mode=SpawnMode.RUN,
+            parent_session_id="parent",
+            project_id="project",
+            tenant_id="tenant",
+            user_id="user",
+        )
+    assert started is False
+    failed = await orchestrator._spawn_manager.find_children("parent")
+    assert failed and failed[0].status == "failed"

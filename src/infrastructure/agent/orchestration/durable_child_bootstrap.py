@@ -9,6 +9,7 @@ become the source of identity.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -77,7 +78,8 @@ async def mirror_shared_spawn(
         return
     from src.domain.model.agent.spawn_mode import SpawnMode
 
-    await RedisSpawnManager(client).register_spawn(
+    manager = RedisSpawnManager(client)
+    await manager.register_spawn(
         parent_agent_id=parent_agent_id,
         child_agent_id=child_agent_id,
         child_session_id=child_session_id,
@@ -86,6 +88,20 @@ async def mirror_shared_spawn(
         task_summary=task_summary,
         parent_session_id=parent_session_id,
     )
+    stored = await manager.get_record(child_session_id)
+    children = await manager.find_children(parent_session_id)
+    owned = any(item.child_session_id == child_session_id for item in children)
+    if (
+        stored is None
+        or stored.project_id != project_id
+        or stored.child_agent_id != child_agent_id
+        or stored.parent_agent_id != parent_agent_id
+        or not owned
+    ):
+        raise RuntimeV2Error(
+            "shared_spawn_registration_failed",
+            "shared spawn relationship was not stored",
+        )
 
 
 async def mirror_shared_status(
@@ -98,13 +114,31 @@ async def mirror_shared_status(
     client = redis_client_for_agent_bus(bus)
     if client is None:
         return
-    manager = RedisSpawnManager(client)
-    current = await manager.get_record(child_session_id)
-    if current is None:
-        return
-    if current.status in {"cancelled", "stopped"} and status not in {"cancelled", "stopped"}:
-        return
-    await manager.update_status(child_session_id, status)
+    token = str(uuid.uuid4())
+    lock_key = f"agent:spawn:{child_session_id}:bootstrap-lock"
+    acquired = False
+    for _ in range(50):
+        acquired = bool(await client.set(lock_key, token, ex=30, nx=True))
+        if acquired:
+            break
+        await asyncio.sleep(0.01)
+    if not acquired:
+        raise RuntimeV2Error(
+            "child_bootstrap_busy",
+            "shared spawn status is being settled",
+        )
+    try:
+        manager = RedisSpawnManager(client)
+        current = await manager.get_record(child_session_id)
+        if current is None:
+            return
+        if current.status in {"cancelled", "stopped"} and status not in {"cancelled", "stopped"}:
+            return
+        await manager.update_status(child_session_id, status)
+    finally:
+        current_lock = await client.get(lock_key)
+        if current_lock == token:
+            await client.delete(lock_key)
 
 
 async def read_shared_spawn(bus: AgentMessageBusPort, child_session_id: str) -> SpawnRecord | None:
