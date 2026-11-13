@@ -372,7 +372,10 @@ class TestWebSocketHeartbeatConfiguration:
             patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send,
             patch.object(client, "list_tools", new_callable=AsyncMock) as mock_list_tools,
         ):
-            mock_send.return_value = {"serverInfo": {"name": "test-server"}}
+            mock_send.return_value = {
+                "protocolVersion": "2024-11-05",
+                "serverInfo": {"name": "test-server"},
+            }
             mock_list_tools.return_value = []
 
             connected = await client.connect()
