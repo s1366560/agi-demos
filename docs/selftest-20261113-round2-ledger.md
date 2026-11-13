@@ -34,8 +34,8 @@ JSON 84 行，加总一致：39 PASS、38 UNAUTHORIZED、1 ENV_MISSING、1 NOT_A
 - 复现：spawn 记录创建时默认 `running`，request 在执行器之前写入消息总线。`execute_project_chat` 只有在进入模型循环后才会写终态和 history response。准入或初始化在此之前失败时，本地路径只结算根运行，actor 路径会让后台任务带异常退出，父会话仍看到 running 和一条 request。
 - 前轮：`_record_child_result_history` 是终态清理。它不负责把还没进入模型的子运行唤醒。成功的 session 模式仍保持 running，这是既有测试 `test_finalize_child_session_keeps_session_mode_running`。
 - 本轮：operation 已钉住时仍走原来的 generation finalizer。operation 还没钉住时，不伪造 pin，也不打开全局 Redis。`spawn_agent` 登记的那条父子记录负责把 SpawnRecord 写成 `failed`、注销子 session、把 run 标成 failed，并在同一条消息总线上追加 `failure_class=backend`。已取消、已停止或已完成的记录不被后到的失败覆盖。跨项目或错误父会话直接拒绝。显式 `detached: true` 只失败子记录，父 session 保持注册。
-- 回归：`test_unpinned_child_bootstrap_failure.py`。缺 generation 的真实 actor `_run_chat`：`initialize` 0 次、`execute_project_chat` 0 次，history 是 request 然后 structured failure，spawn 不再是 running。本地队列走真实 `_run_chat_local`，同样在准入处失败并写到同一条 spawn 记录。合法 generation 进入 execute 后仍是 running。没有启动 Ray 集群；actor 测试用的是进程内 actor 类。
-- 边界：没有用真实 MiniMax 跑 echo 或 5 步链，也没有在用户 Mac 上派生子代理。Ray 进程看不到这次进程内的 spawn owner。
+- 回归：`test_unpinned_child_bootstrap_failure.py` 覆盖同进程 actor 和本地队列。跨进程不使用那张进程内 owner 表。`spawn_agent` 在总线是 Redis 时把同一条 spawn 写进已有的 `RedisSpawnManager`（`agent:spawn:{child}` 和 `agent:spawn:children:{parent}`）。另一个解释器只在会话行、这条 Redis 记录、以及总线上已有的 parent request 三者一致时，才把共享状态写成 `failed`、把子 run 和子会话上仍在 running 的 tool 行写成 failed，并追加一条 response。调用方自填的 project 不一致、父会话已 archived、或 Redis 状态已是 cancelled，都不会改写。`test_cross_process_child_bootstrap.py` 用 `multiprocessing` spawn 跑过这组；子进程里 owner 表长度是 0。这不是 Ray 集群。
+- 边界：没有用真实 MiniMax，也没有在用户 Mac 上派生子代理。Ray actor 进程要能读到同一 Redis 和 Postgres；这次没有启动 Ray head/worker，所以不能把这次子进程测试写成生产 Ray 全覆盖。
 
 ## D3 system_api 代际
 
@@ -52,7 +52,7 @@ JSON 84 行，加总一致：39 PASS、38 UNAUTHORIZED、1 ENV_MISSING、1 NOT_A
 - 对照：PR #19 的 `cron_tool._build_service` 已经注入 `AutomationCommandService`，创建、更新、删除、启停和手动排队带项目、revision 和幂等键。调度器真实执行仍未启动。
 - 本轮：创建和更新在调度器拒绝注册时仍保留已提交的 job，但响应是 `scheduler_registration=registration_pending`、`executable=false`、`failure_class=backend`、`code=scheduler_registration_unavailable`。注册成功也只标 `run_state=not_started`，不表示已经执行。没有改 cutover fence，没有新的 scheduler，也没有启动用户 job。
 - 回归：`test_cron_tool.py`，其中 `test_scheduler_rejection_stays_durable_and_not_executable`。`test_cron_command_ack.py` 仍证明持久创建本身不产生 run 行。
-- 结论：报告中的那句错误是“命令服务没接到这次运行”，不是契约缺失。`AutomationCommandService` 只有创建、更新、删除和手动排队，没有消费者。`job_executor` 的 `system_event` 和 `agent_turn` 都进入 `start_chat_actor`，那一步要租户 provider 和当前 plugin distribution。这次没有把它们跑到终态，调度没有恢复。
+- 结论：已有消费者是 `register_job` 放进 APScheduler 的 `job_executor.execute_cron_job`，不是另一套调度器。它先做 legacy admission，再按 payload 调 `_execute_system_event` 或 `_execute_agent_turn`，两者都进入 `start_chat_actor`。这一步还要钉住的租户 agent 配置、数据库里可解密的 provider 凭据，以及当前进程已发布的 plugin generation。仓库里没有把受控模型接到这三处的现成缝。最小做法是给隔离租户装一个不对外请求的 scripted provider，并在测试里钉住已发布 generation，然后各跑一次 `execute_cron_job`。这次没有加这套缝，也没有改 fence。`registration_pending` 仍然表示 job 已保存但没有被调度执行。调度没有恢复。
 
 ## D5 依赖安装
 
