@@ -296,7 +296,17 @@ async def test_update_remove_and_run_forward_revision_and_idempotency(
         yield SimpleNamespace(commit=AsyncMock())
 
     monkeypatch.setattr(cron_tool_module, "_build_service", lambda _session: _Service())
-    monkeypatch.setattr(cron_tool_module, "_try_register_job", AsyncMock())
+    monkeypatch.setattr(
+        cron_tool_module,
+        "_try_register_job",
+        AsyncMock(
+            return_value={
+                "scheduler_registration": "registered",
+                "executable": False,
+                "run_state": "not_started",
+            }
+        ),
+    )
     monkeypatch.setattr(cron_tool_module, "_try_unregister_job", AsyncMock())
     tool = make_cron_tool(session_factory=session_factory)
     ctx = _make_ctx(user_id="user-1")
@@ -332,3 +342,37 @@ async def test_update_remove_and_run_forward_revision_and_idempotency(
     assert calls[1][1]["idempotency_key"] == "delete-1"
     assert calls[2][1]["expected_revision"] == 3
     assert calls[2][1]["idempotency_key"] == "run-1"
+    updated_payload = json.loads(updated.output)
+    assert updated_payload["scheduler_registration"] == "registered"
+    assert updated_payload["executable"] is False
+    assert updated_payload["run_state"] == "not_started"
+
+
+async def test_scheduler_rejection_stays_durable_and_not_executable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = SimpleNamespace(
+        id="job-pending",
+        enabled=True,
+        timezone="UTC",
+        schedule=SimpleNamespace(
+            kind=SimpleNamespace(value="every"),
+            config={"interval_seconds": 60},
+        ),
+    )
+
+    async def _reject(**_kwargs: object) -> None:
+        raise RuntimeError("Scheduler not initialised -- call start_scheduler() first")
+
+    monkeypatch.setattr(
+        "src.infrastructure.scheduler.scheduler_service.register_job",
+        _reject,
+    )
+    report = await cron_tool_module._try_register_job(job)  # type: ignore[arg-type]
+
+    assert report["scheduler_registration"] == "registration_pending"
+    assert report["executable"] is False
+    assert report["run_state"] == "not_started"
+    assert report["failure_class"] == "backend"
+    assert report["code"] == "scheduler_registration_unavailable"
+    assert "no run was queued" in report["message"]

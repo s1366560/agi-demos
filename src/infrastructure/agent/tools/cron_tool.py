@@ -35,6 +35,7 @@ from src.domain.model.cron.value_objects import ConversationMode
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -137,26 +138,54 @@ def _run_summary(run: CronJobRun) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-async def _try_register_job(job: CronJob) -> None:
-    """Register a cron job with APScheduler (best-effort)."""
+def _registration_report(*, registered: bool) -> dict[str, Any]:
+    """Describe scheduler acceptance without claiming a run already started."""
+    if registered:
+        return {
+            "scheduler_registration": "registered",
+            "executable": False,
+            "run_state": "not_started",
+        }
+    return {
+        "scheduler_registration": "registration_pending",
+        "executable": False,
+        "run_state": "not_started",
+        "failure_class": "backend",
+        "code": "scheduler_registration_unavailable",
+        "message": _(
+            "The job is stored. The scheduler did not accept it, so no run was queued. "
+            "Registration can be retried when the scheduler is available."
+        ),
+    }
+
+
+async def _try_register_job(job: CronJob) -> dict[str, Any]:
+    """Register a cron job with APScheduler and report whether it was accepted."""
+    if not job.enabled:
+        return {
+            "scheduler_registration": "disabled",
+            "executable": False,
+            "run_state": "not_started",
+        }
     try:
         from src.infrastructure.scheduler.scheduler_service import (
             register_job,
         )
 
-        if job.enabled:
-            await register_job(
-                job_id=job.id,
-                schedule_type=job.schedule.kind.value,
-                schedule_config=job.schedule.config,
-                timezone=job.timezone,
-            )
+        await register_job(
+            job_id=job.id,
+            schedule_type=job.schedule.kind.value,
+            schedule_config=job.schedule.config,
+            timezone=job.timezone,
+        )
     except Exception:
         logger.warning(
-            "Failed to register job %s with scheduler (non-fatal)",
+            "Failed to register job %s with scheduler",
             job.id,
             exc_info=True,
         )
+        return _registration_report(registered=False)
+    return _registration_report(registered=True)
 
 
 async def _try_unregister_job(job_id: str) -> None:
@@ -393,13 +422,14 @@ async def _handle_add(  # noqa: C901, PLR0911
         await session.commit()
 
     # Register with APScheduler (after commit, outside session context)
-    await _try_register_job(created)
+    registration = await _try_register_job(created)
 
     return ToolResult(
         output=_json(
             {
                 "created": True,
                 "job": _job_detail(created),
+                **registration,
             }
         ),
         metadata={"job_id": created.id},
@@ -478,15 +508,21 @@ async def _handle_update(  # noqa: PLR0912
 
     # Re-register with APScheduler to pick up new schedule/enabled state
     if updated.enabled:
-        await _try_register_job(updated)
+        registration = await _try_register_job(updated)
     else:
         await _try_unregister_job(updated.id)
+        registration = {
+            "scheduler_registration": "disabled",
+            "executable": False,
+            "run_state": "not_started",
+        }
 
     return ToolResult(
         output=_json(
             {
                 "updated": True,
                 "job": _job_detail(updated),
+                **registration,
             }
         ),
         metadata={"job_id": updated.id},
