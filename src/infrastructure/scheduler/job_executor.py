@@ -80,7 +80,11 @@ async def execute_cron_job(job_id: str) -> None:
         except Exception:
             if admission_attempted:
                 # Commit/delivery uncertainty is not proof that execution has stopped.
-                logger.warning("[CronExecutor] Job %s delivery unresolved", job_id)
+                logger.warning(
+                    "[CronExecutor] Job %s delivery unresolved",
+                    job_id,
+                    exc_info=True,
+                )
                 return
             await session.rollback()
             await _record_preparation_failure(job, run, session)
@@ -224,14 +228,45 @@ async def _execute_payload(
     session: AsyncSession,
     admission: LegacyCronAdmissionIdentity,
 ) -> None:
-    """Execute the job payload with timeout."""
+    """Execute the job payload with timeout.
+
+    The scheduler has no HTTP operation. When the process host has published a
+    generation, lease that generation for the dispatch so ``start_chat_actor``
+    can attach it. No host leaves the previous unpinned behavior.
+    """
     timeout = job.timeout_seconds or 300
 
-    try:
+    async def _run() -> None:
         await asyncio.wait_for(
             _dispatch_payload(job, conversation_id, session, admission),
             timeout=timeout,
         )
+
+    from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    try:
+        current_process_generation_host_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "process_generation_host_not_configured":
+            raise
+        try:
+            await _run()
+        except TimeoutError as err:
+            raise TimeoutError(f"Cron job {job.id} execution timed out after {timeout}s") from err
+        return
+
+    from src.infrastructure.plugins.v2.boundary import pin_agent_turn_operation_v2
+
+    try:
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"cron-payload:{job.id}:{admission.message_id}",
+            tenant_id=job.tenant_id,
+            project_id=job.project_id,
+            session_id=conversation_id,
+            force_process_host_lease=True,
+        ):
+            await _run()
     except TimeoutError as err:
         raise TimeoutError(f"Cron job {job.id} execution timed out after {timeout}s") from err
 
