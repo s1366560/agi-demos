@@ -3,11 +3,8 @@
 Keep normal GC enabled. Avoid importing pytest fixtures or runtime implementations:
 these unrelated object graphs otherwise dominate generation-two collection time.
 
-Samples use process CPU time. Wall time also counts intervals when the runner
-deschedules this process, so a compose that stays near one steady cost can
-report a p95 above the budget during a short preemption window. Collections
-caused by the zero cyclic threshold still run inside the timed compose call
-and remain on the CPU clock.
+samples_ms is wall time from time.perf_counter and is the response-time gate.
+cpu_samples_ms is process CPU time for the same call and is diagnostic only.
 """
 
 from __future__ import annotations
@@ -40,22 +37,27 @@ def main() -> None:
     # samples. Freeze and the zero cyclic threshold change the allocator the
     # timed calls use; the allocation stall has to be paid in that mode.
     # Doing it earlier leaves the first timed samples paying for the switch.
+    # CPython treats threshold0 of zero as disabling automatic collection.
+    # gc.collect() below is outside the timed call.
     for _ in range(10):
         snapshot = compose_profile_v2(profile, manifests, generation=1)
     gc.collect()
     gc.freeze()
     previous_thresholds = gc.get_threshold()
     gc.set_threshold(0)
-    samples = []
+    wall_samples: list[float] = []
+    cpu_samples: list[float] = []
     try:
         for _ in range(30):
             gc.collect()
             snapshot = compose_profile_v2(profile, manifests, generation=1)
         for _ in range(100):
             gc.collect()
-            started = time.process_time()
+            cpu_started = time.process_time()
+            wall_started = time.perf_counter()
             snapshot = compose_profile_v2(profile, manifests, generation=1)
-            samples.append((time.process_time() - started) * 1000.0)
+            wall_samples.append((time.perf_counter() - wall_started) * 1000.0)
+            cpu_samples.append((time.process_time() - cpu_started) * 1000.0)
     finally:
         gc.set_threshold(*previous_thresholds)
 
@@ -68,10 +70,11 @@ def main() -> None:
     print(
         json.dumps(
             {
-                "samples_ms": samples,
+                "samples_ms": wall_samples,
+                "cpu_samples_ms": cpu_samples,
                 "gc_enabled": gc.isenabled(),
                 "warmup": 10,
-                "clock": "process_time",
+                "clock": "perf_counter",
             }
         )
     )

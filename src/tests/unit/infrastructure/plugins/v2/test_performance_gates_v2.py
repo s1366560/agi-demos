@@ -27,9 +27,26 @@ _PROFILE = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
+_COMPOSE_BUDGET_MS = 100.0
+
+
 def _p95(samples: list[float]) -> float:
+    """Existing order statistic: sorted[int(n * 0.95)], not nearest-rank."""
     ordered = sorted(samples)
     return ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
+
+
+def compose_wall_p95_exceeds_budget(measurements: dict[str, object]) -> bool:
+    """Return whether the wall-clock compose gate fails.
+
+    CPU samples are diagnostic. They never satisfy this gate.
+    """
+    if measurements.get("clock") != "perf_counter":
+        raise AssertionError("compose budget clock must stay perf_counter")
+    samples = measurements["samples_ms"]
+    if not isinstance(samples, list) or len(samples) != _ITERATIONS:
+        raise AssertionError("compose budget requires 100 wall samples")
+    return _p95([float(sample) for sample in samples]) >= _COMPOSE_BUDGET_MS
 
 
 def _sources():
@@ -71,13 +88,34 @@ def test_profile_v2_compose_p95_within_budget() -> None:
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     measurements = json.loads(result.stdout)
     samples = measurements["samples_ms"]
+    cpu_samples = measurements["cpu_samples_ms"]
     assert measurements["gc_enabled"] is True
     assert measurements["warmup"] == 10
-    assert measurements["clock"] == "process_time"
+    assert measurements["clock"] == "perf_counter"
     assert len(samples) == _ITERATIONS
+    assert len(cpu_samples) == _ITERATIONS
     p95 = _p95(samples)
-    assert p95 < 100.0, (
+    assert not compose_wall_p95_exceeds_budget(measurements), (
         f"protocol-v2 profile compose p95 {p95:.2f}ms exceeds 100ms; samples={samples}"
+    )
+
+
+@pytest.mark.unit
+def test_p95_order_statistic_keeps_the_existing_index() -> None:
+    """int(n * 0.95) is the historical index. n=100 selects 95, not 94."""
+    assert _p95([1.0]) == 1.0
+    assert _p95([float(value) for value in range(20)]) == 19.0
+    assert _p95([float(value) for value in range(100)]) == 95.0
+
+
+@pytest.mark.unit
+def test_wall_over_budget_fails_even_when_cpu_is_under() -> None:
+    wall = [52.0] * 95 + [102.17] * 5
+    cpu = [52.0] * 100
+    assert _p95(wall) == 102.17
+    assert _p95(cpu) < _COMPOSE_BUDGET_MS
+    assert compose_wall_p95_exceeds_budget(
+        {"clock": "perf_counter", "samples_ms": wall, "cpu_samples_ms": cpu}
     )
 
 
