@@ -48,6 +48,10 @@ const ciWorkflow = readFileSync(
   new URL('../../../../.github/workflows/ci.yml', import.meta.url),
   'utf8',
 );
+const bundleVerifyWorkflow = readFileSync(
+  new URL('../../../../.github/workflows/desktop-bundle-verify.yml', import.meta.url),
+  'utf8',
+);
 const sidecarControlSource = readFileSync(
   new URL('../sidecar/src/control.rs', import.meta.url),
   'utf8',
@@ -92,10 +96,15 @@ test('electron-vite reuses the existing React renderer and isolates its output',
   assert.match(configSource, /outDir:\s*resolve\(desktopRoot,\s*'out\/renderer'\)/);
   assert.match(configSource, /plugins:\s*\[rendererRootHotReload\(desktopRoot\), react\(\)\]/);
   assert.match(ciWorkflow, /node-version: '22'/);
-  assert.match(ciWorkflow, /run: make desktop-bundle/);
-  assert.match(ciWorkflow, /apps\/desktop\/release\/\*\.dmg/u);
-  assert.match(ciWorkflow, /apps\/desktop\/release\/latest\*\.yml/u);
-  assert.doesNotMatch(ciWorkflow, /apps\/desktop\/release\/\*\*/u);
+  assert.match(ciWorkflow, /make desktop-test/);
+  assert.match(ciWorkflow, /run: make desktop-icons/);
+  assert.match(ciWorkflow, /run: make desktop-electron-build/);
+  assert.doesNotMatch(ciWorkflow, /run: make desktop-bundle\b/);
+  assert.doesNotMatch(ciWorkflow, /apps\/desktop\/release\/\*\.dmg/u);
+  assert.match(bundleVerifyWorkflow, /run: make desktop-bundle\b/);
+  assert.match(bundleVerifyWorkflow, /apps\/desktop\/release\/\*\.dmg/u);
+  assert.match(bundleVerifyWorkflow, /apps\/desktop\/release\/latest\*\.yml/u);
+  assert.doesNotMatch(bundleVerifyWorkflow, /apps\/desktop\/release\/\*\*/u);
   assert.doesNotMatch(ciWorkflow, /tauri-cli|src-tauri/u);
 });
 

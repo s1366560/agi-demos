@@ -71,7 +71,7 @@ endif
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-test desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-icons desktop-cua-helper run-desktop run-desktop-electron desktop-grants desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
+.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-test desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-electron-build desktop-icons desktop-cua-helper run-desktop run-desktop-electron desktop-grants desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -136,6 +136,9 @@ desktop-deps: ## 桌面:安装/校验前端依赖
 desktop-frontend: desktop-electron-frontend ## 桌面:Electron 前端构建兼容别名
 
 desktop-electron-frontend: desktop-deps ## 桌面:使用 electron-vite 构建 Electron main/preload/renderer
+	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:electron
+
+desktop-electron-build: ## 桌面:Electron 类型检查与生产编译，不安装依赖、不打安装包
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:electron
 
 desktop-icons: ## 桌面:验证已跟踪的 electron-builder 图标和 macOS entitlements
