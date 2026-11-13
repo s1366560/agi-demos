@@ -37,6 +37,29 @@ def classify_install_failure(message: str) -> str:
     return message
 
 
+def classify_venv_creation_failure(message: str) -> str:
+    """Classify a failed ``python -m venv`` without calling it a permission error.
+
+    Missing ensurepip or the venv module is an interpreter packaging gap.
+    Only an actual permission failure stays ``environment_not_writable``.
+    """
+
+    lowered = message.lower()
+    if (
+        "ensurepip" in lowered
+        or "no module named venv" in lowered
+        or "no module named 'venv'" in lowered
+    ):
+        return (
+            "venv_creation_failed: the interpreter cannot create a virtualenv "
+            "because ensurepip or the venv module is unavailable. "
+            "This is not a sandbox write-permission failure. " + message
+        )
+    if "Permission denied" in message or "Errno 13" in message:
+        return classify_install_failure(message)
+    return "venv_creation_failed: " + message
+
+
 _WORKSPACE_VENV_DIR = ".deps-venv"
 
 
@@ -187,6 +210,60 @@ async def _run_subprocess(
     return stdout_str, stderr_str, process.returncode or 0
 
 
+def _workspace_owned_venv(workspace_dir: str, venv_path: str) -> bool:
+    expected = os.path.realpath(os.path.join(workspace_dir, _WORKSPACE_VENV_DIR))
+    return os.path.realpath(venv_path) == expected
+
+
+async def _create_venv_or_error(
+    venv_path: str,
+    workspace_dir: str,
+    *,
+    install_scope: str | None,
+    install_target: str | None,
+) -> Dict[str, Any] | None:
+    """Create a venv. Return an error payload, or None when bin/pip exists."""
+
+    pip_cmd = os.path.join(venv_path, "bin", "pip")
+    owned = _workspace_owned_venv(workspace_dir, venv_path)
+    if owned and os.path.isdir(venv_path):
+        shutil.rmtree(venv_path, ignore_errors=True)
+    existed = os.path.exists(venv_path)
+    logger.info("Creating venv at %s", venv_path)
+    try:
+        stdout, stderr, rc = await _run_subprocess(
+            f"python3 -m venv {shlex.quote(venv_path)}",
+            cwd=workspace_dir,
+            timeout=60,
+        )
+    except asyncio.TimeoutError:
+        if not existed or owned:
+            shutil.rmtree(venv_path, ignore_errors=True)
+        return {
+            "content": [{"type": "text", "text": "Error: Timed out creating virtualenv"}],
+            "isError": True,
+            "metadata": {
+                "install_scope": install_scope,
+                "install_target": install_target,
+                "venv_creation": "failed",
+            },
+        }
+    if rc == 0 and os.path.isfile(pip_cmd):
+        return None
+    if not existed or owned:
+        shutil.rmtree(venv_path, ignore_errors=True)
+    message = classify_venv_creation_failure(stderr.strip() or stdout.strip() or f"exit code {rc}")
+    return {
+        "content": [{"type": "text", "text": f"Error: {message}"}],
+        "isError": True,
+        "metadata": {
+            "install_scope": install_scope,
+            "install_target": install_target,
+            "venv_creation": "failed",
+        },
+    }
+
+
 # =============================================================================
 # DEPS_INSTALL TOOL
 # =============================================================================
@@ -246,23 +323,16 @@ async def deps_install(
                 if not os.path.isabs(venv_path):
                     venv_path = os.path.join(_workspace_dir, venv_path)
 
-                if not os.path.exists(os.path.join(venv_path, "bin", "pip")):
-                    logger.info(f"Creating venv at {venv_path}")
-                    try:
-                        await _run_subprocess(
-                            f"python3 -m venv {venv_path}",
-                            cwd=_workspace_dir,
-                            timeout=60,
-                        )
-                    except asyncio.TimeoutError:
-                        return {
-                            "content": [
-                                {"type": "text", "text": "Error: Timed out creating virtualenv"}
-                            ],
-                            "isError": True,
-                        }
-
                 pip_cmd = os.path.join(venv_path, "bin", "pip")
+                if not os.path.isfile(pip_cmd):
+                    created = await _create_venv_or_error(
+                        venv_path,
+                        _workspace_dir,
+                        install_scope=install_scope,
+                        install_target=install_target,
+                    )
+                    if created is not None:
+                        return created
 
             # Install each package
             for pkg in pkgs:

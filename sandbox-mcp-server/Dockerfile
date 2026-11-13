@@ -214,6 +214,7 @@ RUN apt-get update \
         net-tools \
         procps \
         python3 \
+        python3-venv \
         shared-mime-info \
         ssl-cert \
         sudo \
