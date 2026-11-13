@@ -499,6 +499,15 @@ class AgentOrchestrator:
                     content=message,
                     message_type=AgentMessageType.REQUEST,
                 )
+                await self._mirror_shared_spawn(
+                    parent_agent_id=resolved_parent_agent_id,
+                    child_agent_id=resolved_target_agent_id,
+                    child_session_id=child_session_id,
+                    project_id=project_id,
+                    parent_session_id=parent_session_id,
+                    mode_value=mode.value,
+                    task_summary=message[:200],
+                )
                 await self._spawn_executor(execution_request)
             except Exception:
                 await _fail_peer_admission(execution_request.admission)
@@ -511,6 +520,7 @@ class AgentOrchestrator:
                     conversation_id=child_session_id,
                     project_id=project_id,
                 )
+                await self._mirror_shared_status(child_session_id, "failed")
                 unbind_spawn_bootstrap_owner(child_session_id)
                 raise
         else:
@@ -520,6 +530,15 @@ class AgentOrchestrator:
                 session_id=child_session_id,
                 content=message,
                 message_type=AgentMessageType.REQUEST,
+            )
+            await self._mirror_shared_spawn(
+                parent_agent_id=resolved_parent_agent_id,
+                child_agent_id=resolved_target_agent_id,
+                child_session_id=child_session_id,
+                project_id=project_id,
+                parent_session_id=parent_session_id,
+                mode_value=mode.value,
+                task_summary=message[:200],
             )
 
         logger.info(
@@ -825,15 +844,64 @@ class AgentOrchestrator:
         conversation_id: str | None = None,
     ) -> SpawnRecord | None:
         """Update lifecycle status for a spawned child session."""
-        return await self._spawn_manager.update_status(
+        updated = await self._spawn_manager.update_status(
             child_session_id=child_session_id,
             new_status=new_status,
             conversation_id=conversation_id,
         )
+        await self._mirror_shared_status(child_session_id, new_status)
+        return updated
 
     async def get_spawn_record(self, child_session_id: str) -> SpawnRecord | None:
-        """Return the spawn record for a child session, if it is tracked."""
-        return await self._spawn_manager.get_record(child_session_id)
+        """Return the spawn record, preferring a shared terminal status."""
+        from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+            prefer_spawn_status,
+            read_shared_spawn,
+        )
+
+        local = await self._spawn_manager.get_record(child_session_id)
+        shared = await read_shared_spawn(self._message_bus, child_session_id)
+        preferred = prefer_spawn_status(local, shared)
+        if not isinstance(preferred, SpawnRecord):
+            return None
+        return preferred
+
+    async def _mirror_shared_spawn(
+        self,
+        *,
+        parent_agent_id: str,
+        child_agent_id: str,
+        child_session_id: str,
+        project_id: str,
+        parent_session_id: str,
+        mode_value: str,
+        task_summary: str,
+    ) -> None:
+        from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+            mirror_shared_spawn,
+        )
+
+        await mirror_shared_spawn(
+            self._message_bus,
+            parent_agent_id=parent_agent_id,
+            child_agent_id=child_agent_id,
+            child_session_id=child_session_id,
+            project_id=project_id,
+            parent_session_id=parent_session_id,
+            mode_value=mode_value,
+            task_summary=task_summary,
+        )
+
+    async def _mirror_shared_status(self, child_session_id: str, status: str) -> None:
+        from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+            mirror_shared_status,
+        )
+
+        await mirror_shared_status(
+            self._message_bus,
+            child_session_id=child_session_id,
+            status=status,
+        )
 
     async def stop_agent(
         self,

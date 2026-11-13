@@ -260,6 +260,7 @@ async def publish_child_bootstrap_failure(
     request_message_id: str,
     parent_session_id: str,
     project_id: str,
+    tenant_id: str,
     error: BaseException,
 ) -> None:
     """Surface a child that never entered model execution.
@@ -284,7 +285,46 @@ async def publish_child_bootstrap_failure(
         from src.infrastructure.agent.orchestration.bootstrap_failure_settlement import (
             settle_unpinned_child_bootstrap_failure,
         )
+        from src.infrastructure.agent.orchestration.durable_child_bootstrap import (
+            settle_durable_child_bootstrap_failure,
+        )
 
+        try:
+            await settle_durable_child_bootstrap_failure(
+                child_session_id=child_session_id,
+                child_agent_id=agent_id,
+                parent_session_id=parent_session_id,
+                project_id=project_id,
+                tenant_id=tenant_id,
+                request_message_id=request_message_id,
+                error_message=error_message,
+            )
+        except RuntimeV2Error as durable_error:
+            if durable_error.code not in {
+                "child_bootstrap_record_missing",
+                "child_spawn_record_missing",
+            }:
+                raise
+        except Exception:
+            logger.warning(
+                "Shared spawn bootstrap settlement was unavailable for session=%s",
+                child_session_id,
+                exc_info=True,
+            )
+        else:
+            try:
+                await settle_unpinned_child_bootstrap_failure(
+                    child_session_id=child_session_id,
+                    child_agent_id=agent_id,
+                    parent_session_id=parent_session_id,
+                    project_id=project_id,
+                    request_message_id=request_message_id,
+                    error_message=error_message,
+                )
+            except RuntimeV2Error as local_error:
+                if local_error.code != "child_bootstrap_owner_missing":
+                    raise
+            return
         await settle_unpinned_child_bootstrap_failure(
             child_session_id=child_session_id,
             child_agent_id=agent_id,

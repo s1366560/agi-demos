@@ -66,6 +66,7 @@ async def test_bootstrap_failure_names_the_cause_for_the_parent() -> None:
             request_message_id="message",
             parent_session_id="parent",
             project_id="project",
+            tenant_id="tenant",
             error=error,
         )
     kwargs = finalize.await_args.kwargs

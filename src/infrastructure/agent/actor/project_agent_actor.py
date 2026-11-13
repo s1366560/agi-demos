@@ -580,6 +580,7 @@ class ProjectAgentActor:
                             request_message_id=request.canonical_run_id or request.message_id,
                             parent_session_id=request.parent_session_id,
                             project_id=self._config.project_id if self._config is not None else "",
+                            tenant_id=self._config.tenant_id if self._config is not None else "",
                             error=exc,
                         )
                     except Exception:
