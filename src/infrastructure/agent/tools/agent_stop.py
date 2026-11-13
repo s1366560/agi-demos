@@ -75,6 +75,7 @@ async def agent_stop_tool(
                 ).to_event_dict()
             )
         result: dict[str, Any] = {
+            "requested_session_id": session_id,
             "stopped_sessions": stopped,
             "count": len(stopped),
         }

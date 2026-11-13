@@ -37,6 +37,7 @@ class SpawnRecord:
     trace_id: str = ""
     span_id: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_activity_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
@@ -52,6 +53,7 @@ class SpawnRecord:
             "trace_id": self.trace_id,
             "span_id": self.span_id,
             "created_at": self.created_at.isoformat(),
+            "last_activity_at": (self.last_activity_at or self.created_at).isoformat(),
         }
 
     @classmethod
@@ -71,4 +73,7 @@ class SpawnRecord:
             created_at=datetime.fromisoformat(data["created_at"])
             if "created_at" in data
             else datetime.now(UTC),
+            last_activity_at=datetime.fromisoformat(data["last_activity_at"])
+            if data.get("last_activity_at")
+            else None,
         )

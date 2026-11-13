@@ -30,6 +30,22 @@ def _authority(*, job: CronJob | None, access_error: Exception | None = None):
     )
 
 
+def _disable_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    current = cron._execution_capabilities()
+    disabled = current.model_copy(
+        update={
+            "durable_execution": False,
+            "run_now": current.run_now.model_copy(
+                update={
+                    "allowed": False,
+                    "reason_code": "durable_automation_execution_unavailable",
+                }
+            ),
+        }
+    )
+    monkeypatch.setattr(cron, "_execution_capabilities", lambda: disabled)
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -40,7 +56,11 @@ def _authority(*, job: CronJob | None, access_error: Exception | None = None):
         ),
     ],
 )
-async def test_disabled_capability_rejects_every_command_without_persistence(body) -> None:
+async def test_disabled_capability_rejects_every_command_without_persistence(
+    body,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_run(monkeypatch)
     job = CronJob(project_id="project-1", tenant_id="tenant-1", name="Disabled runtime")
     authority = _authority(job=job)
     capabilities = await cron.get_cron_job_capabilities("project-1", authority)
@@ -81,7 +101,10 @@ async def test_unavailable_execution_preserves_membership_check() -> None:
     authority.db.commit.assert_not_awaited()
 
 
-async def test_http_v2_command_matches_disabled_capability_reason() -> None:
+async def test_http_v2_command_matches_disabled_capability_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_run(monkeypatch)
     job = CronJob(project_id="project-1", tenant_id="tenant-1", name="HTTP admission")
     authority = _authority(job=job)
     app = FastAPI()

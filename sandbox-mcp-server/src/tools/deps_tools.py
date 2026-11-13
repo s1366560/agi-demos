@@ -23,6 +23,17 @@ from src.server.websocket_server import MCPTool
 
 logger = logging.getLogger(__name__)
 
+
+def classify_install_failure(message: str) -> str:
+    """Mark an unwritable install target without changing sandbox permissions."""
+
+    if "Permission denied" in message or "Errno 13" in message:
+        return (
+            "environment_not_writable: the install target is not writable. "
+            "This is a sandbox limit, not a missing package. " + message
+        )
+    return message
+
 # Regex to validate pip package specifiers (name with optional version constraints).
 # Allows: pandas, numpy>=2.0, requests[security]==2.31.0, my-pkg~=1.0
 # Blocks: shell metacharacters like ;, &, |, $, `, (, ), etc.
@@ -205,7 +216,9 @@ async def deps_install(
                     if rc == 0:
                         results.append({"package": pkg, "status": "installed"})
                     else:
-                        msg = stderr.strip() or stdout.strip() or f"exit code {rc}"
+                        msg = classify_install_failure(
+                            stderr.strip() or stdout.strip() or f"exit code {rc}"
+                        )
                         results.append({"package": pkg, "status": "failed", "error": msg[:500]})
                         errors.append(f"{pkg}: {msg[:200]}")
                 except asyncio.TimeoutError:

@@ -513,11 +513,34 @@ class TestProviderService:
 
     @pytest.mark.asyncio
     async def test_provider_response_hides_historical_unsafe_base_url(self, service):
-        """Existing unsafe endpoints are not echoed back even before data cleanup runs."""
+        """Rows whose endpoint fails the transport contract are not echoed back."""
         now = datetime.now(UTC)
         provider = ProviderConfig(
             id=uuid4(),
             name="historical-openai",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted-key",
+            base_url="http://example.test/tenant-path-token",
+            llm_model="gpt-4o",
+            created_at=now,
+            updated_at=now,
+        )
+        service.repository.get_latest_health.return_value = None
+        service.encryption_service = MagicMock()
+        service.encryption_service.decrypt.return_value = "sk-current-secret"
+
+        response = await service._provider_to_response(provider)
+
+        assert response.base_url is None
+        assert "tenant-path-token" not in response.model_dump_json()
+
+    @pytest.mark.asyncio
+    async def test_provider_response_echoes_custom_base_paths(self, service):
+        """Arbitrary base paths satisfy the contract and are echoed back unchanged."""
+        now = datetime.now(UTC)
+        provider = ProviderConfig(
+            id=uuid4(),
+            name="custom-path-openai",
             provider_type=ProviderType.OPENAI,
             api_key_encrypted="encrypted-key",
             base_url="https://example.test/tenant-path-token",
@@ -531,8 +554,7 @@ class TestProviderService:
 
         response = await service._provider_to_response(provider)
 
-        assert response.base_url is None
-        assert "tenant-path-token" not in response.model_dump_json()
+        assert response.base_url == "https://example.test/tenant-path-token"
 
     @pytest.mark.asyncio
     async def test_delete_provider_success(self, service):
@@ -1267,15 +1289,15 @@ class TestProviderService:
             "https://proxy.example/v1/token",
         ],
     )
-    def test_provider_base_url_rejects_arbitrary_path_tokens(self, base_url):
-        """Provider endpoints accept only exact, explicitly safe API base paths."""
-        with pytest.raises(ValidationError, match="allowed API base path"):
-            ProviderProbeRequest(
-                name="unsafe-path",
-                provider_type=ProviderType.OPENAI,
-                api_key="sk-test",
-                base_url=base_url,
-            )
+    def test_provider_base_url_accepts_arbitrary_paths(self, base_url):
+        """The API base path is user-controlled configuration and is not restricted."""
+        probe = ProviderProbeRequest(
+            name="custom-path",
+            provider_type=ProviderType.OPENAI,
+            api_key="sk-test",
+            base_url=base_url,
+        )
+        assert probe.base_url == base_url.rstrip("/")
 
     @pytest.mark.asyncio
     async def test_unsupported_probe_returns_configuration_valid_without_network(self, service):
@@ -1303,13 +1325,20 @@ class TestProviderService:
                 provider_type=ProviderType.AZURE_OPENAI,
                 base_url="https://resource.openai.azure.com/v1",
             )
-        with pytest.raises(ValidationError, match="allowed API base path"):
+        with pytest.raises(ValidationError, match="Invalid provider base URL"):
             ProviderProbeRequest(
-                name="azure-unsafe-path",
+                name="azure-query-url",
                 provider_type=ProviderType.AZURE_OPENAI,
                 api_key="sk-test",
-                base_url="https://resource.openai.azure.com/deployment-token",
+                base_url="https://resource.openai.azure.com/v1?token=secret",
             )
+        probe = ProviderProbeRequest(
+            name="azure-custom-path",
+            provider_type=ProviderType.AZURE_OPENAI,
+            api_key="sk-test",
+            base_url="https://resource.openai.azure.com/deployment-token",
+        )
+        assert probe.base_url == "https://resource.openai.azure.com/deployment-token"
 
     def test_anthropic_probe_path_is_idempotent(self, service):
         """An Anthropic /v1 base path is not duplicated by the models probe."""

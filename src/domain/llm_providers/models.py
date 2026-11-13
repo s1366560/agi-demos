@@ -735,7 +735,7 @@ def validate_provider_base_url_transport(
     value: str | None,
     provider_type: ProviderType,
 ) -> str | None:
-    """Validate transport plus the explicit non-secret API base-path policy."""
+    """Validate transport safety and normalize the API base URL path."""
     return validate_provider_base_url(value, provider_type)
 
 

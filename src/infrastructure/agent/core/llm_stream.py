@@ -174,6 +174,48 @@ class ToolCallChunk:
         }
 
 
+def classify_provider_failure(error: BaseException) -> tuple[str, str, str]:
+    """Label a provider failure without selecting another provider.
+
+    The third value is ``balance``, ``rate_limit``, or ``other``. Balance is not
+    retried. A rate limit stays retryable. Neither class selects a fallback.
+    """
+
+    name = type(error).__name__
+    text = str(error)
+    lowered = text.lower()
+    if "insufficient balance" in lowered or "no resource package" in lowered:
+        return (
+            "vendor_balance: the provider account has no balance or resource package. "
+            "Retrying this provider will not succeed. No alternate provider was selected. " + text,
+            "vendor_balance",
+            "balance",
+        )
+    if name in {"RateLimitError", "RateLimitExceededError"} or "rate limit" in lowered:
+        return (
+            "vendor_rate_limit: the provider rate-limited the request. "
+            "Retry later. No alternate provider was selected. " + text,
+            "vendor_rate_limit",
+            "rate_limit",
+        )
+    return text, name, "other"
+
+
+def resolve_provider_after_failure(
+    *,
+    current_provider: str,
+    failure_class: str,
+    authorized_fallback: str | None,
+) -> str:
+    """Keep the current provider.
+
+    Tests can pass an authorized fallback name. This path still does not switch.
+    """
+
+    _ = (failure_class, authorized_fallback)
+    return current_provider
+
+
 @dataclass
 class StreamEvent:
     """
@@ -547,7 +589,18 @@ class LLMStream:
             yield StreamEvent.error(str(e), code=e.code)
         except Exception as e:
             logger.error(f"LLM stream error: {e}", exc_info=True)
-            yield StreamEvent.error(str(e), code=type(e).__name__)
+            message, code, failure_class = classify_provider_failure(e)
+            event = StreamEvent.error(message, code=code)
+            event.data["failure_class"] = failure_class
+            event.data["provider_failover"] = "not_authorized"
+            event.data["provider"] = resolve_provider_after_failure(
+                current_provider=self.config.get_provider()
+                if hasattr(self.config, "get_provider")
+                else "",
+                failure_class=failure_class,
+                authorized_fallback=None,
+            )
+            yield event
 
     async def _generate_with_client(  # noqa: C901, PLR0912
         self,

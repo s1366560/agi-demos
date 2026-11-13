@@ -51,6 +51,8 @@ import {
   CloudSessionAuthenticationInvalidError,
   executeVaultBoundCloudRequest,
   projectVaultBoundCloudSession,
+  isCancelledCloudRequest,
+  settleCloudRequest,
   authorizeVaultBoundSandboxDesktopGrant,
 } from './cloudRequestPolicy';
 import {
@@ -817,7 +819,7 @@ async function executeDesktopCommand(
       if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
       const lease = cloudRequestExecutions.begin(ownerId, args?.requestId);
       try {
-        const result = await executeVaultBoundCloudRequest(args?.request, {
+        const settled = await settleCloudRequest(() => executeVaultBoundCloudRequest(args?.request, {
           loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
           fetch: (url, init) => net.fetch(url, init),
           signal: lease.signal,
@@ -825,7 +827,11 @@ async function executeDesktopCommand(
             if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
             return withDesktopAuthorityTransitionV2(operation);
           },
-        });
+        }));
+        if (isCancelledCloudRequest(settled)) {
+          return settled;
+        }
+        const result = settled;
         if (process.env.AGISTACK_DESKTOP_QA_CLOUD_REQUEST_LOG === '1') {
           const redactQaValue = (value: unknown): unknown => {
             if (Array.isArray(value)) return value.map((item) => redactQaValue(item));

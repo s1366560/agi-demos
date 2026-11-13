@@ -20,9 +20,11 @@ function load(url) {
   );
   return module.exports;
 }
-const { executeVaultBoundCloudRequest: execute } = load(
-  new URL('../electron/main/cloudRequestPolicy.ts', import.meta.url),
-);
+const {
+  executeVaultBoundCloudRequest: execute,
+  isCancelledCloudRequest,
+  settleCloudRequest,
+} = load(new URL('../electron/main/cloudRequestPolicy.ts', import.meta.url));
 const { RendererDeliveryAdmissionV2 } = load(
   new URL('../electron/main/rendererDeliveryAdmissionV2.ts', import.meta.url),
 );
@@ -73,6 +75,9 @@ function commandCase(name, bindings) {
     (node) => ts.isCaseClause(node) && node.expression.text === name,
   )[0];
   assert.ok(clause, `actual main case ${name}`);
+  if (name === 'cloud_request') {
+    bindings = { settleCloudRequest, isCancelledCloudRequest, ...bindings };
+  }
   return compileFunction(
     `async function invoke(event,args){${clause.statements.map((node) => node.getText()).join('\n')}}`,
     bindings,

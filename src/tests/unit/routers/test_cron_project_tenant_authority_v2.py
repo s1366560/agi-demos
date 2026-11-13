@@ -27,6 +27,7 @@ def _body() -> CronJobCreate:
             kind=PayloadType.SYSTEM_EVENT,
             config={"content": "run"},
         ),
+        idempotency_key="authority-create-1",
     )
 
 

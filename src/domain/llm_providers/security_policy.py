@@ -9,32 +9,13 @@ from src.domain.llm_providers.provider_catalog import (
     FAMILY_SECURITY,
     extra_official_endpoints,
     family_security,
-    official_base_paths,
     probe_default_base_urls,
     provider_family,
 )
 
 _PROVIDER_PROBE_DEFAULT_BASE_URLS: dict[str, str] = probe_default_base_urls()
-_OFFICIAL_PROVIDER_BASE_PATHS: dict[str, frozenset[str]] = official_base_paths()
 _PROVIDER_EXTRA_OFFICIAL_ENDPOINTS: dict[str, dict[str, frozenset[str]]] = (
     extra_official_endpoints()
-)
-
-# Custom gateways are permitted, but only at well-known API base paths. Arbitrary
-# path components are rejected because they are commonly used for bearer-like
-# gateway tokens and would otherwise be returned by ordinary Provider responses.
-_SAFE_CUSTOM_PROVIDER_BASE_PATHS = frozenset(
-    {
-        "",
-        "/v1",
-        "/v1beta",
-        "/api",
-        "/api/v1",
-        "/api/v3",
-        "/api/paas/v4",
-        "/openai/v1",
-        "/compatible-mode/v1",
-    }
 )
 
 
@@ -161,22 +142,11 @@ def _validate_provider_transport(
     raise ValueError("HTTPS is required for credentialed providers")
 
 
-def _allowed_provider_base_paths(provider_type: object, value: str) -> frozenset[str]:
-    """Return the exact path set allowed for an official or custom origin."""
-    extra_paths = _extra_official_base_paths(provider_type, value)
-    if extra_paths is not None:
-        return extra_paths
-    if not _is_official_origin(provider_type, value):
-        return _SAFE_CUSTOM_PROVIDER_BASE_PATHS
-    provider_family = normalize_provider_family(provider_type)
-    return _OFFICIAL_PROVIDER_BASE_PATHS.get(provider_family, frozenset({""}))
-
-
 def validate_provider_base_url(
     value: str | None,
     provider_type: object,
 ) -> str | None:
-    """Validate transport and an explicit, non-secret provider API base path."""
+    """Validate transport and normalize the provider API base URL path."""
     if value is None:
         return None
     normalized = value.strip()
@@ -202,9 +172,6 @@ def validate_provider_base_url(
     )
 
     path = _normalized_path(parsed.path)
-    if path not in _allowed_provider_base_paths(provider_type, normalized):
-        raise ValueError("Provider base URL path is not an allowed API base path")
-
     return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 
 

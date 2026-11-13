@@ -78,6 +78,7 @@ class TestSpawnRecord:
             "task_summary",
             "status",
             "created_at",
+            "last_activity_at",
             "trace_id",
             "span_id",
         }

@@ -854,7 +854,6 @@ class TestLLMProvidersRouterHealthCheck:
                     "provider_options": {"api_key": "nested-secret"},
                 }
             },
-            {"base_url": "https://proxy.example/path-token"},
         ],
     )
     def test_test_provider_connection_rejects_unsafe_config_and_paths(
@@ -862,7 +861,7 @@ class TestLLMProvidersRouterHealthCheck:
         llm_client,
         payload,
     ):
-        """Probe validation blocks plaintext credential fields and arbitrary URL paths."""
+        """Probe validation blocks plaintext credential fields in config payloads."""
         response = llm_client.post(
             "/api/v1/llm-providers/test-connection",
             json={
@@ -874,6 +873,41 @@ class TestLLMProvidersRouterHealthCheck:
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_test_provider_connection_accepts_arbitrary_base_path(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """The API base path is user-controlled configuration and is not restricted."""
+        mock_validation = ProviderValidationResponse(
+            provider=None,
+            provider_id=uuid4(),
+            status=ProviderStatus.CONFIGURATION_VALID,
+            probed=False,
+            detail=None,
+            catalog=None,
+            response_time_ms=None,
+            last_check=datetime.now(UTC),
+            error_message=None,
+        )
+        mock_provider_service.test_provider_connection.return_value = mock_validation
+
+        response = llm_client.post(
+            "/api/v1/llm-providers/test-connection",
+            json={
+                "name": "custom-path-probe",
+                "provider_type": "openai",
+                "api_key": "sk-test",
+                "llm_model": "gpt-4o",
+                "base_url": "https://proxy.example/path-token",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        submitted = mock_provider_service.test_provider_connection.call_args.args[0]
+        assert submitted.base_url == "https://proxy.example/path-token"
 
     def test_test_provider_connection_rejects_oauth_until_flow_exists(self, llm_client):
         """OAuth probe requests fail explicitly until an OAuth backend flow exists."""
@@ -1308,14 +1342,19 @@ class TestLLMProvidersRouterTypes:
         assert "api_key" not in response.text
         assert secret not in response.text
 
-    def test_detect_env_providers_does_not_echo_unsafe_path(self, llm_client):
-        """Environment detection never returns a path that could contain a gateway token."""
+    def test_detect_env_providers_validates_base_url_and_never_echoes_key(self, llm_client):
+        """Env detection echoes valid base URLs and never returns the API key."""
         detected = {
             "openai": {
                 "api_key": "sk-must-not-leak",
                 "base_url": "https://proxy.example/tenant-path-token",
                 "llm_model": "gpt-4o",
-            }
+            },
+            "anthropic": {
+                "api_key": "sk-must-not-leak",
+                "base_url": "http://proxy.example/tenant-path-token",
+                "llm_model": "claude-test",
+            },
         }
 
         with patch(
@@ -1325,8 +1364,11 @@ class TestLLMProvidersRouterTypes:
             response = llm_client.get("/api/v1/llm-providers/env-detection")
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["detected_providers"]["openai"]["base_url"] is None
-        assert "tenant-path-token" not in response.text
+        providers = response.json()["detected_providers"]
+        # Arbitrary base paths are accepted configuration.
+        assert providers["openai"]["base_url"] == "https://proxy.example/tenant-path-token"
+        # Transport-invalid endpoints are still hidden.
+        assert providers["anthropic"]["base_url"] is None
         assert "sk-must-not-leak" not in response.text
 
     @pytest.mark.asyncio

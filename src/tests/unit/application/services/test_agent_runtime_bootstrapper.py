@@ -198,11 +198,6 @@ def test_runtime_credential_resolves_rust_environment_record_without_decrypting(
         ),
         (
             {"auth_method": "environment", "environment_variable": "OPENAI_API_KEY"},
-            "https://api.openai.com/v1/tenant-path-token",
-            {"OPENAI_API_KEY": "sk-runtime-only"},
-        ),
-        (
-            {"auth_method": "environment", "environment_variable": "OPENAI_API_KEY"},
             "https://api.openai.com/v1",
             {},
         ),
@@ -227,6 +222,30 @@ def test_runtime_credential_rejects_invalid_environment_records(
         pytest.raises(ProviderCredentialRequiredError),
     ):
         AgentRuntimeBootstrapper._resolve_provider_runtime_credential(provider, decrypt)
+
+
+@pytest.mark.unit
+def test_runtime_credential_accepts_custom_path_on_official_origin() -> None:
+    """Custom base paths are allowed configuration and do not block env credentials."""
+    provider = SimpleNamespace(
+        provider_type=ProviderType.OPENAI,
+        api_key_encrypted="encrypted-no-key-sentinel",
+        base_url="https://api.openai.com/v1/tenant-path-token",
+        config={
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+        },
+    )
+    decrypt = MagicMock()
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-runtime-only"}, clear=True):
+        credential = AgentRuntimeBootstrapper._resolve_provider_runtime_credential(
+            provider,
+            decrypt,
+        )
+
+    assert credential == "sk-runtime-only"
+    decrypt.assert_not_called()
 
     decrypt.assert_not_called()
 

@@ -111,11 +111,19 @@ class CronJobCreate(BaseModel):
     max_retries: int = Field(
         default=3, ge=0, description="Max consecutive failures before disabling"
     )
+    idempotency_key: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Caller key that replays the same create instead of inserting another job",
+    )
 
 
 class CronJobUpdate(BaseModel):
     """Request body for updating a cron job (partial update)."""
 
+    expected_revision: int | None = Field(default=None, ge=1)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
     name: str | None = Field(default=None, description="Job name", min_length=1, max_length=255)
     description: str | None = Field(default=None, description="Job description", max_length=1000)
     enabled: bool | None = Field(default=None, description="Enable/disable")
