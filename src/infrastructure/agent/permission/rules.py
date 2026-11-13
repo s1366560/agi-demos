@@ -360,7 +360,6 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "sh",
         "shell",
         "deps_check",
-        "deps_install",
         "run_tests",
         "generate_tests",
         "analyze_coverage",

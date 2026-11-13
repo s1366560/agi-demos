@@ -33,7 +33,7 @@ def _guard(mode: str) -> ChatRunToolPermissionV2:
         ("write", "write"),
         ("bash", "bash"),
         ("run_tests", "bash"),
-        ("deps_install", "bash"),
+        ("deps_install", "ask"),
         ("git_log", "read"),
         ("preview_edit", "read"),
         ("unknown_tool", "ask"),
