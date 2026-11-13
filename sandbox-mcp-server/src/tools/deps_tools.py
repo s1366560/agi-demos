@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import signal
+import sys
 import time
 from typing import Any, Dict
 
@@ -33,6 +34,39 @@ def classify_install_failure(message: str) -> str:
             "This is a sandbox limit, not a missing package. " + message
         )
     return message
+
+
+_WORKSPACE_VENV_DIR = ".deps-venv"
+
+
+def select_pip_install_target(
+    workspace_dir: str,
+    venv_path: str | None,
+    *,
+    prefix_writable: bool,
+) -> tuple[str | None, str]:
+    """Choose a pip target without changing the system prefix or PYTHONPATH.
+
+    An explicit venv stays on that path. A writable interpreter prefix keeps
+    the default pip. A read-only prefix uses a workspace-local venv instead of
+    chmod on site-packages.
+    """
+    if venv_path:
+        if not os.path.isabs(venv_path):
+            venv_path = os.path.join(workspace_dir, venv_path)
+        return venv_path, "explicit_venv"
+    if prefix_writable:
+        return None, "interpreter_prefix"
+    return os.path.join(workspace_dir, _WORKSPACE_VENV_DIR), "workspace_venv"
+
+
+def interpreter_prefix_writable(prefix: str | None = None) -> bool:
+    """Return whether the interpreter prefix can accept new packages."""
+    candidate = prefix or sys.prefix
+    site = os.path.join(candidate, "lib")
+    target = site if os.path.isdir(site) else candidate
+    return os.access(target, os.W_OK)
+
 
 # Regex to validate pip package specifiers (name with optional version constraints).
 # Allows: pandas, numpy>=2.0, requests[security]==2.31.0, my-pkg~=1.0
@@ -177,9 +211,17 @@ async def deps_install(
 
         results: list[dict[str, Any]] = []
         errors: list[str] = []
+        install_scope: str | None = None
+        install_target: str | None = None
 
         if package_type == "pip":
             pip_cmd = "pip"
+            venv_path, install_scope = select_pip_install_target(
+                _workspace_dir,
+                venv_path,
+                prefix_writable=interpreter_prefix_writable(),
+            )
+            install_target = venv_path or sys.prefix
 
             # Handle venv creation / selection
             if venv_path:
@@ -320,6 +362,8 @@ async def deps_install(
                 "errors": errors,
                 "duration_seconds": round(elapsed, 2),
                 "package_type": package_type,
+                "install_scope": install_scope,
+                "install_target": install_target,
             },
         }
 
