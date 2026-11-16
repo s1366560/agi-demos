@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import importlib.util
 import json
@@ -173,6 +174,34 @@ async def test_auto_upgrades_stale_reference_with_observed_values(
     assert lines[0]["old_digest"] == OLD_REFERENCE.digest
     assert lines[0]["new_digest"] == REPLACEMENT.digest
     assert lines[1] == {"upgraded_desired_revision": 8}
+
+
+async def test_engine_is_disposed_when_upgrade_fails(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness.install(monkeypatch, desired_record(OLD_REFERENCE, revision=7))
+
+    async def fail(*_args: object, **_kwargs: object) -> object:
+        raise RuntimeError("upgrade failed")
+
+    monkeypatch.setattr(upgrade_script, "upgrade_root_builtin_bundle_v2", fail)
+    with pytest.raises(RuntimeError, match="upgrade failed"):
+        await upgrade_script.run(make_args(auto=True, actor_id="ops"))
+    assert harness.engine.disposed is True
+
+
+async def test_engine_is_disposed_when_upgrade_is_cancelled(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness.install(monkeypatch, desired_record(OLD_REFERENCE, revision=7))
+
+    async def cancel(*_args: object, **_kwargs: object) -> object:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(upgrade_script, "upgrade_root_builtin_bundle_v2", cancel)
+    with pytest.raises(asyncio.CancelledError):
+        await upgrade_script.run(make_args(auto=True, actor_id="ops"))
+    assert harness.engine.disposed is True
 
 
 async def test_auto_reports_up_to_date_without_writing(

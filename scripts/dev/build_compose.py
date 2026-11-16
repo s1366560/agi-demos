@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import fnmatch
 import gzip
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -204,7 +207,101 @@ def option_flags(spec: BuildSpec) -> list[str]:
     return command
 
 
-def build_command(spec: BuildSpec, *, no_cache: bool = False) -> tuple[list[str], dict[str, str]]:
+_STAMP_LABEL = "dev.input-stamp"
+
+
+def _pattern_matches(relative: str, pattern: str, *, is_dir: bool) -> bool:
+    body = pattern.rstrip("/")
+    if pattern.endswith("/") and not is_dir:
+        return False
+    if body.startswith("**/"):
+        body = body[3:]
+        if _pattern_matches(relative, body, is_dir=is_dir):
+            return True
+        return any(
+            _pattern_matches(relative.split("/", index)[-1], body, is_dir=is_dir)
+            for index in range(1, relative.count("/") + 1)
+        )
+    if "/" not in body and "**" not in body:
+        return fnmatch.fnmatch(Path(relative).name, body)
+    regex = body.replace(".", r"\.").replace("**", "\0").replace("*", "[^/]*").replace("\0", ".*")
+    return re.fullmatch(regex, relative) is not None
+
+
+def ignored_path(relative: str, patterns: list[str], *, is_dir: bool) -> bool:
+    """Apply dockerignore last-match semantics, including the private deny list."""
+    ignored = False
+    for pattern in patterns:
+        negative = pattern.startswith("!")
+        body = pattern[1:] if negative else pattern
+        if _pattern_matches(relative, body, is_dir=is_dir):
+            ignored = not negative
+    return ignored
+
+
+def input_stamp(spec: BuildSpec) -> str:
+    """Fingerprint included build inputs without reading excluded private files."""
+    patterns = context_patterns(spec)
+    digest = hashlib.sha256()
+    arguments = spec.options.get("args", {})
+    if isinstance(arguments, dict):
+        for name in sorted(arguments):
+            value = arguments[name]
+            digest.update(b"arg\0")
+            digest.update(str(name).encode())
+            digest.update(b"\0")
+            digest.update(b"" if value is None else str(value).encode())
+    for directory, dirnames, filenames in os.walk(spec.context, followlinks=False):
+        relative_dir = Path(directory).relative_to(spec.context).as_posix()
+        if relative_dir == ".":
+            relative_dir = ""
+        kept: list[str] = []
+        for name in sorted(dirnames):
+            relative = f"{relative_dir}/{name}" if relative_dir else name
+            if ignored_path(relative, patterns, is_dir=True):
+                continue
+            kept.append(name)
+        dirnames[:] = kept
+        for name in sorted(filenames):
+            relative = f"{relative_dir}/{name}" if relative_dir else name
+            if ignored_path(relative, patterns, is_dir=False):
+                continue
+            path = Path(directory) / name
+            digest.update(relative.encode())
+            digest.update(b"\0")
+            if os.path.islink(path):
+                digest.update(os.readlink(path).encode())
+                continue
+            with path.open("rb") as stream:
+                while chunk := stream.read(1024 * 1024):
+                    digest.update(chunk)
+    return digest.hexdigest()
+
+
+def recorded_stamp(spec: BuildSpec) -> str | None:
+    result = subprocess.run(
+        [*spec.docker, "image", "inspect", "--format", "{{json .Config.Labels}}", spec.image],
+        cwd=spec.repo,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    if result.returncode:
+        return None
+    try:
+        labels: object = json.loads(result.stdout or "null")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(labels, dict):
+        return None
+    value = labels.get(_STAMP_LABEL)
+    return value if isinstance(value, str) and value else None
+
+
+def build_command(
+    spec: BuildSpec, *, no_cache: bool = False, stamp: str | None = None
+) -> tuple[list[str], dict[str, str]]:
     arguments, environment = build_arguments(spec.options)
     command = [
         *spec.docker,
@@ -217,6 +314,8 @@ def build_command(spec: BuildSpec, *, no_cache: bool = False) -> tuple[list[str]
         *arguments,
         *option_flags(spec),
     ]
+    if stamp is not None:
+        command.extend(["--label", f"{_STAMP_LABEL}={stamp}"])
     if no_cache or spec.options.get("no_cache") is True:
         command.append("--no-cache")
     if spec.options.get("pull") is True:
@@ -225,7 +324,14 @@ def build_command(spec: BuildSpec, *, no_cache: bool = False) -> tuple[list[str]
 
 
 def build(spec: BuildSpec, *, no_cache: bool = False) -> int:
-    command, environment = build_command(spec, no_cache=no_cache)
+    stamp = None if no_cache or spec.options.get("no_cache") is True else input_stamp(spec)
+    if stamp is not None and recorded_stamp(spec) == stamp:
+        print(
+            json.dumps({"service": spec.service, "build": "reused", "reason": "inputs_unchanged"}),
+            flush=True,
+        )
+        return 0
+    command, environment = build_command(spec, no_cache=no_cache, stamp=stamp)
     started = time.monotonic()
     with packed_context(spec) as archive:
         packed_at = time.monotonic()

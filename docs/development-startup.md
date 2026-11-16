@@ -4,10 +4,11 @@ Run from the repository root:
 
 ```bash
 make dev           # Ensure infrastructure, migrate, build changed services, start API/Web
-make restart       # Restart API/Web and reconcile changed images/configuration
-make restart-full  # Also force Ray and WorkspaceCore processes to stop and restart
+make restart       # Reconcile infrastructure first, then replace API/Web
+make restart-full  # Stop compute processes first, then run the same startup
 make stop          # Stop this checkout's managed application/compute processes
 make status
+make doctor        # Report managed health and Compose status without changing them
 ```
 
 PostgreSQL, Redis, Neo4j, MinIO and their volumes are retained by all these commands.
@@ -19,10 +20,20 @@ Ray and WorkspaceCore builds run concurrently; API and Vite then launch concurre
 The one-shot MinIO setup job must finish with exit code zero. It is not treated as
 an always-running health-checked service.
 
-`restart` retains unchanged healthy containers. Runtime source, dependency lock or
-Compose configuration changes still trigger image rebuild/recreation. Use
-`restart-full` when the purpose is to discard all compute-process state even if
-there are no source or configuration changes.
+`restart` finishes migration, builtin sync, and image reconciliation before it
+stops API/Web. A failure in that preparation leaves the already running
+application in place. `restart-full` still stops compute processes first.
+
+On 2026-11-16 at 08:56 Asia/Shanghai the API log shows process 94112 shutting
+down, and the Ray containers were created at 08:59. That command's stdout was
+not captured, so those timestamps only bound the phase after the application
+had already been stopped. They do not identify the original error string.
+
+Unchanged image inputs are reused. The input fingerprint covers included file
+names, sizes, and modification times, and is stored as the image label
+`dev.input-stamp`. A source, lock, or Compose input change produces a different
+fingerprint and rebuilds. `scripts/dev/build_compose.py --no-cache` forces a
+rebuild. Runtime logs, virtualenvs, and other dockerignored paths do not.
 
 The Ray head, worker and actor use one Compose development configuration and the
 same locked dependency environment. Dependencies are installed while building the
@@ -43,8 +54,13 @@ The API/Web process manager stores non-secret launch identities under
 It validates kernel process identity, checkout, role, launch marker and listener
 ownership before accepting health or sending signals. It never kills by port or
 global process-name pattern. Legacy PID files do not grant termination authority.
-Manually launched foreground servers remain under their original terminal's control;
-stop those with Ctrl+C before using the managed startup on the same ports.
+Manually launched foreground servers remain under their original terminal's control.
+Stop those with Ctrl+C before using the managed startup on the same ports. A
+foreign listener fails with `port_in_use_by_unmanaged_process:<pid>` and is not
+signaled. `make stop` is idempotent when this checkout has no managed processes.
+`make doctor` prints the managed status and Compose process list; it does not
+start, stop, or delete anything. Its exit code is non-zero when API or Web is
+not ready.
 
 `DEV_STARTUP_TIMEOUT` bounds readiness waiting after builds; `DEV_STOP_TIMEOUT`
 bounds managed process shutdown. Individual HTTP and Compose probes also have

@@ -174,9 +174,15 @@ def test_workspace_core_make_lifecycle_is_complete_and_non_destructive() -> None
     ):
         assert _make_recipe(makefile, target)
 
+    prepare = _make_recipe(makefile, "dev-prepare")
+    assert prepare.index("$(MAKE) db-schema") < prepare.index("plugin-bundle-upgrade")
+    assert prepare.index("plugin-bundle-upgrade") < prepare.index("workspace-core-start")
     dev_all = _make_recipe(makefile, "dev-all")
-    assert dev_all.index("$(MAKE) db-schema") < dev_all.index("plugin-bundle-upgrade")
-    assert "workspace-core-start" in dev_all
+    assert re.search(r"(?m)^dev-all:.*\bdev-prepare\b", makefile)
+    assert "$(MAKE) dev-app-start" in dev_all
+    restart = _make_recipe(makefile, "restart")
+    assert restart.index("dev-prepare") < restart.index("dev-app-stop")
+    assert restart.index("dev-app-stop") < restart.index("dev-app-start")
     assert "$(WORKSPACE_CORE_SERVICE)" in _make_recipe(makefile, "dev-stop")
     assert "$(WORKSPACE_CORE_SERVICE)" in _make_recipe(makefile, "status")
     assert "down" not in _make_recipe(makefile, "workspace-core-stop")

@@ -42,6 +42,10 @@ from pathlib import Path
 args=sys.argv[1:]
 if "compose" in args:
  print(Path(os.environ["FIXTURE_CONFIG"]).read_text());raise SystemExit(0)
+if "inspect" in args:
+ stamp=os.getenv("FIXTURE_STAMP")
+ print("null" if not stamp else json.dumps({"dev.input-stamp":stamp}))
+ raise SystemExit(0 if stamp else 1)
 raw=sys.stdin.buffer.read()
 with tarfile.open(fileobj=io.BytesIO(raw),mode="r:gz") as archive:
  names=archive.getnames();source=archive.extractfile("src/app.py").read().decode();lock=archive.extractfile("uv.lock").read().decode()
@@ -52,7 +56,9 @@ raise SystemExit(int(os.getenv("FIXTURE_BUILD_EXIT","0")))
     return repo, fake, tmp_path / "result.json"
 
 
-def invoke(context, service: str, *, options: dict | None = None, code: int = 0):
+def invoke(
+    context, service: str, *, options: dict | None = None, code: int = 0, stamp: str | None = None
+):
     repo, fake, result = context
     dockerfile = "Dockerfile.ray" if service == "ray-head" else "Dockerfile.workspace-core"
     build = {
@@ -68,7 +74,10 @@ def invoke(context, service: str, *, options: dict | None = None, code: int = 0)
     )
     environment = os.environ.copy()
     environment.update(
-        FIXTURE_CONFIG=str(config), FIXTURE_RESULT=str(result), FIXTURE_BUILD_EXIT=str(code)
+        FIXTURE_CONFIG=str(config),
+        FIXTURE_RESULT=str(result),
+        FIXTURE_BUILD_EXIT=str(code),
+        **({"FIXTURE_STAMP": stamp} if stamp else {}),
     )
     run = subprocess.run(
         [
@@ -123,9 +132,94 @@ def test_every_build_observes_current_source_and_dependency_bytes(context):
     assert result["lock"] == "changed lock"
 
 
+def test_unchanged_inputs_reuse_the_labeled_image_without_a_new_upload(context):
+    run, result = invoke(context, "ray-head")
+    assert run.returncode == 0
+    stamp = next(
+        arg.split("=", 1)[1] for arg in result["argv"] if arg.startswith("dev.input-stamp=")
+    )
+    result_path = context[2]
+    result_path.unlink()
+    run, reused = invoke(context, "ray-head", stamp=stamp)
+    assert run.returncode == 0
+    assert reused is None
+    assert '"build": "reused"' in run.stdout
+    assert "NEUTRAL_PRIVATE_VALUE" not in run.stdout + run.stderr
+
+
+def _stamp(result: dict) -> str:
+    return next(
+        arg.split("=", 1)[1] for arg in result["argv"] if arg.startswith("dev.input-stamp=")
+    )
+
+
+def test_changed_source_still_rebuilds_after_a_matching_stamp(context):
+    run, result = invoke(context, "ray-head")
+    stamp = next(
+        arg.split("=", 1)[1] for arg in result["argv"] if arg.startswith("dev.input-stamp=")
+    )
+    (context[0] / "src/app.py").write_text("changed source")
+    run, rebuilt = invoke(context, "ray-head", stamp=stamp)
+    assert run.returncode == 0
+    assert rebuilt["source"] == "changed source"
+
+
+def test_dockerfile_lock_and_build_arg_changes_invalidate_the_stamp(context):
+    _, original = invoke(context, "ray-head")
+    original_stamp = _stamp(original)
+    (context[0] / "Dockerfile.ray").write_text("FROM scratch\nCOPY . /app\n# changed\n")
+    _, dockerfile = invoke(context, "ray-head")
+    assert _stamp(dockerfile) != original_stamp
+    (context[0] / "uv.lock").write_text("changed lock")
+    _, lock = invoke(context, "ray-head")
+    assert _stamp(lock) != _stamp(dockerfile)
+    _, args = invoke(
+        context,
+        "ray-head",
+        options={"args": {"PRIVATE_BUILD_ARG": "NEUTRAL_OTHER_VALUE"}},
+    )
+    assert _stamp(args) != _stamp(lock)
+    rendered = " ".join(args["argv"])
+    assert "NEUTRAL_OTHER_VALUE" not in rendered
+    assert "NEUTRAL_PRIVATE_VALUE" not in rendered
+
+
+def test_ignored_secret_change_does_not_invalidate_or_leak(context):
+    _, result = invoke(context, "ray-head")
+    stamp = _stamp(result)
+    context[2].unlink()
+    (context[0] / ".env").write_text("NEUTRAL_SECRET_ROTATED")
+    run, reused = invoke(context, "ray-head", stamp=stamp)
+    assert run.returncode == 0
+    assert reused is None
+    assert '"build": "reused"' in run.stdout
+    assert "NEUTRAL_SECRET" not in run.stdout + run.stderr
+    assert "NEUTRAL_SECRET" not in " ".join(result["argv"])
+
+
+def test_missing_image_and_failed_build_do_not_report_reuse(context):
+    run, result = invoke(context, "ray-head")
+    assert '"build": "reused"' not in run.stdout
+    assert result is not None
+    failed, failed_result = invoke(context, "ray-head", code=17)
+    assert failed.returncode == 17
+    assert failed_result is not None
+    assert '"build": "reused"' not in failed.stdout
+
+
+def test_no_cache_does_not_reuse_a_matching_stamp(context):
+    _, result = invoke(context, "ray-head")
+    run, rebuilt = invoke(context, "ray-head", stamp=_stamp(result), options={"no_cache": True})
+    assert run.returncode == 0
+    assert rebuilt is not None
+    assert "--no-cache" in rebuilt["argv"]
+    assert '"build": "reused"' not in run.stdout
+
+
 def test_build_failure_is_not_reported_as_success(context):
     run, _ = invoke(context, "ray-head", code=17)
     assert run.returncode == 17
+    assert '"build": "reused"' not in run.stdout
 
 
 def test_unsupported_configuration_fails_without_executing_build(context):

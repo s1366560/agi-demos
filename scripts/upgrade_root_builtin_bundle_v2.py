@@ -47,46 +47,44 @@ from src.infrastructure.plugins.v2.production_bundle import (  # noqa: E402
 
 
 async def run(args: argparse.Namespace) -> None:
-    if args.all_initialized_scopes:
-        await _run_batch(args)
-    else:
-        await _run_scope(args)
+    try:
+        if args.all_initialized_scopes:
+            await _run_batch(args)
+        else:
+            await _run_scope(args)
+    finally:
+        await engine.dispose()
 
 
 async def _run_batch(args: argparse.Namespace) -> None:
-    try:
-        async with async_session_factory() as session:
-            scopes = await PlatformPluginDesiredBundleSetRepositoryV2(
-                session
-            ).list_initialized_scopes()
-        for scope in scopes:
-            print(
-                json.dumps(
-                    {
-                        "maintenance_scope": {
-                            "kind": scope.kind.value,
-                            "tenant_id": scope.tenant_id,
-                            "project_id": scope.project_id,
-                            "session_id": scope.session_id,
-                        }
+    async with async_session_factory() as session:
+        scopes = await PlatformPluginDesiredBundleSetRepositoryV2(session).list_initialized_scopes()
+    for scope in scopes:
+        print(
+            json.dumps(
+                {
+                    "maintenance_scope": {
+                        "kind": scope.kind.value,
+                        "tenant_id": scope.tenant_id,
+                        "project_id": scope.project_id,
+                        "session_id": scope.session_id,
                     }
-                )
-            )
-            scoped_args = argparse.Namespace(
-                **{
-                    **vars(args),
-                    "all_initialized_scopes": False,
-                    "scope_kind": scope.kind.value,
-                    "tenant_id": scope.tenant_id,
-                    "project_id": scope.project_id,
-                    "session_id": scope.session_id,
                 }
             )
-            # Each owner is a complete transaction. A failure leaves that owner's
-            # source, desired head, and last-good publication untouched; stop here.
-            await _run_scope(scoped_args)
-    finally:
-        await engine.dispose()
+        )
+        scoped_args = argparse.Namespace(
+            **{
+                **vars(args),
+                "all_initialized_scopes": False,
+                "scope_kind": scope.kind.value,
+                "tenant_id": scope.tenant_id,
+                "project_id": scope.project_id,
+                "session_id": scope.session_id,
+            }
+        )
+        # Each owner is a complete transaction. A failure leaves that owner's
+        # source, desired head, and last-good publication untouched; stop here.
+        await _run_scope(scoped_args)
 
 
 def _builtin_reference(
@@ -111,105 +109,96 @@ async def _run_scope(args: argparse.Namespace) -> None:
         project_id=args.project_id,
         session_id=args.session_id,
     )
-    try:
-        async with async_session_factory() as session:
-            head = await PlatformPluginDesiredBundleSetRepositoryV2(session).current_desired_set(
-                scope
-            )
-            if head is None:
-                if args.auto:
-                    print(json.dumps({"status": "uninitialized-scope"}))
-                    return
-                raise ValueError("scope has not been initialized")
-            current = _builtin_reference(head.desired_set, replacement, auto=args.auto)
-            if current is None:
-                print(json.dumps({"status": "skipped", "reason_code": "builtin_reference_absent"}))
-                return
-            reference = head.desired_set.profile_source
-            profile_receipt = None
-            if args.upgrade_profile_baseline:
-                source = await PlatformPluginProfileSourceRepositoryV2(session).read_exact(
-                    scope=scope,
-                    source_id=reference.source_id,
-                    revision=reference.revision,
-                    digest=reference.digest,
-                )
-                if source is None:
-                    raise ValueError("the existing exact scoped ProfileSource is unavailable")
-                candidate = upgrade_production_profile_baseline_v2(source, sources.profile_source)
-                profile_receipt = {
-                    "source_id": source.source_id,
-                    "old_revision": source.revision,
-                    "new_revision": candidate.revision,
-                    "old_digest": source.digest,
-                    "new_digest": candidate.digest,
-                    "baseline_layer": "memstack-production-target-hosts",
-                    "preserved_overlay_layers": [
-                        layer.layer_id
-                        for layer in source.layers
-                        if layer.layer_id != "memstack-production-target-hosts"
-                    ],
-                    "baseline_replacements_and_disabled_ids_preserved": True,
-                }
-            print(
-                json.dumps(
-                    {
-                        "desired_revision": head.desired_set.revision,
-                        "bundle_id": current.bundle_id,
-                        "old_digest": current.digest,
-                        "new_digest": replacement.digest,
-                        **(
-                            {"profile_baseline": profile_receipt}
-                            if profile_receipt is not None
-                            else {"profile_source_preserved": reference.source_id}
-                        ),
-                    }
-                )
-            )
-            if not args.apply and not args.auto:
-                return
+    async with async_session_factory() as session:
+        head = await PlatformPluginDesiredBundleSetRepositoryV2(session).current_desired_set(scope)
+        if head is None:
             if args.auto:
-                if current == replacement and (
-                    profile_receipt is None
-                    or profile_receipt["old_digest"] == profile_receipt["new_digest"]
-                ):
-                    print(json.dumps({"status": "up-to-date"}))
-                    return
-                expected_revision = head.desired_set.revision
-            else:
-                expected_revision = args.expected_revision
-                if current.digest != args.expected_digest:
-                    raise ValueError(
-                        "builtin digest differs from the explicitly expected old digest"
-                    )
-                if args.upgrade_profile_baseline and (
-                    reference.revision != args.expected_source_revision
-                    or reference.digest != args.expected_source_digest
-                ):
-                    raise ValueError(
-                        "profile source differs from the explicitly expected reference"
-                    )
-            loader = ScopedInstalledBundleLoaderV2(
-                session_factory=async_session_factory,
-                production_sources=sources,
-                trusted_public_keys=tuple(args.trusted_public_key),
-                allowed_registries=frozenset(args.allowed_registry),
-            )
-            record = await upgrade_root_builtin_bundle_v2(
-                session,
-                sources=sources,
-                load_verified_bundle=loader,
-                expected_revision=expected_revision,
-                expected_bundle=current,
-                actor_id=args.actor_id,
+                print(json.dumps({"status": "uninitialized-scope"}))
+                return
+            raise ValueError("scope has not been initialized")
+        current = _builtin_reference(head.desired_set, replacement, auto=args.auto)
+        if current is None:
+            print(json.dumps({"status": "skipped", "reason_code": "builtin_reference_absent"}))
+            return
+        reference = head.desired_set.profile_source
+        profile_receipt = None
+        if args.upgrade_profile_baseline:
+            source = await PlatformPluginProfileSourceRepositoryV2(session).read_exact(
                 scope=scope,
-                upgrade_profile_baseline=args.upgrade_profile_baseline,
-                expected_profile_source=reference if args.upgrade_profile_baseline else None,
+                source_id=reference.source_id,
+                revision=reference.revision,
+                digest=reference.digest,
             )
-            await session.commit()
-            print(json.dumps({"upgraded_desired_revision": record.desired_set.revision}))
-    finally:
-        await engine.dispose()
+            if source is None:
+                raise ValueError("the existing exact scoped ProfileSource is unavailable")
+            candidate = upgrade_production_profile_baseline_v2(source, sources.profile_source)
+            profile_receipt = {
+                "source_id": source.source_id,
+                "old_revision": source.revision,
+                "new_revision": candidate.revision,
+                "old_digest": source.digest,
+                "new_digest": candidate.digest,
+                "baseline_layer": "memstack-production-target-hosts",
+                "preserved_overlay_layers": [
+                    layer.layer_id
+                    for layer in source.layers
+                    if layer.layer_id != "memstack-production-target-hosts"
+                ],
+                "baseline_replacements_and_disabled_ids_preserved": True,
+            }
+        print(
+            json.dumps(
+                {
+                    "desired_revision": head.desired_set.revision,
+                    "bundle_id": current.bundle_id,
+                    "old_digest": current.digest,
+                    "new_digest": replacement.digest,
+                    **(
+                        {"profile_baseline": profile_receipt}
+                        if profile_receipt is not None
+                        else {"profile_source_preserved": reference.source_id}
+                    ),
+                }
+            )
+        )
+        if not args.apply and not args.auto:
+            return
+        if args.auto:
+            if current == replacement and (
+                profile_receipt is None
+                or profile_receipt["old_digest"] == profile_receipt["new_digest"]
+            ):
+                print(json.dumps({"status": "up-to-date"}))
+                return
+            expected_revision = head.desired_set.revision
+        else:
+            expected_revision = args.expected_revision
+            if current.digest != args.expected_digest:
+                raise ValueError("builtin digest differs from the explicitly expected old digest")
+            if args.upgrade_profile_baseline and (
+                reference.revision != args.expected_source_revision
+                or reference.digest != args.expected_source_digest
+            ):
+                raise ValueError("profile source differs from the explicitly expected reference")
+        loader = ScopedInstalledBundleLoaderV2(
+            session_factory=async_session_factory,
+            production_sources=sources,
+            trusted_public_keys=tuple(args.trusted_public_key),
+            allowed_registries=frozenset(args.allowed_registry),
+        )
+        record = await upgrade_root_builtin_bundle_v2(
+            session,
+            sources=sources,
+            load_verified_bundle=loader,
+            expected_revision=expected_revision,
+            expected_bundle=current,
+            actor_id=args.actor_id,
+            scope=scope,
+            upgrade_profile_baseline=args.upgrade_profile_baseline,
+            expected_profile_source=reference if args.upgrade_profile_baseline else None,
+        )
+        await session.commit()
+        print(json.dumps({"upgraded_desired_revision": record.desired_set.revision}))
 
 
 def main() -> None:
