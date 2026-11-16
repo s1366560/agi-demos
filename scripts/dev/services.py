@@ -513,6 +513,18 @@ class DevServices:
         return result
 
 
+def acquire_service_lock(directory: Path) -> int:
+    """Take the non-blocking checkout lock. A second caller fails immediately."""
+    directory.mkdir(parents=True, exist_ok=True)
+    lock = os.open(directory / "lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(lock)
+        raise
+    return lock
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     _ = parser.add_argument("action", choices=("start", "stop", "status"))
@@ -565,9 +577,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         connect_timeout=args.connect_timeout,
         read_timeout=args.read_timeout,
     )
-    lock = os.open(manager.directory / "lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock = acquire_service_lock(manager.directory)
+    except OSError:
+        print(json.dumps({"status": "error", "reason": "service_lock_busy"}), file=sys.stderr)
+        return 1
+    try:
         result = asyncio.run(getattr(manager, args.action)(timeout=timeout))
         print(json.dumps(result))
         return (

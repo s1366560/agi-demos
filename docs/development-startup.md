@@ -24,6 +24,11 @@ an always-running health-checked service.
 stops API/Web. A failure in that preparation leaves the already running
 application in place. `restart-full` still stops compute processes first.
 
+On 2026-11-16 at 08:56 Asia/Shanghai the API log shows process 94112 shutting
+down, and the Ray containers were created at 08:59. That command's stdout was
+not captured, so those timestamps only bound the phase after the application
+had already been stopped. They do not identify the original error string.
+
 Unchanged image inputs are reused. The input fingerprint covers included file
 names, sizes, and modification times, and is stored as the image label
 `dev.input-stamp`. A source, lock, or Compose input change produces a different

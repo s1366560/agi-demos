@@ -243,6 +243,14 @@ def input_stamp(spec: BuildSpec) -> str:
     """Fingerprint included build inputs without reading excluded private files."""
     patterns = context_patterns(spec)
     digest = hashlib.sha256()
+    arguments = spec.options.get("args", {})
+    if isinstance(arguments, dict):
+        for name in sorted(arguments):
+            value = arguments[name]
+            digest.update(b"arg\0")
+            digest.update(str(name).encode())
+            digest.update(b"\0")
+            digest.update(b"" if value is None else str(value).encode())
     for directory, dirnames, filenames in os.walk(spec.context, followlinks=False):
         relative_dir = Path(directory).relative_to(spec.context).as_posix()
         if relative_dir == ".":
@@ -259,10 +267,14 @@ def input_stamp(spec: BuildSpec) -> str:
             if ignored_path(relative, patterns, is_dir=False):
                 continue
             path = Path(directory) / name
-            stat = path.lstat()
             digest.update(relative.encode())
-            digest.update(str(stat.st_mtime_ns).encode())
-            digest.update(str(stat.st_size).encode())
+            digest.update(b"\0")
+            if os.path.islink(path):
+                digest.update(os.readlink(path).encode())
+                continue
+            with path.open("rb") as stream:
+                while chunk := stream.read(1024 * 1024):
+                    digest.update(chunk)
     return digest.hexdigest()
 
 

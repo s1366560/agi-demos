@@ -2,7 +2,10 @@
 
 import asyncio
 import dataclasses
+import os
 import signal
+import subprocess
+import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,7 +14,13 @@ from unittest.mock import Mock
 import pytest
 
 from scripts.dev.processes import ProbeError, ProcessIdentity, ProcessProbe
-from scripts.dev.services import DevServices, ServiceError, ServiceSpec, probe_health
+from scripts.dev.services import (
+    DevServices,
+    ServiceError,
+    ServiceSpec,
+    acquire_service_lock,
+    probe_health,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -622,3 +631,34 @@ async def test_cancelled_start_joins_tasks_and_cleans_only_new_launches(harness)
         await task
     assert not processes.processes
     assert not list(manager.directory.glob("*.json"))
+
+
+def test_second_process_service_lock_fails_immediately(tmp_path: Path):
+    repo = Path(__file__).resolve().parents[4]
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from pathlib import Path; "
+            "from scripts.dev.services import acquire_service_lock; "
+            "acquire_service_lock(Path(sys.argv[1])); "
+            "print('held', flush=True); sys.stdin.read()",
+            str(tmp_path),
+        ],
+        cwd=repo,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "held"
+        started = time.monotonic()
+        with pytest.raises(OSError):
+            acquire_service_lock(tmp_path)
+        assert time.monotonic() - started < 0.2
+    finally:
+        if holder.stdin is not None:
+            holder.stdin.close()
+        holder.wait(timeout=5)
+        os.close(acquire_service_lock(tmp_path))
