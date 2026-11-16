@@ -114,6 +114,8 @@ export function DesktopSidebar({
   useEffect(() => {
     if (!profileOpen) return undefined;
 
+    profileMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && profileMenuRef.current?.contains(target)) return;
@@ -167,7 +169,7 @@ export function DesktopSidebar({
       {/* Header: the project/workspace heading and conversation status chips. */}
       <div className="desktop-design-header">
         <header className="desktop-design-header-row">
-          <strong>{projectName}</strong>
+          <strong title={projectName}>{projectName}</strong>
           <div className="desktop-workspace-heading-actions">
             {onCreateWorkspace ? (
               <button
@@ -228,6 +230,24 @@ export function DesktopSidebar({
               className="desktop-design-profile-menu"
               role="menu"
               aria-label={t('sidebar.account')}
+              onKeyDown={(event) => {
+                const items = Array.from(
+                  event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+                );
+                const index = items.findIndex((item) => item === document.activeElement);
+                let nextIndex: number;
+                if (event.key === 'ArrowDown') nextIndex = (index + 1) % items.length;
+                else if (event.key === 'ArrowUp') nextIndex = (index - 1 + items.length) % items.length;
+                else if (event.key === 'Home') nextIndex = 0;
+                else if (event.key === 'End') nextIndex = items.length - 1;
+                else if (event.key === 'Tab') {
+                  setProfileOpen(false);
+                  profileTriggerRef.current?.focus();
+                  return;
+                } else return;
+                event.preventDefault();
+                items[nextIndex]?.focus();
+              }}
             >
               <div className="desktop-design-profile-menu-identity">
                 <span className="desktop-design-profile-avatar">
@@ -280,6 +300,12 @@ export function DesktopSidebar({
             aria-haspopup="menu"
             aria-expanded={profileOpen}
             aria-controls={profileOpen ? 'desktop-profile-menu' : undefined}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                setProfileOpen(true);
+              }
+            }}
             onClick={() => setProfileOpen((open) => !open)}
           >
             <span className="desktop-design-profile-avatar">

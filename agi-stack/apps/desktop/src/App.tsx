@@ -7331,7 +7331,11 @@ export function App() {
       composeAheadFallbackAllowed: false,
       canonicalRunStatus: currentArtifactRun?.status ?? null,
       draftPlan:
-        displaySessionProjection?.currentPlan?.status === 'draft'
+        displaySessionProjection &&
+        canApproveSessionPlan(
+          displaySessionProjection.currentPlan,
+          displaySessionProjection.capabilities,
+        )
           ? displaySessionProjection.currentPlan
           : null,
       onOpenPlanReview: () => openRightCanvasPanel('plan'),

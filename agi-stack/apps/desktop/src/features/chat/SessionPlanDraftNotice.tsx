@@ -34,14 +34,17 @@ export function SessionPlanDraftNotice({
       <div className="session-plan-draft-copy">
         <strong>{t('session.planDraftReadyTitle')}</strong>
         <span>{t('session.planDraftReadyDescription', { count: notice.taskCount })}</span>
-        <ol>
-          {notice.preview.map((step, index) => (
-            <li key={index}>{step}</li>
-          ))}
-        </ol>
-        {notice.remaining ? (
-          <em>{t('session.planDraftReadyMore', { count: notice.remaining })}</em>
-        ) : null}
+        <details className="session-plan-draft-preview">
+          <summary>{t('session.planDraftPreview', { count: notice.taskCount })}</summary>
+          <ol>
+            {notice.preview.map((step, index) => (
+              <li key={index}>{step}</li>
+            ))}
+          </ol>
+          {notice.remaining ? (
+            <em>{t('session.planDraftReadyMore', { count: notice.remaining })}</em>
+          ) : null}
+        </details>
       </div>
       <button
         type="button"

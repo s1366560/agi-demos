@@ -289,11 +289,30 @@ test('simplified sidebar preserves create, search, functions, account, settings 
       'signOut',
     ]);
     await click('.desktop-design-profile');
+    const menuItems = [...view.element.querySelectorAll('[role="menuitem"]')];
+    assert.equal(document.activeElement, menuItems[0], 'opening the account menu focuses its first action');
+    const pressMenuKey = async (key) => {
+      await act(async () => document.activeElement.dispatchEvent(
+        new window.KeyboardEvent('keydown', { key, bubbles: true }),
+      ));
+    };
+    await pressMenuKey('ArrowUp');
+    assert.equal(document.activeElement, menuItems[2], 'up wraps to the final action');
+    await pressMenuKey('ArrowDown');
+    assert.equal(document.activeElement, menuItems[0], 'down wraps to the first action');
+    await pressMenuKey('End');
+    assert.equal(document.activeElement, menuItems[2]);
+    await pressMenuKey('Home');
+    assert.equal(document.activeElement, menuItems[0]);
     await act(async () =>
       document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
     );
     assert.equal(view.element.querySelector('[role="menu"]'), null);
     assert.equal(document.activeElement, view.element.querySelector('.desktop-design-profile'));
+    await pressMenuKey('ArrowDown');
+    assert.ok(view.element.querySelector('[role="menu"]'), 'arrow key opens the account menu');
+    await pressMenuKey('Tab');
+    assert.equal(view.element.querySelector('[role="menu"]'), null);
   } finally {
     await view.close();
   }

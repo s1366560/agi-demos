@@ -5881,7 +5881,7 @@
   box-shadow: none;
 }
 .chat-shell .session-composer-editor .chat-composer-input {
-  min-height: 108px;
+  min-height: 64px;
   padding: 0;
   border: 0;
   border-radius: 18px 18px 0 0;
@@ -5891,7 +5891,7 @@
 .chat-shell .session-composer-editor textarea {
   display: block;
   width: 100%;
-  min-height: 108px;
+  min-height: 64px;
   padding: 15px 16px 8px;
   border: 0;
   outline: none;
@@ -5901,6 +5901,8 @@
   font-size: 15px;
   line-height: 1.55;
   box-shadow: none;
+  max-height: min(240px, 30vh);
+  overflow-y: auto;
   resize: vertical;
 }
 .chat-shell .session-composer-editor textarea::placeholder {

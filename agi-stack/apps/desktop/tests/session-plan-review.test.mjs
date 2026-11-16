@@ -174,6 +174,19 @@ test('draft plan notice exposes the first steps and remaining count', () => {
   assert.equal(draftPlanReviewNotice({ ...plan, tasks: [] }), null);
 });
 
+test('finished legacy task lists do not keep a pending review reminder', () => {
+  const finished = { ...plan, tasks: plan.tasks.map((task, index) => ({
+    ...task, status: index === 0 ? 'completed' : 'cancelled',
+  })) };
+  assert.equal(draftPlanReviewNotice(finished), null);
+  assert.ok(draftPlanReviewNotice({ ...finished, tasks: [
+    ...finished.tasks, { id: 'pending', content: 'Still needs review', status: 'pending' },
+  ] }));
+  assert.ok(draftPlanReviewNotice({ ...finished, tasks: [
+    { id: 'unknown', content: 'Unknown task state', status: 'future_state' },
+  ] }));
+});
+
 test('localizes the legacy plan-ready sentence without rewriting other messages', () => {
   const t = (key) => (key === 'session.planReadyForReview' ? 'LOCALIZED' : key);
   assert.equal(localizePlanReadyMessage('Plan ready for review.', t), 'LOCALIZED');

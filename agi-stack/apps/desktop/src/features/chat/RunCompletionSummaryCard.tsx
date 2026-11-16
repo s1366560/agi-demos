@@ -17,6 +17,7 @@ import type {
 } from '../session/runCompletionSummaryModel';
 import type { SessionCanvasTabId } from '../session/sessionCanvasModel';
 import { formatTokenCount } from '../session/sessionUsageModel';
+import { MarkdownContent } from './ChatTranscript';
 import './RunCompletionSummaryCard.css';
 
 type RunCompletionSummaryCardProps = {
@@ -55,11 +56,14 @@ export function RunCompletionSummaryCard({
   );
 
   return (
-    <section
+    <details
+      key={summary.outcome}
+      open={summary.outcome === 'failed'}
       className={`run-completion-card outcome-${summary.outcome}`}
       aria-label={t('session.runSummary.title')}
     >
-      <header>
+      <summary>
+        <ChevronRightIcon className="run-completion-disclosure" aria-hidden="true" />
         <span className="run-completion-icon" aria-hidden="true">
           <OutcomeIcon />
         </span>
@@ -70,14 +74,7 @@ export function RunCompletionSummaryCard({
         <em className={`run-completion-outcome tone-${summary.outcome}`}>
           {t(summary.outcomeLabelKey)}
         </em>
-      </header>
 
-      <div className="run-completion-body">
-        {summary.completionSummary ? (
-          <p className="run-completion-narrative">
-            {summary.completionSummary}
-          </p>
-        ) : null}
         {summary.durationMs !== null || summary.usage || summary.tokenUsage ? (
           <div className="run-completion-meta">
             {summary.durationMs !== null ? (
@@ -111,6 +108,15 @@ export function RunCompletionSummaryCard({
               </span>
             ) : null}
           </div>
+        ) : null}
+      </summary>
+
+      <div className="run-completion-body">
+        {summary.completionSummary ? (
+          <MarkdownContent
+            content={summary.completionSummary}
+            className="run-completion-narrative"
+          />
         ) : null}
 
         {summary.changes ? (
@@ -241,6 +247,6 @@ export function RunCompletionSummaryCard({
           </section>
         ) : null}
       </div>
-    </section>
+    </details>
   );
 }

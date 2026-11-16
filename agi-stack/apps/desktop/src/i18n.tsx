@@ -2862,6 +2862,7 @@ const enUS: Record<string, string> = {
   'session.planDraftReadyDescription':
     '{count} steps are waiting. Review the environment and permissions before approving.',
   'session.planDraftReadyMore': '+{count} more',
+  'session.planDraftPreview': 'Preview {count} steps',
   'session.planDraftReadyAction': 'Review plan',
   'session.planReadyForReview': 'Plan generated. Review it before execution.',
   'session.responseStopped': 'Response stopped',
@@ -7162,6 +7163,7 @@ const zhCN: Record<string, string> = {
   'session.planDraftReadyTitle': '计划已生成，等待审阅',
   'session.planDraftReadyDescription': '共 {count} 个步骤。审阅执行环境与权限后批准。',
   'session.planDraftReadyMore': '还有 {count} 个步骤',
+  'session.planDraftPreview': '预览 {count} 个步骤',
   'session.planDraftReadyAction': '审阅计划',
   'session.planReadyForReview': '计划已生成，执行前请先审阅。',
   'session.responseStopped': '已停止生成',

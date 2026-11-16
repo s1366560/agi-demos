@@ -144,6 +144,11 @@ export function draftPlanReviewNotice(
   plan: SessionProjectionPlan | null | undefined,
 ): DraftPlanReviewNotice | null {
   if (!plan || plan.status !== 'draft') return null;
+  // A legacy cloud task list can retain draft status after every task ends.
+  // This only controls the reminder; approval authority stays in the plan reviewer.
+  if (plan.tasks.length > 0 && plan.tasks.every(
+    (task) => task.status === 'completed' || task.status === 'cancelled',
+  )) return null;
   const preview = plan.tasks
     .map((task) => (typeof task.content === 'string' ? task.content.trim() : ''))
     .filter(Boolean);
