@@ -257,7 +257,7 @@ class DevServices:
             for pid in pids:
                 current = self.probe.inspect(pid)
                 if current is None or record is None or not self._belongs(current, record):
-                    raise ServiceError(spec.role, "port_in_use_by_unmanaged_process")
+                    raise ServiceError(spec.role, f"port_in_use_by_unmanaged_process:{pid}")
         except ProbeError as error:
             raise ServiceError(spec.role, "listener_identity_unavailable") from error
         return bool(pids)

@@ -17,9 +17,9 @@
 #   - sdk/python/   : Python SDK
 # =============================================================================
 
-.PHONY: help install update clean init reset fresh restart restart-full stop logs status
+.PHONY: help install update clean init reset fresh restart restart-full stop logs status doctor
 .PHONY: disk-usage clean-cache clean-build-cache clean-backend clean-web clean-docker clean-logs
-.PHONY: dev dev-all dev-stop dev-app-stop dev-infra-base dev-infra-dev dev-infra dev-compute dev-backend dev-web dev-web-stop plugin-bundle-upgrade
+.PHONY: dev dev-all dev-prepare dev-app-start dev-stop dev-app-stop dev-infra-base dev-infra-dev dev-infra dev-compute dev-backend dev-web dev-web-stop plugin-bundle-upgrade
 .PHONY: workspace-core-build workspace-core-configure workspace-core-start workspace-core-health workspace-core-status workspace-core-logs workspace-core-stop
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: drone-up drone-down drone-logs
@@ -85,7 +85,8 @@ help: ## Show this help message
 	@echo "  dev       - Start all services (API + workers + web)"
 	@echo "  stop      - Stop all services"
 	@echo "  status    - Show service status"
-	@echo "  restart   - Restart API/Web and reconcile changed containers"
+	@echo "  doctor    - Report managed process, port, and Compose health"
+	@echo "  restart   - Prepare infrastructure, then replace API/Web"
 	@echo "  restart-full - Force all development processes to restart"
 	@echo ""
 	@echo " Development:"
@@ -144,7 +145,7 @@ help-full: ## Show all available commands
 	@echo "  dev              - Start all services (API + workers + web)"
 	@echo "  stop             - Stop all services (alias: dev-stop)"
 	@echo "  status           - Show service status"
-	@echo "  restart          - Quick restart services"
+	@echo "  restart          - Prepare infrastructure, then replace API/Web"
 	@echo "  reset            - Complete reset (stop + clean)"
 	@echo "  fresh            - Fresh start (reset + init + dev)"
 	@echo ""
@@ -299,9 +300,10 @@ fresh: reset init dev ## Fresh start: reset everything and start development
 	@echo ""
 	@echo " Fresh environment ready!"
 
-restart: ## Restart API/Web; rebuild changed services and retain unchanged healthy infrastructure
+restart: ## Prepare infrastructure first, then replace only this checkout's API/Web
+	@$(MAKE) dev-prepare
 	@$(MAKE) dev-app-stop
-	@$(MAKE) dev
+	@$(MAKE) dev-app-start
 	@echo " Services restarted"
 
 restart-full: ## Force a full development process restart, retaining database volumes
@@ -365,12 +367,17 @@ update: ## Update all dependencies
 dev: dev-all ## Start all services (API + worker + infra + web)
 	@echo " Starting full development environment..."
 
-dev-all: dev-infra-base
+dev-prepare: dev-infra-base ## Migrate, sync bundles, and reconcile images before touching API/Web
 	@$(MAKE) db-init
 	@$(MAKE) db-schema
 	@$(MAKE) plugin-bundle-upgrade
 	@$(MAKE) -j2 dev-compute workspace-core-start
+
+dev-app-start: ## Start this checkout's managed API and Web after preparation has succeeded
 	@$(DEV_SERVICES_CMD) start --repo "$(CURDIR)" --timeout $(DEV_STARTUP_TIMEOUT) --web-command '$(subst ','"'"',$(WEB_DEV_CMD))'
+
+dev-all: dev-prepare
+	@$(MAKE) dev-app-start
 	@echo " Development services ready: API http://localhost:8000 · Web http://localhost:3000"
 
 dev-app-stop: ## Stop only this checkout's managed API and Web processes
@@ -455,6 +462,14 @@ workspace-core-logs: ## Follow Avernet Workspace Core logs
 
 workspace-core-stop: ## Stop Avernet Workspace Core without deleting its data volume
 	@$(COMPOSE_CMD) stop $(WORKSPACE_CORE_SERVICE)
+
+doctor: ## Report this checkout's managed services without starting, stopping, or deleting anything
+	@echo " Development doctor"
+	@echo "==================="
+	@status=0; $(DEV_SERVICES_CMD) status --repo "$(CURDIR)" --timeout $(DEV_STARTUP_TIMEOUT) || status=$$?; \
+		$(COMPOSE_DEV) ps; \
+		$(COMPOSE_CMD) ps $(WORKSPACE_CORE_SERVICE); \
+		exit $$status
 
 status: ## Show status of all services
 	@echo " Service Status"

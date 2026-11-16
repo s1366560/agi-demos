@@ -42,6 +42,10 @@ from pathlib import Path
 args=sys.argv[1:]
 if "compose" in args:
  print(Path(os.environ["FIXTURE_CONFIG"]).read_text());raise SystemExit(0)
+if "inspect" in args:
+ stamp=os.getenv("FIXTURE_STAMP")
+ print("null" if not stamp else json.dumps({"dev.input-stamp":stamp}))
+ raise SystemExit(0 if stamp else 1)
 raw=sys.stdin.buffer.read()
 with tarfile.open(fileobj=io.BytesIO(raw),mode="r:gz") as archive:
  names=archive.getnames();source=archive.extractfile("src/app.py").read().decode();lock=archive.extractfile("uv.lock").read().decode()
@@ -52,7 +56,9 @@ raise SystemExit(int(os.getenv("FIXTURE_BUILD_EXIT","0")))
     return repo, fake, tmp_path / "result.json"
 
 
-def invoke(context, service: str, *, options: dict | None = None, code: int = 0):
+def invoke(
+    context, service: str, *, options: dict | None = None, code: int = 0, stamp: str | None = None
+):
     repo, fake, result = context
     dockerfile = "Dockerfile.ray" if service == "ray-head" else "Dockerfile.workspace-core"
     build = {
@@ -68,7 +74,10 @@ def invoke(context, service: str, *, options: dict | None = None, code: int = 0)
     )
     environment = os.environ.copy()
     environment.update(
-        FIXTURE_CONFIG=str(config), FIXTURE_RESULT=str(result), FIXTURE_BUILD_EXIT=str(code)
+        FIXTURE_CONFIG=str(config),
+        FIXTURE_RESULT=str(result),
+        FIXTURE_BUILD_EXIT=str(code),
+        **({"FIXTURE_STAMP": stamp} if stamp else {}),
     )
     run = subprocess.run(
         [
@@ -121,6 +130,32 @@ def test_every_build_observes_current_source_and_dependency_bytes(context):
     assert run.returncode == 0
     assert result["source"] == "changed source"
     assert result["lock"] == "changed lock"
+
+
+def test_unchanged_inputs_reuse_the_labeled_image_without_a_new_upload(context):
+    run, result = invoke(context, "ray-head")
+    assert run.returncode == 0
+    stamp = next(
+        arg.split("=", 1)[1] for arg in result["argv"] if arg.startswith("dev.input-stamp=")
+    )
+    result_path = context[2]
+    result_path.unlink()
+    run, reused = invoke(context, "ray-head", stamp=stamp)
+    assert run.returncode == 0
+    assert reused is None
+    assert '"build": "reused"' in run.stdout
+    assert "NEUTRAL_PRIVATE_VALUE" not in run.stdout + run.stderr
+
+
+def test_changed_source_still_rebuilds_after_a_matching_stamp(context):
+    run, result = invoke(context, "ray-head")
+    stamp = next(
+        arg.split("=", 1)[1] for arg in result["argv"] if arg.startswith("dev.input-stamp=")
+    )
+    (context[0] / "src/app.py").write_text("changed source")
+    run, rebuilt = invoke(context, "ray-head", stamp=stamp)
+    assert run.returncode == 0
+    assert rebuilt["source"] == "changed source"
 
 
 def test_build_failure_is_not_reported_as_success(context):
