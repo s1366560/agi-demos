@@ -46,6 +46,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
     mark_agent_run_running,
 )
+from src.infrastructure.agent.actor.cancelled_text import cancelled_text_end_events
 from src.infrastructure.agent.actor.legacy_cron_admission import (
     complete_legacy_cron_admission,
     complete_legacy_cron_stream,
@@ -456,6 +457,59 @@ class _StreamState:
             self.error_message = side.error_message
         if side.summary_data is not None:
             self.summary_save_data = side.summary_data
+
+
+async def _finalize_cancelled_chat(
+    *,
+    state: _StreamState,
+    time_gen: EventTimeGenerator,
+    tenant_id: str,
+    project_id: str,
+    conversation_id: str,
+    message_id: str,
+    run_id: str,
+    correlation_id: str | None,
+    pending_deltas: list[tuple[dict[str, Any], int, int]] | None = None,
+    redis_client: aioredis.Redis | None = None,
+) -> None:
+    """Durably close partial text before acknowledging the terminal run state."""
+    if pending_deltas:
+        await _flush_pending_delta_events(
+            pending_deltas,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            correlation_id=correlation_id,
+            redis_client=redis_client if redis_client is not None else await _get_redis_client(),
+        )
+    terminal_events = cancelled_text_end_events(state.events)
+    terminal_events.append({"type": "cancelled", "data": {"run_id": run_id, "status": "cancelled"}})
+    for event in terminal_events:
+        event["event_time_us"], event["event_counter"] = time_gen.next()
+        state.events.append(event)
+    await _flush_remaining_events(
+        state.events,
+        state.persisted_count,
+        conversation_id,
+        message_id,
+        correlation_id,
+    )
+    await _settle_root_run_authority(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        run_id=run_id,
+        outcome="cancelled",
+    )
+    for event in terminal_events:
+        await _publish_event_to_stream(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            event=event,
+            event_time_us=event["event_time_us"],
+            event_counter=event["event_counter"],
+            correlation_id=correlation_id,
+            redis_client=redis_client,
+        )
 
 
 def _extract_event_side_effects(event: dict[str, Any]) -> _EventSideEffects:
@@ -1111,6 +1165,8 @@ async def execute_project_chat(  # noqa: PLR0915
     llm_overrides, model_override = await _resolve_chat_runtime_overrides(request)
 
     cancellation_monitor: asyncio.Task[None] | None = None
+    pending_delta_events: list[tuple[dict[str, Any], int, int]] = []
+    redis_client: aioredis.Redis | None = None
     running_heartbeat = start_agent_running_heartbeat(request.conversation_id, request.message_id)
     try:
         cancellation_monitor = await _open_chat_cancellation_monitor(
@@ -1132,7 +1188,6 @@ async def execute_project_chat(  # noqa: PLR0915
             )
             if model_route_override is not None:
                 model_override = model_route_override.model_id
-        pending_delta_events: list[tuple[dict[str, Any], int, int]] = []
         last_delta_flush = time_module.time()
 
         if request.agent_id and request.parent_session_id:
@@ -1301,35 +1356,17 @@ async def execute_project_chat(  # noqa: PLR0915
             state=ss,
             start_time=start_time,
         )
-        await _settle_root_run_authority(
+        await _finalize_cancelled_chat(
+            state=ss,
+            time_gen=time_gen,
             tenant_id=agent.config.tenant_id,
             project_id=agent.config.project_id,
             conversation_id=request.conversation_id,
-            run_id=run_authority_id,
-            outcome="cancelled",
-        )
-        event_time_us, event_counter = time_gen.next()
-        cancelled_event = {
-            "type": "cancelled",
-            "data": {"run_id": run_authority_id, "status": "cancelled"},
-            "event_time_us": event_time_us,
-            "event_counter": event_counter,
-        }
-        ss.events.append(cancelled_event)
-        await _flush_remaining_events(
-            ss.events,
-            ss.persisted_count,
-            request.conversation_id,
-            request.message_id,
-            request.correlation_id,
-        )
-        await _publish_event_to_stream(
-            conversation_id=request.conversation_id,
-            event=cancelled_event,
             message_id=request.message_id,
-            event_time_us=event_time_us,
-            event_counter=event_counter,
+            run_id=run_authority_id,
             correlation_id=request.correlation_id,
+            pending_deltas=pending_delta_events,
+            redis_client=redis_client,
         )
         raise
     except Exception as e:
@@ -1688,12 +1725,16 @@ async def continue_project_chat(  # noqa: PLR0912, PLR0915
             state=ss,
             start_time=start_time,
         )
-        await _settle_root_run_authority(
+        await _finalize_cancelled_chat(
+            state=ss,
+            time_gen=time_gen,
             tenant_id=state.tenant_id,
             project_id=state.project_id,
             conversation_id=state.conversation_id,
+            message_id=state.message_id,
             run_id=run_authority_id,
-            outcome="cancelled",
+            correlation_id=state.correlation_id,
+            redis_client=redis_client,
         )
         raise
     except Exception as e:

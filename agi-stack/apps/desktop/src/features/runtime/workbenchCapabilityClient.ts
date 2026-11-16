@@ -2017,14 +2017,21 @@ async function loadSearchCapability(
     if (credential) headers.set('Authorization', `Bearer ${credential}`);
     const launchCapability = desktopLaunchCapability(config);
     if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
+    const searchScope = new URLSearchParams({
+      tenant_id: config.tenantId.trim(),
+      project_id: config.projectId.trim(),
+    });
     const response = await desktopApiFetch(
       config,
-      '/api/v1/search-enhanced/capabilities',
+      config.mode === 'cloud'
+        ? `/api/v1/search-enhanced/capabilities?${searchScope}`
+        : '/api/v1/search-enhanced/capabilities',
       {
         headers,
         signal,
       },
     );
+    if (response.status === 403) return unavailable('desktop_route_permission_denied');
     if (!response.ok)
       return unavailable('search_capability_contract_unavailable');
     const contentType = response.headers.get('content-type') ?? '';

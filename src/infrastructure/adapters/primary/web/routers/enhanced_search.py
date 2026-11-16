@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -544,6 +544,8 @@ async def search_with_facets(
 
 @router.get("/capabilities")
 async def get_search_capabilities(
+    tenant_id: str | None = Query(None),
+    project_id: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     search_application: SearchApplicationAuthorityV2 = Depends(
         search_application_authority_dependency_v2
@@ -551,6 +553,9 @@ async def get_search_capabilities(
 ) -> dict[str, Any]:
     """
     Get available search capabilities and configuration.
+
+    Declare the selected scope so feature admission checks that scope rather
+    than aggregating unrelated projects.
 
     Returns information about available search types and their parameters.
     """

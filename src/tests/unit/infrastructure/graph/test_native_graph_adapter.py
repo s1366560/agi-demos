@@ -910,3 +910,36 @@ class TestNativeGraphAdapterTypedPrimitives:
             "RETURN 1 AS ok",
             timeout=2.0,
         )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("mode", ["temporal", "faceted"])
+async def test_search_text_preserves_scope_without_query_collision(adapter, mode):
+    """Exercise the real client signature instead of a permissive AsyncMock."""
+    calls = []
+
+    async def execute_query(query, **parameters):
+        calls.append((query, parameters))
+        return MagicMock(records=[])
+
+    adapter._neo4j_client.execute_query = execute_query
+    common = {
+        'query': "UI regression",
+        'since_iso': None,
+        'limit': 10,
+        'project_id': "project-1",
+        'tenant_id': "tenant-1",
+    }
+    if mode == "temporal":
+        result = await adapter.temporal_search(**common, until_iso=None)
+    else:
+        result = await adapter.faceted_search(**common, entity_types=None, tags=None, offset=0)
+    assert result == []
+    statement, parameters = calls[0]
+    assert "$search_text" in statement
+    assert "$project_id" in statement
+    assert "$tenant_id" in statement
+    assert parameters["search_text"] == "UI regression"
+    assert parameters["project_id"] == "project-1"
+    assert parameters["tenant_id"] == "tenant-1"
+    assert "query" not in parameters

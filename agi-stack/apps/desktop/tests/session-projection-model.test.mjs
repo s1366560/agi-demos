@@ -1306,3 +1306,15 @@ test('cloud session projection decodes the server-derived execution stage tolera
 
   assert.equal(decodeSignedProjection(validProjection())?.executionStage, null);
 });
+
+
+test('stream starts refresh only their bound session authority, never per-token deltas', () => {
+  const scope = { conversationId: 'conversation-1', workspaceId: null };
+  for (const type of ['text_start', 'thought_start']) {
+    assert.equal(socketEventInvalidatesSessionProjectionForScope({ type, conversation_id: scope.conversationId }, scope), true);
+    assert.equal(socketEventInvalidatesSessionProjectionForScope({ type, conversation_id: 'other' }, scope), false);
+  }
+  for (const type of ['text_delta', 'thought_delta']) {
+    assert.equal(socketEventInvalidatesSessionProjectionForScope({ type, conversation_id: scope.conversationId }, scope), false);
+  }
+});

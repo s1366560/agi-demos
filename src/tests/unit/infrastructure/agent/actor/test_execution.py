@@ -1463,3 +1463,79 @@ async def test_run_signal_interrupts_model_await_and_publishes_cancelled(monkeyp
     renewals = refresh_mock.await_count
     await asyncio.sleep(0.03)
     assert refresh_mock.await_count == renewals
+
+
+@pytest.mark.unit
+async def test_cancelled_text_is_durable_before_settlement_and_terminal_publication(monkeypatch):
+    from src.domain.model.agent.execution.event_time import EventTimeGenerator
+
+    state = execution._StreamState(
+        events=[
+            {"type": "text_start", "data": {}},
+            {"type": "text_delta", "data": {"delta": "Partial body"}},
+        ]
+    )
+    sequence = []
+    persisted = []
+
+    async def persist(events, *_args):
+        sequence.append("persist")
+        persisted.extend(events)
+
+    async def settle(**_kwargs):
+        sequence.append("settle")
+
+    async def publish(**kwargs):
+        sequence.append(kwargs["event"]["type"])
+
+    async def flush(*_args, **_kwargs):
+        sequence.append("flush-deltas")
+
+    monkeypatch.setattr(execution, "_flush_remaining_events", persist)
+    monkeypatch.setattr(execution, "_settle_root_run_authority", settle)
+    monkeypatch.setattr(execution, "_publish_event_to_stream", publish)
+    monkeypatch.setattr(execution, "_flush_pending_delta_events", flush)
+    await execution._finalize_cancelled_chat(
+        state=state,
+        time_gen=EventTimeGenerator(0, 0),
+        tenant_id="t",
+        project_id="p",
+        conversation_id="c",
+        message_id="m",
+        run_id="r",
+        correlation_id=None,
+        pending_deltas=[(state.events[-1], 1, 0)],
+        redis_client=object(),
+    )
+    assert sequence == ["flush-deltas", "persist", "settle", "text_end", "cancelled"]
+    assert persisted[-2]["data"]["full_text"] == "Partial body"
+    assert persisted[-1]["data"]["run_id"] == "r"
+    assert persisted[-2]["event_time_us"] <= persisted[-1]["event_time_us"]
+
+
+@pytest.mark.unit
+async def test_failed_partial_persistence_cannot_acknowledge_cancellation(monkeypatch):
+    from src.domain.model.agent.execution.event_time import EventTimeGenerator
+
+    settle = AsyncMock()
+    publish = AsyncMock()
+    monkeypatch.setattr(
+        execution,
+        "_flush_remaining_events",
+        AsyncMock(side_effect=RuntimeError("storage unavailable")),
+    )
+    monkeypatch.setattr(execution, "_settle_root_run_authority", settle)
+    monkeypatch.setattr(execution, "_publish_event_to_stream", publish)
+    with pytest.raises(RuntimeError, match="storage unavailable"):
+        await execution._finalize_cancelled_chat(
+            state=execution._StreamState(),
+            time_gen=EventTimeGenerator(0, 0),
+            tenant_id="t",
+            project_id="p",
+            conversation_id="c",
+            message_id="m",
+            run_id="r",
+            correlation_id=None,
+        )
+    settle.assert_not_awaited()
+    publish.assert_not_awaited()

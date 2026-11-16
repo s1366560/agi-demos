@@ -2340,9 +2340,9 @@ class NativeGraphAdapter(GraphStorePort):
         if query:
             conditions.append(
                 "(toLower(coalesce(e.content, '') + ' ' + coalesce(e.name, '') "
-                "+ ' ' + coalesce(e.summary, '')) CONTAINS toLower($query))"
+                "+ ' ' + coalesce(e.summary, '')) CONTAINS toLower($search_text))"
             )
-            params["query"] = query
+            params["search_text"] = query
         if since_iso:
             conditions.append("e.created_at >= datetime($since)")
             params["since"] = since_iso
@@ -2393,9 +2393,9 @@ class NativeGraphAdapter(GraphStorePort):
         if query:
             conditions.append(
                 "(toLower(coalesce(e.name, '') + ' ' + coalesce(e.summary, '') "
-                "+ ' ' + coalesce(e.entity_type, '')) CONTAINS toLower($query))"
+                "+ ' ' + coalesce(e.entity_type, '')) CONTAINS toLower($search_text))"
             )
-            params["query"] = query
+            params["search_text"] = query
         if entity_types:
             conditions.append("e.entity_type IN $entity_types")
             params["entity_types"] = entity_types

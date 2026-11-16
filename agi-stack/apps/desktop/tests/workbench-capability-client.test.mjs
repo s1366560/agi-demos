@@ -1808,7 +1808,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
         ),
       ),
     );
-    assert.equal(calls[0]?.input, 'https://api.memstack.test/api/v1/search-enhanced/capabilities');
+    assert.equal(calls[0]?.input, 'https://api.memstack.test/api/v1/search-enhanced/capabilities?tenant_id=default&project_id=project%2F1');
     assert.equal(calls[0]?.init?.headers.get('Authorization'), 'Bearer session-credential');
     assert.equal(calls[0]?.init?.headers.has('X-Agistack-Launch'), false);
   } finally {
@@ -2942,6 +2942,7 @@ test('independent search transport and decoder failures preserve a healthy task 
   const taskOperations = tenantTasksOperationsV2Fixture();
   try {
     for (const response of [
+      () => new Response('forbidden', { status: 403 }),
       () => new Response('unavailable', { status: 503 }),
       () => new Response('{invalid', {
         status: 200,
@@ -2962,6 +2963,7 @@ test('independent search transport and decoder failures preserve a healthy task 
       );
       const snapshot = await client.loadSnapshot();
       assert.equal(snapshot.capabilities.search.availability, 'unavailable');
+      if (response().status === 403) assert.equal(snapshot.capabilities.search.reason_code, 'desktop_route_permission_denied');
       assert.deepEqual(snapshot.capabilities.search.allowed_actions, []);
       assert.equal(snapshot.capabilities['tenant-tenant-tasks'].availability, 'available');
       assert.equal(snapshot.capabilities['tenant-tenant-tasks'].authority_revision, 23);
