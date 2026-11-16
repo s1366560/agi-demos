@@ -24,6 +24,9 @@ test('Electron main owns vault-bound Cloud socket creation and renderer-owner IP
 });
 
 test('Cloud sockets are cancelled with renderer and application lifecycle', () => {
+  const navigation = mainSource.slice(mainSource.indexOf("window.webContents.on('did-start-navigation'"), mainSource.indexOf("window.on('closed'"));
+  assert.match(navigation, /details\.isMainFrame && !details\.isSameDocument/u);
+  assert.match(navigation, /cloudSocketBroker\?\.cancelOwner\(cloudRequestOwnerId\)/u);
   assert.match(
     mainSource,
     /window\.on\('closed',[\s\S]*cloudSocketBroker\?\.cancelOwner\(cloudRequestOwnerId\)/u,
