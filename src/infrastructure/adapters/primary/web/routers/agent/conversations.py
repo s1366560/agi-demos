@@ -57,6 +57,7 @@ from src.infrastructure.adapters.primary.web.workspace_authority import (
     workspace_core_unavailable_error,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.conversation_collection_services import (
     InvalidConversationAgentSelectionV2,
@@ -877,6 +878,15 @@ async def update_conversation_config(
                 selected_agent_id=data.selected_agent_id,
                 llm_model_override_present="llm_model_override" in fields,
                 llm_model_override=data.llm_model_override,
+                llm_route_override_present="llm_route_override" in fields,
+                llm_route_override=(
+                    ModelRouteRef(
+                        provider_id=data.llm_route_override.provider_id,
+                        model_id=data.llm_route_override.model_id,
+                    )
+                    if data.llm_route_override
+                    else None
+                ),
                 llm_overrides_present="llm_overrides" in fields,
                 llm_overrides=data.llm_overrides,
             ),

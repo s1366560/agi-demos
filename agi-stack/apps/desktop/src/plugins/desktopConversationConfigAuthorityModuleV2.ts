@@ -306,9 +306,7 @@ function createDesktopConversationConfigAuthorityV2(
       assertConversationConfigScopeV2(operationConfig, operationIdentity);
       const payload = {
         llm_model_override: operationMutation.llmModelOverride,
-        ...(operationConfig.mode === "local"
-          ? { llm_route_override: operationMutation.llmRouteOverride }
-          : {}),
+        llm_route_override: operationMutation.llmRouteOverride,
       };
       return transport
         .updateAgentConversationConfig(

@@ -550,7 +550,7 @@ test('Loader activates the exact service and disable removes it without fallback
   await manager.close();
 });
 
-test('local includes the route override while cloud explicitly omits it', async () => {
+test('local and cloud both carry the exact selected provider/model route', async () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
   const fetchCalls = [];
@@ -616,7 +616,10 @@ test('local includes the route override while cloud explicitly omits it', async 
     assert.deepEqual(cloudCommands[0].args.request, {
       path: '/api/v1/agent/conversations/conversation-1/config?project_id=project-1',
       method: 'PATCH',
-      body: { llm_model_override: 'model-cloud' },
+      body: {
+        llm_model_override: 'model-cloud',
+        llm_route_override: { provider_id: 'provider-cloud', model_id: 'model-cloud' },
+      },
     });
     await generation.dispose();
   } finally {

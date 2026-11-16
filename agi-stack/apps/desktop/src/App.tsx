@@ -6107,9 +6107,7 @@ export function App() {
       if (!option) throw new Error(t('chat.selectedModelUnavailable'));
       return persistChatRuntimeModelOverride(
         option.modelId,
-        config.mode === 'local'
-          ? { provider_id: option.providerId, model_id: option.modelId }
-          : null,
+        { provider_id: option.providerId, model_id: option.modelId },
       );
     },
     [

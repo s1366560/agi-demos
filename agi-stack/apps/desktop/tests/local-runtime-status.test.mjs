@@ -245,7 +245,7 @@ test('workspace model selector exposes only routable enabled models and marks th
   );
 });
 
-test('project model selector exposes one structural option for duplicate model ids', () => {
+test('project model selector preserves distinct providers for duplicate model ids', () => {
   const providers = [
     {
       id: 'provider-a',
@@ -281,6 +281,7 @@ test('project model selector exposes one structural option for duplicate model i
     [
       ['provider-a', 'shared-model'],
       ['provider-a', 'unique-a'],
+      ['provider-b', 'shared-model'],
       ['provider-b', 'unique-b'],
     ],
   );
@@ -374,6 +375,16 @@ test('conversation model selection fails closed when a model id is ambiguous', (
       canReset: true,
     },
   );
+});
+
+test('explicit routes restore the exact provider and never select another same-name model', () => {
+  const options = ['a', 'b'].map((providerId) => ({
+    providerId, modelId: 'shared', value: workspaceRuntimeModelSelectionValue(providerId, 'shared'),
+  }));
+  const config = { llm_model_override: 'shared', llm_route_override: { provider_id: 'b', model_id: 'shared' } };
+  assert.equal(conversationRuntimeModelSelection(config, options, null, 'default').selectedValue, options[1].value);
+  assert.equal(conversationRuntimeModelSelection(config, [options[0]], null, 'default').selectedValue, null);
+  assert.equal(conversationRuntimeModelSelection({...config, llm_route_override: {...config.llm_route_override, model_id:'other'}}, options, null, 'default').selectedValue, null);
 });
 
 test('latest conversation model events override or clear persisted selector state', () => {

@@ -190,6 +190,7 @@ async def test_config_update_preserves_omitted_fields_and_normalizes_explicit_va
     assert conversation.agent_config == {
         "selected_agent_id": "agent-new",
         "llm_model_override": "model-new",
+        "llm_route_override": None,
         "llm_overrides": {"temperature": 0.2},
         "capability_mode": "code",
     }
@@ -249,3 +250,51 @@ def test_config_resolver_protocol_is_structural() -> None:
 
     assert isinstance(resolver, ConversationConfigResolverProtocolV2)
     assert isinstance(resolver, ConversationAccessResolverProtocolV2)
+
+
+async def test_explicit_model_route_switch_clear_and_legacy_patch() -> None:
+    from src.infrastructure.agent.model_route import ModelRouteRef
+
+    conversation = Conversation(id="c", tenant_id="t", project_id="p", user_id="u", title="Route")
+    service, _access, _resolve = _service(conversation)
+
+    async def apply(patch):
+        return await service.update_conversation_config(
+            conversation_id="c",
+            tenant_id="t",
+            project_id="p",
+            user_id="u",
+            patch=patch,
+        )
+
+    for provider in ("provider-a", "provider-b"):
+        await apply(
+            ConversationConfigPatchV2(
+                llm_model_override_present=True,
+                llm_model_override="shared",
+                llm_route_override_present=True,
+                llm_route_override=ModelRouteRef(provider_id=provider, model_id="shared"),
+            )
+        )
+        assert conversation.agent_config["llm_route_override"] == {
+            "provider_id": provider,
+            "model_id": "shared",
+        }
+    await apply(ConversationConfigPatchV2())
+    assert conversation.agent_config["llm_route_override"]["provider_id"] == "provider-b"
+    await apply(
+        ConversationConfigPatchV2(llm_model_override_present=True, llm_model_override="legacy")
+    )
+    assert not conversation.agent_config.get("llm_route_override")
+    await apply(ConversationConfigPatchV2(llm_model_override_present=True, llm_model_override=None))
+    assert not conversation.agent_config.get("llm_model_override")
+    assert not conversation.agent_config.get("llm_route_override")
+    with pytest.raises(ValueError, match="match"):
+        await apply(
+            ConversationConfigPatchV2(
+                llm_model_override_present=True,
+                llm_model_override="wrong",
+                llm_route_override_present=True,
+                llm_route_override=ModelRouteRef(provider_id="provider", model_id="shared"),
+            )
+        )

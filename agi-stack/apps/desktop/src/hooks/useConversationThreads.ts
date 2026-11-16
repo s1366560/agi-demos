@@ -387,14 +387,10 @@ export function useConversationThreads(params: AgentConversationParams) {
           input.model
             ? {
                 llm_model_override: input.model.modelId,
-                ...(threadConfig.mode === 'local'
-                  ? {
-                      llm_route_override: {
-                        provider_id: input.model.providerId,
-                        model_id: input.model.modelId,
-                      },
-                    }
-                  : {}),
+                llm_route_override: {
+                  provider_id: input.model.providerId,
+                  model_id: input.model.modelId,
+                },
               }
             : undefined,
         );

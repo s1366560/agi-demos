@@ -1,4 +1,4 @@
-"""Freeze the authoritative workspace model route for a canonical conversation run."""
+"""Freeze the authoritative model route for a canonical conversation run."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ async def freeze_run_model_route(
         raise RuntimeV2Error(
             "workspace_model_route_scope_denied", "Run conversation scope mismatch"
         )
-    if not conversation.workspace_id or conversation.linked_workspace_task_id:
+    if conversation.linked_workspace_task_id:
         return None
     run = await db.scalar(
         select(AgentRunAuthorityModel)
@@ -123,6 +123,20 @@ async def freeze_run_model_route(
     frozen = snapshot.get("model_route")
     if isinstance(frozen, dict):
         return route_from_policy({"roles": {"default": frozen}}, "work")
+    if not conversation.workspace_id:
+        config = conversation.agent_config or {}
+        selection = config.get("llm_route_override")
+        if selection is None:
+            return None
+        route = route_from_policy({"roles": {"default": selection}}, "work")
+        if config.get("llm_model_override") != route.model_id:
+            raise RuntimeV2Error(
+                "model_override_route_mismatch", "Model override does not match its provider route"
+            )
+        snapshot["model_route"] = {"provider_id": route.provider_id, "model_id": route.model_id}
+        run.authorization_snapshot = snapshot
+        await db.commit()
+        return route
     if run.run_kind == "plan":
         policy = snapshot.get("policy")
         if not isinstance(policy, dict):

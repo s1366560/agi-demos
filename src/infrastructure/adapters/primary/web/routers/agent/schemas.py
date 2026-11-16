@@ -21,11 +21,35 @@ class CreateConversationRequest(BaseModel):
     agent_config: dict[str, Any] | None = None
     workspace_id: str | None = None
 
+    @model_validator(mode="after")
+    def validate_model_route(self) -> "CreateConversationRequest":
+        config = self.agent_config
+        if config and config.get("llm_route_override") is not None:
+            route = ConversationModelRoute.model_validate(config["llm_route_override"])
+            model = config.get("llm_model_override")
+            if not isinstance(model, str) or model.strip() != route.model_id:
+                raise ValueError("Model override must match the explicit route model")
+            self.agent_config = {
+                **config,
+                "llm_model_override": model.strip(),
+                "llm_route_override": route.model_dump(),
+            }
+        return self
+
 
 class UpdateConversationTitleRequest(BaseModel):
     """Request to update conversation title."""
 
     title: str
+
+
+class ConversationModelRoute(BaseModel):
+    """Explicit identity selected from a provider's declared model roster."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    provider_id: str = Field(min_length=1)
+    model_id: str = Field(min_length=1)
 
 
 class UpdateConversationConfigRequest(BaseModel):
@@ -45,11 +69,21 @@ class UpdateConversationConfigRequest(BaseModel):
         description="Model name to use for this conversation (e.g. 'gpt-4o', 'gemini-2.0-flash'). "
         "Set to empty string or null to clear the override.",
     )
+    llm_route_override: ConversationModelRoute | None = None
     llm_overrides: dict[str, Any] | None = Field(
         None,
         description="LLM parameter overrides (temperature, max_tokens, top_p, etc.). "
         "Set to null to clear. Keys with null values are removed individually.",
     )
+
+    @model_validator(mode="after")
+    def validate_model_route(self) -> "UpdateConversationConfigRequest":
+        if (
+            self.llm_route_override is not None
+            and (self.llm_model_override or "").strip() != self.llm_route_override.model_id
+        ):
+            raise ValueError("Model override must match the explicit route model")
+        return self
 
 
 class UpdateConversationModeRequest(BaseModel):

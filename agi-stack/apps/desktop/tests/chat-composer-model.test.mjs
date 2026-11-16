@@ -569,3 +569,10 @@ test('composer catalog reloads managed resources whenever the same-scope menu re
     /if \(!open \|\| catalog\) return;[\s\S]*loadComposerCatalog\(api, controller\.signal\)/u,
   );
 });
+
+
+test('conversation selection forwards exact provider identity in both runtime modes', () => {
+  const selection = appSource.slice(appSource.indexOf('const selectChatRuntimeModel ='), appSource.indexOf('const resetChatRuntimeModel ='));
+  assert.match(selection, /persistChatRuntimeModelOverride\(\s*option\.modelId,\s*\{ provider_id: option\.providerId, model_id: option\.modelId \}/u);
+  assert.doesNotMatch(selection, /config\.mode/u);
+});

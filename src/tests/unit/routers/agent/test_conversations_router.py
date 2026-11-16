@@ -2605,6 +2605,7 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
     expected_cleared_config = {
         "selected_agent_id": None,
         "llm_model_override": None,
+        "llm_route_override": None,
         "llm_overrides": None,
         "capability_mode": "code",
     }
