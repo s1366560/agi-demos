@@ -18,7 +18,46 @@ import {
 
 describe('permissionModeStore', () => {
   beforeEach(() => {
-    useAgentPermissionModeStore.setState({ modesByConversation: {} });
+    useAgentPermissionModeStore.setState({
+      modesByConversation: {},
+      autoApprovedRequestIds: {},
+      pendingAutoApprovalIds: {},
+    });
+  });
+
+  it('persists only exact automatically approved request IDs after a server verdict', () => {
+    const store = useAgentPermissionModeStore.getState();
+    expect(store.beginAutoApproval('conv-a', 'request-a')).toBe(true);
+    expect(store.beginAutoApproval('conv-a', 'request-a')).toBe(false);
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds['conv-a']).toBeUndefined();
+    expect(
+      JSON.parse(localStorage.getItem('agent-permission-mode')!).state.pendingAutoApprovalIds
+    ).toBeUndefined();
+    store.completeAutoApproval('conv-a', 'request-a', true);
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds['conv-a']).toEqual([
+      'request-a',
+    ]);
+    expect(
+      JSON.parse(localStorage.getItem('agent-permission-mode')!).state.autoApprovedRequestIds[
+        'conv-a'
+      ]
+    ).toEqual(['request-a']);
+    store.setPermissionMode('conv-a', 'ask');
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds['conv-a']).toEqual([
+      'request-a',
+    ]);
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds['conv-b']).toBeUndefined();
+    store.completeAutoApproval('conv-a', 'manual', true);
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds['conv-a']).toEqual([
+      'request-a',
+    ]);
+    store.beginAutoApproval('conv-a', 'denied');
+    store.completeAutoApproval('conv-a', 'denied', false);
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds['conv-a']).toEqual([
+      'request-a',
+    ]);
+    store.clearConversation('conv-a');
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds['conv-a']).toBeUndefined();
   });
 
   describe('Mode state', () => {
@@ -80,9 +119,7 @@ describe('permissionModeStore', () => {
       expect(
         shouldAutoApprovePermission('auto_edit', { permission_type: 'workspace_file_write' })
       ).toBe(true);
-      expect(shouldAutoApprovePermission('auto_edit', { permission_type: 'delegate' })).toBe(
-        false
-      );
+      expect(shouldAutoApprovePermission('auto_edit', { permission_type: 'delegate' })).toBe(false);
     });
 
     it('should not auto-approve in auto_edit mode when no permission name is present', () => {

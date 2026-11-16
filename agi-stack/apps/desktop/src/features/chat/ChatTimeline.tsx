@@ -55,6 +55,7 @@ import {
   timelineDayLabel,
   timelineRowDurationMs,
   toolActivityRows,
+  toolActivityPairIndex,
   toolCallDiffStat,
   toolCallPairDurationMs,
   toolCallPairStatus,
@@ -273,6 +274,7 @@ export function AgentTimeline({
     () => timelineItemsForDisplay(state.items),
     [state.items],
   );
+  const toolPairIndex = useMemo(() => toolActivityPairIndex(state.items), [state.items]);
   const narrative = useMemo(
     () =>
       annotateTimelineGroups(
@@ -294,7 +296,7 @@ export function AgentTimeline({
     const calls: AgentTimelineItem[] = [];
     for (const node of narrative) {
       if (node.kind !== 'tool_group') continue;
-      for (const row of toolActivityRows(node.items)) {
+      for (const row of toolActivityRows(node.items, toolPairIndex)) {
         if (
           row.kind === 'tool_call' &&
           toolCallPairStatus(row.pair) === 'failed'
@@ -304,7 +306,7 @@ export function AgentTimeline({
       }
     }
     return calls;
-  }, [narrative]);
+  }, [narrative, toolPairIndex]);
   useEffect(() => {
     for (const call of failedToolCalls) {
       if (expandedItems[call.id] === undefined) onToggleItem(call);
@@ -627,8 +629,9 @@ export function AgentTimeline({
             );
             const displayStatus = node.status === 'running' && !groupIsLive ? 'recorded' : node.status;
             const open = timelineGroupOpen(node.items, expandedGroupItems,
-              displayStatus === 'running' || displayStatus === 'failed');
-            const activityRows = toolActivityRows(node.items);
+              displayStatus === 'failed');
+            const activityRows = toolActivityRows(node.items, toolPairIndex);
+            if (!activityRows.length) return null;
             const previewSummary = toolGroupPreviewSummary(activityRows, t);
             return (
               <Fragment key={groupId}>
@@ -1077,6 +1080,24 @@ function TimelineItemView({
     () => timelineSummary(item, kind, t),
     [item, kind, t],
   );
+  if (item.type === 'thought') {
+    return (
+      <ThoughtTimelineCard
+        item={item}
+        expanded={expanded}
+        onToggle={onToggle}
+      />
+    );
+  }
+  if (item.type === 'work_plan' || item.type === 'task_list_updated') {
+    return (
+      <WorkPlanTimelineCard
+        item={item}
+        expanded={expanded}
+        onToggle={onToggle}
+      />
+    );
+  }
   if ((item.isError || item.error || item.type === 'error' || kind === 'runtime') && !timelineHitlType(item) && !agentLifecyclePresentation(item)) {
     const failed = Boolean(item.isError || item.error || item.type === 'error');
     const payload =
@@ -1110,24 +1131,6 @@ function TimelineItemView({
   }
   if (kind === 'artifact') {
     return <ArtifactTimelineCard item={item} />;
-  }
-  if (item.type === 'thought') {
-    return (
-      <ThoughtTimelineCard
-        item={item}
-        expanded={expanded}
-        onToggle={onToggle}
-      />
-    );
-  }
-  if (item.type === 'work_plan' || item.type === 'task_list_updated') {
-    return (
-      <WorkPlanTimelineCard
-        item={item}
-        expanded={expanded}
-        onToggle={onToggle}
-      />
-    );
   }
   if (kind === 'user' || kind === 'agent') {
     return (
@@ -1930,7 +1933,7 @@ function annotateTimelineGroups(
   ) => {
     annotated[index] = {
       ...node,
-      groupId,
+      groupId: node.kind === 'tool_group' ? node.id : groupId,
       membersJson: JSON.stringify(node.items.map((item) => item.id)),
     };
   };

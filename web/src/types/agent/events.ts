@@ -630,6 +630,9 @@ export interface PermissionAskedEventData {
  * Permission replied event data
  */
 export interface PermissionRepliedEventData {
+  auto_approved?: boolean | undefined;
+  reply?: 'once' | 'always' | 'reject' | undefined;
+  response_data?: { granted?: boolean; auto_approved?: boolean } | undefined;
   request_id: string;
   tool_name: string;
   granted: boolean;

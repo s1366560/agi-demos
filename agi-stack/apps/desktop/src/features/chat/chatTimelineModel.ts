@@ -1,5 +1,5 @@
 import { timelineToolResultFailed, timelineToolResultStatus, type ToolResultStatus } from './toolResultStatus';
-import { exactToolResults } from './timelineExecutionIdentity';
+import { exactToolResults, sameTimelineExecution } from './timelineExecutionIdentity';
 import { userMessageForDisplay } from './messageDisplayModel';
 import type { AgentTimelineItem } from '../../types';
 import { foldAssistantExecutionDuplicatesForDisplay } from './assistantDuplicateDisplayModel';
@@ -1108,28 +1108,15 @@ function toolItemsShareStableCallIdentity(
   ) {
     return false;
   }
-  const currentStrongIdentifiers = toolStrongIdentifiers(current);
-  const incomingStrongIdentifiers = toolStrongIdentifiers(incoming);
-  if (currentStrongIdentifiers.length > 0 && incomingStrongIdentifiers.length > 0) {
-    return currentStrongIdentifiers.some((identifier) =>
-      incomingStrongIdentifiers.includes(identifier),
-    );
-  }
-  if (
-    current.type !== 'act' ||
-    isTransientToolTimelineItem(current) === isTransientToolTimelineItem(incoming)
-  ) {
-    return false;
-  }
-  const currentWeakIdentifiers = toolWeakIdentifiers(current);
-  const incomingWeakIdentifiers = toolWeakIdentifiers(incoming);
-  return (
-    currentWeakIdentifiers.length > 0 &&
-    incomingWeakIdentifiers.length > 0 &&
-    currentWeakIdentifiers.some((identifier) =>
-      incomingWeakIdentifiers.includes(identifier),
-    )
-  );
+  if (!sameTimelineExecution(current, incoming)) return false;
+  const currentPayload = isRecord(current.payload) ? current.payload : null;
+  const incomingPayload = isRecord(incoming.payload) ? incoming.payload : null;
+  const hasExecution = (item: AgentTimelineItem, payload: Record<string, unknown> | null) =>
+    [item.tool_execution_id, item.execution_id, payload?.tool_execution_id, payload?.execution_id]
+      .some((value) => typeof value === 'string' && value.length > 0);
+  if (hasExecution(current, currentPayload) && hasExecution(incoming, incomingPayload)) return true;
+  return current.type === 'act' &&
+    isTransientToolTimelineItem(current) !== isTransientToolTimelineItem(incoming);
 }
 
 /** HTTP admission projections and socket replay use different row ids for the
@@ -1404,27 +1391,49 @@ function transientToolItemHasCanonicalExecution(item: AgentTimelineItem): boolea
   );
 }
 
-export function toolActivityRows(items: AgentTimelineItem[]): ToolActivityRow[] {
-  const rows: ToolActivityRow[] = [];
-  let toolItems: AgentTimelineItem[] = [];
-  const flushTools = () => {
-    rows.push(
-      ...pairToolCallItems(toolItems).map(
-        (pair): ToolActivityRow => ({ kind: 'tool_call', pair }),
-      ),
-    );
-    toolItems = [];
+/** Share one exact-identity pairing pass across all presentation groups. */
+export function toolActivityPairIndex(
+  timelineItems: readonly AgentTimelineItem[],
+): ReadonlyMap<string, ToolCallPair> {
+  const pairs = new Map<string, ToolCallPair>();
+  let segment: AgentTimelineItem[] = [];
+  const flush = () => {
+    for (const pair of pairToolCallItems(segment)) pairs.set(pair.call.id, pair);
+    segment = [];
   };
-
-  for (const item of items) {
-    if (item.type === 'thought') {
-      flushTools();
-      rows.push({ kind: 'thought', item });
+  for (const item of timelineItems) {
+    // Preserve protocol turn/run boundaries before selecting tool rows. Call ids
+    // may be reused by producers that do not include a run scope in old history.
+    if (item.role === 'user' || [
+      'user_message', 'complete', 'run_status', 'environment_selected',
+      'agent_conversation_finished', 'conversation_finished',
+    ].includes(item.type)) {
+      flush();
     } else if (item.type === 'act' || item.type === 'observe') {
-      toolItems.push(item);
+      segment.push(item);
     }
   }
-  flushTools();
+  flush();
+  return pairs;
+}
+
+/** Resolve explicit result identities before splitting presentation groups. */
+export function toolActivityRows(
+  items: readonly AgentTimelineItem[],
+  pairIndex: ReadonlyMap<string, ToolCallPair> = toolActivityPairIndex(items),
+): ToolActivityRow[] {
+  const rows: ToolActivityRow[] = [];
+  const renderedIds = new Set<string>();
+  for (const item of items) {
+    if (renderedIds.has(item.id)) continue;
+    renderedIds.add(item.id);
+    if (item.type === 'thought') {
+      rows.push({ kind: 'thought', item });
+    } else {
+      const pair = pairIndex.get(item.id);
+      if (pair) rows.push({ kind: 'tool_call', pair });
+    }
+  }
   return rows;
 }
 
@@ -1681,12 +1690,6 @@ export function detectPayloadLanguage(value: unknown): PayloadCode {
   }
 }
 
-function toolCallNamesMatch(call: AgentTimelineItem, result: AgentTimelineItem): boolean {
-  const callName = call.toolName ?? '';
-  const resultName = result.toolName ?? '';
-  return !callName || !resultName || callName === resultName;
-}
-
 function findMatchingActiveToolIndex(
   items: AgentTimelineItem[],
   incoming: AgentTimelineItem,
@@ -1696,63 +1699,12 @@ function findMatchingActiveToolIndex(
     if (
       candidate.type === 'act' &&
       candidate.metadata?.streaming === true &&
-      toolItemsReferToSameCall(candidate, incoming)
+      sameTimelineExecution(candidate, incoming)
     ) {
       return index;
     }
   }
   return -1;
-}
-
-function toolItemsReferToSameCall(
-  call: AgentTimelineItem,
-  result: AgentTimelineItem,
-): boolean {
-  const callStrongIdentifiers = toolStrongIdentifiers(call);
-  const resultStrongIdentifiers = toolStrongIdentifiers(result);
-  if (callStrongIdentifiers.length > 0 && resultStrongIdentifiers.length > 0) {
-    return callStrongIdentifiers.some((identifier) =>
-      resultStrongIdentifiers.includes(identifier),
-    );
-  }
-  const callIdentifiers = toolCallIdentifiers(call);
-  const resultIdentifiers = toolCallIdentifiers(result);
-  if (callIdentifiers.length > 0 && resultIdentifiers.length > 0) {
-    return callIdentifiers.some((identifier) => resultIdentifiers.includes(identifier));
-  }
-  if (
-    call.message_id &&
-    result.message_id &&
-    call.message_id !== result.message_id
-  ) {
-    return false;
-  }
-  return toolCallNamesMatch(call, result);
-}
-
-function toolStrongIdentifiers(item: AgentTimelineItem): string[] {
-  const payload = isRecord(item.payload) ? item.payload : null;
-  return [
-    item.tool_execution_id,
-    item.execution_id,
-    payload?.tool_execution_id,
-    payload?.execution_id,
-  ].filter(
-    (identifier): identifier is string =>
-      typeof identifier === 'string' && identifier.length > 0,
-  );
-}
-
-function toolWeakIdentifiers(item: AgentTimelineItem): string[] {
-  const payload = isRecord(item.payload) ? item.payload : null;
-  return [item.call_id, payload?.call_id, payload?.tool_call_id].filter(
-    (identifier): identifier is string =>
-      typeof identifier === 'string' && identifier.length > 0,
-  );
-}
-
-function toolCallIdentifiers(item: AgentTimelineItem): string[] {
-  return [...toolStrongIdentifiers(item), ...toolWeakIdentifiers(item)];
 }
 
 function startOfDay(timeMs: number): number {

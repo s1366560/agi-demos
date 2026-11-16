@@ -302,7 +302,6 @@ import { localLlmUnconfiguredFromProviders } from './features/chat/localLlmReadi
 import {
   acknowledgeFullAccessWarning,
   autoApprovalSubmission,
-  permissionPresetScope,
   readFullAccessWarningAcknowledged,
   readPermissionPreset,
   writePermissionPreset,
@@ -363,6 +362,12 @@ import type {
   ChangeReviewComment,
   ChangeReviewCommentMap,
 } from './features/session/sessionChangesReviewModel';
+import {
+  hideConfirmedAutoApprovedPermissions,
+  permissionAutoApprovalScope,
+  readPermissionAutoApprovalHistory,
+  recordSuccessfulPermissionAutoApproval,
+} from './features/chat/permissionAutoApprovalHistory';
 import { conversationResponseIsStreaming } from './features/chat/composeAheadModel';
 import {
   decodeConversationSessionProjection,
@@ -2426,8 +2431,46 @@ export function App() {
     () => new Set(respondableHitlRequestIds),
     [respondableHitlRequestIds],
   );
-  const permissionPresetScopeKey = permissionPresetScope(config.workspaceId, scopedConversationId);
   const [permissionPreset, setPermissionPreset] = useState<PermissionPreset>('default');
+  const autoApprovalHistoryScope = useMemo(
+    () => permissionAutoApprovalScope(config, scopedConversationId),
+    [config.mode, config.apiBaseUrl, config.tenantId, config.projectId,
+      config.workspaceId, scopedConversationId],
+  );
+  const autoApprovalHistoryScopeRef = useRef(autoApprovalHistoryScope);
+  autoApprovalHistoryScopeRef.current = autoApprovalHistoryScope;
+  const [autoApprovalHistoryState, setAutoApprovalHistoryState] = useState(() => ({
+    scope: autoApprovalHistoryScope,
+    entries: readPermissionAutoApprovalHistory(autoApprovalHistoryScope),
+  }));
+  useEffect(() => {
+    setAutoApprovalHistoryState({
+      scope: autoApprovalHistoryScope,
+      entries: readPermissionAutoApprovalHistory(autoApprovalHistoryScope),
+    });
+  }, [autoApprovalHistoryScope]);
+  const [automaticApprovalPending, setAutomaticApprovalPending] = useState<{
+    scope: string | null; ids: string[];
+  }>({ scope: autoApprovalHistoryScope, ids: [] });
+  const [automaticApprovalFailures, setAutomaticApprovalFailures] = useState<{
+    scope: string | null; ids: string[];
+  }>({ scope: autoApprovalHistoryScope, ids: [] });
+  const pendingAutomaticRequestIds = useMemo(() => {
+    const pending = new Set(automaticApprovalPending.scope === autoApprovalHistoryScope
+      ? automaticApprovalPending.ids : []);
+    const failed = new Set(automaticApprovalFailures.scope === autoApprovalHistoryScope
+      ? automaticApprovalFailures.ids : []);
+    for (const request of respondableHitlRequestsForProjection(sessionProjection)) {
+      if (!failed.has(request.id) && autoApprovalSubmission(request, permissionPreset)) {
+        pending.add(request.id);
+      }
+    }
+    return pending;
+  }, [autoApprovalHistoryScope, automaticApprovalPending, automaticApprovalFailures,
+    sessionProjection, permissionPreset]);
+  const autoApprovalHistory = autoApprovalHistoryState.scope === autoApprovalHistoryScope
+    ? autoApprovalHistoryState.entries : [];
+  const permissionPresetScopeKey = autoApprovalHistoryScope;
   const [fullAccessWarningAcknowledged, setFullAccessWarningAcknowledged] = useState(false);
   useEffect(() => {
     setPermissionPreset(
@@ -2508,6 +2551,9 @@ export function App() {
   const sessionTimeline = useMemo<ConversationTimelineState>(
     () => ({
       ...conversationTimeline,
+      items: hideConfirmedAutoApprovedPermissions(
+        conversationTimeline.items, autoApprovalHistory, pendingAutomaticRequestIds,
+      ),
       approvalAuthorityLoading:
         sessionProjectionState.status === 'loading' &&
         sessionProjectionState.conversationId === scopedConversationId,
@@ -2518,6 +2564,8 @@ export function App() {
     }),
     [
       conversationTimeline,
+      autoApprovalHistory,
+      pendingAutomaticRequestIds,
       displaySessionProjection,
       sessionProjectionState.status,
       sessionProjectionState.conversationId,
@@ -2811,7 +2859,7 @@ export function App() {
   ]);
 
   const respondToHitl = useCallback(
-    async (submission: HitlResponseSubmission) => {
+    async (submission: HitlResponseSubmission, onAccepted?: () => void) => {
       const requestConfig = configRef.current;
       if (!scopedConversation) {
         throw new Error(t('session.authorityActionUnavailable'));
@@ -2835,6 +2883,7 @@ export function App() {
           conversation: scopedConversation,
           submission,
         });
+        onAccepted?.();
         invalidateSessionAuthority();
         const conversation = agentConversationSession?.conversation;
         if (conversation) {
@@ -2870,7 +2919,7 @@ export function App() {
   const presetAutoApprovalAttemptsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     presetAutoApprovalAttemptsRef.current.clear();
-  }, [scopedConversationId]);
+  }, [scopedConversationId, autoApprovalHistoryScope]);
   useEffect(() => {
     if (!scopedConversationId || permissionPreset === 'default') return;
     const requests = respondableHitlRequestsForProjection(sessionProjection);
@@ -2880,8 +2929,20 @@ export function App() {
       const attemptKey = `${request.id}:${request.authority_revision ?? 'unversioned'}`;
       if (presetAutoApprovalAttemptsRef.current.has(attemptKey)) continue;
       presetAutoApprovalAttemptsRef.current.add(attemptKey);
-      void respondToHitl(submission)
+      setAutomaticApprovalPending((current) => ({
+        scope: autoApprovalHistoryScope,
+        ids: [...(current.scope === autoApprovalHistoryScope ? current.ids : []), request.id],
+      }));
+      let accepted = false;
+      void respondToHitl(submission, () => { accepted = true; })
         .then(() => {
+          // A stale request can already be settled by another actor, including denial.
+          if (!accepted) return;
+          const entries = recordSuccessfulPermissionAutoApproval(
+            autoApprovalHistoryScope, request.id, permissionPreset,
+          );
+          if (autoApprovalHistoryScopeRef.current !== autoApprovalHistoryScope) return;
+          setAutoApprovalHistoryState({ scope: autoApprovalHistoryScope, entries });
           // Truthfulness: fold the resolved-with-preset marker into the local
           // timeline immediately; the canonical refetch keeps it when the
           // runtime echoes the response data.
@@ -2898,9 +2959,19 @@ export function App() {
             }).items,
           }));
         })
-        .catch(() => undefined);
+        .catch(() => {
+          if (autoApprovalHistoryScopeRef.current !== autoApprovalHistoryScope) return;
+          setAutomaticApprovalFailures((current) => ({
+            scope: autoApprovalHistoryScope,
+            ids: [...(current.scope === autoApprovalHistoryScope ? current.ids : []), request.id],
+          }));
+        })
+        .finally(() => {
+          setAutomaticApprovalPending((current) => current.scope === autoApprovalHistoryScope
+            ? { ...current, ids: current.ids.filter((id) => id !== request.id) } : current);
+        });
     }
-  }, [permissionPreset, respondToHitl, scopedConversationId, sessionProjection]);
+  }, [permissionPreset, respondToHitl, scopedConversationId, sessionProjection, autoApprovalHistoryScope]);
 
   useEffect(() => {
     const previous = sessionSocketAuthorityRef.current;

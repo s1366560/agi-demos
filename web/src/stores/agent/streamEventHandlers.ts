@@ -50,6 +50,7 @@ import type {
   MessageEventData,
   ObserveEventData,
   PermissionAskedEventData,
+  PermissionRepliedEventData,
   ThoughtEventData,
   TimelineEvent,
   ToolCall,
@@ -1173,36 +1174,52 @@ export function createStreamEventHandlers(
         : undefined;
       // A server reply can arrive before a replayed ask. Its exact request ID
       // remains terminal, so replay must not recreate buttons or submit again.
-      if (knownStatus === 'answered' || knownStatus === 'completed') return;
+      if (
+        knownStatus === 'answered' ||
+        knownStatus === 'completed' ||
+        useAgentPermissionModeStore
+          .getState()
+          .autoApprovedRequestIds[handlerConversationId]?.includes(requestId)
+      )
+        return;
 
-      // Full access: every ask is auto-approved, so the card is pure noise.
-      // Respond directly without queueing the timeline event or creating a
-      // HITL request. Background replays keep a pending card for manual review.
-      if (mode === 'full_access' && requestId && isActiveConversation) {
+      const queuePermissionRequest = () => {
+        const permissionEvent: AgentEvent<PermissionAskedEventData> = {
+          type: 'permission_asked',
+          data: event.data,
+        };
+        queueTimelineEvent(permissionEvent, {
+          pendingPermission: event.data,
+          agentState: 'awaiting_input',
+        });
+        flushTimelineBufferSync();
+        useUnifiedHITLStore
+          .getState()
+          .handleSSEEvent(
+            'permission_asked',
+            event.data as unknown as Record<string, unknown>,
+            handlerConversationId
+          );
+      };
+      const approveAutomatically = () => {
+        const permissionState = useAgentPermissionModeStore.getState();
+        if (!permissionState.beginAutoApproval(handlerConversationId, requestId)) return;
         void get()
           .respondToPermission(requestId, true)
-          .catch(() => undefined);
+          .catch(() => {
+            permissionState.completeAutoApproval(handlerConversationId, requestId, false);
+            // A server verdict may have arrived before the transport failure.
+            const status = useUnifiedHITLStore.getState().requestStatuses.get(requestId);
+            if (status === 'answered' || status === 'completed') return;
+            // A failed automatic send must remain answerable, including after a tab switch.
+            queuePermissionRequest();
+          });
+      };
+      if (mode === 'full_access' && requestId && isActiveConversation) {
+        approveAutomatically();
         return;
       }
-
-      const permissionEvent: AgentEvent<PermissionAskedEventData> = {
-        type: 'permission_asked',
-        data: event.data,
-      };
-
-      queueTimelineEvent(permissionEvent, {
-        pendingPermission: event.data,
-        agentState: 'awaiting_input',
-      });
-      flushTimelineBufferSync();
-
-      useUnifiedHITLStore
-        .getState()
-        .handleSSEEvent(
-          'permission_asked',
-          event.data as unknown as Record<string, unknown>,
-          handlerConversationId
-        );
+      queuePermissionRequest();
 
       // Permission mode automation for the visible card (auto edit flips the
       // card to granted once the approval lands). Only fires while this
@@ -1213,9 +1230,7 @@ export function createStreamEventHandlers(
         isActiveConversation &&
         shouldAutoApprovePermission(mode, wireData)
       ) {
-        void get()
-          .respondToPermission(requestId, true)
-          .catch(() => undefined);
+        approveAutomatically();
       }
     },
 
@@ -1224,12 +1239,51 @@ export function createStreamEventHandlers(
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       const requestId = event.data.request_id;
+      const replyData = event.data as Partial<PermissionRepliedEventData>;
+      const granted =
+        (replyData.granted ??
+          replyData.response_data?.granted ??
+          (replyData.reply === 'once' || replyData.reply === 'always')) === true;
+      useAgentPermissionModeStore
+        .getState()
+        .completeAutoApproval(
+          handlerConversationId,
+          requestId,
+          granted,
+          (event.data.auto_approved ?? event.data.response_data?.auto_approved) === true
+        );
+      const autoApproved =
+        useAgentPermissionModeStore
+          .getState()
+          .autoApprovedRequestIds[handlerConversationId]?.includes(requestId) === true;
 
-      const updatedTimeline = convState.timeline.map((te) =>
-        te.type === 'permission_asked' && (te as TimelineEventWithRequestId).requestId === requestId
-          ? { ...te, answered: true, granted: event.data.granted }
+      let updatedTimeline = convState.timeline.map((te) =>
+        (te.type === 'permission_asked' ||
+          te.type === 'permission_requested' ||
+          te.type === 'permission_replied' ||
+          te.type === 'permission_granted') &&
+        (te as TimelineEventWithRequestId).requestId === requestId
+          ? { ...te, answered: true, granted, autoApproved }
           : te
       );
+      if (
+        !updatedTimeline.some(
+          (te) =>
+            'requestId' in te &&
+            te.requestId === requestId &&
+            [
+              'permission_asked',
+              'permission_requested',
+              'permission_replied',
+              'permission_granted',
+            ].includes(te.type)
+        )
+      ) {
+        updatedTimeline = appendSSEEventToTimeline(updatedTimeline, {
+          ...event,
+          data: { ...event.data, granted, auto_approved: autoApproved },
+        });
+      }
 
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
@@ -1241,7 +1295,7 @@ export function createStreamEventHandlers(
         .getState()
         .handleSSEEvent(
           'permission_replied',
-          event.data as unknown as Record<string, unknown>,
+          { ...event.data, granted } as unknown as Record<string, unknown>,
           handlerConversationId
         );
     },

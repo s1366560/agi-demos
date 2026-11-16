@@ -17,9 +17,8 @@ import type {
 /**
  * Whether a timeline event is a permission card that was answered with Allow.
  *
- * Used by the message area to keep granted permission cards out of the UI in
- * full-access mode, where every ask is auto-approved and the cards are noise.
- * Pending (unanswered) and denied cards stay visible.
+ * This describes the outcome only; automatic approval provenance is checked
+ * separately before deciding whether a timeline card can be omitted.
  */
 export function isGrantedPermissionEvent(event: TimelineEvent): boolean {
   if (event.type === 'permission_replied' || event.type === 'permission_granted') {
@@ -31,6 +30,38 @@ export function isGrantedPermissionEvent(event: TimelineEvent): boolean {
     return Boolean(event.answered) && Boolean(event.granted);
   }
   return false;
+}
+
+/** Hide only exact requests confirmed automatically allowed, never pending/manual/denied. */
+export function filterAutomaticPermissionEvents(
+  timeline: TimelineEvent[],
+  approvedRequestIds: readonly string[] = []
+): TimelineEvent[] {
+  const automatic = new Map(approvedRequestIds.map((id) => [id, true]));
+  for (const event of timeline) {
+    if (
+      event.type === 'permission_replied' ||
+      event.type === 'permission_granted' ||
+      ((event.type === 'permission_asked' || event.type === 'permission_requested') &&
+        event.answered)
+    ) {
+      automatic.set(
+        event.requestId,
+        event.granted === true &&
+          (event.autoApproved === true || automatic.get(event.requestId) === true)
+      );
+    }
+  }
+  return timeline.filter((event) => {
+    if (
+      event.type !== 'permission_asked' &&
+      event.type !== 'permission_requested' &&
+      event.type !== 'permission_replied' &&
+      event.type !== 'permission_granted'
+    )
+      return true;
+    return !event.requestId || automatic.get(event.requestId) !== true;
+  });
 }
 
 /**
@@ -114,7 +145,7 @@ export function mergeHITLResponseEvents(timeline: TimelineEvent[]): TimelineEven
       requestType: 'permission_asked',
       mapFn: (r) => {
         const event = r as PermissionRepliedTimelineEvent;
-        return { answered: true, granted: event.granted };
+        return { answered: true, granted: event.granted, autoApproved: event.autoApproved };
       },
     },
     permission_granted: {
@@ -124,6 +155,7 @@ export function mergeHITLResponseEvents(timeline: TimelineEvent[]): TimelineEven
         return {
           answered: true,
           granted: event.granted,
+          autoApproved: event.autoApproved,
         };
       },
     },
@@ -155,6 +187,7 @@ export function mergeHITLResponseEvents(timeline: TimelineEvent[]): TimelineEven
             'decision_asked',
             'env_var_requested',
             'permission_asked',
+            'permission_requested',
           ];
           if (requestTypes.includes(event.type)) {
             return {

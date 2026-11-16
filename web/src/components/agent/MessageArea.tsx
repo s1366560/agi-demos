@@ -48,7 +48,7 @@ import { ChevronDown, ChevronUp, Loader2, Pin, PinOff } from 'lucide-react';
 
 import { usePinnedEventIds, useAgentHITLStore } from '../../stores/agent/hitlStore';
 import { useAgentPermissionModeStore } from '../../stores/agent/permissionModeStore';
-import { isGrantedPermissionEvent } from '../../stores/agent/timelineUtils';
+import { filterAutomaticPermissionEvents } from '../../stores/agent/timelineUtils';
 
 import { SuggestionChips } from './chat/SuggestionChips';
 import { ConversationSummaryCardWrapper } from './message/ConversationSummaryCardWrapper';
@@ -348,18 +348,14 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const pinnedSectionId = useId();
     const { t } = useTranslation();
 
-    // Full-access mode auto-approves every permission ask, so granted cards
-    // are noise: filter them out before grouping. Pending and denied cards
-    // stay visible so nothing becomes unanswerable.
-    const permissionMode = useAgentPermissionModeStore(
-      (state) => (conversationId ? state.modesByConversation[conversationId] : undefined) ?? 'ask'
+    // Approval provenance is keyed by exact conversation/request identity; changing
+    // the current mode must never hide manual decisions or unresolved requests.
+    const approvedRequestIds = useAgentPermissionModeStore((state) =>
+      conversationId ? state.autoApprovedRequestIds[conversationId] : undefined
     );
     const visibleTimeline = useMemo(
-      () =>
-        permissionMode === 'full_access'
-          ? timeline.filter((event) => !isGrantedPermissionEvent(event))
-          : timeline,
-      [timeline, permissionMode]
+      () => filterAutomaticPermissionEvents(timeline, approvedRequestIds),
+      [timeline, approvedRequestIds]
     );
 
     // Memoize grouped timeline items to avoid re-grouping on every render

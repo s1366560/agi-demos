@@ -767,7 +767,11 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         eventCounter,
         timestamp,
         requestId: data.request_id ?? '',
-        granted: data.granted === true,
+        granted:
+          (data.granted ??
+            data.response_data?.granted ??
+            (data.reply === 'once' || data.reply === 'always')) === true,
+        autoApproved: (data.auto_approved ?? data.response_data?.auto_approved) === true,
       };
     }
 

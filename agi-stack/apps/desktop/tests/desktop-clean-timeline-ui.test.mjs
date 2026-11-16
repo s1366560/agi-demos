@@ -84,7 +84,7 @@ function TimelineHarness({ items, running = false }) {
     },
     expandedItems,
     onToggleItem(item) {
-      setExpandedItems((current) => ({ ...current, [item.id]: !current[item.id] }));
+      setExpandedItems((current) => ({ ...current, [item.id]: !(current[item.id] ?? item.type === 'thought') }));
     },
     onLoadEarlier() {},
     onShowEarlier() {},
@@ -208,7 +208,7 @@ test('local sending without artifact presence activates only the latest user tur
     assert.match(groups[0].querySelector('summary').textContent, /Execution steps|执行记录/);
     assert.match(groups[1].querySelector('summary').textContent, /Working|正在执行/);
     assert.equal(groups[0].open, false);
-    assert.equal(groups[1].open, true);
+    assert.equal(groups[1].open, false);
     assert.ok(groups[0].querySelector('.timeline-step.status-recorded'));
     assert.ok(groups[1].querySelector('.timeline-step.status-running'));
     await render(false);
@@ -380,4 +380,52 @@ test('recorded incomplete steps use static recorded presentation without running
     await act(async () => root.unmount());
     container.remove();
   }
+});
+
+
+test('streaming reasoning uses its dedicated inline card and preserves disclosure on updates', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const thought = { id: 'reasoning', type: 'thought', content: 'First reasoning line',
+    metadata: { streaming: true }, eventTimeUs: 1000, eventCounter: 0 };
+  const render = async (item) => act(async () => root.render(React.createElement(
+    I18nProvider, null, React.createElement(ToastProvider, null,
+      React.createElement(TimelineHarness, { items: [item], running: true })))));
+  try {
+    await render(thought);
+    const card = container.querySelector('.thought-timeline-card');
+    assert.ok(card, 'generic runtime notices must not swallow reasoning');
+    const region = card.querySelector('[role="region"]');
+    assert.equal(region.hidden, false);
+    assert.equal(region.textContent, thought.content);
+    await render({ ...thought, content: 'First reasoning line\nSecond reasoning line' });
+    assert.ok(container.querySelector('.thought-timeline-card') === card);
+    assert.match(region.textContent, /Second reasoning line/);
+    await act(async () => card.querySelector('button').click());
+    assert.equal(region.hidden, true);
+    await render({ ...thought, content: 'Completed reasoning', metadata: { streaming: false } });
+    assert.ok(container.querySelector('.thought-timeline-card') === card);
+    assert.equal(region.hidden, true, 'completion respects the reader disclosure choice');
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+test('live tool completion retains a stable collapsed disclosure and pairs across reasoning', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async (items) => act(async () => root.render(React.createElement(
+    I18nProvider, null, React.createElement(ToastProvider, null,
+      React.createElement(TimelineHarness, { items, running: true })))));
+  try {
+    await render([call]);
+    const group = container.querySelector('.timeline-tool-group');
+    assert.equal(group.open, false);
+    await render([call, { id: 'reasoning', type: 'thought', content: 'Tool is running' }, result]);
+    assert.ok(container.querySelector('.timeline-tool-group') === group);
+    assert.equal(group.open, false, 'completion must not change disclosure height');
+    assert.equal(container.querySelectorAll('.timeline-step').length, 1);
+    assert.equal(container.querySelectorAll('.timeline-step.status-complete').length, 1);
+    assert.equal(container.querySelectorAll('.thought-timeline-card').length, 1);
+  } finally { await act(async () => root.unmount()); container.remove(); }
 });

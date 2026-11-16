@@ -1258,7 +1258,9 @@
 }
 
 .thought-timeline-content {
-  max-height: 360px;
+  max-height: 240px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   overflow: auto;
   padding: 0 12px 12px 30px;
 }
@@ -6001,4 +6003,29 @@
   padding: 4px 0;
   border: 0;
   background: transparent;
+}
+
+/* Compact execution rows override the legacy six-column card header. */
+.session-chat-narrative .timeline-steps > .timeline-tool-group-summary {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+}
+.session-chat-narrative .timeline-steps > .timeline-tool-group-summary > span:not(.timeline-tool-group-preview) {
+  display: block;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.session-chat-narrative .timeline-steps > .timeline-tool-group-summary > .timeline-tool-group-preview {
+  display: block;
+  flex: 1 1 0;
+  margin: 0;
+  white-space: nowrap;
+}
+.session-chat-narrative .timeline-steps > .timeline-tool-group-summary > svg {
+  flex: 0 0 14px;
+}
+.session-chat-narrative .timeline-steps .timeline-tool-group-items {
+  padding: 0 0 0 14px;
+  margin: 0;
 }

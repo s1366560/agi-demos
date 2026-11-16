@@ -389,6 +389,7 @@ export interface EnvVarProvidedTimelineEvent extends BaseTimelineEvent {
 export interface PermissionAskedTimelineEvent extends BaseTimelineEvent {
   type: 'permission_asked';
   requestId: string;
+  autoApproved?: boolean | undefined;
   toolName: string;
   description: string;
   riskLevel?: 'low' | 'medium' | 'high' | undefined;
@@ -404,6 +405,7 @@ export interface PermissionAskedTimelineEvent extends BaseTimelineEvent {
 export interface PermissionRequestedTimelineEvent extends BaseTimelineEvent {
   type: 'permission_requested';
   requestId: string;
+  autoApproved?: boolean | undefined;
   action?: string | undefined;
   resource?: string | undefined;
   reason?: string | undefined;
@@ -419,6 +421,7 @@ export interface PermissionRequestedTimelineEvent extends BaseTimelineEvent {
 export interface PermissionRepliedTimelineEvent extends BaseTimelineEvent {
   type: 'permission_replied';
   requestId: string;
+  autoApproved?: boolean | undefined;
   granted: boolean;
 }
 
@@ -428,6 +431,7 @@ export interface PermissionRepliedTimelineEvent extends BaseTimelineEvent {
 export interface PermissionGrantedTimelineEvent extends BaseTimelineEvent {
   type: 'permission_granted';
   requestId: string;
+  autoApproved?: boolean | undefined;
   granted: boolean;
 }
 
