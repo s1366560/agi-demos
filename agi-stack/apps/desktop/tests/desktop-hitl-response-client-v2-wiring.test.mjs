@@ -59,7 +59,7 @@ test('HITL responses enter one submitted session-scoped V2 authority', () => {
 });
 
 test('manual and preset approval paths share the V2 response coordinator', () => {
-  assert.match(app, /void respondToHitl\(submission\)/u);
+  assert.match(app, /void respondToHitl\(submission, \(\) =>/u);
   assert.match(app, /await respondToHitl\(submission\);/u);
 });
 

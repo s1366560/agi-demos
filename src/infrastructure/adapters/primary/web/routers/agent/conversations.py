@@ -874,6 +874,8 @@ async def update_conversation_config(
             tenant_id=authorized_tenant_id,
             user_id=str(current_user.id),
             patch=ConversationConfigPatchV2(
+                approval_mode_present="approval_mode" in fields,
+                approval_mode=data.approval_mode,
                 selected_agent_id_present="selected_agent_id" in fields,
                 selected_agent_id=data.selected_agent_id,
                 llm_model_override_present="llm_model_override" in fields,

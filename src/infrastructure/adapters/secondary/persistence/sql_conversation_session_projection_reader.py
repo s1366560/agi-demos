@@ -524,6 +524,7 @@ class SqlConversationSessionProjectionReader:
         ):
             return None
         return SessionPermissionReviewResponse(
+            permission=sanitize_hitl_text(metadata.get("permission_type")),
             tool_name=cast(str, fields["tool_name"]),
             action=cast(str, fields["action"]),
             description=cast(str, fields["description"]),

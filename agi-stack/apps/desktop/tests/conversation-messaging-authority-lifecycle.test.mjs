@@ -335,13 +335,16 @@ test('App binds the current generation coordinator and injects the required mess
   );
 });
 
-test('Local unsupported permission is rejected before socket dispatch, but routed mentions can save', async () => {
+test('session approval presets do not override workspace authority or block local sends', async () => {
   const h = harness();
+  const payloads = [];
+  h.params.socket.sendAgentMessage = payload => {h.events.push('socket');payloads.push(payload);return false;};
   h.render({ permissionPreset: 'full' });
   await h.hook.sendMessageContent('hello', []);
-  assert.ok(!h.events.includes('socket'));
-  assert.ok(!h.events.includes('run'));
-  assert.ok(h.state.error);
+  assert.ok(h.events.includes('socket'));
+  assert.ok(h.events.includes('run'));
+  assert.equal(payloads[0].permissionMode, undefined);
+  assert.equal(h.state.error, null);
   h.events.length = 0;
   h.client.sendMessage = async () => ({ id: 'routed', mentions: ['agent'] });
   await h.hook.sendMessageContent('hello', []);

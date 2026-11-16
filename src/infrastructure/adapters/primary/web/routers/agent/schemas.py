@@ -60,6 +60,8 @@ class UpdateConversationConfigRequest(BaseModel):
     conversation, but can be overridden per-request via ``app_model_context``.
     """
 
+    approval_mode: Literal["ask", "auto_edit", "full_access"] | None = None
+
     selected_agent_id: str | None = Field(
         None,
         description="Agent Definition ID to use as this conversation's default selected agent.",
@@ -78,6 +80,8 @@ class UpdateConversationConfigRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_model_route(self) -> "UpdateConversationConfigRequest":
+        if "approval_mode" in self.model_fields_set and self.approval_mode is None:
+            raise ValueError("Approval mode must be ask, auto_edit, or full_access")
         if (
             self.llm_route_override is not None
             and (self.llm_model_override or "").strip() != self.llm_route_override.model_id

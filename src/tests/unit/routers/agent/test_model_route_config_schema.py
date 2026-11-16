@@ -39,3 +39,17 @@ def test_model_route_schema_accepts_exact_identity_and_clear(schema):
     ):
         with pytest.raises(ValidationError):
             parse({**selection, "llm_route_override": bad})
+
+
+@pytest.mark.parametrize("mode", ["ask", "auto_edit", "full_access"])
+def test_approval_mode_schema_preserves_explicit_presence(mode):
+    assert "approval_mode" not in UpdateConversationConfigRequest().model_fields_set
+    parsed = UpdateConversationConfigRequest.model_validate({"approval_mode": mode})
+    assert parsed.approval_mode == mode
+    assert parsed.model_fields_set == {"approval_mode"}
+
+
+@pytest.mark.parametrize("mode", [None, "automatic", "FULL_ACCESS", " full_access ", True, 1])
+def test_approval_mode_schema_rejects_noncanonical_values(mode):
+    with pytest.raises(ValidationError):
+        UpdateConversationConfigRequest.model_validate({"approval_mode": mode})

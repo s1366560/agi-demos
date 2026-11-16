@@ -90,6 +90,20 @@ describe('permissionModeStore', () => {
   });
 
   describe('shouldAutoApprovePermission', () => {
+    it('never automates native application and device grants even in full access', () => {
+      expect(shouldAutoApprovePermission('full_access', { permission: 'computer_use' })).toBe(
+        false
+      );
+      expect(
+        shouldAutoApprovePermission('full_access', { metadata: { native_binding: null } })
+      ).toBe(false);
+      expect(shouldAutoApprovePermission('full_access', { native_binding: {} })).toBe(false);
+      expect(
+        shouldAutoApprovePermission('full_access', {
+          decision: { target: { kind: 'device_mcp_tool' } },
+        })
+      ).toBe(false);
+    });
     it('should never auto-approve in ask mode', () => {
       expect(shouldAutoApprovePermission('ask', { permission: 'write' })).toBe(false);
     });

@@ -303,10 +303,8 @@ import {
   acknowledgeFullAccessWarning,
   autoApprovalSubmission,
   readFullAccessWarningAcknowledged,
-  readPermissionPreset,
-  writePermissionPreset,
-  type PermissionPreset,
 } from './features/chat/permissionPresetModel';
+import { useConversationApprovalSync } from './features/chat/useConversationApprovalSync';
 import { applyWorkspaceLifecycleStreamEvent } from './features/chat/workspaceLifecycleEventModel';
 import { applyWorkspaceMessageStreamEvent } from './features/chat/workspaceMessageEventModel';
 import { applyWorkspaceRosterStreamEvent } from './features/chat/workspaceRosterEventModel';
@@ -2431,12 +2429,17 @@ export function App() {
     () => new Set(respondableHitlRequestIds),
     [respondableHitlRequestIds],
   );
-  const [permissionPreset, setPermissionPreset] = useState<PermissionPreset>('default');
   const autoApprovalHistoryScope = useMemo(
     () => permissionAutoApprovalScope(config, scopedConversationId),
     [config.mode, config.apiBaseUrl, config.tenantId, config.projectId,
       config.workspaceId, scopedConversationId],
   );
+  const approvalSync = useConversationApprovalSync({
+    config, conversation: scopedConversation, scope: autoApprovalHistoryScope,
+    operations: desktopConversationConfigOperationsV2,
+    onError: caught => setError(formatError(caught)),
+  });
+  const permissionPreset = approvalSync.preset;
   const autoApprovalHistoryScopeRef = useRef(autoApprovalHistoryScope);
   autoApprovalHistoryScopeRef.current = autoApprovalHistoryScope;
   const [autoApprovalHistoryState, setAutoApprovalHistoryState] = useState(() => ({
@@ -2470,23 +2473,11 @@ export function App() {
     sessionProjection, permissionPreset]);
   const autoApprovalHistory = autoApprovalHistoryState.scope === autoApprovalHistoryScope
     ? autoApprovalHistoryState.entries : [];
-  const permissionPresetScopeKey = autoApprovalHistoryScope;
   const [fullAccessWarningAcknowledged, setFullAccessWarningAcknowledged] = useState(false);
-  useEffect(() => {
-    setPermissionPreset(
-      permissionPresetScopeKey ? readPermissionPreset(permissionPresetScopeKey) : 'default',
-    );
-  }, [permissionPresetScopeKey]);
   useEffect(() => {
     setFullAccessWarningAcknowledged(readFullAccessWarningAcknowledged(config.workspaceId));
   }, [config.workspaceId]);
-  const handlePermissionPresetChange = useCallback(
-    (preset: PermissionPreset) => {
-      if (permissionPresetScopeKey) writePermissionPreset(permissionPresetScopeKey, preset);
-      setPermissionPreset(preset);
-    },
-    [permissionPresetScopeKey],
-  );
+  const handlePermissionPresetChange = approvalSync.save;
   const handleAcknowledgeFullAccessWarning = useCallback(() => {
     acknowledgeFullAccessWarning(config.workspaceId);
     setFullAccessWarningAcknowledged(true);
@@ -7478,6 +7469,7 @@ export function App() {
       respondableHitlRequestIds,
       permissionPreset: selectedConversation ? permissionPreset : undefined,
       permissionPresetFullAccessAcknowledged: fullAccessWarningAcknowledged,
+      permissionPresetPending: approvalSync.pending,
       onPermissionPresetChange: selectedConversation ? handlePermissionPresetChange : undefined,
       onAcknowledgeFullAccessWarning: selectedConversation
         ? handleAcknowledgeFullAccessWarning

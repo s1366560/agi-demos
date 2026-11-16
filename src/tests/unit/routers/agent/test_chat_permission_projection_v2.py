@@ -99,6 +99,7 @@ async def test_real_chat_permission_is_reviewable_after_sql_hydration(
             payload = ConversationSessionProjectionService._hitl(items[0]).model_dump(mode="json")
             assert payload["question"] == tool.description
             assert payload["permission"] == {
+                "permission": "write",
                 "tool_name": tool.name,
                 "action": "execute",
                 "description": tool.description,
@@ -153,3 +154,19 @@ def test_malformed_permission_metadata_is_not_an_approvable_contract(field, valu
     }
     metadata[field] = value
     assert SqlConversationSessionProjectionReader._permission_review(metadata) is None
+
+
+@pytest.mark.parametrize("permission", [None, "write", "read", "terminal"])
+def test_permission_review_preserves_declared_permission_type(permission):
+    metadata = {
+        "tool_name": "opaque",
+        "description": "Declared action",
+        "action": "execute",
+        "risk_level": "medium",
+        "allow_remember": False,
+    }
+    if permission is not None:
+        metadata["permission_type"] = permission
+    review = SqlConversationSessionProjectionReader._permission_review(metadata)
+    assert review is not None
+    assert review.permission == permission

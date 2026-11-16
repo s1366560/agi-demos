@@ -529,6 +529,7 @@ class AgentServiceImpl implements AgentService {
     conversationId: string,
     projectId: string,
     config: {
+      approval_mode?: 'ask' | 'auto_edit' | 'full_access';
       selected_agent_id?: string | null;
       llm_model_override?: string | null;
       llm_overrides?: Record<string, unknown> | null;

@@ -676,6 +676,9 @@ test('cloud session projection preserves only the structured permission review c
     Object.hasOwn(projection?.pendingHitl[0]?.permission ?? {}, 'runtime_payload'),
     false,
   );
+  payload.pending_hitl[0].permission.permission = 'write';
+  const declaredWrite = decodeConversationSessionProjection(payload, 'conversation-1');
+  assert.equal(declaredWrite?.pendingHitl[0]?.permission?.permission, 'write');
 });
 
 test('cloud projection exposes only the binding needed to route an execution-step approval', () => {

@@ -130,6 +130,7 @@ mod plugin_marketplace_v3;
 pub(crate) use platform_plugin_sync_v2::{
     PlatformPluginAuthorityModeV2, PlatformPluginControlPlaneReconcilerV2,
 };
+mod approval_config;
 mod llm_request_timeout;
 mod provider_audio_declaration;
 mod provider_credentials;
@@ -3459,6 +3460,7 @@ impl LocalRuntimeState {
             "agent_config": {
                 "selected_agent_id": selected_agent_id,
                 "capability_mode": conversation.capability_mode,
+                "approval_mode": self.session_store.conversation_approval_mode(&conversation.id).ok().flatten(),
                 "llm_model_override": llm_model_override,
                 "llm_route_override": llm_route_override,
             },
@@ -6683,9 +6685,12 @@ struct ConversationConfigBody {
     #[serde(default)]
     selected_agent_id: Option<String>,
     #[serde(default)]
-    llm_model_override: Option<String>,
-    #[serde(default)]
-    llm_route_override: Option<LlmRouteTarget>,
+    #[serde(deserialize_with = "approval_config::deserialize_present")]
+    llm_model_override: Option<Option<String>>,
+    #[serde(default, deserialize_with = "approval_config::deserialize_present")]
+    llm_route_override: Option<Option<LlmRouteTarget>>,
+    #[serde(default, deserialize_with = "approval_config::deserialize_mode")]
+    approval_mode: Option<approval_config::ApprovalMode>,
 }
 
 async fn update_conversation_mode(
@@ -6751,6 +6756,7 @@ async fn update_conversation_config(
         if body.selected_agent_id.is_some()
             || body.llm_model_override.is_some()
             || body.llm_route_override.is_some()
+            || body.approval_mode.is_some()
         {
             return Err(local_bad_request(
                 "execution_selection must be updated independently".into(),
@@ -6758,9 +6764,12 @@ async fn update_conversation_config(
         }
         return execution_selection_patch::update(&state, &authenticated, &conversation_id, patch);
     }
-    let llm_route =
-        normalized_conversation_llm_route(body.llm_model_override, body.llm_route_override)
-            .map_err(local_bad_request)?;
+    let route_present = body.llm_model_override.is_some() || body.llm_route_override.is_some();
+    let llm_route = normalized_conversation_llm_route(
+        body.llm_model_override.flatten(),
+        body.llm_route_override.flatten(),
+    )
+    .map_err(local_bad_request)?;
     if let Some(route) = llm_route.as_ref() {
         state
             .validate_conversation_llm_route(&authenticated.workspace.tenant_id, route)
@@ -6778,10 +6787,18 @@ async fn update_conversation_config(
             selection.agent_id = body.selected_agent_id;
         }
         let selection = selection.normalized().map_err(local_bad_request)?;
-        state
-            .session_store
-            .update_conversation_llm_route(&conversation.id, llm_route.as_ref(), &now)
-            .map_err(local_store_error)?;
+        if route_present {
+            state
+                .session_store
+                .update_conversation_llm_route(&conversation.id, llm_route.as_ref(), &now)
+                .map_err(local_store_error)?;
+        }
+        if let Some(mode) = body.approval_mode {
+            state
+                .session_store
+                .update_conversation_approval_mode(&conversation.id, mode)
+                .map_err(local_store_error)?;
+        }
         state
             .session_store
             .save_execution_selection(&conversation.id, "conversation-config", &selection, &now)

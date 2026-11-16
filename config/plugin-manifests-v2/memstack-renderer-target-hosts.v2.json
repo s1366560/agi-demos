@@ -542,7 +542,7 @@
       "module_ref": "builtin://memstack/desktop/conversation-config-authority",
       "entrypoint": "applyDesktopConversationConfigAuthorityV2",
       "artifact": {
-        "digest": "sha256:80583a270e586d42c6ad322738292ab79dcbfa72dfc7496c519315601f354a79",
+        "digest": "sha256:8fd6f70a72dec0d5853980edb05bcca886443aa5514460449bffbb459c40ce09",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopConversationConfigAuthorityModuleV2.ts"
       },
       "targets": [

@@ -328,6 +328,7 @@ type ChatPanelProps = {
   respondableHitlRequestIds: readonly string[];
   permissionPreset?: PermissionPreset;
   permissionPresetFullAccessAcknowledged?: boolean;
+  permissionPresetPending?: boolean;
   onPermissionPresetChange?: (preset: PermissionPreset) => void;
   onAcknowledgeFullAccessWarning?: () => void;
   authorityNotice?: ChatAuthorityNotice;
@@ -479,6 +480,7 @@ export const ChatPanel = memo(function ChatPanel({
   respondableHitlRequestIds,
   permissionPreset,
   permissionPresetFullAccessAcknowledged = false,
+  permissionPresetPending = false,
   onPermissionPresetChange,
   onAcknowledgeFullAccessWarning,
   authorityNotice,
@@ -2151,6 +2153,7 @@ export const ChatPanel = memo(function ChatPanel({
             authorityNotice={authorityNotice}
             onAuthorityAction={onAuthorityAction}
             permissionPreset={permissionPreset}
+            permissionPresetPending={permissionPresetPending}
             permissionPresetFullAccessAcknowledged={
               permissionPresetFullAccessAcknowledged
             }
@@ -2276,6 +2279,7 @@ type ChatComposerProps = {
   onAuthorityAction?: () => void;
   permissionPreset?: PermissionPreset;
   permissionPresetFullAccessAcknowledged?: boolean;
+  permissionPresetPending?: boolean;
   onPermissionPresetChange?: (preset: PermissionPreset) => void;
   onAcknowledgeFullAccessWarning?: () => void;
   onRunInputDeliveryChange: (delivery: RunInputDelivery) => void;
@@ -2338,6 +2342,7 @@ function ChatComposer({
   onAuthorityAction,
   permissionPreset,
   permissionPresetFullAccessAcknowledged = false,
+  permissionPresetPending = false,
   onPermissionPresetChange,
   onAcknowledgeFullAccessWarning,
   onRunInputDeliveryChange,
@@ -3218,6 +3223,7 @@ function ChatComposer({
               onPermissionPresetChange &&
               onAcknowledgeFullAccessWarning ? (
                 <PermissionPresetControl
+                  disabled={permissionPresetPending}
                   preset={permissionPreset}
                   fullAccessAcknowledged={
                     permissionPresetFullAccessAcknowledged

@@ -911,3 +911,104 @@ test('selection read and explicit null patch use the same scoped leased authorit
     assert.equal(lifecycle.filter(event=>event.type==='release').length,3);
   } finally {globalThis.fetch=originalFetch;await generation.dispose();}
 });
+
+test("approval mode reads and mutations share scoped leases in local and cloud transports", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const requests = [];
+  let stored = conversation();
+  const respond = (path, method, body) => {
+    requests.push({ path, method, body });
+    if (method === "PATCH")
+      stored = { ...stored, agent_config: { ...stored.agent_config, ...body } };
+    return path.includes("/session?") ? { conversation: stored } : stored;
+  };
+  globalThis.fetch = async (input, init) =>
+    json(
+      respond(
+        String(input),
+        init?.method ?? "GET",
+        init?.body ? JSON.parse(init.body) : undefined,
+      ),
+    );
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      core: {
+        async invoke(command, args) {
+          assert.equal(command, "cloud_request");
+          const { path, method, body } = args.request;
+          return { status: 200, body: respond(path, method, body) };
+        },
+      },
+    },
+  };
+  const generation = await new LoaderV2(
+    rendererDefinitions(),
+    "desktop-renderer",
+  ).stage(loadBootstrap());
+  try {
+    const service = generation.resolve(
+      DESKTOP_CONVERSATION_CONFIG_AUTHORITY_SERVICE_V2,
+      { kind: "root" },
+      { version: DESKTOP_CONVERSATION_CONFIG_AUTHORITY_VERSION_V2 },
+    );
+    const lifecycle = [];
+    const operations = createDesktopConversationConfigOperationsV2(() =>
+      acceptedActions(service, "approval", lifecycle),
+    );
+    for (const mode of ["local", "cloud"]) {
+      const input = {
+        config: runtimeConfig({ mode }),
+        conversation: conversation(),
+      };
+      assert.deepEqual(
+        (await operations.readApprovalMode(input)).agent_config,
+        stored.agent_config,
+      );
+      for (const approvalMode of ["ask", "auto_edit", "full_access"]) {
+        assert.equal(
+          (await operations.updateApprovalMode({ ...input, approvalMode }))
+            .agent_config.approval_mode,
+          approvalMode,
+        );
+        assert.deepEqual(requests.at(-1).body, { approval_mode: approvalMode });
+      }
+      assert.throws(() =>
+        operations.updateApprovalMode({ ...input, approvalMode: "invalid" }),
+      );
+      assert.throws(() =>
+        operations.readApprovalMode({
+          ...input,
+          conversation: conversation({ project_id: "other" }),
+        }),
+      );
+    }
+    assert.equal(lifecycle.filter((item) => item.type === "release").length, 8);
+    assert.ok(
+      lifecycle
+        .filter((item) => item.type === "acquire")
+        .every((item) => item.request.scope.session_id === "conversation-1"),
+    );
+    stored = conversation({ tenant_id: "other" });
+    await assert.rejects(
+      operations.readApprovalMode({
+        config: runtimeConfig(),
+        conversation: conversation(),
+      }),
+    );
+    globalThis.fetch = async () =>
+      json(conversation({ agent_config: { approval_mode: "ask" } }));
+    await assert.rejects(
+      operations.updateApprovalMode({
+        config: runtimeConfig(),
+        conversation: conversation(),
+        approvalMode: "full_access",
+      }),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+    await generation.dispose();
+  }
+});

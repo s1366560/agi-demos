@@ -1215,7 +1215,12 @@ export function createStreamEventHandlers(
             queuePermissionRequest();
           });
       };
-      if (mode === 'full_access' && requestId && isActiveConversation) {
+      if (
+        mode === 'full_access' &&
+        requestId &&
+        isActiveConversation &&
+        shouldAutoApprovePermission(mode, wireData)
+      ) {
         approveAutomatically();
         return;
       }

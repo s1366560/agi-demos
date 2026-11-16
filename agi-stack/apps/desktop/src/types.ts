@@ -1879,6 +1879,7 @@ export type DecisionContext = {
 };
 
 export type PermissionRequestContext = {
+  permission?: string | null;
   tool_name: string;
   action: string;
   risk_level: DecisionRiskLevel;

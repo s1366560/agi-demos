@@ -4,14 +4,20 @@ import { useTranslation } from 'react-i18next';
 
 import { Check, ChevronDown, FileEdit, ShieldQuestion, Zap } from 'lucide-react';
 
+import { useAgentHITLStore } from '@/stores/agent/hitlStore';
 import {
   PERMISSION_MODES,
+  shouldAutoApprovePermission,
   useAgentPermissionModeStore,
   type AgentPermissionMode,
 } from '@/stores/agent/permissionModeStore';
+import { useAgentV3Store } from '@/stores/agentV3';
+
+import { useConversationApprovalMode } from '@/hooks/useConversationApprovalMode';
 
 export interface PermissionModeSwitcherProps {
   conversationId: string | null;
+  projectId?: string | undefined;
   disabled?: boolean | undefined;
 }
 
@@ -35,16 +41,31 @@ const MODE_DESC_KEYS: Record<AgentPermissionMode, { key: string; fallback: strin
 
 export const PermissionModeSwitcher: React.FC<PermissionModeSwitcherProps> = ({
   conversationId,
-  disabled = false,
+  projectId,
+  disabled: disabledProp = false,
 }) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const mode = useAgentPermissionModeStore(
-    (state) => (conversationId ? state.modesByConversation[conversationId] : undefined) ?? 'ask'
-  );
-  const setPermissionMode = useAgentPermissionModeStore((state) => state.setPermissionMode);
+  const { mode, saving, failed, save } = useConversationApprovalMode(conversationId, projectId);
+  const disabled = disabledProp || saving || !conversationId || !projectId;
+  const pending = useAgentHITLStore((state) => state.pendingPermission);
+  const attempted = useRef(new Set<string>());
+  useEffect(() => {
+    if (!conversationId || !pending || !shouldAutoApprovePermission(mode, pending)) return;
+    const agent = useAgentV3Store.getState();
+    if (agent.activeConversationId !== conversationId) return;
+    const key = `${conversationId}:${pending.request_id}`;
+    if (attempted.current.has(key)) return;
+    const permissions = useAgentPermissionModeStore.getState();
+    if (!permissions.beginAutoApproval(conversationId, pending.request_id)) return;
+    attempted.current.add(key);
+    void agent.respondToPermission(pending.request_id, true).catch(() => {
+      permissions.completeAutoApproval(conversationId, pending.request_id, false);
+      // Keep the existing card answerable; never retry a failed grant in a render loop.
+    });
+  }, [conversationId, mode, pending]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -63,12 +84,10 @@ export const PermissionModeSwitcher: React.FC<PermissionModeSwitcherProps> = ({
 
   const handleSelect = useCallback(
     (nextMode: AgentPermissionMode) => {
-      if (conversationId) {
-        setPermissionMode(conversationId, nextMode);
-      }
+      void save(nextMode);
       setIsOpen(false);
     },
-    [conversationId, setPermissionMode]
+    [save]
   );
 
   const handleTriggerKeyDown = useCallback(
@@ -115,6 +134,14 @@ export const PermissionModeSwitcher: React.FC<PermissionModeSwitcherProps> = ({
         />
       </button>
 
+      {failed && (
+        <span role="alert" className="text-xs text-red-600">
+          {t(
+            'agent.permissionMode.saveFailed',
+            'Could not save permission mode. Please try again.'
+          )}
+        </span>
+      )}
       {isOpen && (
         <div className="absolute bottom-full left-0 mb-2 z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20">
           <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">

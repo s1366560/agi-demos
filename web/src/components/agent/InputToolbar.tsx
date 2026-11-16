@@ -122,7 +122,8 @@ export const InputToolbar = memo<InputToolbarProps>(
 
           <PermissionModeSwitcher
             conversationId={activeConversationId}
-            disabled={!!(isStreaming || disabled)}
+            projectId={projectId}
+            disabled={disabled}
           />
 
           <ThinkingLevelSwitcher

@@ -93,9 +93,12 @@ export const useAgentPermissionModeStore = create<PermissionModeState>()(
 
         setPermissionMode: (conversationId, mode) =>
           set(
-            (state) => ({
-              modesByConversation: { ...state.modesByConversation, [conversationId]: mode },
-            }),
+            (state) =>
+              state.modesByConversation[conversationId] === mode
+                ? state
+                : {
+                    modesByConversation: { ...state.modesByConversation, [conversationId]: mode },
+                  },
             false,
             'permissionMode/set'
           ),
@@ -123,8 +126,7 @@ export const useAgentPermissionModeStore = create<PermissionModeState>()(
       {
         name: 'agent-permission-mode',
         // Only confirmed automatic verdicts survive reload. Pending sends are not approvals.
-        partialize: ({ modesByConversation, autoApprovedRequestIds }) => ({
-          modesByConversation,
+        partialize: ({ autoApprovedRequestIds }) => ({
           autoApprovedRequestIds,
         }),
         merge: (persisted, current) => {
@@ -149,17 +151,7 @@ export const useAgentPermissionModeStore = create<PermissionModeState>()(
                   ])
               );
             }
-            if (stored.modesByConversation && typeof stored.modesByConversation === 'object') {
-              const sanitized: Record<string, AgentPermissionMode> = {};
-              for (const [conversationId, mode] of Object.entries(
-                stored.modesByConversation as Record<string, unknown>
-              )) {
-                if (isAgentPermissionMode(mode)) {
-                  sanitized[conversationId] = mode;
-                }
-              }
-              merged.modesByConversation = sanitized;
-            }
+            // Modes are server-owned. Legacy browser preferences must never grant authority.
           }
           return merged;
         },
@@ -183,8 +175,31 @@ export function shouldAutoApprovePermission(
     permission?: string | undefined;
     permission_type?: string | undefined;
     tool_name?: string | undefined;
+    metadata?: Record<string, unknown> | undefined;
+    native_binding?: unknown;
+    decision?: unknown;
   }
 ): boolean {
+  const metadata = data.metadata;
+  const decision = data.decision ?? metadata?.decision;
+  const target =
+    decision && typeof decision === 'object' && 'target' in decision
+      ? (decision as { target?: unknown }).target
+      : undefined;
+  const kind =
+    target && typeof target === 'object' && 'kind' in target
+      ? (target as { kind?: unknown }).kind
+      : undefined;
+  // Native application/device grants always require an explicit user action.
+  if (
+    data.permission === 'computer_use' ||
+    data.permission_type === 'computer_use' ||
+    Object.hasOwn(data, 'native_binding') ||
+    (metadata && Object.hasOwn(metadata, 'native_binding')) ||
+    kind === 'computer_app' ||
+    kind === 'device_mcp_tool'
+  )
+    return false;
   if (mode === 'full_access') return true;
   if (mode !== 'auto_edit') return false;
   const permissionName = data.permission ?? data.permission_type;

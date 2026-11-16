@@ -618,6 +618,8 @@ export interface DoomLoopIntervenedEventData {
  * Permission asked event data
  */
 export interface PermissionAskedEventData {
+  metadata?: Record<string, unknown> | undefined;
+  permission?: string | undefined;
   request_id: string;
   tool_name: string;
   permission_type: 'allow' | 'deny' | 'ask';

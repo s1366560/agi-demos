@@ -298,3 +298,55 @@ async def test_explicit_model_route_switch_clear_and_legacy_patch() -> None:
                 llm_route_override=ModelRouteRef(provider_id="provider", model_id="shared"),
             )
         )
+
+
+@pytest.mark.parametrize("mode", ["ask", "auto_edit", "full_access"])
+async def test_approval_mode_is_persisted_without_changing_runtime_permissions(mode: Any) -> None:
+    original = {"approval_mode": "full_access", "permission_mode": "ask"}
+    conversation = Conversation(
+        id="approval-config",
+        project_id="project-a",
+        tenant_id="tenant-a",
+        user_id="user-a",
+        title="Approval",
+        agent_config=dict(original),
+    )
+    service, access, _ = _service(conversation)
+    scope = {
+        "conversation_id": conversation.id,
+        "project_id": conversation.project_id,
+        "tenant_id": conversation.tenant_id,
+        "user_id": conversation.user_id,
+    }
+    await service.update_conversation_config(**scope, patch=ConversationConfigPatchV2())
+    assert conversation.agent_config == original
+    result = await service.update_conversation_config(
+        **scope,
+        patch=ConversationConfigPatchV2(approval_mode_present=True, approval_mode=mode),
+    )
+    assert result is conversation
+    assert conversation.agent_config == {"approval_mode": mode, "permission_mode": "ask"}
+    assert access.save_scoped_conversation.await_count == 2
+
+
+@pytest.mark.parametrize("mode", [None, "automatic", "FULL_ACCESS", " full_access ", True, 1])
+async def test_invalid_approval_mode_does_not_mutate_or_save(mode: Any) -> None:
+    conversation = Conversation(
+        id="approval-config",
+        project_id="project-a",
+        tenant_id="tenant-a",
+        user_id="user-a",
+        title="Approval",
+        agent_config={"approval_mode": "ask"},
+    )
+    service, access, _ = _service(conversation)
+    with pytest.raises(ValueError, match="Approval mode"):
+        await service.update_conversation_config(
+            conversation_id=conversation.id,
+            project_id=conversation.project_id,
+            tenant_id=conversation.tenant_id,
+            user_id=conversation.user_id,
+            patch=ConversationConfigPatchV2(approval_mode_present=True, approval_mode=mode),
+        )
+    assert conversation.agent_config == {"approval_mode": "ask"}
+    access.save_scoped_conversation.assert_not_awaited()

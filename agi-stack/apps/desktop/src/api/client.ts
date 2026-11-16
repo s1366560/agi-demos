@@ -1201,6 +1201,7 @@ export class DesktopApiClient {
   async updateAgentConversationConfig(
     conversationId: string,
     payload: {
+      approval_mode?: 'ask' | 'auto_edit' | 'full_access';
       execution_selection?: Partial<NonNullable<AgentConversation['execution_selection']>>;
       selected_agent_id?: string | null;
       llm_model_override?: string | null;

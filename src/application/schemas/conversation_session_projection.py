@@ -150,6 +150,7 @@ class SessionWorkspacePlanContextResponse(_ProjectionModel):
 
 
 class SessionPermissionReviewResponse(_ProjectionModel):
+    permission: str | None = Field(default=None, min_length=1, strict=True)
     tool_name: str = Field(min_length=1)
     action: str = Field(min_length=1)
     description: str = Field(min_length=1)

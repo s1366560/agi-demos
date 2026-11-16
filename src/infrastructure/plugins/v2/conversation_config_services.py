@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from src.domain.model.agent import Conversation
 from src.infrastructure.agent.model_route import ModelRouteRef
@@ -33,6 +33,8 @@ CONVERSATION_CONFIG_AGENT_DEFINITIONS_INJECT_V2 = "agent_definitions"
 class ConversationConfigPatchV2:
     """Explicit-presence patch independent of the HTTP request schema."""
 
+    approval_mode_present: bool = False
+    approval_mode: Literal["ask", "auto_edit", "full_access"] | None = None
     selected_agent_id_present: bool = False
     selected_agent_id: str | None = None
     llm_model_override_present: bool = False
@@ -68,6 +70,10 @@ class ConversationConfigServiceV2:
             return None
 
         config_patch: dict[str, Any] = {}
+        if patch.approval_mode_present:
+            if patch.approval_mode not in ("ask", "auto_edit", "full_access"):
+                raise ValueError("Approval mode must be ask, auto_edit, or full_access")
+            config_patch["approval_mode"] = patch.approval_mode
         if patch.selected_agent_id_present:
             selected_agent_id = patch.selected_agent_id.strip() if patch.selected_agent_id else ""
             if selected_agent_id:

@@ -7674,6 +7674,7 @@
       "charLimitHint": "Messages over {{count}} characters may be truncated by the model"
     },
     "permissionMode": {
+      "saveFailed": "Could not save permission mode. Please try again.",
       "label": "Permission mode",
       "title": "Permission mode",
       "ask": "Confirm before changes",

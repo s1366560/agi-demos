@@ -12,11 +12,13 @@ import { PERMISSION_PRESETS, type PermissionPreset } from './permissionPresetMod
  */
 export function PermissionPresetControl({
   preset,
+  disabled = false,
   fullAccessAcknowledged,
   onPresetChange,
   onAcknowledgeFullAccess,
 }: {
   preset: PermissionPreset;
+  disabled?: boolean;
   fullAccessAcknowledged: boolean;
   onPresetChange: (preset: PermissionPreset) => void;
   onAcknowledgeFullAccess: () => void;
@@ -50,6 +52,7 @@ export function PermissionPresetControl({
 
   const selectPreset = (next: PermissionPreset) => {
     setOpen(false);
+    if (disabled) return;
     if (next === 'full' && !fullAccessAcknowledged) {
       setWarningOpen(true);
       return;
@@ -61,6 +64,8 @@ export function PermissionPresetControl({
     <div className="composer-control permission-preset-control" ref={trayRef}>
       <button
         className="composer-mode-button"
+        disabled={disabled}
+        aria-busy={disabled}
         type="button"
         aria-label={t('chat.permissionPreset.label')}
         aria-haspopup="menu"
@@ -86,6 +91,7 @@ export function PermissionPresetControl({
               role="menuitemradio"
               aria-checked={candidate === preset}
               key={candidate}
+              disabled={disabled}
               onClick={() => selectPreset(candidate)}
             >
               <span>
@@ -118,6 +124,7 @@ export function PermissionPresetControl({
               <AlertDialog.Action>
                 <Button
                   color="red"
+                  disabled={disabled}
                   onClick={() => {
                     confirmingRef.current = true;
                     onAcknowledgeFullAccess();

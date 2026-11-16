@@ -5,7 +5,6 @@ import {
   composerAgentExecutionContext,
   workspaceMessageRequiresDefaultAgentLaunch,
 } from '../features/chat/chatComposerModel';
-import { permissionModeForPreset } from '../features/chat/permissionPresetModel';
 import { resolveSessionComposerDispatch } from '../features/session/sessionComposerDispatchModel';
 import {
   AgentConversation,
@@ -28,7 +27,6 @@ export function useConversationMessaging(params: AgentConversationParams) {
   const { t } = useI18n();
   const {
     sessionProjection,
-    permissionPreset,
     runInputReferences,
     runInputDelivery,
     runInputDeliveryOptions,
@@ -283,7 +281,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
             detail: 'Agent conversation opened. Sending task over WebSocket.',
           });
           assertOperationActive();
-          assertLocalMessagingExecutionV2(config, { ...execution, permissionPreset });
+          assertLocalMessagingExecutionV2(config, execution);
           const queued = socket.sendAgentMessage({
             conversationId: conversation.id,
             projectId: config.projectId,
@@ -295,7 +293,6 @@ export function useConversationMessaging(params: AgentConversationParams) {
             mentions: execution.mentions,
             fileMetadata: execution.fileMetadata,
             appModelContext: execution.appModelContext,
-            permissionMode: permissionModeForPreset(permissionPreset),
           });
           setConversationTimeline((current) => {
             if (current.conversationId !== conversation.id) return current;
@@ -317,7 +314,6 @@ export function useConversationMessaging(params: AgentConversationParams) {
           if (!queued && localRuntimeMode) {
             await client.runAgentMessage(conversation, execution.message, messageId, {
               ...execution,
-              permissionPreset,
             });
             assertOperationActive();
             invalidateSessionAuthority();

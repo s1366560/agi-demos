@@ -818,6 +818,9 @@ function readCloudPermissionRequest(
     risk_level: riskLevel as PermissionRequestContext["risk_level"],
     description,
     allow_remember: permission.allow_remember,
+    ...(nonEmptyString(permission.permission)
+      ? { permission: nonEmptyString(permission.permission) }
+      : {}),
   };
 }
 
