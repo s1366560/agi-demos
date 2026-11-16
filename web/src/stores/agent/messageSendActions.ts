@@ -82,7 +82,11 @@ export interface MessageSendActionDeps {
   get: () => {
     activeConversationId: string | null;
     conversationStates: Map<string, ConversationState>;
-    respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
+    respondToPermission: (
+      requestId: string,
+      granted: boolean,
+      approvalMode?: 'auto_edit' | 'full_access'
+    ) => Promise<void>;
     getConversationState: (conversationId: string) => ConversationState;
     updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
     getStreamingConversationCount: () => number;

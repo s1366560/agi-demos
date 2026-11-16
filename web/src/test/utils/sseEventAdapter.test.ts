@@ -663,6 +663,21 @@ describe('SSE Event Adapter', () => {
       }
     });
 
+    it('preserves canonical automatic origin on a restored permission ask', () => {
+      expect(
+        sseEventToTimeline({
+          type: 'permission_asked',
+          data: {
+            request_id: 'restored',
+            tool_name: 'write',
+            answered: true,
+            granted: true,
+            auto_approved: true,
+          },
+        } as any)
+      ).toMatchObject({ requestId: 'restored', answered: true, granted: true, autoApproved: true });
+    });
+
     it('preserves canonical nested automatic permission verdicts for replay', () => {
       const timelineEvent = sseEventToTimeline({
         type: 'permission_replied',

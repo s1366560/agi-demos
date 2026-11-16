@@ -123,7 +123,11 @@ export interface StreamHandlerDeps {
   operation?: WebOperationContextV2;
   get: () => {
     activeConversationId: string | null;
-    respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
+    respondToPermission: (
+      requestId: string,
+      granted: boolean,
+      approvalMode?: 'auto_edit' | 'full_access'
+    ) => Promise<void>;
     getConversationState: (conversationId: string) => ConversationState;
     updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
   };
@@ -1205,7 +1209,7 @@ export function createStreamEventHandlers(
         const permissionState = useAgentPermissionModeStore.getState();
         if (!permissionState.beginAutoApproval(handlerConversationId, requestId)) return;
         void get()
-          .respondToPermission(requestId, true)
+          .respondToPermission(requestId, true, mode === 'ask' ? undefined : mode)
           .catch(() => {
             permissionState.completeAutoApproval(handlerConversationId, requestId, false);
             // A server verdict may have arrived before the transport failure.

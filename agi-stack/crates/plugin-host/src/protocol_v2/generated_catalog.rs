@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:c2893bca556197760998f16c535bf3447b0421ab0d55d4f9e97638eb87818e",
-    "9b\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f10cb",
+    "ab\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1776,7 +1776,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "d014e50a58805bda9f1301efa5dbe\",\"entrypoint\":\"applyDesktopDeadLetterQueueAuthorityV2\",\"mo",
     "dule_ref\":\"builtin://memstack/desktop/dead-letter-queue-authority\",\"plugin_id\":\"memstack",
     "-renderer-target-hosts\",\"plugin_version\":\"2.0.0\",\"targets\":[\"desktop-renderer\"]},{\"artif",
-    "act_digest\":\"sha256:54320982bebd86091d7cc174517847379441a5627a5327ebf18ec0e429a6d49d\",\"a",
+    "act_digest\":\"sha256:47a678396fe9755c1428168bdd2f8319d7f310464e797f24d10cfc7acdfb2e3b\",\"a",
     "rtifact_source\":\"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopHitlRespons",
     "eAuthorityModuleV2.ts\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/d",
     "raft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"des",
@@ -4785,4 +4785,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "rsion\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:c2893bca556197760998f16c535bf3447b0421ab0d55d4f9e97638eb87818e9b";
+    "sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f10cbab";

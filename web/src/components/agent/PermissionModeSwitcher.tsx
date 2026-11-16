@@ -61,10 +61,12 @@ export const PermissionModeSwitcher: React.FC<PermissionModeSwitcherProps> = ({
     const permissions = useAgentPermissionModeStore.getState();
     if (!permissions.beginAutoApproval(conversationId, pending.request_id)) return;
     attempted.current.add(key);
-    void agent.respondToPermission(pending.request_id, true).catch(() => {
-      permissions.completeAutoApproval(conversationId, pending.request_id, false);
-      // Keep the existing card answerable; never retry a failed grant in a render loop.
-    });
+    void agent
+      .respondToPermission(pending.request_id, true, mode === 'ask' ? undefined : mode)
+      .catch(() => {
+        permissions.completeAutoApproval(conversationId, pending.request_id, false);
+        // Keep the existing card answerable; never retry a failed grant in a render loop.
+      });
   }, [conversationId, mode, pending]);
 
   useEffect(() => {

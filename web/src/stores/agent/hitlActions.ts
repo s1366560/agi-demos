@@ -32,7 +32,11 @@ import type { StoreApi } from 'zustand';
 export interface HITLActionDeps {
   get: () => {
     activeConversationId: string | null;
-    respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
+    respondToPermission: (
+      requestId: string,
+      granted: boolean,
+      approvalMode?: 'auto_edit' | 'full_access'
+    ) => Promise<void>;
     getConversationState: (conversationId: string) => ConversationState;
     updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
   };
@@ -268,7 +272,11 @@ export function createHITLActions(deps: HITLActionDeps) {
       }
     },
 
-    respondToPermission: async (requestId: string, granted: boolean): Promise<void> => {
+    respondToPermission: async (
+      requestId: string,
+      granted: boolean,
+      approvalMode?: 'auto_edit' | 'full_access'
+    ): Promise<void> => {
       const { activeConversationId } = get();
       if (!activeConversationId) return;
       const owner = getWebOperationAvailabilityV2().owner;
@@ -277,7 +285,7 @@ export function createHITLActions(deps: HITLActionDeps) {
         const operation = await ensureConnectedAndSubscribe(activeConversationId, deps);
         agentService.assertSession(operation);
 
-        await agentService.respondToPermission(requestId, granted);
+        await agentService.respondToPermission(requestId, granted, approvalMode);
         agentService.assertSession(operation);
         if (get().activeConversationId !== activeConversationId) return;
 

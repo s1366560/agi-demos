@@ -20,6 +20,7 @@ class _ProjectionModel(BaseModel):
 
 
 class SessionConversationResponse(_ProjectionModel):
+    agent_config: dict[str, Any] = Field(default_factory=dict)
     id: str
     tenant_id: str
     project_id: str

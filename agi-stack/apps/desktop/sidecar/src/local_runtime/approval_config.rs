@@ -125,6 +125,18 @@ mod tests {
     }
 
     #[test]
+    fn local_hitl_accepts_outer_approval_mode_without_trusting_response_markers() {
+        let body: super::super::HitlResponseBody = serde_json::from_value(serde_json::json!({
+            "request_id":"request", "hitl_type":"permission", "approval_mode":"full_access",
+            "response_data":{"action":"allow","granted":true,"scope":"once"},
+            "expected_revision":1,"idempotency_key":"local-auto",
+        }))
+        .expect("automatic preference is valid outer metadata");
+        assert_eq!(body.response_data["granted"], true);
+        assert!(body.response_data.get("auto_approved").is_none());
+    }
+
+    #[test]
     fn approval_config_validates_modes_and_preserves_route_presence() {
         for mode in ["ask", "auto_edit", "full_access"] {
             let body: ConversationConfigBody = serde_json::from_value(serde_json::json!({

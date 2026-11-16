@@ -909,9 +909,16 @@ def _build_permission_asked(
 
 
 def _build_permission_replied(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    granted = permission_granted(data.get("action"), data)
+    auto = granted is True and data.get("auto_approved") is True
     return {
         "requestId": data.get("request_id", ""),
-        "granted": permission_granted(data.get("action"), data),
+        "granted": granted,
+        "autoApproved": auto,
+        "auto_approved": auto,
+        "preset": data.get("preset")
+        if auto and data.get("preset") in ("full", "relaxed")
+        else None,
     }
 
 

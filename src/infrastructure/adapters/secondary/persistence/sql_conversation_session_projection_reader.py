@@ -48,6 +48,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.adapters.secondary.persistence.terminal_hitl_run_binding import (
+    terminal_hitl_run_binding,
+)
 from src.infrastructure.agent.hitl.utils import (
     contains_secret_like_text,
     sanitize_env_var_context,
@@ -293,6 +296,7 @@ class SqlConversationSessionProjectionReader:
                 return None
             workspace_name = profile.name
         return ConversationAuthority(
+            agent_config=dict(record.agent_config or {}),
             id=record.id,
             tenant_id=record.tenant_id,
             project_id=record.project_id,
@@ -450,6 +454,12 @@ class SqlConversationSessionProjectionReader:
                     HITLRequest.tenant_id == conversation.tenant_id,
                     HITLRequest.project_id == conversation.project_id,
                     HITLRequest.status == "pending",
+                    ~terminal_hitl_run_binding(
+                        tenant_id=HITLRequest.tenant_id,
+                        project_id=HITLRequest.project_id,
+                        conversation_id=HITLRequest.conversation_id,
+                        message_id=HITLRequest.message_id,
+                    ),
                     HITLRequest.expires_at > now,
                 )
                 .order_by(HITLRequest.created_at.desc(), HITLRequest.id.desc())

@@ -301,6 +301,14 @@ def _restore_summary_hitl_response(
                 restored_response["feedback"] = feedback.strip()
         else:
             restored_response = {"action": response_summary}
+        if restored_response is not None and response_metadata.get("auto_approved") is True:
+            restored_response.update(
+                {
+                    key: response_metadata[key]
+                    for key in ("auto_approved", "preset")
+                    if key in response_metadata
+                }
+            )
     elif hitl_type == "a2ui_action":
         source_component_id = response_metadata.get("source_component_id")
         context = response_metadata.get("context")
@@ -830,7 +838,13 @@ def summarize_hitl_response(
         return _summarize_choice_like_response(value), ordinary_resume_metadata(value)
 
     if hitl_type == "permission":
-        return _summarize_permission_response(response_data), None
+        metadata = None
+        if response_data.get("auto_approved") is True and response_data.get("preset") in (
+            "full",
+            "relaxed",
+        ):
+            metadata = {"auto_approved": True, "preset": response_data["preset"]}
+        return _summarize_permission_response(response_data), metadata
 
     if hitl_type == "a2ui_action":
         source_component_id = sanitize_hitl_text(response_data.get("source_component_id")) or ""

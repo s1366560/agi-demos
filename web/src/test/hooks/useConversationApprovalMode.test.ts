@@ -169,7 +169,7 @@ describe('canonical conversation approval mode', () => {
           modesByConversation: { legacy: 'full_access' },
           autoApprovedRequestIds: { legacy: ['request'] },
         },
-        version: 0,
+        version: 1,
       })
     );
     await useAgentPermissionModeStore.persist.rehydrate();

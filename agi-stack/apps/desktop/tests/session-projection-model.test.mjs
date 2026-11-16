@@ -602,6 +602,20 @@ test('cloud session projection decodes the persisted current run and exact envir
   );
 });
 
+test('cloud projection preserves canonical approval mode without exposing arbitrary agent config', () => {
+  for (const mode of ['ask', 'auto_edit', 'full_access']) {
+    const payload = validCloudProjection();
+    payload.conversation.agent_config = { approval_mode: mode, private_runtime_data: 'do-not-copy' };
+    const projection = decodeConversationSessionProjection(payload, 'conversation-1');
+    assert.equal(projection?.conversation.agent_config.approval_mode, mode);
+    assert.equal(Object.hasOwn(projection?.conversation.agent_config ?? {}, 'private_runtime_data'), false);
+  }
+  const legacy = validCloudProjection();
+  assert.equal(decodeConversationSessionProjection(legacy, 'conversation-1')?.conversation.agent_config.approval_mode, undefined);
+  legacy.conversation.agent_config = { approval_mode: 'invalid' };
+  assert.equal(decodeConversationSessionProjection(legacy, 'conversation-1'), null);
+});
+
 test('cloud session projection preserves the explicit explore runtime mode', () => {
   const payload = validCloudProjection();
   payload.conversation.current_mode = 'explore';

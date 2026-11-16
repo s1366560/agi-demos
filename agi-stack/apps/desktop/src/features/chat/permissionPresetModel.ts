@@ -167,6 +167,7 @@ export function autoApprovalSubmission(
       ? request.authority_revision
       : undefined;
   return {
+    approvalMode: preset === 'full' ? 'full_access' : 'auto_edit',
     requestId: request.id,
     hitlType: 'permission',
     responseData: autoApprovalResponseData(),

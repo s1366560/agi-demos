@@ -528,6 +528,7 @@ class HITLResponseRequest(BaseModel):
     request_id: str
     hitl_type: str  # "clarification", "decision", "env_var", "permission"
     response_data: dict[str, Any]  # Type-specific response data
+    approval_mode: Literal["auto_edit", "full_access"] | None = None
     contract_version: Literal[2] | None = None
     expected_revision: int | None = Field(default=None, strict=True, ge=1)
     idempotency_key: str | None = Field(

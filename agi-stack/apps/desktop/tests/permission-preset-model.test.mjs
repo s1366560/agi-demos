@@ -239,6 +239,8 @@ test('autoApprovalSubmission builds an idempotent permission response', () => {
   const submission = autoApprovalSubmission(permissionRequest(), 'full');
   assert.equal(submission.requestId, 'hitl-1');
   assert.equal(submission.hitlType, 'permission');
+  assert.equal(submission.approvalMode, 'full_access');
+  assert.equal(autoApprovalSubmission(permissionRequest({permission:{permission:'write',risk_level:'high'}}), 'relaxed').approvalMode, 'auto_edit');
   assert.equal(submission.expectedRevision, 3);
   assert.equal(submission.idempotencyKey, 'hitl-1:3:preset-auto:full');
   assert.equal(submission.responseData.granted, true);

@@ -72,7 +72,7 @@ export const useAgentPermissionModeStore = create<PermissionModeState>()(
           if (!conversationId || !requestId) return;
           const pending = get().pendingAutoApprovalIds[conversationId] ?? [];
           const approved = get().autoApprovedRequestIds[conversationId] ?? [];
-          const automatic = explicitAutomatic || pending.includes(requestId);
+          const automatic = explicitAutomatic;
           const nextApproved =
             granted && automatic
               ? [...new Set([...approved, requestId])]
@@ -125,6 +125,9 @@ export const useAgentPermissionModeStore = create<PermissionModeState>()(
       }),
       {
         name: 'agent-permission-mode',
+        version: 1,
+        // Earlier versions inferred automatic origin from a local pending send.
+        migrate: () => ({ autoApprovedRequestIds: {} }),
         // Only confirmed automatic verdicts survive reload. Pending sends are not approvals.
         partialize: ({ autoApprovedRequestIds }) => ({
           autoApprovedRequestIds,

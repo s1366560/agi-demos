@@ -1564,6 +1564,7 @@ export class DesktopApiClient {
     return this.request<HitlResponseOutcome>('/api/v1/agent/hitl/respond', {
       method: 'POST',
       body: {
+        ...(submission.approvalMode ? { approval_mode: submission.approvalMode } : {}),
         request_id: submission.requestId,
         hitl_type: submission.hitlType,
         response_data: submission.responseData,

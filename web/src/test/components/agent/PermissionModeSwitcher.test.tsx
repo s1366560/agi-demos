@@ -51,7 +51,7 @@ describe('pending approval reconciliation', () => {
     expect(mocks.respond).not.toHaveBeenCalled();
     mocks.mode = 'full_access';
     rerender(<PermissionModeSwitcher conversationId="conversation" projectId="project" />);
-    await waitFor(() => expect(mocks.respond).toHaveBeenCalledWith('request', true));
+    await waitFor(() => expect(mocks.respond).toHaveBeenCalledWith('request', true, 'full_access'));
   });
   it('leaves a failed request answerable without retrying on rerender', async () => {
     mocks.mode = 'full_access';

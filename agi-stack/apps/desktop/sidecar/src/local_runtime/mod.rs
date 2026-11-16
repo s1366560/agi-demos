@@ -8367,6 +8367,8 @@ fn append_review_decision(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct HitlResponseBody {
+    #[serde(default, rename = "approval_mode")]
+    _approval_mode: Option<approval_config::ApprovalMode>,
     request_id: String,
     hitl_type: String,
     #[serde(default)]

@@ -22,6 +22,9 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
     BaseRepository,
     refresh_select_statement,
 )
+from src.infrastructure.adapters.secondary.persistence.terminal_hitl_run_binding import (
+    terminal_hitl_run_binding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +140,12 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
             HITLRequestRecord.tenant_id == tenant_id,
             HITLRequestRecord.project_id == project_id,
             HITLRequestRecord.status == HITLRequestStatus.PENDING.value,
+            ~terminal_hitl_run_binding(
+                tenant_id=HITLRequestRecord.tenant_id,
+                project_id=HITLRequestRecord.project_id,
+                conversation_id=HITLRequestRecord.conversation_id,
+                message_id=HITLRequestRecord.message_id,
+            ),
         ]
 
         # Exclude expired requests if requested
@@ -174,6 +183,12 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
                     HITLRequestRecord.tenant_id == tenant_id,
                     HITLRequestRecord.project_id == project_id,
                     HITLRequestRecord.status == HITLRequestStatus.PENDING.value,
+                    ~terminal_hitl_run_binding(
+                        tenant_id=HITLRequestRecord.tenant_id,
+                        project_id=HITLRequestRecord.project_id,
+                        conversation_id=HITLRequestRecord.conversation_id,
+                        message_id=HITLRequestRecord.message_id,
+                    ),
                 )
                 .order_by(HITLRequestRecord.created_at.desc())
                 .limit(limit)

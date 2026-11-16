@@ -129,6 +129,7 @@ def _assert_current_run(
     plan_version_id: str,
 ) -> None:
     assert payload["schema_version"] == 2
+    assert payload["conversation"]["agent_config"]["approval_mode"] == "full_access"
     assert payload["projection_kind"] == "workspace_session"
     assert payload["authority_kind"] == "conversation_record"
     assert payload["authority_id"] == conversation_id
@@ -246,7 +247,11 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         user_id=test_user.id,
         title="Scoped conversation",
         status="active",
-        agent_config={"capability_mode": "code", "temperature": 0.25},
+        agent_config={
+            "capability_mode": "code",
+            "temperature": 0.25,
+            "approval_mode": "full_access",
+        },
         meta={"private": "not projected"},
         message_count=2,
         current_mode="build",

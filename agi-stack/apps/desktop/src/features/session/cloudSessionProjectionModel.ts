@@ -404,6 +404,14 @@ function readCloudConversation(
   const createdAt = nonEmptyString(conversation.created_at);
   const currentMode = nonEmptyString(conversation.current_mode);
   const capabilityMode = conversation.capability_mode;
+  const agentConfig = recordValue(conversation.agent_config);
+  const approvalMode = agentConfig?.approval_mode;
+  if (
+    approvalMode !== undefined &&
+    approvalMode !== "ask" &&
+    approvalMode !== "auto_edit" &&
+    approvalMode !== "full_access"
+  ) return null;
   if (
     id !== scope.conversationId ||
     !projectId ||
@@ -460,6 +468,7 @@ function readCloudConversation(
     updated_at: (conversation.updated_at as string | null) ?? null,
     summary: (conversation.summary as string | null) ?? null,
     agent_config: {
+      ...(approvalMode === undefined ? {} : { approval_mode: approvalMode }),
       capability_mode:
         capabilityMode === "work" || capabilityMode === "code"
           ? capabilityMode

@@ -33,7 +33,7 @@ describe('permissionModeStore', () => {
     expect(
       JSON.parse(localStorage.getItem('agent-permission-mode')!).state.pendingAutoApprovalIds
     ).toBeUndefined();
-    store.completeAutoApproval('conv-a', 'request-a', true);
+    store.completeAutoApproval('conv-a', 'request-a', true, true);
     expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds['conv-a']).toEqual([
       'request-a',
     ]);
@@ -58,6 +58,37 @@ describe('permissionModeStore', () => {
     ]);
     store.clearConversation('conv-a');
     expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds['conv-a']).toBeUndefined();
+  });
+
+  it('does not infer automatic origin when a manual client settles a pending automatic send', () => {
+    const store = useAgentPermissionModeStore.getState();
+    store.beginAutoApproval('conversation', 'race');
+    store.completeAutoApproval('conversation', 'race', true);
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds.conversation).toEqual([]);
+    store.completeAutoApproval('conversation', 'remote-auto', true, true);
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds.conversation).toEqual([
+      'remote-auto',
+    ]);
+    store.completeAutoApproval('conversation', 'remote-denied', false, true);
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds.conversation).toEqual([
+      'remote-auto',
+    ]);
+  });
+
+  it('discards legacy local inferred provenance during migration', async () => {
+    localStorage.setItem(
+      'agent-permission-mode',
+      JSON.stringify({
+        version: 0,
+        state: {
+          modesByConversation: { conversation: 'full_access' },
+          autoApprovedRequestIds: { conversation: ['inferred'] },
+        },
+      })
+    );
+    await useAgentPermissionModeStore.persist.rehydrate();
+    expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds).toEqual({});
+    expect(useAgentPermissionModeStore.getState().getPermissionMode('conversation')).toBe('ask');
   });
 
   describe('Mode state', () => {

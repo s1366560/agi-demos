@@ -82,16 +82,17 @@ export interface AgentV3State {
   respondToClarification: (requestId: string, answer: string) => Promise<void>;
   respondToDecision: (requestId: string, decision: string | string[]) => Promise<void>;
   respondToEnvVar: (requestId: string, values: Record<string, string>) => Promise<void>;
-  respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
+  respondToPermission: (
+    requestId: string,
+    granted: boolean,
+    approvalMode?: 'auto_edit' | 'full_access'
+  ) => Promise<void>;
   loadPendingHITL: (conversationId: string) => Promise<void>;
   clearError: () => void;
   togglePinEvent: (eventId: string) => void;
   setLlmOverrides: (conversationId: string, overrides: LLMConfigOverrides | null) => void;
   setLlmModelOverride: (conversationId: string, modelName: string | null) => void;
-  setReasoningEffort: (
-    conversationId: string,
-    effort: 'low' | 'medium' | 'high' | null
-  ) => void;
+  setReasoningEffort: (conversationId: string, effort: 'low' | 'medium' | 'high' | null) => void;
 }
 
 export interface LoadMessagesOptions {

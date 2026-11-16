@@ -166,6 +166,14 @@ class AgentServiceImpl implements AgentService {
   private performanceMetrics: Map<string, number[]> = new Map();
   private readonly MAX_METRICS_SAMPLES = 100;
   private idleDisconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingPermissionAcks = new Map<
+    string,
+    {
+      resolve: () => void;
+      reject: (error: Error) => void;
+      timeout: ReturnType<typeof setTimeout>;
+    }
+  >();
   private pendingSendAcks: Map<
     string,
     { resolve: () => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }
@@ -193,12 +201,14 @@ class AgentServiceImpl implements AgentService {
       this.cancelIdleDisconnect();
       const error = new DOMException('Agent session retired', 'AbortError');
       for (const pending of [
+        ...this.pendingPermissionAcks.values(),
         ...this.pendingSendAcks.values(),
         ...this.pendingControlAcks.values(),
       ]) {
         clearTimeout(pending.timeout);
         pending.reject(error);
       }
+      this.pendingPermissionAcks.clear();
       this.pendingSendAcks.clear();
       this.pendingControlAcks.clear();
       this.handlers.clear();
@@ -368,6 +378,18 @@ class AgentServiceImpl implements AgentService {
 
     if (type === 'ack') {
       this.resolveSendAck(message);
+      return;
+    }
+
+    if (type === 'permission_response_ack') {
+      const raw = message as unknown as { request_id?: string; success?: boolean };
+      const pending = raw.request_id ? this.pendingPermissionAcks.get(raw.request_id) : undefined;
+      if (pending && raw.request_id) {
+        clearTimeout(pending.timeout);
+        this.pendingPermissionAcks.delete(raw.request_id);
+        if (raw.success === true) pending.resolve();
+        else pending.reject(new Error('Permission approval was rejected'));
+      }
       return;
     }
 
@@ -675,16 +697,38 @@ class AgentServiceImpl implements AgentService {
     return restApi.respondToDecisionHttp(requestId, decision);
   }
 
-  respondToPermission(requestId: string, granted: boolean): Promise<void> {
+  respondToPermission(
+    requestId: string,
+    granted: boolean,
+    approvalMode?: 'auto_edit' | 'full_access'
+  ): Promise<void> {
     if (this.isConnected()) {
-      const sent = this.send({
+      const automatic = granted && approvalMode;
+      const payload = {
         type: 'permission_respond',
         request_id: requestId,
         granted,
+        ...(automatic ? { approval_mode: approvalMode } : {}),
+      };
+      if (!automatic)
+        return this.send(payload)
+          ? Promise.resolve()
+          : Promise.reject(new Error('WebSocket not connected'));
+      // Socket send only confirms transport admission. Await the canonical server claim.
+      return new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          this.pendingPermissionAcks.delete(requestId);
+          reject(new Error('Timed out waiting for permission approval acknowledgment'));
+        }, 15000);
+        this.pendingPermissionAcks.set(requestId, { resolve, reject, timeout });
+        if (!this.send(payload)) {
+          clearTimeout(timeout);
+          this.pendingPermissionAcks.delete(requestId);
+          reject(new Error('WebSocket not connected'));
+        }
       });
-      return sent ? Promise.resolve() : Promise.reject(new Error('WebSocket not connected'));
     }
-    return restApi.respondToPermissionHttp(requestId, granted);
+    return restApi.respondToPermissionHttp(requestId, granted, granted ? approvalMode : undefined);
   }
 
   respondToA2UIAction(

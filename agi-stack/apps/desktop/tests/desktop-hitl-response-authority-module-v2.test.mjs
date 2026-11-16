@@ -590,6 +590,7 @@ test('revisioned transport returns only a validated immutable receipt', async ()
       duplicate: true,
       expires_at: '2026-09-01T00:01:00+00:00',
     }),
+    receipt(),
   ];
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), init });
@@ -612,7 +613,12 @@ test('revisioned transport returns only a validated immutable receipt', async ()
       .bindOperation(runtimeConfig())
       .respond(conversation(), submission());
 
-    assert.equal(calls.length, 2);
+    await service.bindOperation(runtimeConfig()).respond(conversation(), submission({
+      approvalMode: 'full_access', responseData: {action:'allow',granted:true,scope:'once'},
+    }));
+    assert.equal(calls.length, 3);
+    assert.equal(JSON.parse(String(calls[2].init.body)).approval_mode, 'full_access');
+    assert.equal(Object.hasOwn(JSON.parse(String(calls[0].init.body)), 'approval_mode'), false);
     assert.equal(new URL(calls[0].input).pathname, '/api/v1/agent/hitl/respond');
     assert.deepEqual(JSON.parse(String(calls[0].init.body)), {
       request_id: 'request-1',
@@ -759,6 +765,10 @@ test('scope, revision, idempotency and JSON safety fail before acquiring a lease
     );
   }
   for (const invalidSubmission of [
+    { approvalMode: 'ask' },
+    { approvalMode: 'full_access', hitlType: 'decision', responseData: {action:'allow',granted:true} },
+    { approvalMode: 'full_access', responseData: {action:'deny',granted:false} },
+    { approvalMode: 'full_access', responseData: {action:'allow'} },
     { expectedRevision: undefined },
     { expectedRevision: 2 },
     { expectedRevision: true },

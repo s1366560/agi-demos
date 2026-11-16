@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
 
@@ -59,6 +59,8 @@ class ConversationAuthority:
     focused_agent_id: str | None
     created_at: datetime
     updated_at: datetime | None
+
+    agent_config: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -347,6 +349,7 @@ class ConversationSessionProjectionService:
     @staticmethod
     def _conversation(source: ConversationAuthority) -> SessionConversationResponse:
         return SessionConversationResponse(
+            agent_config=dict(source.agent_config),
             id=source.id,
             tenant_id=source.tenant_id,
             project_id=source.project_id,

@@ -170,3 +170,113 @@ def test_permission_review_preserves_declared_permission_type(permission):
     review = SqlConversationSessionProjectionReader._permission_review(metadata)
     assert review is not None
     assert review.permission == permission
+
+
+@pytest.mark.parametrize("binding", ["terminal", "detached", "active_retry"])
+async def test_terminal_run_pending_permission_does_not_block_new_messages(
+    test_db,
+    test_user,
+    test_project_db,
+    binding,
+):
+    from datetime import timedelta
+
+    from src.infrastructure.adapters.secondary.persistence.models import Conversation
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+        ensure_chat_run_authority,
+    )
+
+    conversation = Conversation(
+        id="terminal-hitl",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        user_id=test_user.id,
+        title="Terminal HITL",
+        agent_config={"approval_mode": "full_access"},
+    )
+    test_db.add(conversation)
+    await test_db.commit()
+    run = await ensure_chat_run_authority(
+        test_db,
+        conversation=conversation,
+        run_id="terminal-hitl-run",
+        request_message="Read only",
+        client_message_id=None,
+        app_model_context=None,
+    )
+    run.status = "cancelled"
+    run.completed_at = datetime.now(UTC)
+    if binding == "active_retry":
+        retry = await ensure_chat_run_authority(
+            test_db,
+            conversation=conversation,
+            run_id="active-hitl-retry",
+            request_message="Retry",
+            client_message_id=None,
+            app_model_context=None,
+        )
+        retry.message_id = run.message_id
+        retry.status = "running"
+    test_db.add(
+        HITLRequest(
+            id="terminal-permission",
+            request_type="clarification",
+            conversation_id=conversation.id,
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+            user_id=test_user.id,
+            message_id=None if binding == "detached" else run.message_id,
+            question="Review declared tool",
+            status="pending",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+            request_metadata={
+                "hitl_type": "permission",
+                "tool_name": "bash",
+                "action": "execute",
+                "description": "Read only",
+                "risk_level": "medium",
+                "allow_remember": False,
+            },
+        )
+    )
+    await test_db.commit()
+    reader = SqlConversationSessionProjectionReader(test_db, SimpleNamespace())
+    projection = await ConversationSessionProjectionService(reader).get_projection(
+        conversation_id=conversation.id,
+        tenant_id=conversation.tenant_id,
+        project_id=conversation.project_id,
+        workspace_id=None,
+        user_id=test_user.id,
+    )
+    from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler import (
+        _pending_hitl_requests,
+    )
+
+    admission_pending = await _pending_hitl_requests(
+        SimpleNamespace(db=test_db, tenant_id=conversation.tenant_id),
+        conversation_id=conversation.id,
+        project_id=conversation.project_id,
+    )
+    assert bool(admission_pending) is bool(projection.pending_hitl)
+    assert bool(projection.pending_hitl) is (binding != "terminal")
+    assert projection.capabilities.can_send_message is (binding == "terminal")
+
+    from src.infrastructure.adapters.primary.web.routers.agent.automatic_permission_response import (
+        annotate_automatic_permission_response,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+        SqlHITLRequestRepository,
+    )
+
+    stored = await SqlHITLRequestRepository(test_db).get_by_id("terminal-permission")
+    response = {"action": "allow", "granted": True, "scope": "once"}
+    if binding == "terminal":
+        with pytest.raises(ValueError):
+            await annotate_automatic_permission_response(
+                test_db, hitl_request=stored, approval_mode="full_access", response_data=response
+            )
+    else:
+        accepted = await annotate_automatic_permission_response(
+            test_db, hitl_request=stored, approval_mode="full_access", response_data=response
+        )
+        assert accepted["auto_approved"] is True

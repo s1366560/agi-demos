@@ -309,3 +309,16 @@ test('removing a failed automatic submission restores its pending manual fallbac
   assert.deepEqual(history, []);
   assert.deepEqual(items, original);
 });
+
+
+test('cross-client persisted automatic replies hide without local history while manual and denied remain', () => {
+  const items = [
+    timelineItem('web-auto', 'permission_asked', {requestId:'web-auto'}),
+    timelineItem('web-reply', 'permission_replied', {requestId:'web-auto',granted:true,auto_approved:true,preset:'full'}),
+    timelineItem('manual', 'permission_asked', {requestId:'manual'}),
+    timelineItem('manual-reply', 'permission_replied', {requestId:'manual',granted:true}),
+    timelineItem('denied', 'permission_asked', {requestId:'denied'}),
+    timelineItem('denied-reply', 'permission_replied', {requestId:'denied',granted:false,auto_approved:true,preset:'full'}),
+  ];
+  assert.deepEqual(hideConfirmedAutoApprovedPermissions(items, []).map(item=>item.id), ['manual','denied']);
+});

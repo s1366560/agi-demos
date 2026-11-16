@@ -1709,7 +1709,7 @@ describe('streamEventHandlers', () => {
         },
       } as any);
 
-      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-1', true);
+      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-1', true, 'full_access');
       // Full access suppresses the card entirely instead of queueing it.
       expect(mockState.timeline.some((e) => e.type === 'permission_asked')).toBe(false);
     });
@@ -1754,6 +1754,7 @@ describe('streamEventHandlers', () => {
         data: {
           request_id: 'automatic',
           granted: true,
+          auto_approved: true,
         },
       } as any);
       expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds[conversationId]).toEqual(
@@ -1799,7 +1800,7 @@ describe('streamEventHandlers', () => {
       } as any);
 
       expect(mockRespondToPermission).toHaveBeenCalledTimes(1);
-      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-edit', true);
+      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-edit', true, 'auto_edit');
       // Auto edit keeps the card visible; it flips to granted on approval.
       expect(mockState.timeline.filter((e) => e.type === 'permission_asked')).toHaveLength(2);
     });
