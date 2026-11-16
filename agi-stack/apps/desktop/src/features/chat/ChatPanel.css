@@ -544,7 +544,7 @@
   position: absolute;
   z-index: 5;
   left: 50%;
-  bottom: 96px;
+  bottom: 12px;
   transform: translateX(-50%);
   border-color: rgba(var(--desktop-cyan-dim-rgb), 0.35);
   background: rgba(var(--desktop-surface-35-rgb), 0.96);
@@ -561,7 +561,7 @@
 }
 
 .session-chat-narrative .session-jump-latest {
-  bottom: 132px;
+  bottom: 12px;
 }
 
 .chat-shell .session-jump-latest:hover,
@@ -2041,24 +2041,39 @@
 }
 
 .assistant-execution-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
+  margin-top: 8px;
+  color: var(--desktop-chat-text-tertiary);
 }
 
-/* Web conversation parity 2026-12: execution summary pills follow the web
-   ExecutionSummaryPanel recipe — neutral rounded-full pills, tertiary label +
-   medium near-primary value (SUMMARY_PILL_CLASSES). */
-.assistant-execution-summary > span {
+.assistant-execution-summary > summary {
+  width: fit-content;
+  padding: 4px 0;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
+  cursor: pointer;
+}
+
+.assistant-execution-summary > summary:hover {
+  color: var(--desktop-chat-text);
+}
+
+.assistant-execution-summary > summary:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.assistant-execution-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 6px 0;
+}
+
+.assistant-execution-metrics > span {
   display: inline-flex;
   align-items: baseline;
   gap: 5px;
-  min-height: 23px;
-  padding: 3px 9px;
-  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.12);
-  border-radius: 999px;
-  background: rgba(var(--desktop-chat-tint-rgb), 0.04);
   color: var(--desktop-chat-text-secondary);
 }
 
@@ -2071,6 +2086,7 @@
   color: var(--desktop-chat-text);
   font-size: var(--desktop-text-xs-plus);
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .session-chat-narrative .session-thread-message.user .transcript-content,
@@ -5966,4 +5982,23 @@
   border-radius: 7px;
   font-size: 12px;
   line-height: 18px;
+}
+
+/* Anchor search and follow-latest to the transcript, above variable-height controls. */
+.session-transcript-region {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-transcript-region > .message-scroll { height: 100%; }
+
+.session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response:not(.is-denied) {
+  width: fit-content;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
 }

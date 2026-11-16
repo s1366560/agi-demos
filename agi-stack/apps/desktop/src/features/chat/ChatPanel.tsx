@@ -61,9 +61,11 @@ import type {
 } from '../session/sessionNarrativeModel';
 import type { SessionProjectionPlan } from '../session/sessionProjectionTypes';
 import { SessionPlanDraftNotice } from './SessionPlanDraftNotice';
+import { ComposerStatusSlot } from './ComposerStatusSlot';
 import {
   classifySessionTimelineWindowChange,
   isSessionTimelinePinnedToLatest,
+  sessionTimelineFollowIntent,
   shouldFollowSessionTimeline,
 } from '../session/sessionTimelineScrollModel';
 import type { SessionTimelineWindow } from '../session/sessionTimelineScrollModel';
@@ -932,7 +934,11 @@ export const ChatPanel = memo(function ChatPanel({
     return t('session.notAvailable');
   }, [activitySummary, t]);
   const scrollToLatest = useCallback(() => {
-    scrollAnchorRef.current?.scrollIntoView({ block: 'end' });
+    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>(
+      '[data-radix-scroll-area-viewport]',
+    ) ?? scrollAreaRef.current;
+    // Include transcript padding and scroll only the conversation viewport.
+    if (viewport && pinnedToLatestRef.current) viewport.scrollTop = viewport.scrollHeight;
   }, []);
   const scrollViewport = useCallback(() => {
     return (
@@ -1218,12 +1224,57 @@ export const ChatPanel = memo(function ChatPanel({
   useEffect(() => {
     const viewport = scrollViewport();
     if (!viewport) return undefined;
+    let direction: 'backward' | 'forward' | null = null;
+    let pointerDown = false;
+    let touchY: number | null = null;
+    let previousTop = viewport.scrollTop;
+    let previousHeight = viewport.scrollHeight;
+    let previousViewportHeight = viewport.clientHeight;
+    let resizeFrame: number | null = null;
+    const updateIntent = (source: 'layout' | 'backward' | 'forward') => {
+      const following = sessionTimelineFollowIntent(pinnedToLatestRef.current, source, viewport);
+      pinnedToLatestRef.current = following;
+      setShowJumpToLatest(!following && viewport.scrollHeight > viewport.clientHeight);
+    };
+    const navigate = (next: 'backward' | 'forward') => {
+      direction = next;
+      // Stop before the browser scrolls so a pending follow frame cannot undo it.
+      if (next === 'backward' || isSessionTimelinePinnedToLatest(viewport)) updateIntent(next);
+    };
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY !== 0) navigate(event.deltaY < 0 ? 'backward' : 'forward');
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.altKey || event.ctrlKey) return;
+      if (event.target instanceof Element && event.target.closest(
+        'input, textarea, select, [contenteditable="true"], button, a, summary',
+      )) return;
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey)) {
+        navigate('backward');
+      } else if (['ArrowDown', 'PageDown', 'End', ' '].includes(event.key)) {
+        navigate('forward');
+      }
+    };
+    const handleTouchStart = (event: TouchEvent) => { touchY = event.touches[0]?.clientY ?? null; };
+    const handleTouchMove = (event: TouchEvent) => {
+      const nextY = event.touches[0]?.clientY ?? null;
+      if (touchY !== null && nextY !== null && touchY !== nextY) {
+        navigate(nextY > touchY ? 'backward' : 'forward');
+      }
+      touchY = nextY;
+    };
+    const handlePointerDown = () => { pointerDown = true; };
+    const handlePointerUp = () => { pointerDown = false; };
     const handleScroll = () => {
-      const pinnedToLatest = isSessionTimelinePinnedToLatest(viewport);
-      pinnedToLatestRef.current = pinnedToLatest;
-      setShowJumpToLatest(
-        !pinnedToLatest && viewport.scrollHeight > viewport.clientHeight,
-      );
+      const sameGeometry = previousHeight === viewport.scrollHeight &&
+        previousViewportHeight === viewport.clientHeight;
+      const moved = viewport.scrollTop - previousTop;
+      const source = sameGeometry && moved !== 0 && (pointerDown || direction)
+        ? (moved < 0 ? 'backward' : 'forward') : 'layout';
+      updateIntent(source);
+      previousTop = viewport.scrollTop;
+      previousHeight = viewport.scrollHeight;
+      previousViewportHeight = viewport.clientHeight;
 
       if (timelineLoadingEarlier && earlierScrollRef.current) {
         const nextAnchor = captureEarlierScrollAnchor();
@@ -1234,12 +1285,43 @@ export const ChatPanel = memo(function ChatPanel({
       if (!timelineHasMore || timelineLoading || timelineLoadingEarlier) return;
       if (viewport.scrollTop <= 96) requestEarlierTimeline();
     };
+    const observer = new ResizeObserver(() => {
+      direction = null;
+      previousHeight = viewport.scrollHeight;
+      previousViewportHeight = viewport.clientHeight;
+      if (!pinnedToLatestRef.current || resizeFrame !== null) return;
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        scrollToLatest();
+        previousTop = viewport.scrollTop;
+      });
+    });
+    observer.observe(viewport);
+    if (viewport.firstElementChild) observer.observe(viewport.firstElementChild);
     viewport.addEventListener('scroll', handleScroll, { passive: true });
-    return () => viewport.removeEventListener('scroll', handleScroll);
+    viewport.addEventListener('wheel', handleWheel, { passive: true });
+    viewport.addEventListener('keydown', handleKeyDown);
+    viewport.addEventListener('touchstart', handleTouchStart, { passive: true });
+    viewport.addEventListener('touchmove', handleTouchMove, { passive: true });
+    const scrollArea = scrollAreaRef.current;
+    scrollArea?.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      observer.disconnect();
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+      viewport.removeEventListener('scroll', handleScroll);
+      viewport.removeEventListener('wheel', handleWheel);
+      viewport.removeEventListener('keydown', handleKeyDown);
+      viewport.removeEventListener('touchstart', handleTouchStart);
+      viewport.removeEventListener('touchmove', handleTouchMove);
+      scrollArea?.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
   }, [
     captureEarlierScrollAnchor,
     requestEarlierTimeline,
     scrollViewport,
+    scrollToLatest,
     timelineError,
     timelineHasMore,
     timelineLoading,
@@ -1717,6 +1799,7 @@ export const ChatPanel = memo(function ChatPanel({
         />
       ) : (
         <>
+          <div className="session-transcript-region">
           <ScrollArea
             className="message-scroll"
             ref={scrollAreaRef}
@@ -1977,6 +2060,7 @@ export const ChatPanel = memo(function ChatPanel({
               {t('session.jumpToLatest')}
             </Button>
           ) : null}
+          </div>
           {messageActionNotice ? (
             <div
               className="session-message-action-notice"
@@ -2010,13 +2094,17 @@ export const ChatPanel = memo(function ChatPanel({
               ) : null}
             </div>
           ) : null}
-          {currentActivity ? (
-            <CurrentActivityHeadlineBar
-              activity={currentActivity}
-              sessionKey={messageActionConversationId}
-              presence={activityPresence}
-              usage={sessionUsage}
-            />
+          {currentActivity || authorityNotice?.tone === 'loading' ? (
+            <div className="session-activity-region">
+              {currentActivity ? (
+                <CurrentActivityHeadlineBar
+                  activity={currentActivity}
+                  sessionKey={messageActionConversationId}
+                  presence={activityPresence}
+                  usage={sessionUsage}
+                />
+              ) : null}
+            </div>
           ) : null}
           {draftPlan && onOpenPlanReview ? (
             <SessionPlanDraftNotice
@@ -2822,7 +2910,9 @@ function ChatComposer({
         />
       ) : null}
       {composerPresentation.showQueueHandoff &&
-      (runInputsLoading || runInputsError || queuedRunInputs.length) ? (
+      (runInputsError ||
+        queuedRunInputs.length ||
+        (composerVariant !== 'session' && runInputsLoading)) ? (
         <section
           className="run-input-queue"
           aria-label={t('session.queueHandoffRegion')}
@@ -2913,7 +3003,10 @@ function ChatComposer({
           })}
         </section>
       ) : null}
-      {authorityNotice ? (
+      {authorityNotice &&
+      (composerVariant !== 'session' ||
+        authorityNotice.tone !== 'loading' ||
+        authorityNotice.actionLabel) ? (
         <div
           className={`session-authority-notice tone-${authorityNotice.tone}`}
           role={authorityNotice.tone === 'error' ? 'alert' : 'status'}
@@ -2938,6 +3031,15 @@ function ChatComposer({
       ) : null}
       {composeAheadEnabled && queuedPrompts.length ? (
         <ComposeAheadQueue prompts={queuedPrompts} scope={composeAheadScope} />
+      ) : null}
+      {composerVariant === 'session' ? (
+        <ComposerStatusSlot
+          notice={authorityNotice}
+          queueLoading={Boolean(
+            composerPresentation.showQueueHandoff &&
+            runInputsLoading && !runInputsError && !queuedRunInputs.length,
+          )}
+        />
       ) : null}
       <div
         className={`session-composer-editor${isFileDragging ? ' is-file-dragging' : ''}`}

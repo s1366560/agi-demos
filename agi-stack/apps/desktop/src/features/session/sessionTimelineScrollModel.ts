@@ -52,3 +52,16 @@ export function isSessionTimelinePinnedToLatest(
   const remaining = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
   return remaining <= tolerancePx;
 }
+
+export type SessionTimelineScrollSource = 'layout' | 'backward' | 'forward';
+
+/** Follow is a user preference, not a side effect of changing content height. */
+export function sessionTimelineFollowIntent(
+  following: boolean,
+  source: SessionTimelineScrollSource,
+  viewport: SessionTimelineViewport,
+): boolean {
+  if (source === 'backward') return false;
+  if (source === 'forward') return isSessionTimelinePinnedToLatest(viewport);
+  return following;
+}

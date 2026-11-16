@@ -208,7 +208,7 @@ export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimeli
     return message ? [message] : [];
   });
   return foldAssistantExecutionDuplicatesForDisplay(
-    foldInternalGoalControlItemsForDisplay(visibleItems),
+    foldInternalGoalControlItemsForDisplay(foldUserEventAliasesForDisplay(visibleItems)),
   );
 }
 
@@ -1132,11 +1132,54 @@ function toolItemsShareStableCallIdentity(
   );
 }
 
+/** HTTP admission projections and socket replay use different row ids for the
+ * same persisted user event. Both its event cursor and message identity must
+ * agree; repeated sends and shared execution ids alone are never duplicates. */
+function userItemsShareEventIdentity(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): boolean {
+  return (
+    isUserTimelineItem(current) &&
+    isUserTimelineItem(incoming) &&
+    !isTransientUserTimelineItem(current) &&
+    !isTransientUserTimelineItem(incoming) &&
+    Number.isSafeInteger(current.eventTimeUs) && current.eventTimeUs > 0 &&
+    Number.isSafeInteger(current.eventCounter) && current.eventCounter >= 0 &&
+    current.eventTimeUs === incoming.eventTimeUs &&
+    current.eventCounter === incoming.eventCounter &&
+    timelineItemsShareStableIdentity(current, incoming)
+  );
+}
+
+/** Also repair already-hydrated aliases without mutating stored event rows. */
+function foldUserEventAliasesForDisplay(items: AgentTimelineItem[]): AgentTimelineItem[] {
+  const result: AgentTimelineItem[] = [];
+  const cursors = new Map<string, number[]>();
+  for (const item of items) {
+    if (!isUserTimelineItem(item) || isTransientUserTimelineItem(item)) {
+      result.push(item);
+      continue;
+    }
+    const key = `${item.eventTimeUs}:${item.eventCounter}`;
+    const indexes = cursors.get(key) ?? [];
+    const duplicateIndex = indexes.find((index) => userItemsShareEventIdentity(result[index], item));
+    if (duplicateIndex !== undefined) {
+      result[duplicateIndex] = mergeTimelineIdentityPair(result[duplicateIndex], item);
+    } else {
+      cursors.set(key, [...indexes, result.length]);
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 function timelineItemsShareIdentity(
   current: AgentTimelineItem,
   incoming: AgentTimelineItem,
 ): boolean {
   if (current.id === incoming.id) return true;
+  if (userItemsShareEventIdentity(current, incoming)) return true;
   if (thoughtItemsShareCompletionIdentity(current, incoming)) return true;
   if (toolItemsShareStableCallIdentity(current, incoming)) return true;
   if (!timelineItemsArePromotablePair(current, incoming)) return false;

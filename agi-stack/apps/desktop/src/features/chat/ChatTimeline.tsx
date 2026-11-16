@@ -1407,8 +1407,8 @@ function TimelineItemBody({
   if (kind === 'user' || kind === 'agent') {
     return (
       <>
-        {kind === 'agent' ? <AssistantExecutionSummary item={item} /> : null}
         <MarkdownContent content={content} className="transcript-content" />
+        {kind === 'agent' ? <AssistantExecutionSummary item={item} /> : null}
         {kind === 'agent' ? <AssistantDuplicateDisclosure item={item} /> : null}
         {kind === 'agent' ? (
           <AssistantArtifactReferences
@@ -1566,17 +1566,20 @@ function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
     });
   }
   return (
-    <div
+    <details
       className="assistant-execution-summary"
       aria-label={t('chat.executionSummary')}
     >
-      {pills.map((pill) => (
-        <span key={pill.label}>
-          <small>{pill.label}</small>
-          <strong>{pill.value}</strong>
-        </span>
-      ))}
-    </div>
+      <summary>{t('chat.executionSummary')}</summary>
+      <div className="assistant-execution-metrics">
+        {pills.map((pill) => (
+          <span key={pill.label}>
+            <small>{pill.label}</small>
+            <strong>{pill.value}</strong>
+          </span>
+        ))}
+      </div>
+    </details>
   );
 }
 

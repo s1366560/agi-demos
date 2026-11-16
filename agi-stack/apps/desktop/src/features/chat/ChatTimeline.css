@@ -2156,14 +2156,14 @@
 .timeline-steps.timeline-tool-group {
   border: 0;
   background: transparent;
-  margin: 12px 0;
+  margin: 4px 0;
   border-radius: 0;
 }
 .timeline-steps > .timeline-tool-group-summary {
   justify-content: flex-start;
   gap: 8px;
-  padding: 8px 0;
-  min-height: 36px;
+  padding: 4px 0;
+  min-height: 32px;
   color: var(--gray-11);
   font-size: 13px;
   font-weight: 400;
@@ -2195,7 +2195,7 @@
 .timeline-step.status-failed, .timeline-notice.is-error { color: var(--red-11); }
 .timeline-step.status-running .timeline-step-icon { animation: timeline-step-spin 1.2s linear infinite; }
 .timeline-notice {
-  display: flex; gap: 10px; align-items: baseline; padding: 12px 0;
+  display: flex; gap: 10px; align-items: baseline; padding: 6px 0;
   font-size: 13px; color: var(--gray-11); overflow-wrap: anywhere;
 }
 .timeline-notice > svg { align-self: center; flex: 0 0 16px; }

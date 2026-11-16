@@ -83,11 +83,12 @@ export type TaskChecklistProps = {
 export const TaskChecklist = memo<TaskChecklistProps>(({ items }) => {
   const { t } = useI18n();
   const contentId = useId();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   if (items.length === 0) return null;
 
   const stats = todoChecklistStats(items);
   const title = t("chat.todoChecklist.title");
+  const activeTask = items.find((item) => item.status === "in_progress");
 
   return (
     <section className="task-checklist" aria-label={title}>
@@ -118,6 +119,12 @@ export const TaskChecklist = memo<TaskChecklistProps>(({ items }) => {
           </span>
         ) : null}
       </button>
+      {!expanded && activeTask ? (
+        <p className="task-checklist-current" title={activeTask.content}>
+          <span aria-hidden="true"><UpdateIcon /></span>
+          <span className="task-checklist-current-text">{activeTask.content}</span>
+        </p>
+      ) : null}
       <div
         className="task-checklist-progress"
         role="progressbar"
