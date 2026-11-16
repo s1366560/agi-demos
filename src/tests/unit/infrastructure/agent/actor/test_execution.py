@@ -1539,3 +1539,43 @@ async def test_failed_partial_persistence_cannot_acknowledge_cancellation(monkey
         )
     settle.assert_not_awaited()
     publish.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_cancel_during_tool_after_retry_does_not_persist_duplicate_answer(monkeypatch):
+    from src.domain.model.agent.execution.event_time import EventTimeGenerator
+
+    state = execution._StreamState(
+        events=[
+            {"type": "text_start", "data": {}},
+            {"type": "text_delta", "data": {"delta": "failed attempt"}},
+            {"type": "retry", "data": {"attempt": 1, "delay_ms": 100}},
+            {"type": "text_start", "data": {}},
+            {"type": "text_delta", "data": {"delta": "successful answer"}},
+            {"type": "text_end", "data": {"full_text": "successful answer"}},
+            {"type": "act_start", "data": {"tool_name": "test_tool"}},
+        ]
+    )
+    state.persisted_count = len(state.events)
+    pending_to_persist = []
+
+    async def persist(events, persisted_count, *_args):
+        pending_to_persist.extend(events[persisted_count:])
+
+    monkeypatch.setattr(execution, "_flush_remaining_events", persist)
+    monkeypatch.setattr(execution, "_settle_root_run_authority", AsyncMock())
+    publish = AsyncMock()
+    monkeypatch.setattr(execution, "_publish_event_to_stream", publish)
+    await execution._finalize_cancelled_chat(
+        state=state,
+        time_gen=EventTimeGenerator(0, 0),
+        tenant_id="t",
+        project_id="p",
+        conversation_id="c",
+        message_id="m",
+        run_id="r",
+        correlation_id=None,
+    )
+    assert [item["type"] for item in pending_to_persist] == ["cancelled"]
+    assert sum(item["type"] == "text_end" for item in state.events) == 1
+    assert [call.kwargs["event"]["type"] for call in publish.await_args_list] == ["cancelled"]

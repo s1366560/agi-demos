@@ -5,7 +5,9 @@ from copy import deepcopy
 import pytest
 
 from src.domain.events.agent_events import (
+    AgentRetryEvent,
     AgentTextDeltaEvent,
+    AgentTextEndEvent,
     AgentTextStartEvent,
 )
 from src.infrastructure.agent.actor.cancelled_text import cancelled_text_end_events
@@ -122,3 +124,37 @@ def test_generation_first_attached_to_delta_is_preserved():
         ]
     )[0]
     assert snapshot["data"]["plugin_generation"] == {"generation": 9}
+
+
+@pytest.mark.parametrize("cancel_after", ["retry", "partial_retry", "completed_retry"])
+def test_retry_retires_failed_attempt_before_cancellation(cancel_after):
+    converter = EventConverter()
+    domain_events = [
+        AgentTextStartEvent(),
+        AgentTextDeltaEvent(delta="discarded attempt"),
+        AgentRetryEvent(attempt=1, delay_ms=100, message="retryable failure"),
+    ]
+    if cancel_after != "retry":
+        domain_events.extend([AgentTextStartEvent(), AgentTextDeltaEvent(delta="accepted answer")])
+    if cancel_after == "completed_retry":
+        domain_events.append(AgentTextEndEvent(full_text="accepted answer"))
+    events = [converter.convert(item, agent_id="agent-a") for item in domain_events]
+    # The actor may be cancelled during retry backoff, the new stream, or tool execution.
+    events.append(event("act_start", tool_name="test_tool", agent_id="agent-a"))
+    assert texts(events) == (["accepted answer"] if cancel_after == "partial_retry" else [])
+
+
+def test_retry_retires_all_failed_deferred_blocks_only_in_its_scope():
+    events = [
+        event("text_start", agent_id="other-agent"),
+        event("text_delta", agent_id="other-agent", delta="unrelated partial"),
+        event("text_start", agent_id="retry-agent"),
+        event("text_delta", agent_id="retry-agent", delta="failed first block"),
+        event("text_start", agent_id="retry-agent"),
+        event("text_delta", agent_id="retry-agent", delta="failed second block"),
+        event("retry", agent_id="retry-agent", attempt=1),
+        event("text_start", agent_id="retry-agent"),
+        event("text_delta", agent_id="retry-agent", delta="successful answer"),
+        event("text_end", agent_id="retry-agent", full_text="successful answer"),
+    ]
+    assert texts(events) == ["unrelated partial"]

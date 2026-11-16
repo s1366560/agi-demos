@@ -48,7 +48,7 @@ def cancelled_text_end_events(events: Sequence[Mapping[str, Any]]) -> list[dict[
     by_scope: dict[tuple[str | None, ...], list[_OpenTextBlock]] = {}
     seen_cursors: set[tuple[int, int]] = set()
     for event in events:
-        if event.get("type") not in {"text_start", "text_delta", "text_end"}:
+        if event.get("type") not in {"text_start", "text_delta", "text_end", "retry"}:
             continue
         cursor = (event.get("event_time_us"), event.get("event_counter"))
         if all(type(value) is int for value in cursor):
@@ -66,6 +66,12 @@ def cancelled_text_end_events(events: Sequence[Mapping[str, Any]]) -> list[dict[
         )
         scoped_blocks = by_scope.setdefault(scope, [])
         event_type = normalized["type"]
+        if event_type == "retry":
+            # The processor discards every text block from the failed attempt,
+            # including deferred ends. Do not let a later successful end close
+            # one of those blocks or snapshot failed text during retry backoff.
+            _retire_failed_attempt(scoped_blocks)
+            continue
         if event_type == "text_end":
             # Processor defers accepted text_end events until model completion,
             # so multiple starts can precede their corresponding ends.
@@ -88,6 +94,11 @@ def cancelled_text_end_events(events: Sequence[Mapping[str, Any]]) -> list[dict[
             open_block.append_delta(payload)
 
     return _unfinished_snapshots(blocks)
+
+
+def _retire_failed_attempt(blocks: Sequence[_OpenTextBlock]) -> None:
+    for block in blocks:
+        block.closed = True
 
 
 def _unfinished_snapshots(blocks: Sequence[_OpenTextBlock]) -> list[dict[str, Any]]:
