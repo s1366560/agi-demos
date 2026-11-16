@@ -2162,11 +2162,20 @@
 .timeline-steps > .timeline-tool-group-summary {
   justify-content: flex-start;
   gap: 8px;
+  min-width: 0;
   padding: 4px 0;
   min-height: 32px;
   color: var(--gray-11);
   font-size: 13px;
   font-weight: 400;
+}
+.timeline-tool-group-preview {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gray-10);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .timeline-steps > .timeline-tool-group-summary > .timeline-tool-group-chevron {
   margin: 0;

@@ -3024,6 +3024,9 @@ const enUS: Record<string, string> = {
     'Summary regeneration is available in cloud workspaces only.',
   'session.composerBlockedByRunState':
     'This run is not accepting ordinary input. Use the visible review, approval, or recovery action.',
+  'session.composerBlockedByActiveRun':
+    'A run is in progress and is not accepting ordinary input.',
+  'session.cancelRun': 'Cancel run',
   'session.localLlmUnconfigured':
     'Configure a local model provider before starting this conversation.',
   'session.localLlmUnconfiguredTitle': 'No local model provider',
@@ -7302,6 +7305,9 @@ const zhCN: Record<string, string> = {
   'session.conversationSummaryLocalOnly': '仅云端工作空间支持重新生成摘要。',
   'session.composerBlockedByRunState':
     '此运行当前不接受普通输入，请使用页面中显示的审查、审批或恢复操作。',
+  'session.composerBlockedByActiveRun':
+    '当前运行仍在进行，暂不接受普通输入。',
+  'session.cancelRun': '取消运行',
   'session.localLlmUnconfigured': '请先配置本地模型提供商，再开始此对话。',
   'session.localLlmUnconfiguredTitle': '尚未配置本地模型提供商',
   'session.localLlmUnconfiguredDescription': '配置并启用本地 LLM 提供商后，对话才能运行。',

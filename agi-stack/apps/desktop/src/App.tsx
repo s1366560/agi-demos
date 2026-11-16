@@ -5435,7 +5435,16 @@ export function App() {
                 sessionProjection?.capabilities.canSendMessage &&
                 sessionProjection.capabilities.allowedActions.includes('send_message')
               ) && !runInputDeliveryOptions.length
-            ? t('session.composerBlockedByRunState')
+            ? (currentArtifactRun?.status === 'running' ||
+                currentArtifactRun?.status === 'queued' ||
+                sessionActivityState === 'live') &&
+              respondableHitlRequestIds.length === 0 &&
+              !canApproveSessionPlan(
+                displaySessionProjection?.currentPlan ?? null,
+                displaySessionProjection?.capabilities ?? null,
+              )
+              ? t('session.composerBlockedByActiveRun')
+              : t('session.composerBlockedByRunState')
             : localLlmUnconfigured
               ? t('session.localLlmUnconfigured')
               : null

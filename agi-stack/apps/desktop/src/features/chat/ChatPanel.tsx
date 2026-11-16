@@ -2102,6 +2102,12 @@ export const ChatPanel = memo(function ChatPanel({
                   sessionKey={messageActionConversationId}
                   presence={activityPresence}
                   usage={sessionUsage}
+                  onStopResponse={runActive && onStopResponse && stopRequest.status !== 'stopped' ? stopResponse : undefined}
+                  stopResponseDisabled={agentStopResponseButtonDisabled({
+                    socketConnected: stopResponseTransportConnected ?? agentSocketConnected,
+                    status: stopRequest.status,
+                  })}
+                  stopResponseLoading={stopRequest.status === 'stopping'}
                 />
               ) : null}
             </div>
@@ -2521,12 +2527,20 @@ function ChatComposer({
     contextItems,
     referenceCount: references.length,
   });
-  const canSendNow =
-    !disabled &&
-    (allowSendWhileAuthorityPending ||
-      (executionBinding.ready && !executionBinding.pending)) &&
+  // Run-input delivery is an explicit authority grant for this bound run,
+  // independent of the currently streaming response. It never authorizes a
+  // new ordinary message or bypasses an in-progress execution-selection edit.
+  const canDeliverRunInput = Boolean(
+    runActive && activeConversationId.trim() && runInputAuthorityRunId?.trim() &&
+    runInputDelivery && runInputDeliveryOptions.includes(runInputDelivery),
+  );
+  const canSendOrdinaryMessage =
+    !runActive && !runInputDelivery && runInputDeliveryOptions.length === 0 &&
     !sending &&
-    !runActive &&
+    (allowSendWhileAuthorityPending || executionBinding.ready);
+  const canSendNow =
+    !disabled && !executionBinding.pending &&
+    (canDeliverRunInput || canSendOrdinaryMessage) &&
     !uploadingAttachments &&
     (Boolean(input.trim()) || composerHasSendableAttachment(contextItems));
   const canSubmit = canSendNow || composeAheadQueueEligibility.canQueue;
@@ -2688,7 +2702,7 @@ function ChatComposer({
       scheduleDispatchMonitor(head);
       return;
     }
-    if (!composeAheadEnabled || responseStreaming || sending || disabled) {
+    if (!composeAheadEnabled || runActive || responseStreaming || sending || disabled) {
       return;
     }
     const claimed = composeAheadQueueStore.claimNext(composeAheadScope, false);
@@ -2724,6 +2738,7 @@ function ChatComposer({
     onSend,
     queuedPrompts,
     responseStreaming,
+    runActive,
     sending,
   ]);
   // Steer dispatch: while the run streams, claim the next steer-intent prompt
@@ -3352,7 +3367,7 @@ function ChatComposer({
                   }
                 />
               </div>
-            ) : (
+            ) : runActive && !runInputDeliveryOptions.length ? null : (
               <Button
                 size="2"
                 color="green"
@@ -3366,8 +3381,10 @@ function ChatComposer({
                       : t('session.sendMessage')
                 }
                 title={
-                  runActive
-                    ? t('session.composerRunActiveHint')
+                  canDeliverRunInput
+                    ? t('session.sendShortcut')
+                    : runActive
+                      ? t('session.composerRunActiveHint')
                     : composeAheadEnabled &&
                         composeAheadQueueEligibility.reason &&
                         composeAheadQueueEligibility.reason !== 'empty'
@@ -3376,7 +3393,7 @@ function ChatComposer({
                         ? t('session.sendShortcut')
                         : undefined
                 }
-                loading={sending}
+                loading={sending && !canDeliverRunInput}
                 disabled={!canSubmit}
               >
                 <ArrowUpIcon />

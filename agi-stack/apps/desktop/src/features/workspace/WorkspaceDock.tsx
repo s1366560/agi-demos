@@ -356,8 +356,9 @@ export function WorkspaceDock({
             />
           ) : availability === 'empty' ? (
             <WorkspaceTreeState
+              compact={unboundConversations.length > 0}
               title={t('workspaceTree.empty')}
-              detail={t('workspaceTree.emptyDescription')}
+              detail={unboundConversations.length > 0 ? undefined : t('workspaceTree.emptyDescription')}
               actionLabel={onCreateWorkspace ? t('workspaceCreate.open') : undefined}
               onAction={onCreateWorkspace}
             />

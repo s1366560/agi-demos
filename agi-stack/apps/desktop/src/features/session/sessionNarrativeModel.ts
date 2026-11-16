@@ -163,12 +163,20 @@ function appendStructuredNarrative(
     pairs.flatMap((pair) => (pair.result ? [pair.result.id] : [])),
   );
   let toolItems: AgentTimelineItem[] = [];
+  let pendingDiagnostics: AgentTimelineItem[] = [];
+
+  const flushPendingDiagnostics = () => {
+    for (const item of pendingDiagnostics) {
+      narrative.push({ kind: 'item', id: item.id, item });
+    }
+    pendingDiagnostics = [];
+  };
 
   const flushToolItems = () => {
     if (!toolItems.length) return;
     narrative.push({
       kind: 'tool_group',
-      id: `tool-group:${toolItems[0].id}`,
+      id: `tool-group:${toolItems.find((item) => item.type === 'act' || item.type === 'observe')!.id}`,
       toolCount: toolGroupCount(toolItems),
       status: sessionToolGroupStatus(toolItems),
       items: toolItems,
@@ -185,18 +193,36 @@ function appendStructuredNarrative(
         return;
       }
       flushToolItems();
-      narrative.push({ kind: 'item', id: item.id, item });
+      if (scope && isSessionDiagnostic(item)) {
+        if (pendingDiagnostics.length && timelineExecutionScope(pendingDiagnostics[0]) !== scope) {
+          flushPendingDiagnostics();
+        }
+        pendingDiagnostics.push(item);
+      } else {
+        flushPendingDiagnostics();
+        narrative.push({ kind: 'item', id: item.id, item });
+      }
       return;
     }
     if (claimedResultIds.has(item.id) || linkedResultIds.has(item.id)) return;
     const pair = pairsByCallId.get(item.id);
     if (!pair) return;
     const owner = toolItems.find((candidate) => candidate.type === 'act' || candidate.type === 'observe');
-    if (owner && timelineExecutionScope(owner) !== timelineExecutionScope(pair.call)) flushToolItems();
+    const scope = timelineExecutionScope(pair.call);
+    if (owner && timelineExecutionScope(owner) !== scope) flushToolItems();
+    if (pendingDiagnostics.length) {
+      if (scope && timelineExecutionScope(pendingDiagnostics[0]) === scope) {
+        toolItems.push(...pendingDiagnostics);
+        pendingDiagnostics = [];
+      } else {
+        flushPendingDiagnostics();
+      }
+    }
     toolItems.push(pair.call);
     if (pair.result) toolItems.push(pair.result);
   });
   flushToolItems();
+  flushPendingDiagnostics();
 }
 
 function activityTitleKey(item: AgentTimelineItem | undefined): string | null {

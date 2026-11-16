@@ -548,3 +548,60 @@ test('an observed principal change rejects the same Local cache until replacemen
   await h.hook.sendMessageContent('after-clear', []);
   assert.ok(h.events.includes('socket'));
 });
+
+for (const delivery of ['queue_next', 'steer_now']) {
+  test(`composer ${delivery} reaches the existing bound run-input operation, not ordinary messaging`, async () => {
+    const h = harness();
+    const submissions = [];
+    h.render({
+      selectedConversation: { id: 'c', project_id: 'p' },
+      currentArtifactRun: { id: 'r', conversation_id: 'c', revision: 2, status: 'running' },
+      runInputDelivery: delivery,
+      runInputDeliveryOptions: [delivery],
+      sessionRunInputOperationsV2: {
+        async createRunInput(input) {
+          submissions.push(input);
+          return {
+            input: { id: 'i', sequence: 1, delivery },
+            conversation_id: 'c', message_id: input.request.messageId, delivery_mode: delivery,
+          };
+        },
+      },
+    });
+    try {
+      await h.hook.sendMessageContent('follow-up instruction', [], () => h.events.push('clear'));
+      assert.equal(submissions.length, 1);
+      assert.equal(submissions[0].runId, 'r');
+      assert.equal(submissions[0].conversation.id, 'c');
+      assert.equal(submissions[0].request.expectedRunRevision, 2);
+      assert.equal(submissions[0].request.delivery, delivery);
+      assert.equal(submissions[0].request.message, 'follow-up instruction');
+      assert.equal(h.calls.length, 0);
+      assert.ok(h.events.includes('clear'));
+    } finally { h.unmount(); }
+  });
+}
+
+for (const [name, patch] of [
+  ['revoked capability', { runInputDeliveryOptions: [] }],
+  ['mismatched run owner', { currentArtifactRun: { id: 'other-run', conversation_id: 'other', revision: 2, status: 'running' } }],
+  ['terminal run', { currentArtifactRun: { id: 'r', conversation_id: 'c', revision: 2, status: 'completed' } }],
+]) {
+  test(`run-input dispatch rejects ${name} without falling back to ordinary messaging`, async () => {
+    const h = harness();
+    let submitted = 0;
+    h.render({
+      selectedConversation: { id: 'c', project_id: 'p' },
+      currentArtifactRun: { id: 'r', conversation_id: 'c', revision: 2, status: 'running' },
+      runInputDelivery: 'queue_next', runInputDeliveryOptions: ['queue_next'],
+      sessionRunInputOperationsV2: { async createRunInput() { submitted++; } },
+      ...patch,
+    });
+    try {
+      await h.hook.sendMessageContent('follow-up instruction', []);
+      assert.equal(submitted, 0);
+      assert.equal(h.calls.length, 0);
+      assert.equal(h.state.error, 'session.authorityActionUnavailable');
+    } finally { h.unmount(); }
+  });
+}

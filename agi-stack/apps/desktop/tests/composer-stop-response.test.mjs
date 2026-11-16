@@ -36,6 +36,16 @@ test('local planning requires a specific message id and never targets an existin
   assert.equal(composerStopTarget({ ...local, conversationId: ' ', run }), undefined);
 });
 
+test('queued local runs do not manufacture an unsupported REST cancellation target', () => {
+  const queued = { ...run, status: 'queued' };
+  assert.equal(composerStopTarget({ ...local, run: queued }), undefined);
+  assert.equal(composerStopTarget({ ...local, run: queued, messageId: queued.message_id }), undefined);
+  assert.deepEqual(composerStopTarget({ ...local, run: queued, messageId: 'new-planning-message' }), {
+    kind: 'local_turn', scopeKey: 'owner-a', conversationId: 'conversation-1',
+    messageId: 'new-planning-message',
+  });
+});
+
 test('message targeting uses structured execution identity and excludes ambiguous pending signals', () => {
   const signal = { conversationId: 'conversation-1', messageId: 'pending', status: 'acknowledged' };
   assert.equal(composerStopMessageId('conversation-1', [
