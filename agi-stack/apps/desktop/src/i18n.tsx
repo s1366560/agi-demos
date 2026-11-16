@@ -2827,6 +2827,9 @@ const enUS: Record<string, string> = {
   'automations.runTrigger.unknown': 'Unknown source',
   'session.runControlUnavailable':
     'This session does not have an authoritative run that can be controlled.',
+  'session.authorityRefreshing': 'Syncing run state…',
+  'session.authorityRefreshingDescription':
+    'Updating available actions; the conversation remains readable.',
   'session.authorityLoading': 'Restoring session…',
   'session.authorityLoadingDescription':
     'Run state is syncing. Existing messages remain readable.',
@@ -7140,6 +7143,8 @@ const zhCN: Record<string, string> = {
   'session.liveReconnecting': '正在重连更新',
   'session.liveUpdatesEnded': '更新已结束',
   'session.runControlUnavailable': '当前会话没有可控制的权威运行。',
+  'session.authorityRefreshing': '正在同步运行状态…',
+  'session.authorityRefreshingDescription': '正在更新可用操作；已有消息仍可阅读。',
   'session.authorityLoading': '正在恢复会话…',
   'session.authorityLoadingDescription': '正在同步运行状态；已有消息仍可阅读和复制。',
   'session.authoritySlowTitle': '会话恢复时间较长',

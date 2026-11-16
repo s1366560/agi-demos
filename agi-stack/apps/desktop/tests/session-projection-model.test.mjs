@@ -1318,3 +1318,22 @@ test('stream starts refresh only their bound session authority, never per-token 
     assert.equal(socketEventInvalidatesSessionProjectionForScope({ type, conversation_id: scope.conversationId }, scope), false);
   }
 });
+
+
+test('projection refresh feedback distinguishes live work from initial recovery without changing authority', async () => {
+  const { sessionProjectionLoadingFeedback } = await import(
+    '/tmp/agistack-desktop-test-dist/src/features/session/sessionProjectionModel.js'
+  );
+  const initial = { hasDisplayedProjection: false, runStatus: null, activityLive: false };
+  assert.equal(sessionProjectionLoadingFeedback(initial).placeholderKey, 'session.authorityLoading');
+  assert.equal(sessionProjectionLoadingFeedback({ ...initial, hasDisplayedProjection: true }).titleKey,
+    'session.authorityRefreshing');
+  for (const runStatus of ['queued', 'running']) {
+    assert.equal(sessionProjectionLoadingFeedback({ ...initial, runStatus }).placeholderKey,
+      'session.composerBlockedByActiveRun');
+  }
+  assert.equal(sessionProjectionLoadingFeedback({ ...initial, activityLive: true }).active, true);
+  for (const runStatus of ['completed', 'cancelled', 'failed']) {
+    assert.equal(sessionProjectionLoadingFeedback({ ...initial, runStatus }).active, false);
+  }
+});

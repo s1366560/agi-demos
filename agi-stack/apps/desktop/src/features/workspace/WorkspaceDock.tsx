@@ -1,12 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { ScrollArea } from '@radix-ui/themes';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
-  DotsHorizontalIcon,
-  Pencil1Icon,
-  TrashIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -39,6 +36,7 @@ import {
   ConversationLifecycleDialogs,
   type ConversationLifecycleMode,
 } from './ConversationLifecycleDialogs';
+import { ConversationActionsMenu } from './ConversationActionsMenu';
 import './WorkspaceDock.css';
 
 type ConversationLifecycleRequest = {
@@ -182,34 +180,6 @@ export function WorkspaceDock({
     });
   };
 
-  useEffect(() => {
-    const openConversationMenu = () =>
-      navigationRef.current?.querySelector<HTMLDetailsElement>(
-        'details.workspace-tree-session-actions[open]',
-      ) ?? null;
-    const handleMenuPointerDown = (event: PointerEvent) => {
-      const openMenu = openConversationMenu();
-      if (!openMenu) return;
-      const target = event.target;
-      if (target instanceof Node && openMenu.contains(target)) return;
-      openMenu.removeAttribute('open');
-    };
-    const handleMenuKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      const openMenu = openConversationMenu();
-      if (!openMenu) return;
-      event.preventDefault();
-      openMenu.removeAttribute('open');
-      openMenu.querySelector<HTMLElement>('summary')?.focus();
-    };
-
-    document.addEventListener('pointerdown', handleMenuPointerDown);
-    document.addEventListener('keydown', handleMenuKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handleMenuPointerDown);
-      document.removeEventListener('keydown', handleMenuKeyDown);
-    };
-  }, []);
 
   return (
     <>
@@ -609,46 +579,12 @@ function ConversationTreeRow({
         </span>
       </button>
       {hasLifecycleActions ? (
-        <details className="workspace-tree-session-actions">
-          <summary
-            ref={actionRef}
-            role="button"
-            aria-haspopup="menu"
-            aria-label={t('workspaceTree.conversationActions', { title })}
-            title={t('workspaceTree.conversationActions', { title })}
-          >
-            <DotsHorizontalIcon />
-          </summary>
-          <div role="menu" aria-label={t('workspaceTree.conversationActions', { title })}>
-            {onRename ? (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={(event) => {
-                  event.currentTarget.closest('details')?.removeAttribute('open');
-                  onRename();
-                }}
-              >
-                <Pencil1Icon />
-                {t('workspaceTree.renameConversation')}
-              </button>
-            ) : null}
-            {onDelete ? (
-              <button
-                type="button"
-                role="menuitem"
-                className="danger"
-                onClick={(event) => {
-                  event.currentTarget.closest('details')?.removeAttribute('open');
-                  onDelete();
-                }}
-              >
-                <TrashIcon />
-                {t('workspaceTree.deleteConversation')}
-              </button>
-            ) : null}
-          </div>
-        </details>
+        <ConversationActionsMenu
+          title={title}
+          actionRef={actionRef}
+          onRename={onRename}
+          onDelete={onDelete}
+        />
       ) : null}
     </div>
   );

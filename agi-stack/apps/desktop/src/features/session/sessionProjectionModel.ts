@@ -26,6 +26,33 @@ export {
   socketEventInvalidatesSessionProjectionForScope,
 } from './sessionProjectionEvents';
 
+/** Presentation only: a refresh must never grant stale send capabilities. */
+export function sessionProjectionLoadingFeedback({
+  hasDisplayedProjection,
+  runStatus,
+  activityLive,
+}: {
+  hasDisplayedProjection: boolean;
+  runStatus: string | null | undefined;
+  activityLive: boolean;
+}) {
+  const active = runStatus === 'running' || runStatus === 'queued' || activityLive;
+  return {
+    placeholderKey: active
+      ? 'session.composerBlockedByActiveRun'
+      : hasDisplayedProjection
+        ? 'session.authorityRefreshing'
+        : 'session.authorityLoading',
+    titleKey: hasDisplayedProjection || active
+      ? 'session.authorityRefreshing'
+      : 'session.authorityLoading',
+    descriptionKey: hasDisplayedProjection || active
+      ? 'session.authorityRefreshingDescription'
+      : 'session.authorityLoadingDescription',
+    active,
+  } as const;
+}
+
 const runStatuses = new Set<DesktopRunStatus>([
   'queued',
   'running',

@@ -568,7 +568,7 @@
   padding: 8px 0;
 }
 
-.desktop-design-sidebar .workspace-tree-session-actions button {
+.workspace-tree-session-menu [role='menuitem'] {
   min-height: 32px;
   font-size: 12px;
 }

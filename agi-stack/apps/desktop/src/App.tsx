@@ -363,9 +363,11 @@ import type {
   ChangeReviewComment,
   ChangeReviewCommentMap,
 } from './features/session/sessionChangesReviewModel';
+import { conversationResponseIsStreaming } from './features/chat/composeAheadModel';
 import {
   decodeConversationSessionProjection,
   signedSessionSnapshotRevision,
+  sessionProjectionLoadingFeedback,
   socketEventInvalidatesSessionProjectionForScope,
 } from './features/session/sessionProjectionModel';
 import {
@@ -538,6 +540,7 @@ import {
   reconcileExpandedWorkspaceIds,
   reconcileWorkspaceConversationRowsAfterRefresh,
   replaceConversationInWorkspaceRows,
+  preserveConversationRunMetadata,
   resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
@@ -4834,7 +4837,10 @@ export function App() {
       ) {
         return;
       }
-      const nextSession = { ...currentSession, conversation: updated };
+      const nextSession = {
+        ...currentSession,
+        conversation: preserveConversationRunMetadata(currentSession.conversation, updated),
+      };
       agentConversationSessionRef.current = nextSession;
       setAgentConversationSession(nextSession);
     } catch (caught) {
@@ -4891,7 +4897,10 @@ export function App() {
         ? current
         : { ...current, conversationsByWorkspace };
     });
-    const nextSession = { ...latestSession, conversation: updated };
+    const nextSession = {
+      ...latestSession,
+      conversation: preserveConversationRunMetadata(latestSession.conversation, updated),
+    };
     agentConversationSessionRef.current = nextSession;
     setAgentConversationSession(nextSession);
   };
@@ -5422,13 +5431,24 @@ export function App() {
   const openProviderSettings = useCallback(() => {
     window.location.hash = `/tenant/${encodeURIComponent(config.tenantId)}/providers`;
   }, [config.tenantId]);
+  const projectionLoadingFeedback = sessionProjectionLoadingFeedback({
+    hasDisplayedProjection: Boolean(displaySessionProjection),
+    runStatus: currentArtifactRun?.status,
+    activityLive: sessionActivityState === 'live' || conversationResponseIsStreaming({
+      activeConversationId: scopedConversationId,
+      sending,
+      activityPresence: sessionActivityState,
+      signals: agentTaskSignals,
+      timelineItems: sessionTimeline.items,
+    }),
+  });
   const sessionChatDisabledReason =
     chatDisabledReason ??
     (selectedConversation
       ? sessionProjectionState.status === 'idle' || sessionProjectionState.status === 'loading'
         ? sessionProjectionSlow && config.mode === 'local'
           ? null
-          : t('session.authorityLoading')
+          : t(projectionLoadingFeedback.placeholderKey)
         : sessionProjectionState.status === 'error'
           ? t('session.authorityError')
           : !(
@@ -5470,7 +5490,7 @@ export function App() {
   const sessionAuthorityNotice = useMemo(() => {
     if (!selectedConversation || sessionProjectionState.status === 'ready') return null;
     if (sessionProjectionState.status === 'idle' || sessionProjectionState.status === 'loading') {
-      if (sessionProjectionSlow) {
+      if (sessionProjectionSlow && !projectionLoadingFeedback.active) {
         return {
           tone: 'warning' as const,
           title: t('session.authoritySlowTitle'),
@@ -5480,8 +5500,8 @@ export function App() {
       }
       return {
         tone: 'loading' as const,
-        title: t('session.authorityLoading'),
-        description: t('session.authorityLoadingDescription'),
+        title: t(projectionLoadingFeedback.titleKey),
+        description: t(projectionLoadingFeedback.descriptionKey),
       };
     }
     return {
@@ -5490,7 +5510,15 @@ export function App() {
       description: t('session.authorityErrorDescription'),
       actionLabel: t('session.authorityRetry'),
     };
-  }, [selectedConversation, sessionProjectionSlow, sessionProjectionState.status, t]);
+  }, [
+    selectedConversation,
+    sessionProjectionSlow,
+    sessionProjectionState.status,
+    projectionLoadingFeedback.active,
+    projectionLoadingFeedback.titleKey,
+    projectionLoadingFeedback.descriptionKey,
+    t,
+  ]);
   const availableChangeScopes = useMemo<readonly RunChangeScope[]>(
     () =>
       config.mode === 'cloud'
