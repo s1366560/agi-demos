@@ -8720,7 +8720,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:c81baf534f81231ba184a0d0e7c7db15229250b5be7b4781177db4a669024ce4",
+        "digest": "sha256:7d9fcba090dec06e9894d339c752b9bfbb0c541010dc8b4dcf8d06a5c4871975",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_llm_providers_http_routes.py"
       }
     },
