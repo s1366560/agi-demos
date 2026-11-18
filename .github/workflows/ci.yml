@@ -1243,6 +1243,10 @@ jobs:
           # is the manual desktop-bundle-verify workflow.
           make desktop-test
 
+      - name: Verify streaming transcript scroll positions in Chromium
+        working-directory: agi-stack/apps/desktop
+        run: node --test browser-qa/timeline-streaming.test.mjs
+
       - name: Verify desktop icons and macOS entitlement resources
         run: make desktop-icons
 
