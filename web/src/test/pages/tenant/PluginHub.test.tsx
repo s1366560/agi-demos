@@ -217,6 +217,7 @@ describe('PluginHub', () => {
     const addButton = await screen.findByRole('button', {
       name: 'tenant.pluginHub.channelsList.addChannel',
     });
+    await waitFor(() => expect(addButton).toBeEnabled());
     fireEvent.click(addButton);
 
     await waitFor(() => {
