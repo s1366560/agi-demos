@@ -30,6 +30,83 @@ TOOL_DISCOVER_TIMEOUT = 15
 # Timeout for tool calls (default, overridden by tool-specific timeout when available)
 TOOL_CALL_TIMEOUT = 60
 
+JSONRPC_METHOD_NOT_FOUND = -32601
+
+
+class MCPRPCError(Exception):
+    """A JSON-RPC error returned by a managed MCP server."""
+
+    def __init__(
+        self,
+        method: str,
+        message: str,
+        *,
+        code: int | str | None = None,
+        data: object = None,
+    ) -> None:
+        self.method = method
+        self.rpc_code = code
+        self.rpc_message = message
+        self.rpc_data = data
+        super().__init__(f"MCP error: {message}")
+
+    def is_method_not_found(self) -> bool:
+        """Return True for JSON-RPC MethodNotFound / missing method capability."""
+        if self.rpc_code in (
+            JSONRPC_METHOD_NOT_FOUND,
+            "-32601",
+            "MethodNotFound",
+            "method_not_found",
+        ):
+            return True
+        text = self.rpc_message.lower()
+        return "method not found" in text or "methodnotfound" in text
+
+
+@dataclass(frozen=True)
+class SetLogLevelResult:
+    """Structured outcome of logging/setLevel, including capability limitations."""
+
+    ok: bool
+    code: str
+    message: str
+    server_name: str
+    level: str
+    rpc_code: int | str | None = None
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+    def to_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "success": self.ok,
+            "name": self.server_name,
+            "level": self.level,
+            "code": self.code,
+            "message": self.message,
+        }
+        if self.rpc_code is not None:
+            payload["rpc_code"] = self.rpc_code
+        if not self.ok:
+            error: dict[str, Any] = {"code": self.code, "message": self.message}
+            if self.rpc_code is not None:
+                error["rpc_code"] = self.rpc_code
+            payload["error"] = error
+        return payload
+
+
+def _raise_for_rpc_error(method: str, response: Dict[str, Any]) -> None:
+    """Raise MCPRPCError when a JSON-RPC response carries an error object."""
+    raw = response.get("error")
+    if not isinstance(raw, dict):
+        raise MCPRPCError(method, "Unknown error")
+    raise MCPRPCError(
+        method,
+        str(raw.get("message") or "Unknown error"),
+        code=raw.get("code"),
+        data=raw.get("data"),
+    )
+
 
 @dataclass
 class MCPToolInfo:
@@ -371,7 +448,10 @@ class MCPServerManager:
         return combined[:4000] if combined else ""
 
     async def _read_stream_with_retry(
-        self, stream: asyncio.StreamReader, label: str, name: str,
+        self,
+        stream: asyncio.StreamReader,
+        label: str,
+        name: str,
     ) -> str:
         """Read from an asyncio stream with retry for buffered output.
 
@@ -845,30 +925,88 @@ class MCPServerManager:
         self,
         server_name: str,
         level: str,
-    ) -> bool:
+    ) -> SetLogLevelResult:
         """Set the logging level on a managed MCP server via logging/setLevel.
+
+        MCP defines logging/setLevel as a JSON-RPC request. A MethodNotFound
+        response is a capability limitation, not a silent success or a
+        generic failure.
 
         Args:
             server_name: Server name.
             level: Log level (debug, info, notice, warning, error, critical, alert, emergency).
 
         Returns:
-            True if notification was sent successfully, False otherwise.
+            Structured result distinguishing unsupported method, not running,
+            and other protocol/transport errors.
         """
         server = self._tracker.get_server(server_name)
-        if not server or server.status != ServerStatus.RUNNING:
-            return False
+        if not server:
+            return SetLogLevelResult(
+                ok=False,
+                code="server_not_found",
+                message=f"MCP server '{server_name}' was not found.",
+                server_name=server_name,
+                level=level,
+            )
+        if server.status != ServerStatus.RUNNING:
+            return SetLogLevelResult(
+                ok=False,
+                code="server_not_running",
+                message=(
+                    f"MCP server '{server_name}' is not running (status={server.status.value})."
+                ),
+                server_name=server_name,
+                level=level,
+            )
 
         try:
-            await self._send_notification(
+            await self._send_request(
                 server_name,
                 "logging/setLevel",
                 {"level": level},
             )
-            return True
-        except Exception as e:
-            logger.error(f"Error setting log level on '{server_name}': {e}")
-            return False
+            return SetLogLevelResult(
+                ok=True,
+                code="ok",
+                message=f"Set log level of '{server_name}' to '{level}'.",
+                server_name=server_name,
+                level=level,
+            )
+        except MCPRPCError as exc:
+            if exc.is_method_not_found():
+                return SetLogLevelResult(
+                    ok=False,
+                    code="method_not_supported",
+                    message=(
+                        f"MCP server '{server_name}' does not support "
+                        "logging/setLevel (JSON-RPC MethodNotFound). "
+                        "This is a capability limitation of the server, "
+                        "not a runtime crash."
+                    ),
+                    server_name=server_name,
+                    level=level,
+                    rpc_code=exc.rpc_code if exc.rpc_code is not None else JSONRPC_METHOD_NOT_FOUND,
+                )
+            return SetLogLevelResult(
+                ok=False,
+                code="protocol_error",
+                message=(
+                    f"MCP server '{server_name}' rejected logging/setLevel: {exc.rpc_message}"
+                ),
+                server_name=server_name,
+                level=level,
+                rpc_code=exc.rpc_code,
+            )
+        except Exception as exc:
+            logger.error(f"Error setting log level on '{server_name}': {exc}")
+            return SetLogLevelResult(
+                ok=False,
+                code="protocol_error",
+                message=f"Failed to set log level for '{server_name}': {exc}",
+                server_name=server_name,
+                level=level,
+            )
 
     async def subscribe_resource(
         self,
@@ -1121,9 +1259,7 @@ class MCPServerManager:
                     )
                     # Got response
                     if "error" in response:
-                        raise RuntimeError(
-                            f"MCP error: {response['error'].get('message', 'Unknown error')}"
-                        )
+                        _raise_for_rpc_error(method, response)
                     return response.get("result", {})
                 except asyncio.TimeoutError:
                     # Check if process exited
@@ -1300,9 +1436,7 @@ class MCPServerManager:
                             response = response[0] if response else {}
 
                     if "error" in response:
-                        raise RuntimeError(
-                            f"MCP error: {response['error'].get('message', 'Unknown')}"
-                        )
+                        _raise_for_rpc_error(method, response)
                     return response.get("result", {})
 
             except aiohttp.ClientError as e:
@@ -1393,7 +1527,7 @@ class MCPServerManager:
                     if isinstance(data, dict) and "result" in data:
                         return data.get("result", {})
                     if isinstance(data, dict) and "error" in data:
-                        raise RuntimeError(f"MCP error: {data['error'].get('message', 'Unknown')}")
+                        _raise_for_rpc_error("<sse>", data)
                 except json_mod.JSONDecodeError:
                     continue
         return {}
@@ -1560,9 +1694,10 @@ class MCPServerManager:
                         if req_id is not None and req_id in conn._pending:
                             future = conn._pending.pop(req_id)
                             if "error" in data:
-                                future.set_exception(
-                                    RuntimeError(data["error"].get("message", "Unknown"))
-                                )
+                                try:
+                                    _raise_for_rpc_error("<pending>", data)
+                                except MCPRPCError as exc:
+                                    future.set_exception(exc)
                             else:
                                 future.set_result(data.get("result", {}))
                     except json.JSONDecodeError:
@@ -1804,9 +1939,10 @@ class MCPServerManager:
                             if req_id is not None and req_id in conn._pending:
                                 future = conn._pending.pop(req_id)
                                 if "error" in data:
-                                    future.set_exception(
-                                        RuntimeError(data["error"].get("message", "Unknown"))
-                                    )
+                                    try:
+                                        _raise_for_rpc_error("<pending>", data)
+                                    except MCPRPCError as exc:
+                                        future.set_exception(exc)
                                 else:
                                     future.set_result(data.get("result", {}))
                         except json.JSONDecodeError:
