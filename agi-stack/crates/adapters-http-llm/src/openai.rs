@@ -657,8 +657,11 @@ impl HttpLlm {
             };
             let wire = serde_json::from_str::<AgentActionWire>(clean_structured(&content));
             let guidance = match wire {
+                // The streaming ReAct loop dispatches the returned tool. One-shot
+                // structured decisions must deliver the original action to their
+                // caller for validation and audit, even when the tool is wrong.
                 Ok(AgentActionWire::CallTool { ref tool, .. })
-                    if !available_tools.contains(tool) =>
+                    if on_text.is_some() && !available_tools.contains(tool) =>
                 {
                     if repairing {
                         return Err(CoreError::Llm(

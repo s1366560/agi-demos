@@ -195,13 +195,39 @@ async fn repeating_an_unavailable_tool_after_one_repair_is_a_model_error() {
     let stale = r#"{"kind":"call_tool","tool":"submit_plan","input_json":{}}"#;
     let (base, captured) = mock_responses(vec![chat_body(stale), chat_body(stale)]).await;
     let error = HttpLlm::new(base, "test")
-        .decide("execute", 0, &[], &["read".into()])
+        .decide_with_tools_stream(
+            "execute",
+            0,
+            &[],
+            &[agistack_core::ports::ToolDefinition::name_only("read")],
+            &|_| {},
+        )
         .await
         .unwrap_err();
     assert!(error
         .to_string()
         .contains("tool outside the current tool list"));
     assert_eq!(captured.lock().await.len(), 2);
+}
+
+#[tokio::test]
+async fn one_shot_tool_decision_preserves_the_original_action_for_caller_audit() {
+    let wrong = r#"{"kind":"call_tool","tool":"other","input_json":{"id":2}}"#;
+    let (base, captured) = mock_responses(vec![chat_body(wrong)]).await;
+    let action = HttpLlm::new(base, "fixture")
+        .decide_with_tools(
+            "extract",
+            1,
+            &[],
+            &[agistack_core::ports::ToolDefinition::name_only(
+                "submit_projection",
+            )],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(action, AgentAction::CallTool { tool, input_json }
+        if tool == "other" && input_json == r#"{"id":2}"#));
+    assert_eq!(captured.lock().await.len(), 1);
 }
 
 #[tokio::test]
