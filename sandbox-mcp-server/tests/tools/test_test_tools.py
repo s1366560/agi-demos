@@ -7,15 +7,27 @@ TDD Cycle:
 """
 
 import ast
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from src.tools.test_tools import (
+    _parse_coverage_json,
     analyze_coverage,
     generate_tests,
     run_tests,
 )
+
+
+def _result_text(result: dict) -> str:
+    """Join tool text content for assertions."""
+    chunks = []
+    for item in result.get("content") or []:
+        if isinstance(item, dict):
+            chunks.append(item.get("text") or "")
+    return "\n".join(chunks)
+
 
 
 class TestGenerateTests:
@@ -197,6 +209,66 @@ def test_failing():
         assert not result.get("isError")
 
     @pytest.mark.asyncio
+    async def test_run_tests_no_tests_in_empty_workspace(self, tmp_path):
+        """An empty workspace should report zero tests, not a tool error."""
+        result = await run_tests(
+            file_pattern="test_*.py",
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        assert result["metadata"]["total"] == 0
+        assert result["metadata"]["passed"] == 0
+        assert result["metadata"]["failed"] == 0
+        assert "No test files found" in _result_text(result)
+
+    @pytest.mark.asyncio
+    async def test_run_tests_config_failure_is_error(self, tmp_path):
+        """Invalid pytest configuration must be reported as a tool error."""
+        (tmp_path / "pytest.ini").write_text(
+            "[pytest]\naddopts = --not-a-real-pytest-option\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "test_sample.py").write_text(
+            "def test_ok():\n    assert True\n",
+            encoding="utf-8",
+        )
+
+        result = await run_tests(
+            file_pattern="test_*.py",
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "tests_failed_to_run"
+        text = _result_text(result)
+        assert "Tests failed to run" in text
+        assert "stderr:" in text
+        assert "--not-a-real-pytest-option" in text or "--not-a-real-pytest-option" in (
+            result["metadata"].get("stderr") or ""
+        )
+
+    @pytest.mark.asyncio
+    async def test_run_tests_collection_error_is_error(self, tmp_path):
+        """Collection/import failures must be errors and must keep stderr."""
+        (tmp_path / "test_broken.py").write_text(
+            "import module_that_does_not_exist_xyz123\n\n"
+            "def test_ok():\n    assert True\n",
+            encoding="utf-8",
+        )
+
+        result = await run_tests(
+            file_pattern="test_*.py",
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "tests_failed_to_run"
+        text = _result_text(result)
+        assert "Tests failed to run" in text
+        assert "module_that_does_not_exist_xyz123" in text
+
+    @pytest.mark.asyncio
     async def test_run_tests_rejects_path_escape(self, tmp_path):
         """Escaped test directories should be rejected."""
         workspace = tmp_path / "workspace"
@@ -241,8 +313,9 @@ def function_b():
 
             assert not result.get("isError")
             metadata = result.get("metadata", {})
-            # Should return some coverage info
-            assert "file_path" in metadata
+            assert "coverage_percent" in metadata
+            assert isinstance(metadata["coverage_percent"], (int, float))
+            assert "Coverage:" in _result_text(result)
 
     @pytest.mark.asyncio
     async def test_analyze_coverage_with_pytest(self):
@@ -277,8 +350,9 @@ def test_my_function():
 
             assert not result.get("isError")
             metadata = result.get("metadata", {})
-            # Should return coverage info
-            assert "file_path" in metadata or "coverage" in metadata
+            assert "coverage_percent" in metadata
+            assert isinstance(metadata["coverage_percent"], (int, float))
+            assert "Coverage:" in _result_text(result)
 
     @pytest.mark.asyncio
     async def test_analyze_coverage_nonexistent_file(self):
@@ -313,7 +387,95 @@ def my_function():
         assert not (tmp_path / "test_mymodule_coverage.py").exists()
 
 
+
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_without_pytest_is_error(self, tmp_path):
+        """Refusing pytest-cov must not invent a numeric estimate or succeed."""
+        module_file = tmp_path / "mymodule.py"
+        module_file.write_text("def my_function():\n    return 1\n", encoding="utf-8")
+
+        result = await analyze_coverage(
+            file_path=str(module_file),
+            use_pytest=False,
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "coverage_unavailable"
+        assert "coverage_percent" not in result["metadata"]
+        assert "Basic coverage estimation" not in _result_text(result)
+
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_missing_plugin_is_error(self, tmp_path, monkeypatch):
+        """A missing pytest-cov plugin must surface as an error with stderr."""
+        module_file = tmp_path / "mymodule.py"
+        module_file.write_text("def my_function():\n    return 1\n", encoding="utf-8")
+        (tmp_path / "test_mymodule.py").write_text(
+            "from mymodule import my_function\n\ndef test_my_function():\n    assert my_function() == 1\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+
+        result = await analyze_coverage(
+            file_path=str(module_file),
+            use_pytest=True,
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "pytest_cov_missing"
+        text = _result_text(result)
+        assert "stderr:" in text or "unrecognized arguments" in text.lower()
+        assert "--cov" in text or "--cov" in (result["metadata"].get("stderr") or "")
+        assert "coverage_percent" not in result["metadata"]
+
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_missing_report_is_error(self, tmp_path, monkeypatch):
+        """Successful pytest without a coverage report must not be marked success."""
+        module_file = tmp_path / "mymodule.py"
+        module_file.write_text("def my_function():\n    return 1\n", encoding="utf-8")
+
+        def fake_run(*args, **kwargs):
+            return subprocess.CompletedProcess(args[0], 0, stdout="collected 0 items", stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        result = await analyze_coverage(
+            file_path=str(module_file),
+            use_pytest=True,
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "coverage_report_unavailable"
+        assert "numeric results" in _result_text(result)
+        assert "coverage_percent" not in result["metadata"]
+
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_exception_is_error(self, tmp_path, monkeypatch):
+        """Unexpected exceptions must be errors, not a fake coverage estimate."""
+        module_file = tmp_path / "mymodule.py"
+        module_file.write_text("def my_function():\n    return 1\n", encoding="utf-8")
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("simulated coverage crash")
+
+        monkeypatch.setattr(subprocess, "run", boom)
+
+        result = await analyze_coverage(
+            file_path=str(module_file),
+            use_pytest=True,
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "coverage_analysis_failed"
+        assert "simulated coverage crash" in _result_text(result)
+        assert "Basic coverage estimation" not in _result_text(result)
+
+
 class TestTestToolsIntegration:
+
     """Integration tests for test tools."""
 
     @pytest.mark.asyncio
@@ -361,3 +523,21 @@ def divide(a: int, b: int) -> float:
                 _workspace_dir=tmpdir,
             )
             assert not cov_result.get("isError")
+
+
+
+def test_parse_coverage_json_accepts_relative_report_paths(tmp_path):
+    """pytest-cov may record relative paths; resolve them against the import root."""
+    source = tmp_path / "mymodule.py"
+    source.write_text("def f():\n    return 1\n", encoding="utf-8")
+    report = tmp_path / "coverage.json"
+    report.write_text(
+        '''{"files": {"mymodule.py": {"summary": {"percent_covered": 75.0}, "missing_lines": [5], "executed_lines": [1, 2, 3]}}}''',
+        encoding="utf-8",
+    )
+
+    parsed = _parse_coverage_json(report, source, roots=[tmp_path])
+
+    assert parsed is not None
+    assert parsed["coverage_percent"] == 75.0
+    assert parsed["missing_lines"] == [5]
