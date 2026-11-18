@@ -120,6 +120,12 @@ def infer_provider_from_model(model: str) -> str:
 # ============================================================================
 
 
+def _is_provider_context_overflow(error: Exception) -> bool:
+    from litellm.exceptions import ContextWindowExceededError
+
+    return isinstance(error, ContextWindowExceededError) or getattr(error, "code", None) == "context_length_exceeded"
+
+
 class StreamEventType(str, Enum):
     """Types of events emitted during LLM streaming."""
 
@@ -572,14 +578,27 @@ class LLMStream:
 
         try:
             # Use injected client if available (preferred path with full resilience)
-            source = (
-                self._generate_with_client(messages, request_id, langfuse_context)
-                if self._llm_client
-                else self._generate_direct(messages, request_id, langfuse_context)
-            )
-            async with aclosing(source):
-                async for event in source:
-                    yield event
+            generate = self._generate_with_client if self._llm_client else self._generate_direct
+            emitted = False
+            for attempt in range(2):
+                try:
+                    async with aclosing(generate(messages, request_id, langfuse_context)) as source:
+                        async for event in source:
+                            emitted = True
+                            yield event
+                    break
+                except Exception as exc:
+                    if emitted or attempt or not _is_provider_context_overflow(exc):
+                        raise
+                    from src.infrastructure.agent.context.overflow_recovery import (
+                        OverflowRecoveryCoordinator,
+                    )
+
+                    reduced = OverflowRecoveryCoordinator().reduce_provider_request(messages)
+                    if reduced == messages:
+                        raise
+                    self._reset_state()
+                    messages = reduced
 
             elapsed = time.time() - start_time
             logger.debug(f"LLM stream completed: request_id={request_id}, elapsed={elapsed:.2f}s")

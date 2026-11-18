@@ -27,19 +27,19 @@ class HistoryTurnGuard:
                 "modified_messages": 0,
             }
 
-        has_system_prefix = bool(messages) and messages[0].get("role") == "system"
-        prefix = messages[:1] if has_system_prefix else []
-        body = messages[1:] if has_system_prefix else messages
-
-        if len(body) <= self._max_messages:
-            return messages, {
-                "max_messages": self._max_messages,
-                "dropped_messages": 0,
-                "modified_messages": 0,
-            }
-
-        dropped = len(body) - self._max_messages
-        trimmed = prefix + body[-self._max_messages :]
+        # Only start retained history at a user turn. A tool result may refer to a
+        # parallel call earlier in its turn. Always retain runtime instructions.
+        boundary = len(messages) - self._max_messages
+        user_indexes = [i for i, message in enumerate(messages) if message.get("role") == "user"]
+        start = next(
+            (i for i in user_indexes if i >= boundary), user_indexes[-1] if user_indexes else 0
+        )
+        trimmed = [
+            message
+            for i, message in enumerate(messages)
+            if i >= start or message.get("role") in {"developer", "system"}
+        ]
+        dropped = len(messages) - len(trimmed)
         return trimmed, {
             "max_messages": self._max_messages,
             "dropped_messages": dropped,
