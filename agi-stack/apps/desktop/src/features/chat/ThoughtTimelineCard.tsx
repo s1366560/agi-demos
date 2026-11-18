@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -65,25 +66,35 @@ export function ThoughtTimelineCard({
   const durationMs = thoughtTimelineDurationMs(item, nowMs);
   const duration = durationMs !== null ? formatToolCallDuration(durationMs) : '';
   const content = item.content ?? '';
+  const previewContent = content.trim();
+  const preview = previewContent
+    ? previewContent.slice(0, 100).replace(/\n/g, ' ') + (previewContent.length > 100 ? '…' : '')
+    : t('chat.thoughtAnalyzing');
 
-  const previousStreaming = useRef(streaming);
-  const previousScrollTop = useRef(0);
+  // Preserve the inner viewport on completion. Removing its height limit
+  // would expand a long trace into the transcript and discard its scroll offset.
+  const wasStreaming = useRef(streaming);
+  useLayoutEffect(() => {
+    if (streaming) wasStreaming.current = true;
+  }, [streaming]);
   const contentRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
+  const previousScrollTop = useRef(0);
   useLayoutEffect(() => {
     const viewport = contentRef.current;
-    const followContent = streaming || previousStreaming.current;
-    previousStreaming.current = streaming;
-    if (followContent && expanded && followRef.current && viewport) {
+    if (wasStreaming.current && expanded && followRef.current && viewport) {
       viewport.scrollTop = viewport.scrollHeight;
       previousScrollTop.current = viewport.scrollTop;
     }
   }, [content, expanded, streaming]);
 
+  if (!streaming && !previewContent) return null;
+
   return (
     <article
       className={`thought-timeline-card${streaming ? ' is-streaming' : ''}`}
       data-timeline-anchor-id={item.id}
+      data-live-origin={streaming || wasStreaming.current || undefined}
       aria-busy={streaming}
       tabIndex={-1}
     >
@@ -103,8 +114,14 @@ export function ThoughtTimelineCard({
           aria-expanded={expanded}
           aria-controls={contentId}
           onClick={onToggle}
+          onKeyDown={(event) => {
+            if (streaming && expanded && event.key === 'Escape') {
+              event.stopPropagation();
+              onToggle();
+            }
+          }}
         >
-          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+          {streaming && (expanded ? <ChevronDownIcon /> : <ChevronRightIcon />)}
           <span id={labelId} className="thought-timeline-title">
             {t('chat.thought')}
           </span>
@@ -115,37 +132,48 @@ export function ThoughtTimelineCard({
               <i />
             </span>
           ) : null}
-          {!expanded && content ? (
-            <span className="thought-timeline-preview">{content}</span>
+          {!expanded && streaming ? (
+            <span className="thought-timeline-preview">{preview}</span>
           ) : null}
           {duration ? (
             <span className="thought-timeline-duration">{duration}</span>
           ) : null}
+          {!streaming && (
+            <span className="thought-history-chevron">
+              {expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+            </span>
+          )}
         </button>
         <div
           id={contentId}
-          ref={contentRef}
-          onWheel={(event) => {
-            if (event.deltaY < 0 && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) {
-              followRef.current = false;
-            }
-          }}
-          onScroll={(event) => {
-            const viewport = event.currentTarget;
-            if (viewport.scrollTop < previousScrollTop.current) followRef.current = false;
-            else if (viewport.scrollTop > previousScrollTop.current) {
-              followRef.current = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 24;
-            }
-            previousScrollTop.current = viewport.scrollTop;
-          }}
-          role="region"
-          aria-labelledby={labelId}
-          className="thought-timeline-content"
-          hidden={!expanded}
+          className="thought-timeline-disclosure"
+          aria-hidden={!expanded}
+          data-expanded={expanded}
+          hidden={!expanded && !streaming}
         >
-          {/* Web parity: reasoning content renders as plain pre-wrap text, not
-              italic markdown (ThinkingBlock text-xs whitespace-pre-wrap). */}
-          <div className="thought-content">{content}</div>
+          <div
+            ref={contentRef}
+            onWheel={(event) => {
+              if (event.deltaY < 0 && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) {
+                followRef.current = false;
+              }
+            }}
+            onScroll={(event) => {
+              const viewport = event.currentTarget;
+              if (viewport.scrollTop < previousScrollTop.current) followRef.current = false;
+              else if (viewport.scrollTop > previousScrollTop.current) {
+                followRef.current = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 24;
+              }
+              previousScrollTop.current = viewport.scrollTop;
+            }}
+            role="region"
+            aria-labelledby={labelId}
+            className="thought-timeline-content"
+          >
+            {/* Web parity: reasoning content renders as plain pre-wrap text, not
+                italic markdown (ThinkingBlock text-xs whitespace-pre-wrap). */}
+            <div className="thought-content">{content}</div>
+          </div>
         </div>
       </div>
     </article>

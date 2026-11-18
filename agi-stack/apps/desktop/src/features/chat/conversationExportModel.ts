@@ -58,6 +58,10 @@ function isSupportedExportEventType(type: string): type is ConversationExportEve
   return SUPPORTED_EXPORT_EVENT_TYPES.has(type as ConversationExportEventType);
 }
 
+export function isConversationExportItem(item: AgentTimelineItem): boolean {
+  return isSupportedExportEventType(item.type);
+}
+
 export function createConversationExportSnapshot({
   conversationId,
   title,
@@ -84,16 +88,6 @@ export function createConversationExportSnapshot({
         },
       ];
     }),
-  };
-}
-
-export function cloneConversationExportSnapshot(
-  snapshot: ConversationExportSnapshot,
-): ConversationExportSnapshot {
-  return {
-    conversationId: snapshot.conversationId,
-    title: snapshot.title,
-    events: snapshot.events.map((event) => ({ ...event })),
   };
 }
 

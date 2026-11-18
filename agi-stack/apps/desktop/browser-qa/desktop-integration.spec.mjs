@@ -160,3 +160,55 @@ test("artifact preview changes format without an error state", async ({
     ).toHaveCount(0);
   }
 });
+
+test("conversation history aligns structured rows with the assistant paragraph", async ({ page }) => {
+  await page.goto("/qa/session-conversation.html");
+  const timeline = page.locator(".agent-timeline").first();
+  const group = timeline.locator(":scope > .timeline-tool-group").first();
+  for (const width of [1440, 480]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const open of [false, true]) {
+      if ((await group.evaluate(el => el.open)) !== open) {
+        await group.locator(":scope > summary").click();
+        await expect(group).toHaveJSProperty("open", open);
+      }
+      const bounds = selector => timeline.locator(selector).first().evaluate(el => {
+        const { left, right } = el.getBoundingClientRect();
+        return { left, right };
+      });
+      const paragraph = await bounds(".agent .transcript-content p");
+      for (const selector of [":scope > .timeline-tool-group", ":scope > .thought-timeline-card",
+        ":scope > .timeline-row:has(.hitl-response-card)"]) {
+        expect(Math.abs((await bounds(selector)).left - paragraph.left), selector).toBeLessThanOrEqual(1);
+      }
+      const bubble = await bounds(".user .session-message-surface");
+      const column = await timeline.boundingBox();
+      expect(column.width).toBeGreaterThan(300);
+      expect(Math.abs(bubble.right - column.x - column.width)).toBeLessThanOrEqual(1);
+      expect(await timeline.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
+test("thought disclosures match historical and streaming web interactions", async ({ page }) => {
+  await page.goto("/qa/thought-timeline-card.html");
+  const cards = page.locator(".thought-timeline-card");
+  await expect(cards).toHaveCount(3);
+  for (const [index, card] of (await cards.all()).entries()) {
+    const toggle = card.getByRole("button");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await toggle.focus();
+    await toggle.press(index === 0 ? "Space" : "Escape");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(card.getByRole("region")).toHaveCount(0);
+    const preview = card.locator(".thought-timeline-preview");
+    if (index === 0) {
+      await expect(preview).toHaveCount(0);
+    } else {
+      await expect(preview).toHaveText(index === 1 ? /DESKTOP_THOUGHT_STREAMING_QA/ : /\S/);
+    }
+    await toggle.press("Enter");
+    await expect(card.getByRole("region")).toBeVisible();
+    await expect(preview).toHaveCount(0);
+  }
+});

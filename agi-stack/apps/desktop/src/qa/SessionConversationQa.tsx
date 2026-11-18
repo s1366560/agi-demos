@@ -158,6 +158,16 @@ const conversationItems: AgentTimelineItem[] = [
     timestamp: nowMs - 25.5 * HOUR + 680,
   }),
   item({
+    id: 'permission-verify',
+    type: 'permission_asked',
+    requestId: 'permission-verify',
+    question: 'Allow verification?',
+    action: 'execute',
+    resource: 'terminal',
+    riskLevel: 'medium',
+    eventTimeUs: (nowMs - 25.45 * HOUR) * 1000,
+  }),
+  item({
     id: 'agent-1',
     type: 'assistant_message',
     role: 'assistant',
@@ -972,10 +982,10 @@ function TimelineFixture({
 
 function SessionConversationQa() {
   return (
-    <div className="session-workspace-thread" style={{ minHeight: '100%' }}>
+    <div className="session-workspace-thread desktop-conversation-surface" style={{ height: '100vh' }}>
       <section
         className="pane-shell chat-shell session-chat-narrative"
-        style={{ maxWidth: 860, margin: '0 auto' }}
+        style={{ width: '100%', gridTemplateRows: 'minmax(0, 1fr)', maxWidth: 860, margin: '0 auto' }}
       >
         <div className="message-scroll">
           <div className="message-stack">

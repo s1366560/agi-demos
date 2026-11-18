@@ -2,6 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn delayed_embedding_renews_and_cancelled_future_marks_only_current_lease_failed() {
+    const LEASE_MS: u64 = 200;
     for cancel in [false, true] {
         let f = Fixture::new().await;
         let endpoint = Endpoint::new().await;
@@ -19,12 +20,12 @@ async fn delayed_embedding_renews_and_cancelled_future_marks_only_current_lease_
         let task = f.run(
             config.clone(),
             IndexRunOptions {
-                lease_ms: 200,
+                lease_ms: LEASE_MS,
                 renew_every_ms: 40,
             },
         );
         endpoint.entered().await;
-        let observed = watch_lease(&f, 300).await;
+        let observed = watch_lease(&f, 300, LEASE_MS).await;
         if cancel {
             task.abort();
             assert!(task.await.unwrap_err().is_cancelled());
@@ -366,7 +367,7 @@ struct LeaseWatch {
     samples: Vec<(i64, Result<i64, String>)>,
 }
 
-async fn watch_lease(fixture: &Fixture, wall_ms: u64) -> LeaseWatch {
+async fn watch_lease(fixture: &Fixture, wall_ms: u64, lease_ms: u64) -> LeaseWatch {
     let started = std::time::Instant::now();
     let mut samples = Vec::new();
     let mut previous: Option<i64> = None;
@@ -375,7 +376,9 @@ async fn watch_lease(fixture: &Fixture, wall_ms: u64) -> LeaseWatch {
         let now = chrono::Utc::now().timestamp_millis();
         let expiry = read_index_expiry(fixture);
         if let (Some(prior), Ok(expiry)) = (previous, expiry.clone()) {
-            if expiry > prior && now < prior {
+            // A later sample can observe an on-time renewal after the old deadline.
+            // An advanced lease expires exactly one lease duration after renewal.
+            if expiry > prior && expiry.abs_diff(prior) < lease_ms {
                 renewed_before_original_deadline = true;
             }
         }

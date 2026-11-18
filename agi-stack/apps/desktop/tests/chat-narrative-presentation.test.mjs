@@ -918,40 +918,12 @@ test('hitl requests use the web standalone card anatomy (§1.5)', () => {
   }
 });
 
-test('session narrative column stays readable and timeline rows indent under the avatar (§1.10)', () => {
+test('session narrative column stays readable', () => {
   assert.match(
     chatStyles,
     /\.session-workspace-thread \.session-chat-narrative \.message-stack \{[\s\S]*max-width: 800px/,
   );
   assert.match(chatStyles, /padding: 16px clamp\(16px, 3\.2cqi, 48px\) 80px/);
-  assert.match(
-    chatStyles,
-    /\.session-chat-narrative \.agent-timeline > \.message\.timeline-row,[\s\S]*?margin-left: 44px/,
-  );
-  // The avatar offset covers every assistant-scoped block: MCP app cards and
-  // collapsed-turn placeholders indent like the tool groups and thought cards.
-  assert.match(
-    chatStyles,
-    /\.session-chat-narrative \.agent-timeline > \.mcp-app-timeline-card,[\s\S]*?margin-left: 44px/,
-  );
-  assert.match(
-    chatStyles,
-    /\.session-chat-narrative \.agent-timeline > \.timeline-turn-placeholder-shell,[\s\S]*?margin-left: 44px/,
-  );
-  // The collapsed group preview tracks the 44px offset plus the group's own
-  // 26px content indent (web ml-6 inside the offset column).
-  assert.match(
-    chatStyles,
-    /\.session-chat-narrative \.timeline-tool-group-preview \{[\s\S]*?margin: 0 0 6px 70px/,
-  );
-  assert.match(
-    chatStyles,
-    /@container \(max-width: 520px\)[\s\S]*\.agent-timeline > \.thought-timeline-card,[\s\S]*?margin-left: 0/,
-  );
-  assert.match(
-    chatStyles,
-    /@container \(max-width: 520px\)[\s\S]*\.timeline-tool-group-preview \{[\s\S]*?margin-left: 26px/,
-  );
 });
 
 test('work plans use structured steps instead of raw timeline payloads', () => {

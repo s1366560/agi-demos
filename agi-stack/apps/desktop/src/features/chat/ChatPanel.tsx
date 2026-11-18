@@ -172,7 +172,7 @@ import {
 } from './chatTimelineModel';
 import { TaskChecklist } from './TaskChecklist';
 import { todoChecklistFromTimeline } from './todoChecklistModel';
-import { createConversationExportSnapshot } from './conversationExportModel';
+import { isConversationExportItem } from './conversationExportModel';
 import {
   conversationComparisonAvailable,
   conversationComparisonScope,
@@ -665,16 +665,8 @@ export const ChatPanel = memo(function ChatPanel({
     },
     [expandTimelineTurn, timelineTurns],
   );
-  const conversationExportSnapshot = useMemo(
-    () =>
-      visibleTimelineState && messageActionConversationId
-        ? createConversationExportSnapshot({
-            conversationId: messageActionConversationId,
-            title: sessionTitle,
-            items: visibleTimelineState.items,
-          })
-        : null,
-    [messageActionConversationId, sessionTitle, visibleTimelineState],
+  const canExportConversation = Boolean(
+    messageActionConversationId && visibleTimelineItems.some(isConversationExportItem),
   );
   const conversationSearchScopeId =
     timelineConversationId || selectedConversationId || '';
@@ -1415,7 +1407,7 @@ export const ChatPanel = memo(function ChatPanel({
           </Button>
         </header>
       ) : null}
-      {comparisonAvailable || conversationExportSnapshot?.events.length ? (
+      {comparisonAvailable || canExportConversation ? (
         <ConversationToolbarItem>
         <div className="chat-conversation-actions">
           <ChatOverflowMenu label={t('chat.conversationTools')} icon={<ReaderIcon aria-hidden="true" />}>
@@ -1433,8 +1425,12 @@ export const ChatPanel = memo(function ChatPanel({
               <span>{t('chat.comparison.compare')}</span>
             </button>
           ) : null}
-          {conversationExportSnapshot?.events.length ? (
-            <ConversationExportMenu snapshot={conversationExportSnapshot} />
+          {canExportConversation && messageActionConversationId ? (
+            <ConversationExportMenu
+              conversationId={messageActionConversationId}
+              title={sessionTitle}
+              items={visibleTimelineItems}
+            />
           ) : null}
           </ChatOverflowMenu>
         </div>

@@ -4,7 +4,7 @@ import { ChevronDownIcon, DownloadIcon, FileTextIcon } from '@radix-ui/react-ico
 import { useI18n } from '../../i18n';
 import { saveBlobWithDesktopDialog } from '../runtime/nativeFileBridge';
 import {
-  cloneConversationExportSnapshot,
+  createConversationExportSnapshot,
   conversationExportFilename,
   conversationExportToHtml,
   conversationExportToMarkdown,
@@ -71,10 +71,10 @@ async function downloadConversationPdf(
 }
 
 export function ConversationExportMenu({
-  snapshot,
-}: {
-  snapshot: ConversationExportSnapshot;
-}) {
+  conversationId,
+  title,
+  items,
+}: Parameters<typeof createConversationExportSnapshot>[0]) {
   const { t } = useI18n();
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
@@ -111,7 +111,7 @@ export function ConversationExportMenu({
 
   const exportConversation = async (format: ExportFormat) => {
     if (exportingFormat !== null) return;
-    const invocationSnapshot = cloneConversationExportSnapshot(snapshot);
+    const invocationSnapshot = createConversationExportSnapshot({ conversationId, title, items });
     closeMenu();
     setExportingFormat(format);
     setNotice(null);

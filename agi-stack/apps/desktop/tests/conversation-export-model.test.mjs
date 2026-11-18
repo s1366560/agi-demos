@@ -9,6 +9,7 @@ const {
   conversationExportToHtml,
   conversationExportToMarkdown,
   createConversationExportSnapshot,
+  isConversationExportItem,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/conversationExportModel.js',
 );
@@ -82,6 +83,22 @@ const renderOptions = {
   formatTimestamp: (timestampMs) => new Date(timestampMs).toISOString(),
 };
 
+test('checking export availability leaves tool payloads untouched until export', () => {
+  let serializations = 0;
+  const tool = {
+    type: 'act',
+    toolInput: { toJSON() { serializations++; return { path: 'current' }; } },
+  };
+  assert.equal(isConversationExportItem({ type: 'ack' }), false);
+  assert.equal(isConversationExportItem(tool), true);
+  assert.equal(serializations, 0);
+  const snapshot = createConversationExportSnapshot({
+    conversationId: 'thread', title: 'Export', items: [tool],
+  });
+  assert.equal(serializations, 1);
+  assert.deepEqual(JSON.parse(snapshot.events[0].toolInput), { path: 'current' });
+});
+
 test('conversation export snapshots ordered Web-supported events by value', () => {
   assert.equal(snapshot.conversationId, 'conversation-123');
   assert.equal(snapshot.title, 'Export test');
@@ -129,7 +146,7 @@ test('PDF HTML mirrors Web ordering, escaping, filename, and 300-character trunc
 });
 
 test('Desktop exposes localized, accessible native-dialog Markdown and PDF controls', () => {
-  assert.match(chatPanelSource, /createConversationExportSnapshot/);
+  assert.match(exportMenuSource, /createConversationExportSnapshot/);
   assert.match(chatPanelSource, /<ConversationExportMenu/);
   assert.match(exportMenuSource, /downloadConversationMarkdown/);
   assert.match(exportMenuSource, /downloadConversationPdf/);

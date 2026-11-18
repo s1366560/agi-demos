@@ -397,16 +397,22 @@ test('streaming reasoning uses its dedicated inline card and preserves disclosur
     const card = container.querySelector('.thought-timeline-card');
     assert.ok(card, 'generic runtime notices must not swallow reasoning');
     const region = card.querySelector('[role="region"]');
-    assert.equal(region.hidden, false);
+    const control = card.querySelector('button');
+    const disclosure = document.getElementById(control.getAttribute('aria-controls'));
+    const collapsed = () => Boolean(region.closest('[hidden], [aria-hidden="true"]'));
+    assert.ok(disclosure.contains(region));
+    assert.equal(collapsed(), false);
     assert.equal(region.textContent, thought.content);
     await render({ ...thought, content: 'First reasoning line\nSecond reasoning line' });
     assert.ok(container.querySelector('.thought-timeline-card') === card);
     assert.match(region.textContent, /Second reasoning line/);
-    await act(async () => card.querySelector('button').click());
-    assert.equal(region.hidden, true);
+    await act(async () => control.click());
+    assert.equal(control.getAttribute('aria-expanded'), 'false');
+    assert.equal(collapsed(), true);
     await render({ ...thought, content: 'Completed reasoning', metadata: { streaming: false } });
     assert.ok(container.querySelector('.thought-timeline-card') === card);
-    assert.equal(region.hidden, true, 'completion respects the reader disclosure choice');
+    assert.equal(collapsed(), true, 'completion respects the reader disclosure choice');
+    assert.equal(card.dataset.liveOrigin, 'true', 'completion retains the inner viewport');
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
