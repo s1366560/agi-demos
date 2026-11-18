@@ -1407,6 +1407,7 @@ const commonTranslations: Record<string, string> = {
   'nav.newMemory': 'New Memory',
   'nav.analytics': 'Analytics',
   'nav.tasks': 'Tasks',
+  'nav.cronJobs': 'Scheduled Tasks',
   'nav.agents': 'Agent Management',
   'nav.agentConfiguration': 'Agent Configuration',
   'nav.subagents': 'SubAgents',

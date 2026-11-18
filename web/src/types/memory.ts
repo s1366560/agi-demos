@@ -395,6 +395,32 @@ export interface ProviderTypeDescriptor {
   unavailable_auth_methods: ProviderAuthMethod[];
 }
 
+export interface ProviderAutoConfig {
+  provider_type: ProviderType;
+  api_key_required: boolean;
+  api_key_detected: boolean;
+  api_key_env_var: string | null;
+  api_key_env_vars: string[];
+  recommended: {
+    llm_model: string | null;
+    llm_small_model: string | null;
+    embedding_model: string | null;
+    reranker_model: string | null;
+    base_url: string | null;
+  };
+  plans: {
+    coding: {
+      provider_type: ProviderType;
+      source: string | null;
+      candidate_models: string[];
+      base_url_source: string | null;
+      llm_model: string | null;
+      llm_small_model: string | null;
+      base_url: string | null;
+    } | null;
+  };
+}
+
 export interface DetectedEnvironmentProvider {
   provider_type: string;
   operation_type: ProviderOperationType;
