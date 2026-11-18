@@ -142,22 +142,32 @@ export const useContextStore = create<ContextState>()(
       detailExpanded: false,
 
       handleContextStatus: (data) => {
-        const prevHistory = get().status?.compressionHistory ?? defaultStatus.compressionHistory;
+        const previous = get().status ?? defaultStatus;
+        // Per-call usage updates measure tokens only. Compression and summary
+        // state still describes the context prepared for this conversation.
+        const usageOnly = data.source === 'processor_usage';
         const incomingHistory = data.compression_history_summary as
           | CompressionHistorySummary
           | undefined;
         const hasHistory = incomingHistory !== undefined && incomingHistory.total_compressions > 0;
         const status: ContextStatus = {
-          currentTokens: extractNumber(data.current_tokens, 0),
-          tokenBudget: extractNumber(data.token_budget, 128000),
-          occupancyPct: extractNumber(data.occupancy_pct, 0),
-          compressionLevel: extractString(data.compression_level, 'none'),
-          tokenDistribution:
-            (data.token_distribution as TokenDistribution | undefined) ??
-            defaultStatus.tokenDistribution,
-          compressionHistory: hasHistory ? incomingHistory : prevHistory,
-          fromCache: extractBoolean(data.from_cache, false),
-          messagesInSummary: extractNumber(data.messages_in_summary, 0),
+          currentTokens: extractNumber(data.current_tokens, previous.currentTokens),
+          tokenBudget: extractNumber(data.token_budget, previous.tokenBudget),
+          occupancyPct: extractNumber(data.occupancy_pct, previous.occupancyPct),
+          compressionLevel: usageOnly
+            ? previous.compressionLevel
+            : extractString(data.compression_level, previous.compressionLevel),
+          tokenDistribution: usageOnly
+            ? previous.tokenDistribution
+            : ((data.token_distribution as TokenDistribution | undefined) ??
+              previous.tokenDistribution),
+          compressionHistory: hasHistory ? incomingHistory : previous.compressionHistory,
+          fromCache: usageOnly
+            ? previous.fromCache
+            : extractBoolean(data.from_cache, previous.fromCache),
+          messagesInSummary: usageOnly
+            ? previous.messagesInSummary
+            : extractNumber(data.messages_in_summary, previous.messagesInSummary),
         };
         set({ status });
       },
