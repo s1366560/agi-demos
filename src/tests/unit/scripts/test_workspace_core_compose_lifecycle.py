@@ -181,7 +181,7 @@ def test_workspace_core_make_lifecycle_is_complete_and_non_destructive() -> None
     assert re.search(r"(?m)^dev-all:.*\bdev-prepare\b", makefile)
     assert "$(MAKE) dev-app-start" in dev_all
     restart = _make_recipe(makefile, "restart")
-    assert restart.index("dev-prepare") < restart.index("dev-app-stop")
+    assert "dev-prepare" not in restart
     assert restart.index("dev-app-stop") < restart.index("dev-app-start")
     assert "$(WORKSPACE_CORE_SERVICE)" in _make_recipe(makefile, "dev-stop")
     assert "$(WORKSPACE_CORE_SERVICE)" in _make_recipe(makefile, "status")

@@ -4,8 +4,8 @@ Run from the repository root:
 
 ```bash
 make dev           # Ensure infrastructure, migrate, build changed services, start API/Web
-make restart       # Reconcile infrastructure first, then replace API/Web
-make restart-full  # Stop compute processes first, then run the same startup
+make restart       # Restart only this checkout's managed API/Web processes
+make restart-full  # Stop compute processes first, then run the full startup
 make stop          # Stop this checkout's managed application/compute processes
 make status
 make doctor        # Report managed health and Compose status without changing them
@@ -20,14 +20,10 @@ Ray and WorkspaceCore builds run concurrently; API and Vite then launch concurre
 The one-shot MinIO setup job must finish with exit code zero. It is not treated as
 an always-running health-checked service.
 
-`restart` finishes migration, builtin sync, and image reconciliation before it
-stops API/Web. A failure in that preparation leaves the already running
-application in place. `restart-full` still stops compute processes first.
-
-On 2026-11-16 at 08:56 Asia/Shanghai the API log shows process 94112 shutting
-down, and the Ray containers were created at 08:59. That command's stdout was
-not captured, so those timestamps only bound the phase after the application
-had already been stopped. They do not identify the original error string.
+`restart` only stops and starts the managed API/Web processes. It skips database
+initialization, migrations, builtin synchronization, image reconciliation and
+compute health checks; use `make dev` when infrastructure or dependencies change.
+`restart-full` still stops compute processes first and then performs full startup.
 
 Unchanged image inputs are reused. The input fingerprint covers included file
 names, sizes, and modification times, and is stored as the image label
