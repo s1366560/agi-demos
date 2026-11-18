@@ -602,6 +602,20 @@ test('cloud session projection decodes the persisted current run and exact envir
   );
 });
 
+test('cloud projection preserves canonical approval mode without exposing arbitrary agent config', () => {
+  for (const mode of ['ask', 'auto_edit', 'full_access']) {
+    const payload = validCloudProjection();
+    payload.conversation.agent_config = { approval_mode: mode, private_runtime_data: 'do-not-copy' };
+    const projection = decodeConversationSessionProjection(payload, 'conversation-1');
+    assert.equal(projection?.conversation.agent_config.approval_mode, mode);
+    assert.equal(Object.hasOwn(projection?.conversation.agent_config ?? {}, 'private_runtime_data'), false);
+  }
+  const legacy = validCloudProjection();
+  assert.equal(decodeConversationSessionProjection(legacy, 'conversation-1')?.conversation.agent_config.approval_mode, undefined);
+  legacy.conversation.agent_config = { approval_mode: 'invalid' };
+  assert.equal(decodeConversationSessionProjection(legacy, 'conversation-1'), null);
+});
+
 test('cloud session projection preserves the explicit explore runtime mode', () => {
   const payload = validCloudProjection();
   payload.conversation.current_mode = 'explore';
@@ -676,6 +690,9 @@ test('cloud session projection preserves only the structured permission review c
     Object.hasOwn(projection?.pendingHitl[0]?.permission ?? {}, 'runtime_payload'),
     false,
   );
+  payload.pending_hitl[0].permission.permission = 'write';
+  const declaredWrite = decodeConversationSessionProjection(payload, 'conversation-1');
+  assert.equal(declaredWrite?.pendingHitl[0]?.permission?.permission, 'write');
 });
 
 test('cloud projection exposes only the binding needed to route an execution-step approval', () => {
@@ -1305,4 +1322,35 @@ test('cloud session projection decodes the server-derived execution stage tolera
   );
 
   assert.equal(decodeSignedProjection(validProjection())?.executionStage, null);
+});
+
+
+test('stream starts refresh only their bound session authority, never per-token deltas', () => {
+  const scope = { conversationId: 'conversation-1', workspaceId: null };
+  for (const type of ['text_start', 'thought_start']) {
+    assert.equal(socketEventInvalidatesSessionProjectionForScope({ type, conversation_id: scope.conversationId }, scope), true);
+    assert.equal(socketEventInvalidatesSessionProjectionForScope({ type, conversation_id: 'other' }, scope), false);
+  }
+  for (const type of ['text_delta', 'thought_delta']) {
+    assert.equal(socketEventInvalidatesSessionProjectionForScope({ type, conversation_id: scope.conversationId }, scope), false);
+  }
+});
+
+
+test('projection refresh feedback distinguishes live work from initial recovery without changing authority', async () => {
+  const { sessionProjectionLoadingFeedback } = await import(
+    '/tmp/agistack-desktop-test-dist/src/features/session/sessionProjectionModel.js'
+  );
+  const initial = { hasDisplayedProjection: false, runStatus: null, activityLive: false };
+  assert.equal(sessionProjectionLoadingFeedback(initial).placeholderKey, 'session.authorityLoading');
+  assert.equal(sessionProjectionLoadingFeedback({ ...initial, hasDisplayedProjection: true }).titleKey,
+    'session.authorityRefreshing');
+  for (const runStatus of ['queued', 'running']) {
+    assert.equal(sessionProjectionLoadingFeedback({ ...initial, runStatus }).placeholderKey,
+      'session.composerBlockedByActiveRun');
+  }
+  assert.equal(sessionProjectionLoadingFeedback({ ...initial, activityLive: true }).active, true);
+  for (const runStatus of ['completed', 'cancelled', 'failed']) {
+    assert.equal(sessionProjectionLoadingFeedback({ ...initial, runStatus }).active, false);
+  }
 });

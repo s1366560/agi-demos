@@ -455,7 +455,11 @@ def _validate_and_summarize_hitl_response(
             raise HTTPException(status_code=400, detail=_("Native permission scope changed"))
     _validate_hitl_response_shape(
         hitl_type=stored_hitl_type,
-        response_data=request.response_data,
+        response_data={
+            key: value
+            for key, value in request.response_data.items()
+            if key not in {"auto_approved", "preset"}
+        },
         request_data=request_data,
     )
 
@@ -703,6 +707,19 @@ async def respond_to_hitl(
             tenant_id=tenant_id,
             request_id=request.request_id,
         )
+        from .automatic_permission_response import annotate_automatic_permission_response
+
+        try:
+            request.response_data = await annotate_automatic_permission_response(
+                db,
+                hitl_request=hitl_request,
+                approval_mode=request.approval_mode,
+                response_data=request.response_data,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail=_("Invalid automatic permission approval")
+            ) from exc
         if request.expected_revision is not None:
             return await respond_to_hitl_v2(
                 request=request,

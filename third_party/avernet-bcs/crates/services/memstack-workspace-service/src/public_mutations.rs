@@ -1,7 +1,6 @@
 //! Legacy-compatible public Workspace update and delete orchestration.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::{
     ActorId, ContractVersion, ExpectedRevision, IdempotencyKey, ProjectId, RequestHash, TenantId,
     WorkspaceActor, WorkspaceCommandError, WorkspaceId, WorkspaceMutationAction,
@@ -213,9 +212,9 @@ impl<'a> PublicWorkspaceMutationService<'a> {
             profile.metadata.clone_from(metadata);
         }
 
-        let now = Utc::now();
-        let persisted_at = now.to_rfc3339_opts(SecondsFormat::Micros, false);
-        let response_at = now.to_rfc3339_opts(SecondsFormat::Micros, true);
+        let now = time::OffsetDateTime::now_utc();
+        let persisted_at = crate::timestamps::storage_micros(now);
+        let response_at = crate::timestamps::response_micros(now);
         let response = workspace_response(&profile, Some(response_at.as_str()));
         let event_payload = json!({
             "workspace_id": &profile.workspace_id,
@@ -235,7 +234,7 @@ impl<'a> PublicWorkspaceMutationService<'a> {
                 WorkspaceAutonomyBootstrapStore::new(self.db, self.flavor).ensure_mutation(
                     &profile,
                     input.context.user_id.as_str(),
-                    now.timestamp_millis(),
+                    crate::timestamps::unix_millis(now),
                 ),
             );
         }
@@ -275,7 +274,7 @@ impl<'a> PublicWorkspaceMutationService<'a> {
             )?,
             self.receipt_authority.as_ref(),
         );
-        let persisted_at = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, false);
+        let persisted_at = crate::timestamps::storage_micros(time::OffsetDateTime::now_utc());
         let event_payload = json!({
             "workspace_id": &profile.workspace_id,
             "workspace": workspace_response(&profile, profile.updated_at.as_deref()),

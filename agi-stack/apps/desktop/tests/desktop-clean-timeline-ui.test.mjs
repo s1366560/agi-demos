@@ -38,7 +38,7 @@ const esbuild = createRequire(require.resolve('vite'))('esbuild');
 const compiled = await esbuild.build({
   stdin: {
     contents:
-      "export {AgentTimeline} from './src/features/chat/ChatTimeline'; export {I18nProvider} from './src/i18n'; export {ToastProvider} from './src/features/feedback/ToastCenter';",
+      "export {AgentTimeline} from './src/features/chat/ChatTimeline'; export {CurrentActivityHeadlineBar} from './src/features/chat/CurrentActivityHeadline'; export {I18nProvider} from './src/i18n'; export {ToastProvider} from './src/features/feedback/ToastCenter';",
     resolveDir: new URL('..', import.meta.url).pathname,
     loader: 'ts',
   },
@@ -62,7 +62,7 @@ new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(
   module,
   module.exports,
 );
-const { AgentTimeline, I18nProvider, ToastProvider } = module.exports;
+const { AgentTimeline, CurrentActivityHeadlineBar, I18nProvider, ToastProvider } = module.exports;
 
 function TimelineHarness({ items, running = false }) {
   const [expandedItems, setExpandedItems] = React.useState({});
@@ -84,7 +84,7 @@ function TimelineHarness({ items, running = false }) {
     },
     expandedItems,
     onToggleItem(item) {
-      setExpandedItems((current) => ({ ...current, [item.id]: !current[item.id] }));
+      setExpandedItems((current) => ({ ...current, [item.id]: !(current[item.id] ?? item.type === 'thought') }));
     },
     onLoadEarlier() {},
     onShowEarlier() {},
@@ -160,6 +160,7 @@ for (const status of ['running', 'complete', 'failed']) {
           container.querySelector('.timeline-step.status-failed'),
           'failed step stays visible',
         );
+        assert.match(group.querySelector('.timeline-tool-group-preview').textContent, /read_file/);
         assert.doesNotMatch(container.textContent, /File permission denied/);
         assert.match(container.textContent, /failed|失败|错误/i);
       }
@@ -207,7 +208,7 @@ test('local sending without artifact presence activates only the latest user tur
     assert.match(groups[0].querySelector('summary').textContent, /Execution steps|执行记录/);
     assert.match(groups[1].querySelector('summary').textContent, /Working|正在执行/);
     assert.equal(groups[0].open, false);
-    assert.equal(groups[1].open, true);
+    assert.equal(groups[1].open, false);
     assert.ok(groups[0].querySelector('.timeline-step.status-recorded'));
     assert.ok(groups[1].querySelector('.timeline-step.status-running'));
     await render(false);
@@ -249,4 +250,182 @@ test('local sending shows pre-tool working feedback and terminal completion remo
     await act(async () => root.unmount());
     container.remove();
   }
+});
+
+test('adjacent diagnostic events fold into tool_group and summary shows tool preview', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const items = [
+    { id: 'u-1', type: 'user_message', role: 'user', content: 'Check file', eventTimeUs: 500 },
+    { id: 'ack-1', type: 'tool_selection', content: 'accepted', eventTimeUs: 800, payload: { run_id: 'run-1' } },
+    { ...call, payload: { ...call.payload, run_id: 'run-1' } },
+    { ...result, payload: { ...result.payload, run_id: 'run-1' } },
+    { id: 'ack-2', type: 'tool_progress', content: 'done', eventTimeUs: 2500, payload: { run_id: 'run-1' } },
+  ];
+  try {
+    await act(async () =>
+      root.render(
+        React.createElement(
+          I18nProvider,
+          null,
+          React.createElement(
+            ToastProvider,
+            null,
+            React.createElement(TimelineHarness, { items }),
+          ),
+        ),
+      ),
+    );
+    const groups = container.querySelectorAll('.timeline-tool-group');
+    assert.equal(groups.length, 1);
+    const topLevelDiagnosticLinks = [...container.querySelectorAll('.timeline-diagnostic-link')].filter(
+      (el) => !el.closest('.timeline-tool-group'),
+    );
+    assert.equal(topLevelDiagnosticLinks.length, 0);
+    const preview = groups[0].querySelector('.timeline-tool-group-preview');
+    assert.ok(preview && preview.textContent.includes('read_file'));
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+test('stalled activity headline exposes inline cancel button without duplicate clock', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  let cancelled = 0;
+  const oldMs = Date.now() - 180_000;
+  try {
+    await act(async () =>
+      root.render(
+        React.createElement(
+          I18nProvider,
+          null,
+          React.createElement(CurrentActivityHeadlineBar, {
+            activity: {
+              kind: 'subagent',
+              label: 'builtin:sisyphus',
+              titleKey: null,
+              detail: 'echo',
+              startedAtMs: oldMs,
+              lastActivityAtMs: oldMs,
+              activeSubagentCount: 1,
+              entries: [],
+            },
+            sessionKey: 'session-1',
+            presence: 'live',
+            onStopResponse: () => {
+              cancelled += 1;
+            },
+          }),
+        ),
+      ),
+    );
+    assert.ok(container.querySelector('.current-activity-headline-row .current-activity-stalled'));
+    assert.equal(container.querySelector('.current-activity-headline').children.length, 1,
+      'the warning stays in the existing row rather than adding footer height');
+    assert.equal(container.querySelector('.current-activity-stalled-clock'), null);
+    const cancelBtn = container.querySelector('.current-activity-stalled-cancel');
+    assert.ok(cancelBtn);
+    await act(async () => cancelBtn.click());
+    assert.equal(cancelled, 1);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+test('diagnostics from another run remain independently inspectable', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(React.createElement(I18nProvider, null,
+      React.createElement(ToastProvider, null, React.createElement(TimelineHarness, { items: [
+        { id: 'foreign-ack', type: 'tool_progress', content: 'accepted', eventTimeUs: 800, payload: { run_id: 'other-run' } },
+        { ...call, payload: { run_id: 'current-run' } },
+        { ...result, payload: { run_id: 'current-run' } },
+      ] })),
+    )));
+    const group = container.querySelector('.timeline-tool-group');
+    assert.ok(group);
+    assert.ok(!JSON.parse(group.dataset.timelineAnchorMembers).includes('foreign-ack'));
+    assert.ok([...container.querySelectorAll('.timeline-diagnostic-link')].some(
+      (node) => !node.closest('.timeline-tool-group') &&
+        JSON.parse(node.dataset.timelineAnchorMembers).includes('foreign-ack'),
+    ));
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+test('recorded incomplete steps use static recorded presentation without running state', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(React.createElement(I18nProvider, null,
+      React.createElement(ToastProvider, null, React.createElement(TimelineHarness, { items: [call] })),
+    )));
+    const group = container.querySelector('.timeline-tool-group');
+    assert.ok(group.classList.contains('status-recorded'));
+    await act(async () => group.querySelector('summary').click());
+    assert.ok(container.querySelector('.timeline-step.status-recorded'));
+    assert.equal(container.querySelector('.timeline-step.status-running'), null);
+    assert.match(container.textContent, /Recorded/);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+
+test('streaming reasoning uses its dedicated inline card and preserves disclosure on updates', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const thought = { id: 'reasoning', type: 'thought', content: 'First reasoning line',
+    metadata: { streaming: true }, eventTimeUs: 1000, eventCounter: 0 };
+  const render = async (item) => act(async () => root.render(React.createElement(
+    I18nProvider, null, React.createElement(ToastProvider, null,
+      React.createElement(TimelineHarness, { items: [item], running: true })))));
+  try {
+    await render(thought);
+    const card = container.querySelector('.thought-timeline-card');
+    assert.ok(card, 'generic runtime notices must not swallow reasoning');
+    const region = card.querySelector('[role="region"]');
+    assert.equal(region.hidden, false);
+    assert.equal(region.textContent, thought.content);
+    await render({ ...thought, content: 'First reasoning line\nSecond reasoning line' });
+    assert.ok(container.querySelector('.thought-timeline-card') === card);
+    assert.match(region.textContent, /Second reasoning line/);
+    await act(async () => card.querySelector('button').click());
+    assert.equal(region.hidden, true);
+    await render({ ...thought, content: 'Completed reasoning', metadata: { streaming: false } });
+    assert.ok(container.querySelector('.thought-timeline-card') === card);
+    assert.equal(region.hidden, true, 'completion respects the reader disclosure choice');
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+test('live tool completion retains a stable collapsed disclosure and pairs across reasoning', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async (items) => act(async () => root.render(React.createElement(
+    I18nProvider, null, React.createElement(ToastProvider, null,
+      React.createElement(TimelineHarness, { items, running: true })))));
+  try {
+    await render([call]);
+    const group = container.querySelector('.timeline-tool-group');
+    assert.equal(group.open, false);
+    await render([call, { id: 'reasoning', type: 'thought', content: 'Tool is running' }, result]);
+    assert.ok(container.querySelector('.timeline-tool-group') === group);
+    assert.equal(group.open, false, 'completion must not change disclosure height');
+    assert.equal(container.querySelectorAll('.timeline-step').length, 1);
+    assert.equal(container.querySelectorAll('.timeline-step.status-complete').length, 1);
+    assert.equal(container.querySelectorAll('.thought-timeline-card').length, 1);
+  } finally { await act(async () => root.unmount()); container.remove(); }
 });

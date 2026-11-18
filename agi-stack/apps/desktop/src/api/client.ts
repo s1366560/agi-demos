@@ -1201,6 +1201,7 @@ export class DesktopApiClient {
   async updateAgentConversationConfig(
     conversationId: string,
     payload: {
+      approval_mode?: 'ask' | 'auto_edit' | 'full_access';
       execution_selection?: Partial<NonNullable<AgentConversation['execution_selection']>>;
       selected_agent_id?: string | null;
       llm_model_override?: string | null;
@@ -1563,6 +1564,7 @@ export class DesktopApiClient {
     return this.request<HitlResponseOutcome>('/api/v1/agent/hitl/respond', {
       method: 'POST',
       body: {
+        ...(submission.approvalMode ? { approval_mode: submission.approvalMode } : {}),
         request_id: submission.requestId,
         hitl_type: submission.hitlType,
         response_data: submission.responseData,

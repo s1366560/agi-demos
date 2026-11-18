@@ -1,7 +1,6 @@
 //! Legacy-compatible Workspace chat orchestration over the BCS message authority.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{DateTime, SecondsFormat, Utc};
 use memstack_workspace_store::{
     ResolvedWorkspaceMentions, WorkspaceMessageRecord, WorkspaceMessageScope,
     WorkspaceMessageStore, WorkspaceMessageStoreError, WorkspaceMessageWrite,
@@ -295,7 +294,7 @@ fn message_write(
     let session_id = deterministic_id("session", scope, "workspace-chat");
     let correlation_id = deterministic_id("correlation", scope, &idempotency_key);
     let outbox_id = deterministic_id("outbox", scope, &idempotency_key);
-    let created_at_ms = Utc::now().timestamp_millis();
+    let created_at_ms = crate::timestamps::unix_millis(time::OffsetDateTime::now_utc());
     let created_at = format_timestamp(created_at_ms)?;
     let metadata = json!({"sender_name": sender_name});
     let message = PublicWorkspaceMessage {
@@ -385,8 +384,9 @@ pub(crate) fn public_message(
 }
 
 fn format_timestamp(timestamp_ms: i64) -> Result<String, PublicWorkspaceMessageError> {
-    DateTime::<Utc>::from_timestamp_millis(timestamp_ms)
-        .map(|timestamp| timestamp.to_rfc3339_opts(SecondsFormat::Millis, true))
+    time::OffsetDateTime::from_unix_timestamp_nanos(i128::from(timestamp_ms) * 1_000_000)
+        .ok()
+        .map(|timestamp| crate::timestamps::response_millis(timestamp))
         .ok_or(PublicWorkspaceMessageError::InvalidTimestamp(timestamp_ms))
 }
 

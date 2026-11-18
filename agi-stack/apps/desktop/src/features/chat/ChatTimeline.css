@@ -2122,51 +2122,36 @@
   }
 }
 
-/* Web conversation parity 2026-12: timeline items enter with the web
-   animate-fade-in-up recipe (0.25s ease-out, translateY 8px), gated behind
-   no-preference so prefers-reduced-motion disables the motion entirely. */
-@keyframes desktop-timeline-fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .session-chat-narrative .agent-timeline > .message,
-  .session-chat-narrative .agent-timeline > .thought-timeline-card,
-  .session-chat-narrative .agent-timeline > .work-plan-timeline-card,
-  .session-chat-narrative .agent-timeline > .artifact-timeline-card,
-  .session-chat-narrative .agent-timeline > .skill-execution-card,
-  .session-chat-narrative .agent-timeline > .memory-recall-card,
-  .session-chat-narrative .agent-timeline > .memory-captured-card,
-  .session-chat-narrative .agent-timeline > .timeline-subagent-group,
-  .session-chat-narrative .agent-timeline > .timeline-tool-group,
-  .session-chat-narrative .agent-timeline > .timeline-debug-group,
-  .session-chat-narrative .message-stack > .message {
-    animation: desktop-timeline-fade-in-up 250ms var(--ease-out);
-  }
+/* Streaming rows update in place. Entrance translations would move the
+   follow-to-latest viewport whenever a thought or tool group is hydrated. */
+.session-chat-narrative .agent-timeline > * {
+  animation: none;
 }
 
 /* Readable execution steps share the transcript rhythm. */
 .timeline-steps.timeline-tool-group {
   border: 0;
   background: transparent;
-  margin: 12px 0;
+  margin: 4px 0;
   border-radius: 0;
 }
 .timeline-steps > .timeline-tool-group-summary {
   justify-content: flex-start;
   gap: 8px;
-  padding: 8px 0;
-  min-height: 36px;
+  min-width: 0;
+  padding: 4px 0;
+  min-height: 32px;
   color: var(--gray-11);
   font-size: 13px;
   font-weight: 400;
+}
+.timeline-tool-group-preview {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gray-10);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .timeline-steps > .timeline-tool-group-summary > .timeline-tool-group-chevron {
   margin: 0;
@@ -2174,7 +2159,7 @@
   width: 14px;
   height: 14px;
 }
-.timeline-steps .timeline-tool-group-items { padding: 0 0 0 8px; gap: 2px; }
+.timeline-steps .timeline-tool-group-items { padding: 0; gap: 2px; }
 .timeline-step { min-width: 0; margin: 0; }
 .timeline-step-button {
   width: 100%; display: flex; align-items: center; gap: 10px;
@@ -2195,7 +2180,7 @@
 .timeline-step.status-failed, .timeline-notice.is-error { color: var(--red-11); }
 .timeline-step.status-running .timeline-step-icon { animation: timeline-step-spin 1.2s linear infinite; }
 .timeline-notice {
-  display: flex; gap: 10px; align-items: baseline; padding: 12px 0;
+  display: flex; gap: 10px; align-items: baseline; padding: 6px 0;
   font-size: 13px; color: var(--gray-11); overflow-wrap: anywhere;
 }
 .timeline-notice > svg { align-self: center; flex: 0 0 16px; }

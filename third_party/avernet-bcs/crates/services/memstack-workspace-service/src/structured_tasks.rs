@@ -1,7 +1,6 @@
 //! Internal structured Workspace Task authority for Agent Runtime.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_store::{
     WorkspaceTaskAuxiliaryWrite, WorkspaceTaskDispatchWrite, WorkspaceTaskDomainWrite,
     WorkspaceTaskMutation, WorkspaceTaskMutationOutcome, WorkspaceTaskRecord, WorkspaceTaskScope,
@@ -595,7 +594,7 @@ fn task_dispatch_write(
         )
         .to_string(),
         delivery_request_id: Uuid::new_v5(&STRUCTURED_TASK_NAMESPACE, seed.as_bytes()).to_string(),
-        created_at_ms: Utc::now().timestamp_millis(),
+        created_at_ms: crate::timestamps::unix_millis(time::OffsetDateTime::now_utc()),
     })
 }
 
@@ -777,7 +776,7 @@ fn deterministic_task_id(context: &StructuredTaskContext) -> String {
 }
 
 fn now_string() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true)
+    crate::timestamps::response_micros(time::OffsetDateTime::now_utc())
 }
 
 #[cfg(test)]

@@ -146,6 +146,7 @@ export function mergeLocalRuntimeStatus(
 export type HitlType = 'clarification' | 'decision' | 'env_var' | 'permission' | 'a2ui_action';
 
 export type HitlResponseSubmission = {
+  approvalMode?: 'auto_edit' | 'full_access';
   requestId: string;
   hitlType: HitlType;
   responseData: Record<string, unknown>;
@@ -1879,6 +1880,7 @@ export type DecisionContext = {
 };
 
 export type PermissionRequestContext = {
+  permission?: string | null;
   tool_name: string;
   action: string;
   risk_level: DecisionRiskLevel;

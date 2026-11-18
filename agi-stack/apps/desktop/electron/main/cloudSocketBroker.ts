@@ -80,6 +80,7 @@ export class DesktopCloudSocketBroker {
   readonly #registry: CloudSocketExecutionRegistry;
   readonly #computerUse?: ComputerUseCloudDeviceHooks;
   readonly #connections = new Map<string, ActiveBrokerSocket>();
+  readonly #opening = new Map<string, { ownerId: number; cancelled: boolean }>();
 
   constructor(dependencies: DesktopCloudSocketBrokerDependencies) {
     this.#authorize = dependencies.authorize;
@@ -98,7 +99,22 @@ export class DesktopCloudSocketBroker {
 
   async open(ownerId: number, input: unknown): Promise<void> {
     const request = parseOpenInput(input);
-    const policy = await this.#authorize(request.request);
+    if (this.#opening.has(request.socketId) || this.#connections.has(request.socketId)) {
+      throw new Error('cloud socket id is already active');
+    }
+    const opening = { ownerId, cancelled: false };
+    this.#opening.set(request.socketId, opening);
+    let policy: AuthorizedCloudSocket;
+    try {
+      policy = await this.#authorize(request.request);
+    } finally {
+      if (this.#opening.get(request.socketId) === opening) {
+        this.#opening.delete(request.socketId);
+      }
+    }
+    // A renderer may close or navigate while vault/scope authorization is pending.
+    // Retired attempts cannot create a transport after their owner has gone away.
+    if (opening.cancelled) return;
     let connection: ActiveBrokerSocket | null = null;
     let pendingDirective: CloudSocketCloseDirective | null = null;
     const lease = this.#registry.begin(ownerId, request.socketId, policy, (directive) => {
@@ -194,17 +210,38 @@ export class DesktopCloudSocketBroker {
 
   async close(ownerId: number, input: unknown): Promise<void> {
     const request = parseCloseInput(input);
+    const opening = this.#opening.get(request.socketId);
+    if (opening?.ownerId === ownerId) {
+      this.#retireOpening(request.socketId, opening);
+      return;
+    }
     if (!this.#registry.close(ownerId, request.socketId, request.code, request.reason)) {
       throw new Error('cloud socket is unavailable');
     }
   }
 
   cancelOwner(ownerId: number): number {
-    return this.#registry.cancelOwner(ownerId);
+    let count = 0;
+    for (const [socketId, opening] of this.#opening) {
+      if (opening.ownerId === ownerId) {
+        this.#retireOpening(socketId, opening);
+        count += 1;
+      }
+    }
+    return count + this.#registry.cancelOwner(ownerId);
   }
 
   cancelAll(): number {
-    return this.#registry.cancelAll();
+    const count = this.#opening.size;
+    for (const [socketId, opening] of this.#opening) this.#retireOpening(socketId, opening);
+    return count + this.#registry.cancelAll();
+  }
+
+  #retireOpening(socketId: string, opening: { ownerId: number; cancelled: boolean }): void {
+    const ownerId = opening.ownerId;
+    opening.cancelled = true;
+    this.#opening.delete(socketId);
+    this.#safeEmit(ownerId, { socketId, type: 'close', code: 1001, reason: '', wasClean: false });
   }
 
   #owned(ownerId: number, socketId: string): ActiveBrokerSocket | null {

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:b532fc58409c02c9214b263b6f9188bf78b3ef18a78803731ef9a0e0f5',
-  'd40396","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f',
+  '10cbab","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1126,7 +1126,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   's.v2.conversation_collection_services:_apply_conversation_collection_v2","module_ref',
   '":"builtin://memstack/application/conversation-collection","plugin_id":"memstack-run',
   'time-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha2',
-  '56:21d55e605f0c12c9ff2c6efa962513be398cafdea976f1d9b0ec9f27f6a3aa07","artifact_sourc',
+  '56:de8f24143b98b00013d5f84c6fc1276f613c6d5b450d9da66b7f8eb94d453d4c","artifact_sourc',
   'e":"repo+python://src/infrastructure/plugins/v2/conversation_config_services.py","co',
   'ntract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","',
   'additionalProperties":false,"properties":{"strategy":{"const":"operation-scoped-prov',
@@ -1836,8 +1836,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '140095e32f8bd3da","entrypoint":"applyDesktopBrowserIntegrationAuthorityV2","module_r',
   'ef":"builtin://memstack/desktop/browser-integration-authority","plugin_id":"memstack',
   '-renderer-target-hosts","plugin_version":"2.0.0","targets":["desktop-renderer"]},{"a',
-  'rtifact_digest":"sha256:cb3ba952e26b03f7263cd862aef4d27f2d772cc836850ea7f4d5547d0b14',
-  'ecf3","artifact_source":"repo+typescript://agi-stack/apps/desktop/src/plugins/deskto',
+  'rtifact_digest":"sha256:8fd6f70a72dec0d5853980edb05bcca886443aa5514460449bffbb459c40',
+  'ce09","artifact_source":"repo+typescript://agi-stack/apps/desktop/src/plugins/deskto',
   'pConversationConfigAuthorityModuleV2.ts","contract":{"config_schema":{"$schema":"htt',
   'ps://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties"',
   ':{"strategy":{"const":"desktop-api-client","type":"string"}},"required":["strategy"]',
@@ -1880,8 +1880,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'dfef941670937938d11b0040d014e50a58805bda9f1301efa5dbe","entrypoint":"applyDesktopDea',
   'dLetterQueueAuthorityV2","module_ref":"builtin://memstack/desktop/dead-letter-queue-',
   'authority","plugin_id":"memstack-renderer-target-hosts","plugin_version":"2.0.0","ta',
-  'rgets":["desktop-renderer"]},{"artifact_digest":"sha256:54320982bebd86091d7cc1745178',
-  '47379441a5627a5327ebf18ec0e429a6d49d","artifact_source":"repo+typescript://agi-stack',
+  'rgets":["desktop-renderer"]},{"artifact_digest":"sha256:47a678396fe9755c1428168bdd2f',
+  '8319d7f310464e797f24d10cfc7acdfb2e3b","artifact_source":"repo+typescript://agi-stack',
   '/apps/desktop/src/plugins/desktopHitlResponseAuthorityModuleV2.ts","contract":{"conf',
   'ig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProp',
   'erties":false,"properties":{"strategy":{"const":"desktop-api-client","type":"string"',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:b532fc58409c02c9214b263b6f9188bf78b3ef18a78803731ef9a0e0f5d40396' as const;
+  'sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f10cbab' as const;

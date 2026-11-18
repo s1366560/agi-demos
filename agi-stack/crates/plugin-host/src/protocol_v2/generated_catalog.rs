@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:b532fc58409c02c9214b263b6f9188bf78b3ef18a78803731ef9a0e0f5d403",
-    "96\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f10cb",
+    "ab\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1055,8 +1055,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "3ffcee49751b2b4aabf2efa6cb9859714b358b6df2d7b87\",\"entrypoint\":\"src.infrastructure.plugin",
     "s.v2.conversation_collection_services:_apply_conversation_collection_v2\",\"module_ref\":\"b",
     "uiltin://memstack/application/conversation-collection\",\"plugin_id\":\"memstack-runtime-ker",
-    "nel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:21d55e605",
-    "f0c12c9ff2c6efa962513be398cafdea976f1d9b0ec9f27f6a3aa07\",\"artifact_source\":\"repo+python:",
+    "nel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:de8f24143",
+    "b98b00013d5f84c6fc1276f613c6d5b450d9da66b7f8eb94d453d4c\",\"artifact_source\":\"repo+python:",
     "//src/infrastructure/plugins/v2/conversation_config_services.py\",\"contract\":{\"config_sch",
     "ema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":fa",
     "lse,\"properties\":{\"strategy\":{\"const\":\"operation-scoped-provider\",\"type\":\"string\"}},\"req",
@@ -1733,8 +1733,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "digest\":\"sha256:3c66912a6af655866b71bd95b460b8dc9150b22d084e3d9d140095e32f8bd3da\",\"entry",
     "point\":\"applyDesktopBrowserIntegrationAuthorityV2\",\"module_ref\":\"builtin://memstack/desk",
     "top/browser-integration-authority\",\"plugin_id\":\"memstack-renderer-target-hosts\",\"plugin_",
-    "version\":\"2.0.0\",\"targets\":[\"desktop-renderer\"]},{\"artifact_digest\":\"sha256:cb3ba952e26b",
-    "03f7263cd862aef4d27f2d772cc836850ea7f4d5547d0b14ecf3\",\"artifact_source\":\"repo+typescript",
+    "version\":\"2.0.0\",\"targets\":[\"desktop-renderer\"]},{\"artifact_digest\":\"sha256:8fd6f70a72de",
+    "c0d5853980edb05bcca886443aa5514460449bffbb459c40ce09\",\"artifact_source\":\"repo+typescript",
     "://agi-stack/apps/desktop/src/plugins/desktopConversationConfigAuthorityModuleV2.ts\",\"co",
     "ntract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"addi",
     "tionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"desktop-api-client\",\"type\":\"s",
@@ -1776,7 +1776,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "d014e50a58805bda9f1301efa5dbe\",\"entrypoint\":\"applyDesktopDeadLetterQueueAuthorityV2\",\"mo",
     "dule_ref\":\"builtin://memstack/desktop/dead-letter-queue-authority\",\"plugin_id\":\"memstack",
     "-renderer-target-hosts\",\"plugin_version\":\"2.0.0\",\"targets\":[\"desktop-renderer\"]},{\"artif",
-    "act_digest\":\"sha256:54320982bebd86091d7cc174517847379441a5627a5327ebf18ec0e429a6d49d\",\"a",
+    "act_digest\":\"sha256:47a678396fe9755c1428168bdd2f8319d7f310464e797f24d10cfc7acdfb2e3b\",\"a",
     "rtifact_source\":\"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopHitlRespons",
     "eAuthorityModuleV2.ts\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/d",
     "raft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"des",
@@ -4785,4 +4785,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "rsion\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:b532fc58409c02c9214b263b6f9188bf78b3ef18a78803731ef9a0e0f5d40396";
+    "sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f10cbab";

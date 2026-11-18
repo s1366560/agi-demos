@@ -1,7 +1,6 @@
 //! Legacy-compatible public Workspace Agent mutation orchestration.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::{
     AgentId, AgentRegistryAgent, AgentRegistryLookup, AgentRegistryPort, AgentRegistryPortError,
     WorkspaceAgentBindingId, WorkspaceCommandError, WorkspaceMemberRole, WorkspaceMutationAction,
@@ -155,9 +154,9 @@ impl<'a> PublicWorkspaceAgentMutationService<'a> {
             .read_by_agent_id(&scope, &input.agent_id)
             .await?;
         let is_update = existing.is_some();
-        let now = Utc::now();
-        let persisted_at = now.to_rfc3339_opts(SecondsFormat::Micros, false);
-        let response_at = now.to_rfc3339_opts(SecondsFormat::Micros, true);
+        let now = time::OffsetDateTime::now_utc();
+        let persisted_at = crate::timestamps::storage_micros(now);
+        let response_at = crate::timestamps::response_micros(now);
         let binding = bind_snapshot(input, existing.as_ref(), &persisted_at)?;
         let bot_name = bind_bot_name(&binding, &registry_agent);
         let bot_info = bot_info(&binding);
@@ -237,9 +236,9 @@ impl<'a> PublicWorkspaceAgentMutationService<'a> {
             .await?
             .ok_or(PublicWorkspaceMutationError::NotFound)?;
         apply_update(&mut binding, input)?;
-        let now = Utc::now();
-        let persisted_at = now.to_rfc3339_opts(SecondsFormat::Micros, false);
-        let response_at = now.to_rfc3339_opts(SecondsFormat::Micros, true);
+        let now = time::OffsetDateTime::now_utc();
+        let persisted_at = crate::timestamps::storage_micros(now);
+        let response_at = crate::timestamps::response_micros(now);
         binding.updated_at = Some(persisted_at.clone());
         let bot_name = binding
             .display_name

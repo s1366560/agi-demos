@@ -48,7 +48,19 @@ export type DesktopConversationConfigOperationInputV2 = Readonly<{
   }> | null;
 }>;
 
+export type DesktopConversationApprovalModeV2 =
+  | "ask"
+  | "auto_edit"
+  | "full_access";
+
 export interface DesktopConversationConfigAuthorityV2 {
+  readonly readApprovalMode: (
+    identity: DesktopConversationConfigIdentityV2,
+  ) => Promise<AgentConversation>;
+  readonly updateApprovalMode: (
+    identity: DesktopConversationConfigIdentityV2,
+    approvalMode: DesktopConversationApprovalModeV2,
+  ) => Promise<AgentConversation>;
   readonly readExecutionSelection: (
     identity: DesktopConversationConfigIdentityV2,
   ) => Promise<AgentConversation>;
@@ -69,6 +81,15 @@ export interface DesktopConversationConfigAuthorityServiceV2 {
 }
 
 export interface DesktopConversationConfigOperationsV2 {
+  readonly readApprovalMode: (input: {
+    config: DesktopRuntimeConfig;
+    conversation: AgentConversation;
+  }) => Promise<AgentConversation>;
+  readonly updateApprovalMode: (input: {
+    config: DesktopRuntimeConfig;
+    conversation: AgentConversation;
+    approvalMode: DesktopConversationApprovalModeV2;
+  }) => Promise<AgentConversation>;
   readonly readExecutionSelection: (input: {
     config: DesktopRuntimeConfig;
     conversation: AgentConversation;
@@ -142,6 +163,29 @@ export function createDesktopConversationConfigOperationsV2(
   resolveActions: () => DesktopRendererGenerationActionsV2 | null,
 ): DesktopConversationConfigOperationsV2 {
   return Object.freeze({
+    readApprovalMode(input: {
+      config: DesktopRuntimeConfig;
+      conversation: AgentConversation;
+    }) {
+      return withDesktopConversationConfigAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        { ...input, llmModelOverride: null },
+        (authority, prepared) => authority.readApprovalMode(prepared.identity),
+      );
+    },
+    updateApprovalMode(input: {
+      config: DesktopRuntimeConfig;
+      conversation: AgentConversation;
+      approvalMode: DesktopConversationApprovalModeV2;
+    }) {
+      const approvalMode = requireApprovalModeV2(input.approvalMode);
+      return withDesktopConversationConfigAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        { ...input, llmModelOverride: null },
+        (authority, prepared) =>
+          authority.updateApprovalMode(prepared.identity, approvalMode),
+      );
+    },
     readExecutionSelection(input: {
       config: DesktopRuntimeConfig;
       conversation: AgentConversation;
@@ -258,6 +302,42 @@ function createDesktopConversationConfigAuthorityV2(
   const operationConfig = cloneDesktopRuntimeConfigV2(config);
   const transport = new DesktopApiClient(operationConfig);
   return Object.freeze({
+    async readApprovalMode(identity: DesktopConversationConfigIdentityV2) {
+      const expected = cloneConversationIdentityV2(identity);
+      assertConversationConfigScopeV2(operationConfig, expected);
+      const session = await transport.getConversationSession(expected.id, {
+        tenantId: expected.tenant_id,
+        projectId: expected.project_id,
+        workspaceId: expected.workspace_id,
+      });
+      if (!isRecordV2(session)) throw invalidConversationConfigInputV2();
+      const conversation = validateConversationConfigResponseV2(
+        session.conversation as AgentConversation,
+        expected,
+      );
+      if (conversation.agent_config?.approval_mode !== undefined)
+        requireApprovalModeV2(conversation.agent_config.approval_mode);
+      return conversation;
+    },
+    async updateApprovalMode(
+      identity: DesktopConversationConfigIdentityV2,
+      approvalMode: DesktopConversationApprovalModeV2,
+    ) {
+      const expected = cloneConversationIdentityV2(identity);
+      assertConversationConfigScopeV2(operationConfig, expected);
+      const mode = requireApprovalModeV2(approvalMode);
+      const conversation = validateConversationConfigResponseV2(
+        await transport.updateAgentConversationConfig(
+          expected.id,
+          { approval_mode: mode },
+          expected.project_id,
+        ),
+        expected,
+      );
+      if (conversation.agent_config?.approval_mode !== mode)
+        throw invalidConversationConfigInputV2();
+      return conversation;
+    },
     async readExecutionSelection(
       identity: DesktopConversationConfigIdentityV2,
     ) {
@@ -306,9 +386,7 @@ function createDesktopConversationConfigAuthorityV2(
       assertConversationConfigScopeV2(operationConfig, operationIdentity);
       const payload = {
         llm_model_override: operationMutation.llmModelOverride,
-        ...(operationConfig.mode === "local"
-          ? { llm_route_override: operationMutation.llmRouteOverride }
-          : {}),
+        llm_route_override: operationMutation.llmRouteOverride,
       };
       return transport
         .updateAgentConversationConfig(
@@ -328,6 +406,25 @@ function createRevocableDesktopConversationConfigAuthorityV2(
   isOperationActive: () => boolean,
 ): DesktopConversationConfigAuthorityV2 {
   return Object.freeze({
+    readApprovalMode(identity: DesktopConversationConfigIdentityV2) {
+      if (!isOperationActive())
+        throw new RuntimeV2Error(
+          "desktop_conversation_config_operation_released",
+          "desktop conversation config operation has been released",
+        );
+      return authority.readApprovalMode(identity);
+    },
+    updateApprovalMode(
+      identity: DesktopConversationConfigIdentityV2,
+      approvalMode: DesktopConversationApprovalModeV2,
+    ) {
+      if (!isOperationActive())
+        throw new RuntimeV2Error(
+          "desktop_conversation_config_operation_released",
+          "desktop conversation config operation has been released",
+        );
+      return authority.updateApprovalMode(identity, approvalMode);
+    },
     readExecutionSelection(identity: DesktopConversationConfigIdentityV2) {
       if (!isOperationActive())
         throw new RuntimeV2Error(
@@ -546,4 +643,12 @@ function generatedContractDigestV2(): string {
     );
   }
   return entry.contract_digest;
+}
+
+function requireApprovalModeV2(
+  value: unknown,
+): DesktopConversationApprovalModeV2 {
+  if (value !== "ask" && value !== "auto_edit" && value !== "full_access")
+    throw invalidConversationConfigInputV2();
+  return value;
 }

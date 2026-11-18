@@ -2605,14 +2605,30 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
     expected_cleared_config = {
         "selected_agent_id": None,
         "llm_model_override": None,
+        "llm_route_override": None,
         "llm_overrides": None,
         "capability_mode": "code",
     }
     assert conversation.agent_config == expected_cleared_config
     assert cleared_response.agent_config == expected_cleared_config
-    assert access.save_scoped_conversation.await_count == 2
-    assert db.commit.await_count == 2
+    approval_response = await conversations_router.update_conversation_config(
+        conversation_id=conversation.id,
+        data=UpdateConversationConfigRequest(approval_mode="full_access"),
+        request=MagicMock(),
+        project_id=conversation.project_id,
+        current_user=SimpleNamespace(id=conversation.user_id),
+        tenant_id=conversation.tenant_id,
+        project_access=db,
+        conversation_config=authority,
+    )
+    assert approval_response.agent_config == {
+        **expected_cleared_config,
+        "approval_mode": "full_access",
+    }
+    assert access.save_scoped_conversation.await_count == 3
+    assert db.commit.await_count == 3
     assert access.cache.invalidate.await_args_list == [
+        ((conversation.project_id,), {}),
         ((conversation.project_id,), {}),
         ((conversation.project_id,), {}),
     ]

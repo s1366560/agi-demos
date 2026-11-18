@@ -168,3 +168,77 @@ async def test_policy_read_checks_exact_core_scope(monkeypatch, mismatch):
         == "/api/v1/tenants/tenant/projects/project/workspaces/workspace/agent-policy"
     )
     assert ("X-MemStack-User-ID", "user") in proxy.await_args.kwargs["headers"]
+
+
+@pytest.mark.unit
+async def test_unbound_explicit_route_is_frozen_and_next_run_uses_changed_selection(
+    test_db, test_user, test_project_db, monkeypatch
+):
+    conversation = Conversation(
+        id="explicit-conversation",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        user_id=test_user.id,
+        title="Explicit route",
+        agent_config={
+            "llm_model_override": "shared",
+            "llm_route_override": {
+                "provider_id": "provider-a",
+                "model_id": "shared",
+            },
+        },
+    )
+    test_db.add(conversation)
+    await test_db.flush()
+
+    def new_run(run_id):
+        return AgentRunAuthorityModel(
+            id=run_id,
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+            conversation_id=conversation.id,
+            run_kind="chat",
+            idempotency_key=run_id,
+            message_id=run_id,
+            request_message="Reply",
+            status="running",
+            permission_profile="read_only",
+            authorization_snapshot={},
+        )
+
+    run = new_run("explicit-run")
+    test_db.add(run)
+    await test_db.commit()
+    load = AsyncMock(side_effect=AssertionError("Unbound selection must not read workspace policy"))
+    monkeypatch.setattr(routes, "load_workspace_policy", load)
+    kwargs = {
+        "tenant_id": conversation.tenant_id,
+        "project_id": conversation.project_id,
+        "conversation_id": conversation.id,
+        "run_id": run.id,
+    }
+    first = await routes.freeze_run_model_route(test_db, **kwargs)
+    assert first.provider_id == "provider-a"
+    conversation.agent_config = {
+        "llm_model_override": "shared",
+        "llm_route_override": {
+            "provider_id": "provider-b",
+            "model_id": "shared",
+        },
+    }
+    await test_db.commit()
+    assert await routes.freeze_run_model_route(test_db, **kwargs) == first
+    next_run = new_run("explicit-next")
+    test_db.add(next_run)
+    await test_db.commit()
+    assert (
+        await routes.freeze_run_model_route(test_db, **{**kwargs, "run_id": next_run.id})
+    ).provider_id == "provider-b"
+    for field in ("tenant_id", "project_id", "conversation_id", "run_id"):
+        with pytest.raises(RuntimeV2Error):
+            await routes.freeze_run_model_route(test_db, **{**kwargs, field: "foreign"})
+    run.status = "completed"
+    await test_db.commit()
+    with pytest.raises(RuntimeV2Error):
+        await routes.freeze_run_model_route(test_db, **kwargs)
+    load.assert_not_awaited()

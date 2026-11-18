@@ -65,7 +65,13 @@ async def test_real_coordinator_permission_event_is_delivered_before_response(
         assert (
             resolve_by_request_id(
                 event.request_id,
-                {"action": "allow" if granted else "deny", "granted": granted, "scope": "once"},
+                {
+                    "action": "allow" if granted else "deny",
+                    "granted": granted,
+                    "scope": "once",
+                    "auto_approved": granted,
+                    "preset": "full" if granted else None,
+                },
                 tenant_id="delivery-order-tenant",
                 project_id="delivery-order-project",
                 conversation_id="delivery-order-conversation",
@@ -76,6 +82,8 @@ async def test_real_coordinator_permission_event_is_delivered_before_response(
         assert isinstance(reply, AgentPermissionRepliedEvent)
         assert reply.request_id == event.request_id
         assert reply.granted is granted
+        assert reply.auto_approved is granted
+        assert reply.preset == ("full" if granted else None)
         if not granted:
             observation = await asyncio.wait_for(anext(events), timeout=1)
             assert isinstance(observation, AgentObserveEvent)

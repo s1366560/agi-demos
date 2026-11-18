@@ -25,8 +25,8 @@ fn build_date() -> String {
     let epoch = raw_epoch
         .parse::<i64>()
         .unwrap_or_else(|error| panic!("SOURCE_DATE_EPOCH must be a signed integer: {error}"));
-    chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0)
-        .unwrap_or_else(|| panic!("SOURCE_DATE_EPOCH is outside chrono's supported range"))
-        .format("%Y-%m-%d")
-        .to_string()
+    time::OffsetDateTime::from_unix_timestamp(epoch)
+        .expect("SOURCE_DATE_EPOCH exceeds the supported date range")
+        .format(time::macros::format_description!("[year]-[month]-[day]"))
+        .expect("valid timestamp format")
 }

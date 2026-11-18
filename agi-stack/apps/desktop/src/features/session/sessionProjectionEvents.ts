@@ -1,6 +1,8 @@
 import { socketEventMatchesSessionScope } from './sessionScope';
 
 const sessionAuthorityEventTypes = new Set([
+  'text_start',
+  'thought_start',
   'act',
   'observe',
   'run_status',

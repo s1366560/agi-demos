@@ -1,7 +1,6 @@
 //! Legacy-compatible Workspace Plan use cases with Agent-first judgment boundaries.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{DateTime, SecondsFormat, Utc};
 use memstack_workspace_service_api::{
     WorkspacePlanJudgeContractError, WorkspacePlanJudgePort, WorkspacePlanJudgePortError,
     WorkspacePlanJudgment, WorkspacePlanJudgmentKind, WorkspacePlanJudgmentRequest,
@@ -255,8 +254,8 @@ impl<'a> PublicWorkspacePlanService<'a> {
         input: &PublicWorkspacePlanActionInput,
     ) -> Result<PublicWorkspacePlanActionResult, PublicWorkspacePlanError> {
         validate_action_input(input)?;
-        let now = Utc::now();
-        let persisted_at = now.to_rfc3339_opts(SecondsFormat::Micros, false);
+        let now = time::OffsetDateTime::now_utc();
+        let persisted_at = crate::timestamps::storage_micros(now);
         let snapshot = self
             .store
             .action_snapshot(&WorkspacePlanSnapshotQuery {
@@ -662,10 +661,13 @@ fn is_structurally_stale(node: &WorkspacePlanNodeRecord, now: &str) -> bool {
     let Some(deadline) = node.timeout_deadline_at.as_deref() else {
         return false;
     };
-    let Ok(deadline) = DateTime::parse_from_rfc3339(deadline) else {
+    let Ok(deadline) =
+        time::OffsetDateTime::parse(deadline, &time::format_description::well_known::Rfc3339)
+    else {
         return false;
     };
-    let Ok(now) = DateTime::parse_from_rfc3339(now) else {
+    let Ok(now) = time::OffsetDateTime::parse(now, &time::format_description::well_known::Rfc3339)
+    else {
         return false;
     };
     deadline <= now

@@ -275,6 +275,7 @@ class PermissionRequestData:
     native_binding: dict[str, Any] | None = None
     scopes: list[str] | None = None
     actions: list[dict[str, str]] | None = None
+    permission_type: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         result = {
@@ -287,7 +288,14 @@ class PermissionRequestData:
             "default_action": self.default_action.value if self.default_action else None,
             "context": self.context,
         }
-        for key in ("decision", "authority_revision", "native_binding", "scopes", "actions"):
+        for key in (
+            "decision",
+            "authority_revision",
+            "native_binding",
+            "scopes",
+            "actions",
+            "permission_type",
+        ):
             value = getattr(self, key)
             if value is not None:
                 result[key] = value
@@ -665,6 +673,7 @@ def create_permission_request(
             native_binding=kwargs.get("native_binding"),
             scopes=kwargs.get("scopes"),
             actions=kwargs.get("actions"),
+            permission_type=kwargs.get("permission_type"),
         ),
         **{
             k: v
@@ -681,6 +690,7 @@ def create_permission_request(
                 "native_binding",
                 "scopes",
                 "actions",
+                "permission_type",
             )
         },
     )

@@ -730,6 +730,9 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         permission?: string | undefined;
         patterns?: string[] | undefined;
         metadata?: Record<string, unknown> | undefined;
+        answered?: boolean;
+        granted?: boolean;
+        auto_approved?: boolean;
       };
       const metadata = data.metadata ?? {};
       const toolName =
@@ -754,7 +757,9 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
             ? (metadata.input as Record<string, unknown>)
             : undefined),
         context: Object.keys(metadata).length > 0 ? metadata : (data.context ?? undefined),
-        answered: false,
+        answered: data.answered === true,
+        granted: data.granted,
+        autoApproved: data.auto_approved === true,
       };
     }
 
@@ -767,7 +772,11 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         eventCounter,
         timestamp,
         requestId: data.request_id ?? '',
-        granted: data.granted === true,
+        granted:
+          (data.granted ??
+            data.response_data?.granted ??
+            (data.reply === 'once' || data.reply === 'always')) === true,
+        autoApproved: (data.auto_approved ?? data.response_data?.auto_approved) === true,
       };
     }
 

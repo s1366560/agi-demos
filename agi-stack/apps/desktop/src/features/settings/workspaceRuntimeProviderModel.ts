@@ -29,8 +29,8 @@ export type ConversationRuntimeModelSelection = {
 
 /**
  * Overlay a persisted conversation model override on the workspace routing
- * catalog. Duplicate model ids intentionally remain unselected because the
- * conversation contract does not carry a provider id.
+ * catalog using the persisted provider/model identity. Legacy model-only
+ * selections remain unselected when more than one provider declares that model.
  */
 export function conversationRuntimeModelSelection(
   agentConfig: Record<string, unknown> | null | undefined,
@@ -57,7 +57,11 @@ export function conversationRuntimeModelSelection(
     };
   }
 
-  const matches = options.filter((option) => option.modelId === overrideModel);
+  const route = recordValue(agentConfig?.llm_route_override);
+  const matches = options.filter((option) =>
+    option.modelId === overrideModel &&
+    (!route || (route.model_id === overrideModel && route.provider_id === option.providerId))
+  );
   return {
     overrideModel,
     selectedValue: matches.length === 1 ? (matches[0]?.value ?? null) : null,
@@ -142,13 +146,10 @@ export function projectRuntimeModelOptions(
   providers: readonly ManagedLlmProvider[],
   mode: RuntimeMode = 'local'
 ): WorkspaceRuntimeModelOption[] {
-  const seenModelIds = new Set<string>();
   const options: WorkspaceRuntimeModelOption[] = [];
   for (const provider of providers) {
     const providerLabel = provider.name.trim() || provider.provider_type;
     for (const modelId of workspaceRoutingModelIds(provider, mode)) {
-      if (seenModelIds.has(modelId)) continue;
-      seenModelIds.add(modelId);
       options.push({
         value: workspaceRuntimeModelSelectionValue(provider.id, modelId),
         providerId: provider.id,

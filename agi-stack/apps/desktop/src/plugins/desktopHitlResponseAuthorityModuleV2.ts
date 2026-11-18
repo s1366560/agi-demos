@@ -42,6 +42,7 @@ export type DesktopHitlResponseIdentityV2 = Readonly<{
 }>;
 
 export type DesktopHitlResponseCommandV2 = Readonly<{
+  approvalMode?: 'auto_edit' | 'full_access';
   expectedRevision: typeof PENDING_HITL_AUTHORITY_REVISION_V2;
   hitlType: HitlType;
   idempotencyKey: string;
@@ -327,7 +328,12 @@ function cloneHitlResponseCommandV2(
     !HITL_TYPES_V2.has(submission.hitlType) ||
     submission.expectedRevision !== PENDING_HITL_AUTHORITY_REVISION_V2 ||
     !isVisibleAsciiIdempotencyKeyV2(submission.idempotencyKey) ||
-    !isPlainRecordV2(submission.responseData)
+    !isPlainRecordV2(submission.responseData) ||
+    (submission.approvalMode !== undefined &&
+      (submission.hitlType !== 'permission' ||
+        (submission.approvalMode !== 'auto_edit' && submission.approvalMode !== 'full_access') ||
+        submission.responseData.granted !== true ||
+        submission.responseData.action !== 'allow'))
   ) {
     throw invalidHitlResponseInputV2();
   }
@@ -337,6 +343,7 @@ function cloneHitlResponseCommandV2(
     0,
   );
   return Object.freeze({
+    ...(submission.approvalMode ? { approvalMode: submission.approvalMode } : {}),
     requestId: submission.requestId,
     hitlType: submission.hitlType,
     responseData,

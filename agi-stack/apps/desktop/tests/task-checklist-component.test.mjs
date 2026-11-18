@@ -190,17 +190,36 @@ test("header toggles the item list while keeping the progress header visible", (
   const { container, root } = render(ITEMS);
   const header = container.querySelector(".task-checklist-header");
   const body = container.querySelector(".task-checklist-body");
-  assert.equal(header.getAttribute("aria-expanded"), "true");
-  assert.equal(body.hasAttribute("hidden"), false);
+  assert.equal(header.getAttribute("aria-expanded"), "false");
+  assert.equal(body.hasAttribute("hidden"), true);
+  assert.ok(container.querySelector(".task-checklist-current"));
   act(() => {
     header.click();
   });
-  assert.equal(header.getAttribute("aria-expanded"), "false");
-  assert.equal(body.hasAttribute("hidden"), true);
+  assert.equal(header.getAttribute("aria-expanded"), "true");
+  assert.equal(body.hasAttribute("hidden"), false);
+  assert.equal(container.querySelector(".task-checklist-current"), null);
   assert.ok(
     container.querySelector("[role='progressbar']"),
     "progress stays visible",
   );
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("live task updates preserve expansion and update the compact current task", () => {
+  const { container, root } = render(ITEMS);
+  const update = (items) => act(() => root.render(
+    React.createElement(I18nProvider, null, React.createElement(TaskChecklist, { items })),
+  ));
+  const next = ITEMS.map((item) => ({ ...item, status: "completed" }));
+  update(next);
+  assert.equal(container.querySelector(".task-checklist-header").getAttribute("aria-expanded"), "false");
+  assert.equal(container.querySelector(".task-checklist-current"), null);
+  act(() => container.querySelector(".task-checklist-header").click());
+  update(ITEMS);
+  assert.equal(container.querySelector(".task-checklist-header").getAttribute("aria-expanded"), "true");
+  assert.equal(container.querySelector(".task-checklist-body").hidden, false);
   act(() => root.unmount());
   container.remove();
 });

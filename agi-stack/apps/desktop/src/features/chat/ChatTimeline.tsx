@@ -55,6 +55,7 @@ import {
   timelineDayLabel,
   timelineRowDurationMs,
   toolActivityRows,
+  toolActivityPairIndex,
   toolCallDiffStat,
   toolCallPairDurationMs,
   toolCallPairStatus,
@@ -273,6 +274,7 @@ export function AgentTimeline({
     () => timelineItemsForDisplay(state.items),
     [state.items],
   );
+  const toolPairIndex = useMemo(() => toolActivityPairIndex(state.items), [state.items]);
   const narrative = useMemo(
     () =>
       annotateTimelineGroups(
@@ -294,7 +296,7 @@ export function AgentTimeline({
     const calls: AgentTimelineItem[] = [];
     for (const node of narrative) {
       if (node.kind !== 'tool_group') continue;
-      for (const row of toolActivityRows(node.items)) {
+      for (const row of toolActivityRows(node.items, toolPairIndex)) {
         if (
           row.kind === 'tool_call' &&
           toolCallPairStatus(row.pair) === 'failed'
@@ -304,7 +306,7 @@ export function AgentTimeline({
       }
     }
     return calls;
-  }, [narrative]);
+  }, [narrative, toolPairIndex]);
   useEffect(() => {
     for (const call of failedToolCalls) {
       if (expandedItems[call.id] === undefined) onToggleItem(call);
@@ -627,17 +629,20 @@ export function AgentTimeline({
             );
             const displayStatus = node.status === 'running' && !groupIsLive ? 'recorded' : node.status;
             const open = timelineGroupOpen(node.items, expandedGroupItems,
-              displayStatus === 'running' || displayStatus === 'failed');
-            const activityRows = toolActivityRows(node.items);
+              displayStatus === 'failed');
+            const activityRows = toolActivityRows(node.items, toolPairIndex);
+            if (!activityRows.length) return null;
+            const previewSummary = toolGroupPreviewSummary(activityRows, t);
             return (
               <Fragment key={groupId}>
                 {dayDivider}{responseRegionMarker}
-                <details className={`timeline-tool-group timeline-steps status-${node.status}`}
+                <details className={`timeline-tool-group timeline-steps status-${displayStatus}`}
                   data-timeline-anchor-id={groupId} data-timeline-anchor-members={node.membersJson} open={open}>
                   <summary className="timeline-tool-group-summary" aria-expanded={open}
                     onClick={(event) => {event.preventDefault(); setGroupOpen(node.items, !open);}}>
                     <ChevronRightIcon className="timeline-tool-group-chevron" aria-hidden="true" />
                     <span>{t(`session.steps.${displayStatus}`, {count: node.toolCount})}</span>
+                    {previewSummary ? <span className="timeline-tool-group-preview" title={previewSummary}>· {previewSummary}</span> : null}
                   </summary>
                   <div className="timeline-tool-group-items">
                     <AggregatedSourcesCard items={node.items} />
@@ -786,6 +791,25 @@ function TimelineWorkingRow({ items }: { items: AgentTimelineItem[] }) {
       {duration ? <em>{t('session.workedFor', { duration })}</em> : null}
     </div>
   );
+}
+
+function toolGroupPreviewSummary(
+  rows: ReturnType<typeof toolActivityRows>,
+  t: (key: string, values?: Record<string, string | number>) => string,
+): string {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (row.kind !== 'tool_call') continue;
+    const detail = toolCallPairPreviewText(row.pair, t).preview.trim();
+    const toolName = row.pair.call.toolName || row.pair.result?.toolName;
+    const preview = toolName && detail !== toolName ? `${toolName}: ${detail}` : detail;
+    if (!preview || seen.has(preview)) continue;
+    seen.add(preview);
+    labels.push(preview);
+    if (labels.length >= 2) break;
+  }
+  return labels.join(', ');
 }
 
 /* Web conversation parity (audit 1.1): tool-call rows render preview-first —
@@ -1056,6 +1080,24 @@ function TimelineItemView({
     () => timelineSummary(item, kind, t),
     [item, kind, t],
   );
+  if (item.type === 'thought') {
+    return (
+      <ThoughtTimelineCard
+        item={item}
+        expanded={expanded}
+        onToggle={onToggle}
+      />
+    );
+  }
+  if (item.type === 'work_plan' || item.type === 'task_list_updated') {
+    return (
+      <WorkPlanTimelineCard
+        item={item}
+        expanded={expanded}
+        onToggle={onToggle}
+      />
+    );
+  }
   if ((item.isError || item.error || item.type === 'error' || kind === 'runtime') && !timelineHitlType(item) && !agentLifecyclePresentation(item)) {
     const failed = Boolean(item.isError || item.error || item.type === 'error');
     const payload =
@@ -1089,24 +1131,6 @@ function TimelineItemView({
   }
   if (kind === 'artifact') {
     return <ArtifactTimelineCard item={item} />;
-  }
-  if (item.type === 'thought') {
-    return (
-      <ThoughtTimelineCard
-        item={item}
-        expanded={expanded}
-        onToggle={onToggle}
-      />
-    );
-  }
-  if (item.type === 'work_plan' || item.type === 'task_list_updated') {
-    return (
-      <WorkPlanTimelineCard
-        item={item}
-        expanded={expanded}
-        onToggle={onToggle}
-      />
-    );
   }
   if (kind === 'user' || kind === 'agent') {
     return (
@@ -1407,8 +1431,8 @@ function TimelineItemBody({
   if (kind === 'user' || kind === 'agent') {
     return (
       <>
-        {kind === 'agent' ? <AssistantExecutionSummary item={item} /> : null}
         <MarkdownContent content={content} className="transcript-content" />
+        {kind === 'agent' ? <AssistantExecutionSummary item={item} /> : null}
         {kind === 'agent' ? <AssistantDuplicateDisclosure item={item} /> : null}
         {kind === 'agent' ? (
           <AssistantArtifactReferences
@@ -1566,17 +1590,20 @@ function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
     });
   }
   return (
-    <div
+    <details
       className="assistant-execution-summary"
       aria-label={t('chat.executionSummary')}
     >
-      {pills.map((pill) => (
-        <span key={pill.label}>
-          <small>{pill.label}</small>
-          <strong>{pill.value}</strong>
-        </span>
-      ))}
-    </div>
+      <summary>{t('chat.executionSummary')}</summary>
+      <div className="assistant-execution-metrics">
+        {pills.map((pill) => (
+          <span key={pill.label}>
+            <small>{pill.label}</small>
+            <strong>{pill.value}</strong>
+          </span>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -1906,7 +1933,7 @@ function annotateTimelineGroups(
   ) => {
     annotated[index] = {
       ...node,
-      groupId,
+      groupId: node.kind === 'tool_group' ? node.id : groupId,
       membersJson: JSON.stringify(node.items.map((item) => item.id)),
     };
   };

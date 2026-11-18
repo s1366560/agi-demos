@@ -24,7 +24,7 @@ base64      = { workspace = true }
 thiserror   = { workspace = true }
 futures     = { workspace = true }
 uuid        = { workspace = true }
-chrono      = { workspace = true }
+time = { workspace = true }
 form_urlencoded = "1"
 
 bcs-domain      = { workspace = true }

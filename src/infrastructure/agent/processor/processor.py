@@ -3629,7 +3629,15 @@ class SessionProcessor:
                 hitl_type=HITLType.PERMISSION,
                 timeout_seconds=self.config.permission_timeout,
             )
-            yield AgentPermissionRepliedEvent(request_id=request_id, granted=bool(granted))
+            provenance_reader = getattr(coordinator, "permission_response_metadata", None)
+            provenance: dict[str, Any] = (
+                cast(dict[str, Any], provenance_reader(request_id))
+                if callable(provenance_reader) and granted
+                else {}
+            )
+            yield AgentPermissionRepliedEvent(
+                request_id=request_id, granted=bool(granted), **provenance
+            )
             if not granted:
                 error = "Permission rejected by user"
         except TimeoutError:

@@ -335,6 +335,8 @@ class AgentPermissionAskedEvent(AgentDomainEvent):
 
 
 class AgentPermissionRepliedEvent(AgentDomainEvent):
+    auto_approved: bool = False
+    preset: Literal["full", "relaxed"] | None = None
     event_type: AgentEventType = AgentEventType.PERMISSION_REPLIED
     request_id: str
     granted: bool

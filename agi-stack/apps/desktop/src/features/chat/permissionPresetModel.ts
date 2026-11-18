@@ -2,18 +2,18 @@ import type {
   DesktopApprovalRequest,
   HitlResponseSubmission,
   PermissionRequestContext,
-  WorkspacePermissionMode,
 } from '../../types';
 
 /**
  * Session-scoped approval autonomy dial (P1-2 "审批即对话").
  *
- * Auto-approval here is a structural category check only: it reads the
- * validated `risk_level` enum and the request `kind` from the permission
- * request contract (Agent First rule — no text/keyword risk heuristics).
+ * Auto-approval reads the structured request kind and native grant binding.
+ * No text/keyword risk or permission-category inference is performed.
  */
 
 export type PermissionPreset = 'default' | 'relaxed' | 'full';
+
+const AUTO_EDIT_PERMISSIONS = new Set(['write', 'workspace_file_write', 'workspace_task_write']);
 
 export const PERMISSION_PRESETS: readonly PermissionPreset[] = [
   'default',
@@ -25,14 +25,6 @@ export const PERMISSION_PRESET_STORAGE_PREFIX =
   'agistack.desktop.permission-preset:v1';
 export const FULL_ACCESS_WARNING_STORAGE_PREFIX =
   'agistack.desktop.permission-preset-full-access-warning:v1';
-
-export function permissionModeForPreset(
-  preset: PermissionPreset,
-): WorkspacePermissionMode {
-  if (preset === 'full') return 'full_access';
-  if (preset === 'relaxed') return 'automatic';
-  return 'ask';
-}
 
 type PermissionPresetStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -122,19 +114,13 @@ export function acknowledgeFullAccessWarning(
 }
 
 /**
- * Low-risk derivation: the backend classifies every permission request into
- * the `risk_level` enum ('low' | 'medium' | 'high'); "relaxed" auto-allows
- * exactly the 'low' membership. No keyword matching on tool names or actions.
- *
- * Wire semantics: "relaxed" selects the backend `automatic` mode, which
- * allows reads plus workspace task/file writes and DENIES every other
- * mutation without asking. Low-risk asks that still surface (tool-initiated
- * HITL requests) are answered automatically here.
+ * Relaxed mode approves declared workspace write categories only. Missing
+ * declarations remain explicit; risk and tool names never imply authority.
  */
 export function autoApprovalForPermissionRequest(
   preset: PermissionPreset,
   request: Pick<DesktopApprovalRequest, 'kind'> & {
-    permission?: Pick<PermissionRequestContext, 'risk_level'> | null;
+    permission?: Pick<PermissionRequestContext, 'risk_level' | 'permission'> | null;
     decision?: DesktopApprovalRequest['decision'];
     native_binding?: unknown;
   },
@@ -150,7 +136,9 @@ export function autoApprovalForPermissionRequest(
   )
     return null;
   if (preset === 'full') return 'allow';
-  return request.permission.risk_level === 'low' ? 'allow' : null;
+  // Only the tool's declared permission category authorizes automatic edits.
+  const permission = request.permission.permission;
+  return permission != null && AUTO_EDIT_PERMISSIONS.has(permission) ? 'allow' : null;
 }
 
 /**
@@ -179,6 +167,7 @@ export function autoApprovalSubmission(
       ? request.authority_revision
       : undefined;
   return {
+    approvalMode: preset === 'full' ? 'full_access' : 'auto_edit',
     requestId: request.id,
     hitlType: 'permission',
     responseData: autoApprovalResponseData(),

@@ -11,7 +11,6 @@ import {
   fullAccessWarningScope,
   parsePermissionPreset,
   permissionDenialResponseData,
-  permissionModeForPreset,
   permissionPresetScope,
   readFullAccessWarningAcknowledged,
   readPermissionPreset,
@@ -57,12 +56,6 @@ test('parsePermissionPreset only accepts known presets', () => {
   assert.equal(parsePermissionPreset('default'), 'default');
   assert.equal(parsePermissionPreset('bypass'), 'default');
   assert.equal(parsePermissionPreset(null), 'default');
-});
-
-test('permission presets map to canonical run authorization modes', () => {
-  assert.equal(permissionModeForPreset('default'), 'ask');
-  assert.equal(permissionModeForPreset('relaxed'), 'automatic');
-  assert.equal(permissionModeForPreset('full'), 'full_access');
 });
 
 test('preset scope requires both workspace and conversation', () => {
@@ -118,8 +111,8 @@ test('default preset never auto-approves', () => {
   assert.equal(autoApprovalForPermissionRequest('default', permissionRequest()), null);
 });
 
-test('relaxed preset auto-approves only low-risk permission requests', () => {
-  assert.equal(autoApprovalForPermissionRequest('relaxed', permissionRequest()), 'allow');
+test('relaxed preset keeps unclassified permission requests explicit', () => {
+  assert.equal(autoApprovalForPermissionRequest('relaxed', permissionRequest()), null);
   assert.equal(
     autoApprovalForPermissionRequest(
       'relaxed',
@@ -142,6 +135,15 @@ test('relaxed preset auto-approves only low-risk permission requests', () => {
     autoApprovalForPermissionRequest('relaxed', permissionRequest({ permission: null })),
     null,
   );
+});
+
+test('relaxed approves only statically declared workspace write permissions', () => {
+  for (const permission of ['write', 'workspace_file_write', 'workspace_task_write']) {
+    assert.equal(autoApprovalForPermissionRequest('relaxed', permissionRequest({permission:{permission,risk_level:'high'}})), 'allow');
+  }
+  for (const permission of ['execute', 'read', 'payment', null, undefined]) {
+    assert.equal(autoApprovalForPermissionRequest('relaxed', permissionRequest({permission:{permission,risk_level:'low'}})), null);
+  }
 });
 
 test('full preset auto-approves ordinary tool permission requests regardless of risk', () => {
@@ -211,7 +213,8 @@ test('ordinary computer tool invocations retain runtime auto-approval', () => {
     },
     decision: { target: { kind: 'tool', id: 'computer_click' } },
   });
-  for (const preset of ['relaxed', 'full']) {
+  assert.equal(autoApprovalForPermissionRequest('relaxed', request), null);
+  for (const preset of ['full']) {
     assert.equal(autoApprovalForPermissionRequest(preset, request), 'allow');
     assert.equal(autoApprovalSubmission(request, preset).responseData.granted, true);
   }
@@ -236,6 +239,8 @@ test('autoApprovalSubmission builds an idempotent permission response', () => {
   const submission = autoApprovalSubmission(permissionRequest(), 'full');
   assert.equal(submission.requestId, 'hitl-1');
   assert.equal(submission.hitlType, 'permission');
+  assert.equal(submission.approvalMode, 'full_access');
+  assert.equal(autoApprovalSubmission(permissionRequest({permission:{permission:'write',risk_level:'high'}}), 'relaxed').approvalMode, 'auto_edit');
   assert.equal(submission.expectedRevision, 3);
   assert.equal(submission.idempotencyKey, 'hitl-1:3:preset-auto:full');
   assert.equal(submission.responseData.granted, true);
@@ -247,10 +252,10 @@ test('autoApprovalSubmission builds an idempotent permission response', () => {
   );
   const unversioned = autoApprovalSubmission(
     permissionRequest({ authority_revision: null }),
-    'relaxed',
+    'full',
   );
   assert.equal('expectedRevision' in unversioned, false);
-  assert.equal(unversioned.idempotencyKey, 'hitl-1:unversioned:preset-auto:relaxed');
+  assert.equal(unversioned.idempotencyKey, 'hitl-1:unversioned:preset-auto:full');
 });
 
 test('denial payload matches the legacy shape unless feedback is present', () => {

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -66,6 +66,15 @@ export function ThoughtTimelineCard({
   const duration = durationMs !== null ? formatToolCallDuration(durationMs) : '';
   const content = item.content ?? '';
 
+  const contentRef = useRef<HTMLDivElement>(null);
+  const followRef = useRef(true);
+  useLayoutEffect(() => {
+    const viewport = contentRef.current;
+    if (streaming && expanded && followRef.current && viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
+  }, [content, expanded, streaming]);
+
   return (
     <article
       className={`thought-timeline-card${streaming ? ' is-streaming' : ''}`}
@@ -110,6 +119,12 @@ export function ThoughtTimelineCard({
         </button>
         <div
           id={contentId}
+          ref={contentRef}
+          onWheel={(event) => { if (event.deltaY < 0) followRef.current = false; }}
+          onScroll={(event) => {
+            const viewport = event.currentTarget;
+            followRef.current = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 24;
+          }}
           role="region"
           aria-labelledby={labelId}
           className="thought-timeline-content"

@@ -1557,7 +1557,11 @@ describe('streamEventHandlers', () => {
 
   describe('onPermissionAsked permission mode automation', () => {
     beforeEach(() => {
-      useAgentPermissionModeStore.setState({ modesByConversation: {} });
+      useAgentPermissionModeStore.setState({
+        modesByConversation: {},
+        autoApprovedRequestIds: {},
+        pendingAutoApprovalIds: {},
+      });
       useUnifiedHITLStore.getState().reset();
       mockRespondToPermission.mockClear();
     });
@@ -1640,11 +1644,13 @@ describe('streamEventHandlers', () => {
           agentState: 'idle',
           pendingPermission: null,
         });
-        expect(mockState.timeline.find((event) => event.type === 'permission_asked')).toMatchObject({
-          requestId: 'late-decision',
-          answered: true,
-          granted,
-        });
+        expect(mockState.timeline.find((event) => event.type === 'permission_asked')).toMatchObject(
+          {
+            requestId: 'late-decision',
+            answered: true,
+            granted,
+          }
+        );
       }
     );
 
@@ -1703,9 +1709,71 @@ describe('streamEventHandlers', () => {
         },
       } as any);
 
-      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-1', true);
+      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-1', true, 'full_access');
       // Full access suppresses the card entirely instead of queueing it.
       expect(mockState.timeline.some((e) => e.type === 'permission_asked')).toBe(false);
+    });
+
+    it('keeps failed automatic sends answerable and does not persist approval', async () => {
+      useAgentPermissionModeStore.getState().setPermissionMode(conversationId, 'full_access');
+      mockRespondToPermission.mockRejectedValueOnce(new Error('offline'));
+      const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+      handlers.onPermissionAsked?.({
+        type: 'permission_asked',
+        data: {
+          request_id: 'failed-auto',
+          tool_name: 'memory_update',
+          description: 'Update',
+        },
+      } as any);
+      await Promise.resolve();
+      expect(mockState.pendingPermission?.request_id).toBe('failed-auto');
+      expect(mockState.timeline.some((event) => event.type === 'permission_asked')).toBe(true);
+      expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds[conversationId]).toEqual(
+        []
+      );
+    });
+
+    it('records automatic provenance only after server approval and preserves orphan denials', () => {
+      useAgentPermissionModeStore.getState().setPermissionMode(conversationId, 'full_access');
+      const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+      handlers.onPermissionAsked?.({
+        type: 'permission_asked',
+        data: {
+          request_id: 'automatic',
+          tool_name: 'memory_update',
+          description: 'Update',
+        },
+      } as any);
+      expect(
+        useAgentPermissionModeStore.getState().autoApprovedRequestIds[conversationId]
+      ).toBeUndefined();
+      const reconnected = createStreamEventHandlers(conversationId, undefined, mockDeps);
+      reconnected.onPermissionReplied?.({
+        type: 'permission_replied',
+        data: {
+          request_id: 'automatic',
+          granted: true,
+          auto_approved: true,
+        },
+      } as any);
+      expect(useAgentPermissionModeStore.getState().autoApprovedRequestIds[conversationId]).toEqual(
+        ['automatic']
+      );
+      reconnected.onPermissionReplied?.({
+        type: 'permission_replied',
+        data: {
+          request_id: 'denied',
+          granted: false,
+        },
+      } as any);
+      expect(mockState.timeline).toContainEqual(
+        expect.objectContaining({
+          type: 'permission_replied',
+          requestId: 'denied',
+          granted: false,
+        })
+      );
     });
 
     it('auto-approves only edit permissions in auto_edit mode', () => {
@@ -1732,7 +1800,7 @@ describe('streamEventHandlers', () => {
       } as any);
 
       expect(mockRespondToPermission).toHaveBeenCalledTimes(1);
-      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-edit', true);
+      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-edit', true, 'auto_edit');
       // Auto edit keeps the card visible; it flips to granted on approval.
       expect(mockState.timeline.filter((e) => e.type === 'permission_asked')).toHaveLength(2);
     });

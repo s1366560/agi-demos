@@ -848,3 +848,15 @@ class TestEnhancedSearchRouter:
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert exc_info.value.detail == "Search failed"
+
+
+def test_capability_scope_is_declared_for_feature_operation_admission():
+    from fastapi.dependencies.utils import get_typed_signature
+
+    from src.infrastructure.adapters.primary.web.routers.enhanced_search import (
+        get_search_capabilities,
+    )
+
+    parameters = get_typed_signature(get_search_capabilities).parameters
+    assert "tenant_id" in parameters
+    assert "project_id" in parameters

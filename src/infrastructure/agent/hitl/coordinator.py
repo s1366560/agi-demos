@@ -215,6 +215,17 @@ class HITLCoordinator:
 
         return strategy.extract_response_value(response_data)
 
+    def permission_response_metadata(self, request_id: str) -> dict[str, Any]:
+        """Read verified presentation provenance from the completed response future."""
+        pending = self._pending.get(request_id)
+        if pending is None or not pending.future.done() or pending.future.cancelled():
+            return {}
+        response = pending.future.result()
+        if not isinstance(response, dict) or response.get("auto_approved") is not True:
+            return {}
+        preset = response.get("preset")
+        return {"auto_approved": True, "preset": preset} if preset in ("full", "relaxed") else {}
+
     async def wait_for_completion(
         self,
         request_id: str,

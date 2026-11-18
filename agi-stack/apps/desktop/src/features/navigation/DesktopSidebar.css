@@ -6,8 +6,8 @@
   grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 12px;
   overflow: hidden;
   border-right: 0;
   background: var(--desktop-sidebar-bg);
@@ -134,13 +134,13 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  height: 34px;
+  height: 36px;
   border: 1px solid var(--desktop-border-cyan-9) !important;
   border-radius: 7px;
   background: var(--desktop-new-thread-bg) !important;
   color: var(--desktop-new-thread-text) !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
 }
 
 .desktop-design-new-task:hover:not(:disabled) {
@@ -175,7 +175,8 @@
 }
 
 .desktop-design-header-row strong {
-  max-width: 120px;
+  flex: 1;
+  min-width: 0;
 }
 
 .desktop-conversation-status-summary {
@@ -238,8 +239,8 @@
 
 .desktop-workspace-heading-actions button {
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid transparent;
@@ -445,7 +446,7 @@
   padding: 0 7px;
   border-radius: 5px;
   color: var(--desktop-muted);
-  font-size: 9px;
+  font-size: 12px;
   text-align: left;
 }
 
@@ -515,4 +516,64 @@
 }
 .app-shell.hierarchy-shell.sidebar-collapsed .desktop-design-sidebar {
   display: none;
+}
+
+/* Keep navigation readable without letting setup prompts dominate the thread list. */
+.desktop-design-sidebar .workspace-tree-workspace-action strong {
+  font-size: 12px;
+}
+
+.desktop-design-sidebar .workspace-tree-workspace-action small {
+  font-size: 10px;
+}
+
+.desktop-design-sidebar .workspace-tree-toggle {
+  min-height: 32px;
+}
+
+.desktop-design-sidebar .workspace-tree-session-group > h3 {
+  margin-block: 10px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: normal;
+}
+
+.desktop-design-sidebar .workspace-tree-state {
+  gap: 6px;
+  margin: 12px 8px 4px;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--desktop-border-soft);
+  border-radius: 0;
+}
+
+.desktop-design-sidebar .workspace-tree-state strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.desktop-design-sidebar .workspace-tree-state small {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.desktop-design-sidebar .workspace-tree-state > button {
+  min-height: 28px;
+  font-size: 12px;
+  text-align: left;
+}
+
+.desktop-design-sidebar .workspace-tree-state.compact {
+  margin: 4px 8px;
+  padding: 8px 0;
+}
+
+.workspace-tree-session-menu [role='menuitem'] {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.desktop-design-profile-menu button:focus-visible {
+  background: var(--desktop-nav-hover-bg);
+  color: var(--desktop-text);
 }

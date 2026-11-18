@@ -194,3 +194,44 @@ async def test_membership_revoked_during_restore_releases_reservation(existing_s
             await acquire_existing_scoped_session_v2(context, conversation_id="s", project_id="p")
     assert error.value.code == "CONVERSATION_ACCESS_DENIED"
     reservation.lease.release.assert_awaited_once()
+
+
+async def test_recovery_bridge_keeps_exact_recipient_access_when_response_completes_during_acquire(
+    existing_session,
+):
+    from datetime import UTC, datetime, timedelta
+
+    from src.infrastructure.adapters.secondary.persistence.models import HITLRequest
+
+    context = existing_session
+    context.db.add(User(id="owner", email="recovery-owner@test.invalid", hashed_password="unused"))
+    await context.db.flush()
+    await context.db.execute(update(Conversation).values(user_id="owner"))
+    request = HITLRequest(
+        id="recovering-h",
+        request_type="clarification",
+        conversation_id="s",
+        tenant_id="t",
+        project_id="p",
+        user_id="u",
+        question="Review",
+        status="answered",
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    context.db.add(request)
+    await context.db.commit()
+    reservation = context.scoped_profile_runtime_v2.acquire.return_value
+
+    async def complete_while_acquiring(_scope):
+        request.status = "completed"
+        await context.db.commit()
+        return reservation
+
+    context.scoped_profile_runtime_v2.acquire.side_effect = complete_while_acquiring
+    result = await acquire_existing_scoped_session_v2(
+        context, conversation_id="s", project_id="p", hitl_request_id=request.id
+    )
+    assert result is reservation
+    assert request.status == "completed"
+    with pytest.raises(RuntimeV2Error):
+        await authorize_existing_scoped_session_v2(context, conversation_id="s", project_id="p")

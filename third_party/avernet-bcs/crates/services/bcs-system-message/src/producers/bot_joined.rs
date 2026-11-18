@@ -119,8 +119,13 @@ fn format_skills(skills: &[Skill]) -> String {
 }
 
 fn format_date(ts_ms: u64) -> String {
-    chrono::DateTime::from_timestamp_millis(ts_ms as i64)
-        .map(|dt: chrono::DateTime<chrono::Utc>| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+    time::OffsetDateTime::from_unix_timestamp_nanos(i128::from(ts_ms) * 1_000_000)
+        .map(|dt| {
+            dt.format(time::macros::format_description!(
+                "[year]-[month]-[day] [hour]:[minute]:[second]"
+            ))
+            .expect("valid timestamp format")
+        })
         .unwrap_or_default()
 }
 

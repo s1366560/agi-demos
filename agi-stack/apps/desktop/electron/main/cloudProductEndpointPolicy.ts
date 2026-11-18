@@ -1170,10 +1170,18 @@ function authorizeOperationalCohort(
   if (admin) return admin;
   if (
     target.pathname === '/api/v1/search-enhanced/capabilities' &&
-    request.method === 'GET' &&
-    noQuery(target)
+    request.method === 'GET'
   ) {
-    return endpoint('project', null, null, null);
+    if (noQuery(target)) return endpoint('project', null, null, null);
+    if (exactQueryKeys(target.searchParams, new Set(['tenant_id', 'project_id']))) {
+      return endpoint(
+        'project',
+        requiredIdentifier(target.searchParams.get('tenant_id')),
+        requiredIdentifier(target.searchParams.get('project_id')),
+        null,
+      );
+    }
+    return null;
   }
   if (
     target.pathname === '/api/v1/system/info' &&

@@ -824,7 +824,7 @@ test('tool groups default to summaries while failures expand', () => {
   );
   assert.match(
     chatSource,
-    /timelineGroupOpen\(\s*node\.items,\s*expandedGroupItems,\s*displayStatus === 'running' \|\| displayStatus === 'failed'/,
+    /timelineGroupOpen\(\s*node\.items,\s*expandedGroupItems,\s*displayStatus === 'failed'/,
   );
   assert.match(
     chatSource,

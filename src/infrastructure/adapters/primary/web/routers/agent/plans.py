@@ -63,6 +63,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
     ensure_plan_run_authority,
 )
+from src.infrastructure.adapters.secondary.persistence.terminal_hitl_run_binding import (
+    terminal_hitl_run_binding,
+)
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
@@ -623,6 +626,12 @@ async def approve_plan_and_start(
             HITLRequest.project_id == conversation.project_id,
             HITLRequest.conversation_id == conversation.id,
             HITLRequest.status == "pending",
+            ~terminal_hitl_run_binding(
+                tenant_id=HITLRequest.tenant_id,
+                project_id=HITLRequest.project_id,
+                conversation_id=HITLRequest.conversation_id,
+                message_id=HITLRequest.message_id,
+            ),
             HITLRequest.expires_at > datetime.now(UTC),
         )
         .limit(1)
@@ -851,9 +860,7 @@ async def _publish_plan_run_status(
         )
 
 
-async def _broadcast_approved_plan_message(
-    conversation_id: str, message: dict[str, Any]
-) -> None:
+async def _broadcast_approved_plan_message(conversation_id: str, message: dict[str, Any]) -> None:
     """Discard the recipient count so the stream consumer sees Awaitable[None]."""
     await get_connection_manager().broadcast_to_conversation(conversation_id, message)
 

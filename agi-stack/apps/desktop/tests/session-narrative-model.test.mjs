@@ -294,3 +294,64 @@ test('cross-segment pairing refuses missing, conflicting or sibling identities a
     assert.equal(groups[0].status,'running');
   }
 });
+
+test('leading and trailing diagnostics join only an explicit matching execution scope', () => {
+  const scope = { conversation_id: 'conversation', run_id: 'run', round_id: 'round' };
+  const ack = { id: 'ack', type: 'ack', ...scope };
+  const selection = { id: 'selection', type: 'tool_selection', ...scope };
+  const call = { id: 'call', type: 'act', toolName: 'read', tool_call_id: 'read', ...scope };
+  const result = { id: 'result', type: 'observe', toolName: 'read', tool_call_id: 'read', ...scope };
+  const usage = { id: 'usage', type: 'context_usage', ...scope };
+  const items = [ack, selection, call, result, usage];
+  const narrative = buildSessionNarrative(items, 'conversation');
+  assert.equal(narrative.length, 1);
+  assert.equal(narrative[0].kind, 'tool_group');
+  assert.equal(narrative[0].id, 'tool-group:call', 'diagnostics do not change the tool anchor');
+  assert.deepEqual(narrative[0].items.map((item) => item.id), items.map((item) => item.id));
+  assert.equal(narrative[0].toolCount, 1);
+  assert.equal(narrative[0].status, 'complete');
+  assert.deepEqual(items.map((item) => item.id), ['ack', 'selection', 'call', 'result', 'usage']);
+});
+
+test('unknown, conflicting and error diagnostics remain separate from tool groups', () => {
+  const scope = { conversation_id: 'conversation', run_id: 'run', round_id: 'round' };
+  const call = { id: 'call', type: 'act', toolName: 'read', tool_call_id: 'read', ...scope };
+  const result = { id: 'result', type: 'observe', toolName: 'read', tool_call_id: 'read', ...scope };
+  const diagnostic = { id: 'diagnostic', type: 'context_usage', ...scope };
+  for (const variant of [
+    { ...diagnostic, run_id: 'other' },
+    { ...diagnostic, conversation_id: 'other' },
+    { ...diagnostic, round_id: 'other' },
+    { ...diagnostic, subagent_id: 'child' },
+    { ...diagnostic, run_id: undefined },
+    { ...diagnostic, metadata: { run_id: 'conflict' } },
+    { ...diagnostic, isError: true },
+    { ...diagnostic, error: 'Diagnostic failed' },
+  ]) {
+    for (const items of [[variant, call, result], [call, result, variant]]) {
+      const narrative = buildSessionNarrative(items, 'conversation');
+      const group = narrative.find((node) => node.kind === 'tool_group');
+      assert.deepEqual(group.items.map((item) => item.id), ['call', 'result']);
+      assert.equal(narrative.find((node) => node.kind === 'item').item, variant);
+    }
+  }
+});
+
+test('pending diagnostics keep their positions across messages and protocol boundaries', () => {
+  const scope = { conversation_id: 'conversation', run_id: 'run' };
+  const diagnostic = { id: 'diagnostic', type: 'ack', ...scope };
+  const call = { id: 'call', type: 'act', toolName: 'read', ...scope };
+  for (const boundary of [
+    { id: 'boundary', type: 'user_message', role: 'user' },
+    { id: 'boundary', type: 'assistant_message', role: 'assistant' },
+    { id: 'boundary', type: 'run_status', status: 'completed' },
+    { id: 'boundary', type: 'complete' },
+    { id: 'boundary', type: 'thought' },
+  ]) {
+    const narrative = buildSessionNarrative([diagnostic, boundary, call], 'conversation');
+    assert.deepEqual(narrative.map((node) => node.kind === 'item' ? node.id : node.items.map((item) => item.id)),
+      ['diagnostic', 'boundary', ['call']]);
+  }
+  assert.deepEqual(buildSessionNarrative([diagnostic], 'conversation'),
+    [{ kind: 'item', id: 'diagnostic', item: diagnostic }]);
+});

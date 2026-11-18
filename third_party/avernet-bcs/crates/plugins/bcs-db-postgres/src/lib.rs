@@ -16,8 +16,8 @@ use bcs_db_api::{
     DbTransactionResultKind, DbTransactionStep, DbTransactionStepResult, DbValue,
 };
 use bytes::BytesMut;
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, SecondsFormat, Utc};
 use postgres_native_tls::MakeTlsConnector;
+use time::{Date, OffsetDateTime, PrimitiveDateTime, Time, macros::format_description};
 use tokio::sync::{Mutex, MutexGuard};
 use tokio_postgres::config::SslMode;
 use tokio_postgres::types::{FromSqlOwned, IsNull, Json, Kind, ToSql, Type, to_sql_checked};
@@ -361,17 +361,16 @@ fn encode_string(
             .parse::<uuid::Uuid>()
             .map_err(|error| invalid_value(format!("invalid UUID parameter: {error}")))?
             .to_sql(ty, out),
-        Type::TIMESTAMP => NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
+        Type::TIMESTAMP => PrimitiveDateTime::parse(value, format_description!("[year]-[month]-[day] [hour]:[minute]:[second][optional [.[subsecond]]]"))
             .map_err(|error| invalid_value(format!("invalid timestamp parameter: {error}")))?
             .to_sql(ty, out),
-        Type::TIMESTAMPTZ => DateTime::parse_from_rfc3339(value)
+        Type::TIMESTAMPTZ => OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
             .map_err(|error| invalid_value(format!("invalid timestamptz parameter: {error}")))?
-            .with_timezone(&Utc)
             .to_sql(ty, out),
-        Type::DATE => NaiveDate::parse_from_str(value, "%Y-%m-%d")
+        Type::DATE => Date::parse(value, format_description!("[year]-[month]-[day]"))
             .map_err(|error| invalid_value(format!("invalid date parameter: {error}")))?
             .to_sql(ty, out),
-        Type::TIME => NaiveTime::parse_from_str(value, "%H:%M:%S%.f")
+        Type::TIME => Time::parse(value, format_description!("[hour]:[minute]:[second][optional [.[subsecond]]]"))
             .map_err(|error| invalid_value(format!("invalid time parameter: {error}")))?
             .to_sql(ty, out),
         _ if matches!(ty.kind(), Kind::Enum(_)) => {
@@ -438,17 +437,27 @@ fn postgres_column_value(row: &Row, index: usize, ty: &Type) -> DbResult<DbValue
             .map(|value| value.map_or(DbValue::Null, |value| DbValue::String(value.to_string()))),
         Type::UUID => optional_column::<uuid::Uuid>(row, index, ty)
             .map(|value| value.map_or(DbValue::Null, |value| DbValue::String(value.to_string()))),
-        Type::TIMESTAMP => optional_column::<NaiveDateTime>(row, index, ty)
-            .map(|value| value.map_or(DbValue::Null, |value| DbValue::String(value.to_string()))),
-        Type::TIMESTAMPTZ => optional_column::<DateTime<Utc>>(row, index, ty).map(|value| {
+        Type::TIMESTAMP => optional_column::<PrimitiveDateTime>(row, index, ty).map(|value| {
             value.map_or(DbValue::Null, |value| {
-                DbValue::String(value.to_rfc3339_opts(SecondsFormat::Micros, true))
+                DbValue::String(format!("{} {}", value.date(), sql_time(value.time())))
             })
         }),
-        Type::DATE => optional_column::<NaiveDate>(row, index, ty)
+        Type::TIMESTAMPTZ => optional_column::<OffsetDateTime>(row, index, ty).map(|value| {
+            value.map_or(DbValue::Null, |value| {
+                DbValue::String(
+                    value
+                        .to_offset(time::UtcOffset::UTC)
+                        .format(format_description!(
+                            "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]Z"
+                        ))
+                        .expect("valid UTC timestamp"),
+                )
+            })
+        }),
+        Type::DATE => optional_column::<Date>(row, index, ty)
             .map(|value| value.map_or(DbValue::Null, |value| DbValue::String(value.to_string()))),
-        Type::TIME => optional_column::<NaiveTime>(row, index, ty)
-            .map(|value| value.map_or(DbValue::Null, |value| DbValue::String(value.to_string()))),
+        Type::TIME => optional_column::<Time>(row, index, ty)
+            .map(|value| value.map_or(DbValue::Null, |value| DbValue::String(sql_time(value)))),
         _ => Err(DbError::Conversion(format!(
             "unsupported PostgreSQL column type {ty} at index {index}"
         ))),
@@ -540,5 +549,20 @@ mod tests {
         };
 
         assert_eq!(config.get_ssl_mode(), SslMode::Disable);
+    }
+}
+
+fn sql_time(value: Time) -> String {
+    let base = format!(
+        "{:02}:{:02}:{:02}",
+        value.hour(),
+        value.minute(),
+        value.second()
+    );
+    match value.nanosecond() {
+        0 => base,
+        nanos if nanos % 1_000_000 == 0 => format!("{base}.{:03}", value.millisecond()),
+        nanos if nanos % 1_000 == 0 => format!("{base}.{:06}", value.microsecond()),
+        nanos => format!("{base}.{nanos:09}"),
     }
 }

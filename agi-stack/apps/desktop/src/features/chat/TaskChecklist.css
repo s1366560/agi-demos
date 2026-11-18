@@ -171,3 +171,20 @@
     transition: none;
   }
 }
+
+.task-checklist-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0 12px 8px;
+  color: var(--desktop-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-checklist-current > span:first-child { display: flex; flex: none; }
+.task-checklist-current-text { overflow: hidden; text-overflow: ellipsis; }
+.task-checklist-current svg { width: 12px; height: 12px; }

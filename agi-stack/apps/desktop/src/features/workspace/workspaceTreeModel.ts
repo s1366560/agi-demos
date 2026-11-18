@@ -582,6 +582,24 @@ export function filterUnboundConversations(
   return conversations.filter((conversation) => !conversation.workspace_id?.trim());
 }
 
+/** Title/summary responses omit the separately projected run authority. */
+export function preserveConversationRunMetadata(
+  current: AgentConversation,
+  replacement: AgentConversation,
+): AgentConversation {
+  if (
+    current.id !== replacement.id ||
+    current.project_id !== replacement.project_id ||
+    current.tenant_id !== replacement.tenant_id ||
+    !Object.hasOwn(current.metadata ?? {}, 'run') ||
+    Object.hasOwn(replacement.metadata ?? {}, 'run')
+  ) return replacement;
+  return {
+    ...replacement,
+    metadata: { ...replacement.metadata, run: current.metadata?.run },
+  };
+}
+
 export function replaceConversationInWorkspaceRows(
   current: Record<string, AgentConversation[]>,
   replacement: AgentConversation,
@@ -600,7 +618,7 @@ export function replaceConversationInWorkspaceRows(
       }
       changed = true;
       const updated = [...conversations];
-      updated[index] = replacement;
+      updated[index] = preserveConversationRunMetadata(conversations[index], replacement);
       return [workspaceId, updated];
     }),
   );

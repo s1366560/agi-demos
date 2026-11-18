@@ -436,6 +436,7 @@ class PermissionStrategy(HITLTypeStrategy):
             request_id=request_id,
             conversation_id=conversation_id,
             tool_name=tool_name,
+            permission_type=sanitize_hitl_text(request_data.get("permission_type")),
             action=action,
             risk_level=risk_level,
             timeout_seconds=kwargs.get("timeout_seconds", 60.0),

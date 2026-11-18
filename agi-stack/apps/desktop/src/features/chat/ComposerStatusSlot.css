@@ -1,0 +1,46 @@
+.composer-status-slot {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 12px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 4px;
+  overflow: hidden;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.composer-status-recovery {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.composer-status-recovery > svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.composer-status-recovery > strong {
+  flex: none;
+  font-size: inherit;
+  font-weight: 500;
+}
+
+.composer-status-recovery > span,
+.composer-status-queue {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-status-queue {
+  min-width: 0;
+  margin-left: auto;
+}

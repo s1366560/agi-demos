@@ -77,7 +77,7 @@ async def authorize_existing_scoped_session_v2(
                 HITLRequest.conversation_id == conversation_id,
                 HITLRequest.tenant_id == context.tenant_id,
                 HITLRequest.project_id == project_id,
-                HITLRequest.status.in_(("pending", "answered")),
+                HITLRequest.status.in_(("pending", "answered", "processing", "completed")),
                 or_(
                     HITLRequest.user_id == context.user_id,
                     and_(

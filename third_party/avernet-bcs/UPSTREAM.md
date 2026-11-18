@@ -83,6 +83,19 @@ inputs. `scripts/avernet-bcs/audit.sh` pins cargo-audit 0.22.2 and denies all
 vulnerability, unmaintained, unsound, and yanked findings without an advisory
 allowlist.
 
+## Compatibility assessment of v2026.09.17
+
+MemStack retains the fixed revision above. A three-way trial of the release
+(`96adb2ea`, BCS tree `c16a26e0`) found 31 conflicts across the upstream
+and downstream changes. The new transaction protocol can bind a later
+statement's parameters from earlier query results and stop when a query
+returns no rows. The downstream PostgreSQL adapter reads raw parameters;
+adopting the release without implementing those semantics could persist SQL
+NULL instead of a bound value. Port the PostgreSQL transaction interpreter
+and validate its behavior against SQLite before updating the baseline.
+Also reconcile migrations 9–27 and the provider frame's downstream run ID.
+The release lockfile alone does not fix the libz-sys or chrono advisories.
+
 ## Reproducible build provenance
 
 The two BCS build scripts never inspect the enclosing Git worktree or local

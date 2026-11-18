@@ -2827,6 +2827,9 @@ const enUS: Record<string, string> = {
   'automations.runTrigger.unknown': 'Unknown source',
   'session.runControlUnavailable':
     'This session does not have an authoritative run that can be controlled.',
+  'session.authorityRefreshing': 'Syncing run state…',
+  'session.authorityRefreshingDescription':
+    'Updating available actions; the conversation remains readable.',
   'session.authorityLoading': 'Restoring session…',
   'session.authorityLoadingDescription':
     'Run state is syncing. Existing messages remain readable.',
@@ -2862,6 +2865,7 @@ const enUS: Record<string, string> = {
   'session.planDraftReadyDescription':
     '{count} steps are waiting. Review the environment and permissions before approving.',
   'session.planDraftReadyMore': '+{count} more',
+  'session.planDraftPreview': 'Preview {count} steps',
   'session.planDraftReadyAction': 'Review plan',
   'session.planReadyForReview': 'Plan generated. Review it before execution.',
   'session.responseStopped': 'Response stopped',
@@ -3023,6 +3027,9 @@ const enUS: Record<string, string> = {
     'Summary regeneration is available in cloud workspaces only.',
   'session.composerBlockedByRunState':
     'This run is not accepting ordinary input. Use the visible review, approval, or recovery action.',
+  'session.composerBlockedByActiveRun':
+    'A run is in progress and is not accepting ordinary input.',
+  'session.cancelRun': 'Cancel run',
   'session.localLlmUnconfigured':
     'Configure a local model provider before starting this conversation.',
   'session.localLlmUnconfiguredTitle': 'No local model provider',
@@ -3716,16 +3723,16 @@ const enUS: Record<string, string> = {
   'chat.denyFeedbackHint':
     'Your feedback is sent to the agent as a steering message together with the denial.',
   'chat.permissionPreset.label': 'Approvals',
-  'chat.permissionPreset.default': 'Default',
-  'chat.permissionPreset.relaxed': 'Relaxed',
+  'chat.permissionPreset.default': 'Ask every time',
+  'chat.permissionPreset.relaxed': 'Auto edit',
   'chat.permissionPreset.full': 'Full access',
   'chat.permissionPreset.defaultDescription': 'Ask before every permission request.',
   'chat.permissionPreset.relaxedDescription':
-    'Reads and workspace task/file writes run without prompts; other change requests are denied.',
-  'chat.permissionPreset.fullDescription': 'Auto-allow every permission request in this session.',
+    'Automatically approve declared workspace edits; ask for other permissions.',
+  'chat.permissionPreset.fullDescription': 'Automatically approve ordinary tool permissions; device and application grants still require confirmation.',
   'chat.fullAccessWarning.title': 'Enable full access for this session?',
   'chat.fullAccessWarning.body':
-    'Every permission request in this session will be approved automatically, including destructive or irreversible actions. The change takes effect immediately and is remembered for this conversation.',
+    'Ordinary tool permission requests in this session will be approved automatically, including destructive or irreversible actions. Device and application grants still require manual confirmation. This setting takes effect after saving and is shared across clients for this conversation.',
   'chat.fullAccessWarning.confirm': 'Enable full access',
   'chat.submitSecurely': 'Submit securely',
   'chat.enterDecision': 'Enter a decision',
@@ -7136,6 +7143,8 @@ const zhCN: Record<string, string> = {
   'session.liveReconnecting': '正在重连更新',
   'session.liveUpdatesEnded': '更新已结束',
   'session.runControlUnavailable': '当前会话没有可控制的权威运行。',
+  'session.authorityRefreshing': '正在同步运行状态…',
+  'session.authorityRefreshingDescription': '正在更新可用操作；已有消息仍可阅读。',
   'session.authorityLoading': '正在恢复会话…',
   'session.authorityLoadingDescription': '正在同步运行状态；已有消息仍可阅读和复制。',
   'session.authoritySlowTitle': '会话恢复时间较长',
@@ -7162,6 +7171,7 @@ const zhCN: Record<string, string> = {
   'session.planDraftReadyTitle': '计划已生成，等待审阅',
   'session.planDraftReadyDescription': '共 {count} 个步骤。审阅执行环境与权限后批准。',
   'session.planDraftReadyMore': '还有 {count} 个步骤',
+  'session.planDraftPreview': '预览 {count} 个步骤',
   'session.planDraftReadyAction': '审阅计划',
   'session.planReadyForReview': '计划已生成，执行前请先审阅。',
   'session.responseStopped': '已停止生成',
@@ -7300,6 +7310,9 @@ const zhCN: Record<string, string> = {
   'session.conversationSummaryLocalOnly': '仅云端工作空间支持重新生成摘要。',
   'session.composerBlockedByRunState':
     '此运行当前不接受普通输入，请使用页面中显示的审查、审批或恢复操作。',
+  'session.composerBlockedByActiveRun':
+    '当前运行仍在进行，暂不接受普通输入。',
+  'session.cancelRun': '取消运行',
   'session.localLlmUnconfigured': '请先配置本地模型提供商，再开始此对话。',
   'session.localLlmUnconfiguredTitle': '尚未配置本地模型提供商',
   'session.localLlmUnconfiguredDescription': '配置并启用本地 LLM 提供商后，对话才能运行。',
@@ -7962,15 +7975,15 @@ const zhCN: Record<string, string> = {
   'chat.denyFeedbackPlaceholder': '告诉 Agent 接下来应该怎么做……',
   'chat.denyFeedbackHint': '反馈会与拒绝一起作为引导消息发送给 Agent。',
   'chat.permissionPreset.label': '审批',
-  'chat.permissionPreset.default': '默认',
-  'chat.permissionPreset.relaxed': '宽松',
+  'chat.permissionPreset.default': '每次询问',
+  'chat.permissionPreset.relaxed': '自动编辑',
   'chat.permissionPreset.full': '完全放行',
   'chat.permissionPreset.defaultDescription': '每次权限请求都需要手动确认。',
-  'chat.permissionPreset.relaxedDescription': '读取与工作区任务/文件写入自动放行；其余变更请求将被拒绝。',
-  'chat.permissionPreset.fullDescription': '本会话内自动允许所有权限请求。',
+  'chat.permissionPreset.relaxedDescription': '自动批准已声明的工作区编辑；其他权限仍需确认。',
+  'chat.permissionPreset.fullDescription': '自动批准普通工具权限；设备与应用授权仍需手动确认。',
   'chat.fullAccessWarning.title': '为本会话启用完全放行？',
   'chat.fullAccessWarning.body':
-    '本会话内的所有权限请求都将被自动批准，包括具有破坏性或不可逆的操作。该设置立即生效，并会在此对话中记住。',
+    '本会话内的普通工具权限请求将被自动批准，包括具有破坏性或不可逆的操作。设备与应用授权仍需手动确认。设置保存成功后生效，并在此对话的各客户端间同步。',
   'chat.fullAccessWarning.confirm': '启用完全放行',
   'chat.submitSecurely': '安全提交',
   'chat.enterDecision': '输入决策',

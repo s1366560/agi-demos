@@ -663,6 +663,52 @@ describe('SSE Event Adapter', () => {
       }
     });
 
+    it('preserves canonical automatic origin on a restored permission ask', () => {
+      expect(
+        sseEventToTimeline({
+          type: 'permission_asked',
+          data: {
+            request_id: 'restored',
+            tool_name: 'write',
+            answered: true,
+            granted: true,
+            auto_approved: true,
+          },
+        } as any)
+      ).toMatchObject({ requestId: 'restored', answered: true, granted: true, autoApproved: true });
+    });
+
+    it('preserves canonical nested automatic permission verdicts for replay', () => {
+      const timelineEvent = sseEventToTimeline({
+        type: 'permission_replied',
+        data: {
+          request_id: 'automatic',
+          response_data: { granted: true, auto_approved: true },
+        },
+      } as any);
+      expect(timelineEvent).toMatchObject({
+        type: 'permission_replied',
+        requestId: 'automatic',
+        granted: true,
+        autoApproved: true,
+      });
+    });
+
+    it('decodes manager automatic allow replies without treating rejection as a grant', () => {
+      for (const reply of ['once', 'always', 'reject']) {
+        expect(
+          sseEventToTimeline({
+            type: 'permission_replied',
+            data: {
+              request_id: 'automatic',
+              reply,
+              auto_approved: true,
+            },
+          } as any)
+        ).toMatchObject({ granted: reply !== 'reject', autoApproved: true });
+      }
+    });
+
     it('should convert permission_replied', () => {
       const timelineEvent = sseEventToTimeline({
         type: 'permission_replied',

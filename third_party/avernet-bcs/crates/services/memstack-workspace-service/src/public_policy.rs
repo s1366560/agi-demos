@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::{
     ActorId, ContractVersion, ExpectedRevision, IdempotencyKey, ModelId, ProjectId, ProviderId,
     ProviderRegistryLookup, ProviderRegistryPort, ProviderRegistryPortError, RequestHash, TenantId,
@@ -391,7 +390,7 @@ impl<'a> PublicWorkspacePolicyService<'a> {
             return Err(PublicWorkspacePolicyError::RevisionExhausted);
         }
         let committed_policy_revision = expected_policy_revision + 1;
-        let updated_at = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
+        let updated_at = crate::timestamps::response_micros(time::OffsetDateTime::now_utc());
         let response = json!({
             "tenant_id": scope.tenant_id().as_str(),
             "project_id": scope.project_id().as_str(),

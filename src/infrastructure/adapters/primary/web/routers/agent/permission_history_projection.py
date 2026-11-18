@@ -47,6 +47,8 @@ def permission_history_item(
     elif status.get("status") in ("answered", "completed"):
         answered = True
         granted = permission_granted(status.get("response"), status.get("response_metadata", {}))
+    response_metadata = status.get("response_metadata", {})
+    auto = granted is True and response_metadata.get("auto_approved") is True
     remember = stored.get("allow_remember", data.get("allow_remember", True))
     return {
         "requestId": request_id,
@@ -61,6 +63,9 @@ def permission_history_item(
         )
         or "",
         "allowRemember": remember if isinstance(remember, bool) else False,
+        "autoApproved": auto,
+        "auto_approved": auto,
+        "preset": response_metadata.get("preset") if auto else None,
         "answered": answered,
         "granted": granted,
     }

@@ -53,6 +53,9 @@ const {
   toolCallPresentationKind,
   toolCallStreamingArguments,
 } = require("/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js");
+const { timelineItemFromSocketEvent } = require(
+  "/tmp/agistack-desktop-test-dist/src/features/chat/appTimelineEventModel.js",
+);
 const appSource = readFileSync(
   new URL("../src/App.tsx", import.meta.url),
   "utf8",
@@ -1020,6 +1023,36 @@ test("canonical user rows are never deduplicated by content or shared message id
     items.filter((item) => item.role === "user").map((item) => item.id),
     ["persisted-user-message-1", "persisted-user-message-2"],
   );
+});
+
+test("HTTP turn admission and socket replay reconcile only the same persisted user event", () => {
+  const history = {
+    id: "turn_admitted-1000000-2", type: "user_message", role: "user",
+    message_id: "execution-1", content: "one request", eventTimeUs: 1_000_000, eventCounter: 2,
+  };
+  const replay = timelineItemFromSocketEvent({
+    type: "user_message", event_time_us: history.eventTimeUs, event_counter: history.eventCounter,
+    data: { message_id: "client-1", execution_message_id: "execution-1", content: "one request" },
+  });
+  assert.equal(replay.id, "user_message-1000000-2");
+  for (const items of [
+    mergeConversationTimelineItems([history], [replay]),
+    mergeConversationTimelineItems([replay], [history]),
+    timelineItemsForDisplay([history, replay]),
+    timelineItemsForDisplay([replay, history]),
+  ]) {
+    assert.equal(items.length, 1);
+    assert.equal(items[0].content, "one request");
+  }
+  for (const distinct of [
+    { ...replay, eventTimeUs: 1_000_001 },
+    { ...replay, eventCounter: 3 },
+    { ...replay, message_id: "client-2", executionMessageId: "execution-2" },
+    { ...replay, eventTimeUs: 0 },
+  ]) {
+    assert.equal(mergeConversationTimelineItems([history], [distinct]).length, 2);
+    assert.equal(timelineItemsForDisplay([history, distinct]).length, 2);
+  }
 });
 
 test("two optimistic user sends before an assistant response both remain visible", () => {

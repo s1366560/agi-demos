@@ -187,6 +187,7 @@
     "src/features/chat/hitlResponseEventModel.ts",
     "src/features/chat/hitlResponseCardModel.ts",
     "src/features/chat/permissionPresetModel.ts",
+    "src/features/chat/conversationApprovalSyncModel.ts",
     "src/features/chat/hitlAuthorityRecovery.ts",
     "src/features/chat/subagentTimelineGroupModel.ts",
     "src/features/chat/subagentControlAuthorityModel.ts",

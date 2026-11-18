@@ -1,7 +1,6 @@
 //! Legacy-compatible Workspace Context application service with Agent-first ambiguity resolution.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::{
     IdempotencyKey, ProjectId, TenantId, UserId, WorkspaceCommandError, WorkspaceContextCandidate,
     WorkspaceContextCurrent, WorkspaceContextJudgeContractError, WorkspaceContextJudgePort,
@@ -440,7 +439,7 @@ fn context_transition_with_hash(
     request_hash: String,
     audit: Option<WorkspaceContextAuditRecord>,
 ) -> Result<WorkspaceContextTransition, PublicWorkspaceContextError> {
-    let persisted_at = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
+    let persisted_at = crate::timestamps::response_micros(time::OffsetDateTime::now_utc());
     let event_type = match kind {
         WorkspaceContextTransitionKind::Initialize => "workspace_context.initialized",
         WorkspaceContextTransitionKind::Repair => "workspace_context.repaired",
@@ -484,7 +483,7 @@ fn successful_judgment_audit(
     judgment: &WorkspaceContextJudgment,
     selected: &WorkspaceContextCandidateSnapshot,
 ) -> WorkspaceContextAuditRecord {
-    let created_at = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
+    let created_at = crate::timestamps::response_micros(time::OffsetDateTime::now_utc());
     WorkspaceContextAuditRecord {
         audit_id: deterministic_id("context-judge", user_id, &created_at),
         user_id: user_id.to_string(),
@@ -503,7 +502,7 @@ fn successful_judgment_audit(
 }
 
 fn failed_judgment_audit(request: &WorkspaceContextJudgmentRequest) -> WorkspaceContextAuditRecord {
-    let created_at = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
+    let created_at = crate::timestamps::response_micros(time::OffsetDateTime::now_utc());
     let input = json!({
         "user_id": request.user_id().as_str(),
         "current": request.current().map(|current| json!({

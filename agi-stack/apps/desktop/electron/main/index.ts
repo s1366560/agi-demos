@@ -1396,6 +1396,8 @@ async function createMainWindow(): Promise<void> {
   window.once('ready-to-show', () => window.show());
   window.webContents.on('did-start-navigation', (details) => {
     if (details.isMainFrame && !details.isSameDocument) {
+      cloudSocketBroker?.cancelOwner(cloudRequestOwnerId);
+      cloudRequestExecutions.cancelOwner(cloudRequestOwnerId);
       mcpAppGuestHost.clear();
       void mcpAppFrameHost.clear();
       computerUseActivity?.clear(cloudRequestOwnerId);

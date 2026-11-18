@@ -466,3 +466,54 @@ test('frames buffered during discovery retain frame and aggregate limits', async
     assert.deepEqual(events, ['error', 'close']);
   }
 });
+
+for (const retirement of ['close', 'cancelOwner', 'cancelAll']) {
+  test(`pending socket authorization cannot resurrect after ${retirement}`, async () => {
+    const { DesktopCloudSocketBroker } = require(compiledModule);
+    let resolveAuthorization;
+    const events = [];
+    const sockets = [];
+    const broker = new DesktopCloudSocketBroker({
+      authorize: () => new Promise((resolve) => { resolveAuthorization = resolve; }),
+      createSocket: (url, protocols) => {
+        const socket = fakeSocket(url, protocols);
+        sockets.push(socket);
+        return socket;
+      },
+      emit: (ownerId, event) => events.push({ ownerId, event }),
+    });
+    const socketId = 'pending-authorization-socket';
+    const pending = broker.open(31, { socketId, request: {} });
+    await assert.rejects(broker.close(32, { socketId, code: 1000, reason: '' }), /unavailable/u);
+    if (retirement === 'close') await broker.close(31, { socketId, code: 1000, reason: '' });
+    else assert.equal(broker[retirement](...(retirement === 'cancelOwner' ? [31] : [])), 1);
+    resolveAuthorization(policy);
+    await pending;
+    assert.equal(sockets.length, 0);
+    assert.equal(broker.activeCount, 0);
+    assert.deepEqual(events.map(({ ownerId, event }) => [ownerId, event.type]), [[31, 'close']]);
+    // The same owner can connect again after a reload without consuming an old slot.
+    const next = broker.open(31, { socketId, request: {} });
+    resolveAuthorization(policy);
+    await next;
+    assert.equal(sockets.length, 1);
+    broker.cancelAll();
+  });
+}
+
+test('repeated owner navigation releases live socket slots without affecting another owner', async () => {
+  const { DesktopCloudSocketBroker } = require(compiledModule);
+  const broker = new DesktopCloudSocketBroker({
+    authorize: async () => policy,
+    createSocket: (url, protocols) => fakeSocket(url, protocols),
+    emit: () => {},
+    perOwnerLimit: 1,
+  });
+  await broker.open(42, { socketId: 'other-owner-socket-001', request: {} });
+  for (let index = 0; index < 12; index += 1) {
+    await broker.open(41, { socketId: `navigation-socket-${index.toString().padStart(4, '0')}`, request: {} });
+    assert.equal(broker.cancelOwner(41), 1);
+    assert.equal(broker.activeCount, 1);
+  }
+  broker.cancelAll();
+});

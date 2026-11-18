@@ -125,6 +125,7 @@ export const restApi = {
     conversationId: string,
     projectId: string,
     config: {
+      approval_mode?: 'ask' | 'auto_edit' | 'full_access';
       selected_agent_id?: string | null;
       llm_model_override?: string | null;
       llm_overrides?: Record<string, unknown> | null;
@@ -344,11 +345,16 @@ export const restApi = {
     });
   },
 
-  async respondToPermissionHttp(requestId: string, granted: boolean): Promise<void> {
+  async respondToPermissionHttp(
+    requestId: string,
+    granted: boolean,
+    approvalMode?: 'auto_edit' | 'full_access'
+  ): Promise<void> {
     await api.post<{ status: string }>('/agent/hitl/respond', {
       request_id: requestId,
       hitl_type: 'permission',
-      response_data: { granted, action: granted ? 'allow' : 'deny' },
+      response_data: { granted, action: granted ? 'allow' : 'deny', scope: 'once' },
+      ...(granted && approvalMode ? { approval_mode: approvalMode } : {}),
     });
   },
 

@@ -542,7 +542,7 @@
       "module_ref": "builtin://memstack/desktop/conversation-config-authority",
       "entrypoint": "applyDesktopConversationConfigAuthorityV2",
       "artifact": {
-        "digest": "sha256:cb3ba952e26b03f7263cd862aef4d27f2d772cc836850ea7f4d5547d0b14ecf3",
+        "digest": "sha256:8fd6f70a72dec0d5853980edb05bcca886443aa5514460449bffbb459c40ce09",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopConversationConfigAuthorityModuleV2.ts"
       },
       "targets": [
@@ -3301,7 +3301,7 @@
       "module_ref": "builtin://memstack/desktop/hitl-response-authority",
       "entrypoint": "applyDesktopHitlResponseAuthorityV2",
       "artifact": {
-        "digest": "sha256:54320982bebd86091d7cc174517847379441a5627a5327ebf18ec0e429a6d49d",
+        "digest": "sha256:47a678396fe9755c1428168bdd2f8319d7f310464e797f24d10cfc7acdfb2e3b",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopHitlResponseAuthorityModuleV2.ts"
       },
       "targets": [

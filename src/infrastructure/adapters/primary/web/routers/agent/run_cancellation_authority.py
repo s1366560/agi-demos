@@ -21,6 +21,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     HITLRequest,
     User,
 )
+from src.infrastructure.adapters.secondary.persistence.terminal_hitl_run_binding import (
+    terminal_hitl_run_binding,
+)
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.agent_worker_runtime import current_agent_worker_redis_client_v2
 from src.infrastructure.plugins.v2.boundary import (
@@ -90,6 +93,12 @@ async def cancel_run(
             HITLRequest.project_id == run.project_id,
             HITLRequest.conversation_id == run.conversation_id,
             HITLRequest.status == "pending",
+            ~terminal_hitl_run_binding(
+                tenant_id=HITLRequest.tenant_id,
+                project_id=HITLRequest.project_id,
+                conversation_id=HITLRequest.conversation_id,
+                message_id=HITLRequest.message_id,
+            ),
             HITLRequest.expires_at > datetime.now(UTC),
         )
         .limit(1)

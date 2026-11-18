@@ -15,6 +15,28 @@ async fn postgres_db_plugin_passes_contract() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 #[ignore = "requires BCS_TEST_POSTGRES_URL"]
+async fn postgres_calendar_parameters_keep_precision_and_timezone() -> Result<(), Box<dyn Error>> {
+    let database_url = std::env::var("BCS_TEST_POSTGRES_URL")?;
+    let plugin = PostgresDbPlugin::connect(&database_url, 1).await?;
+    let rows = plugin.query(DbStatement::with_params(
+        "SELECT $1::date AS day, $2::time AS clock, $3::timestamp AS local_ts, $4::timestamptz AS instant",
+        vec!["2024-02-29".into(), "00:01:02.010".into(),
+             "2024-02-29 01:02:03".into(), "2024-03-01T06:02:03.000004+08:00".into()],
+    )).await?;
+    let row = rows.first().ok_or("missing timestamp row")?;
+    for (column, expected) in [
+        ("day", "2024-02-29"),
+        ("clock", "00:01:02.010"),
+        ("local_ts", "2024-02-29 01:02:03"),
+        ("instant", "2024-02-29T22:02:03.000004Z"),
+    ] {
+        assert_eq!(row.get_string(column)?.as_deref(), Some(expected));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires BCS_TEST_POSTGRES_URL"]
 async fn postgres_timestamptz_uses_legacy_json_timestamp_format() -> Result<(), Box<dyn Error>> {
     let database_url = std::env::var("BCS_TEST_POSTGRES_URL")?;
     let plugin = PostgresDbPlugin::connect(&database_url, 1).await?;

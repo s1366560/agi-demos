@@ -171,12 +171,11 @@ async fn baas_data_or_conflict_ok(resp: reqwest::Response) -> Result<serde_json:
     Err(crate::error::map_baas_error(code, status.as_u16(), body["detail"]["message"].as_str().unwrap_or("")))
 }
 
-/// ISO 8601 -> unix seconds via chrono `DateTime::parse_from_rfc3339`.
+/// Convert RFC 3339 timestamps to Unix seconds.
 fn parse_iso_to_unix(s: &str) -> Option<u64> {
-    use chrono::DateTime;
     if s.is_empty() { return None; }
-    let dt = DateTime::parse_from_rfc3339(s).ok()?;
-    Some(dt.timestamp().max(0) as u64)
+    let dt = time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339).ok()?;
+    Some(dt.unix_timestamp().max(0) as u64)
 }
 
 /// Current unix timestamp in seconds.

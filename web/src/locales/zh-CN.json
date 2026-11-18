@@ -7695,6 +7695,7 @@
       "charLimitHint": "超过 {{count}} 个字符的消息可能会被模型截断"
     },
     "permissionMode": {
+      "saveFailed": "无法保存审批级别，请重试。",
       "label": "授权模式",
       "title": "授权设置",
       "ask": "变更前确认",

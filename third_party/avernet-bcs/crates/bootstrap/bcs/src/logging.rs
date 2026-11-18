@@ -95,7 +95,10 @@ fn build_output_targets_filter(output: &LogOutputConfig) -> Targets {
 
 /// Get today's date string in local time (YYYY-MM-DD).
 fn today_local() -> String {
-    chrono::Local::now().format("%Y-%m-%d").to_string()
+    time::OffsetDateTime::now_local()
+        .unwrap_or_else(|_| time::OffsetDateTime::now_utc())
+        .format(time::macros::format_description!("[year]-[month]-[day]"))
+        .expect("valid timestamp format")
 }
 
 fn console_ansi_enabled() -> bool {
@@ -486,7 +489,11 @@ mod tests {
             .get(..19)
             .expect("main timestamp should include seconds");
         assert!(
-            chrono::NaiveDateTime::parse_from_str(main_timestamp, "%Y-%m-%d %H:%M:%S").is_ok(),
+            time::PrimitiveDateTime::parse(
+                main_timestamp,
+                time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second]")
+            )
+            .is_ok(),
             "main timestamp should use YYYY-MM-DD HH:mm:ss: {main_timestamp}"
         );
         assert_eq!(
@@ -504,7 +511,13 @@ mod tests {
             .get(..23)
             .expect("common error timestamp should include milliseconds");
         assert!(
-            chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%d %H:%M:%S%.3f").is_ok(),
+            time::PrimitiveDateTime::parse(
+                timestamp,
+                time::macros::format_description!(
+                    "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]"
+                )
+            )
+            .is_ok(),
             "common error timestamp should use YYYY-MM-DD HH:mm:ss.SSS: {timestamp}"
         );
     }

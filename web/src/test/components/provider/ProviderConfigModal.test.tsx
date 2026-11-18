@@ -499,7 +499,9 @@ describe('ProviderConfigModal', () => {
     expect(screen.queryByLabelText('Volcengine Secret Key (SK)')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Speech Access Token')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    const next = screen.getByRole('button', { name: 'Next' });
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.click(next);
     fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save Provider' }));
 

@@ -5,6 +5,7 @@ import {
   classifySessionTimelineWindowChange,
   isSessionTimelinePinnedToLatest,
   shouldFollowSessionTimeline,
+  sessionTimelineFollowIntent,
 } from '/tmp/agistack-desktop-test-dist/src/features/session/sessionTimelineScrollModel.js';
 
 const windowState = (overrides = {}) => ({
@@ -69,4 +70,29 @@ test('timeline pinned state uses a practical bottom tolerance', () => {
     isSessionTimelinePinnedToLatest({ scrollTop: 700, scrollHeight: 1_000, clientHeight: 200 }),
     false,
   );
+});
+
+test('layout growth, shrink and viewport resize preserve the follow preference', () => {
+  for (const viewport of [
+    { scrollTop: 800, scrollHeight: 1_000, clientHeight: 200 },
+    { scrollTop: 800, scrollHeight: 1_600, clientHeight: 200 },
+    { scrollTop: 400, scrollHeight: 600, clientHeight: 200 },
+    { scrollTop: 600, scrollHeight: 1_000, clientHeight: 400 },
+  ]) {
+    assert.equal(sessionTimelineFollowIntent(true, 'layout', viewport), true);
+    assert.equal(sessionTimelineFollowIntent(false, 'layout', viewport), false);
+  }
+});
+
+test('explicit navigation away stops following and forward navigation resumes only near the tail', () => {
+  const bottom = { scrollTop: 800, scrollHeight: 1_000, clientHeight: 200 };
+  const history = { ...bottom, scrollTop: 300 };
+  assert.equal(sessionTimelineFollowIntent(true, 'backward', bottom), false);
+  assert.equal(sessionTimelineFollowIntent(true, 'backward', history), false);
+  assert.equal(sessionTimelineFollowIntent(false, 'forward', history), false);
+  assert.equal(sessionTimelineFollowIntent(false, 'forward', bottom), true);
+  assert.equal(shouldFollowSessionTimeline('updated',
+    sessionTimelineFollowIntent(true, 'layout', { ...bottom, scrollHeight: 1_500 })), true);
+  assert.equal(shouldFollowSessionTimeline('updated',
+    sessionTimelineFollowIntent(true, 'backward', bottom)), false);
 });

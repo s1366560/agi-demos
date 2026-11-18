@@ -1,7 +1,6 @@
 //! Typed use cases over the fenced Workspace Plan runtime outbox.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{DateTime, SecondsFormat, Utc};
 use memstack_workspace_service_api::{
     WorkspacePlanDispatchAction, WorkspacePlanDispatchContractError, WorkspacePlanDispatchReceipt,
     WorkspacePlanDispatchRequest,
@@ -206,7 +205,8 @@ fn deterministic_id(namespace: &str, seed: &str) -> String {
 }
 
 fn timestamp(timestamp_ms: i64) -> Result<String, PublicWorkspacePlanDeliveryError> {
-    DateTime::<Utc>::from_timestamp_millis(timestamp_ms)
-        .map(|timestamp| timestamp.to_rfc3339_opts(SecondsFormat::Millis, true))
+    time::OffsetDateTime::from_unix_timestamp_nanos(i128::from(timestamp_ms) * 1_000_000)
+        .ok()
+        .map(|timestamp| crate::timestamps::response_millis(timestamp))
         .ok_or(PublicWorkspacePlanDeliveryError::InvalidTimestamp)
 }

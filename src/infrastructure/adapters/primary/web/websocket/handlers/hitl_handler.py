@@ -456,6 +456,7 @@ async def _handle_hitl_response(
     hitl_type: str,
     response_data: dict[str, Any],
     ack_type: str,
+    approval_mode: str | None = None,
 ) -> None:
     """
     Common handler for all HITL response types.
@@ -467,6 +468,39 @@ async def _handle_hitl_response(
         request_id=request_id,
     )
     if hitl_request is None:
+        return
+
+    from src.infrastructure.adapters.primary.web.routers.agent.automatic_permission_response import (
+        annotate_automatic_permission_response,
+    )
+
+    try:
+        if approval_mode is not None:
+            async with _resolve_session_factory(context.session_factory)() as db:
+                response_data = await annotate_automatic_permission_response(
+                    db,
+                    hitl_request=hitl_request,
+                    approval_mode=approval_mode,
+                    response_data=response_data,
+                )
+        else:
+            response_data = {
+                key: value
+                for key, value in response_data.items()
+                if key not in {"auto_approved", "preset"}
+            }
+    except ValueError:
+        await context.send_json(
+            {
+                "type": ack_type,
+                "request_id": request_id,
+                "success": False,
+                "conversation_id": hitl_request.conversation_id,
+            }
+        )
+        await context.send_error(
+            "Invalid automatic permission approval", conversation_id=hitl_request.conversation_id
+        )
         return
 
     conversation_id = hitl_request.conversation_id
@@ -693,6 +727,7 @@ class PermissionRespondHandler(WebSocketMessageHandler):
                 hitl_type="permission",
                 response_data={"granted": granted, "action": action, "scope": scope},
                 ack_type="permission_response_ack",
+                approval_mode=message.get("approval_mode"),
             )
         except Exception as e:
             logger.error(f"[WS HITL] Error handling permission response: {e}", exc_info=True)

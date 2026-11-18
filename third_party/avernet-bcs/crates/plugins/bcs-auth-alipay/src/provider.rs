@@ -113,7 +113,12 @@ impl AlipayOAuthProvider {
         params.insert("sign_type".to_string(), ALIPAY_SIGN_TYPE.to_string());
         params.insert(
             "timestamp".to_string(),
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            time::OffsetDateTime::now_local()
+                .unwrap_or_else(|_| time::OffsetDateTime::now_utc())
+                .format(time::macros::format_description!(
+                    "[year]-[month]-[day] [hour]:[minute]:[second]"
+                ))
+                .expect("valid timestamp format"),
         );
         params.insert("version".to_string(), ALIPAY_API_VERSION.to_string());
         params

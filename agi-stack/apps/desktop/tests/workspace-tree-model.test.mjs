@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 require.extensions['.css'] = () => {};
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
+const { Theme } = require('@radix-ui/themes');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const { WorkspaceDock } = require(
   '/tmp/agistack-desktop-test-dist/src/features/workspace/WorkspaceDock.js'
@@ -31,6 +32,7 @@ const {
   reconcileExpandedWorkspaceIds,
   reconcileWorkspaceConversationRowsAfterRefresh,
   replaceConversationInWorkspaceRows,
+  preserveConversationRunMetadata,
   resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
@@ -220,7 +222,7 @@ function renderWorkspaceDock(nodeState, conversationsByWorkspace, lifecycleActio
     React.createElement(
       I18nProvider,
       null,
-      React.createElement(WorkspaceDock, {
+      React.createElement(Theme, null, React.createElement(WorkspaceDock, {
         workspaces: [
           {
             id: 'workspace-a',
@@ -247,7 +249,7 @@ function renderWorkspaceDock(nodeState, conversationsByWorkspace, lifecycleActio
               onDeleteConversation: async () => {},
             }
           : {}),
-      })
+      }))
     )
   );
 }
@@ -345,9 +347,9 @@ test('workspace dock exposes accessible persisted lifecycle actions for every co
   );
 
   assert.equal((markup.match(/aria-haspopup="menu"/g) ?? []).length, 2);
-  assert.equal((markup.match(/role="button"/g) ?? []).length, 2);
-  assert.equal((markup.match(/>Rename conversation</g) ?? []).length, 2);
-  assert.equal((markup.match(/>Delete conversation</g) ?? []).length, 2);
+  assert.equal((markup.match(/class="workspace-tree-session-actions"/g) ?? []).length, 2);
+  // Closed portaled menus are absent until the user opens a trigger.
+  assert.doesNotMatch(markup, /role="menuitem"/);
   assert.match(markup, /aria-label="Actions for Unbound task session"/);
   assert.match(markup, /aria-label="Actions for Bound workspace session"/);
 });
@@ -437,23 +439,6 @@ test('workspace dock omits recency headers when every session shares one group',
   assert.match(markup, /Only task session/);
 });
 
-test('conversation lifecycle menus dismiss outside and restore focus on Escape', () => {
-  assert.match(
-    workspaceDockSource,
-    /details\.workspace-tree-session-actions\[open\]/,
-  );
-  assert.match(
-    workspaceDockSource,
-    /document\.addEventListener\('pointerdown', handleMenuPointerDown\)/,
-  );
-  assert.match(
-    workspaceDockSource,
-    /document\.addEventListener\('keydown', handleMenuKeyDown\)/,
-  );
-  assert.match(workspaceDockSource, /if \(event\.key !== 'Escape'\) return/);
-  assert.match(workspaceDockSource, /openMenu\.removeAttribute\('open'\)/);
-  assert.match(workspaceDockSource, /openMenu\.querySelector<HTMLElement>\('summary'\)\?\.focus\(\)/);
-});
 
 test('conversation lifecycle row updates are immutable and constrained to existing identities', () => {
   const original = {
@@ -1174,5 +1159,23 @@ test('conversation rows keep routine runtime metadata in tooltips and meaningful
   assert.match(markup, /data-status="active"/);
   assert.match(markup, /data-status="danger"/);
   assert.match(markup, /data-status="attention"/);
-  assert.match(markup, /role="menuitem"/);
+  assert.match(markup, /aria-haspopup="menu"/);
+});
+
+
+test('title responses preserve projected run status unless they explicitly replace it', () => {
+  for (const status of ['running', 'cancelled', 'completed']) {
+    const current = { ...conversation('run-session', 'Before', null),
+      metadata: { run: { id: 'run-1', status } } };
+    const replacement = { ...current, title: 'After', metadata: { subtitle: 'Updated' } };
+    const rows = replaceConversationInWorkspaceRows({ workspace: [current] }, replacement);
+    assert.equal(rows.workspace[0].title, 'After');
+    assert.equal(conversationTreeStatusValue(rows.workspace[0]), status);
+    assert.equal(rows.workspace[0].metadata.subtitle, 'Updated');
+    assert.equal(current.title, 'Before');
+    assert.equal(preserveConversationRunMetadata(current, { ...replacement, metadata: { run: null } })
+      .metadata.run, null);
+    const other = { ...replacement, tenant_id: 'other-tenant' };
+    assert.equal(preserveConversationRunMetadata(current, other), other);
+  }
 });

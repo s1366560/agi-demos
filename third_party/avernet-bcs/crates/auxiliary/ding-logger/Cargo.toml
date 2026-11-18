@@ -17,4 +17,4 @@ tracing      = { workspace = true }
 reqwest      = { workspace = true }
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 base64       = "0.22"
-chrono       = { workspace = true }
+time = { workspace = true }

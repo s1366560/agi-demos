@@ -408,6 +408,12 @@ impl DesktopSessionStore {
                    updated_at TEXT NOT NULL,
                    value_json TEXT NOT NULL
                  );
+                 CREATE TABLE IF NOT EXISTS desktop_conversation_approval_modes (
+                   conversation_id TEXT PRIMARY KEY,
+                   mode TEXT NOT NULL CHECK(mode IN ('ask', 'auto_edit', 'full_access')),
+                   FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id)
+                     ON DELETE CASCADE
+                 );
                  CREATE TABLE IF NOT EXISTS desktop_conversation_llm_routes (
                    conversation_id TEXT PRIMARY KEY,
                    provider_id TEXT NOT NULL,
@@ -1214,6 +1220,35 @@ impl DesktopSessionStore {
                 .map_err(|error| error.to_string())?;
         }
         transaction.commit().map_err(|error| error.to_string())
+    }
+
+    pub(super) fn conversation_approval_mode(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<String>, String> {
+        self.connection()?
+            .query_row(
+                "SELECT mode FROM desktop_conversation_approval_modes WHERE conversation_id = ?1",
+                [conversation_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())
+    }
+
+    pub(super) fn update_conversation_approval_mode(
+        &self,
+        conversation_id: &str,
+        mode: super::approval_config::ApprovalMode,
+    ) -> Result<(), String> {
+        self.connection()?
+            .execute(
+                "INSERT INTO desktop_conversation_approval_modes(conversation_id, mode)
+             VALUES (?1, ?2) ON CONFLICT(conversation_id) DO UPDATE SET mode = excluded.mode",
+                params![conversation_id, mode.as_str()],
+            )
+            .map(|_| ())
+            .map_err(|error| error.to_string())
     }
 
     pub(super) fn conversation_llm_route(

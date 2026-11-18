@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{DateTime, Duration as ChronoDuration, SecondsFormat, Utc};
 use memstack_workspace_service::{
     PublicWorkspaceAutonomyContext, PublicWorkspaceAutonomyJudgePort,
     PublicWorkspaceAutonomyScheduleCandidate, PublicWorkspaceAutonomyScheduleService,
@@ -136,22 +135,26 @@ impl WorkspaceAutonomyScheduler {
 
     /// Execute one bounded structural scan and Agent-judged tick batch.
     pub async fn tick_once(&self) -> Result<WorkspaceAutonomyScheduleBatchOutcome> {
-        self.tick_once_at(Utc::now()).await
+        self.tick_once_at(time::OffsetDateTime::now_utc()).await
     }
 
     pub(crate) async fn tick_once_at(
         &self,
-        now: DateTime<Utc>,
+        now: time::OffsetDateTime,
     ) -> Result<WorkspaceAutonomyScheduleBatchOutcome> {
-        let cooldown = ChronoDuration::from_std(self.config.cooldown)
+        let cooldown = time::Duration::try_from(self.config.cooldown)
             .context("Workspace Autonomy scheduler cooldown is invalid")?;
-        let cutoff = (now - cooldown).to_rfc3339_opts(SecondsFormat::Micros, false);
+        let cutoff = (now - cooldown)
+            .format(time::macros::format_description!(
+                "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]+00:00"
+            ))
+            .expect("valid timestamp format");
         let candidates =
             PublicWorkspaceAutonomyScheduleService::new(self.db.as_ref(), self.sql_flavor)
                 .list_due(cutoff.as_str(), self.config.batch_size)
                 .await
                 .context("list structurally due autonomous Workspaces")?;
-        let now_ms = now.timestamp_millis();
+        let now_ms = now.unix_timestamp_nanos().div_euclid(1_000_000) as i64;
         let mut outcome = WorkspaceAutonomyScheduleBatchOutcome {
             due: candidates.len(),
             ..WorkspaceAutonomyScheduleBatchOutcome::default()

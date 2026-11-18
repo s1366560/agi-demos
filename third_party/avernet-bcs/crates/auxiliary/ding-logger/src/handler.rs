@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use anyhow::{Context, Result};
-use chrono::Utc;
 use serde_json::Value;
 use tracing::info;
 
@@ -62,7 +61,7 @@ pub fn handle_frame(
     // Serialize as a single JSON object in the log message body.
     // BCS logging routes `ding_group_message` target to its own file via logging.outputs.
     let payload = serde_json::json!({
-        "timestamp": Utc::now().to_rfc3339(),
+        "timestamp": utc_timestamp(time::OffsetDateTime::now_utc()),
         "group_id": record.group_id,
         "message_id": record.message_id,
         "sender_staff_id": record.sender_staff_id,
@@ -163,4 +162,19 @@ fn base64_decode(s: &str) -> Result<String> {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     let bytes = STANDARD.decode(s).context("base64 decode failed")?;
     String::from_utf8(bytes).context("invalid UTF-8 in base64 data")
+}
+
+fn utc_timestamp(value: time::OffsetDateTime) -> String {
+    let suffix = match value.nanosecond() {
+        0 => String::new(),
+        nanos if nanos % 1_000_000 == 0 => format!(".{:03}", value.millisecond()),
+        nanos if nanos % 1_000 == 0 => format!(".{:06}", value.microsecond()),
+        nanos => format!(".{nanos:09}"),
+    };
+    let seconds = value
+        .format(time::macros::format_description!(
+            "[year]-[month]-[day]T[hour]:[minute]:[second]"
+        ))
+        .expect("UTC timestamp has all format components");
+    format!("{seconds}{suffix}+00:00")
 }

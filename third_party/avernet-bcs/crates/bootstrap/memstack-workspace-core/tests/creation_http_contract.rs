@@ -798,7 +798,9 @@ async fn expired_bootstrap_claim_recovers_after_objective_creation_and_revision_
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await?)?;
     let workspace_id = payload["id"].as_str().ok_or("missing workspace id")?;
 
-    let claim_now_ms = chrono::Utc::now().timestamp_millis();
+    let claim_now_ms = time::OffsetDateTime::now_utc()
+        .unix_timestamp_nanos()
+        .div_euclid(1_000_000) as i64;
     let bootstrap = PublicWorkspaceAutonomyBootstrapService::new(db.as_ref(), DbSqlFlavor::Sqlite);
     let claim = bootstrap
         .claim_bootstraps(

@@ -30,11 +30,17 @@ export function CurrentActivityHeadlineBar({
   sessionKey,
   presence,
   usage,
+  onStopResponse,
+  stopResponseDisabled = false,
+  stopResponseLoading = false,
 }: {
   activity: CurrentActivityHeadline;
   sessionKey: string;
   presence: SessionActivityPresence;
   usage?: SessionUsageSummary | null;
+  onStopResponse?: () => void;
+  stopResponseDisabled?: boolean;
+  stopResponseLoading?: boolean;
 }) {
   const { t } = useI18n();
   const [expandedState, setExpandedState] = useState({ key: sessionKey, open: false });
@@ -69,8 +75,14 @@ export function CurrentActivityHeadlineBar({
         <span className="current-activity-dot" aria-hidden="true" />
         <span className="current-activity-label">
           <strong>{label}</strong>
-          {activity.detail ? (
-            <span className="current-activity-detail">{activity.detail}</span>
+          {stalled.stalled ? (
+            <span className="current-activity-stalled" role="status" title={t('session.currentActivity.stalledHint')}>
+              {t('session.currentActivity.stalled', {
+                minutes: stalledIdleMinutes(stalled.idleMs),
+              })}
+            </span>
+          ) : activity.detail ? (
+            <span className="current-activity-detail" title={activity.detail}>{activity.detail}</span>
           ) : null}
         </span>
         {activity.activeSubagentCount > 1 ? (
@@ -89,6 +101,17 @@ export function CurrentActivityHeadlineBar({
           </span>
         ) : null}
         {elapsed ? <span className="current-activity-elapsed">{elapsed}</span> : null}
+        {stalled.stalled && onStopResponse ? (
+          <button
+            type="button"
+            className="current-activity-stalled-cancel"
+            disabled={stopResponseDisabled || stopResponseLoading}
+            title={t(stopResponseLoading ? 'session.stoppingResponse' : stopResponseDisabled ? 'session.stopResponseDisconnectedHint' : 'session.stopResponse')}
+            onClick={onStopResponse}
+          >
+            {t(stopResponseLoading ? 'session.stoppingResponse' : 'session.stopResponse')}
+          </button>
+        ) : null}
         <button
           type="button"
           className="current-activity-toggle"
@@ -100,21 +123,6 @@ export function CurrentActivityHeadlineBar({
           {expanded ? <ChevronDownIcon aria-hidden="true" /> : <ChevronRightIcon aria-hidden="true" />}
         </button>
       </div>
-      {stalled.stalled ? (
-        <div className="current-activity-stalled" role="status">
-          <span>
-            {t('session.currentActivity.stalled', {
-              minutes: stalledIdleMinutes(stalled.idleMs),
-            })}
-          </span>
-          <span className="current-activity-stalled-clock">
-            {formatElapsedClock(stalled.idleMs)}
-          </span>
-          <span className="current-activity-stalled-hint">
-            {t('session.currentActivity.stalledHint')}
-          </span>
-        </div>
-      ) : null}
       {expanded ? (
         <ul className="current-activity-entries" aria-label={t('session.currentActivity')}>
           {activity.entries.length === 0 ? (
