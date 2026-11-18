@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_store::{
     WorkspacePlanOutboxRecord, WorkspacePlanScope, WorkspacePlanSnapshotQuery, WorkspacePlanStore,
     WorkspacePlanStoreError, WorkspaceTaskAttemptRecord, WorkspaceTaskRecord, WorkspaceTaskScope,
@@ -233,7 +232,7 @@ impl<'a> PublicWorkspaceExecutionDiagnosticsService<'a> {
                 && evidence_gaps.is_empty(),
         });
         let blocked_reason = blockers.iter().find_map(explicit_blocked_reason);
-        let generated_at = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
+        let generated_at = crate::timestamps::response_micros(time::OffsetDateTime::now_utc());
         let selected_plan = plan.selected.as_ref();
         let controller_state = json!({
             "workspace_id": &input.workspace_id,

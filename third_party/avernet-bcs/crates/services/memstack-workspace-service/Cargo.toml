@@ -11,7 +11,7 @@ version = { workspace = true }
 async-trait = { workspace = true }
 bcs-db-api = { workspace = true }
 bcs-storage-api = { workspace = true }
-chrono = { workspace = true }
+time = { workspace = true }
 hex = { workspace = true }
 memstack-workspace-service-api = { workspace = true }
 memstack-workspace-store = { workspace = true }

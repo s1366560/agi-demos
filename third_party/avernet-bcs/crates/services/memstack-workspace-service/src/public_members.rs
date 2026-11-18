@@ -1,7 +1,6 @@
 //! Legacy-compatible public Workspace member mutation orchestration.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::{
     UserId, WorkspaceMemberRole, WorkspaceMutationAction, WorkspaceMutationAuthority,
 };
@@ -107,9 +106,9 @@ impl<'a> PublicWorkspaceMemberMutationService<'a> {
             )?,
             self.receipt_authority.as_ref(),
         );
-        let now = Utc::now();
-        let persisted_at = now.to_rfc3339_opts(SecondsFormat::Micros, false);
-        let response_at = now.to_rfc3339_opts(SecondsFormat::Micros, true);
+        let now = time::OffsetDateTime::now_utc();
+        let persisted_at = crate::timestamps::storage_micros(now);
+        let response_at = crate::timestamps::response_micros(now);
         let member = WorkspaceMemberSnapshot {
             member_id: member_identifier(input),
             workspace_id: input.context.workspace_id.clone(),
@@ -179,9 +178,9 @@ impl<'a> PublicWorkspaceMemberMutationService<'a> {
             )?,
             self.receipt_authority.as_ref(),
         );
-        let now = Utc::now();
-        let persisted_at = now.to_rfc3339_opts(SecondsFormat::Micros, false);
-        let response_at = now.to_rfc3339_opts(SecondsFormat::Micros, true);
+        let now = time::OffsetDateTime::now_utc();
+        let persisted_at = crate::timestamps::storage_micros(now);
+        let response_at = crate::timestamps::response_micros(now);
         member.role = input.role;
         member.updated_at = Some(persisted_at.clone());
         let response = member_response(&member, Some(response_at.as_str()));

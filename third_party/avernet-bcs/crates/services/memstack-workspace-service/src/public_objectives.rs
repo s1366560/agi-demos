@@ -1,7 +1,6 @@
 //! Legacy-compatible Workspace Objective use cases over the Avernet authority.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::WorkspaceMutationAuthority;
 use memstack_workspace_store::{
     WorkspaceObjectiveDomainWrite, WorkspaceObjectiveMutation, WorkspaceObjectiveRecord,
@@ -745,5 +744,5 @@ fn hash_value(value: Value) -> Result<String, serde_json::Error> {
 }
 
 fn now_string() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Micros, false)
+    crate::timestamps::storage_micros(time::OffsetDateTime::now_utc())
 }

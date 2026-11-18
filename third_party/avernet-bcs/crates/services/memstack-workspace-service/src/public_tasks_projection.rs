@@ -1,6 +1,5 @@
 //! Task validation, response projection, and structural read-model helpers.
 
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_store::{
     WorkspaceTaskAttemptRecord, WorkspaceTaskRecord, WorkspaceTaskScope,
 };
@@ -486,5 +485,5 @@ pub(super) fn request_hash(payload: Value) -> Result<String, PublicWorkspaceTask
 }
 
 pub(super) fn now_string() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true)
+    crate::timestamps::response_micros(time::OffsetDateTime::now_utc())
 }

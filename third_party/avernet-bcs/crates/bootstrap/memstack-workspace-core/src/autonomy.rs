@@ -73,7 +73,9 @@ async fn retry_autonomy_attention(
         .retry(
             &context,
             attention_id.as_str(),
-            chrono::Utc::now().timestamp_millis(),
+            time::OffsetDateTime::now_utc()
+                .unix_timestamp_nanos()
+                .div_euclid(1_000_000) as i64,
         )
         .await
         .map_err(attention_error_response)?;
@@ -102,7 +104,9 @@ async fn resolve_autonomy_attention(
         .resolve_judge_attention(
             &context,
             attention_id.as_str(),
-            chrono::Utc::now().timestamp_millis(),
+            time::OffsetDateTime::now_utc()
+                .unix_timestamp_nanos()
+                .div_euclid(1_000_000) as i64,
         )
         .await
         .map(Json)

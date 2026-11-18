@@ -1,6 +1,5 @@
 //! Topology validation, canonical hashing, IDs, and response projection.
 
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_store::{
     WorkspaceTopologyEdgeRecord, WorkspaceTopologyNodeRecord, WorkspaceTopologyScope,
     WorkspaceTopologyStore,
@@ -71,7 +70,7 @@ pub(super) fn deterministic_id(
 }
 
 pub(super) fn timestamp() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true)
+    crate::timestamps::response_micros(time::OffsetDateTime::now_utc())
 }
 
 pub(super) fn validate_node_input(

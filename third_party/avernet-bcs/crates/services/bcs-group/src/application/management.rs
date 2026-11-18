@@ -1023,10 +1023,12 @@ impl GroupManagementService for GroupManagement {
             (Some(topic), _) => Some(format!("Group: {}", topic)),
             (None, Some(label)) => Some(label.clone()),
             (None, None) => {
-                let now = chrono::Utc::now()
-                    .with_timezone(&chrono::FixedOffset::east_opt(8 * 3600).expect("UTC+8"))
-                    .format("%Y%m%d%H%M")
-                    .to_string();
+                let now = time::OffsetDateTime::now_utc()
+                    .to_offset(time::macros::offset!(+8))
+                    .format(time::macros::format_description!(
+                        "[year][month][day][hour][minute]"
+                    ))
+                    .expect("valid timestamp format");
                 Some(format!("{}-{}", cmd.driver_bot_id, now))
             }
         };

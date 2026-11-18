@@ -60,7 +60,7 @@ bcs-config-api = { workspace = true }
 bcs-protocol    = { workspace = true }
 
 [build-dependencies]
-chrono = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

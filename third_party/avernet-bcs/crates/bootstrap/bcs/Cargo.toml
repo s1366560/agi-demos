@@ -69,7 +69,6 @@ regex = { workspace = true }
 
 # Time
 time = { workspace = true }
-chrono = { workspace = true }
 
 # Crypto for Alibaba Cloud signing
 sha2 = { workspace = true }
@@ -179,7 +178,7 @@ if-addrs = "0.15"
 form_urlencoded = "1"
 
 [build-dependencies]
-chrono = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

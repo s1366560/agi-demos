@@ -1,6 +1,5 @@
 //! Atomic Workspace-owned half of the platform task-session saga.
 
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::{
     ActorId, ModelId, ProjectId, ProviderId, ProviderRegistryLookup, ProviderRegistryPort,
     ProviderRegistryPortError, TenantId, WorkspaceCommandError, WorkspaceId, WorkspaceName,
@@ -219,7 +218,7 @@ impl<'a> CreateTaskSessionService<'a> {
             } => {
                 let group_id = deterministic_id("group", input);
                 let owner_member_id = deterministic_id("owner", input);
-                let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
+                let timestamp = crate::timestamps::response_micros(time::OffsetDateTime::now_utc());
                 let workspace = json!({
                     "id": workspace_id,
                     "tenant_id": input.context.tenant_id,
@@ -271,8 +270,8 @@ impl<'a> CreateTaskSessionService<'a> {
         };
         let policy = self.prepare_policy(input, &scope, &policy_store).await?;
         let committed_authority_revision = expected_authority_revision + 1;
-        let now = Utc::now();
-        let created_at = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+        let now = time::OffsetDateTime::now_utc();
+        let created_at = crate::timestamps::response_millis(now);
         let message = json!({
             "id": input.initial_message.message_id,
             "workspace_id": scope.workspace_id().as_str(),
@@ -325,7 +324,7 @@ impl<'a> CreateTaskSessionService<'a> {
             message_content_json: serde_json::to_string(&input.initial_message.content)
                 .map_err(CreateTaskSessionError::Json)?,
             message_metadata_json: response["initial_message"]["metadata"].to_string(),
-            message_created_at_ms: now.timestamp_millis(),
+            message_created_at_ms: crate::timestamps::unix_millis(now),
             expected_authority_revision,
             committed_authority_revision,
             response,
@@ -395,7 +394,7 @@ impl<'a> CreateTaskSessionService<'a> {
             roles,
             reasoning_effort: selection.reasoning_effort.clone(),
             permission_mode: selection.permission_mode.clone(),
-            updated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true),
+            updated_at: crate::timestamps::response_micros(time::OffsetDateTime::now_utc()),
         }))
     }
 }

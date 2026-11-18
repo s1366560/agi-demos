@@ -18,15 +18,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "android_system_properties"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "819e7219dbd41043ac279b19830f2efc897156490d7fd6ea916720117ee66311"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "anstream"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -311,7 +302,6 @@ dependencies = [
  "bcs-user-directory-api",
  "bcs-user-identity",
  "bcs-ws",
- "chrono",
  "clap",
  "ding-logger",
  "dirs",
@@ -483,12 +473,12 @@ dependencies = [
  "base64",
  "bcs-auth-api",
  "bcs-test-support",
- "chrono",
  "pem",
  "reqwest",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "time",
  "tokio",
  "tracing",
  "urlencoding",
@@ -743,7 +733,6 @@ dependencies = [
  "bcs-config-api",
  "bcs-protocol",
  "chardetng",
- "chrono",
  "clap",
  "dirs",
  "encoding_rs",
@@ -755,6 +744,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "tempfile",
+ "time",
  "tokio",
  "tokio-util",
  "tracing",
@@ -894,11 +884,11 @@ dependencies = [
  "bcs-session-store",
  "bcs-test-support",
  "bytes",
- "chrono",
  "native-tls",
  "postgres-native-tls",
  "serde_json",
  "serde_yaml",
+ "time",
  "tokio",
  "tokio-postgres",
  "tracing",
@@ -910,7 +900,6 @@ name = "bcs-domain"
 version = "0.1.0"
 dependencies = [
  "base64",
- "chrono",
  "hmac 0.12.1",
  "serde",
  "serde_json",
@@ -1001,10 +990,10 @@ dependencies = [
  "bcs-session",
  "bcs-session-store",
  "bcs-test-support",
- "chrono",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+ "time",
  "tokio",
  "tokio-test",
  "tracing",
@@ -1567,12 +1556,12 @@ dependencies = [
  "async-trait",
  "bcs-domain",
  "bcs-storage-api",
- "chrono",
  "percent-encoding",
  "reqwest",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "time",
  "tokio",
  "tracing",
  "wiremock",
@@ -1605,9 +1594,9 @@ dependencies = [
  "bcs-protocol",
  "bcs-service-api",
  "bcs-test-support",
- "chrono",
  "futures",
  "serde_json",
+ "time",
  "tokio",
  "tracing",
  "uuid",
@@ -1676,7 +1665,6 @@ dependencies = [
  "bcs-session",
  "bcs-telemetry",
  "bcs-test-support",
- "chrono",
  "form_urlencoded",
  "futures",
  "opentelemetry",
@@ -1684,6 +1672,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "time",
  "tokio",
  "tokio-test",
  "tokio-tungstenite 0.26.2",
@@ -1800,19 +1789,6 @@ dependencies = [
  "cfg-if",
  "encoding_rs",
  "memchr",
-]
-
-[[package]]
-name = "chrono"
-version = "0.4.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
-dependencies = [
- "iana-time-zone",
- "js-sys",
- "num-traits",
- "wasm-bindgen",
- "windows-link",
 ]
 
 [[package]]
@@ -2099,11 +2075,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
- "chrono",
  "futures",
  "reqwest",
  "serde",
  "serde_json",
+ "time",
  "tokio",
  "tokio-tungstenite 0.26.2",
  "tracing",
@@ -2637,30 +2613,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iana-time-zone"
-version = "0.1.65"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e31bc9ad994ba00e440a8aa5c9ef0ec67d5cb5e5cb0cc7f8b744a35b389cc470"
-dependencies = [
- "android_system_properties",
- "core-foundation-sys",
- "iana-time-zone-haiku",
- "js-sys",
- "log",
- "wasm-bindgen",
- "windows-core",
-]
-
-[[package]]
-name = "iana-time-zone-haiku"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "icu_collections"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3065,7 +3017,6 @@ dependencies = [
  "bcs-storage-baas",
  "bcs-storage-local",
  "bytes",
- "chrono",
  "clap",
  "futures",
  "hex",
@@ -3079,6 +3030,7 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.21",
+ "time",
  "tokio",
  "tokio-util",
  "toml",
@@ -3099,7 +3051,6 @@ dependencies = [
  "bcs-db-postgres",
  "bcs-storage-api",
  "bytes",
- "chrono",
  "futures",
  "hex",
  "memstack-workspace-service-api",
@@ -3108,6 +3059,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.21",
+ "time",
  "tokio",
  "uuid",
 ]
@@ -3665,11 +3617,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "851ca9db4932932d69f3ea811b1abe63087a0f740a47692619dd40d4899b68be"
 dependencies = [
  "bytes",
- "chrono",
  "fallible-iterator 0.2.0",
  "postgres-protocol",
  "serde_core",
  "serde_json",
+ "time",
  "uuid",
 ]
 
@@ -5514,41 +5466,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
-name = "windows-core"
-version = "0.62.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8e83a14d34d0623b51dce9581199302a221863196a1dde71a7663a4c2be9deb"
-dependencies = [
- "windows-implement",
- "windows-interface",
- "windows-link",
- "windows-result",
- "windows-strings",
-]
-
-[[package]]
-name = "windows-implement"
-version = "0.60.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "windows-interface"
-version = "0.59.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5559,15 +5476,6 @@ name = "windows-result"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
-dependencies = [
- "windows-link",
-]
-
-[[package]]
-name = "windows-strings"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7837d08f69c77cf6b07689544538e017c1bfcf57e34b4c0ff58e6c2cd3b37091"
 dependencies = [
  "windows-link",
 ]

@@ -5,7 +5,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
 use bcs_storage_api::ByteStream;
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::WorkspaceMutationAuthority;
 use memstack_workspace_store::{
     WorkspaceFileDomainWrite, WorkspaceFileMutation, WorkspaceFileMutationOutcome,
@@ -1124,7 +1123,7 @@ fn created_event(response: &PublicWorkspaceFile, copied_from: Option<&str>) -> V
     value
 }
 fn timestamp() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true)
+    crate::timestamps::response_micros(time::OffsetDateTime::now_utc())
 }
 fn deterministic_file_id(
     context: &PublicWorkspaceFileContext,

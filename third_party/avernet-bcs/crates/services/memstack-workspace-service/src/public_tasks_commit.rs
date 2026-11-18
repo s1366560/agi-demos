@@ -218,7 +218,7 @@ fn task_dispatch_write(
             .as_str(),
         ),
         delivery_request_id,
-        created_at_ms: chrono::Utc::now().timestamp_millis(),
+        created_at_ms: crate::timestamps::unix_millis(time::OffsetDateTime::now_utc()),
     })
 }
 

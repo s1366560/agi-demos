@@ -5,7 +5,6 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use memstack_workspace_store::{
     WorkspaceAutonomyAttentionWrite, WorkspaceAutonomyJudgedSnapshot,
     WorkspaceAutonomyJudgmentApply, WorkspaceAutonomyJudgmentAudit,
@@ -563,7 +562,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
         };
         let tick_id = deterministic_tick_id(context, idempotency_key.as_str());
         let claim_id = deterministic_judgment_claim_id(tick_id.as_str());
-        let now_ms = Utc::now().timestamp_millis();
+        let now_ms = crate::timestamps::unix_millis(time::OffsetDateTime::now_utc());
         let lease_expires_at_ms = now_ms
             .checked_add(JUDGMENT_LEASE_SECONDS * 1_000)
             .ok_or(PublicWorkspaceAutonomyError::InvalidRequest)?;
@@ -625,7 +624,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                     claim_id: judged.claim_id.clone(),
                     audit_id: judged.audit_id.clone(),
                     lease_generation: judged.lease_generation,
-                    applied_at_ms: Utc::now().timestamp_millis(),
+                    applied_at_ms: crate::timestamps::unix_millis(time::OffsetDateTime::now_utc()),
                 }),
             )
             .await;
@@ -639,7 +638,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                 .mark_superseded(
                     &judged,
                     "Workspace authority changed before the judged tick could be applied",
-                    Utc::now().timestamp_millis(),
+                    crate::timestamps::unix_millis(time::OffsetDateTime::now_utc()),
                 )
                 .await?;
         }
@@ -654,7 +653,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
     ) -> Result<WorkspaceAutonomyJudgedSnapshot, PublicWorkspaceAutonomyError> {
         let started_at = Instant::now();
         let call = self.judge.judge(request).await;
-        let recorded_at = Utc::now();
+        let recorded_at = time::OffsetDateTime::now_utc();
         let latency_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
         let audit_id =
             deterministic_judgment_audit_id(lease.claim_id.as_str(), lease.lease_generation);
@@ -672,7 +671,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                     latency_ms: judgment.latency_ms(),
                     status: "judged".to_string(),
                     error_detail: None,
-                    created_at: recorded_at.to_rfc3339_opts(SecondsFormat::Micros, false),
+                    created_at: crate::timestamps::storage_micros(recorded_at),
                 };
                 self.judgments.record_audit(scope, &audit).await?;
                 match self
@@ -681,7 +680,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                         lease,
                         audit_id.as_str(),
                         &snapshot,
-                        recorded_at.timestamp_millis(),
+                        crate::timestamps::unix_millis(recorded_at),
                     )
                     .await
                 {
@@ -711,7 +710,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                     latency_ms,
                     status: "failed".to_string(),
                     error_detail: Some(error_detail.to_string()),
-                    created_at: recorded_at.to_rfc3339_opts(SecondsFormat::Micros, false),
+                    created_at: crate::timestamps::storage_micros(recorded_at),
                 };
                 self.judgments.record_audit(scope, &audit).await?;
                 self.judgments
@@ -719,7 +718,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                         lease,
                         audit_id.as_str(),
                         error_detail,
-                        recorded_at.timestamp_millis(),
+                        crate::timestamps::unix_millis(recorded_at),
                     )
                     .await?;
                 Err(error.into())
@@ -791,7 +790,8 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
         scope: &WorkspaceAutonomyScope,
         candidates: &[PublicWorkspaceAutonomyCandidate],
     ) -> Result<bool, PublicWorkspaceAutonomyError> {
-        let cutoff = Utc::now() - Duration::seconds(WORKSPACE_AUTONOMY_COOLDOWN_SECONDS);
+        let cutoff = time::OffsetDateTime::now_utc()
+            - time::Duration::seconds(WORKSPACE_AUTONOMY_COOLDOWN_SECONDS);
         for candidate in candidates {
             let Some(last_tick) = self
                 .store
@@ -800,10 +800,13 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
             else {
                 return Ok(false);
             };
-            let Ok(last_tick) = DateTime::parse_from_rfc3339(last_tick.as_str()) else {
+            let Ok(last_tick) = time::OffsetDateTime::parse(
+                last_tick.as_str(),
+                &time::format_description::well_known::Rfc3339,
+            ) else {
                 return Ok(false);
             };
-            if last_tick.with_timezone(&Utc) <= cutoff {
+            if last_tick <= cutoff {
                 return Ok(false);
             }
         }
@@ -851,7 +854,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                 workspace_agent_binding_id: action.workspace_agent_binding_id.clone(),
                 task_title: action.title.clone(),
                 task_description: action.description.clone(),
-                created_at_ms: Utc::now().timestamp_millis(),
+                created_at_ms: crate::timestamps::unix_millis(time::OffsetDateTime::now_utc()),
             })
         } else {
             None
@@ -878,7 +881,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                     source_kind: source_kind.to_string(),
                     source_id: tick_id.clone(),
                     reason: judgment.rationale().to_string(),
-                    created_at_ms: Utc::now().timestamp_millis(),
+                    created_at_ms: crate::timestamps::unix_millis(time::OffsetDateTime::now_utc()),
                 })
             }
             _ => None,
@@ -902,7 +905,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
             latency_ms: judgment.latency_ms(),
             status: "judged".to_string(),
             error_detail: None,
-            created_at: Utc::now().to_rfc3339_opts(SecondsFormat::Micros, false),
+            created_at: crate::timestamps::storage_micros(time::OffsetDateTime::now_utc()),
         });
         outcome_from_store(
             self.store
@@ -923,7 +926,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                     progression,
                     attention,
                     response: response_value,
-                    created_at: Utc::now().to_rfc3339_opts(SecondsFormat::Micros, false),
+                    created_at: crate::timestamps::storage_micros(time::OffsetDateTime::now_utc()),
                 })
                 .await?,
         )

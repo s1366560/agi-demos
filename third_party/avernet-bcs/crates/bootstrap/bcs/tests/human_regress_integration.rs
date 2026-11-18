@@ -304,14 +304,12 @@ fn regress1_human_default_mode_is_absent() {
 /// verifies the timestamp formatting matches the server.rs code.
 #[test]
 fn regress1_label_fallback_timestamp_format() {
-    // Verify the exact format string used in server.rs:
-    //   chrono::Utc::now()
-    //       .with_timezone(&chrono::FixedOffset::east_opt(8 * 3600).expect("UTC+8"))
-    //       .format("%Y%m%d%H%M")
-    use chrono::FixedOffset;
-    let utc8 = FixedOffset::east_opt(8 * 3600).expect("UTC+8");
-    let now = chrono::Utc::now().with_timezone(&utc8);
-    let ts = now.format("%Y%m%d%H%M").to_string();
+    let now = time::OffsetDateTime::now_utc().to_offset(time::macros::offset!(+8));
+    let ts = now
+        .format(time::macros::format_description!(
+            "[year][month][day][hour][minute]"
+        ))
+        .expect("valid timestamp format");
     // Must be 12 digits: YYYYMMDDHHmm
     assert_eq!(ts.len(), 12, "timestamp must be 12 chars: got {}", ts);
     assert!(

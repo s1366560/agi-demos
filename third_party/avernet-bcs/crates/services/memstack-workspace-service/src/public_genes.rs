@@ -1,7 +1,6 @@
 //! Legacy-compatible Workspace Gene use cases over the Avernet authority.
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::WorkspaceMutationAuthority;
 use memstack_workspace_store::{
     WorkspaceGeneDomainWrite, WorkspaceGeneMutation, WorkspaceGeneRecord, WorkspaceGeneScope,
@@ -573,7 +572,7 @@ fn hash_payload(value: &Value) -> Value {
 }
 
 fn timestamp() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true)
+    crate::timestamps::response_micros(time::OffsetDateTime::now_utc())
 }
 
 const fn active_status(is_active: bool) -> &'static str {

@@ -7,7 +7,6 @@ use bcs_db_api::{
     DbCountExpectation, DbError, DbPlugin, DbRow, DbStatement, DbTransactionStep, DbValue,
     db_get_column,
 };
-use chrono::DateTime;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use sha2::{Digest as _, Sha256};
@@ -1432,9 +1431,9 @@ fn required_timestamp(
     label: &str,
 ) -> Result<(String, i64), DesktopLegacyImportError> {
     let value = required_string(object, key, label)?;
-    let parsed = DateTime::parse_from_rfc3339(&value)
+    let parsed = time::OffsetDateTime::parse(&value, &time::format_description::well_known::Rfc3339)
         .map_err(|_| invalid(format!("{label}.{key} must be RFC 3339")))?;
-    Ok((value, parsed.timestamp_millis()))
+    Ok((value, parsed.unix_timestamp_nanos().div_euclid(1_000_000) as i64))
 }
 
 fn metadata_with_legacy(

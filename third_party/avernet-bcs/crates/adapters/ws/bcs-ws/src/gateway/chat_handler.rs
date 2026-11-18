@@ -30,8 +30,15 @@ fn generate_mock_response(message: &str) -> String {
     } else if msg_lower.contains("weather") || msg_lower.contains("天气") {
         "今天天气晴朗，气温 22°C。非常适合户外活动！".to_string()
     } else if msg_lower.contains("time") || msg_lower.contains("时间") {
-        let now = chrono::Local::now();
-        format!("当前时间: {}", now.format("%Y-%m-%d %H:%M:%S"))
+        let now =
+            time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc());
+        format!(
+            "当前时间: {}",
+            now.format(time::macros::format_description!(
+                "[year]-[month]-[day] [hour]:[minute]:[second]"
+            ))
+            .expect("valid timestamp format")
+        )
     } else if msg_lower.contains("status") || msg_lower.contains("状态") {
         "BCS 服务状态:\n✅ WebSocket: 正常\n✅ Bot 注册: 正常\n✅ 消息路由: 正常\n✅ 会话管理: 正常".to_string()
     } else {

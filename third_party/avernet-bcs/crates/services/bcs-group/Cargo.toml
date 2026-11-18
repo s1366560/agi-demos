@@ -21,7 +21,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 # Time
-chrono = "0.4"
+time = { workspace = true }
 
 # Error types
 thiserror = { workspace = true }

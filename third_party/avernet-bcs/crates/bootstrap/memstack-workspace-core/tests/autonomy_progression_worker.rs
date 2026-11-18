@@ -250,7 +250,9 @@ async fn scheduled_judgment_materializes_dispatch_and_runtime_correlation()
 
     let task_worker_boundary =
         PublicWorkspaceTaskDispatchService::new(db.as_ref(), DbSqlFlavor::Sqlite);
-    let now_ms = chrono::Utc::now().timestamp_millis();
+    let now_ms = time::OffsetDateTime::now_utc()
+        .unix_timestamp_nanos()
+        .div_euclid(1_000_000) as i64;
     let claims = task_worker_boundary
         .claim_dispatches("task-dispatch-test", now_ms, now_ms + 120_000, 10)
         .await?;
@@ -582,7 +584,9 @@ async fn judge_block_attention_stops_scheduling_until_an_editor_resolves_it()
         .resolve_judge_attention(
             &resolution_context,
             attention_id.as_str(),
-            chrono::Utc::now().timestamp_millis(),
+            time::OffsetDateTime::now_utc()
+                .unix_timestamp_nanos()
+                .div_euclid(1_000_000) as i64,
         )
         .await?;
     assert_eq!(resolved.attention_id, attention_id);
@@ -593,7 +597,9 @@ async fn judge_block_attention_stops_scheduling_until_an_editor_resolves_it()
         .resolve_judge_attention(
             &resolution_context,
             attention_id.as_str(),
-            chrono::Utc::now().timestamp_millis(),
+            time::OffsetDateTime::now_utc()
+                .unix_timestamp_nanos()
+                .div_euclid(1_000_000) as i64,
         )
         .await?;
     assert_eq!(replay.committed_revision, 2);

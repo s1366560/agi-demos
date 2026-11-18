@@ -7,7 +7,6 @@
 use std::collections::BTreeMap;
 
 use bcs_db_api::{DbPlugin, DbSqlFlavor};
-use chrono::{SecondsFormat, Utc};
 use memstack_workspace_service_api::{
     ActorId, BcsEnvironment, ContractVersion, ExpectedRevision, GroupId, IdempotencyKey,
     ParticipantActorId, ProjectId, RequestHash, TenantId, UserId, WorkspaceActor,
@@ -53,6 +52,7 @@ mod public_tasks;
 mod public_topology;
 mod structured_tasks;
 mod task_session;
+mod timestamps;
 
 pub use public_agents::{
     PublicBindWorkspaceAgentInput, PublicUnbindWorkspaceAgentInput,
@@ -352,9 +352,9 @@ impl<'a> WorkspaceCreationService<'a> {
         owner_email: Option<&str>,
         bootstrap_autonomy: bool,
     ) -> Result<CreateWorkspaceOutcome, CreateWorkspaceServiceError> {
-        let now = Utc::now();
-        let persisted_at = now.to_rfc3339_opts(SecondsFormat::Micros, false);
-        let response_at = now.to_rfc3339_opts(SecondsFormat::Micros, true);
+        let now = time::OffsetDateTime::now_utc();
+        let persisted_at = timestamps::storage_micros(now);
+        let response_at = timestamps::response_micros(now);
         let timestamps =
             WorkspaceCreationTimestamps::new(persisted_at.clone(), persisted_at.clone())?;
         let request_hash = canonical_request_hash(input, owner_email)?;
@@ -402,7 +402,7 @@ impl<'a> WorkspaceCreationService<'a> {
                     WorkspaceAutonomyBootstrapCreation::new(
                         input.content.name.as_str(),
                         input.content.description.as_deref(),
-                        now.timestamp_millis(),
+                        timestamps::unix_millis(now),
                     )?,
                 ),
             )?

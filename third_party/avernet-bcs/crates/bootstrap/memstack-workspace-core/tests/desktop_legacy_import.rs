@@ -496,8 +496,7 @@ async fn assert_imported_contract(db: &dyn DbPlugin) -> TestResult {
         "\"first message\""
     );
     let expected_created_at =
-        chrono::DateTime::parse_from_rfc3339("2026-07-14T03:47:29.661319+00:00")?
-            .timestamp_millis();
+        time::OffsetDateTime::parse("2026-07-14T03:47:29.661319+00:00", &time::format_description::well_known::Rfc3339)?.unix_timestamp_nanos().div_euclid(1_000_000) as i64;
     assert_eq!(
         db_get_column::<i64>(&rows[0], "created_at")?,
         expected_created_at
