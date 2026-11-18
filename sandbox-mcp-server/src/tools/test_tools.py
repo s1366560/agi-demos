@@ -118,24 +118,37 @@ def module_origin_for(module_name: str, import_root: Path) -> Path:
 
 
 def _default_generate_tests_output_path(source_path: Path, workspace_dir: str) -> Path:
-    """Place generated tests under workspace/tests, without overwriting files.
+    """Claim a unique workspace/tests/test_<file>[_N].py path without overwriting.
 
-    The SKILL example and conventional project layout use ``tests/test_<file>.py``.
-    An explicit ``output_path`` still wins. If the default name already exists,
-    a numeric suffix is added so existing tests are not clobbered.
+    Defaulting to ``tests/`` is a product-layout choice (the SKILL example uses
+    that directory). It is not a previously formalized tool contract; an
+    explicit ``output_path`` still wins and may overwrite.
+
+    The file is created with ``O_EXCL`` so concurrent callers cannot select
+    the same name and clobber each other. The path is resolved and rejected
+    if it would leave the workspace (including via a ``tests/`` symlink).
     """
     workspace = Path(workspace_dir).resolve()
     tests_dir = workspace / "tests"
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    resolved_tests = tests_dir.resolve()
+    if not resolved_tests.is_relative_to(workspace):
+        raise ValueError("Default test output path is outside the workspace")
+
     stem = source_path.stem
-    candidate = tests_dir / f"test_{stem}.py"
-    if not candidate.exists():
-        return candidate
-    index = 2
-    while True:
-        alt = tests_dir / f"test_{stem}_{index}.py"
-        if not alt.exists():
-            return alt
-        index += 1
+    index = 1
+    while index <= 10000:
+        name = f"test_{stem}.py" if index == 1 else f"test_{stem}_{index}.py"
+        candidate = resolved_tests / name
+        if not candidate.resolve().is_relative_to(workspace):
+            raise ValueError("Default test output path is outside the workspace")
+        try:
+            fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            return candidate
+        except FileExistsError:
+            index += 1
+    raise RuntimeError("Unable to allocate a unique default test output path")
 
 
 def _candidate_coverage_tests(source_path: Path, workspace_dir: str) -> list[Path]:
@@ -158,7 +171,12 @@ def _candidate_coverage_tests(source_path: Path, workspace_dir: str) -> list[Pat
 
 
 def _import_bootstrap_lines(import_root: Path, module_name: str) -> list[str]:
-    """Emit import preamble that prefers this workspace over a shadowed package."""
+    """Emit import preamble that prefers this workspace over a shadowed package.
+
+    These lines are written into the generated *test file* and execute only in
+    that test process (for example pytest). ``generate_tests`` does not exec
+    them and does not mutate ``sys.modules`` in the long-lived MCP host.
+    """
     top_level = module_name.split(".", 1)[0]
     return [
         "from pathlib import Path",

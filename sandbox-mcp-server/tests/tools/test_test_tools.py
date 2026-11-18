@@ -7,7 +7,9 @@ TDD Cycle:
 """
 
 import ast
+import asyncio
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -264,6 +266,70 @@ def test_default_generate_tests_output_path_increments_collisions(tmp_path):
 
     chosen = _default_generate_tests_output_path(source, str(tmp_path))
     assert chosen == tests_dir / "test_models_3.py"
+    assert chosen.exists()
+
+
+@pytest.mark.asyncio
+async def test_generate_tests_does_not_mutate_host_sys_modules(tmp_path, monkeypatch):
+    """Clearing a shadowed src package must happen only in generated test code."""
+    import types
+
+    source = tmp_path / "sample.py"
+    source.write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+
+    sentinel = types.ModuleType("src")
+    sentinel.__file__ = str(tmp_path / "shadow-host" / "src" / "__init__.py")
+    monkeypatch.setitem(sys.modules, "src", sentinel)
+
+    result = await generate_tests(
+        file_path=str(source),
+        _workspace_dir=str(tmp_path),
+    )
+    assert not result.get("isError")
+    assert sys.modules.get("src") is sentinel
+
+
+@pytest.mark.asyncio
+async def test_generate_tests_default_paths_are_unique_under_concurrency(tmp_path):
+    """Two default writes of the same stem must not overwrite each other."""
+    source = tmp_path / "models.py"
+    source.write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+
+    first, second = await asyncio.gather(
+        generate_tests(file_path=str(source), _workspace_dir=str(tmp_path)),
+        generate_tests(file_path=str(source), _workspace_dir=str(tmp_path)),
+    )
+    assert not first.get("isError")
+    assert not second.get("isError")
+    paths = {
+        Path(first["metadata"]["output_file"]),
+        Path(second["metadata"]["output_file"]),
+    }
+    assert paths == {
+        tmp_path / "tests" / "test_models.py",
+        tmp_path / "tests" / "test_models_2.py",
+    }
+    for path in paths:
+        assert path.exists()
+        assert "def test_ping" in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_generate_tests_default_path_rejects_tests_symlink_escape(tmp_path):
+    """A tests/ symlink pointing outside the workspace must be rejected."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (workspace / "models.py").write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+    (workspace / "tests").symlink_to(outside)
+
+    result = await generate_tests(
+        file_path=str(workspace / "models.py"),
+        _workspace_dir=str(workspace),
+    )
+    assert result.get("isError") is True
+    assert list(outside.iterdir()) == []
 
 
 class TestRunTests:
