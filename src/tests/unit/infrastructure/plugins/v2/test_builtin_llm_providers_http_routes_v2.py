@@ -54,6 +54,13 @@ def test_llm_providers_row_is_a_complete_explicit_v2_contribution() -> None:
             None,
         ),
         (
+            f"{prefix}/models/auto-config/{{provider_type}}",
+            ("GET",),
+            "get_provider_auto_config",
+            dict[str, Any],
+            None,
+        ),
+        (
             f"{prefix}/models/{{provider_type}}",
             ("GET",),
             "list_models_for_provider_type",

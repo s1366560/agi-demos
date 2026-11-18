@@ -260,6 +260,8 @@ async def list_provider_types(
 @router.get("/models/catalog")
 async def list_catalog_models(
     provider: str | None = Query(None, description="Filter by provider name"),
+    capability: str | None = Query(None, description="Filter by model capability"),
+    modality: str | None = Query(None, description="Filter by model modality"),
     include_deprecated: bool = Query(False, description="Include deprecated models"),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -276,6 +278,8 @@ async def list_catalog_models(
     models = catalog.list_models(
         provider=provider,
         include_deprecated=include_deprecated,
+        capability=capability,
+        modality=modality,
     )
     # Exclude internal-only fields from API response
     exclude_fields = {"input_budget_ratio", "chars_per_token", "interleaved"}
@@ -296,6 +300,8 @@ async def list_catalog_models(
 async def search_catalog_models(
     q: str = Query(..., description="Search query"),
     provider: str | None = Query(None, description="Filter by provider name"),
+    capability: str | None = Query(None, description="Filter by model capability"),
+    modality: str | None = Query(None, description="Filter by model modality"),
     limit: int = Query(20, ge=1, le=100, description="Max results"),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -307,7 +313,9 @@ async def search_catalog_models(
     )
 
     catalog = get_model_catalog_service()
-    results = catalog.search_models(query=q, provider=provider, limit=limit)
+    results = catalog.search_models(
+        query=q, provider=provider, limit=limit, capability=capability, modality=modality
+    )
     exclude_fields = {"input_budget_ratio", "chars_per_token", "interleaved"}
     return {
         "query": q,
@@ -339,6 +347,21 @@ async def refresh_catalog_models(
     info = catalog.refresh_from_remote()
     logger.info("Model catalog refreshed from models.dev by user %s", current_user.id)
     return {"status": "refreshed", "snapshot": info}
+
+
+@router.get("/models/auto-config/{provider_type}")
+async def get_provider_auto_config(
+    provider_type: str,
+    current_user: User = Depends(require_admin),
+) -> dict[str, Any]:
+    """Return non-secret suggestions for an explicitly selected provider."""
+    from src.infrastructure.llm.provider_env_defaults import provider_auto_config
+
+    try:
+        selected = ProviderType(provider_type.strip().lower())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=_("Unsupported provider type")) from exc
+    return provider_auto_config(selected)
 
 
 @router.get("/models/{provider_type}/guidance")
