@@ -27,10 +27,18 @@ impl LocalRuntimeState {
                 let kind = item["type"].as_str()?;
                 let data = &item["data"];
                 match kind {
-                    "user_message" | "assistant_message" => Some(json!({
-                        "type": kind,
-                        "content": item["content"].as_str().or_else(|| data["content"].as_str())?,
-                    })),
+                    "user_message" | "assistant_message" => {
+                        // New-task planning wraps the user's objective in turn-local tool
+                        // instructions. Replay the visible message, not the old mode prompt.
+                        let visible = (kind == "user_message")
+                            .then(|| data["display_content"].as_str()
+                                .or_else(|| item["payload"]["display_content"].as_str()))
+                            .flatten()
+                            .filter(|text| !text.trim().is_empty());
+                        let content = visible.or_else(|| item["content"].as_str())
+                            .or_else(|| data["content"].as_str())?;
+                        Some(json!({ "type": kind, "content": content }))
+                    }
                     "act" | "observe" => Some(json!({
                         "type": kind,
                         "tool_name": data["tool_name"],

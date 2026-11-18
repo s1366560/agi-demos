@@ -354,6 +354,11 @@ impl ToolHost for AuthorizedRunToolHost {
 
     async fn call_with_content(&self, tool: &str, input_json: &str) -> CoreResult<ToolResult> {
         self.validate_owner()?;
+        if !self.inner.can_dispatch(tool) {
+            return Err(CoreError::Tool(format!(
+                "tool '{tool}' is unavailable in this run; use the current tool roster"
+            )));
+        }
         if agistack_adapters_cua::tool_effects().contains_key(tool) {
             return self.call_native(tool, input_json).await;
         }
@@ -826,6 +831,18 @@ pub(super) mod tests {
         let inner = LocalToolHost::new(&root).map_err(|error| error.to_string())?;
         let host = AuthorizedRunToolHost::new(Arc::new(inner), store.clone(), run.clone());
         Ok((root, store, run, host))
+    }
+
+    #[tokio::test]
+    async fn build_cannot_dispatch_or_record_a_planning_only_submission() -> Result<(), String> {
+        let (root, store, run, host) = running_host(DesktopPermissionProfile::FullAccess)?;
+        assert!(!host.list_tools().iter().any(|name| name == "submit_plan"));
+        let error = host.call("submit_plan", r#"{"tasks":[{"content":"Plan again"}]}"#)
+            .await.expect_err("approved build has no plan submission tool");
+        assert!(error.to_string().contains("unavailable in this run"));
+        assert!(store.list_tool_invocations(&run.conversation_id)?.is_empty());
+        std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
+        Ok(())
     }
 
     #[tokio::test]

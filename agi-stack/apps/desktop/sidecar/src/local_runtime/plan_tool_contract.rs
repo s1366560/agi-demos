@@ -1,5 +1,28 @@
 use super::*;
 
+pub(super) fn approved_build_instructions(
+    store: &DesktopSessionStore,
+    run: &DesktopRun,
+) -> Result<String, String> {
+    let plan = store
+        .plan_version_for_projection(&run.plan_version_id)?
+        .filter(|plan| {
+            plan.conversation_id == run.conversation_id
+                && plan.status == authority_store::DesktopPlanStatus::Approved
+        })
+        .ok_or_else(|| "approved plan for this run is unavailable".to_owned())?;
+    let tasks: Vec<_> = plan.tasks.iter().map(|task| &task["content"]).collect();
+    Ok(format!(
+        "\n\n[Current Build run]\nExecute these approved tasks in order: {}. \
+         Prior conversation messages and tool calls are historical context. \
+         Use tools available in this run when needed. In the finish answer, follow the user's \
+         requested format for the approved deliverable. When reporting tool results, check each \
+         factual claim against the current run's observations. For a requested complete listing, \
+         report every returned entry with its exact path and observed type.",
+        json!(tasks)
+    ))
+}
+
 pub(super) fn submit_plan_definition() -> agistack_core::ports::ToolDefinition {
     agistack_core::ports::ToolDefinition::new(SUBMIT_PLAN_TOOL_NAME,
         "Persist the final ordered plan for human review. Supply tasks with content (not description); do not execute the plan.",

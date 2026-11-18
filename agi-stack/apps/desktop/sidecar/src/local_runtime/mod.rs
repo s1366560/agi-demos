@@ -2826,6 +2826,9 @@ impl LocalRuntimeState {
                 dynamic_metadata.extend(subagent_host.authority_metadata_by_name());
                 profiled_tool_hosts.push(Arc::new(subagent_host));
             }
+            profile.instructions.push_str(&plan_tool_contract::approved_build_instructions(
+                &self.session_store, run,
+            )?);
         }
         let combined_tool_host: Arc<dyn ToolHost> =
             Arc::new(fan_out_tool_host::FanOutToolHost::new(profiled_tool_hosts));
