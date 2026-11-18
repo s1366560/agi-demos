@@ -98,7 +98,7 @@ test('Desktop mirrors the Web pinned-message interaction and accessibility contr
   );
   assert.match(chatPanelSource, /data-timeline-anchor-id/);
   assert.match(chatPanelSource, /timelineAnchorMemberIds/);
-  assert.match(chatPanelSource, /scrollIntoView/);
+  assert.match(chatPanelSource, /navigateToTimelineMember\(message\.id,/);
   assert.match(chatPanelSource, /\.focus\(\{ preventScroll: true \}\)/);
   assert.match(chatPanelSource, /chat-pinned-jump-target/);
   assert.match(chatTimelineSource, /onPinMessage/);

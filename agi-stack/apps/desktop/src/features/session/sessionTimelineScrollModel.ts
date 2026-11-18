@@ -65,3 +65,25 @@ export function sessionTimelineFollowIntent(
   if (source === 'forward') return isSessionTimelinePinnedToLatest(viewport);
   return following;
 }
+
+/** React commits, content resizes and explicit navigation share one viewport write per frame. */
+export function timelineScrollFrame(
+  reconcile: () => void,
+  request: typeof requestAnimationFrame = requestAnimationFrame,
+  cancel: typeof cancelAnimationFrame = cancelAnimationFrame,
+) {
+  let pending: number | null = null;
+  return {
+    schedule() {
+      if (pending !== null) return;
+      pending = request(() => {
+        pending = null;
+        reconcile();
+      });
+    },
+    cancel() {
+      if (pending !== null) cancel(pending);
+      pending = null;
+    },
+  };
+}

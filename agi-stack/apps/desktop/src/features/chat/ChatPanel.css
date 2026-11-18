@@ -579,6 +579,11 @@
   overflow-anchor: none;
 }
 
+.message-scroll :is(.chat-pinned-message-list, .work-plan-timeline-content,
+  .skill-tool-evidence pre, .mcp-app-event-evidence pre, .timeline-tool-args-stream) {
+  overscroll-behavior-y: contain;
+}
+
 .chat-pinned-messages {
   position: sticky;
   z-index: 7;

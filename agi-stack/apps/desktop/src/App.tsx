@@ -614,7 +614,7 @@ import {
 import {
   agentTaskUpdateFromSocketEvent,
   mergeLiveTimelineEvent,
-  mergeTimelineItems,
+  mergeTimelineHistory,
   timelineCursorFromFirst,
   timelineCursorFromLast,
 } from './features/chat/appTimelineEventModel';
@@ -2721,7 +2721,7 @@ export function App() {
           if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
           const messageItems =
             current.conversationId === conversation.id
-              ? mergeTimelineItems(responseItems, current.items)
+              ? mergeTimelineHistory(responseItems, current.items)
               : responseItems;
           const items = traceResult.status === 'fulfilled'
             ? mergeCloudSubagentTraceItems(messageItems, traceResult.value)
@@ -2805,7 +2805,7 @@ export function App() {
       });
       setConversationTimeline((current) => {
         if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
-        const items = mergeTimelineItems(response.timeline ?? [], current.items);
+        const items = mergeTimelineHistory(response.timeline ?? [], current.items);
         const pageResolution = resolveEarlierTimelinePage({
           requestedCursor: cursor,
           previousItemCount: current.items.length,

@@ -6,6 +6,7 @@ import {
   isSessionTimelinePinnedToLatest,
   shouldFollowSessionTimeline,
   sessionTimelineFollowIntent,
+  timelineScrollFrame,
 } from '/tmp/agistack-desktop-test-dist/src/features/session/sessionTimelineScrollModel.js';
 
 const windowState = (overrides = {}) => ({
@@ -95,4 +96,36 @@ test('explicit navigation away stops following and forward navigation resumes on
     sessionTimelineFollowIntent(true, 'layout', { ...bottom, scrollHeight: 1_500 })), true);
   assert.equal(shouldFollowSessionTimeline('updated',
     sessionTimelineFollowIntent(true, 'backward', bottom)), false);
+});
+
+test('a frame coalesces commit and resize requests and reads the latest navigation intent', () => {
+  let nextId = 0;
+  let intent = 'tail';
+  const callbacks = new Map();
+  const writes = [];
+  const frame = timelineScrollFrame(
+    () => writes.push(intent),
+    (callback) => { callbacks.set(++nextId, callback); return nextId; },
+    (id) => callbacks.delete(id),
+  );
+  const flush = () => {
+    for (const [id, callback] of [...callbacks]) {
+      callbacks.delete(id);
+      callback(0);
+    }
+  };
+  frame.schedule();
+  frame.schedule();
+  assert.equal(callbacks.size, 1);
+  intent = 'reading';
+  flush();
+  assert.deepEqual(writes, ['reading']);
+  frame.schedule();
+  frame.cancel();
+  flush();
+  assert.deepEqual(writes, ['reading']);
+  intent = 'search';
+  frame.schedule();
+  flush();
+  assert.deepEqual(writes, ['reading', 'search']);
 });

@@ -23,6 +23,10 @@ async fn agent_answer_arrives_before_provider_finishes() {
         let mut request = [0; 8192];
         let n = socket.read(&mut request).await.unwrap();
         assert!(String::from_utf8_lossy(&request[..n]).contains("\"stream\":true"));
+        let wire = String::from_utf8_lossy(&request[..n]);
+        assert!(
+            wire.contains(r#""properties":{"kind":{"const":"finish"},"answer":{"type":"string"}"#)
+        );
         let first = sse(r#"{"kind":"finish","answer":"Hello "#);
         let last = format!("{}data: [DONE]\n\n", sse("world\"}"));
         let header = format!(
@@ -36,7 +40,7 @@ async fn agent_answer_arrives_before_provider_finishes() {
         wait.await.unwrap();
         socket.write_all(last.as_bytes()).await.unwrap();
     });
-    let llm = HttpLlm::new(base, "test");
+    let llm = HttpLlm::new(base, "test").with_action_schema_support(true);
     let output = Arc::new(Mutex::new(String::new()));
     let sink = output.clone();
     let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel();

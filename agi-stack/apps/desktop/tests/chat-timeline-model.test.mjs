@@ -53,7 +53,7 @@ const {
   toolCallPresentationKind,
   toolCallStreamingArguments,
 } = require("/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js");
-const { timelineItemFromSocketEvent } = require(
+const { mergeTimelineHistory, timelineItemFromSocketEvent } = require(
   "/tmp/agistack-desktop-test-dist/src/features/chat/appTimelineEventModel.js",
 );
 const appSource = readFileSync(
@@ -513,6 +513,7 @@ test("live-first hydration still promotes the persisted assistant identity", () 
     [
       {
         ...persisted,
+        renderId: transient.id,
         executionMessageId: "request-message-1",
         metadata: {
           streaming: false,
@@ -555,6 +556,7 @@ test("history hydration reconciles a live assistant by execution id when cursors
     [
       {
         ...history,
+        renderId: live.id,
         metadata: {
           streaming: false,
           traceUrl: "https://trace.example/run",
@@ -646,6 +648,7 @@ test("history hydration collapses every transient row bridged by response and ex
     [
       {
         ...history,
+        renderId: responseReplay.id,
         metadata: {
           streaming: false,
           traceUrl: "https://trace.example/run",
@@ -782,6 +785,7 @@ test("send acknowledgement rebinds an optimistic user to its canonical execution
       [
         {
           ...canonical,
+          ...(items === liveFirst ? { renderId: optimistic.id } : {}),
           executionMessageId: "execution-message-1",
           metadata: {
             optimistic: false,
@@ -1234,6 +1238,24 @@ test("multiple live assistants reconcile to persisted rows by cursor without swa
       { id: "assistant-2", content: "second final", traceUrl: "trace-second" },
     ],
   );
+});
+
+test("promoting a streamed assistant preserves the mounted row through history replay", () => {
+  const draft = mergeAssistantTextStreamChunk([], {
+    kind: "delta", messageId: "response-id", content: "draft",
+    eventTimeUs: 7000, eventCounter: 1,
+  });
+  const history = {
+    id: "persisted-id", type: "assistant_message", role: "assistant",
+    message_id: "response-id", content: "final", eventTimeUs: 7100, eventCounter: 1,
+  };
+  const promoted = mergeConversationTimelineItems(draft, [history]);
+  assert.equal(promoted[0].id, history.id);
+  assert.equal(promoted[0].renderId, draft[0].id);
+  assert.equal(mergeConversationTimelineItems(promoted, [history])[0].renderId, draft[0].id);
+  assert.equal(mergeConversationTimelineItems([history], draft)[0].renderId ?? history.id, history.id);
+  assert.equal(mergeTimelineHistory([history], draft)[0].renderId, draft[0].id);
+  assert.equal(mergeTimelineHistory([history], promoted)[0].renderId, draft[0].id);
 });
 
 test("replayed text_end reconciles a canonical assistant at the same event cursor", () => {

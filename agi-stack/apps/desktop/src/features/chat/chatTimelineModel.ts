@@ -259,9 +259,11 @@ function foldInternalGoalControlItemsForDisplay(
 
 function isStructuredGoalControlMessage(item: AgentTimelineItem): boolean {
   if (!isAssistantTimelineItem(item) || typeof item.content !== 'string') return false;
+  const content = item.content.trimStart();
+  if (!content.startsWith('{')) return false;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(item.content.trim());
+    parsed = JSON.parse(content);
   } catch {
     return false;
   }
@@ -651,6 +653,7 @@ function compareTimelineCursor(
 export function mergeConversationTimelineItems(
   existing: AgentTimelineItem[],
   incoming: AgentTimelineItem[],
+  mounted: 'existing' | 'incoming' = 'existing',
 ): AgentTimelineItem[] {
   const merged = sortTimelineItems([...existing]);
   for (const item of sortTimelineItems([...incoming])) {
@@ -665,6 +668,13 @@ export function mergeConversationTimelineItems(
           merged[duplicateIndex],
           reconciled,
         );
+      }
+      // History pages are the base for data precedence, but the live rows are
+      // already on screen. Preserve their UI identity in either merge direction.
+      const mountedItem = mounted === 'existing' ? merged[duplicateIndexes[0]] : item;
+      const renderId = mountedItem.renderId ?? mountedItem.id;
+      if (renderId !== (reconciled.renderId ?? reconciled.id)) {
+        reconciled = { ...reconciled, renderId };
       }
       merged.splice(
         0,

@@ -52,6 +52,12 @@ async fn mock_content_type(
 }
 
 async fn mock_responses(bodies: Vec<String>) -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
+    mock_status_responses(bodies.into_iter().map(|body| (200, body)).collect()).await
+}
+
+async fn mock_status_responses(
+    bodies: Vec<(u16, String)>,
+) -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let captured = Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
@@ -67,11 +73,11 @@ async fn mock_responses(bodies: Vec<String>) -> (String, Arc<tokio::sync::Mutex<
             sink.lock()
                 .await
                 .push(String::from_utf8_lossy(&buf[..n]).to_string());
-            let Some(body) = responses.lock().await.pop_front() else {
+            let Some((status, body)) = responses.lock().await.pop_front() else {
                 break;
             };
             let response = format!(
-                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                "HTTP/1.1 {status} Response\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
                 body.len(),
                 body
             );
@@ -143,7 +149,10 @@ async fn decide_accepts_structured_tool_input_and_normalizes_it_to_json() {
     let (base, _captured) = mock(200, body).await;
 
     let llm = HttpLlm::new(base, "m");
-    let got = llm.decide("plan", 0, &[], &[]).await.unwrap();
+    let got = llm
+        .decide("plan", 0, &[], &["submit_plan".into()])
+        .await
+        .unwrap();
 
     match got {
         AgentAction::CallTool { tool, input_json } => {
@@ -160,6 +169,65 @@ async fn decide_accepts_structured_tool_input_and_normalizes_it_to_json() {
         }
         other => panic!("unexpected action: {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn stale_planning_tool_is_reconsidered_before_dispatch_and_the_answer_streams() {
+    let stale = r#"{"kind":"call_tool","tool":"submit_plan","input_json":{"tasks":[]}}"#;
+    let answer = r#"{"kind":"finish","answer":"Here is the approved deliverable."}"#;
+    let (base, captured) = mock_responses(vec![chat_body(stale), chat_body(answer)]).await;
+    let output = std::sync::Mutex::new(String::new());
+    let action = HttpLlm::new(base, "test")
+        .decide_with_tools_stream("execute the approved plan", 0, &[], &[], &|text| {
+            output.lock().unwrap().push_str(text);
+        })
+        .await
+        .unwrap();
+    assert!(matches!(action, AgentAction::Finish { answer } if answer == *output.lock().unwrap()));
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1].contains("current tool list"));
+    assert!(requests[1].contains(r#""stream":true"#));
+}
+
+#[tokio::test]
+async fn repeating_an_unavailable_tool_after_one_repair_is_a_model_error() {
+    let stale = r#"{"kind":"call_tool","tool":"submit_plan","input_json":{}}"#;
+    let (base, captured) = mock_responses(vec![chat_body(stale), chat_body(stale)]).await;
+    let error = HttpLlm::new(base, "test")
+        .decide_with_tools_stream(
+            "execute",
+            0,
+            &[],
+            &[agistack_core::ports::ToolDefinition::name_only("read")],
+            &|_| {},
+        )
+        .await
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("tool outside the current tool list"));
+    assert_eq!(captured.lock().await.len(), 2);
+}
+
+#[tokio::test]
+async fn one_shot_tool_decision_preserves_the_original_action_for_caller_audit() {
+    let wrong = r#"{"kind":"call_tool","tool":"other","input_json":{"id":2}}"#;
+    let (base, captured) = mock_responses(vec![chat_body(wrong)]).await;
+    let action = HttpLlm::new(base, "fixture")
+        .decide_with_tools(
+            "extract",
+            1,
+            &[],
+            &[agistack_core::ports::ToolDefinition::name_only(
+                "submit_projection",
+            )],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(action, AgentAction::CallTool { tool, input_json }
+        if tool == "other" && input_json == r#"{"id":2}"#));
+    assert_eq!(captured.lock().await.len(), 1);
 }
 
 #[tokio::test]
@@ -249,6 +317,103 @@ async fn decide_retries_trailing_text_instead_of_accepting_an_ambiguous_action()
     let requests = captured.lock().await;
     assert_eq!(requests.len(), 2);
     assert!(requests[1].contains("return exactly one JSON object"));
+    assert!(requests[1].contains("and input_json (an object matching"));
+    assert!(requests[1].contains("successful observations already suffice"));
+}
+
+#[tokio::test]
+async fn invalid_string_uses_json_mode_only_on_repair_and_negotiates_an_unsupported_format() {
+    let malformed = r#"{"kind":"call_tool","tool":"list","input_json":{"path":"a
+b"}}"#;
+    let corrected = r#"{"kind":"call_tool","tool":"list","input_json":{"path":"a\nb"}}"#;
+    for status in [200, 400, 422] {
+        let mut responses = vec![(200, chat_body(malformed))];
+        if status != 200 {
+            responses.extend(vec![
+                (
+                    status,
+                    r#"{"error":{"param":"response_format"}}"#.into()
+                );
+                2
+            ]);
+        }
+        responses.push((200, chat_body(corrected)));
+        let (base, captured) = mock_status_responses(responses).await;
+        let llm = HttpLlm::new(base, "fixture");
+        let tools = [agistack_core::ports::ToolDefinition::name_only("list")];
+        let action = llm
+            .decide_with_tools_stream("list", 0, &[], &tools, &|_| {
+                panic!("tool decisions must not stream answer text")
+            })
+            .await
+            .unwrap();
+        let AgentAction::CallTool { tool, input_json } = action else {
+            panic!("expected tool")
+        };
+        assert_eq!(tool, "list");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&input_json).unwrap()["path"],
+            "a\nb"
+        );
+        let requests = captured.lock().await;
+        assert_eq!(requests.len(), if status == 200 { 2 } else { 4 });
+        for (index, request) in requests.iter().enumerate() {
+            let body: serde_json::Value =
+                serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+            match index {
+                1 => {
+                    let schema = &body["response_format"]["json_schema"]["schema"]["oneOf"];
+                    let alternatives = schema.as_array().unwrap();
+                    assert_eq!(alternatives.len(), 3);
+                    let call = alternatives
+                        .iter()
+                        .find(|option| option["properties"]["kind"]["const"] == "call_tool")
+                        .unwrap();
+                    assert_eq!(
+                        call["properties"]["tool"]["enum"],
+                        serde_json::json!(["list"])
+                    );
+                    assert!(call["required"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&serde_json::json!("input_json")));
+                }
+                2 => assert_eq!(body["response_format"]["type"], "json_object"),
+                _ => assert!(body.get("response_format").is_none()),
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn first_action_negotiates_format_before_generating_the_only_answer() {
+    let (base, captured) = mock_status_responses(vec![
+        (400, "{}".into()),
+        (422, "{}".into()),
+        (200, chat_body(r#"{"kind":"finish","answer":"done"}"#)),
+    ])
+    .await;
+    let llm = HttpLlm::new(base, "fixture").with_action_schema_support(true);
+    assert!(matches!(llm.decide("hi", 0, &[], &[]).await.unwrap(),
+        AgentAction::Finish { answer } if answer == "done"));
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 3);
+    let formats: Vec<_> = requests
+        .iter()
+        .map(|request| {
+            let body: serde_json::Value =
+                serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+            assert!(!body["messages"][1]["content"]
+                .as_str()
+                .unwrap()
+                .contains("Protocol correction:"));
+            body["response_format"]["type"].clone()
+        })
+        .collect();
+    assert_eq!(
+        serde_json::json!(formats),
+        serde_json::json!(["json_schema", "json_object", null])
+    );
 }
 
 #[tokio::test]

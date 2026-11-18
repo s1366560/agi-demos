@@ -94,10 +94,17 @@ impl ToolExecutionPolicy for GenerationToolExecutionPolicyV2 {
         input_json: &str,
         schema: Option<&Value>,
     ) -> CoreResult<ToolPolicyDecision> {
-        let arguments: Value = serde_json::from_str(input_json)
-            .map_err(|_| CoreError::Tool("tool arguments are invalid JSON".into()))?;
+        let Ok(arguments) = serde_json::from_str::<Value>(input_json) else {
+            // A legacy model response may carry an unparseable JSON string.
+            // No argument object can enter the policy waterfall or the tool.
+            self.arguments
+                .is_valid(schema, &Value::Null)
+                .await
+                .map_err(|_| CoreError::Tool("unable to validate tool input schema".into()))?;
+            return Ok(ToolPolicyDecision::InvalidArguments);
+        };
         let mut payload = self.identity(context);
-        payload["arguments"] = arguments;
+        payload["arguments"] = arguments.clone();
         payload["decision"] = json!({"kind": "allow"});
         let result = self
             .dispatch(context, TOOLS_BEFORE_EXECUTE_EVENT_V2, payload)
@@ -108,12 +115,19 @@ impl ToolExecutionPolicy for GenerationToolExecutionPolicyV2 {
             .to_owned();
         match result["decision"]["kind"].as_str() {
             Some("allow") => {
-                self.arguments
-                    .validate(schema, &result["arguments"])
+                let valid = self
+                    .arguments
+                    .is_valid(schema, &result["arguments"])
                     .await
-                    .map_err(|_| {
-                        CoreError::Tool("rewritten tool arguments violate input schema".into())
-                    })?;
+                    .map_err(|_| CoreError::Tool("unable to validate tool input schema".into()))?;
+                if !valid {
+                    if result.get("arguments") == Some(&arguments) {
+                        return Ok(ToolPolicyDecision::InvalidArguments);
+                    }
+                    return Err(CoreError::Tool(
+                        "rewritten tool arguments violate input schema".into(),
+                    ));
+                }
                 Ok(ToolPolicyDecision::Allow {
                     input_json: result["arguments"].to_string(),
                 })

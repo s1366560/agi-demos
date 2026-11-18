@@ -282,6 +282,12 @@ async fn display_content_is_persisted_while_provider_receives_raw_planning_promp
     assert_eq!(user["payload"]["display_content"], "Original objective");
     assert_eq!(user["data"]["display_content"], "Original objective");
     assert!(llm.calls.lock().unwrap()[0].0.contains(raw));
+    let next = state.conversation_turn_checkpoint(
+        "display-own", "local-project", "next-message", "Execute the approved plan",
+    ).unwrap();
+    let history = serde_json::to_string(&next.transcript).unwrap();
+    assert!(history.contains("Original objective"));
+    assert!(!history.contains("Runtime planning constraints"));
     let mut changed = body;
     changed["display_content"] = json!("Different objective");
     let response = local_router(state.clone()).oneshot(authenticated_json_request(

@@ -80,6 +80,42 @@ fn call() -> ToolPolicyContext<'static> {
 }
 
 #[test]
+fn unchanged_invalid_model_arguments_are_recoverable_but_invalid_schemas_are_not() {
+    block_on(async {
+        let policy = policy(&context());
+        let schema =
+            json!({"type":"object","required":["path"],"properties":{"path":{"type":"string"}}});
+        let invalid = policy
+            .before_execute(&call(), r#"{"private":"do-not-echo"}"#, Some(&schema))
+            .await
+            .unwrap();
+        assert!(matches!(invalid, ToolPolicyDecision::InvalidArguments));
+        assert!(matches!(
+            policy
+                .before_execute(&call(), "{", Some(&schema))
+                .await
+                .unwrap(),
+            ToolPolicyDecision::InvalidArguments
+        ));
+        assert!(policy
+            .before_execute(&call(), "{", Some(&json!({"type":42})))
+            .await
+            .is_err());
+        assert!(matches!(
+            policy
+                .before_execute(&call(), r#"{"path":"ok"}"#, Some(&schema))
+                .await
+                .unwrap(),
+            ToolPolicyDecision::Allow { .. }
+        ));
+        assert!(policy
+            .before_execute(&call(), "{}", Some(&json!({"type":42})))
+            .await
+            .is_err());
+    });
+}
+
+#[test]
 fn declared_waterfalls_rewrite_validate_and_preserve_conversation_scope() {
     block_on(async {
         let context = context();

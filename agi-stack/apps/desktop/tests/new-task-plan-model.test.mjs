@@ -68,6 +68,7 @@ test('planning prompt establishes a real structured plan and approval boundary',
 
   assert.match(prompt, /todowrite/);
   assert.match(prompt, /submit_plan/);
+  assert.match(prompt, /requested final deliverable.*format and completeness/);
   assert.match(prompt, /without changing files/);
   assert.match(prompt, /human explicitly approves/);
   assert.match(prompt, /\/workspace\/app/);

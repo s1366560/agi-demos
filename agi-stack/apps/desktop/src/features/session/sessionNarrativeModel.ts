@@ -81,16 +81,17 @@ export function buildSessionNarrative(
 }
 
 export function timelineGroupOpen(
-  items: readonly Pick<AgentTimelineItem, 'id'>[],
+  items: readonly Pick<AgentTimelineItem, 'id' | 'renderId'>[],
   expandedItems: Readonly<Record<string, boolean>>,
   defaultOpen = false,
 ): boolean {
   let hasExplicitState = false;
   let open = false;
   for (const item of items) {
-    if (!Object.prototype.hasOwnProperty.call(expandedItems, item.id)) continue;
+    const id = item.renderId ?? item.id;
+    if (!Object.prototype.hasOwnProperty.call(expandedItems, id)) continue;
     hasExplicitState = true;
-    open ||= expandedItems[item.id] === true;
+    open ||= expandedItems[id] === true;
   }
   return hasExplicitState ? open : defaultOpen;
 }
@@ -174,9 +175,10 @@ function appendStructuredNarrative(
 
   const flushToolItems = () => {
     if (!toolItems.length) return;
+    const call = toolItems.find((item) => item.type === 'act' || item.type === 'observe')!;
     narrative.push({
       kind: 'tool_group',
-      id: `tool-group:${toolItems.find((item) => item.type === 'act' || item.type === 'observe')!.id}`,
+      id: `tool-group:${call.renderId ?? call.id}`,
       toolCount: toolGroupCount(toolItems),
       status: sessionToolGroupStatus(toolItems),
       items: toolItems,

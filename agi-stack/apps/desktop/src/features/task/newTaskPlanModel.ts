@@ -307,6 +307,7 @@ export function buildPlanningPrompt(definition: NewTaskDefinition): string {
     'Publish the final plan through the available structured task-list tool.',
     'On MemStack cloud use todowrite with action="replace". In the local desktop runtime call submit_plan with JSON input {"tasks":[{"content":"actionable step","priority":"high|medium|low"}]}.',
     'Every task must be actionable, ordered, and independently reviewable by a human.',
+    'Include the requested final deliverable in the plan, with its format and completeness requirements.',
     'Do not start implementation until the human explicitly approves the plan.',
     `Task title: ${definition.title.trim()}`,
     `Objective: ${definition.objective.trim()}${codeContext}`,

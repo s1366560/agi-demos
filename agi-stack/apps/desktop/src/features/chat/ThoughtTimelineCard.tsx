@@ -66,12 +66,17 @@ export function ThoughtTimelineCard({
   const duration = durationMs !== null ? formatToolCallDuration(durationMs) : '';
   const content = item.content ?? '';
 
+  const previousStreaming = useRef(streaming);
+  const previousScrollTop = useRef(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
   useLayoutEffect(() => {
     const viewport = contentRef.current;
-    if (streaming && expanded && followRef.current && viewport) {
+    const followContent = streaming || previousStreaming.current;
+    previousStreaming.current = streaming;
+    if (followContent && expanded && followRef.current && viewport) {
       viewport.scrollTop = viewport.scrollHeight;
+      previousScrollTop.current = viewport.scrollTop;
     }
   }, [content, expanded, streaming]);
 
@@ -120,10 +125,18 @@ export function ThoughtTimelineCard({
         <div
           id={contentId}
           ref={contentRef}
-          onWheel={(event) => { if (event.deltaY < 0) followRef.current = false; }}
+          onWheel={(event) => {
+            if (event.deltaY < 0 && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) {
+              followRef.current = false;
+            }
+          }}
           onScroll={(event) => {
             const viewport = event.currentTarget;
-            followRef.current = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 24;
+            if (viewport.scrollTop < previousScrollTop.current) followRef.current = false;
+            else if (viewport.scrollTop > previousScrollTop.current) {
+              followRef.current = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 24;
+            }
+            previousScrollTop.current = viewport.scrollTop;
           }}
           role="region"
           aria-labelledby={labelId}

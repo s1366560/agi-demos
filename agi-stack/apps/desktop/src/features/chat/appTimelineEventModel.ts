@@ -175,6 +175,13 @@ export function mergeTimelineItems(
   return mergeConversationTimelineItems(existing, incoming);
 }
 
+export function mergeTimelineHistory(
+  history: AgentTimelineItem[],
+  mounted: AgentTimelineItem[],
+): AgentTimelineItem[] {
+  return mergeConversationTimelineItems(history, mounted, 'incoming');
+}
+
 export function timelineCursorFromFirst(
   items: AgentTimelineItem[],
 ): ConversationTimelineState['firstCursor'] {

@@ -37,7 +37,7 @@ const forbiddenAuthorityPolicyPattern = new RegExp(
     'listConversations',
     'sendMessage',
     'runAgentMessage',
-    'mergeTimelineItems',
+    'mergeTimelineHistory',
     'resolveEarlierTimelinePage',
     'comparison',
   ].join('|'),
@@ -97,7 +97,7 @@ test('initial session timeline loading shares a scoped input across generation o
     replayArtifactCanvasEvents: () => ({}),
     artifactCanvasStateRef: { current: null },
     setArtifactCanvasState: () => {},
-    mergeTimelineItems: (a, b) => [...a, ...b],
+    mergeTimelineHistory: (a, b) => [...a, ...b],
     mergeCloudSubagentTraceItems: (a, b) => [...a, ...b],
     timelineCursorFromFirst: () => null,
     timelineCursorFromLast: () => null,
@@ -142,7 +142,7 @@ test('initial session timeline loading shares a scoped input across generation o
   assert.match(loader, /sessionTimelineRequestIsCurrent/u);
   assert.match(loader, /scopeEpoch: configScopeEpochRef\.current/u);
   assert.match(loader, /replayArtifactCanvasEvents\(responseItems\)/u);
-  assert.match(loader, /mergeTimelineItems\(responseItems, current\.items\)/u);
+  assert.match(loader, /mergeTimelineHistory\(responseItems, current\.items\)/u);
   assert.match(loader, /\[desktopSessionTimelineOperationsV2\]/u);
   assert.doesNotMatch(loader, /bindOperation/u);
   assert.doesNotMatch(loader, /new DesktopApiClient\(/u);
@@ -241,7 +241,7 @@ test('earlier-page loading uses an independent generation operation without chan
   assert.match(loader, /pageResolution\.kind === 'stalled'/u);
   assert.match(
     loader,
-    /mergeTimelineItems\(response\.timeline \?\? \[\], current\.items\)/u,
+    /mergeTimelineHistory\(response\.timeline \?\? \[\], current\.items\)/u,
   );
   assert.match(
     loader,
@@ -334,7 +334,7 @@ function timelineHarness(initial = {}) {
     replayArtifactCanvasEvents: () => ({}),
     artifactCanvasStateRef: { current: null },
     setArtifactCanvasState() {},
-    mergeTimelineItems: (a, b) => [...a, ...b],
+    mergeTimelineHistory: (a, b) => [...a, ...b],
     mergeCloudSubagentTraceItems: (a) => a,
     timelineCursorFromFirst: () => null,
     timelineCursorFromLast: () => null,

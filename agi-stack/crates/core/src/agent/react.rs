@@ -486,6 +486,7 @@ impl ReActEngine {
                 continue;
             };
             let mut denied_tool = None;
+            let mut invalid_arguments = false;
             if let (Some(policy), AgentAction::CallTool { tool, input_json }) =
                 (self.tool_policy.as_ref(), &action)
             {
@@ -503,6 +504,7 @@ impl ReActEngine {
                             input_json,
                         };
                     }
+                    ToolPolicyDecision::InvalidArguments => invalid_arguments = true,
                     ToolPolicyDecision::Deny { reason } => denied_tool = Some(reason),
                     ToolPolicyDecision::Cancel { reason } => {
                         state.push_unique(TranscriptEntry::new(
@@ -532,6 +534,19 @@ impl ReActEngine {
                     }
                     state.answer = Some(answer);
                     state.status = SessionStatus::Finished;
+                }
+                AgentAction::CallTool { tool, .. } if invalid_arguments => {
+                    // Give the model a normal next round, without emitting the rejected
+                    // payload to observers or journaling an invocation that never ran.
+                    state.push_unique(TranscriptEntry::new(
+                        state.round,
+                        Role::Observation,
+                        format!(
+                            "Arguments for tool '{tool}' did not match its declared JSON schema. \
+                            Check the required fields and types in the current tool definition, \
+                            or finish with the requested deliverable if no tool is needed."
+                        ),
+                    ));
                 }
                 AgentAction::CallTool { tool, input_json } => {
                     if let Some(observer) = observer.as_deref() {

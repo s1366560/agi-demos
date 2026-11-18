@@ -87,22 +87,16 @@ test('Cloud Changes structural reason codes are localized in both locales', () =
   }
 });
 
-test('session history exposes keyboard recovery and preserves manual reading position', () => {
+test('session history exposes a focusable viewport and localized recovery controls', () => {
   assert.match(chatPanelSource, /aria-label=\{t\('session\.timelineScrollRegion'\)\}/);
   assert.match(chatPanelSource, /aria-busy=\{timelineLoading \|\| timelineLoadingEarlier\}/);
   assert.match(chatPanelSource, /tabIndex=\{0\}/);
-  assert.match(chatPanelSource, /if \(!hasTimelineState \|\| timelineError\) return;/);
-  assert.match(chatPanelSource, /isSessionTimelinePinnedToLatest\(viewport\)/);
-  assert.match(chatPanelSource, /snapshot\.conversationId !== timelineConversationId/);
-  assert.doesNotMatch(chatPanelSource, /scrollHeight - snapshot\.height/);
-  assert.match(chatPanelSource, /timelineAnchorMemberIds\(candidate\)\.includes/);
   assert.match(chatPanelCssSource, /overflow-anchor: none/);
   assert.match(chatPanelSource, /t\('session\.jumpToLatest'\)/);
   assert.match(chatTimelineSource, /className="timeline-error" role="alert"/);
   assert.match(chatTimelineSource, /data-timeline-anchor-id=/);
   assert.match(chatTimelineSource, /data-timeline-anchor-members=/);
   assert.match(chatTimelineSource, /open=\{open\}/);
-  assert.match(chatTimelineSource, /timelineGroupIdentity\(narrative, index\)/);
   assert.match(chatTranscriptSource, /data-timeline-anchor-id=\{timelineItemId\}/);
   assert.match(chatTimelineSource, /onClick=\{state\.items\.length \? onLoadEarlier : onRetry\}/);
   assert.match(chatTimelineSource, /t\('session\.loadEarlierHistory'\)/);

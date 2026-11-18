@@ -22,10 +22,6 @@ const chatTimelineSource = readFileSync(
   new URL('../src/features/chat/ChatTimeline.tsx', import.meta.url),
   'utf8',
 );
-const conversationSearchSource = readFileSync(
-  new URL('../src/features/chat/ConversationSearch.tsx', import.meta.url),
-  'utf8',
-);
 const chatPanelStyles = readFileSync(
   new URL('../src/features/chat/ChatPanel.css', import.meta.url),
   'utf8',
@@ -155,15 +151,7 @@ test('desktop timeline exposes a Web-parity accessible whole-turn collapse contr
 });
 
 test('search and pinned jumps reveal a collapsed response before locating its anchor', () => {
-  assert.match(chatPanelSource, /const revealTimelineMember = useCallback/);
-  assert.match(
-    chatPanelSource,
-    /revealTimelineMember\(message\.id\)[\s\S]*?requestAnimationFrame/,
-  );
-  assert.match(chatPanelSource, /<ConversationSearch[\s\S]*?onRevealItem=\{revealTimelineMember\}/);
-  assert.match(conversationSearchSource, /onRevealItem\?: \(itemId: string\) => boolean/);
-  assert.match(
-    conversationSearchSource,
-    /onRevealItem\?\.\(match\.anchorId\)[\s\S]*?requestAnimationFrame/,
-  );
+  assert.match(chatPanelSource, /revealTimelineMember\(id\)[\s\S]*?viewportController\.current\?\.navigate\(id, onLocated\)/);
+  assert.match(chatPanelSource, /navigateToTimelineMember\(message\.id,/);
+  assert.match(chatPanelSource, /<ConversationSearch[\s\S]*?onNavigate=\{navigateToTimelineMember\}/);
 });
