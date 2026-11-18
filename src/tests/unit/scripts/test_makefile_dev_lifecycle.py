@@ -90,13 +90,7 @@ def test_parallel_make_migrates_before_plugin_upgrade_and_application_start(life
 def test_restart_stops_managed_processes_before_launch_but_keeps_core_running(lifecycle) -> None:
     trace = run_lifecycle(lifecycle, "restart")
     events = [row["event"] for row in trace]
-    assert events.index("services:stop") < events.index("services:start")
-    stops = [row["args"] for row in trace if row["event"] == "compose:stop"]
-    assert stops == []
-    assert any(
-        row["event"] == "build" and row["args"][row["args"].index("--service") + 1] == "ray-head"
-        for row in trace
-    )
+    assert events == ["services:stop", "services:start"]
 
 
 def test_stop_uses_scoped_manager_and_explicit_compose_services(lifecycle) -> None:

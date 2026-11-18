@@ -86,7 +86,7 @@ help: ## Show this help message
 	@echo "  stop      - Stop all services"
 	@echo "  status    - Show service status"
 	@echo "  doctor    - Report managed process, port, and Compose health"
-	@echo "  restart   - Prepare infrastructure, then replace API/Web"
+	@echo "  restart   - Restart managed API/Web only"
 	@echo "  restart-full - Force all development processes to restart"
 	@echo ""
 	@echo " Development:"
@@ -145,7 +145,7 @@ help-full: ## Show all available commands
 	@echo "  dev              - Start all services (API + workers + web)"
 	@echo "  stop             - Stop all services (alias: dev-stop)"
 	@echo "  status           - Show service status"
-	@echo "  restart          - Prepare infrastructure, then replace API/Web"
+	@echo "  restart          - Restart managed API/Web only"
 	@echo "  reset            - Complete reset (stop + clean)"
 	@echo "  fresh            - Fresh start (reset + init + dev)"
 	@echo ""
@@ -300,8 +300,7 @@ fresh: reset init dev ## Fresh start: reset everything and start development
 	@echo ""
 	@echo " Fresh environment ready!"
 
-restart: ## Prepare infrastructure first, then replace only this checkout's API/Web
-	@$(MAKE) dev-prepare
+restart: ## Restart only this checkout's managed API/Web processes
 	@$(MAKE) dev-app-stop
 	@$(MAKE) dev-app-start
 	@echo " Services restarted"
