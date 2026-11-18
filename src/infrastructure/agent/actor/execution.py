@@ -1844,10 +1844,15 @@ async def _save_context_summary(
             SqlContextSummaryAdapter,
         )
 
+        cutoff = summary_data.get("messages_covered_up_to")
+        tokens = summary_data.get("summary_tokens")
         summary = ContextSummary(
             summary_text=summary_data.get("summary_text", ""),
-            summary_tokens=summary_data.get("summary_tokens", 0),
-            messages_covered_up_to=last_event_time_us,
+            summary_tokens=tokens if type(tokens) is int and tokens >= 0 else 0,
+            messages_covered_up_to=(
+                cutoff if type(cutoff) is int and 0 < cutoff <= last_event_time_us
+                else last_event_time_us
+            ),
             messages_covered_count=summary_data.get("messages_covered_count", 0),
             compression_level=summary_data.get("compression_level", "summarize"),
         )

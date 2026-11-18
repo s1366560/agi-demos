@@ -1062,6 +1062,7 @@ class AgentContextSummaryGeneratedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.CONTEXT_SUMMARY_GENERATED
     summary_text: str
     summary_tokens: int
+    messages_covered_up_to: int | None = None
     messages_covered_count: int
     compression_level: str
 
