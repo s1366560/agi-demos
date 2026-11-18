@@ -114,8 +114,17 @@ class ContextBuildResult:
         }
         if self.metadata.get("compression_history"):
             data["compression_history_summary"] = self.metadata["compression_history"]
-        if self.metadata.get("compression_level"):
-            data["compression_level"] = self.metadata["compression_level"]
+        for field_name in (
+            "compression_level",
+            "tokens_saved",
+            "compression_ratio",
+            "pruned_tool_outputs",
+            "duration_ms",
+            "occupancy_before",
+            "pipeline",
+        ):
+            if field_name in self.metadata:
+                data[field_name] = self.metadata[field_name]
         return data
 
 

@@ -71,6 +71,8 @@ class ConversationContextStatusV2:
     messages_in_summary: int
     compression_level: str
     from_cache: bool
+    messages_covered_up_to: int
+    summary_schema_version: str
 
     @classmethod
     def from_conversation(
@@ -87,6 +89,8 @@ class ConversationContextStatusV2:
                 messages_in_summary=0,
                 compression_level="none",
                 from_cache=False,
+                messages_covered_up_to=0,
+                summary_schema_version="none",
             )
         return cls(
             conversation_id=conversation.id,
@@ -96,6 +100,8 @@ class ConversationContextStatusV2:
             messages_in_summary=summary.messages_covered_count,
             compression_level=summary.compression_level,
             from_cache=True,
+            messages_covered_up_to=summary.messages_covered_up_to,
+            summary_schema_version=summary.schema_version,
         )
 
     def to_dict(self) -> dict[str, str | int | bool]:
@@ -108,6 +114,9 @@ class ConversationContextStatusV2:
             "messages_in_summary": self.messages_in_summary,
             "compression_level": self.compression_level,
             "from_cache": self.from_cache,
+            "source": "api_snapshot",
+            "messages_covered_up_to": self.messages_covered_up_to,
+            "summary_schema_version": self.summary_schema_version,
         }
 
 

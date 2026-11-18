@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f',
-  '10cbab","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:0239a19ee64611bff44ae6beb8af8554ca6e4dd2e30e516dcc6cd20b63',
+  'b405f9","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1139,8 +1139,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'rypoint":"src.infrastructure.plugins.v2.conversation_config_services:_apply_conversa',
   'tion_config_v2","module_ref":"builtin://memstack/application/conversation-config","p',
   'lugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{',
-  '"artifact_digest":"sha256:00e0ab3a20908fb93f4af309ff4d288e6b3edaf1ea096b65b15cabf0e0',
-  '9bbc28","artifact_source":"repo+python://src/infrastructure/plugins/v2/conversation_',
+  '"artifact_digest":"sha256:62c02528b04af1809aa85ee453e0342d4f872956523626ddd2d373a40d',
+  'e7e3f9","artifact_source":"repo+python://src/infrastructure/plugins/v2/conversation_',
   'context_status_services.py","contract":{"config_schema":{"$schema":"https://json-sch',
   'ema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":',
   '{"const":"operation-scoped-provider","type":"string"}},"required":["strategy"],"type',
@@ -4077,8 +4077,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'a7d54eb421281","entrypoint":"src.infrastructure.plugins.v2.cluster_services:_apply_c',
   'luster_provider_v2","module_ref":"builtin://memstack/persistence/cluster-provider","',
   'plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},',
-  '{"artifact_digest":"sha256:00e0ab3a20908fb93f4af309ff4d288e6b3edaf1ea096b65b15cabf0e',
-  '09bbc28","artifact_source":"repo+python://src/infrastructure/plugins/v2/conversation',
+  '{"artifact_digest":"sha256:62c02528b04af1809aa85ee453e0342d4f872956523626ddd2d373a40',
+  'de7e3f9","artifact_source":"repo+python://src/infrastructure/plugins/v2/conversation',
   '_context_status_services.py","contract":{"config_schema":{"$schema":"https://json-sc',
   'hema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy"',
   ':{"const":"request-async-session","type":"string"}},"required":["strategy"],"type":"',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f10cbab' as const;
+  'sha256:0239a19ee64611bff44ae6beb8af8554ca6e4dd2e30e516dcc6cd20b63b405f9' as const;

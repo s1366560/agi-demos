@@ -6184,7 +6184,7 @@
       },
       "contract_digest": "sha256:13bffbb2168f9c8b1efaadfeff2e0f35d4182ca86dad048bc103178f9fe331f5",
       "artifact": {
-        "digest": "sha256:00e0ab3a20908fb93f4af309ff4d288e6b3edaf1ea096b65b15cabf0e09bbc28",
+        "digest": "sha256:62c02528b04af1809aa85ee453e0342d4f872956523626ddd2d373a40de7e3f9",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_context_status_services.py"
       }
     },
@@ -12706,7 +12706,7 @@
       },
       "contract_digest": "sha256:a491ea5a02f19afeb8607af4b2f3b0ac3cc70e3cd71ccb24c850093082ff7e93",
       "artifact": {
-        "digest": "sha256:00e0ab3a20908fb93f4af309ff4d288e6b3edaf1ea096b65b15cabf0e09bbc28",
+        "digest": "sha256:62c02528b04af1809aa85ee453e0342d4f872956523626ddd2d373a40de7e3f9",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_context_status_services.py"
       }
     },

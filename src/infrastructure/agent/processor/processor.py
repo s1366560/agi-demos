@@ -3135,6 +3135,7 @@ class SessionProcessor:
                             token_budget=context_limit,
                             occupancy_pct=round(occupancy, 1),
                             compression_level="none",
+                            source="processor_usage",
                         )
 
                         # Check for compaction need
@@ -3303,6 +3304,7 @@ class SessionProcessor:
             token_budget=context_limit,
             occupancy_pct=round(occupancy, 1),
             compression_level="none",
+            source="processor_usage",
         )
 
     # ── _execute_tool helper methods ──────────────────────────────────

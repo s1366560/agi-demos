@@ -765,6 +765,7 @@ Summary:"""
         else:
             strategy = CompressionStrategy.SUMMARIZE
 
+        usable_tokens = calculate_usable_context(model_limits)
         return ContextWindowResult(
             messages=result.messages,
             was_compressed=result.level != CompressionLevel.NONE,
@@ -772,16 +773,14 @@ Summary:"""
             original_message_count=result.messages_before,
             final_message_count=result.messages_after,
             estimated_tokens=result.tokens_after,
-            token_budget=calculate_usable_context(model_limits),
-            budget_utilization_pct=(
-                (result.tokens_after / calculate_usable_context(model_limits)) * 100
-                if calculate_usable_context(model_limits) > 0
-                else 0.0
-            ),
+            token_budget=usable_tokens,
+            budget_utilization_pct=(result.tokens_after / usable_tokens * 100 if usable_tokens else 0.0),
             summary=result.summary,
             summarized_message_count=(self._compression_engine.state.messages_summarized_up_to),
             metadata={
                 "compression_level": result.level.value,
+                "pipeline": "adaptive",
+                "occupancy_before": round(result.tokens_before / usable_tokens, 4) if usable_tokens else 0.0,
                 "tokens_saved": result.tokens_saved,
                 "compression_ratio": round(result.compression_ratio, 3),
                 "pruned_tool_outputs": result.pruned_tool_outputs,
