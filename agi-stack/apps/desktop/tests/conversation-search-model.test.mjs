@@ -127,9 +127,7 @@ test('desktop conversation search mirrors the Web keyboard, focus, count, and an
   );
   assert.match(conversationSearchSource, /inputRef\.current\?\.focus\(\)/);
   assert.match(conversationSearchSource, /aria-live="polite"/);
-  assert.match(conversationSearchSource, /data-timeline-anchor-id/);
-  assert.match(conversationSearchSource, /data-timeline-anchor-members/);
-  assert.match(conversationSearchSource, /scrollIntoView/);
+  assert.match(conversationSearchSource, /navigateRef.current\(anchorId,/);
   assert.match(conversationSearchSource, /chat-search-highlight/);
   assert.match(chatPanelStyles, /\.conversation-search-overlay/);
   assert.match(chatPanelStyles, /\.chat-search-highlight/);

@@ -84,10 +84,13 @@ export function applyHitlResponseStreamEvent(
 export function foldHitlResponseTimelineItems(
   items: AgentTimelineItem[],
 ): AgentTimelineItem[] {
-  return items.reduce<AgentTimelineItem[]>((folded, item) => {
+  let folded: AgentTimelineItem[] = [];
+  for (const item of items) {
     const result = applyHitlResponseStreamEvent(folded, item);
-    return result.handled ? result.items : [...folded, item];
-  }, []);
+    if (result.handled) folded = result.items;
+    else folded.push(item);
+  }
+  return folded;
 }
 
 export function hitlResponsePresentation(

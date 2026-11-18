@@ -507,11 +507,11 @@ test('doom-loop detection is immediately visible without expanding routine activ
   );
   assert.match(
     chatSource,
-    /expanded=\{expandedItems\[item\.id\] \?\? isTimelineItemInitiallyExpanded\(item\)\}/,
+    /expanded=\{expandedItems\[item\.renderId \?\? item\.id\] \?\? isTimelineItemInitiallyExpanded\(item\)\}/,
   );
   assert.match(
     chatSource,
-    /current\[item\.id\] \?\? isTimelineItemInitiallyExpanded\(item\)/,
+    /current\[id\] \?\? isTimelineItemInitiallyExpanded\(item\)/,
   );
 });
 

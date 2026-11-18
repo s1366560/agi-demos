@@ -1800,6 +1800,8 @@ export type PaginatedConversationsResponse = {
 export type AgentTimelineItem = {
   /** Independent project notifications cannot define conversation pagination boundaries. */
   cursorSource?: 'conversation' | 'project_lifecycle';
+  /** Renderer-local identity of an already mounted row promoted by history reconciliation. */
+  renderId?: string;
   id: string;
   type: string;
   eventTimeUs: number;

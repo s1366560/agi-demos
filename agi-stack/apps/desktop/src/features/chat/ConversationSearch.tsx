@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -18,36 +18,37 @@ import {
 type ConversationSearchProps = {
   items: readonly AgentTimelineItem[];
   visible: boolean;
-  getViewport: () => HTMLElement | null;
-  onRevealItem?: (itemId: string) => boolean;
+  onNavigate: (itemId: string, onLocated: (target: HTMLElement) => void) => () => void;
   onClose: () => void;
 };
 
 export function ConversationSearch({
   items,
   visible,
-  getViewport,
-  onRevealItem,
+  onNavigate,
   onClose,
 }: ConversationSearchProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedAnchor, setSelectedAnchor] = useState<string | null>(null);
+  const [navigationRequest, setNavigationRequest] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const selectedAnchorRef = useRef<string | null>(null);
+  const navigateRef = useRef(onNavigate);
+  useLayoutEffect(() => {
+    navigateRef.current = onNavigate;
+  }, [onNavigate]);
   const matches = useMemo(() => conversationSearchMatches(items, query), [items, query]);
 
   useEffect(() => {
     if (!visible) {
-      clearSearchHighlights(getViewport());
       setQuery('');
-      setCurrentIndex(0);
-      selectedAnchorRef.current = null;
+      setSelectedAnchor(null);
       const previousFocus = previousFocusRef.current;
       previousFocusRef.current = null;
       if (previousFocus?.isConnected) {
-        window.requestAnimationFrame(() => previousFocus.focus());
+        const frame = window.requestAnimationFrame(() => previousFocus.focus({ preventScroll: true }));
+        return () => window.cancelAnimationFrame(frame);
       }
       return undefined;
     }
@@ -56,75 +57,33 @@ export function ConversationSearch({
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
-  }, [getViewport, visible]);
+  }, [visible]);
+
+  const currentIndex = resolveConversationSearchIndex(matches, selectedAnchor, 0);
+  const anchorId = matches[currentIndex]?.anchorId ?? null;
+  useEffect(() => {
+    setSelectedAnchor(anchorId);
+  }, [anchorId]);
 
   useEffect(() => {
-    if (!matches.length) {
-      selectedAnchorRef.current = null;
-      setCurrentIndex(0);
-      return;
-    }
-    setCurrentIndex((index) => {
-      const nextIndex = resolveConversationSearchIndex(
-        matches,
-        selectedAnchorRef.current,
-        index,
-      );
-      selectedAnchorRef.current = matches[nextIndex]?.anchorId ?? null;
-      return nextIndex;
-    });
-  }, [matches]);
-
-  useEffect(() => {
-    const viewport = getViewport();
-    clearSearchHighlights(viewport);
-    if (!visible || !viewport || !matches.length) return undefined;
-
-    const match = matches[currentIndex];
-    if (!match) return undefined;
-    selectedAnchorRef.current = match.anchorId;
-    let firstFrame: number | null = null;
-    let secondFrame: number | null = null;
-    let target: HTMLElement | null = null;
-    const scrollToMatch = () => {
-      const anchors = Array.from(
-        viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
-      );
-      target =
-        anchors.find((anchor) => anchor.dataset.timelineAnchorId === match.anchorId) ??
-        anchors.find((anchor) => anchorContainsSearchMember(anchor, match.anchorId)) ??
-        null;
-      if (!target) return;
-
-      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      target.scrollIntoView({
-        behavior: reducedMotion ? 'auto' : 'smooth',
-        block: 'center',
-      });
+    if (!visible || !anchorId) return;
+    let highlighted: HTMLElement | null = null;
+    const cancel = navigateRef.current(anchorId, (target) => {
+      highlighted = target;
       target.classList.add('chat-search-highlight');
-    };
-    if (onRevealItem?.(match.anchorId)) {
-      firstFrame = window.requestAnimationFrame(() => {
-        secondFrame = window.requestAnimationFrame(scrollToMatch);
-      });
-    } else {
-      scrollToMatch();
-    }
+    });
     return () => {
-      if (firstFrame !== null) window.cancelAnimationFrame(firstFrame);
-      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame);
-      target?.classList.remove('chat-search-highlight');
+      cancel();
+      highlighted?.classList.remove('chat-search-highlight');
     };
-  }, [currentIndex, getViewport, matches, onRevealItem, visible]);
+  }, [anchorId, navigationRequest, query, visible]);
 
   if (!visible) return null;
 
   const move = (direction: ConversationSearchDirection) => {
-    setCurrentIndex((index) => {
-      const nextIndex = moveConversationSearchIndex(index, matches.length, direction);
-      selectedAnchorRef.current = matches[nextIndex]?.anchorId ?? null;
-      return nextIndex;
-    });
+    const nextIndex = moveConversationSearchIndex(currentIndex, matches.length, direction);
+    setSelectedAnchor(matches[nextIndex]?.anchorId ?? null);
+    setNavigationRequest((request) => request + 1);
   };
   const resultLabel = matches.length
     ? t('chat.search.resultCount', {
@@ -147,8 +106,7 @@ export function ConversationSearch({
         placeholder={t('chat.search.placeholder')}
         aria-label={t('chat.search.placeholder')}
         onChange={(event) => {
-          selectedAnchorRef.current = null;
-          setCurrentIndex(0);
+          setSelectedAnchor(null);
           setQuery(event.currentTarget.value);
         }}
         onKeyDown={(event) => {
@@ -196,21 +154,4 @@ export function ConversationSearch({
       </div>
     </section>
   );
-}
-
-function clearSearchHighlights(viewport: HTMLElement | null) {
-  viewport
-    ?.querySelectorAll('.chat-search-highlight')
-    .forEach((element) => element.classList.remove('chat-search-highlight'));
-}
-
-function anchorContainsSearchMember(anchor: HTMLElement, memberId: string): boolean {
-  const serialized = anchor.getAttribute('data-timeline-anchor-members');
-  if (!serialized) return false;
-  try {
-    const members: unknown = JSON.parse(serialized);
-    return Array.isArray(members) && members.includes(memberId);
-  } catch {
-    return false;
-  }
 }

@@ -2,7 +2,7 @@ import { projectToolOutputPresentationV2 } from './toolResultOutputPresentationV
 import { timelineToolResultStatus } from './toolResultStatus';
 import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
 import { conversationImagePreviewClient } from './structuredImagePreviewOwnerModel';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, Text } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
@@ -131,9 +131,9 @@ import {
 import './AssistantDuplicateDisclosure.css';
 import './ChatTimeline.css';
 import { useTimelineInspection } from '../session/TimelineInspectionContext';
+import { resolveTimelineRenderWindow, timelineWindowMember } from './timelineRenderWindow';
+import type { TimelineWindowBoundary } from './timelineRenderWindow';
 
-const TIMELINE_RENDER_THRESHOLD = 150;
-const TIMELINE_RENDER_WINDOW = 100;
 export const TIMELINE_RENDER_STEP = 100;
 /* Web conversation parity (audit 1.2): collapsed worklog groups show up to 7
    one-line action previews before the "More N actions" overflow line. */
@@ -190,11 +190,13 @@ type AnnotatedTimelineNode =
 export function AgentTimeline({
   imagePreviewClient,
   state,
+  projectedItems,
   expandedItems,
   onToggleItem,
   onLoadEarlier,
   onShowEarlier,
   earlierRenderAllowance,
+  preserveReadingWindow = false,
   onRetry,
   onRespondToHitl,
   respondableHitlRequestIds,
@@ -218,11 +220,13 @@ export function AgentTimeline({
 }: {
   imagePreviewClient: StructuredImagePreviewClientV2 | null;
   state: ConversationTimelineState;
+  projectedItems?: AgentTimelineItem[];
   expandedItems: Record<string, boolean>;
   onToggleItem: (item: AgentTimelineItem) => void;
   onLoadEarlier: () => void;
   onShowEarlier: () => void;
   earlierRenderAllowance: number;
+  preserveReadingWindow?: boolean;
   onRetry: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   respondableHitlRequestIds: readonly string[];
@@ -271,8 +275,8 @@ export function AgentTimeline({
     [state.items],
   );
   const displayItems = useMemo(
-    () => timelineItemsForDisplay(state.items),
-    [state.items],
+    () => projectedItems ?? timelineItemsForDisplay(state.items),
+    [projectedItems, state.items],
   );
   const toolPairIndex = useMemo(() => toolActivityPairIndex(state.items), [state.items]);
   const narrative = useMemo(
@@ -288,39 +292,26 @@ export function AgentTimeline({
     item.role === 'user' || item.type === 'user_message' ? index : latest, -1);
   const latestTurnItems = new Set(displayItems.slice(latestUserIndex + 1).map((item) => item.id));
   const latestToolGroupIndex = narrative.map((node) => node.kind).lastIndexOf('tool_group');
-  /* Web conversation parity (audit 1.1): failed tool steps auto-expand (web
-     TimelineStepItem defaultExpanded on error). The toggle handler derives the
-     next value from the same expandedItems map, so prime the map through
-     onToggleItem once per failed call instead of overriding render defaults. */
-  const failedToolCalls = useMemo(() => {
-    const calls: AgentTimelineItem[] = [];
-    for (const node of narrative) {
-      if (node.kind !== 'tool_group') continue;
-      for (const row of toolActivityRows(node.items, toolPairIndex)) {
-        if (
-          row.kind === 'tool_call' &&
-          toolCallPairStatus(row.pair) === 'failed'
-        ) {
-          calls.push(row.pair.call);
-        }
-      }
-    }
-    return calls;
-  }, [narrative, toolPairIndex]);
-  useEffect(() => {
-    for (const call of failedToolCalls) {
-      if (expandedItems[call.id] === undefined) onToggleItem(call);
-    }
-  }, [failedToolCalls, expandedItems, onToggleItem]);
-  const renderWindow = useMemo(
-    () =>
-      resolveTimelineRenderWindow(
-        narrative,
-        displayItems.length,
-        earlierRenderAllowance,
-      ),
-    [narrative, displayItems.length, earlierRenderAllowance],
+  // Remember the committed boundary, including before the first upward scroll.
+  // An append in the very next render can cross the window-size threshold.
+  const boundaryRef = useRef<
+    (TimelineWindowBoundary & { conversationId: typeof state.conversationId }) | null
+  >(null);
+  const boundary = boundaryRef.current;
+  const retained =
+    preserveReadingWindow && boundary?.conversationId === state.conversationId ? boundary : null;
+  const renderWindow = resolveTimelineRenderWindow(
+    narrative,
+    displayItems.length,
+    earlierRenderAllowance,
+    retained,
   );
+  const firstMember = timelineWindowMember(narrative[renderWindow.startIndex]);
+  useLayoutEffect(() => {
+    boundaryRef.current = firstMember
+      ? { memberId: firstMember, allowance: earlierRenderAllowance, conversationId: state.conversationId }
+      : null;
+  }, [firstMember, earlierRenderAllowance, state.conversationId]);
   const collapsedTurnIdSet = useMemo(
     () => new Set(collapsedTurnIds),
     [collapsedTurnIds],
@@ -351,8 +342,9 @@ export function AgentTimeline({
       const next = { ...current };
       let changed = false;
       items.forEach((item) => {
-        if (next[item.id] === open) return;
-        next[item.id] = open;
+        const id = item.renderId ?? item.id;
+        if (next[id] === open) return;
+        next[id] = open;
         changed = true;
       });
       return changed ? next : current;
@@ -537,7 +529,7 @@ export function AgentTimeline({
             ) : null;
           if (node.kind === 'item' && isMemoryTimelineEvent(node.item)) {
             return (
-              <Fragment key={node.id}>
+              <Fragment key={node.item.renderId ?? node.id}>
                 {dayDivider}
                 {responseRegionMarker}
                 <MemoryTimelineEvent
@@ -649,11 +641,11 @@ export function AgentTimeline({
                     {node.items.some(item => item.type !== 'act' && item.type !== 'observe' && item.type !== 'thought') &&
                       <TimelineDiagnosticLink items={node.items} anchorId={`${groupId}:details`} />}
                     {activityRows.map((row) => row.kind === 'thought' ? (
-                      <TimelineItemView key={row.item.id} item={row.item}
-                        expanded={expandedItems[row.item.id] ?? false} onToggle={() => onToggleItem(row.item)}
+                      <TimelineItemView key={row.item.renderId ?? row.item.id} item={row.item}
+                        expanded={expandedItems[row.item.renderId ?? row.item.id] ?? false} onToggleItem={onToggleItem}
                         onRespondToHitl={onRespondToHitl} canRespondToHitl={false} />
-                    ) : <ToolCallPairView key={row.pair.call.id} pair={row.pair}
-                      expanded={false} recorded={!groupIsLive} onToggle={() => onToggleItem(row.pair.call)} isLast />)}
+                    ) : <ToolCallPairView key={row.pair.call.renderId ?? row.pair.call.id} pair={row.pair}
+                      recorded={!groupIsLive} />)}
                   </div>
                 </details>
               </Fragment>
@@ -670,13 +662,13 @@ export function AgentTimeline({
           const collapsed = Boolean(turn && collapsedTurnIdSet.has(turn.id));
           const regionId = turn ? timelineTurnResponseRegionId(turn.id) : '';
           return (
-            <Fragment key={node.id}>
+            <Fragment key={node.item.renderId ?? node.id}>
               {dayDivider}
               {responseRegionMarker}
               <TimelineItemView
                 item={item}
-                expanded={expandedItems[item.id] ?? isTimelineItemInitiallyExpanded(item)}
-                onToggle={() => onToggleItem(item)}
+                expanded={expandedItems[item.renderId ?? item.id] ?? isTimelineItemInitiallyExpanded(item)}
+                onToggleItem={onToggleItem}
                 onRespondToHitl={onRespondToHitl}
                 canRespondToHitl={Boolean(
                   requestId && respondableHitlRequestIdSet.has(requestId),
@@ -847,7 +839,7 @@ function toolCallPairPreviewText(
 }
 
 function ToolCallPairView({ pair, recorded }: {
-  pair: ToolCallPair; expanded: boolean; recorded?: boolean; onToggle: () => void; isLast: boolean;
+  pair: ToolCallPair; recorded?: boolean;
 }) {
   const { t } = useI18n();
   const { inspect } = useTimelineInspection();
@@ -1029,10 +1021,10 @@ function TimelinePayloadBlock({
   );
 }
 
-function TimelineItemView({
+const TimelineItemView = memo(function TimelineItemView({
   item,
   expanded,
-  onToggle,
+  onToggleItem,
   onRespondToHitl,
   canRespondToHitl,
   a2uiActionView,
@@ -1050,7 +1042,7 @@ function TimelineItemView({
 }: {
   item: AgentTimelineItem;
   expanded: boolean;
-  onToggle: () => void;
+  onToggleItem: (item: AgentTimelineItem) => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   canRespondToHitl: boolean;
   a2uiActionView?: A2UIActionView;
@@ -1071,6 +1063,7 @@ function TimelineItemView({
 }) {
   const { t } = useI18n();
   const { inspect } = useTimelineInspection();
+  const onToggle = () => onToggleItem(item);
   const kind = timelineKind(item);
   const lineCount = useMemo(
     () => timelineDetailLineCount(item, kind),
@@ -1269,7 +1262,7 @@ function TimelineItemView({
       )}
     </article>
   );
-}
+});
 
 function TimelineItemBody({
   item,
@@ -1961,8 +1954,8 @@ function annotateTimelineGroups(
 
   nodes.forEach((node, index) => {
     if (node.kind === 'item') {
-      if (lastItemId === null) resolveLeadingGroups(node.id);
-      lastItemId = node.id;
+      if (lastItemId === null) resolveLeadingGroups(node.item.renderId ?? node.id);
+      lastItemId = node.item.renderId ?? node.id;
       ordinalsAfterItem = {};
       annotated[index] = node;
       return;
@@ -2044,25 +2037,6 @@ function timelineTurnResponseRegionId(turnId: string): string {
 
 function timelineTurnControlId(turnId: string): string {
   return `timeline-turn-control-${encodeURIComponent(turnId)}`;
-}
-
-function resolveTimelineRenderWindow(
-  narrative: AnnotatedTimelineNode[],
-  itemCount: number,
-  earlierAllowance: number,
-): { startIndex: number; hiddenCount: number } {
-  if (itemCount <= TIMELINE_RENDER_THRESHOLD)
-    return { startIndex: 0, hiddenCount: 0 };
-  const budget = TIMELINE_RENDER_WINDOW + earlierAllowance;
-  if (budget >= itemCount) return { startIndex: 0, hiddenCount: 0 };
-  let coveredItems = 0;
-  let startIndex = narrative.length;
-  while (startIndex > 0 && coveredItems < budget) {
-    startIndex -= 1;
-    const node = narrative[startIndex];
-    coveredItems += node.kind === 'item' ? 1 : node.items.length;
-  }
-  return { startIndex, hiddenCount: itemCount - coveredItems };
 }
 
 function isCollapsibleRuntimeItem(item: AgentTimelineItem): boolean {
