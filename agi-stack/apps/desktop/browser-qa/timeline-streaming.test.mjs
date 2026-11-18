@@ -237,7 +237,7 @@ test('reading survives pagination overlapping a tail update, then returns to lat
 
 test('wheel inside expanded reasoning stays local while the transcript follows', async (t) => {
   const page = await open(t);
-  const text = Array.from({ length: 80 }, (_, i) => 'Reasoning line ' + i).join('\n');
+  const text = Array.from({ length: 80 }, (_, i) => '  Reasoning line ' + i).join('\n') + '\n';
   await page.evaluate(
     (content) => window.transcript.append('thought', { content, metadata: { streaming: true } }),
     text,
@@ -246,6 +246,7 @@ test('wheel inside expanded reasoning stays local while the transcript follows',
   if ((await thought.getAttribute('aria-expanded')) !== 'true') await thought.click();
   const region = page.locator('.thought-timeline-content').last();
   await frames(page);
+  assert.equal(await region.textContent(), text, 'the expanded trace retains its exact whitespace');
   await region.hover();
   await page.mouse.wheel(0, -90);
   await frames(page);
