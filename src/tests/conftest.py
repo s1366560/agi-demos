@@ -67,9 +67,16 @@ TEST_MEMORY_ID = "550e8400-e29b-41d4-a716-446655440003"
 @pytest.fixture(autouse=True)
 def isolate_cron_scheduler_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep tests from opening process-global APScheduler infrastructure implicitly."""
+    from src.infrastructure.plugins.v2.cron_services import (
+        reset_process_cron_scheduler_runtime_v2,
+    )
+
+    reset_process_cron_scheduler_runtime_v2()
     monkeypatch.setattr(scheduler_service, "start_scheduler", AsyncMock(return_value=object()))
     monkeypatch.setattr(scheduler_service, "sync_all_jobs", AsyncMock())
     monkeypatch.setattr(scheduler_service, "stop_scheduler", AsyncMock())
+    yield
+    reset_process_cron_scheduler_runtime_v2()
 
 
 @pytest.fixture(autouse=True)
@@ -91,6 +98,7 @@ def isolate_llm_health_checker_lifecycle(monkeypatch: pytest.MonkeyPatch) -> Non
     """Keep generic V2 profile tests from starting the process health loop."""
     from src.infrastructure.plugins.v2 import llm_health_runtime
 
+    llm_health_runtime.reset_process_llm_health_runtime_v2()
     monkeypatch.setattr(llm_health_runtime, "start_health_checker", AsyncMock())
     monkeypatch.setattr(
         llm_health_runtime,
@@ -98,6 +106,8 @@ def isolate_llm_health_checker_lifecycle(monkeypatch: pytest.MonkeyPatch) -> Non
         AsyncMock(return_value=0),
     )
     monkeypatch.setattr(llm_health_runtime, "stop_health_checker", AsyncMock())
+    yield
+    llm_health_runtime.reset_process_llm_health_runtime_v2()
 
 
 @pytest.fixture(autouse=True)
@@ -105,6 +115,7 @@ def isolate_docker_event_monitor_lifecycle(monkeypatch: pytest.MonkeyPatch) -> N
     """Keep generic V2 profile tests from starting Docker event streaming."""
     from src.infrastructure.plugins.v2 import docker_monitor_runtime
 
+    docker_monitor_runtime.reset_process_docker_event_monitor_runtime_v2()
     monkeypatch.setattr(
         docker_monitor_runtime,
         "start_docker_event_monitor",
@@ -115,6 +126,8 @@ def isolate_docker_event_monitor_lifecycle(monkeypatch: pytest.MonkeyPatch) -> N
         "stop_docker_event_monitor",
         AsyncMock(),
     )
+    yield
+    docker_monitor_runtime.reset_process_docker_event_monitor_runtime_v2()
 
 
 # --- Database Fixtures ---

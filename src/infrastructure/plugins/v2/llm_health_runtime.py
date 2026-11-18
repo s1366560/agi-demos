@@ -153,13 +153,42 @@ class LlmHealthCheckerRuntimeV2:
             self._registered_provider_types = 0
 
 
+_process_llm_health_runtime: LlmHealthCheckerRuntimeV2 | None = None
+
+
+async def _start_process_llm_health() -> None:
+    await start_health_checker()
+
+
+async def _sync_process_llm_health(*, session_factory: LlmHealthSessionFactoryV2) -> int:
+    return await sync_llm_health_checker_providers_v2(session_factory=session_factory)
+
+
+async def _stop_process_llm_health() -> None:
+    await stop_health_checker()
+
+
+def process_llm_health_runtime_v2() -> LlmHealthCheckerRuntimeV2:
+    """Share one health-checker runtime for every definition factory in this process."""
+    global _process_llm_health_runtime
+    if _process_llm_health_runtime is None:
+        _process_llm_health_runtime = LlmHealthCheckerRuntimeV2(
+            start=_start_process_llm_health,
+            sync=_sync_process_llm_health,
+            stop=_stop_process_llm_health,
+        )
+    return _process_llm_health_runtime
+
+
+def reset_process_llm_health_runtime_v2() -> None:
+    """Drop the process manager so isolated tests do not leak generation references."""
+    global _process_llm_health_runtime
+    _process_llm_health_runtime = None
+
+
 def llm_health_runtime_definition_v2() -> PluginDefinitionV2:
     """Bind provider synchronization and health polling to a V2 effect."""
-    runtime = LlmHealthCheckerRuntimeV2(
-        start=start_health_checker,
-        sync=sync_llm_health_checker_providers_v2,
-        stop=stop_health_checker,
-    )
+    runtime = process_llm_health_runtime_v2()
 
     async def apply(context: ContextV2, config: Mapping[str, Any]) -> EffectResultV2:
         if config.get("strategy") != "resilience-health-checker":
@@ -177,7 +206,7 @@ def llm_health_runtime_definition_v2() -> PluginDefinitionV2:
                 runtime,
                 label="llm-health-checker",
             )
-        except Exception:
+        except BaseException:
             await runtime.release_generation()
             raise
 
@@ -201,5 +230,7 @@ __all__ = [
     "LlmHealthCheckerRuntimeV2",
     "LlmHealthSessionFactoryV2",
     "llm_health_runtime_definition_v2",
+    "process_llm_health_runtime_v2",
+    "reset_process_llm_health_runtime_v2",
     "sync_llm_health_checker_providers_v2",
 ]
