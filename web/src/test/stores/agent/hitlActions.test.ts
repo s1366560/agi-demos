@@ -80,7 +80,11 @@ describe('permission response failures', () => {
 
         await actions.respondToPermission('permission-1', false);
 
-        expect(agentService.respondToPermission).toHaveBeenCalledWith('permission-1', false);
+        expect(agentService.respondToPermission).toHaveBeenCalledWith(
+          'permission-1',
+          false,
+          undefined
+        );
         expect(update).toHaveBeenCalledWith('conversation-1', {
           timeline: [],
           pendingPermission: null,
