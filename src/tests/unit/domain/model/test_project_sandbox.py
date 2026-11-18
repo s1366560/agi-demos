@@ -91,14 +91,14 @@ class TestProjectSandbox:
         assert sandbox.status == ProjectSandboxStatus.RUNNING
         assert sandbox.error_message is None
         assert sandbox.health_checked_at is not None
-        assert sandbox.metadata["docker_health"] == "unhealthy"
-        assert sandbox.metadata["docker_health_detail"] == "Health check failed"
+        assert sandbox.metadata["health_probe"] == "unhealthy"
+        assert sandbox.metadata["health_probe_detail"] == "Health check failed"
 
         sandbox.record_health_observation(healthy=True)
 
         assert sandbox.status == ProjectSandboxStatus.RUNNING
-        assert sandbox.metadata["docker_health"] == "healthy"
-        assert "docker_health_detail" not in sandbox.metadata
+        assert sandbox.metadata["health_probe"] == "healthy"
+        assert "health_probe_detail" not in sandbox.metadata
 
     def test_mark_error(self) -> None:
         """Should mark as error."""

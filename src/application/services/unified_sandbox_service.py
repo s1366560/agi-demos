@@ -351,9 +351,11 @@ class UnifiedSandboxService(SandboxResourcePort):
     async def health_check(self, project_id: str) -> bool:
         """Perform health check on project's sandbox.
 
-        Records the probe on the association (``health_checked_at`` and
-        ``metadata.docker_health``) without changing lifecycle status or
-        auto-recreating the sandbox.
+        Records the adapter probe (``health_checked_at`` and
+        ``metadata.health_probe``). If the adapter reports unhealthy and
+        auto_recover is enabled, attempts to recreate the sandbox, matching
+        the existing recovery contract. The adapter probe is not the Docker
+        HEALTHCHECK and does not use that signal to decide recovery.
 
         Args:
             project_id: The project ID
@@ -376,15 +378,32 @@ class UnifiedSandboxService(SandboxResourcePort):
                 healthy=healthy,
                 detail=None if healthy else "Health check failed",
             )
+
+            if healthy:
+                association.mark_healthy()
+                await self._repository.save(association)
+                return True
+
+            # Adapter unhealthy means not tracked, container not running,
+            # MCP not connected, or the inspect failed — not a Docker
+            # HEALTHCHECK-only degradation. Keep the original contract.
+            association.mark_unhealthy("Health check failed")
             await self._repository.save(association)
-            # A failed probe is an observation only. Do not change RUNNING to
-            # ERROR or auto-recreate; those paths can destroy a still-running
-            # sandbox whose Docker HEALTHCHECK failed for a non-fatal reason.
-            return healthy
+
+            if self._auto_recover:
+                logger.info(f"Auto-recovering unhealthy sandbox for project {project_id}")
+                try:
+                    await self._recreate_sandbox(association)
+                    return True
+                except Exception as recover_err:
+                    logger.error(f"Auto-recovery failed for project {project_id}: {recover_err}")
+
+            return False
 
         except Exception as e:
             logger.error(f"Health check error for project {project_id}: {e}")
             association.record_health_observation(healthy=False, detail=str(e))
+            association.mark_unhealthy(str(e))
             await self._repository.save(association)
             return False
 

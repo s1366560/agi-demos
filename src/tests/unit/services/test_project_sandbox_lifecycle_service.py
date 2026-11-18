@@ -352,7 +352,7 @@ class TestProjectSandboxLifecycleService:
 
         assert result is True
         assert sample_association.status == ProjectSandboxStatus.RUNNING
-        assert sample_association.metadata.get("docker_health") == "healthy"
+        assert sample_association.metadata.get("health_probe") == "healthy"
         assert sample_association.health_checked_at is not None
 
     @pytest.mark.asyncio
@@ -366,8 +366,8 @@ class TestProjectSandboxLifecycleService:
         result = await service.health_check("proj-456")
 
         assert result is False
-        assert sample_association.status == ProjectSandboxStatus.RUNNING
-        assert sample_association.metadata.get("docker_health") == "unhealthy"
+        assert sample_association.status == ProjectSandboxStatus.ERROR
+        assert sample_association.metadata.get("health_probe") == "unhealthy"
         assert sample_association.health_checked_at is not None
         mock_repository.save.assert_called()
 

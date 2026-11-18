@@ -588,15 +588,15 @@ class TestHealthCheck:
 
         assert result is False
         saved = mock_repository.save.call_args.args[0]
-        assert saved.status == ProjectSandboxStatus.RUNNING
-        assert saved.metadata.get("docker_health") == "unhealthy"
+        assert saved.status == ProjectSandboxStatus.ERROR
+        assert saved.metadata.get("health_probe") == "unhealthy"
         assert saved.health_checked_at is not None
 
     @pytest.mark.asyncio
-    async def test_health_check_failed_probe_keeps_running_and_does_not_recreate(
+    async def test_health_check_unhealthy_with_auto_recover_recreates(
         self, mock_repository, mock_adapter, mock_lock
     ):
-        """A failed probe must not flip RUNNING to ERROR or auto-recreate."""
+        """Adapter-unhealthy with auto_recover=True keeps the original recreate contract."""
         service = UnifiedSandboxService(
             repository=mock_repository,
             sandbox_adapter=mock_adapter,
@@ -609,21 +609,21 @@ class TestHealthCheck:
         result = await service.health_check(project_id="proj-123")
 
         saved = mock_repository.save.call_args.args[0]
-        assert result is False
-        assert saved.status == ProjectSandboxStatus.RUNNING
-        assert saved.metadata.get("docker_health") == "unhealthy"
+        assert result is True
+        assert saved.status == ProjectSandboxStatus.ERROR
+        assert saved.metadata.get("health_probe") == "unhealthy"
         assert saved.health_checked_at is not None
-        service._recreate_sandbox.assert_not_called()
+        service._recreate_sandbox.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_health_check_updates_association_status(self, service, mock_repository):
-        """Should persist a real observation without changing RUNNING."""
+        """Healthy adapter probe records observation and keeps RUNNING."""
         await service.health_check(project_id="proj-123")
 
         mock_repository.save.assert_called()
         saved = mock_repository.save.call_args.args[0]
         assert saved.status == ProjectSandboxStatus.RUNNING
-        assert saved.metadata.get("docker_health") == "healthy"
+        assert saved.metadata.get("health_probe") == "healthy"
         assert saved.health_checked_at is not None
 
     @pytest.mark.asyncio
@@ -794,10 +794,11 @@ class TestErrorHandling:
 
         result = await service.health_check(project_id="proj-123")
 
-        # Should return False on error, but keep RUNNING and record the observation
+        # Exception path records the observation and keeps the original ERROR contract.
+        # It does not auto-recreate (same as pre-patch behavior).
         assert result is False
-        assert existing.status == ProjectSandboxStatus.RUNNING
-        assert existing.metadata.get("docker_health") == "unhealthy"
+        assert existing.status == ProjectSandboxStatus.ERROR
+        assert existing.metadata.get("health_probe") == "unhealthy"
         assert existing.health_checked_at is not None
 
     @pytest.mark.asyncio

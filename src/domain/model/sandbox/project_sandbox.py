@@ -176,24 +176,26 @@ class ProjectSandbox(Entity):
         self.mark_error(reason or "Unhealthy")
 
     def record_health_observation(self, *, healthy: bool, detail: str | None = None) -> None:
-        """Record a health probe result without changing lifecycle status.
+        """Record an adapter health-probe result without changing lifecycle status.
 
-        A failed probe (including Docker HEALTHCHECK unhealthy) means the
-        observation failed; the container may still be running. This must not
-        set ``ProjectSandboxStatus.ERROR``, which consumers may treat as a
-        signal to clean up or recreate the sandbox.
+        This only updates ``health_checked_at`` and existing ``metadata``
+        (``health_probe`` is ``healthy`` or ``unhealthy``). Callers that have
+        an authorized recovery/ERROR contract still apply that themselves.
 
-        The observation is stored on existing ``metadata`` (no schema change):
-        ``docker_health`` is ``healthy`` or ``unhealthy``, and
-        ``health_checked_at`` is updated to now.
+        The adapter probe is not the Docker HEALTHCHECK: a still-running
+        container can have an unhealthy Docker HEALTHCHECK while this probe
+        is healthy (or the reverse). This method must not be treated as a
+        substitute for auto-recover.
         """
         self.health_checked_at = datetime.now(UTC)
         metadata = dict(self.metadata or {})
-        metadata["docker_health"] = "healthy" if healthy else "unhealthy"
+        metadata["health_probe"] = "healthy" if healthy else "unhealthy"
+        metadata.pop("docker_health", None)
+        metadata.pop("docker_health_detail", None)
         if detail:
-            metadata["docker_health_detail"] = str(detail)[:500]
+            metadata["health_probe_detail"] = str(detail)[:500]
         else:
-            metadata.pop("docker_health_detail", None)
+            metadata.pop("health_probe_detail", None)
         self.metadata = metadata
 
     def mark_error(self, error: str) -> None:
