@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from src.tools.test_tools import (
+    _default_generate_tests_output_path,
     _parse_coverage_json,
     analyze_coverage,
     generate_tests,
@@ -141,6 +142,128 @@ async def fetch(name: str) -> str:
 
         assert result.get("isError") is True
         assert result["metadata"]["error"]["code"] == "path_outside_workspace"
+
+    @pytest.mark.asyncio
+    async def test_generate_tests_defaults_to_tests_directory(self, tmp_path):
+        """Omitted output_path writes under tests/, not next to the source file."""
+        source = tmp_path / "src" / "pkg" / "models.py"
+        source.parent.mkdir(parents=True)
+        source.write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+
+        result = await generate_tests(
+            file_path=str(source),
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        output_file = Path(result["metadata"]["output_file"])
+        assert output_file == tmp_path / "tests" / "test_models.py"
+        assert output_file.exists()
+        assert not (source.parent / "test_models.py").exists()
+
+    @pytest.mark.asyncio
+    async def test_generate_tests_explicit_output_path_is_preserved(self, tmp_path):
+        """An explicit output_path still wins over the tests/ default."""
+        source = tmp_path / "calculator.py"
+        source.write_text("def add(a: int, b: int) -> int:\n    return a + b\n", encoding="utf-8")
+        target = tmp_path / "custom" / "test_add.py"
+
+        result = await generate_tests(
+            file_path=str(source),
+            output_path=str(target),
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        output_file = Path(result["metadata"]["output_file"])
+        assert output_file == target
+        assert target.exists()
+        assert not (tmp_path / "tests" / "test_calculator.py").exists()
+
+    @pytest.mark.asyncio
+    async def test_generate_tests_does_not_overwrite_existing_default_file(self, tmp_path):
+        """Default naming must not clobber an existing tests/test_<file>.py."""
+        source = tmp_path / "models.py"
+        source.write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+        existing = tmp_path / "tests" / "test_models.py"
+        existing.parent.mkdir()
+        existing.write_text("# existing suite\n", encoding="utf-8")
+
+        result = await generate_tests(
+            file_path=str(source),
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        output_file = Path(result["metadata"]["output_file"])
+        assert output_file == tmp_path / "tests" / "test_models_2.py"
+        assert existing.read_text(encoding="utf-8") == "# existing suite\n"
+        assert output_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_generate_tests_import_survives_shadowed_src_package(self, tmp_path):
+        """Generated imports must load the workspace file, not a venv package named src."""
+        import subprocess
+        import sys
+
+        source = tmp_path / "src" / "pkg" / "models.py"
+        source.parent.mkdir(parents=True)
+        (tmp_path / "src" / "__init__.py").write_text("", encoding="utf-8")
+        (tmp_path / "src" / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+        source.write_text("def ping() -> str:\n    return 'workspace'\n", encoding="utf-8")
+
+        shadow_root = tmp_path / "shadow"
+        shadow_pkg = shadow_root / "src"
+        (shadow_pkg / "pkg").mkdir(parents=True)
+        (shadow_pkg / "__init__.py").write_text("", encoding="utf-8")
+        (shadow_pkg / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+        (shadow_pkg / "pkg" / "models.py").write_text(
+            "def ping() -> str:\n    return 'shadow'\n",
+            encoding="utf-8",
+        )
+
+        result = await generate_tests(
+            file_path=str(source),
+            _workspace_dir=str(tmp_path),
+        )
+        assert not result.get("isError")
+        output_file = Path(result["metadata"]["output_file"])
+        generated = output_file.read_text(encoding="utf-8")
+        assert "sys.path.insert(0, _source_root)" in generated
+        assert "from src.pkg.models import ping" in generated
+
+        script = (
+            "import sys\n"
+            f"sys.path.insert(0, r'{shadow_root}')\n"
+            f"path = r'{output_file}'\n"
+            "code = open(path, encoding='utf-8').read()\n"
+            "preamble = code.split('import pytest', 1)[0]\n"
+            "ns = {}\n"
+            "exec(preamble, ns)\n"
+            "exec('from src.pkg.models import ping', ns)\n"
+            "print(ns['ping']())\n"
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_path / "tests"),
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.strip() == "workspace"
+
+
+def test_default_generate_tests_output_path_increments_collisions(tmp_path):
+    """Helper chooses the first free tests/test_<stem>[_N].py name."""
+    source = tmp_path / "models.py"
+    source.write_text("x = 1\n", encoding="utf-8")
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_models.py").write_text("old\n", encoding="utf-8")
+    (tests_dir / "test_models_2.py").write_text("old2\n", encoding="utf-8")
+
+    chosen = _default_generate_tests_output_path(source, str(tmp_path))
+    assert chosen == tests_dir / "test_models_3.py"
 
 
 class TestRunTests:

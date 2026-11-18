@@ -117,6 +117,75 @@ def module_origin_for(module_name: str, import_root: Path) -> Path:
     return import_root.joinpath(*module_name.split(".")).with_suffix(".py")
 
 
+def _default_generate_tests_output_path(source_path: Path, workspace_dir: str) -> Path:
+    """Place generated tests under workspace/tests, without overwriting files.
+
+    The SKILL example and conventional project layout use ``tests/test_<file>.py``.
+    An explicit ``output_path`` still wins. If the default name already exists,
+    a numeric suffix is added so existing tests are not clobbered.
+    """
+    workspace = Path(workspace_dir).resolve()
+    tests_dir = workspace / "tests"
+    stem = source_path.stem
+    candidate = tests_dir / f"test_{stem}.py"
+    if not candidate.exists():
+        return candidate
+    index = 2
+    while True:
+        alt = tests_dir / f"test_{stem}_{index}.py"
+        if not alt.exists():
+            return alt
+        index += 1
+
+
+def _candidate_coverage_tests(source_path: Path, workspace_dir: str) -> list[Path]:
+    """Find tests next to the source file or under workspace/tests."""
+    stem = source_path.stem
+    pattern = f"test*{stem}*.py"
+    found: list[Path] = []
+    seen: set[Path] = set()
+    workspace = Path(workspace_dir).resolve()
+    for directory in (source_path.parent, workspace / "tests"):
+        if not directory.exists():
+            continue
+        for path in sorted(directory.glob(pattern)):
+            resolved = path.resolve()
+            if resolved in seen or resolved == source_path.resolve():
+                continue
+            seen.add(resolved)
+            found.append(path)
+    return found
+
+
+def _import_bootstrap_lines(import_root: Path, module_name: str) -> list[str]:
+    """Emit import preamble that prefers this workspace over a shadowed package."""
+    top_level = module_name.split(".", 1)[0]
+    return [
+        "from pathlib import Path",
+        "import sys",
+        "",
+        f'SOURCE_ROOT = Path(r"{import_root}")',
+        "_source_root = str(SOURCE_ROOT)",
+        "if _source_root in sys.path:",
+        "    sys.path.remove(_source_root)",
+        "sys.path.insert(0, _source_root)",
+        f"_top_level = {top_level!r}",
+        "for _name in list(sys.modules):",
+        "    if _name == _top_level or _name.startswith(_top_level + '.'):",
+        "        _mod = sys.modules[_name]",
+        "        _file = getattr(_mod, '__file__', None)",
+        "        if not _file:",
+        "            sys.modules.pop(_name, None)",
+        "            continue",
+        "        try:",
+        "            if not Path(_file).resolve().is_relative_to(SOURCE_ROOT.resolve()):",
+        "                sys.modules.pop(_name, None)",
+        "        except (OSError, ValueError):",
+        "            sys.modules.pop(_name, None)",
+        "",
+    ]
+
+
 def _sample_argument_value(
     arg: ast.arg,
     *,
@@ -193,7 +262,7 @@ async def generate_tests(
         function_name: Optional function name to generate tests for
         class_name: Optional class name to generate tests for
         test_framework: Test framework to use (pytest, unittest)
-        output_path: Optional output file path
+        output_path: Optional output file path. Defaults to tests/test_<filename>.py
         _workspace_dir: Workspace directory
 
     Returns:
@@ -251,14 +320,8 @@ async def generate_tests(
             f'"""Auto-generated tests for {full_path.name}."""',
             "from __future__ import annotations",
             "",
-            "from pathlib import Path",
-            "import sys",
-            "",
+            *_import_bootstrap_lines(import_root, module_name),
             "import pytest",
-            "",
-            f'SOURCE_ROOT = Path(r"{import_root}")',
-            "if str(SOURCE_ROOT) not in sys.path:",
-            "    sys.path.insert(0, str(SOURCE_ROOT))",
             "",
             f"from {module_name} import {', '.join(sorted(import_targets))}",
             "",
@@ -299,12 +362,13 @@ async def generate_tests(
         full_test_code = "\n\n".join(generated_code).rstrip() + "\n"
         ast.parse(full_test_code)
 
-        # Write to output file if specified
+        # Write to an explicit path when provided; otherwise use tests/.
         if output_path:
             output_full_path = _resolve_path(output_path, _workspace_dir)
         else:
-            # Default to test_<filename>.py
-            output_full_path = full_path.parent / f"test_{full_path.stem}.py"
+            output_full_path = _default_generate_tests_output_path(
+                full_path, _workspace_dir
+            )
         output_full_path.parent.mkdir(parents=True, exist_ok=True)
         output_full_path.write_text(full_test_code, encoding="utf-8")
 
@@ -404,7 +468,11 @@ def create_generate_tests_tool() -> MCPTool:
                 },
                 "output_path": {
                     "type": "string",
-                    "description": "Optional output file path",
+                    "description": (
+                        "Optional output file path. When omitted, tests are written "
+                        "to tests/test_<filename>.py in the workspace; an existing "
+                        "file is not overwritten (a numeric suffix is added)."
+                    ),
                 },
             },
             "required": ["file_path"],
@@ -648,7 +716,7 @@ async def analyze_coverage(
 
             module_name, import_root = _module_import_data(full_path, _workspace_dir)
 
-            candidate_tests = sorted(full_path.parent.glob(f"test*{full_path.stem}*.py"))
+            candidate_tests = _candidate_coverage_tests(full_path, _workspace_dir)
             with tempfile.TemporaryDirectory(prefix="coverage-") as temp_dir_str:
                 temp_dir = Path(temp_dir_str)
                 json_report = temp_dir / "coverage.json"
@@ -662,13 +730,7 @@ async def analyze_coverage(
                         "\n".join(
                             [
                                 "from __future__ import annotations",
-                                "from pathlib import Path",
-                                "import sys",
-                                "",
-                                f'IMPORT_ROOT = Path(r"{import_root}")',
-                                "if str(IMPORT_ROOT) not in sys.path:",
-                                "    sys.path.insert(0, str(IMPORT_ROOT))",
-                                "",
+                                *_import_bootstrap_lines(import_root, module_name),
                                 f"import {module_name}",
                                 "",
                                 f"def test_{full_path.stem}_coverage() -> None:",
