@@ -16,15 +16,12 @@ pub(super) struct ToolArgumentValidator {
 }
 
 impl ToolArgumentValidator {
-    pub(super) async fn validate(
+    pub(super) async fn is_valid(
         &self,
         schema: Option<&Value>,
         arguments: &Value,
-    ) -> Result<(), RuntimeV2Error> {
-        if !arguments.is_object() {
-            return Err(invalid("tool arguments must be an object"));
-        }
-        let Some(schema) = schema else { return Ok(()) };
+    ) -> Result<bool, RuntimeV2Error> {
+        let Some(schema) = schema else { return Ok(arguments.is_object()) };
         #[cfg(target_arch = "wasm32")]
         {
             self.validate_schema(schema, arguments)
@@ -48,7 +45,7 @@ impl ToolArgumentValidator {
         }
     }
 
-    fn validate_schema(&self, schema: &Value, arguments: &Value) -> Result<(), RuntimeV2Error> {
+    fn validate_schema(&self, schema: &Value, arguments: &Value) -> Result<bool, RuntimeV2Error> {
         let key = schema.to_string();
         let validator = {
             let mut schemas = self
@@ -70,11 +67,7 @@ impl ToolArgumentValidator {
                 validator
             }
         };
-        if validator.is_valid(arguments) {
-            Ok(())
-        } else {
-            Err(invalid("rewritten tool arguments violate input schema"))
-        }
+        Ok(arguments.is_object() && validator.is_valid(arguments))
     }
 }
 
@@ -106,4 +99,24 @@ fn worker() -> Result<&'static std::sync::mpsc::SyncSender<ValidationJob>, Runti
         })
         .as_ref()
         .map_err(|_| invalid("tool schema validation is unavailable"))
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::ToolArgumentValidator;
+    use futures::executor::block_on;
+    use serde_json::json;
+
+    #[test]
+    fn unavailable_validator_is_a_hard_error_even_for_invalid_arguments() {
+        let validator = ToolArgumentValidator::default();
+        let schemas = validator.schemas.clone();
+        let poison = std::thread::spawn(move || {
+            let _guard = schemas.lock().unwrap();
+            panic!("simulate an interrupted schema cache update");
+        });
+        assert!(poison.join().is_err());
+        let schema = json!({"type":"object","required":["path"]});
+        assert!(block_on(validator.is_valid(Some(&schema), &json!({}))).is_err());
+    }
 }

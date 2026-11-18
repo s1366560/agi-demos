@@ -48,6 +48,7 @@ impl ToolExecutionPolicy for Policy {
         _: Option<&Value>,
     ) -> CoreResult<ToolPolicyDecision> {
         Ok(match self.action {
+            "invalid_arguments" => ToolPolicyDecision::InvalidArguments,
             "deny" => ToolPolicyDecision::Deny {
                 reason: "denied".into(),
             },
@@ -163,6 +164,24 @@ fn rewritten_arguments_reach_real_authorization_and_only_transformed_output_is_o
             .contains("private raw result"));
         assert!(observer.results.lock().unwrap()[0].contains("safe transformed result"));
     }
+}
+
+#[test]
+fn invalid_model_arguments_consume_a_round_without_dispatching_or_recording_the_payload() {
+    let host = Arc::new(AuthorityHost::default());
+    let observer = Arc::new(Observer::default());
+    let state = block_on(engine(host.clone(), "invalid_arguments", false)
+        .run_observed("session", "goal", None, observer.clone())).unwrap();
+    assert_eq!(state.answer.as_deref(), Some("done"));
+    assert!(state.completed_tool_calls.is_empty());
+    assert!(observer.results.lock().unwrap().is_empty());
+    assert!(host.inputs.lock().unwrap().is_empty());
+    let history = serde_json::to_string(&state.transcript).unwrap();
+    assert!(history.contains("declared JSON schema"));
+    assert!(!history.contains("original"));
+    let capped = block_on(engine(host, "invalid_arguments", false).with_max_rounds(1)
+        .run("session", "goal", None)).unwrap();
+    assert_eq!(capped.status, SessionStatus::Failed);
 }
 
 #[test]

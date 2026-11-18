@@ -106,6 +106,9 @@ pub(super) async fn execute_nested_with_policy(
         .await?;
     let input = match decision {
         ToolPolicyDecision::Allow { input_json } => input_json,
+        ToolPolicyDecision::InvalidArguments => {
+            return Err(CoreError::Tool("tool arguments do not match the declared JSON schema".into()))
+        }
         ToolPolicyDecision::Deny { reason } | ToolPolicyDecision::Cancel { reason } => {
             return Err(CoreError::Tool(reason))
         }
