@@ -903,6 +903,44 @@ class AgentOrchestrator:
             status=status,
         )
 
+    async def _session_ids_to_reconcile(
+        self,
+        session_id: str,
+        *,
+        cascade: bool,
+    ) -> list[str]:
+        """Collect the requested session and, when cascading, its descendants."""
+        ids: list[str] = [session_id]
+        if not cascade:
+            return ids
+        descendants = await self._spawn_manager.find_descendants(session_id)
+        for record in descendants:
+            child_id = record.child_session_id
+            if child_id and child_id not in ids:
+                ids.append(child_id)
+        return ids
+
+    async def _archive_stopped_child_conversations(self, session_ids: list[str]) -> None:
+        """Persist archived status for stopped child conversations.
+
+        Redis spawn records may already be ``stopped`` (or expire after a
+        restart). Reconciling the durable conversation row is therefore
+        attempted for every requested id, including already-stopped ones.
+        This writes only legal conversation statuses and is a no-op when the
+        orchestrator has no database session (unit tests).
+        """
+        if self._db_session is None or not session_ids:
+            return
+
+        from src.infrastructure.adapters.secondary.persistence.archive_stopped_child_conversations import (
+            archive_stopped_child_conversations,
+        )
+
+        # Drop a leftover read-only transaction so the status write can commit
+        # without attaching to unrelated dirty state.
+        await self._release_read_transaction()
+        await archive_stopped_child_conversations(self._db_session, session_ids)
+
     async def stop_agent(
         self,
         agent_id: str,
@@ -914,6 +952,10 @@ class AgentOrchestrator:
     ) -> list[str]:
         """Stop an agent session, optionally cascading to children."""
         stopped: list[str]
+        ids_to_reconcile = await self._session_ids_to_reconcile(
+            session_id,
+            cascade=cascade,
+        )
 
         async def _publish_cancelled_announce(
             child_session_id: str,
@@ -963,6 +1005,9 @@ class AgentOrchestrator:
             len(stopped),
         )
 
+        # Reconcile even when ``stopped`` is empty (already completed / retry
+        # after a Redis-only stop or a previous persistence failure).
+        await self._archive_stopped_child_conversations(ids_to_reconcile)
         return stopped
 
     async def register_agent_session(
