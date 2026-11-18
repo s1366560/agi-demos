@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 
-use agistack_core::ports::{CoreError, CoreResult, ToolHost};
+use agistack_core::ports::{CoreError, CoreResult, ToolDefinition, ToolHost};
 use async_trait::async_trait;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -314,6 +314,18 @@ impl LocalToolHost {
 
 #[async_trait]
 impl ToolHost for LocalToolHost {
+    fn tool_definition(&self, name: &str) -> Option<ToolDefinition> {
+        if name != "list" {
+            return None;
+        }
+        let metadata = self.tools.get(name)?.metadata();
+        Some(ToolDefinition::new(
+            name,
+            &metadata.description,
+            metadata.input_schema.clone(),
+        ))
+    }
+
     fn list_tools(&self) -> Vec<String> {
         PYTHON_TOOL_NAMES
             .iter()
@@ -436,7 +448,7 @@ fn description_for(name: &str) -> &'static str {
         "edit" => "Replace text in a workspace file.",
         "glob" => "Match workspace paths by glob pattern.",
         "grep" => "Search workspace files by regular expression.",
-        "list" => "List workspace directory entries.",
+        "list" => "List workspace entries (default: root). Each returned entry has its workspace-relative path, kind, and byte count. An empty file has zero bytes.",
         "patch" => "Apply a unified diff inside the workspace.",
         "export_artifact" => {
             "Export an immutable artifact version. Reuse artifact_id when publishing a new version."
@@ -453,6 +465,10 @@ fn schema_for(name: &str) -> Value {
     let mut required = Vec::new();
 
     match name {
+        "list" => {
+            properties.insert("path".into(), json!({ "type": "string" }));
+            properties.insert("recursive".into(), json!({ "type": "boolean", "default": false }));
+        }
         "read" | "write" | "edit" | "import_file" => {
             properties.insert("path".into(), json!({ "type": "string" }));
             required.push("path");
@@ -1934,6 +1950,23 @@ mod tests {
                 .len(),
             52
         );
+    }
+
+    #[tokio::test]
+    async fn list_contract_matches_root_listing_with_an_empty_file() {
+        let root = temp_root();
+        let host = LocalToolHost::new(&root).unwrap();
+        fs::write(root.join("empty"), b"").await.unwrap();
+        fs::create_dir(root.join("subdir")).await.unwrap();
+        let schema = host.tool_definition("list").unwrap().input_schema.unwrap();
+        assert_eq!(schema["required"], json!([]));
+        assert_eq!(schema["properties"]["path"]["type"], "string");
+        let reply = host.mcp_tools_call_result("list", json!({})).await;
+        let observation: Value = serde_json::from_str(&reply.content[0].text).unwrap();
+        let entries = observation["entries"].as_array().unwrap();
+        assert!(entries.contains(&json!({"path":"empty","kind":"file","bytes":0})));
+        assert!(entries.contains(&json!({"path":"subdir","kind":"directory","bytes":null})));
+        fs::remove_dir_all(root).await.unwrap();
     }
 
     #[tokio::test]
