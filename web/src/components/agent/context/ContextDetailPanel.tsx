@@ -190,7 +190,7 @@ const CompressionTimeline: FC<{ records: CompressionRecord[]; t: TFunction }> = 
 };
 
 export const ContextDetailPanel: FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const status = useContextStatus();
   const expanded = useContextDetailExpanded();
   const { setDetailExpanded } = useContextActions();
@@ -211,6 +211,7 @@ export const ContextDetailPanel: FC = () => {
   const levelDescription = levelDescriptionKey ? t(levelDescriptionKey) : '';
   const history = status?.compressionHistory;
   const distribution = status?.tokenDistribution;
+  const summaryDate = status?.summaryThroughUs ? new Date(status.summaryThroughUs / 1000) : null;
 
   return (
     <Drawer
@@ -271,6 +272,16 @@ export const ContextDetailPanel: FC = () => {
           {levelDescription}
         </div>
       </div>
+
+      {status?.fromCache && summaryDate && Number.isFinite(summaryDate.getTime()) && (
+        <p className="text-sm">
+          {t('agent.contextDetail.cachedSummaryThrough', {
+            date: summaryDate.toLocaleString(i18n.resolvedLanguage),
+            count: status.messagesInSummary,
+          })}
+          {status.summarySchemaVersion && <Tag>{status.summarySchemaVersion}</Tag>}
+        </p>
+      )}
 
       <Divider className="!my-4" />
 

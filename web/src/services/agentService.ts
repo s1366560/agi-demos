@@ -512,26 +512,7 @@ class AgentServiceImpl implements AgentService {
     return restApi.getConversation(conversationId, projectId);
   }
 
-  getContextStatus(
-    conversationId: string,
-    projectId: string
-  ): Promise<
-    {
-      conversation_id: string;
-      token_usage: {
-        input_tokens: number;
-        output_tokens: number;
-        total_tokens: number;
-        estimated_cost_usd: number;
-      };
-      compression_level: string;
-      last_compressed_time?: string;
-    } & Partial<{
-      from_cache: boolean;
-      messages_in_summary: number;
-      summary_tokens: number;
-    }>
-  > {
+  getContextStatus(conversationId: string, projectId: string) {
     return restApi.getContextStatus(conversationId, projectId);
   }
 

@@ -1,5 +1,6 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
+import { agentService } from '../../services/agentService';
 import { useContextStore } from '../../stores/contextStore';
 
 it('keeps builder compression data while refreshing measured token usage', () => {
@@ -44,4 +45,37 @@ it('keeps builder compression data while refreshing measured token usage', () =>
     fromCache: false,
   });
   actions.reset();
+});
+
+it('restores the server checkpoint and clears it for a conversation without a summary', async () => {
+  const actions = useContextStore.getState();
+  const snapshot = {
+    conversation_id: 'chat',
+    message_count: 3,
+    has_summary: true,
+    compression_level: 'l2_summarize',
+    summary_tokens: 12,
+    messages_in_summary: 2,
+    from_cache: true,
+    messages_covered_up_to: 1000000,
+    summary_schema_version: 'v1',
+  };
+  const fetch = vi.spyOn(agentService, 'getContextStatus').mockResolvedValue(snapshot);
+  try {
+    actions.reset();
+    await actions.fetchContextStatus('chat', 'project');
+    expect(useContextStore.getState().status).toMatchObject({
+      summaryThroughUs: 1000000,
+      summarySchemaVersion: 'v1',
+    });
+    fetch.mockResolvedValue({ ...snapshot, has_summary: false, from_cache: false });
+    await actions.fetchContextStatus('chat', 'project');
+    expect(useContextStore.getState().status).toMatchObject({
+      summaryThroughUs: null,
+      summarySchemaVersion: null,
+    });
+  } finally {
+    fetch.mockRestore();
+    actions.reset();
+  }
 });

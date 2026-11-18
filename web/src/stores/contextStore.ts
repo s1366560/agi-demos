@@ -54,6 +54,8 @@ export interface ContextStatus {
   compressionHistory: CompressionHistorySummary;
   fromCache: boolean;
   messagesInSummary: number;
+  summaryThroughUs: number | null;
+  summarySchemaVersion: string | null;
 }
 
 interface ContextState {
@@ -91,6 +93,8 @@ const defaultStatus: ContextStatus = {
   },
   fromCache: false,
   messagesInSummary: 0,
+  summaryThroughUs: null,
+  summarySchemaVersion: null,
 };
 
 /**
@@ -151,6 +155,7 @@ export const useContextStore = create<ContextState>()(
           | undefined;
         const hasHistory = incomingHistory !== undefined && incomingHistory.total_compressions > 0;
         const status: ContextStatus = {
+          ...previous,
           currentTokens: extractNumber(data.current_tokens, previous.currentTokens),
           tokenBudget: extractNumber(data.token_budget, previous.tokenBudget),
           occupancyPct: extractNumber(data.occupancy_pct, previous.occupancyPct),
@@ -219,6 +224,8 @@ export const useContextStore = create<ContextState>()(
             compressionLevel: data.compression_level,
             fromCache: data.from_cache ?? false,
             messagesInSummary: data.messages_in_summary ?? 0,
+            summaryThroughUs: data.has_summary ? (data.messages_covered_up_to ?? null) : null,
+            summarySchemaVersion: data.has_summary ? (data.summary_schema_version ?? null) : null,
             // Preserve live token data if we have it, otherwise use summary tokens
             currentTokens: prev?.currentTokens ?? data.summary_tokens ?? 0,
           },
