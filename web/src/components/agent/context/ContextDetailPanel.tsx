@@ -273,6 +273,14 @@ export const ContextDetailPanel: FC = () => {
         </div>
       </div>
 
+      {status?.pipeline && status.occupancyBeforePct != null && (
+        <p className="text-sm">
+          {t('agent.contextDetail.beforeCompression', {
+            pipeline: status.pipeline,
+            percent: status.occupancyBeforePct.toFixed(1),
+          })}
+        </p>
+      )}
       {status?.fromCache && summaryDate && Number.isFinite(summaryDate.getTime()) && (
         <p className="text-sm">
           {t('agent.contextDetail.cachedSummaryThrough', {

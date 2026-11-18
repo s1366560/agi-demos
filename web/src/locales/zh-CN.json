@@ -6846,6 +6846,7 @@
       "viewSession": "查看智能体会话"
     },
     "contextDetail": {
+      "beforeCompression": "压缩前上下文占用率（{{pipeline}}）：{{percent}}%",
       "cachedSummaryThrough": "缓存摘要涵盖截至 {{date}} 的 {{count}} 条消息。",
       "title": "上下文监控",
       "contextUsage": "上下文使用量",

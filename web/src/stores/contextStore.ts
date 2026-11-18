@@ -54,6 +54,8 @@ export interface ContextStatus {
   compressionHistory: CompressionHistorySummary;
   fromCache: boolean;
   messagesInSummary: number;
+  pipeline: string | null;
+  occupancyBeforePct: number | null;
   summaryThroughUs: number | null;
   summarySchemaVersion: string | null;
 }
@@ -93,6 +95,8 @@ const defaultStatus: ContextStatus = {
   },
   fromCache: false,
   messagesInSummary: 0,
+  pipeline: null,
+  occupancyBeforePct: null,
   summaryThroughUs: null,
   summarySchemaVersion: null,
 };
@@ -167,6 +171,10 @@ export const useContextStore = create<ContextState>()(
             : ((data.token_distribution as TokenDistribution | undefined) ??
               previous.tokenDistribution),
           compressionHistory: hasHistory ? incomingHistory : previous.compressionHistory,
+          pipeline: isString(data.pipeline) ? data.pipeline : previous.pipeline,
+          occupancyBeforePct: isNumber(data.occupancy_before)
+            ? data.occupancy_before * 100
+            : previous.occupancyBeforePct,
           fromCache: usageOnly
             ? previous.fromCache
             : extractBoolean(data.from_cache, previous.fromCache),
@@ -194,6 +202,10 @@ export const useContextStore = create<ContextState>()(
             tokenDistribution:
               (data.token_distribution as TokenDistribution | undefined) ?? prev.tokenDistribution,
             compressionHistory: hasHistory ? incomingHistory : prev.compressionHistory,
+            pipeline: isString(data.pipeline) ? data.pipeline : prev.pipeline,
+            occupancyBeforePct: isNumber(data.occupancy_before)
+              ? data.occupancy_before * 100
+              : prev.occupancyBeforePct,
           },
         });
       },

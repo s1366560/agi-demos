@@ -9,6 +9,8 @@ it('keeps builder compression data while refreshing measured token usage', () =>
   const distribution = { system: 5, user: 10, assistant: 11, tool: 12, summary: 13 };
   actions.handleContextStatus({
     source: 'context_builder',
+    occupancy_before: 1.12,
+    pipeline: 'adaptive',
     compression_level: 'l2_summarize',
     from_cache: true,
     messages_in_summary: 17,
@@ -33,6 +35,7 @@ it('keeps builder compression data while refreshing measured token usage', () =>
     messagesInSummary: 17,
     tokenDistribution: distribution,
   });
+  expect(useContextStore.getState().status?.occupancyBeforePct).toBeCloseTo(112);
   actions.handleContextStatus({
     source: 'context_builder',
     compression_level: 'none',
