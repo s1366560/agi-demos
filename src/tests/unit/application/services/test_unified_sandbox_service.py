@@ -107,9 +107,7 @@ class TestUnifiedSandboxServiceInit:
         assert service._adapter is mock_adapter
         assert service._distributed_lock is mock_lock
 
-    def test_resolve_config_includes_host_docker_socket_volume(
-        self, mock_repository, mock_adapter
-    ):
+    def test_resolve_config_includes_host_docker_socket_volume(self, mock_repository, mock_adapter):
         """Service should pass configured Docker socket mount to sandbox config."""
         service = UnifiedSandboxService(
             repository=mock_repository,
@@ -589,14 +587,44 @@ class TestHealthCheck:
         result = await service.health_check(project_id="proj-123")
 
         assert result is False
+        saved = mock_repository.save.call_args.args[0]
+        assert saved.status == ProjectSandboxStatus.RUNNING
+        assert saved.metadata.get("docker_health") == "unhealthy"
+        assert saved.health_checked_at is not None
+
+    @pytest.mark.asyncio
+    async def test_health_check_failed_probe_keeps_running_and_does_not_recreate(
+        self, mock_repository, mock_adapter, mock_lock
+    ):
+        """A failed probe must not flip RUNNING to ERROR or auto-recreate."""
+        service = UnifiedSandboxService(
+            repository=mock_repository,
+            sandbox_adapter=mock_adapter,
+            distributed_lock=mock_lock,
+            auto_recover=True,
+        )
+        service._recreate_sandbox = AsyncMock()
+        mock_adapter.health_check.return_value = False
+
+        result = await service.health_check(project_id="proj-123")
+
+        saved = mock_repository.save.call_args.args[0]
+        assert result is False
+        assert saved.status == ProjectSandboxStatus.RUNNING
+        assert saved.metadata.get("docker_health") == "unhealthy"
+        assert saved.health_checked_at is not None
+        service._recreate_sandbox.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_health_check_updates_association_status(self, service, mock_repository):
-        """Should update association status based on health check."""
+        """Should persist a real observation without changing RUNNING."""
         await service.health_check(project_id="proj-123")
 
-        # Verify save was called to update status
         mock_repository.save.assert_called()
+        saved = mock_repository.save.call_args.args[0]
+        assert saved.status == ProjectSandboxStatus.RUNNING
+        assert saved.metadata.get("docker_health") == "healthy"
+        assert saved.health_checked_at is not None
 
     @pytest.mark.asyncio
     async def test_health_check_returns_false_for_non_existing(self, service, mock_repository):
@@ -766,8 +794,11 @@ class TestErrorHandling:
 
         result = await service.health_check(project_id="proj-123")
 
-        # Should return False on error
+        # Should return False on error, but keep RUNNING and record the observation
         assert result is False
+        assert existing.status == ProjectSandboxStatus.RUNNING
+        assert existing.metadata.get("docker_health") == "unhealthy"
+        assert existing.health_checked_at is not None
 
     @pytest.mark.asyncio
     async def test_get_status_handles_missing_container(self, service, mock_adapter):

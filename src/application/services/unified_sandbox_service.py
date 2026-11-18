@@ -351,8 +351,9 @@ class UnifiedSandboxService(SandboxResourcePort):
     async def health_check(self, project_id: str) -> bool:
         """Perform health check on project's sandbox.
 
-        If auto_recover is enabled and sandbox is unhealthy, attempts to
-        recreate the sandbox automatically.
+        Records the probe on the association (``health_checked_at`` and
+        ``metadata.docker_health``) without changing lifecycle status or
+        auto-recreating the sandbox.
 
         Args:
             project_id: The project ID
@@ -371,29 +372,19 @@ class UnifiedSandboxService(SandboxResourcePort):
         # Perform health check via adapter
         try:
             healthy = await self._adapter.health_check(association.sandbox_id)
-
-            if healthy:
-                association.mark_healthy()
-                await self._repository.save(association)
-                return True
-
-            # Unhealthy - attempt auto-recovery if enabled
-            association.mark_unhealthy("Health check failed")
+            association.record_health_observation(
+                healthy=healthy,
+                detail=None if healthy else "Health check failed",
+            )
             await self._repository.save(association)
-
-            if self._auto_recover:
-                logger.info(f"Auto-recovering unhealthy sandbox for project {project_id}")
-                try:
-                    await self._recreate_sandbox(association)
-                    return True
-                except Exception as recover_err:
-                    logger.error(f"Auto-recovery failed for project {project_id}: {recover_err}")
-
-            return False
+            # A failed probe is an observation only. Do not change RUNNING to
+            # ERROR or auto-recreate; those paths can destroy a still-running
+            # sandbox whose Docker HEALTHCHECK failed for a non-fatal reason.
+            return healthy
 
         except Exception as e:
             logger.error(f"Health check error for project {project_id}: {e}")
-            association.mark_unhealthy(str(e))
+            association.record_health_observation(healthy=False, detail=str(e))
             await self._repository.save(association)
             return False
 

@@ -175,6 +175,27 @@ class ProjectSandbox(Entity):
         """Mark sandbox as unhealthy (deprecated: use mark_error)."""
         self.mark_error(reason or "Unhealthy")
 
+    def record_health_observation(self, *, healthy: bool, detail: str | None = None) -> None:
+        """Record a health probe result without changing lifecycle status.
+
+        A failed probe (including Docker HEALTHCHECK unhealthy) means the
+        observation failed; the container may still be running. This must not
+        set ``ProjectSandboxStatus.ERROR``, which consumers may treat as a
+        signal to clean up or recreate the sandbox.
+
+        The observation is stored on existing ``metadata`` (no schema change):
+        ``docker_health`` is ``healthy`` or ``unhealthy``, and
+        ``health_checked_at`` is updated to now.
+        """
+        self.health_checked_at = datetime.now(UTC)
+        metadata = dict(self.metadata or {})
+        metadata["docker_health"] = "healthy" if healthy else "unhealthy"
+        if detail:
+            metadata["docker_health_detail"] = str(detail)[:500]
+        else:
+            metadata.pop("docker_health_detail", None)
+        self.metadata = metadata
+
     def mark_error(self, error: str) -> None:
         """Mark sandbox as having an error."""
         self.status = ProjectSandboxStatus.ERROR
