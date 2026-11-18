@@ -21,13 +21,21 @@ impl ToolPolicyContext<'_> {
 
 /// Decisions are structured plugin output; the engine only applies their protocol.
 pub enum ToolPolicyDecision {
-    Allow { input_json: String },
+    Allow {
+        input_json: String,
+    },
     /// The untouched model input does not conform to the current tool schema.
     /// No host operation or authorization was attempted.
     InvalidArguments,
-    Deny { reason: String },
-    Cancel { reason: String },
-    Ask { request: HitlRequest },
+    Deny {
+        reason: String,
+    },
+    Cancel {
+        reason: String,
+    },
+    Ask {
+        request: HitlRequest,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]

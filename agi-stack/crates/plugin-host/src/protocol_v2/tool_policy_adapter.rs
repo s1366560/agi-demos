@@ -97,7 +97,9 @@ impl ToolExecutionPolicy for GenerationToolExecutionPolicyV2 {
         let Ok(arguments) = serde_json::from_str::<Value>(input_json) else {
             // A legacy model response may carry an unparseable JSON string.
             // No argument object can enter the policy waterfall or the tool.
-            self.arguments.is_valid(schema, &Value::Null).await
+            self.arguments
+                .is_valid(schema, &Value::Null)
+                .await
                 .map_err(|_| CoreError::Tool("unable to validate tool input schema".into()))?;
             return Ok(ToolPolicyDecision::InvalidArguments);
         };
@@ -113,7 +115,8 @@ impl ToolExecutionPolicy for GenerationToolExecutionPolicyV2 {
             .to_owned();
         match result["decision"]["kind"].as_str() {
             Some("allow") => {
-                let valid = self.arguments
+                let valid = self
+                    .arguments
                     .is_valid(schema, &result["arguments"])
                     .await
                     .map_err(|_| CoreError::Tool("unable to validate tool input schema".into()))?;
@@ -121,7 +124,9 @@ impl ToolExecutionPolicy for GenerationToolExecutionPolicyV2 {
                     if result.get("arguments") == Some(&arguments) {
                         return Ok(ToolPolicyDecision::InvalidArguments);
                     }
-                    return Err(CoreError::Tool("rewritten tool arguments violate input schema".into()));
+                    return Err(CoreError::Tool(
+                        "rewritten tool arguments violate input schema".into(),
+                    ));
                 }
                 Ok(ToolPolicyDecision::Allow {
                     input_json: result["arguments"].to_string(),

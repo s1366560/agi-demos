@@ -467,7 +467,10 @@ fn schema_for(name: &str) -> Value {
     match name {
         "list" => {
             properties.insert("path".into(), json!({ "type": "string" }));
-            properties.insert("recursive".into(), json!({ "type": "boolean", "default": false }));
+            properties.insert(
+                "recursive".into(),
+                json!({ "type": "boolean", "default": false }),
+            );
         }
         "read" | "write" | "edit" | "import_file" => {
             properties.insert("path".into(), json!({ "type": "string" }));

@@ -164,15 +164,20 @@ impl LlmPort for FailoverLlm {
 }
 
 fn anthropic_model_transcript(transcript: &[TranscriptEntry]) -> Vec<Value> {
-    transcript.iter().map(|entry| {
-        let mut projected = json!(entry);
-        if entry.role == Role::Observation {
-            if let Some(data) = agistack_adapters_http_llm::structured_observation(&entry.content) {
-                projected["content"] = data;
+    transcript
+        .iter()
+        .map(|entry| {
+            let mut projected = json!(entry);
+            if entry.role == Role::Observation {
+                if let Some(data) =
+                    agistack_adapters_http_llm::structured_observation(&entry.content)
+                {
+                    projected["content"] = data;
+                }
             }
-        }
-        projected
-    }).collect()
+            projected
+        })
+        .collect()
 }
 
 #[async_trait]

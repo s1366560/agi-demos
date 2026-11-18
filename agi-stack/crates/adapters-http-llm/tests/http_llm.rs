@@ -55,7 +55,9 @@ async fn mock_responses(bodies: Vec<String>) -> (String, Arc<tokio::sync::Mutex<
     mock_status_responses(bodies.into_iter().map(|body| (200, body)).collect()).await
 }
 
-async fn mock_status_responses(bodies: Vec<(u16, String)>) -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
+async fn mock_status_responses(
+    bodies: Vec<(u16, String)>,
+) -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let captured = Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
@@ -301,30 +303,54 @@ b"}}"#;
     for status in [200, 400, 422] {
         let mut responses = vec![(200, chat_body(malformed))];
         if status != 200 {
-            responses.extend(vec![(status, r#"{"error":{"param":"response_format"}}"#.into()); 2]);
+            responses.extend(vec![
+                (
+                    status,
+                    r#"{"error":{"param":"response_format"}}"#.into()
+                );
+                2
+            ]);
         }
         responses.push((200, chat_body(corrected)));
         let (base, captured) = mock_status_responses(responses).await;
         let llm = HttpLlm::new(base, "fixture");
         let tools = [agistack_core::ports::ToolDefinition::name_only("list")];
-        let action = llm.decide_with_tools_stream("list", 0, &[], &tools, &|_| {
-            panic!("tool decisions must not stream answer text")
-        }).await.unwrap();
-        let AgentAction::CallTool { tool, input_json } = action else { panic!("expected tool") };
+        let action = llm
+            .decide_with_tools_stream("list", 0, &[], &tools, &|_| {
+                panic!("tool decisions must not stream answer text")
+            })
+            .await
+            .unwrap();
+        let AgentAction::CallTool { tool, input_json } = action else {
+            panic!("expected tool")
+        };
         assert_eq!(tool, "list");
-        assert_eq!(serde_json::from_str::<serde_json::Value>(&input_json).unwrap()["path"], "a\nb");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&input_json).unwrap()["path"],
+            "a\nb"
+        );
         let requests = captured.lock().await;
         assert_eq!(requests.len(), if status == 200 { 2 } else { 4 });
         for (index, request) in requests.iter().enumerate() {
-            let body: serde_json::Value = serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+            let body: serde_json::Value =
+                serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
             match index {
                 1 => {
                     let schema = &body["response_format"]["json_schema"]["schema"]["oneOf"];
                     let alternatives = schema.as_array().unwrap();
                     assert_eq!(alternatives.len(), 3);
-                    let call = alternatives.iter().find(|option| option["properties"]["kind"]["const"] == "call_tool").unwrap();
-                    assert_eq!(call["properties"]["tool"]["enum"], serde_json::json!(["list"]));
-                    assert!(call["required"].as_array().unwrap().contains(&serde_json::json!("input_json")));
+                    let call = alternatives
+                        .iter()
+                        .find(|option| option["properties"]["kind"]["const"] == "call_tool")
+                        .unwrap();
+                    assert_eq!(
+                        call["properties"]["tool"]["enum"],
+                        serde_json::json!(["list"])
+                    );
+                    assert!(call["required"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&serde_json::json!("input_json")));
                 }
                 2 => assert_eq!(body["response_format"]["type"], "json_object"),
                 _ => assert!(body.get("response_format").is_none()),
@@ -336,20 +362,32 @@ b"}}"#;
 #[tokio::test]
 async fn first_action_negotiates_format_before_generating_the_only_answer() {
     let (base, captured) = mock_status_responses(vec![
-        (400, "{}".into()), (422, "{}".into()),
+        (400, "{}".into()),
+        (422, "{}".into()),
         (200, chat_body(r#"{"kind":"finish","answer":"done"}"#)),
-    ]).await;
+    ])
+    .await;
     let llm = HttpLlm::new(base, "fixture").with_action_schema_support(true);
     assert!(matches!(llm.decide("hi", 0, &[], &[]).await.unwrap(),
         AgentAction::Finish { answer } if answer == "done"));
     let requests = captured.lock().await;
     assert_eq!(requests.len(), 3);
-    let formats: Vec<_> = requests.iter().map(|request| {
-        let body: serde_json::Value = serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
-        assert!(!body["messages"][1]["content"].as_str().unwrap().contains("Protocol correction:"));
-        body["response_format"]["type"].clone()
-    }).collect();
-    assert_eq!(serde_json::json!(formats), serde_json::json!(["json_schema","json_object",null]));
+    let formats: Vec<_> = requests
+        .iter()
+        .map(|request| {
+            let body: serde_json::Value =
+                serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+            assert!(!body["messages"][1]["content"]
+                .as_str()
+                .unwrap()
+                .contains("Protocol correction:"));
+            body["response_format"]["type"].clone()
+        })
+        .collect();
+    assert_eq!(
+        serde_json::json!(formats),
+        serde_json::json!(["json_schema", "json_object", null])
+    );
 }
 
 #[tokio::test]

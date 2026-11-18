@@ -170,8 +170,15 @@ fn rewritten_arguments_reach_real_authorization_and_only_transformed_output_is_o
 fn invalid_model_arguments_consume_a_round_without_dispatching_or_recording_the_payload() {
     let host = Arc::new(AuthorityHost::default());
     let observer = Arc::new(Observer::default());
-    let state = block_on(engine(host.clone(), "invalid_arguments", false)
-        .run_observed("session", "goal", None, observer.clone())).unwrap();
+    let state = block_on(
+        engine(host.clone(), "invalid_arguments", false).run_observed(
+            "session",
+            "goal",
+            None,
+            observer.clone(),
+        ),
+    )
+    .unwrap();
     assert_eq!(state.answer.as_deref(), Some("done"));
     assert!(state.completed_tool_calls.is_empty());
     assert!(observer.results.lock().unwrap().is_empty());
@@ -179,8 +186,12 @@ fn invalid_model_arguments_consume_a_round_without_dispatching_or_recording_the_
     let history = serde_json::to_string(&state.transcript).unwrap();
     assert!(history.contains("declared JSON schema"));
     assert!(!history.contains("original"));
-    let capped = block_on(engine(host, "invalid_arguments", false).with_max_rounds(1)
-        .run("session", "goal", None)).unwrap();
+    let capped = block_on(
+        engine(host, "invalid_arguments", false)
+            .with_max_rounds(1)
+            .run("session", "goal", None),
+    )
+    .unwrap();
     assert_eq!(capped.status, SessionStatus::Failed);
 }
 

@@ -21,7 +21,9 @@ impl ToolArgumentValidator {
         schema: Option<&Value>,
         arguments: &Value,
     ) -> Result<bool, RuntimeV2Error> {
-        let Some(schema) = schema else { return Ok(arguments.is_object()) };
+        let Some(schema) = schema else {
+            return Ok(arguments.is_object());
+        };
         #[cfg(target_arch = "wasm32")]
         {
             self.validate_schema(schema, arguments)

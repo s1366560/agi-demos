@@ -541,9 +541,11 @@ impl ReActEngine {
                     state.push_unique(TranscriptEntry::new(
                         state.round,
                         Role::Observation,
-                        format!("Arguments for tool '{tool}' did not match its declared JSON schema. \
+                        format!(
+                            "Arguments for tool '{tool}' did not match its declared JSON schema. \
                             Check the required fields and types in the current tool definition, \
-                            or finish with the requested deliverable if no tool is needed."),
+                            or finish with the requested deliverable if no tool is needed."
+                        ),
                     ));
                 }
                 AgentAction::CallTool { tool, input_json } => {

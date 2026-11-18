@@ -133,7 +133,9 @@ struct ChatStreamDelta {
 // Desktop bindings identify Ollama as openai_compatible. Limit the default
 // to its canonical local API address; never infer a capability from a model name.
 fn local_ollama_endpoint(base_url: &str) -> bool {
-    let Ok(url) = reqwest::Url::parse(base_url) else { return false };
+    let Ok(url) = reqwest::Url::parse(base_url) else {
+        return false;
+    };
     matches!(url.scheme(), "http" | "https")
         && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
         && url.port() == Some(11434)
@@ -144,7 +146,9 @@ fn local_ollama_endpoint(base_url: &str) -> bool {
 
 fn format_request_rejected(message: &str) -> bool {
     matches!(
-        message.strip_prefix("provider_http_error: HTTP ").and_then(|rest| rest.split(':').next()),
+        message
+            .strip_prefix("provider_http_error: HTTP ")
+            .and_then(|rest| rest.split(':').next()),
         Some("400" | "422")
     )
 }
@@ -599,7 +603,10 @@ impl HttpLlm {
                     .then(|| crate::structured_observation(&e.content))
                     .flatten()
                     .map(|data| data.to_string());
-                user.push_str(&format!("- [{who}] {}\n", structured.as_deref().unwrap_or(&e.content)));
+                user.push_str(&format!(
+                    "- [{who}] {}\n",
+                    structured.as_deref().unwrap_or(&e.content)
+                ));
             }
         }
         let media = transcript
@@ -620,9 +627,15 @@ impl HttpLlm {
             let mut decoder = crate::AgentAnswerStream::new();
             let response_format = format.wire(available_tools);
             let content = if let Some(on_text) = on_text {
-                self.chat_with_media_stream(DECIDE_SYSTEM, user.clone(), &media, response_format, |delta| {
-                    decoder.push(delta, on_text);
-                })
+                self.chat_with_media_stream(
+                    DECIDE_SYSTEM,
+                    user.clone(),
+                    &media,
+                    response_format,
+                    |delta| {
+                        decoder.push(delta, on_text);
+                    },
+                )
                 .await
             } else {
                 self.chat_with_media(DECIDE_SYSTEM, user.clone(), &media, response_format)
@@ -634,7 +647,9 @@ impl HttpLlm {
                 {
                     // Some compatible gateways reject response_format before generation.
                     // Only request-format negotiation repeats; the model correction is strictly parsed.
-                    let Some(fallback) = format.fallback() else { return Err(CoreError::Llm(message.clone())) };
+                    let Some(fallback) = format.fallback() else {
+                        return Err(CoreError::Llm(message.clone()));
+                    };
                     format = fallback;
                     continue;
                 }
@@ -691,8 +706,10 @@ mod tests {
             assert!(local_ollama_endpoint(&format!("http://{host}:11434/v1/")));
         }
         for address in [
-            "http://localhost:11435/v1", "http://remote.example:11434/v1",
-            "http://localhost:11434/other", "http://localhost:11434/v1?proxy=1"
+            "http://localhost:11435/v1",
+            "http://remote.example:11434/v1",
+            "http://localhost:11434/other",
+            "http://localhost:11434/v1?proxy=1",
         ] {
             assert!(!local_ollama_endpoint(address));
         }

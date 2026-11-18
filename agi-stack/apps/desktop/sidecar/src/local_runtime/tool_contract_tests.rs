@@ -277,9 +277,12 @@ fn declared_identity_mismatch_fails_closed_instead_of_name_only_fallback() {
 fn build_instructions_use_the_approved_version_even_after_another_draft() {
     let (root, store, run, _) =
         authorized_tool_host::tests::running_host(DesktopPermissionProfile::FullAccess).unwrap();
-    store.replace_agent_plan_tasks(&run.conversation_id, &[
-        json!({"id":"later-draft", "content":"UNREVIEWED_WORK"}),
-    ]).unwrap();
+    store
+        .replace_agent_plan_tasks(
+            &run.conversation_id,
+            &[json!({"id":"later-draft", "content":"UNREVIEWED_WORK"})],
+        )
+        .unwrap();
     let guidance = plan_tool_contract::approved_build_instructions(&store, &run).unwrap();
     assert!(guidance.contains("Exercise the authorized tool host"));
     assert!(!guidance.contains("UNREVIEWED_WORK"));

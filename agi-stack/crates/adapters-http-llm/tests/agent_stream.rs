@@ -24,7 +24,9 @@ async fn agent_answer_arrives_before_provider_finishes() {
         let n = socket.read(&mut request).await.unwrap();
         assert!(String::from_utf8_lossy(&request[..n]).contains("\"stream\":true"));
         let wire = String::from_utf8_lossy(&request[..n]);
-        assert!(wire.contains(r#""properties":{"kind":{"const":"finish"},"answer":{"type":"string"}"#));
+        assert!(
+            wire.contains(r#""properties":{"kind":{"const":"finish"},"answer":{"type":"string"}"#)
+        );
         let first = sse(r#"{"kind":"finish","answer":"Hello "#);
         let last = format!("{}data: [DONE]\n\n", sse("world\"}"));
         let header = format!(
