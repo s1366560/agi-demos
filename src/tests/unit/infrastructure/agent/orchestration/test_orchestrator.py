@@ -1313,6 +1313,7 @@ class TestStopAgent:
         """With cascade=True, calls spawn_manager.cascade_stop and preserves session history."""
         # Arrange
         fx.spawn_manager.cascade_stop = AsyncMock(return_value=["sess-1", "sess-2"])
+        fx.spawn_manager.find_descendants = AsyncMock(return_value=[])
         fx.message_bus.cleanup_session = AsyncMock()
 
         # Act
@@ -1339,6 +1340,7 @@ class TestStopAgent:
         """Stopping child sessions should not delete their message history streams."""
         # Arrange
         fx.spawn_manager.cascade_stop = AsyncMock(return_value=["s1", "s2", "s3"])
+        fx.spawn_manager.find_descendants = AsyncMock(return_value=[])
         fx.message_bus.cleanup_session = AsyncMock()
 
         # Act
@@ -1357,6 +1359,7 @@ class TestStopAgent:
         """With cascade=False, stops the session without deleting its history."""
         # Arrange
         fx.spawn_manager.update_status = AsyncMock()
+        fx.spawn_manager.find_descendants = AsyncMock(return_value=[])
         fx.session_registry.unregister = AsyncMock()
         fx.message_bus.cleanup_session = AsyncMock()
 
@@ -1381,6 +1384,28 @@ class TestStopAgent:
             project_id="proj-1",
         )
         fx.message_bus.cleanup_session.assert_not_called()
+
+
+    async def test_stop_agent_reconciles_already_stopped_sessions(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        """A retry after Redis already marked the session stopped still syncs DB rows."""
+        child = _make_spawn_record(child_session_id="child-sess-1")
+        fx.spawn_manager.cascade_stop = AsyncMock(return_value=[])
+        fx.spawn_manager.find_descendants = AsyncMock(return_value=[child])
+        fx.orchestrator._archive_stopped_child_conversations = AsyncMock()
+
+        result = await fx.orchestrator.stop_agent(
+            agent_id="agent-1",
+            session_id="child-sess-1",
+            project_id="proj-1",
+            cascade=True,
+        )
+
+        assert result == []
+        fx.orchestrator._archive_stopped_child_conversations.assert_awaited_once_with(
+            ["child-sess-1"]
+        )
 
 
 # ---------------------------------------------------------------------------
