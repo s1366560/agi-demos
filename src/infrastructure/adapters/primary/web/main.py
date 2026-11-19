@@ -250,14 +250,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     try:
         yield
     finally:
-        from src.application.services.memory_update_dispatch import (
-            install_memory_update_dispatcher,
-            shutdown_memory_update_dispatcher,
-        )
+        await _shutdown_lifespan_side_effects(app)
 
-        await shutdown_memory_update_dispatcher()
-        install_memory_update_dispatcher(None)
-        await _shutdown_application_plugins_v2(app)
+
+async def _shutdown_lifespan_side_effects(app: FastAPI) -> None:
+    """Stop the memory-update accelerator, then the published plugin runtimes."""
+    from src.application.services.memory_update_dispatch import (
+        install_memory_update_dispatcher,
+        shutdown_memory_update_dispatcher,
+    )
+
+    await shutdown_memory_update_dispatcher()
+    install_memory_update_dispatcher(None)
+    await _shutdown_application_plugins_v2(app)
 
 
 def _install_memory_update_recovery(app: FastAPI) -> None:
