@@ -37,12 +37,14 @@ class MemoryUpdateDispatcher:
         index: Index,
         stage_timeout_s: float | None = None,
         ready: ReadyCheck | None = None,
+        retry_delay_s: Callable[[int], float] | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._extract = extract
         self._index = index
         self._stage_timeout_s = stage_timeout_s
         self._ready = ready
+        self._retry_delay_s = retry_delay_s
         self._tasks: set[asyncio.Task[str | list[str]]] = set()
         self._inflight: set[str] = set()
 
@@ -97,15 +99,43 @@ class MemoryUpdateDispatcher:
 
     async def _run(self, task_id: str, extract: Extract, index: Index) -> str:
         try:
-            return await execute_memory_update_job(
-                self._session_factory,
-                task_id,
-                extract=extract,
-                index=index,
-                stage_timeout_s=self._stage_timeout_s,
-            )
+            outcome = "missing"
+            while True:
+                outcome = await execute_memory_update_job(
+                    self._session_factory,
+                    task_id,
+                    extract=extract,
+                    index=index,
+                    stage_timeout_s=self._stage_timeout_s,
+                )
+                attempt = await self._pending_attempt(task_id)
+                if outcome != "failed" or attempt is None:
+                    return outcome
+                await asyncio.sleep(self._delay_for_attempt(attempt))
         finally:
             self._inflight.discard(task_id)
+
+    async def _pending_attempt(self, task_id: str) -> int | None:
+        from src.application.services.memory_update_jobs import MAX_ATTEMPTS
+        from src.infrastructure.adapters.secondary.persistence.models import TaskLog
+
+        session = self._session_factory()
+        try:
+            task = await session.get(TaskLog, task_id)
+            if task is None or task.status != "PENDING":
+                return None
+            if int(task.retry_count or 0) >= MAX_ATTEMPTS:
+                return None
+            return int(task.retry_count or 0)
+        finally:
+            await session.close()
+
+    def _delay_for_attempt(self, attempt: int) -> float:
+        from src.infrastructure.agent.retry.policy import RetryPolicy
+
+        if self._retry_delay_s is not None:
+            return self._retry_delay_s(attempt)
+        return RetryPolicy().calculate_delay(max(attempt, 1)) / 1000
 
     def _finish(self, task: asyncio.Task[str | list[str]]) -> None:
         self._tasks.discard(task)

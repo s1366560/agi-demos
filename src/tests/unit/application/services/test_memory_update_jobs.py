@@ -709,14 +709,16 @@ async def test_timeout_releases_the_claim_for_resume(
         extract=extract,
         index=lambda _payload: _ok(),
         stage_timeout_s=0.05,
+        retry_delay_s=lambda _attempt: 0,
     )
     dispatcher.kick(task_id)
     await dispatcher.join()
     session = factory()
     task = await session.get(TaskLog, task_id)
     assert task is not None
-    assert task.status == "PENDING"
+    assert task.status == "FAILED"
     assert task.worker_id is None
+    assert task.retry_count == MAX_ATTEMPTS
     assert task.error_message == "extraction:TimeoutError"
     await session.close()
     outcomes = await resume_memory_update_jobs(
@@ -725,10 +727,37 @@ async def test_timeout_releases_the_claim_for_resume(
         index=lambda _payload: _ok(),
         stage_timeout_s=1,
     )
-    assert outcomes == ["completed"]
+    assert outcomes == []
+    session = factory()
+    task = await session.get(TaskLog, task_id)
+    assert task is not None
+    assert task.status == "FAILED"
+    await session.close()
 
 
 @pytest.mark.unit
+def test_service_startup_calls_graph_recovery_without_a_project_chat() -> None:
+    import inspect
+    from pathlib import Path
+
+    from src.infrastructure.plugins.v2.graph_runtime import graph_runtime_definition_v2
+
+    root = Path(__file__).resolve().parents[5]
+    builtin = (root / "src/infrastructure/plugins/v2/builtin_modules.py").read_text(
+        encoding="utf-8"
+    )
+    startup = (
+        root / "src/infrastructure/adapters/primary/web/startup/plugin_runtime_v2.py"
+    ).read_text(encoding="utf-8")
+    main = (root / "src/infrastructure/adapters/primary/web/main.py").read_text(encoding="utf-8")
+    assert "graph_runtime_definition_v2" in builtin
+    assert "builtin_runtime_definitions_v2" in startup
+    assert "initialize_plugin_runtime_v2" in main
+    assert "_recover_memory_updates_from_process_graph" in inspect.getsource(
+        graph_runtime_definition_v2
+    )
+
+
 async def test_process_graph_bind_recovers_without_opening_a_project(
     factory: Callable[[], AsyncSession],
 ) -> None:
