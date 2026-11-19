@@ -1588,6 +1588,53 @@ async def _stream_agent_with_scoped_session(  # noqa: PLR0913
             await stream_context.db.rollback()
 
 
+_DISCONNECT_BEFORE_START = "client_disconnected_before_start"
+
+
+async def _close_unstarted_turn_after_disconnect(
+    *,
+    tenant_id: str,
+    project_id: str,
+    conversation_id: str,
+    run_id: str | None,
+) -> None:
+    """Terminalize a queued chat run whose worker never started.
+
+    Disconnect cancels only this socket's bridge task. A run that already
+    reached ``running`` keeps its worker and is reattached by subscribe.
+    """
+    if not run_id:
+        return
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+        fail_unstarted_chat_authority,
+    )
+
+    try:
+        async with async_session_factory() as session:
+            closed = await fail_unstarted_chat_authority(
+                session,
+                run_id=run_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                conversation_id=conversation_id,
+                cause=_DISCONNECT_BEFORE_START,
+            )
+    except Exception:
+        logger.warning(
+            "[WS] Failed to close unstarted chat run %s after disconnect",
+            run_id,
+            exc_info=True,
+        )
+        return
+    if closed:
+        logger.info(
+            "[WS] Closed unstarted chat run %s after disconnect for conversation %s",
+            run_id,
+            conversation_id,
+        )
+
+
 async def stream_agent_to_websocket(  # noqa: PLR0913
     context: MessageContext,
     conversation_id: str,
@@ -1650,6 +1697,12 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
             )
     except asyncio.CancelledError:
         logger.info("[WS] Stream cancelled for conversation %s", conversation_id)
+        await _close_unstarted_turn_after_disconnect(
+            tenant_id=context.tenant_id,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            run_id=turn_id,
+        )
     except Exception as exc:
         logger.error("[WS] Error admitting websocket stream: %s", exc, exc_info=True)
         from src.infrastructure.adapters.primary.web.websocket.chat_admission_error import (
@@ -1791,7 +1844,13 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
                 )
 
     except asyncio.CancelledError:
-        logger.info(f"[WS] Stream cancelled for conversation {conversation_id}")
+        logger.info("[WS] Stream cancelled for conversation %s", conversation_id)
+        await _close_unstarted_turn_after_disconnect(
+            tenant_id=context.tenant_id,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            run_id=execution_message_id,
+        )
     except Exception as e:
         logger.error(f"[WS] Error streaming to websocket: {e}", exc_info=True)
         # Send error only to the initiating session

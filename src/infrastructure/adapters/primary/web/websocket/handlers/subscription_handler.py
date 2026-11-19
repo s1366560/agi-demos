@@ -269,14 +269,63 @@ async def _start_recovery_bridge_task_v2(
     return started
 
 
+async def _session_has_durable_chat_run(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    project_id: str,
+) -> bool:
+    """A project session is recoverable only after its chat worker has started."""
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.secondary.common.base_repository import (
+        refresh_select_statement,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import AgentRunAuthorityModel
+
+    try:
+        rows = (
+            await context.db.execute(
+                refresh_select_statement(
+                    select(
+                        AgentRunAuthorityModel.status,
+                        AgentRunAuthorityModel.started_at,
+                    ).where(
+                        AgentRunAuthorityModel.conversation_id == conversation_id,
+                        AgentRunAuthorityModel.tenant_id == context.tenant_id,
+                        AgentRunAuthorityModel.project_id == project_id,
+                        AgentRunAuthorityModel.run_kind == "chat",
+                    )
+                )
+            )
+        ).all()
+    except Exception:
+        # A caller that cannot read authority is not proof that no worker exists.
+        return True
+    return any(row.status == "running" or row.started_at is not None for row in rows)
+
+
 async def _maybe_start_recovery_bridge(
     context: MessageContext,
     conversation_id: str,
     project_id: str,
     message: dict[str, Any],
 ) -> None:
-    """Start a recovery bridge on subscribe when execution is still running."""
+    """Start a recovery bridge on subscribe when execution is still running.
+
+    A project conversation created with only ``project_id`` has no workspace
+    and no scoped publication until a turn actually starts. That is not a
+    client error. Recovery runs only after a chat authority has started.
+    """
     try:
+        if not await _session_has_durable_chat_run(
+            context, conversation_id=conversation_id, project_id=project_id
+        ):
+            logger.info(
+                "[WS] Skip recovery bridge; project session has no started run: conv=%s",
+                conversation_id,
+            )
+            return
         if await scoped_session_has_only_terminal_runs_v2(
             context, conversation_id=conversation_id, project_id=project_id
         ):

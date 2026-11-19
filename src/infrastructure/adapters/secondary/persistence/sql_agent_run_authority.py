@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.chat_permission_admission_v2 import prepare_chat_permission_snapshot
@@ -128,6 +128,47 @@ async def ensure_plan_run_authority(
     )
     db.add(row)
     return row
+
+
+async def fail_unstarted_chat_authority(
+    db: AsyncSession,
+    *,
+    run_id: str,
+    tenant_id: str,
+    project_id: str,
+    conversation_id: str,
+    cause: str,
+) -> bool:
+    """Fail a chat authority that is still queued and has never started.
+
+    A row that has already been marked running is left to that worker. The
+    conditional update loses to ``mark_agent_run_running`` instead of
+    cancelling a durable execution.
+    """
+    now = datetime.now(UTC)
+    result = await db.execute(
+        update(AgentRunAuthorityModel)
+        .where(
+            AgentRunAuthorityModel.id == run_id,
+            AgentRunAuthorityModel.tenant_id == tenant_id,
+            AgentRunAuthorityModel.project_id == project_id,
+            AgentRunAuthorityModel.conversation_id == conversation_id,
+            AgentRunAuthorityModel.run_kind == "chat",
+            AgentRunAuthorityModel.status == "queued",
+            AgentRunAuthorityModel.started_at.is_(None),
+        )
+        .values(
+            status="failed",
+            error=cause[:500],
+            completed_at=now,
+            updated_at=now,
+        )
+        .returning(AgentRunAuthorityModel.id)
+    )
+    closed = result.scalar_one_or_none() is not None
+    if closed:
+        await db.commit()
+    return closed
 
 
 async def mark_agent_run_running(
