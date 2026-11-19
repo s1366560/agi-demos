@@ -38,9 +38,35 @@ def test_different_recorded_digest_is_stale() -> None:
     assert status.current_digest == "bbb"
 
 
-def test_automatic_rebuild_refuses_an_active_run() -> None:
-    assert automatic_rebuild_allowed(active_run=False) is True
-    assert automatic_rebuild_allowed(active_run=True) is False
+def test_production_startup_and_run_lifecycle_call_the_guard() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[5]
+    execution = (root / "src/infrastructure/agent/actor/execution.py").read_text(encoding="utf-8")
+    main = (root / "src/infrastructure/adapters/primary/web/main.py").read_text(encoding="utf-8")
+    adapter = (
+        root / "src/infrastructure/adapters/secondary/sandbox/mcp_sandbox_adapter.py"
+    ).read_text(encoding="utf-8")
+    assert "note_project_run" in execution
+    assert "_mark_root_run_authority_running" in execution
+    assert "_settle_root_run_authority" in execution
+    assert "_run_state_session_factory = async_session_factory" in main
+    assert "project_run_state" in adapter
+
+
+def test_run_lifecycle_mark_is_visible_without_a_container_label() -> None:
+    from src.application.services.sandbox_image_lifecycle import note_project_run, project_run_mark
+
+    note_project_run("project-live", active=True)
+    assert project_run_mark("project-live") is True
+    note_project_run("project-live", active=False)
+    assert project_run_mark("project-live") is False
+
+
+def test_automatic_rebuild_refuses_an_active_or_unknown_run() -> None:
+    assert automatic_rebuild_allowed(run_state="idle") is True
+    assert automatic_rebuild_allowed(run_state="active") is False
+    assert automatic_rebuild_allowed(run_state="unknown") is False
     assert container_marks_active_run({"org.memstack.sandbox.active_run": "true"}) is True
 
 
@@ -85,3 +111,5 @@ def test_explicit_migration_keeps_workspace_and_refuses_a_live_run() -> None:
     assert planned.preserve_workspace is True
     assert planned.permission_mode == "read_only"
     assert planned.recreate_live_container is False
+    assert planned.upgrade_performed is False
+    assert planned.stage == "plan_only"

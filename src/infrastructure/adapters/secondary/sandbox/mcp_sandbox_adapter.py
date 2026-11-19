@@ -3689,16 +3689,21 @@ class MCPSandboxAdapter(SandboxPort):
         from src.application.services.sandbox_image_lifecycle import (
             automatic_rebuild_allowed,
             container_marks_active_run,
+            project_run_state,
         )
 
-        lookup = getattr(self, "_active_run_lookup", None)
-        active_run = container_marks_active_run(instance.labels or {})
-        if callable(lookup) and instance.project_id:
-            active_run = active_run or bool(lookup(instance.project_id))
-        if not automatic_rebuild_allowed(active_run=active_run):
+        if container_marks_active_run(instance.labels or {}):
+            run_state = "active"
+        else:
+            run_state = await project_run_state(
+                getattr(self, "_run_state_session_factory", None),
+                instance.project_id,
+            )
+        if not automatic_rebuild_allowed(run_state=run_state):
             logger.warning(
-                "Refusing automatic rebuild of sandbox %s because a run is active",
+                "Refusing automatic rebuild of sandbox %s run_state=%s",
                 sandbox_id,
+                run_state,
             )
             return False
 

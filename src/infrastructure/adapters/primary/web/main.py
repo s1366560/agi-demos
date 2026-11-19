@@ -155,7 +155,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
 
     def sandbox_runtime_factory() -> MCPSandboxAdapter | None:
         try:
-            return MCPSandboxAdapter(
+            adapter = MCPSandboxAdapter(
                 mcp_image=settings.sandbox_default_image,
                 default_timeout=settings.sandbox_timeout_seconds,
                 default_memory_limit=settings.sandbox_memory_limit,
@@ -163,6 +163,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
                 workspace_base=settings.sandbox_workspace_base,
                 redis_client=redis_client,
             )
+            adapter._run_state_session_factory = async_session_factory
+            return adapter
         except SandboxConnectionError:
             logger.warning("Sandbox runtime unavailable because Docker is not reachable")
             return None

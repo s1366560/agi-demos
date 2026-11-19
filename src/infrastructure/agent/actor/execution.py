@@ -95,6 +95,10 @@ async def _mark_root_run_authority_running(
             conversation_id=conversation_id,
         )
 
+        from src.application.services.sandbox_image_lifecycle import note_project_run
+
+        if run is not None:
+            note_project_run(project_id, active=True)
         return run is not None and isinstance(
             run.authorization_snapshot.get("cancellation_receipt"), dict
         )
@@ -144,6 +148,19 @@ async def _settle_root_run_authority(
                 completed_at=completed_at,
             )
             await session.commit()
+        from sqlalchemy import func, select
+
+        from src.application.services.sandbox_image_lifecycle import note_project_run
+
+        remaining = await session.scalar(
+            select(func.count())
+            .select_from(AgentRunAuthorityModel)
+            .where(
+                AgentRunAuthorityModel.project_id == project_id,
+                AgentRunAuthorityModel.status.in_(("queued", "running")),
+            )
+        )
+        note_project_run(project_id, active=bool(remaining))
 
     # Terminal observations must not depend on a still-running parent model.
     from .peer_terminal_projection_v2 import publish_settled_peer_terminal_v2

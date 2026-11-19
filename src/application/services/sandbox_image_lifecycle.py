@@ -34,6 +34,8 @@ class SandboxMigrationPlan:
     target_digest: str
     preserve_workspace: bool = True
     recreate_live_container: bool = False
+    upgrade_performed: bool = False
+    stage: str = "plan_only"
 
 
 def fingerprint_sources(parts: Mapping[str, bytes]) -> str:
@@ -72,9 +74,65 @@ def container_marks_active_run(labels: Mapping[str, str]) -> bool:
     return labels.get(ACTIVE_RUN_LABEL) == "true"
 
 
-def automatic_rebuild_allowed(*, active_run: bool) -> bool:
-    """Health recovery may replace an idle container. A live run blocks it."""
-    return not active_run
+def automatic_rebuild_allowed(*, run_state: str) -> bool:
+    """Replace an idle container only. Active and unknown states both refuse."""
+    return run_state == "idle"
+
+
+_ACTIVE_AUTHORITY = ("queued", "running")
+_project_run_marks: set[str] = set()
+
+
+def note_project_run(project_id: str, *, active: bool) -> None:
+    """Record a run transition from the canonical authority lifecycle."""
+    if not project_id:
+        return
+    if active:
+        _project_run_marks.add(project_id)
+        return
+    _project_run_marks.discard(project_id)
+
+
+def project_run_mark(project_id: str) -> bool:
+    return project_id in _project_run_marks
+
+
+async def project_run_state(session_factory: object, project_id: str | None) -> str:
+    """Read canonical run authority. A failed read is unknown, not idle."""
+    if not project_id:
+        return "unknown"
+    if project_run_mark(project_id):
+        return "active"
+    if not callable(session_factory):
+        return "unknown"
+    try:
+        from sqlalchemy import func, select
+
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            AgentRunAuthorityModel,
+        )
+
+        session = session_factory()
+        try:
+            count = await session.scalar(
+                select(func.count())
+                .select_from(AgentRunAuthorityModel)
+                .where(
+                    AgentRunAuthorityModel.project_id == project_id,
+                    AgentRunAuthorityModel.status.in_(_ACTIVE_AUTHORITY),
+                )
+            )
+        finally:
+            close = getattr(session, "close", None)
+            if callable(close):
+                result = close()
+                if hasattr(result, "__await__"):
+                    await result
+    except Exception:
+        return "unknown"
+    if count is None:
+        return "unknown"
+    return "active" if int(count) > 0 else "idle"
 
 
 def plan_explicit_migration(
