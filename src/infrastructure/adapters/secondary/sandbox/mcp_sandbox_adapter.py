@@ -184,6 +184,9 @@ class MCPSandboxAdapter(SandboxPort):
         await adapter.terminate_sandbox(sandbox.id)
     """
 
+    _source_digest: str | None = None
+    _run_state_session_factory: Any | None = None
+
     def __init__(
         self,
         mcp_image: str = DEFAULT_SANDBOX_IMAGE,
@@ -1400,6 +1403,13 @@ class MCPSandboxAdapter(SandboxPort):
                 ),
                 **({"memstack.project_id": project_id} if project_id else {}),
                 **({"memstack.tenant_id": tenant_id} if tenant_id else {}),
+                **(
+                    # Image source bytes only. This label does not attest the
+                    # tool server process; see IMAGE_DIGEST_SCOPE.
+                    {"org.memstack.sandbox.source_digest": self._source_digest}
+                    if isinstance(self._source_digest, str) and self._source_digest
+                    else {}
+                ),
             }
 
             chromium_volume_name = None
@@ -3677,6 +3687,27 @@ class MCPSandboxAdapter(SandboxPort):
                 f"Sandbox {sandbox_id} is unhealthy but rebuild was attempted "
                 f"recently ({now - last_rebuild:.1f}s ago), skipping rebuild to prevent loop. "
                 f"Cooldown: {self._rebuild_cooldown_seconds}s"
+            )
+            return False
+
+        from src.application.services.sandbox_image_lifecycle import (
+            automatic_rebuild_allowed,
+            container_marks_active_run,
+            project_run_state,
+        )
+
+        if container_marks_active_run(instance.labels or {}):
+            run_state = "active"
+        else:
+            run_state = await project_run_state(
+                getattr(self, "_run_state_session_factory", None),
+                instance.project_id,
+            )
+        if not automatic_rebuild_allowed(run_state=run_state):
+            logger.warning(
+                "Refusing automatic rebuild of sandbox %s run_state=%s",
+                sandbox_id,
+                run_state,
             )
             return False
 
