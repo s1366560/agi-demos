@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import and_, false, or_, select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.processing import MemoryProcessingSource
@@ -107,14 +107,19 @@ async def _claim_job(
     """Take a lease. A live PROCESSING claim is not stolen before it expires."""
     now = datetime.now(UTC)
     worker_id = str(uuid4())
-    steal_expired = false()
+    claimable = [
+        TaskLog.status == "PENDING",
+        and_(TaskLog.status == "FAILED", TaskLog.retry_count < MAX_ATTEMPTS),
+    ]
     if stage_timeout_s is not None and stage_timeout_s > 0:
-        steal_expired = and_(
-            TaskLog.status == "PROCESSING",
-            or_(
-                TaskLog.started_at.is_(None),
-                TaskLog.started_at < now - timedelta(seconds=stage_timeout_s),
-            ),
+        claimable.append(
+            and_(
+                TaskLog.status == "PROCESSING",
+                or_(
+                    TaskLog.started_at.is_(None),
+                    TaskLog.started_at < now - timedelta(seconds=stage_timeout_s),
+                ),
+            )
         )
     session = session_factory()
     try:
@@ -123,11 +128,7 @@ async def _claim_job(
             .where(
                 TaskLog.id == task_id,
                 TaskLog.task_type == MEMORY_UPDATE_JOB,
-                or_(
-                    TaskLog.status == "PENDING",
-                    and_(TaskLog.status == "FAILED", TaskLog.retry_count < MAX_ATTEMPTS),
-                    steal_expired,
-                ),
+                or_(*claimable),
             )
             .values(status="PROCESSING", worker_id=worker_id, started_at=now)
             .returning(TaskLog.payload)
@@ -289,8 +290,10 @@ class ExtractionQueued(RuntimeError):
 
 
 def _handed_to_queue(row: TaskLog) -> bool:
-    result = row.result if isinstance(row.result, dict) else {}
-    stages = result.get("stages") if isinstance(result.get("stages"), dict) else {}
+    raw_result = row.result
+    result = raw_result if isinstance(raw_result, dict) else {}
+    raw_stages = result.get("stages")
+    stages = raw_stages if isinstance(raw_stages, dict) else {}
     return stages.get("extraction") == "queued"
 
 
