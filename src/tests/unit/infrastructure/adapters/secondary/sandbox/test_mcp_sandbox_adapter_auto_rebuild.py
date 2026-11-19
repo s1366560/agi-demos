@@ -730,6 +730,27 @@ class TestSandboxRestartPolicy:
         assert "mcp-sandbox-stale" not in adapter._active_sandboxes
 
     @pytest.mark.asyncio
+    async def test_automatic_rebuild_refuses_an_active_run(self, adapter, mock_docker):
+        instance = MCPSandboxInstance(
+            id="mcp-sandbox-live",
+            status=SandboxStatus.ERROR,
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
+            project_path="/tmp/test_project",
+            endpoint="ws://localhost:18765",
+            websocket_url="ws://localhost:18765",
+            mcp_port=18765,
+            labels={
+                "memstack.sandbox": "true",
+                "memstack.project_id": "proj-1",
+                "org.memstack.sandbox.active_run": "true",
+            },
+        )
+        adapter._active_sandboxes[instance.id] = instance
+
+        assert await adapter._attempt_sandbox_rebuild(instance.id, instance) is False
+        mock_docker.containers.run.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_create_sandbox_sets_restart_policy(self, adapter, mock_docker):
         """
         RED Test: Verify that create_sandbox sets restart_policy to on-failure.

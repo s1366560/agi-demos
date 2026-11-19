@@ -1400,6 +1400,12 @@ class MCPSandboxAdapter(SandboxPort):
                 ),
                 **({"memstack.project_id": project_id} if project_id else {}),
                 **({"memstack.tenant_id": tenant_id} if tenant_id else {}),
+                **(
+                    {"org.memstack.sandbox.source_digest": self._source_digest}
+                    if isinstance(getattr(self, "_source_digest", None), str)
+                    and self._source_digest
+                    else {}
+                ),
             }
 
             chromium_volume_name = None
@@ -3677,6 +3683,22 @@ class MCPSandboxAdapter(SandboxPort):
                 f"Sandbox {sandbox_id} is unhealthy but rebuild was attempted "
                 f"recently ({now - last_rebuild:.1f}s ago), skipping rebuild to prevent loop. "
                 f"Cooldown: {self._rebuild_cooldown_seconds}s"
+            )
+            return False
+
+        from src.application.services.sandbox_image_lifecycle import (
+            automatic_rebuild_allowed,
+            container_marks_active_run,
+        )
+
+        lookup = getattr(self, "_active_run_lookup", None)
+        active_run = container_marks_active_run(instance.labels or {})
+        if callable(lookup) and instance.project_id:
+            active_run = active_run or bool(lookup(instance.project_id))
+        if not automatic_rebuild_allowed(active_run=active_run):
+            logger.warning(
+                "Refusing automatic rebuild of sandbox %s because a run is active",
+                sandbox_id,
             )
             return False
 

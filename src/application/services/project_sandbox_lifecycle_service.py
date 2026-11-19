@@ -1530,3 +1530,33 @@ class ProjectSandboxLifecycleService:
             return False
 
         return await self._adapter.container_exists(association.sandbox_id)
+
+    def plan_image_migration(
+        self,
+        *,
+        sandbox_id: str,
+        project_id: str,
+        workspace_path: str,
+        permission_mode: str,
+        labels: dict[str, str],
+        current_digest: str | None,
+        active_run: bool,
+        human_requested: bool,
+    ) -> tuple[object, object]:
+        """Report staleness and a human migration plan. This does not rebuild."""
+        from src.application.services.sandbox_image_lifecycle import (
+            image_status,
+            plan_explicit_migration,
+        )
+
+        status = image_status(labels, current_digest)
+        plan = plan_explicit_migration(
+            sandbox_id=sandbox_id,
+            project_id=project_id,
+            workspace_path=workspace_path,
+            permission_mode=permission_mode,
+            target_digest=current_digest or "",
+            active_run=active_run,
+            human_requested=human_requested,
+        )
+        return status, plan
