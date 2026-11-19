@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -21,6 +22,7 @@ from src.application.services.memory_update_jobs import (
     resume_memory_update_jobs,
     stage_memory_update_job,
 )
+from src.application.services.memory_update_runtime import memory_update_runtime_ready
 from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
     KnowledgeSyncEnrollmentModel,
 )
@@ -32,7 +34,15 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Tenant,
     User,
 )
-from src.infrastructure.agent.tools.memory_tools import _execute_memory_update
+from src.infrastructure.agent.tools.memory_tools import (
+    MemoryToolRuntime,
+    _exclude_unsearchable_memory_hits,
+    _execute_memory_update,
+    _memory_tool_runtime,
+)
+from src.infrastructure.plugins.v2.graph_runtime import (
+    _recover_memory_updates_from_process_graph,
+)
 
 
 class _SlowExtract:
@@ -536,6 +546,310 @@ async def test_saved_update_returns_pending_before_slow_extraction(
     assert memory.content == "after the save"
     assert memory.processing_status == "COMPLETED"
     await check.close()
+
+
+@pytest.mark.unit
+async def test_late_old_extraction_does_not_overwrite_a_newer_revision(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    old_task = await _stage_update(factory, content="first", revision=2)
+    extract = _SlowExtract()
+    worker = asyncio.create_task(
+        execute_memory_update_job(
+            factory,
+            old_task,
+            extract=extract,
+            index=lambda _payload: _ok(),
+            stage_timeout_s=30,
+        )
+    )
+    await asyncio.wait_for(extract.started.wait(), 1)
+    session = factory()
+    memory = await session.get(Memory, "memory-1")
+    assert memory is not None
+    memory.content = "second"
+    memory.version = 3
+    new_task = await stage_memory_update_job(
+        session,
+        memory_id="memory-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        content_changed=True,
+        revision=3,
+        content="second",
+        title="Title",
+        tags=[],
+        category="fact",
+    )
+    await session.commit()
+    await session.close()
+    extract.release.set()
+    assert await asyncio.wait_for(worker, 1) == "stale_or_deleted"
+    check = factory()
+    current = await check.get(Memory, "memory-1")
+    newer = await check.get(TaskLog, new_task)
+    assert current is not None and newer is not None
+    assert current.content == "second"
+    assert current.version == 3
+    assert current.task_id == new_task
+    assert newer.status == "PENDING"
+    await check.close()
+
+
+@pytest.mark.unit
+async def test_delete_during_extraction_is_not_resurrected(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    task_id = await _stage_update(factory, content="after")
+    extract = _SlowExtract()
+    worker = asyncio.create_task(
+        execute_memory_update_job(
+            factory,
+            task_id,
+            extract=extract,
+            index=lambda _payload: _ok(),
+            stage_timeout_s=30,
+        )
+    )
+    await asyncio.wait_for(extract.started.wait(), 1)
+    session = factory()
+    memory = await session.get(Memory, "memory-1")
+    assert memory is not None
+    await session.delete(memory)
+    await session.commit()
+    await session.close()
+    extract.release.set()
+    assert await asyncio.wait_for(worker, 1) == "stale_or_deleted"
+    check = factory()
+    assert await check.get(Memory, "memory-1") is None
+    await check.close()
+
+
+@pytest.mark.unit
+async def test_live_processing_claim_blocks_a_second_worker(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    task_id = await _stage_update(factory, content="after")
+    calls = 0
+    extract = _SlowExtract()
+
+    async def counting(payload: dict[str, object]) -> None:
+        nonlocal calls
+        calls += 1
+        await extract(payload)
+
+    first = asyncio.create_task(
+        execute_memory_update_job(
+            factory,
+            task_id,
+            extract=counting,
+            index=lambda _payload: _ok(),
+            stage_timeout_s=30,
+        )
+    )
+    await asyncio.wait_for(extract.started.wait(), 1)
+    assert (
+        await execute_memory_update_job(
+            factory,
+            task_id,
+            extract=counting,
+            index=lambda _payload: _ok(),
+            stage_timeout_s=30,
+        )
+        == "in_progress"
+    )
+    assert calls == 1
+    extract.release.set()
+    assert await asyncio.wait_for(first, 1) == "completed"
+    assert calls == 1
+
+
+@pytest.mark.unit
+async def test_expired_processing_lease_can_be_reclaimed(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    task_id = await _stage_update(factory, content="after")
+    session = factory()
+    task = await session.get(TaskLog, task_id)
+    assert task is not None
+    task.status = "PROCESSING"
+    task.worker_id = "dead-worker"
+    task.started_at = datetime.now(UTC) - timedelta(seconds=5)
+    await session.commit()
+    await session.close()
+    assert (
+        await execute_memory_update_job(
+            factory,
+            task_id,
+            extract=lambda _payload: _ok(),
+            index=lambda _payload: _ok(),
+            stage_timeout_s=1,
+        )
+        == "completed"
+    )
+
+
+@pytest.mark.unit
+async def test_timeout_releases_the_claim_for_resume(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    task_id = await _stage_update(factory, content="after")
+
+    async def extract(_payload: dict[str, object]) -> None:
+        await asyncio.sleep(5)
+
+    dispatcher = MemoryUpdateDispatcher(
+        factory,
+        extract=extract,
+        index=lambda _payload: _ok(),
+        stage_timeout_s=0.05,
+    )
+    dispatcher.kick(task_id)
+    await dispatcher.join()
+    session = factory()
+    task = await session.get(TaskLog, task_id)
+    assert task is not None
+    assert task.status == "PENDING"
+    assert task.worker_id is None
+    assert task.error_message == "extraction:TimeoutError"
+    await session.close()
+    outcomes = await resume_memory_update_jobs(
+        factory,
+        extract=lambda _payload: _ok(),
+        index=lambda _payload: _ok(),
+        stage_timeout_s=1,
+    )
+    assert outcomes == ["completed"]
+
+
+@pytest.mark.unit
+async def test_process_graph_bind_recovers_without_opening_a_project(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    await _stage_update(factory, content="after")
+    seen: list[str] = []
+
+    async def extract(payload: dict[str, object]) -> None:
+        seen.append(str(payload["content"]))
+
+    dispatcher = MemoryUpdateDispatcher(
+        factory,
+        extract=extract,
+        index=lambda _payload: _ok(),
+        ready=memory_update_runtime_ready,
+    )
+    install_memory_update_dispatcher(dispatcher)
+    try:
+        dispatcher.resume_soon()
+        await dispatcher.join()
+        assert seen == []
+        _recover_memory_updates_from_process_graph(object())
+        await dispatcher.join()
+        assert seen == ["after"]
+    finally:
+        install_memory_update_dispatcher(None)
+
+
+@pytest.mark.unit
+async def test_rollback_removes_the_staged_task_and_keeps_the_saved_body(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    session = factory()
+    memory = await session.get(Memory, "memory-1")
+    assert memory is not None
+    memory.content = "after"
+    memory.version = 2
+    task_id = await stage_memory_update_job(
+        session,
+        memory_id="memory-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        content_changed=True,
+        revision=2,
+        content="after",
+        title="Title",
+        tags=[],
+        category="fact",
+    )
+    await session.rollback()
+    await session.close()
+    check = factory()
+    stored = await check.get(Memory, "memory-1")
+    assert stored is not None
+    assert stored.content == "before"
+    assert stored.processing_status == "COMPLETED"
+    assert await check.get(TaskLog, task_id) is None
+    await check.close()
+
+
+@pytest.mark.unit
+async def test_search_hides_pending_and_failed_memories(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    session = factory()
+    pending = await session.get(Memory, "memory-1")
+    assert pending is not None
+    pending.processing_status = "PENDING"
+    session.add(
+        Memory(
+            id="memory-ready",
+            project_id="project-1",
+            author_id="user-1",
+            title="Ready",
+            content="ready",
+            version=1,
+            processing_status="COMPLETED",
+            status="ENABLED",
+            meta={"tenant_id": "tenant-1"},
+        )
+    )
+    session.add(
+        Memory(
+            id="memory-failed",
+            project_id="project-1",
+            author_id="user-1",
+            title="Failed",
+            content="failed",
+            version=1,
+            processing_status="FAILED",
+            status="ENABLED",
+            meta={"tenant_id": "tenant-1", "index_error": "extraction:TimeoutError"},
+        )
+    )
+    await session.commit()
+    await session.close()
+    token = _memory_tool_runtime.set(
+        MemoryToolRuntime(
+            session_factory=factory,
+            graph_service=None,
+            chunk_search=None,
+            project_id="project-1",
+            tenant_id="tenant-1",
+        )
+    )
+    try:
+        visible = await _exclude_unsearchable_memory_hits(
+            [
+                {"source_id": "memory-1", "content": "pending"},
+                {"source_id": "memory-ready", "content": "ready"},
+                {"source_id": "memory-failed", "content": "failed"},
+                {"source_id": "graph-only", "content": "fact"},
+            ],
+            "project-1",
+        )
+    finally:
+        _memory_tool_runtime.reset(token)
+    assert [item["source_id"] for item in visible] == ["memory-ready", "graph-only"]
 
 
 async def _ok() -> None:

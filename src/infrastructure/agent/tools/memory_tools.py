@@ -165,6 +165,41 @@ def memory_result_matches_category(item: dict[str, Any], category: str | None) -
     return item.get("category") == category
 
 
+async def _exclude_unsearchable_memory_hits(
+    results: list[dict[str, Any]],
+    project_id: str,
+) -> list[dict[str, Any]]:
+    """Drop hits whose saved memory is still pending or failed."""
+    runtime = _memory_tool_runtime.get()
+    if runtime is None or runtime.session_factory is None or not results:
+        return results
+    source_ids = [str(item.get("source_id") or "") for item in results if item.get("source_id")]
+    if not source_ids:
+        return results
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.secondary.persistence.models import Memory
+
+    session = runtime.session_factory()
+    try:
+        rows = await session.execute(
+            select(Memory.id, Memory.processing_status).where(
+                Memory.project_id == project_id,
+                Memory.id.in_(source_ids),
+            )
+        )
+        blocked = {
+            memory_id
+            for memory_id, status in rows.all()
+            if str(status or "").upper() != "COMPLETED"
+        }
+    finally:
+        await session.close()
+    if not blocked:
+        return results
+    return [item for item in results if str(item.get("source_id") or "") not in blocked]
+
+
 def _format_citations(results: list[dict[str, Any]]) -> None:
     """Add citation strings to result dicts, in-place."""
     for r in results:
@@ -332,6 +367,7 @@ async def memory_search_tool(
         )
     if category:
         results = [item for item in results if memory_result_matches_category(item, category)]
+    results = await _exclude_unsearchable_memory_hits(results, project_id)
 
     # Format citations
     _format_citations(results)

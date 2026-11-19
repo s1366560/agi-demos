@@ -10,11 +10,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, false, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.processing import MemoryProcessingSource
@@ -98,7 +98,69 @@ def _source(payload: dict[str, Any]) -> MemoryProcessingSource | None:
     return MemoryProcessingSource.from_payload(payload)
 
 
-async def execute_memory_update_job(  # noqa: C901, PLR0911, PLR0912
+async def _claim_job(
+    session_factory: Callable[[], AsyncSession],
+    task_id: str,
+    stage_timeout_s: float | None,
+) -> tuple[str, dict[str, Any]] | str:
+    """Take a lease. A live PROCESSING claim is not stolen before it expires."""
+    now = datetime.now(UTC)
+    worker_id = str(uuid4())
+    steal_expired = false()
+    if stage_timeout_s is not None and stage_timeout_s > 0:
+        steal_expired = and_(
+            TaskLog.status == "PROCESSING",
+            or_(
+                TaskLog.started_at.is_(None),
+                TaskLog.started_at < now - timedelta(seconds=stage_timeout_s),
+            ),
+        )
+    session = session_factory()
+    try:
+        claimed = await session.execute(
+            update(TaskLog)
+            .where(
+                TaskLog.id == task_id,
+                TaskLog.task_type == MEMORY_UPDATE_JOB,
+                or_(
+                    TaskLog.status == "PENDING",
+                    and_(TaskLog.status == "FAILED", TaskLog.retry_count < MAX_ATTEMPTS),
+                    steal_expired,
+                ),
+            )
+            .values(status="PROCESSING", worker_id=worker_id, started_at=now)
+            .returning(TaskLog.payload)
+        )
+        payload = claimed.scalar_one_or_none()
+        if payload is not None:
+            await session.commit()
+            return worker_id, dict(payload or {})
+        found = (
+            await session.execute(
+                select(TaskLog.task_type, TaskLog.status, TaskLog.retry_count).where(
+                    TaskLog.id == task_id
+                )
+            )
+        ).one_or_none()
+        await session.rollback()
+        if found is None or found.task_type != MEMORY_UPDATE_JOB:
+            return "missing"
+        if found.status == "COMPLETED":
+            return "already_completed"
+        if found.status == "FAILED" and int(found.retry_count or 0) >= MAX_ATTEMPTS:
+            return "retries_exhausted"
+        if found.status == "PROCESSING":
+            return "in_progress"
+        return "not_runnable"
+    finally:
+        await session.close()
+
+
+def _owns_claim(task: TaskLog, worker_id: str) -> bool:
+    return task.worker_id == worker_id
+
+
+async def execute_memory_update_job(  # noqa: C901
     session_factory: Callable[[], AsyncSession],
     task_id: str,
     *,
@@ -111,23 +173,10 @@ async def execute_memory_update_job(  # noqa: C901, PLR0911, PLR0912
     ``stage_timeout_s`` reuses the caller-supplied budget, normally the
     configured LLM timeout. ``None`` waits until the stage finishes.
     """
-    session = session_factory()
-    try:
-        task = await session.get(TaskLog, task_id)
-        if task is None or task.task_type != MEMORY_UPDATE_JOB:
-            return "missing"
-        if task.status == "COMPLETED":
-            return "already_completed"
-        if task.status == "FAILED" and task.retry_count >= MAX_ATTEMPTS:
-            return "retries_exhausted"
-        if task.status not in _RUNNABLE and task.status != "FAILED":
-            return "not_runnable"
-        payload = dict(task.payload or {})
-        task.status = "PROCESSING"
-        task.started_at = task.started_at or datetime.now(UTC)
-        await session.commit()
-    finally:
-        await session.close()
+    claimed = await _claim_job(session_factory, task_id, stage_timeout_s)
+    if isinstance(claimed, str):
+        return claimed
+    worker_id, payload = claimed
 
     stages: dict[str, str] = {}
     try:
@@ -136,7 +185,7 @@ async def execute_memory_update_job(  # noqa: C901, PLR0911, PLR0912
                 await _run_stage(extract, payload, stage_timeout_s)
                 stages["extraction"] = "succeeded"
             except GraphNotReady:
-                await _defer_until_ready(session_factory, task_id)
+                await _defer_until_ready(session_factory, task_id, worker_id)
                 return "not_ready"
             except ExtractionQueued:
                 stages["extraction"] = "queued"
@@ -148,7 +197,7 @@ async def execute_memory_update_job(  # noqa: C901, PLR0911, PLR0912
             await _run_stage(index, payload, stage_timeout_s)
             stages["index"] = "succeeded"
         except GraphNotReady:
-            await _defer_until_ready(session_factory, task_id)
+            await _defer_until_ready(session_factory, task_id, worker_id)
             return "not_ready"
         except asyncio.CancelledError:
             raise
@@ -161,11 +210,12 @@ async def execute_memory_update_job(  # noqa: C901, PLR0911, PLR0912
             error="cancelled",
             failed=False,
             stages=stages,
+            worker_id=worker_id,
         )
         raise
 
     if stages.get("extraction") == "queued" and stages.get("index") == "succeeded":
-        await _record_queue_handoff(session_factory, task_id, stages)
+        await _record_queue_handoff(session_factory, task_id, stages, worker_id)
         return "queued"
     if stages.get("extraction") not in {None, "succeeded"} or stages.get("index") != "succeeded":
         failed_stage = (
@@ -177,11 +227,12 @@ async def execute_memory_update_job(  # noqa: C901, PLR0911, PLR0912
             error=f"{failed_stage}:{stages.get(failed_stage)}",
             failed=True,
             stages=stages,
+            worker_id=worker_id,
         )
         logger.warning("memory_update job failed stage=%s", failed_stage)
         return "failed"
 
-    return await _complete_current(session_factory, task_id, payload)
+    return await _complete_current(session_factory, task_id, payload, worker_id)
 
 
 async def resume_memory_update_jobs(
@@ -250,13 +301,15 @@ async def _run_stage(func: Extract, payload: dict[str, Any], timeout_s: float | 
 async def _defer_until_ready(
     session_factory: Callable[[], AsyncSession],
     task_id: str,
+    worker_id: str,
 ) -> None:
     session = session_factory()
     try:
         task = await session.get(TaskLog, task_id)
-        if task is None or task.status == "COMPLETED":
+        if task is None or task.status == "COMPLETED" or not _owns_claim(task, worker_id):
             return
         task.status = "PENDING"
+        task.worker_id = None
         await session.commit()
     finally:
         await session.close()
@@ -266,13 +319,15 @@ async def _record_queue_handoff(
     session_factory: Callable[[], AsyncSession],
     task_id: str,
     stages: dict[str, str],
+    worker_id: str,
 ) -> None:
     session = session_factory()
     try:
         task = await session.get(TaskLog, task_id)
-        if task is None or task.status == "COMPLETED":
+        if task is None or task.status == "COMPLETED" or not _owns_claim(task, worker_id):
             return
         task.status = "PENDING"
+        task.worker_id = None
         task.error_message = "extraction_queued"
         task.result = {"stages": stages, "completed": False}
         await session.commit()
@@ -287,12 +342,16 @@ async def _record_attempt(
     error: str,
     failed: bool,
     stages: dict[str, str] | None = None,
+    worker_id: str | None = None,
 ) -> None:
     session = session_factory()
     try:
         task = await session.get(TaskLog, task_id)
         if task is None or task.status == "COMPLETED":
             return
+        if worker_id is not None and not _owns_claim(task, worker_id):
+            return
+        task.worker_id = None
         task.retry_count = int(task.retry_count or 0) + (1 if failed else 0)
         task.error_message = error
         if stages is not None:
@@ -319,6 +378,7 @@ async def _complete_current(
     session_factory: Callable[[], AsyncSession],
     task_id: str,
     payload: dict[str, Any],
+    worker_id: str,
 ) -> str:
     session = session_factory()
     try:
@@ -327,6 +387,8 @@ async def _complete_current(
         source = _source(payload)
         if task is None:
             return "missing"
+        if not _owns_claim(task, worker_id):
+            return "in_progress"
         if (
             memory is None
             or memory.status != "ENABLED"
@@ -337,6 +399,7 @@ async def _complete_current(
             or memory.task_id != task_id
         ):
             task.status = "FAILED"
+            task.worker_id = None
             task.error_message = "stale_or_deleted"
             task.completed_at = datetime.now(UTC)
             await session.commit()
@@ -344,11 +407,13 @@ async def _complete_current(
         applied = await update_memory_processing_status(session, source, "COMPLETED")
         if not applied:
             task.status = "FAILED"
+            task.worker_id = None
             task.error_message = "stale_or_deleted"
             task.completed_at = datetime.now(UTC)
             await session.commit()
             return "stale_or_deleted"
         task.status = "COMPLETED"
+        task.worker_id = None
         task.error_message = None
         task.completed_at = datetime.now(UTC)
         task.progress = 100
