@@ -783,8 +783,6 @@ async def _execute_memory_update(  # noqa: PLR0911
     user_id: str | None = None,
 ) -> str:
     """Persist a memory update, then leave indexing to a durable job."""
-    _ = graph_service
-    _ = embedding_service
     if not session_factory:
         return json.dumps({"error": "Memory update not configured"})
 
@@ -848,6 +846,21 @@ async def _execute_memory_update(  # noqa: PLR0911
                 category=category if isinstance(category, str) else "fact",
             )
         await session.commit()
+        if task_id:
+            from src.application.services.memory_update_dispatch import kick_memory_update_job
+            from src.application.services.memory_update_runtime import (
+                extract_with_graph,
+                index_with_session,
+            )
+
+            graph = graph_service
+            embedder = embedding_service
+            factory = session_factory
+            kick_memory_update_job(
+                task_id,
+                extract=lambda payload: extract_with_graph(payload, graph),
+                index=lambda payload: index_with_session(payload, factory, embedder),
+            )
 
         logger.info("memory_update: saved memory")
 

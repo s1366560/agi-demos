@@ -242,11 +242,47 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
+    _install_memory_update_recovery(app)
 
     try:
         yield
     finally:
+        from src.application.services.memory_update_dispatch import (
+            install_memory_update_dispatcher,
+            shutdown_memory_update_dispatcher,
+        )
+
+        await shutdown_memory_update_dispatcher()
+        install_memory_update_dispatcher(None)
         await _shutdown_application_plugins_v2(app)
+
+
+def _install_memory_update_recovery(app: FastAPI) -> None:
+    """Install the durable memory-update accelerator and one startup recovery pass.
+
+    Recovery waits until a project agent binds the graph runtime. The TaskLog
+    rows remain the queue if this process stops before that binding exists.
+    """
+    from src.application.services.memory_update_dispatch import (
+        MemoryUpdateDispatcher,
+        install_memory_update_dispatcher,
+    )
+    from src.application.services.memory_update_runtime import (
+        bound_extract,
+        bound_index,
+        memory_update_runtime_ready,
+    )
+
+    dispatcher = MemoryUpdateDispatcher(
+        async_session_factory,
+        extract=bound_extract,
+        index=bound_index,
+        stage_timeout_s=float(settings.llm_timeout),
+        ready=memory_update_runtime_ready,
+    )
+    install_memory_update_dispatcher(dispatcher)
+    app.state.memory_update_dispatcher = dispatcher
+    dispatcher.resume_soon()
 
 
 async def _shutdown_application_plugins_v2(app: FastAPI) -> None:

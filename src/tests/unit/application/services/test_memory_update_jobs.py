@@ -4,17 +4,25 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import Callable
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from src.application.services.memory_update_dispatch import (
+    MemoryUpdateDispatcher,
+    install_memory_update_dispatcher,
+)
 from src.application.services.memory_update_jobs import (
     MAX_ATTEMPTS,
     execute_memory_update_job,
     resume_memory_update_jobs,
     stage_memory_update_job,
+)
+from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+    KnowledgeSyncEnrollmentModel,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     Base,
@@ -401,6 +409,132 @@ async def test_tool_rejects_another_project_without_writing(
     memory = await check.get(Memory, "memory-1")
     assert memory is not None
     assert memory.content == "before"
+    await check.close()
+
+
+@pytest.mark.unit
+async def test_stage_timeout_is_a_queryable_retry(factory: Callable[[], AsyncSession]) -> None:
+    await _seed(factory)
+    task_id = await _stage_update(factory, content="after")
+
+    async def extract(_payload: dict[str, object]) -> None:
+        await asyncio.sleep(5)
+
+    started = time.perf_counter()
+    assert (
+        await execute_memory_update_job(
+            factory,
+            task_id,
+            extract=extract,
+            index=lambda _payload: _ok(),
+            stage_timeout_s=0.05,
+        )
+        == "failed"
+    )
+    assert time.perf_counter() - started < 2
+    session = factory()
+    task = await session.get(TaskLog, task_id)
+    memory = await session.get(Memory, "memory-1")
+    assert task is not None and memory is not None
+    assert task.error_message == "extraction:TimeoutError"
+    assert task.result["stages"]["extraction"] == "TimeoutError"
+    assert memory.processing_status == "PENDING"
+    assert memory.processing_status != "COMPLETED"
+    await session.close()
+
+
+@pytest.mark.unit
+async def test_cancelled_accelerator_is_recovered_by_resume(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    task_id = await _stage_update(factory, content="after")
+    extract = _SlowExtract()
+    dispatcher = MemoryUpdateDispatcher(factory, extract=extract, index=lambda _payload: _ok())
+    install_memory_update_dispatcher(dispatcher)
+    try:
+        assert dispatcher.kick(task_id) is None
+        await asyncio.wait_for(extract.started.wait(), 1)
+        await dispatcher.aclose()
+    finally:
+        install_memory_update_dispatcher(None)
+    outcomes = await resume_memory_update_jobs(
+        factory,
+        extract=lambda _payload: _ok(),
+        index=lambda _payload: _ok(),
+    )
+    assert outcomes == ["completed"]
+
+
+@pytest.mark.unit
+async def test_saved_update_returns_pending_before_slow_extraction(
+    factory: Callable[[], AsyncSession],
+) -> None:
+    await _seed(factory)
+    session = factory()
+    session.add(
+        KnowledgeSyncEnrollmentModel(
+            project_id="project-1",
+            tenant_id="tenant-1",
+            enabled=False,
+        )
+    )
+    await session.commit()
+    await session.close()
+    extract = _SlowExtract()
+
+    class _Episode:
+        def __init__(self) -> None:
+            self.status = "PENDING"
+
+    class _Graph:
+        embedder = None
+
+        async def add_episode(self, episode: _Episode) -> _Episode:
+            await extract(episode)
+            episode.status = "COMPLETED"
+            return episode
+
+    dispatcher = MemoryUpdateDispatcher(
+        factory,
+        extract=lambda _payload: _ok(),
+        index=lambda _payload: _ok(),
+    )
+    install_memory_update_dispatcher(dispatcher)
+    try:
+        started = time.perf_counter()
+        result = json.loads(
+            await _execute_memory_update(
+                memory_id="memory-1",
+                title=None,
+                content="after the save",
+                tags=None,
+                metadata=None,
+                session_factory=factory,
+                graph_service=_Graph(),
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+            )
+        )
+        elapsed = time.perf_counter() - started
+        assert elapsed < 1
+        assert result["status"] == "updated"
+        assert result["saved"] is True
+        assert result["processing_status"] == "PENDING"
+        assert result["searchable"] is False
+        assert result["revision"] == 2
+        await asyncio.wait_for(extract.started.wait(), 1)
+        assert not extract.release.is_set()
+        extract.release.set()
+        await dispatcher.join()
+    finally:
+        install_memory_update_dispatcher(None)
+    check = factory()
+    memory = await check.get(Memory, "memory-1")
+    assert memory is not None
+    assert memory.content == "after the save"
+    assert memory.processing_status == "COMPLETED"
     await check.close()
 
 

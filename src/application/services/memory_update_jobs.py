@@ -98,14 +98,19 @@ def _source(payload: dict[str, Any]) -> MemoryProcessingSource | None:
     return MemoryProcessingSource.from_payload(payload)
 
 
-async def execute_memory_update_job(
+async def execute_memory_update_job(  # noqa: C901, PLR0911, PLR0912
     session_factory: Callable[[], AsyncSession],
     task_id: str,
     *,
     extract: Extract,
     index: Index,
+    stage_timeout_s: float | None = None,
 ) -> str:
-    """Run one durable job. Returns a terminal outcome name."""
+    """Run one durable job. Returns a terminal outcome name.
+
+    ``stage_timeout_s`` reuses the caller-supplied budget, normally the
+    configured LLM timeout. ``None`` waits until the stage finishes.
+    """
     session = session_factory()
     try:
         task = await session.get(TaskLog, task_id)
@@ -128,15 +133,23 @@ async def execute_memory_update_job(
     try:
         if payload.get("content_changed") is True:
             try:
-                await extract(payload)
+                await _run_stage(extract, payload, stage_timeout_s)
                 stages["extraction"] = "succeeded"
+            except GraphNotReady:
+                await _defer_until_ready(session_factory, task_id)
+                return "not_ready"
+            except ExtractionQueued:
+                stages["extraction"] = "queued"
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 stages["extraction"] = type(exc).__name__
         try:
-            await index(payload)
+            await _run_stage(index, payload, stage_timeout_s)
             stages["index"] = "succeeded"
+        except GraphNotReady:
+            await _defer_until_ready(session_factory, task_id)
+            return "not_ready"
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -151,6 +164,9 @@ async def execute_memory_update_job(
         )
         raise
 
+    if stages.get("extraction") == "queued" and stages.get("index") == "succeeded":
+        await _record_queue_handoff(session_factory, task_id, stages)
+        return "queued"
     if stages.get("extraction") not in {None, "succeeded"} or stages.get("index") != "succeeded":
         failed_stage = (
             "extraction" if stages.get("extraction") not in {None, "succeeded"} else "index"
@@ -174,6 +190,7 @@ async def resume_memory_update_jobs(
     extract: Extract,
     index: Index,
     limit: int = 20,
+    stage_timeout_s: float | None = None,
 ) -> list[str]:
     """Replay durable jobs left pending or retryable after a worker stop."""
     session = session_factory()
@@ -192,15 +209,75 @@ async def resume_memory_update_jobs(
                 .limit(limit)
             )
         ).all()
-        task_ids = [row.id for row in rows]
+        task_ids = [row.id for row in rows if not _handed_to_queue(row)]
     finally:
         await session.close()
     outcomes: list[str] = []
     for task_id in task_ids:
         outcomes.append(
-            await execute_memory_update_job(session_factory, task_id, extract=extract, index=index)
+            await execute_memory_update_job(
+                session_factory,
+                task_id,
+                extract=extract,
+                index=index,
+                stage_timeout_s=stage_timeout_s,
+            )
         )
     return outcomes
+
+
+class GraphNotReady(RuntimeError):
+    """The process has no graph or index runtime bound yet."""
+
+
+class ExtractionQueued(RuntimeError):
+    """The graph adapter accepted the episode onto its own queue."""
+
+
+def _handed_to_queue(row: TaskLog) -> bool:
+    result = row.result if isinstance(row.result, dict) else {}
+    stages = result.get("stages") if isinstance(result.get("stages"), dict) else {}
+    return stages.get("extraction") == "queued"
+
+
+async def _run_stage(func: Extract, payload: dict[str, Any], timeout_s: float | None) -> None:
+    if timeout_s is None:
+        await func(payload)
+        return
+    await asyncio.wait_for(func(payload), timeout_s)
+
+
+async def _defer_until_ready(
+    session_factory: Callable[[], AsyncSession],
+    task_id: str,
+) -> None:
+    session = session_factory()
+    try:
+        task = await session.get(TaskLog, task_id)
+        if task is None or task.status == "COMPLETED":
+            return
+        task.status = "PENDING"
+        await session.commit()
+    finally:
+        await session.close()
+
+
+async def _record_queue_handoff(
+    session_factory: Callable[[], AsyncSession],
+    task_id: str,
+    stages: dict[str, str],
+) -> None:
+    session = session_factory()
+    try:
+        task = await session.get(TaskLog, task_id)
+        if task is None or task.status == "COMPLETED":
+            return
+        task.status = "PENDING"
+        task.error_message = "extraction_queued"
+        task.result = {"stages": stages, "completed": False}
+        await session.commit()
+    finally:
+        await session.close()
 
 
 async def _record_attempt(
@@ -228,6 +305,11 @@ async def _record_attempt(
         source = _source(payload)
         if source is not None and exhausted:
             _ = await update_memory_processing_status(session, source, "FAILED")
+            memory = await session.get(DBMemory, source.memory_id)
+            if memory is not None and memory.task_id == task_id:
+                meta = dict(memory.meta or {})
+                meta["index_error"] = error
+                memory.meta = meta
         await session.commit()
     finally:
         await session.close()
@@ -270,6 +352,10 @@ async def _complete_current(
         task.error_message = None
         task.completed_at = datetime.now(UTC)
         task.progress = 100
+        meta = dict(memory.meta or {})
+        if "index_error" in meta:
+            meta.pop("index_error", None)
+            memory.meta = meta
         await session.commit()
         return "completed"
     finally:
