@@ -3480,6 +3480,7 @@ class SessionProcessor:
         metadata: Any,
         failed: bool,
         raw_result: Any,
+        sse_result: Any,
     ) -> tuple[str, Any, bool]:
         """Count a structured unrecoverable failure and surface it as an error.
 
@@ -3524,7 +3525,7 @@ class SessionProcessor:
                 self.doom_loop_detector.clear_same_cause(
                     not_a_git_repository_fingerprint(arguments)
                 )
-            return output, metadata, failed
+            return output, sse_result, failed
         count = self.doom_loop_detector.record_same_cause(cause.fingerprint)
         observed = {
             "output": cause.diagnosis,
@@ -4249,6 +4250,7 @@ class SessionProcessor:
             result_metadata if isinstance(result_metadata, dict) else {},
             failed,
             result,
+            sse_result,
         )
         control = self._native_control_outcome(result)
         if self._same_cause_stop is not None:
@@ -4912,6 +4914,7 @@ class SessionProcessor:
                     result_metadata if isinstance(result_metadata, dict) else {},
                     failed,
                     raw_result,
+                    sse_result,
                 )
                 control = self._native_control_outcome(raw_result)
                 if self._same_cause_stop is not None:
