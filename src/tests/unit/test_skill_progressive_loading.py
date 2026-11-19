@@ -776,14 +776,14 @@ class TestSkillLoaderTool:
         assert "not found" in result.output.lower()
         assert "other-skill" in result.output
 
-    async def test_execute_falls_back_to_cwd_when_primary_service_misses(
+    async def test_execute_does_not_load_a_cwd_skill_outside_the_roster(
         self,
         mock_skill_service,
         skill_loader,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ):
-        """Test skill_loader_tool falls back to cwd skill files when primary service misses."""
+        """A skill that exists only in the process cwd is not an advertised skill."""
         skill_dir = tmp_path / ".memstack" / "skills" / "research"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
@@ -806,9 +806,8 @@ Use fallback loader.
         ctx = self._make_ctx()
         result = await skill_loader.execute(ctx, name="research")
 
-        assert not result.is_error
-        assert result.title == "Loaded skill: research"
-        assert "# Fallback Skill" in result.output
+        assert result.is_error
+        assert "not found" in result.output.lower()
 
     async def test_execute_validates_empty_skill_name(self, skill_loader):
         """Test error ToolResult for empty skill name."""

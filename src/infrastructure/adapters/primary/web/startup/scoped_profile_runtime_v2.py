@@ -25,14 +25,11 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_recovery_
 )
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 from src.infrastructure.plugins.v2.bundle_archive import VerifiedBundleArchiveV2
-from src.infrastructure.plugins.v2.http_routes import RouteTableRegistryV2
+from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
 from src.infrastructure.plugins.v2.production_bundle import production_bundle_sources_v2
 from src.infrastructure.plugins.v2.profile_composition_cache import ProfileCompositionCacheV2
 from src.infrastructure.plugins.v2.reconciler import PreparedGenerationPublicationV2
-from src.infrastructure.plugins.v2.route_effects import (
-    ROUTE_TABLE_BUILDER_SERVICE_V2,
-    RouteTableBuilderV2,
-)
+from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.scoped_builtin_runtime import (

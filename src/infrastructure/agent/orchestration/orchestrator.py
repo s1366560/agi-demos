@@ -12,6 +12,7 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.domain.model.agent.agent_definition import Agent
@@ -1059,7 +1060,10 @@ class AgentOrchestrator:
             records = await self._spawn_manager.find_children(
                 parent_session_id,
             )
-        return [await self._with_observed_activity(record) for record in records]
+        refreshed = [await self._with_observed_activity(record) for record in records]
+        if all(updated is original for updated, original in zip(refreshed, records, strict=True)):
+            return records
+        return refreshed
 
     async def _with_observed_activity(self, record: SpawnRecord) -> SpawnRecord:
         """Show the latest child message time without marking the session complete."""
@@ -1070,9 +1074,16 @@ class AgentOrchestrator:
             )
         except Exception:
             return record
-        if not history:
+        if not isinstance(history, list | tuple) or not history:
             return record
-        latest = max(message.timestamp for message in history)
+        timestamps = [
+            message.timestamp
+            for message in history
+            if isinstance(getattr(message, "timestamp", None), datetime)
+        ]
+        if not timestamps:
+            return record
+        latest = max(timestamps)
         if record.last_activity_at is not None and latest <= record.last_activity_at:
             return record
         note = getattr(self._spawn_manager, "note_activity", None)

@@ -17,10 +17,29 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _has_hitl_requests() -> bool:
+    """Workspace-only upgrade paths stamp past the table that owns this column."""
+    return sa.inspect(op.get_bind()).has_table("hitl_requests")
+
+
 def upgrade() -> None:
-    op.alter_column("hitl_requests", "expires_at", existing_type=sa.DateTime(timezone=True), nullable=True)
+    if not _has_hitl_requests():
+        return
+    op.alter_column(
+        "hitl_requests",
+        "expires_at",
+        existing_type=sa.DateTime(timezone=True),
+        nullable=True,
+    )
 
 
 def downgrade() -> None:
+    if not _has_hitl_requests():
+        return
     op.execute("UPDATE hitl_requests SET expires_at = created_at WHERE expires_at IS NULL")
-    op.alter_column("hitl_requests", "expires_at", existing_type=sa.DateTime(timezone=True), nullable=False)
+    op.alter_column(
+        "hitl_requests",
+        "expires_at",
+        existing_type=sa.DateTime(timezone=True),
+        nullable=False,
+    )
