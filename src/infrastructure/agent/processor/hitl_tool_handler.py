@@ -1050,7 +1050,9 @@ async def handle_a2ui_action_tool(
         components = arguments.get("components", "")
         block_id = arguments.get("block_id", "")
         context = _ensure_dict(arguments.get("context", {}))
-        timeout = arguments.get("timeout", 300.0)
+        # Interactive canvas waits until click, cancel, session stop, delete, or
+        # process shutdown. A caller-supplied timeout is not a user deadline.
+        timeout = None
 
         # Create a canvas block so the frontend renders the A2UI surface tab
         from src.infrastructure.agent.canvas.tools import get_canvas_manager

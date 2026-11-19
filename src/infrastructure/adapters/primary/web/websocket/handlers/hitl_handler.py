@@ -16,7 +16,7 @@ from src.application.services.hitl_authority import (
     HitlAuthorityConflict,
     classify_hitl_authority_conflict,
 )
-from src.domain.model.agent.hitl_request import HITLRequest, HITLRequestStatus
+from src.domain.model.agent.hitl_request import HITLRequest, HITLRequestStatus, HITLRequestType
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
@@ -262,6 +262,13 @@ async def _persist_hitl_response(
         )
         if updated_request is None:
             authority = await repo.get_by_id(request_id)
+            if (
+                authority is not None
+                and authority.status == HITLRequestStatus.ANSWERED
+                and authority.request_type == HITLRequestType.A2UI_ACTION
+                and authority.response == response_str
+            ):
+                return authority
             if authority is None:
                 raise RuntimeError("HITL request could not be updated")
             if authority.status == HITLRequestStatus.PENDING and authority.is_expired:

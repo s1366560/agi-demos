@@ -1027,7 +1027,7 @@ class AgentA2UIActionAskedEvent(AgentDomainEvent):
     conversation_id: str
     block_id: str
     title: str = ""
-    timeout_seconds: float = 300.0
+    timeout_seconds: float | None = None
     surface_data: dict[str, Any] | None = None
 
 

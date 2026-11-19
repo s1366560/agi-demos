@@ -107,7 +107,11 @@ class HITLCoordinator:
         real request_id. Then call ``wait_for_response()`` to block until the
         user responds.
         """
-        timeout = timeout_seconds or self.default_timeout
+        timeout = (
+            self.default_timeout
+            if timeout_seconds is None and hitl_type != HITLType.A2UI_ACTION
+            else timeout_seconds
+        )
         strategy = self._get_strategy(hitl_type)
 
         hitl_request = strategy.create_request(
@@ -166,7 +170,11 @@ class HITLCoordinator:
         Returns the response value extracted by the type strategy.
         Raises ``asyncio.TimeoutError`` if the user doesn't respond in time.
         """
-        timeout = timeout_seconds or self.default_timeout
+        timeout = (
+            self.default_timeout
+            if timeout_seconds is None and hitl_type != HITLType.A2UI_ACTION
+            else timeout_seconds
+        )
         strategy = self._get_strategy(hitl_type)
         pending = self._pending.get(request_id)
         if pending is None:
@@ -180,7 +188,10 @@ class HITLCoordinator:
         )
 
         try:
-            response_data = await asyncio.wait_for(fut, timeout=timeout)
+            if timeout is None:
+                response_data = await fut
+            else:
+                response_data = await asyncio.wait_for(fut, timeout=timeout)
         except TimeoutError:
             logger.warning(
                 f"[HITLCoordinator] Timeout waiting for {hitl_type.value} request_id={request_id}"
@@ -620,7 +631,7 @@ async def _persist_hitl_request(
     tenant_id: str,
     project_id: str,
     message_id: str | None,
-    timeout_seconds: float,
+    timeout_seconds: float | None,
     type_data: dict[str, Any],
     created_at: datetime,
 ) -> None:
@@ -650,10 +661,13 @@ async def _persist_hitl_request(
         context=type_data.get("context", {}),
         metadata={
             "hitl_type": hitl_type.value,
+            "user_response_deadline": timeout_seconds is not None,
             **{k: v for k, v in type_data.items() if k not in ("question", "options", "context")},
         },
         created_at=created_at,
-        expires_at=created_at + timedelta(seconds=timeout_seconds),
+        expires_at=(
+            None if timeout_seconds is None else created_at + timedelta(seconds=timeout_seconds)
+        ),
     )
 
     async with async_session_factory() as session:
