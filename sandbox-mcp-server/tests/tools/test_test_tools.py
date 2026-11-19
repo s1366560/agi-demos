@@ -8,6 +8,7 @@ TDD Cycle:
 
 import ast
 import asyncio
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -253,6 +254,101 @@ async def fetch(name: str) -> str:
         )
         assert proc.returncode == 0, proc.stderr
         assert proc.stdout.strip() == "workspace"
+
+
+def _namespace_src_layout(tmp_path: Path) -> tuple[Path, Path]:
+    """src-layout namespace package with no __init__.py, plus a regular src shadow."""
+    source = tmp_path / "src" / "pkg" / "validator.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "def alpha() -> str:\n"
+        "    return 'workspace'\n"
+        "\n"
+        "def beta() -> str:\n"
+        "    return 'workspace'\n"
+        "\n"
+        "def gamma() -> str:\n"
+        "    return 'workspace'\n"
+        "\n"
+        "def delta() -> str:\n"
+        "    return 'workspace'\n",
+        encoding="utf-8",
+    )
+    shadow = tmp_path / "shadow"
+    (shadow / "src").mkdir(parents=True)
+    (shadow / "src" / "__init__.py").write_text(
+        "def alpha():\n    return 'shadow'\n",
+        encoding="utf-8",
+    )
+    return source, shadow
+
+
+def _run_generated_pytest(
+    output_file: Path,
+    shadow: Path,
+    extra_args: list[str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(shadow)
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        str(output_file),
+        "-q",
+        "--noconftest",
+        "-p",
+        "no:cacheprovider",
+        *(extra_args or []),
+    ]
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        cwd=str(output_file.parent),
+        env=env,
+        check=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_namespace_src_layout_tests_run_for_default_and_explicit_paths(tmp_path):
+    """Generated tests execute against a namespace src layout, not the server src."""
+    source, shadow = _namespace_src_layout(tmp_path)
+    explicit = tmp_path / "temp" / "r7_smoke" / "test_validator.py"
+
+    default_result = await generate_tests(
+        file_path=str(source),
+        _workspace_dir=str(tmp_path),
+    )
+    explicit_result = await generate_tests(
+        file_path=str(source),
+        output_path=str(explicit),
+        _workspace_dir=str(tmp_path),
+    )
+    assert not default_result.get("isError")
+    assert not explicit_result.get("isError")
+    default_file = Path(default_result["metadata"]["output_file"])
+    explicit_file = Path(explicit_result["metadata"]["output_file"])
+    assert default_file == tmp_path / "tests" / "test_validator.py"
+    assert explicit_file == explicit
+    assert not (tmp_path / "src" / "__init__.py").exists()
+    assert not (tmp_path / "src" / "pkg" / "__init__.py").exists()
+
+    for output_file in (default_file, explicit_file):
+        generated = output_file.read_text(encoding="utf-8")
+        assert "from src.pkg.validator import " in generated
+        assert "_WorkspaceRootFinder" in generated
+        proc = _run_generated_pytest(output_file, shadow)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "4 passed" in proc.stdout
+    covered = _run_generated_pytest(
+        default_file,
+        shadow,
+        ["--cov=src.pkg.validator", "--cov-report=term-missing"],
+    )
+    assert covered.returncode == 0, covered.stdout + covered.stderr
+    assert "4 passed" in covered.stdout
 
 
 def test_default_generate_tests_output_path_increments_collisions(tmp_path):
