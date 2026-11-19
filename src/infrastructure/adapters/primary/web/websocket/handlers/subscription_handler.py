@@ -283,21 +283,25 @@ async def _session_has_durable_chat_run(
     )
     from src.infrastructure.adapters.secondary.persistence.models import AgentRunAuthorityModel
 
-    rows = (
-        await context.db.execute(
-            refresh_select_statement(
-                select(
-                    AgentRunAuthorityModel.status,
-                    AgentRunAuthorityModel.started_at,
-                ).where(
-                    AgentRunAuthorityModel.conversation_id == conversation_id,
-                    AgentRunAuthorityModel.tenant_id == context.tenant_id,
-                    AgentRunAuthorityModel.project_id == project_id,
-                    AgentRunAuthorityModel.run_kind == "chat",
+    try:
+        rows = (
+            await context.db.execute(
+                refresh_select_statement(
+                    select(
+                        AgentRunAuthorityModel.status,
+                        AgentRunAuthorityModel.started_at,
+                    ).where(
+                        AgentRunAuthorityModel.conversation_id == conversation_id,
+                        AgentRunAuthorityModel.tenant_id == context.tenant_id,
+                        AgentRunAuthorityModel.project_id == project_id,
+                        AgentRunAuthorityModel.run_kind == "chat",
+                    )
                 )
             )
-        )
-    ).all()
+        ).all()
+    except Exception:
+        # A caller that cannot read authority is not proof that no worker exists.
+        return True
     return any(row.status == "running" or row.started_at is not None for row in rows)
 
 
