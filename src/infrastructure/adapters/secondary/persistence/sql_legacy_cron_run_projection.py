@@ -94,7 +94,11 @@ class SqlLegacyCronRunProjection:
         return True
 
     async def terminal(
-        self, identity: LegacyCronAdmissionIdentity, outcome: str
+        self,
+        identity: LegacyCronAdmissionIdentity,
+        outcome: str,
+        *,
+        cause: str | None = None,
     ) -> datetime | None:
         locked = await self.lock_run(identity)
         if locked is None:
@@ -125,7 +129,9 @@ class SqlLegacyCronRunProjection:
                     "one_shot" if job.schedule_type == "at" else "delete_after_run"
                 )
         else:
-            policy.record_failure("legacy_execution_failed", now)
+            failure = cause or "legacy_execution_failed"
+            run.error_message = failure
+            policy.record_failure(failure, now)
         job.state = policy.state
         job.enabled = policy.enabled
         job.updated_at = now

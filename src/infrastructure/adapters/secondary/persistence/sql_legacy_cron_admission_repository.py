@@ -144,7 +144,13 @@ class SqlLegacyCronAdmissionRepository:
         await self._session.flush()
         return True
 
-    async def complete(self, ticket: LegacyCronExecutionTicket, outcome: str) -> bool:
+    async def complete(
+        self,
+        ticket: LegacyCronExecutionTicket,
+        outcome: str,
+        *,
+        cause: str | None = None,
+    ) -> bool:
         if outcome not in {"success", "failed"}:
             return False
         row = await self._matched_row(ticket.admission, lock=True)
@@ -155,13 +161,42 @@ class SqlLegacyCronAdmissionRepository:
         if row.execution_phase != "running":
             return False
         terminal_at = await SqlLegacyCronRunProjection(self._session).terminal(
-            ticket.admission, outcome
+            ticket.admission, outcome, cause=cause
         )
         if terminal_at is None:
             return False
         row.status = outcome
         row.execution_phase = "terminal"
         row.terminal_at = terminal_at
+        await self._session.flush()
+        return True
+
+    async def fail_unstarted(self, identity: LegacyCronAdmissionIdentity, cause: str) -> bool:
+        """Close an admitted run that never started. The job stays enabled."""
+        row = await self._matched_row(identity, lock=True)
+        if row is None or row.status != "active" or row.execution_phase != "ready":
+            return False
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            AgentRunAuthorityModel,
+            CronJobRunModel,
+        )
+
+        now = datetime.now(UTC)
+        run = await self._session.get(CronJobRunModel, identity.run_id)
+        if run is not None and run.status == "queued":
+            run.status = "failed"
+            run.finished_at = now
+            run.error_message = cause
+        authority = await self._session.get(AgentRunAuthorityModel, identity.message_id)
+        if authority is not None and authority.started_at is None and authority.status == "queued":
+            authority.status = "failed"
+            authority.completed_at = now
+            authority.error = cause
+            authority.updated_at = now
+        row.status = "failed"
+        row.execution_phase = "terminal"
+        row.execution_nonce = secrets.token_hex(32)
+        row.terminal_at = now
         await self._session.flush()
         return True
 

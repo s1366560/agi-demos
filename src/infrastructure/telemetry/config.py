@@ -67,7 +67,9 @@ def _create_resource(settings_override: dict[str, Any] | None = None) -> Resourc
 
         attributes["service.version"] = version("memstack")
     except Exception:
-        attributes["service.version"] = "0.3.0"
+        from src.configuration.api_release import API_RELEASE_VERSION
+
+        attributes["service.version"] = API_RELEASE_VERSION
 
     return Resource.create(attributes)
 

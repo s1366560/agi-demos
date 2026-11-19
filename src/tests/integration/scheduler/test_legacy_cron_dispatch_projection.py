@@ -77,9 +77,15 @@ async def test_uncertain_dispatch_keeps_nonterminal_run_and_statistics(
         identity = identities[0]
         run = await session.get(CronJobRunModel, identity.run_id)
         job = await session.get(CronJobModel, "job")
-        assert run.status == "queued" and run.finished_at is None
+        if error is asyncio.CancelledError:
+            assert run.status == "queued" and run.finished_at is None
+            assert await SqlLegacyCronAdmissionRepository(session).matches_active(identity)
+        else:
+            assert run.status == "failed" and run.finished_at is not None
+            assert error.__name__ in (run.error_message or "")
+            assert job.enabled
+            assert not await SqlLegacyCronAdmissionRepository(session).matches_active(identity)
         assert job.state == {"next_run": "preserved"}
-        assert await SqlLegacyCronAdmissionRepository(session).matches_active(identity)
 
 
 async def test_preparation_failure_records_safe_error_with_current_policy(database, monkeypatch):

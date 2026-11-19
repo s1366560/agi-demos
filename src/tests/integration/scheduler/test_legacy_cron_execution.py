@@ -264,6 +264,9 @@ async def test_scheduler_commits_running_admission_before_dispatch(
         database as database_module,
         sql_cron_job_repository,
     )
+    from src.infrastructure.adapters.secondary.persistence.legacy_cron_admission_model import (
+        LegacyCronAdmissionModel,
+    )
 
     _, sessions = database
     monkeypatch.setattr(database_module, "async_session_factory", sessions)
@@ -299,7 +302,14 @@ async def test_scheduler_commits_running_admission_before_dispatch(
     assert len(admitted) == 1
     assert recorded == [CronRunStatus.QUEUED]
     async with sessions() as session:
-        assert await SqlLegacyCronAdmissionRepository(session).matches_active(admitted[0])
+        repository = SqlLegacyCronAdmissionRepository(session)
+        if delivery_error:
+            assert not await repository.matches_active(admitted[0])
+            row = await session.get(LegacyCronAdmissionModel, admitted[0].admission_id)
+            assert row is not None
+            assert row.status == "failed" and row.execution_phase == "terminal"
+        else:
+            assert await repository.matches_active(admitted[0])
 
 
 async def test_future_hitl_event_wait_and_answer_project_without_releasing_nonce(

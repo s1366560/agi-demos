@@ -9,7 +9,11 @@ from sqlalchemy.exc import DBAPIError
 from src.infrastructure.adapters.secondary.persistence.legacy_cron_admission_model import (
     LegacyCronAdmissionModel,
 )
-from src.infrastructure.adapters.secondary.persistence.models import CronJobModel, CronJobRunModel
+from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentRunAuthorityModel,
+    CronJobModel,
+    CronJobRunModel,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_legacy_cron_admission_repository import (
     SqlLegacyCronAdmissionRepository,
 )
@@ -79,6 +83,75 @@ async def test_one_shot_success_retires_without_deleting_history(database, sched
         await session.commit()
         assert not job.enabled and job.state["retired_at"]
         assert await session.get(CronJobRunModel, identity.run_id) is not None
+
+
+async def test_unstarted_delivery_failure_closes_run_and_authority_without_disabling_job(
+    database,
+):
+    _, sessions = database
+    async with sessions() as session:
+        identity = await admit(session)
+        await session.commit()
+        await session.execute(text("INSERT INTO conversations (id) VALUES ('conversation')"))
+        session.add(
+            AgentRunAuthorityModel(
+                id=identity.message_id,
+                tenant_id="tenant",
+                project_id="project",
+                conversation_id="conversation",
+                run_kind="chat",
+                idempotency_key=f"execution:{identity.message_id}",
+                message_id=identity.message_id,
+                request_message="probe",
+                status="queued",
+                revision=1,
+                permission_profile="read_only",
+                authorization_snapshot={},
+            )
+        )
+        await session.commit()
+        cause = "failure_class=backend code=operation_context_not_pinned plugin operation context is not pinned"
+        assert await SqlLegacyCronAdmissionRepository(session).fail_unstarted(identity, cause)
+        await session.commit()
+        run = await session.get(CronJobRunModel, identity.run_id)
+        job = await session.get(CronJobModel, "job")
+        authority = await session.get(AgentRunAuthorityModel, identity.message_id)
+        admission = await session.get(LegacyCronAdmissionModel, identity.admission_id)
+        assert run.status == "failed"
+        assert "operation_context_not_pinned" in (run.error_message or "")
+        assert authority.status == "failed" and authority.started_at is None
+        assert authority.error == cause
+        assert job.enabled
+        assert admission.status == "failed" and admission.execution_phase == "terminal"
+
+
+async def test_goal_judge_failure_keeps_its_cause_and_is_not_success(database):
+    _, sessions = database
+    async with sessions() as session:
+        identity = await admit(session)
+        repository = SqlLegacyCronAdmissionRepository(session)
+        ticket = await repository.claim_execution(identity)
+        await session.commit()
+        job = await session.get(CronJobModel, "job")
+        job.max_retries = 3
+        await session.flush()
+        assert await repository.complete(ticket, "failed", cause="GOAL_JUDGE_UNAVAILABLE")
+        await session.commit()
+        run = await session.get(CronJobRunModel, identity.run_id)
+        assert run.status == "failed"
+        assert run.error_message == "GOAL_JUDGE_UNAVAILABLE"
+        assert job.enabled
+        assert job.state["last_error"] == "GOAL_JUDGE_UNAVAILABLE"
+
+
+async def test_open_queued_run_blocks_a_second_scheduled_dispatch(database):
+    from src.infrastructure.scheduler.job_executor import _open_scheduled_run_id
+
+    _, sessions = database
+    async with sessions() as session:
+        identity = await admit(session)
+        await session.commit()
+        assert await _open_scheduled_run_id(session, "job") == identity.run_id
 
 
 async def test_projection_failure_rolls_back_terminal_admission(database):
