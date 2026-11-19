@@ -352,12 +352,23 @@ async def generate_commit(
     try:
         git_dir = _resolve_git_working_dir(_workspace_dir, working_dir, repo_path)
         if not _is_git_repository(git_dir):
+            requested = (repo_path or working_dir or ".").strip() or "."
+            hint = (
+                "Not a git repository. Pass working_dir or repo_path as a workspace-relative "
+                f"directory that contains .git. This call used {requested}. "
+                "This tool does not search other directories, run git init, or create a commit."
+            )
             return {
                 "content": [{"type": "text", "text": "Not a git repository"}],
-                "isError": False,
+                "isError": True,
+                "code": "not_a_git_repository",
+                "hint": hint,
                 "metadata": {
                     "in_git_repo": False,
+                    "code": "not_a_git_repository",
+                    "hint": hint,
                     "working_dir": str(git_dir),
+                    "requested_repo": requested,
                 },
             }
 

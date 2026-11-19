@@ -163,7 +163,11 @@ class FailingThenCleanupSandboxAdapter(MockSandboxAdapter):
                 "is_error": True,
             }
         return {
-            "content": [{"text": "[workspace_bash_cleanup] root=/workspace/.memstack/worktrees/att-timeout matched=1 groups=1 remaining=0"}],
+            "content": [
+                {
+                    "text": "[workspace_bash_cleanup] root=/workspace/.memstack/worktrees/att-timeout matched=1 groups=1 remaining=0"
+                }
+            ],
             "is_error": False,
         }
 
@@ -849,7 +853,13 @@ class TestSandboxMCPToolExecute:
 
         results = (first, second)
         assert sum(result.is_error is False for result in results) == 1
-        assert sum("Another workspace bash command is already running" in result.output for result in results) == 1
+        assert (
+            sum(
+                "Another workspace bash command is already running" in result.output
+                for result in results
+            )
+            == 1
+        )
         assert adapter.call_count == 1
         assert adapter.max_active_calls == 1
 
@@ -887,7 +897,10 @@ class TestSandboxMCPToolExecute:
         assert adapter.call_count == 2
         assert "sleep 600" in adapter.calls[0][1]["command"]
         assert "[workspace_bash_cleanup]" in adapter.calls[1][1]["command"]
-        assert "workspace_root=/workspace/.memstack/worktrees/att-timeout" in adapter.calls[1][1]["command"]
+        assert (
+            "workspace_root=/workspace/.memstack/worktrees/att-timeout"
+            in adapter.calls[1][1]["command"]
+        )
 
     async def test_workspace_worker_bash_precleans_before_dependency_setup(self):
         """Dependency setup should clear stale worktree processes before starting."""
@@ -921,7 +934,10 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is False
         assert adapter.call_count == 1
         assert "[workspace_bash_cleanup]" in adapter.calls[0][1]["command"]
-        assert "workspace_root=/workspace/.memstack/worktrees/att-preclean" in adapter.calls[0][1]["command"]
+        assert (
+            "workspace_root=/workspace/.memstack/worktrees/att-preclean"
+            in adapter.calls[0][1]["command"]
+        )
         assert "npm ci" in adapter.calls[0][1]["command"]
 
     async def test_workspace_worker_bash_uses_structured_active_execution_root(self):
@@ -3048,6 +3064,33 @@ class TestSandboxMCPToolErrorFieldHandling:
         assert result.is_error is True
         assert "Tool execution failed" in result.output
         assert "File not found" in result.output
+
+    async def test_preserves_structured_non_repo_error(self):
+        class StructuredErrorAdapter:
+            async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict, **kw):
+                return {
+                    "content": [{"text": "Not a git repository"}],
+                    "isError": True,
+                    "code": "not_a_git_repository",
+                    "hint": "Pass working_dir or repo_path",
+                    "metadata": {"in_git_repo": False, "code": "not_a_git_repository"},
+                }
+
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="generate_commit",
+            tool_schema={
+                "name": "generate_commit",
+                "description": "Generate commit",
+                "input_schema": {"type": "object", "properties": {}},
+            },
+            sandbox_port=StructuredErrorAdapter(),
+        )
+        result = await tool.execute(_make_ctx(), message="a", dry_run=True)
+        assert result.is_error is True
+        assert result.metadata["code"] == "not_a_git_repository"
+        assert result.metadata["in_git_repo"] is False
+        assert "working_dir" in result.metadata["hint"]
 
     async def test_handles_snake_case_is_error_field(self):
         """Test that wrapper handles snake_case is_error field."""

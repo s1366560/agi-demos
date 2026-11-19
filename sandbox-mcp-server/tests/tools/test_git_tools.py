@@ -427,6 +427,30 @@ class TestGenerateCommit:
             assert "Add new file" in result_log.stdout
 
     @pytest.mark.asyncio
+    async def test_generate_commit_non_repo_is_structured_error_and_does_not_write(self):
+        """A non-repository dry run reports the cause and does not create a repo."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "notes.txt").write_text("not a repo\n")
+
+            result = await generate_commit(
+                message="test message",
+                auto_add=False,
+                dry_run=True,
+                _workspace_dir=tmpdir,
+            )
+
+            assert result.get("isError") is True
+            assert result.get("code") == "not_a_git_repository"
+            hint = result.get("hint", "")
+            assert "working_dir" in hint
+            assert "repo_path" in hint
+            assert "workspace-relative" in hint
+            assert not (workspace / ".git").exists()
+            assert result["metadata"]["in_git_repo"] is False
+            assert result["metadata"]["requested_repo"] == "."
+
+    @pytest.mark.asyncio
     async def test_generate_commit_dry_run(self):
         """Test generating commit in dry-run mode."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -464,8 +488,6 @@ class TestGenerateCommit:
             )
             # Should still have only 1 commit (the initial one)
             assert result_log.stdout.strip().count("\n") == 0  # Only one line = one commit
-
-
 
     @pytest.mark.asyncio
     async def test_generate_commit_uses_nested_working_dir(self):

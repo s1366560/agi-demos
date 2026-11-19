@@ -1545,6 +1545,14 @@ async def _workspace_execution_preflight_error(
     )
 
 
+class SandboxToolResultError(RuntimeError):
+    """A sandbox tool returned a structured error result."""
+
+    def __init__(self, message: str, raw_result: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.raw_result = raw_result
+
+
 def _extract_error_msg(result: dict[str, Any]) -> str:
     """Extract error message from an MCP error result.
 
@@ -1635,6 +1643,7 @@ async def _execute_with_retry(
     import time as _time
 
     last_error: MCPToolError | None = None
+    last_raw_result: dict[str, Any] | None = None
     tool_timeout = kwargs.get("timeout")
     configured_timeout_s: float | None = (
         float(tool_timeout) if tool_timeout and isinstance(tool_timeout, (int, float)) else None
@@ -1689,6 +1698,7 @@ async def _execute_with_retry(
                 )
                 mcp_err.retry_count = attempt
                 last_error = mcp_err
+                last_raw_result = result
 
                 if mcp_err.is_retryable and attempt < max_retries:
                     await asyncio.sleep(retry_config.get_delay(attempt))
@@ -1721,14 +1731,17 @@ async def _execute_with_retry(
             raise RuntimeError(f"Tool execution failed: {mcp_err.get_user_message()}") from exc
 
     if last_error:
-        raise RuntimeError(
+        message = (
             f"Tool execution failed after {last_error.retry_count + 1} "
             f"attempts: {last_error.get_user_message()}"
         )
+        if last_raw_result is not None:
+            raise SandboxToolResultError(message, last_raw_result)
+        raise RuntimeError(message)
     raise RuntimeError("Tool execution failed: Unknown error")
 
 
-def create_sandbox_mcp_tool(
+def create_sandbox_mcp_tool(  # noqa: C901, PLR0915
     sandbox_id: str,
     tool_name: str,
     tool_schema: dict[str, Any],
@@ -1774,7 +1787,7 @@ def create_sandbox_mcp_tool(
         else classify_sandbox_tool_permission(tool_name)
     )
 
-    async def execute(ctx: ToolContext, **kwargs: Any) -> ToolResult:
+    async def execute(ctx: ToolContext, **kwargs: Any) -> ToolResult:  # noqa: C901, PLR0911, PLR0912
         """Execute the sandbox MCP tool with retry logic."""
         normalized_kwargs = kwargs
         root_override = None
@@ -1837,14 +1850,36 @@ def create_sandbox_mcp_tool(
             if confined_root is not None:
                 normalized_kwargs["_workspace_write_contract"] = "directory-fd-write-v1"
                 normalized_kwargs["_workspace_dir"] = confined_root
-            output, raw_result = await _execute_workspace_sandbox_tool(
-                sandbox_id=sandbox_id,
-                tool_name=tool_name,
-                sandbox_port=sandbox_port,
-                retry_config=cfg,
-                kwargs=normalized_kwargs,
-                preclean_dependency_setup=preclean_dependency_setup,
-            )
+            try:
+                output, raw_result = await _execute_workspace_sandbox_tool(
+                    sandbox_id=sandbox_id,
+                    tool_name=tool_name,
+                    sandbox_port=sandbox_port,
+                    retry_config=cfg,
+                    kwargs=normalized_kwargs,
+                    preclean_dependency_setup=preclean_dependency_setup,
+                )
+            except SandboxToolResultError as exc:
+                output = _workspace_runtime_error_output(
+                    exc,
+                    tool_name=tool_name,
+                    kwargs=normalized_kwargs,
+                    root_override=root_override,
+                    declared_code_root=declared_code_root,
+                )
+                metadata = build_sandbox_tool_metadata(
+                    tool_name=tool_name,
+                    arguments=normalized_kwargs,
+                    raw_result=exc.raw_result,
+                    output=output,
+                )
+                code = exc.raw_result.get("code")
+                hint = exc.raw_result.get("hint")
+                if isinstance(code, str):
+                    metadata["code"] = code
+                if isinstance(hint, str):
+                    metadata["hint"] = hint
+                return ToolResult(output=output, metadata=metadata, is_error=True)
             if tool_name == "bash":
                 if artifact_error := _workspace_output_artifact_escape_error(
                     output,
