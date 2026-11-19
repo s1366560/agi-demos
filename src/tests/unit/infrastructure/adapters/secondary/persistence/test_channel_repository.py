@@ -336,40 +336,39 @@ class TestChannelMessageRepository:
 class TestCredentialEncryption:
     """Tests for credential encryption functionality."""
 
-    def test_encryption_service_available(self):
+    @pytest.fixture
+    def encryption_service(self):
+        from secrets import token_hex
+
+        from src.infrastructure.security.encryption_service import EncryptionService
+
+        return EncryptionService(encryption_key=token_hex(32))
+
+    def test_encryption_service_available(self, encryption_service):
         """Encryption service should be available."""
-        from src.infrastructure.security.encryption_service import get_encryption_service
+        assert encryption_service is not None
 
-        service = get_encryption_service()
-        assert service is not None
-
-    def test_encrypt_decrypt_roundtrip(self):
+    def test_encrypt_decrypt_roundtrip(self, encryption_service):
         """Should encrypt and decrypt credentials correctly."""
-        from src.infrastructure.security.encryption_service import get_encryption_service
-
-        service = get_encryption_service()
         secret = "my-app-secret-12345"
 
-        encrypted = service.encrypt(secret)
-        decrypted = service.decrypt(encrypted)
+        encrypted = encryption_service.encrypt(secret)
+        decrypted = encryption_service.decrypt(encrypted)
 
         assert encrypted != secret
         assert decrypted == secret
 
-    def test_encryption_produces_different_ciphertext(self):
+    def test_encryption_produces_different_ciphertext(self, encryption_service):
         """Same plaintext should produce different ciphertext (random nonce)."""
-        from src.infrastructure.security.encryption_service import get_encryption_service
-
-        service = get_encryption_service()
         secret = "my-app-secret-12345"
 
-        encrypted1 = service.encrypt(secret)
-        encrypted2 = service.encrypt(secret)
+        encrypted1 = encryption_service.encrypt(secret)
+        encrypted2 = encryption_service.encrypt(secret)
 
         # Due to random nonce, same plaintext produces different ciphertext
         assert encrypted1 != encrypted2
-        assert service.decrypt(encrypted1) == secret
-        assert service.decrypt(encrypted2) == secret
+        assert encryption_service.decrypt(encrypted1) == secret
+        assert encryption_service.decrypt(encrypted2) == secret
 
 
 class TestChannelSessionBindingRepository:

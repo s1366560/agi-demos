@@ -1579,3 +1579,33 @@ async def test_cancel_during_tool_after_retry_does_not_persist_duplicate_answer(
     assert [item["type"] for item in pending_to_persist] == ["cancelled"]
     assert sum(item["type"] == "text_end" for item in state.events) == 1
     assert [call.kwargs["event"]["type"] for call in publish.await_args_list] == ["cancelled"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("data", "cutoff", "tokens"), [
+    ({"messages_covered_up_to": 123, "summary_tokens": 42}, 123, 42),
+    ({"summary_tokens": "invalid"}, 777, 0),
+])
+async def test_save_context_summary_checkpoint(data, cutoff, tokens):
+    session = MagicMock()
+    session.begin.return_value = AsyncMock()
+    session_context = AsyncMock()
+    session_context.__aenter__.return_value = session
+    adapter = AsyncMock()
+    with (
+        patch.object(execution, "async_session_factory", return_value=session_context),
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.sql_context_summary_adapter."
+            "SqlContextSummaryAdapter",
+            return_value=adapter,
+        ),
+    ):
+        await execution._save_context_summary(
+            conversation_id="conv-1",
+            summary_data={"summary_text": "summary", "messages_covered_count": 5, **data},
+            last_event_time_us=777,
+        )
+
+    conversation_id, summary = adapter.save_summary.await_args.args
+    assert conversation_id == "conv-1"
+    assert (summary.messages_covered_up_to, summary.summary_tokens) == (cutoff, tokens)

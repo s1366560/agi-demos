@@ -62,6 +62,9 @@ class ModelCatalogService(ModelCatalogPort):
         query: str,
         provider: str | None = None,
         limit: int = 20,
+        *,
+        capability: str | None = None,
+        modality: str | None = None,
     ) -> list[ModelMetadata]:
         """Search models by name substring or keyword."""
         self._ensure_loaded()
@@ -70,7 +73,9 @@ class ModelCatalogService(ModelCatalogPort):
         for meta in self._models.values():
             if provider and meta.provider != provider:
                 continue
-            if self._matches_query(meta, query_lower):
+            if self._matches_query(meta, query_lower) and self._matches_filters(
+                meta, capability, modality
+            ):
                 results.append(meta)
             if len(results) >= limit:
                 break
@@ -81,6 +86,9 @@ class ModelCatalogService(ModelCatalogPort):
         self,
         provider: str | None = None,
         include_deprecated: bool = False,
+        *,
+        capability: str | None = None,
+        modality: str | None = None,
     ) -> list[ModelMetadata]:
         """List all known models, optionally filtered."""
         self._ensure_loaded()
@@ -90,8 +98,17 @@ class ModelCatalogService(ModelCatalogPort):
                 continue
             if not include_deprecated and meta.is_deprecated:
                 continue
-            results.append(meta)
+            if self._matches_filters(meta, capability, modality):
+                results.append(meta)
         return results
+
+    @staticmethod
+    def _matches_filters(meta: ModelMetadata, capability: str | None, modality: str | None) -> bool:
+        cap = (capability or "").strip().lower()
+        mode = (modality or "").strip().lower()
+        return (not cap or any(str(item).lower() == cap for item in meta.capabilities)) and (
+            not mode or any(item.lower() == mode for item in meta.modalities)
+        )
 
     def list_models_by_capability(
         self,

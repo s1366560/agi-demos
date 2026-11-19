@@ -330,6 +330,8 @@ async def generate_commit(
     message: Optional[str] = None,
     auto_add: bool = False,
     dry_run: bool = False,
+    working_dir: Optional[str] = None,
+    repo_path: Optional[str] = None,
     _workspace_dir: str = "/workspace",
     **kwargs,
 ) -> Dict[str, Any]:
@@ -340,33 +342,37 @@ async def generate_commit(
         message: Optional custom commit message
         auto_add: Automatically stage all changes before committing
         dry_run: Generate message without creating commit
+        working_dir: Optional git working directory relative to the workspace
+        repo_path: Alias for working_dir
         _workspace_dir: Workspace directory
 
     Returns:
         Commit result
     """
     try:
-        # Check if we're in a git repo
-        git_dir = Path(_workspace_dir)
-        if not (git_dir / ".git").exists():
+        git_dir = _resolve_git_working_dir(_workspace_dir, working_dir, repo_path)
+        if not _is_git_repository(git_dir):
             return {
                 "content": [{"type": "text", "text": "Not a git repository"}],
                 "isError": False,
-                "metadata": {"in_git_repo": False},
+                "metadata": {
+                    "in_git_repo": False,
+                    "working_dir": str(git_dir),
+                },
             }
 
         # Auto-add changes if requested
         if auto_add:
             subprocess.run(
                 ["git", "add", "-A"],
-                cwd=_workspace_dir,
+                cwd=git_dir,
                 capture_output=True,
             )
 
         # Check if there are staged changes
         status_result = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
-            cwd=_workspace_dir,
+            cwd=git_dir,
             capture_output=True,
             text=True,
         )
@@ -376,7 +382,7 @@ async def generate_commit(
         # Also check for unstaged changes for message generation
         unstaged_result = subprocess.run(
             ["git", "diff", "--name-only"],
-            cwd=_workspace_dir,
+            cwd=git_dir,
             capture_output=True,
             text=True,
         )
@@ -393,6 +399,8 @@ async def generate_commit(
                     "staged_count": 0,
                     "dry_run": dry_run,
                     "commit_message": message,
+                    "in_git_repo": True,
+                    "working_dir": str(git_dir),
                 },
             }
 
@@ -431,7 +439,7 @@ async def generate_commit(
         if staged_files and not dry_run:
             commit_result = subprocess.run(
                 ["git", "commit", "-m", message],
-                cwd=_workspace_dir,
+                cwd=git_dir,
                 capture_output=True,
                 text=True,
             )
@@ -464,6 +472,8 @@ async def generate_commit(
                 "files_for_message": list(files_for_message),
                 "dry_run": dry_run,
                 "committed": committed,
+                "in_git_repo": True,
+                "working_dir": str(git_dir),
             },
         }
 
@@ -496,6 +506,14 @@ def create_generate_commit_tool() -> MCPTool:
                     "type": "boolean",
                     "description": "Generate message without creating commit",
                     "default": False,
+                },
+                "working_dir": {
+                    "type": "string",
+                    "description": "Optional git working directory relative to the workspace",
+                },
+                "repo_path": {
+                    "type": "string",
+                    "description": "Alias for working_dir",
                 },
             },
             "required": [],

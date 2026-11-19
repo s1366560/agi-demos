@@ -33,6 +33,18 @@ export interface ExecutionStatusApiResponse {
   recovery?: ExecutionRecoveryInfo | null;
 }
 
+export interface ConversationContextSnapshot {
+  conversation_id: string;
+  message_count: number;
+  has_summary: boolean;
+  summary_tokens: number;
+  messages_in_summary: number;
+  compression_level: string;
+  from_cache: boolean;
+  messages_covered_up_to?: number;
+  summary_schema_version?: string;
+}
+
 export const restApi = {
   async createConversation(
     request: CreateConversationRequest
@@ -87,20 +99,13 @@ export const restApi = {
   async getContextStatus(
     conversationId: string,
     projectId: string
-  ): Promise<{
-    conversation_id: string;
-    token_usage: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-      estimated_cost_usd: number;
-    };
-    compression_level: string;
-    last_compressed_time?: string;
-  }> {
-    return await api.get(`/agent/conversations/${conversationId}/context-status`, {
-      params: { project_id: projectId },
-    });
+  ): Promise<ConversationContextSnapshot> {
+    return await api.get<ConversationContextSnapshot>(
+      `/agent/conversations/${conversationId}/context-status`,
+      {
+        params: { project_id: projectId },
+      }
+    );
   },
 
   async deleteConversation(conversationId: string, projectId: string): Promise<void> {

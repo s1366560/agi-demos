@@ -221,7 +221,9 @@ async def execute_mcp_server_call_tool(
             uri = args.get("uri", "")
             if not uri:
                 return {
-                    "content": [{"type": "text", "text": "Error: uri is required for resources/read"}],
+                    "content": [
+                        {"type": "text", "text": "Error: uri is required for resources/read"}
+                    ],
                     "isError": True,
                 }
             result = await manager.read_resource(server_name, uri)
@@ -287,26 +289,49 @@ async def execute_mcp_server_set_log_level(
     normalized_level = level.strip().lower()
     if normalized_level not in VALID_LOG_LEVELS:
         return {
-            "content": [
-                {"type": "text", "text": f"Invalid MCP logging level: {normalized_level}"}
-            ],
+            "content": [{"type": "text", "text": f"Invalid MCP logging level: {normalized_level}"}],
             "isError": True,
         }
 
     try:
         manager = _get_manager(_workspace_dir)
-        success = await manager.set_log_level(name, normalized_level)
-        payload = {"success": success, "level": normalized_level}
-        if not success:
-            payload["error"] = f"Failed to set log level for {name}"
+        result = await manager.set_log_level(name, normalized_level)
+        payload = (
+            result.to_payload()
+            if hasattr(result, "to_payload")
+            else {
+                "success": bool(result),
+                "name": name,
+                "level": normalized_level,
+                "code": "ok" if result else "protocol_error",
+                "message": (
+                    f"Set log level of '{name}' to '{normalized_level}'."
+                    if result
+                    else f"Failed to set log level for {name}"
+                ),
+            }
+        )
+        if not payload.get("success") and "error" not in payload:
+            payload["error"] = {
+                "code": payload.get("code", "protocol_error"),
+                "message": payload.get("message") or f"Failed to set log level for {name}",
+            }
         return {
             "content": [{"type": "text", "text": json.dumps(payload, indent=2)}],
-            "isError": not success,
+            "isError": not bool(payload.get("success")),
         }
     except Exception as e:
         logger.error(f"Error setting log level for '{name}': {e}", exc_info=True)
+        payload = {
+            "success": False,
+            "name": name,
+            "level": normalized_level,
+            "code": "protocol_error",
+            "message": str(e),
+            "error": {"code": "protocol_error", "message": str(e)},
+        }
         return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+            "content": [{"type": "text", "text": json.dumps(payload, indent=2)}],
             "isError": True,
         }
 

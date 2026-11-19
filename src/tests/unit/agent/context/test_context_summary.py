@@ -87,6 +87,7 @@ class TestContextSummary:
         assert summary.messages_covered_count == 0
         assert summary.compression_level == "l2_summarize"
         assert summary.model is None
+        assert summary.schema_version == "v1"
 
     def test_roundtrip_serialization(self):
         original = ContextSummary(
@@ -96,8 +97,10 @@ class TestContextSummary:
             messages_covered_count=25,
             compression_level="l2_summarize",
             model="test-model",
+            schema_version="v2",
         )
         restored = ContextSummary.from_dict(original.to_dict())
+        assert restored.schema_version == "v2"
         assert restored.summary_text == original.summary_text
         assert restored.summary_tokens == original.summary_tokens
         assert restored.messages_covered_up_to == original.messages_covered_up_to

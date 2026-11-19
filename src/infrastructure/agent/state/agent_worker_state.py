@@ -2553,6 +2553,12 @@ async def get_or_create_skills(
                 project_id=project_id,
                 cache_key=cache_label,
             )
+            await _merge_generation_catalog_skills_for_worker(
+                loaded_by_name,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                cache_key=cache_label,
+            )
 
             skills = list(loaded_by_name.values())
 
@@ -2617,6 +2623,75 @@ async def _merge_database_skills_for_worker(
             )
     except Exception as e:
         logger.warning("Agent Worker: DB skill merge failed: %s", e)
+
+
+async def _merge_generation_catalog_skills_for_worker(
+    loaded_by_name: dict[str, Any],
+    *,
+    tenant_id: str,
+    project_id: str | None,
+    cache_key: str,
+) -> None:
+    """Fill gaps from the pinned generation catalog (profile-enabled skills).
+
+    The worker filesystem/DB cache is not the authority for V2 profile skills
+    such as darwinian-evolver. Prompts resolve those from the capability
+    catalog; the loader must use the same source so enabled skills are
+    discoverable and loadable. Existing filesystem/DB skills that already
+    have content are left in place. If no operation context is pinned, this
+    is a no-op so isolated cache tests stay unchanged.
+    """
+    if not project_id or not str(project_id).strip():
+        return
+    try:
+        from src.infrastructure.plugins.v2.agent_capabilities import (
+            AGENT_CAPABILITY_RESOLVER_SERVICE_V2,
+            AgentCapabilityResolverProtocolV2,
+        )
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        try:
+            operation = current_operation_context_v2()
+        except RuntimeV2Error:
+            return
+        resolver = operation.require(AGENT_CAPABILITY_RESOLVER_SERVICE_V2)
+        if not isinstance(resolver, AgentCapabilityResolverProtocolV2):
+            logger.warning(
+                "Agent Worker: generation catalog skill merge skipped for %s: invalid resolver",
+                cache_key,
+            )
+            return
+        capabilities = await resolver.resolve(
+            agent=object(),
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Agent Worker: generation catalog skill merge failed for %s: %s",
+            cache_key,
+            exc,
+        )
+        return
+
+    added = 0
+    for skill in capabilities.skills:
+        existing = loaded_by_name.get(skill.name)
+        has_content = bool(
+            existing is not None
+            and (getattr(existing, "full_content", None) or getattr(existing, "file_path", None))
+        )
+        if has_content:
+            continue
+        loaded_by_name[skill.name] = skill
+        added += 1
+    if added:
+        logger.info(
+            "Agent Worker: generation catalog skill merge added %d skills for %s",
+            added,
+            cache_key,
+        )
 
 
 async def get_or_create_provider_config(
@@ -2883,14 +2958,19 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 or agent_mode in getattr(skill, "agent_modes", [])
             ]
             available_skill_names = tuple(s.name for s in filtered_skills)
-            from functools import partial
 
             from src.application.services.marketplace_skill_runtime import resolve_marketplace_skill
 
+            skills_by_name = {skill.name: skill for skill in filtered_skills}
+
+            async def resolve_bound_or_marketplace_skill(skill_name: str) -> Skill | None:
+                owned = await resolve_marketplace_skill(tenant_id, project_id or "", skill_name)
+                if owned is not None:
+                    return owned
+                return skills_by_name.get(skill_name)
+
             tool_info = make_skill_loader_tool(
-                marketplace_skill_resolver=partial(
-                    resolve_marketplace_skill, tenant_id, project_id or ""
-                ),
+                marketplace_skill_resolver=resolve_bound_or_marketplace_skill,
                 skill_service=skill_service,
                 tenant_id=tenant_id,
                 project_id=project_id or "",

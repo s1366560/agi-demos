@@ -176,7 +176,13 @@ class TestBuildContext:
         event_data = result.to_event_data()
         assert "was_compressed" in event_data
         assert "compression_strategy" in event_data
-        assert "estimated_tokens" in event_data
+        assert event_data["estimated_tokens"] == result.estimated_tokens
+        assert event_data["occupancy_before"] == pytest.approx(
+            result.estimated_tokens / result.token_budget, abs=0.0001
+        )
+        assert event_data["pipeline"] == "adaptive"
+        for field in ("duration_ms", "tokens_saved", "pruned_tool_outputs", "compression_ratio"):
+            assert event_data[field] == result.metadata[field]
 
 
 class TestEstimateTokens:

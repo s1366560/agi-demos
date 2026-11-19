@@ -85,7 +85,9 @@ class OverflowRecoveryCoordinator:
                 updated.append(msg)
                 continue
 
-            if role == "tool" and len(content) > max_tool_chars:
+            if role == "tool" and len(content) > max_tool_chars + len(
+                "\n[... tool output truncated for overflow recovery]"
+            ):
                 truncated_count += 1
                 updated.append(
                     {
@@ -98,7 +100,9 @@ class OverflowRecoveryCoordinator:
                 )
                 continue
 
-            if role == "assistant" and len(content) > max_assistant_chars:
+            if role == "assistant" and len(content) > max_assistant_chars + len(
+                "\n[... assistant output truncated for overflow recovery]"
+            ):
                 truncated_count += 1
                 updated.append(
                     {
@@ -114,6 +118,20 @@ class OverflowRecoveryCoordinator:
             updated.append(msg)
 
         return updated, truncated_count
+
+    def reduce_provider_request(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Reduce rejected input in isolation without rebuilding or replaying an agent turn."""
+        from src.infrastructure.agent.context.guard_chain import ContextGuardChain
+        from src.infrastructure.agent.context.guards import HistoryTurnGuard
+
+        guarded = ContextGuardChain([HistoryTurnGuard(max_messages=self.config.tail_keep_messages)])
+        result = guarded.apply(messages, estimate_message_tokens=lambda _: 0)
+        reduced, _ = self.truncate_messages(
+            result.messages,
+            max_tool_chars=self.config.max_tool_chars,
+            max_assistant_chars=self.config.max_assistant_chars,
+        )
+        return reduced
 
     def _tail_trim_messages(
         self, messages: list[dict[str, Any]]

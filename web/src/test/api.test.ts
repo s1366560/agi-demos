@@ -1,7 +1,7 @@
 import { installHttpAdmissionFixtureV2 } from './services/webHttpAdmissionFixtureV2';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { authAPI, tenantAPI, projectAPI, memoryAPI, taskAPI } from '../services/api';
+import { authAPI, tenantAPI, projectAPI, memoryAPI, taskAPI, providerAPI } from '../services/api';
 
 import type { MemoryCreate, MemoryUpdate, Entity, Relationship } from '../types/memory';
 
@@ -40,6 +40,30 @@ describe('API Services', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+  });
+
+  it('sends the provider and catalog filters to their respective endpoints', async () => {
+    mockApiInstance.get.mockResolvedValue({ data: {} });
+    await providerAPI.getProviderAutoConfig('kimi_coding');
+    await providerAPI.getModelCatalog('kimi', false, { capability: 'chat', modality: 'text' });
+    await providerAPI.searchModelCatalog('kimi', 'kimi', 5, { modality: 'text' });
+    expect(mockApiInstance.get.mock.calls.map(([url]) => url)).toEqual([
+      '/llm-providers/models/auto-config/kimi_coding',
+      '/llm-providers/models/catalog',
+      '/llm-providers/models/catalog/search',
+    ]);
+    expect(mockApiInstance.get.mock.calls[1]?.[1]?.params).toEqual({
+      provider: 'kimi',
+      include_deprecated: false,
+      capability: 'chat',
+      modality: 'text',
+    });
+    expect(mockApiInstance.get.mock.calls[2]?.[1]?.params).toEqual({
+      q: 'kimi',
+      provider: 'kimi',
+      limit: 5,
+      modality: 'text',
+    });
   });
 
   describe('authAPI', () => {

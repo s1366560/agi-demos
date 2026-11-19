@@ -351,8 +351,11 @@ class UnifiedSandboxService(SandboxResourcePort):
     async def health_check(self, project_id: str) -> bool:
         """Perform health check on project's sandbox.
 
-        If auto_recover is enabled and sandbox is unhealthy, attempts to
-        recreate the sandbox automatically.
+        Records the adapter probe (``health_checked_at`` and
+        ``metadata.health_probe``). If the adapter reports unhealthy and
+        auto_recover is enabled, attempts to recreate the sandbox, matching
+        the existing recovery contract. The adapter probe is not the Docker
+        HEALTHCHECK and does not use that signal to decide recovery.
 
         Args:
             project_id: The project ID
@@ -371,13 +374,19 @@ class UnifiedSandboxService(SandboxResourcePort):
         # Perform health check via adapter
         try:
             healthy = await self._adapter.health_check(association.sandbox_id)
+            association.record_health_observation(
+                healthy=healthy,
+                detail=None if healthy else "Health check failed",
+            )
 
             if healthy:
                 association.mark_healthy()
                 await self._repository.save(association)
                 return True
 
-            # Unhealthy - attempt auto-recovery if enabled
+            # Adapter unhealthy means not tracked, container not running,
+            # MCP not connected, or the inspect failed — not a Docker
+            # HEALTHCHECK-only degradation. Keep the original contract.
             association.mark_unhealthy("Health check failed")
             await self._repository.save(association)
 
@@ -393,6 +402,7 @@ class UnifiedSandboxService(SandboxResourcePort):
 
         except Exception as e:
             logger.error(f"Health check error for project {project_id}: {e}")
+            association.record_health_observation(healthy=False, detail=str(e))
             association.mark_unhealthy(str(e))
             await self._repository.save(association)
             return False

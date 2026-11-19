@@ -37,6 +37,8 @@ import type {
   ProviderHealth,
   ProviderTypeDescriptor,
   DetectedEnvironmentProvider,
+  ProviderAutoConfig,
+  ProviderType,
   RecentTask,
   StatusBreakdown,
   SchemaEntityType,
@@ -612,21 +614,25 @@ export const providerAPI = {
   }> => {
     return await api.get(`/llm-providers/models/${providerType}`);
   },
+  getProviderAutoConfig: async (provider: ProviderType): Promise<ProviderAutoConfig> =>
+    api.get(`/llm-providers/models/auto-config/${provider}`),
   getModelCatalog: async (
     provider?: string,
-    includeDeprecated: boolean = false
+    includeDeprecated: boolean = false,
+    filters?: { capability?: string; modality?: string }
   ): Promise<{ total: number; models: ModelCatalogEntry[] }> => {
     return await api.get('/llm-providers/models/catalog', {
-      params: { provider, include_deprecated: includeDeprecated },
+      params: { provider, include_deprecated: includeDeprecated, ...filters },
     });
   },
   searchModelCatalog: async (
     query: string,
     provider?: string,
-    limit: number = 20
+    limit: number = 20,
+    filters?: { capability?: string; modality?: string }
   ): Promise<{ query: string; total: number; models: ModelCatalogEntry[] }> => {
     return await api.get('/llm-providers/models/catalog/search', {
-      params: { q: query, provider, limit },
+      params: { q: query, provider, limit, ...filters },
     });
   },
   detectEnvKeys: async (): Promise<{

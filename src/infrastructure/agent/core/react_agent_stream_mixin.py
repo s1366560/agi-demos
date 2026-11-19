@@ -968,6 +968,9 @@ class StreamMixin:
                     1,
                 ),
                 compression_level=compression_level,
+                source="context_builder",
+                pipeline=context_result.metadata.get("pipeline"),
+                occupancy_before=context_result.metadata.get("occupancy_before"),
                 token_distribution={},
                 compression_history_summary=(
                     context_result.metadata.get("compression_history", {})

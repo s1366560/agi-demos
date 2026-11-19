@@ -28,6 +28,7 @@ import {
   DetectedEnvironmentProvider,
   ModelCatalogEntry,
   ProviderAuthMethod,
+  ProviderAutoConfig,
   ProviderConfig,
   ProviderConnectionProbe,
   ProviderCreate,
@@ -361,6 +362,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     void fetchModelCatalog(resolveCatalogProviderType(formData.provider_type));
   }, [fetchModelCatalog, formData.provider_type]);
 
+  const [autoConfig, setAutoConfig] = useState<ProviderAutoConfig | null>(null);
+  const codingPlan =
+    autoConfig?.provider_type === formData.provider_type ? autoConfig.plans.coding : null;
+
   // Track which model fields are in custom input mode
   const [useCustomModel, setUseCustomModel] = useState({
     llm: false,
@@ -412,29 +417,34 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     },
   ];
 
+  const modelRequest = useRef(0);
   const fetchModels = useCallback(async (type: ProviderType) => {
+    const request = ++modelRequest.current;
     setIsLoadingModels(true);
     try {
-      const response = await providerAPI.listModels(type);
-      try {
-        const guidance = await providerAPI.getModelGuidance(type);
-        roleDefaultsRef.current = Object.fromEntries(
-          guidance.roles.map((role) => [role.role, role.default_model])
-        );
-      } catch {
-        roleDefaultsRef.current = {};
-      }
+      const [response, guidance, config] = await Promise.all([
+        providerAPI.listModels(type),
+        providerAPI.getModelGuidance(type).catch(() => null),
+        type.endsWith('_coding') ? providerAPI.getProviderAutoConfig(type).catch(() => null) : null,
+      ]);
+      if (modelRequest.current !== request) return undefined;
+      setAutoConfig(config);
+      roleDefaultsRef.current = Object.fromEntries(
+        (guidance?.roles ?? []).map((role) => [role.role, role.default_model])
+      );
       setAvailableModels(response.models);
 
       // If editing, don't auto-select defaults yet, we handle that in useEffect
-      return response.models;
+      return { models: response.models, recommended: config?.recommended };
     } catch (err) {
+      if (modelRequest.current !== request) return undefined;
+      setAutoConfig(null);
       console.error('Failed to fetch models:', err);
       // Fallback to empty
       setAvailableModels({ chat: [], embedding: [], rerank: [] });
       return null;
     } finally {
-      setIsLoadingModels(false);
+      if (modelRequest.current === request) setIsLoadingModels(false);
     }
   }, []);
 
@@ -472,8 +482,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       const embeddingConfig = resolveEmbeddingConfig(provider);
 
       // Fetch models for the provider
-      void fetchModels(provider.provider_type).then((models) => {
-        if (!models) return;
+      void fetchModels(provider.provider_type).then((result) => {
+        if (!result) return;
+        const { models } = result;
         const llmCandidates = getLlmCandidates(models);
 
         // Check if models are custom (not in fetched list)
@@ -569,17 +580,19 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       });
 
       // Fetch models for default provider
-      void fetchModels(defaultProvider).then((models) => {
-        if (models) {
-          const primaryModel = resolvePrimaryLlmModel(models, roleDefaultsRef.current.primary);
+      void fetchModels(defaultProvider).then((result) => {
+        if (result) {
+          const { models, recommended } = result;
+          const primaryModel =
+            recommended?.llm_model ||
+            resolvePrimaryLlmModel(models, roleDefaultsRef.current.primary);
           setFormData((prev) => ({
             ...prev,
+            base_url: prev.base_url || recommended?.base_url || '',
             llm_model: defaultOperation === 'llm' ? primaryModel : '',
-            llm_small_model: resolveSmallLlmModel(
-              models,
-              primaryModel,
-              roleDefaultsRef.current.fast
-            ),
+            llm_small_model:
+              recommended?.llm_small_model ||
+              resolveSmallLlmModel(models, primaryModel, roleDefaultsRef.current.fast),
             embedding_model: models.embedding[0] ?? '',
             reranker_model: models.rerank[0] ?? '',
           }));
@@ -635,8 +648,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     const nextOperation = operationForProviderType(type);
 
     // Fetch models first
-    const models = await fetchModels(type);
-    const primaryModel = resolvePrimaryLlmModel(models, roleDefaultsRef.current.primary);
+    const result = await fetchModels(type);
+    if (result === undefined) return;
+    const models = result?.models ?? null;
+    const recommended = result?.recommended;
+    const primaryModel =
+      recommended?.llm_model || resolvePrimaryLlmModel(models, roleDefaultsRef.current.primary);
     const authMethods = getProviderAuthMethods(providerCapabilities, type);
     const envValues = envProviders[type];
     const environmentVariable = getDetectedEnvironmentVariable(envValues, authMethods);
@@ -651,11 +668,13 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           : getDefaultProviderAuthMethod(providerCapabilities, type),
         environment_variable: environmentVariable ?? '',
         api_key: '',
-        base_url: '',
+        base_url: recommended?.base_url || '',
         use_custom_base_url: false,
         name: providerMeta?.label ?? prev.name,
         llm_model: nextOperation === 'llm' ? primaryModel : '',
-        llm_small_model: resolveSmallLlmModel(models, primaryModel, roleDefaultsRef.current.fast),
+        llm_small_model:
+          recommended?.llm_small_model ||
+          resolveSmallLlmModel(models, primaryModel, roleDefaultsRef.current.fast),
         embedding_model: models?.embedding[0] ?? '',
         embedding_dimensions: '1536', // Default, user can change
         embedding_provider_options: {},
@@ -1519,6 +1538,15 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         {/* Step 3: Models */}
         {currentStep === 'models' && (
           <div className="space-y-4">
+            {codingPlan?.llm_model && (
+              <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
+                <p>{t('components.provider.config.codingPlan', { defaultValue: 'Coding plan' })}</p>
+                <p>
+                  {[codingPlan.llm_model, codingPlan.llm_small_model].filter(Boolean).join(' / ')}
+                </p>
+                {codingPlan.base_url && <code>{codingPlan.base_url}</code>}
+              </div>
+            )}
             <div className="grid gap-2 sm:grid-cols-2">
               {(['primary', 'fast', 'embedding', 'rerank', 'voice'] as const).map((role) => (
                 <div
