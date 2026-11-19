@@ -2,6 +2,7 @@
 
 import uuid
 
+import pytest
 import pytest_asyncio
 from alembic.config import Config
 from alembic.migration import MigrationContext
@@ -20,8 +21,23 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     CronSchedulerOwnerModel,
     HITLRequest,
 )
+from src.infrastructure.plugins.v2.boundary import (
+    clear_process_generation_host_v2,
+    install_process_generation_host_v2,
+)
 
 migration = ScriptDirectory.from_config(Config("alembic.ini")).get_revision("b36acb66634d").module
+
+
+@pytest.fixture(autouse=True)
+def published_process_host():
+    """Scheduler tests run after publication, matching a ready process host."""
+    host = object()
+    install_process_generation_host_v2(host)
+    try:
+        yield host
+    finally:
+        clear_process_generation_host_v2(host)
 
 
 @pytest_asyncio.fixture(loop_scope="function")

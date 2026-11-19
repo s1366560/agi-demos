@@ -105,14 +105,19 @@ async def validate_legacy_cron_admission(
 
 
 async def complete_legacy_cron_admission(
-    identity: LegacyCronExecutionTicket | None, outcome: str
+    identity: LegacyCronExecutionTicket | None,
+    outcome: str,
+    *,
+    cause: str | None = None,
 ) -> None:
     """Only real success/failure releases the blocker; uncertain outcomes stay active."""
     if identity is None or outcome not in {"success", "failed"}:
         return
     try:
         async with async_session_factory() as session:
-            matched = await SqlLegacyCronAdmissionRepository(session).complete(identity, outcome)
+            matched = await SqlLegacyCronAdmissionRepository(session).complete(
+                identity, outcome, cause=cause
+            )
             if not matched:
                 logger.warning("Legacy cron terminal identity did not match an active admission")
                 return
@@ -122,14 +127,34 @@ async def complete_legacy_cron_admission(
         logger.warning("Legacy cron terminal persistence failed; admission remains unresolved")
 
 
+def _failure_cause(events: Sequence[Mapping[str, object]]) -> str | None:
+    """Keep a fail-closed judge or error code instead of a generic terminal label."""
+    for event in events:
+        if event.get("type") != "error":
+            continue
+        data = event.get("data")
+        if not isinstance(data, Mapping):
+            continue
+        code = data.get("code")
+        if isinstance(code, str) and code.strip():
+            return code.strip()
+    return None
+
+
 async def complete_legacy_cron_stream(
     identity: LegacyCronExecutionTicket | None,
     events: Sequence[Mapping[str, object]],
     is_error: bool,
 ) -> None:
     """A stream ending without a successful completion event is not drain proof."""
-    if any(event.get("type") == "complete" for event in events):
-        await complete_legacy_cron_admission(identity, "failed" if is_error else "success")
+    cause = _failure_cause(events)
+    failed = is_error or cause in {"GOAL_JUDGE_UNAVAILABLE", "GOAL_NOT_ACHIEVED"}
+    if any(event.get("type") == "complete" for event in events) or failed:
+        await complete_legacy_cron_admission(
+            identity,
+            "failed" if failed else "success",
+            cause=cause if failed else None,
+        )
 
 
 async def park_legacy_cron_admission(ticket: LegacyCronExecutionTicket | None) -> None:

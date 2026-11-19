@@ -31,6 +31,64 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
+_HOST_READY_TIMEOUT_S = 30.0
+_HOST_READY_POLL_S = 0.05
+
+
+async def _wait_for_process_host() -> bool:
+    """Wait until startup publishes the process generation host.
+
+    Cron registration runs inside plugin apply, before
+    ``install_process_generation_host_v2``. A due job can fire in that gap.
+    Admitting then would leave a queued run with no pinned tenant scope.
+    """
+    import time
+
+    from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    deadline = time.monotonic() + _HOST_READY_TIMEOUT_S
+    while True:
+        try:
+            current_process_generation_host_v2()
+        except RuntimeV2Error as exc:
+            if exc.code != "process_generation_host_not_configured":
+                raise
+        else:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        await asyncio.sleep(_HOST_READY_POLL_S)
+
+
+def _delivery_cause(exc: BaseException) -> str:
+    code = getattr(exc, "code", None)
+    if not isinstance(code, str) or not code.strip():
+        code = type(exc).__name__
+    return f"failure_class=backend code={code} {exc}"[:500]
+
+
+async def _fail_unstarted_delivery(identity: object, exc: BaseException) -> None:
+    from src.domain.model.cron.legacy_admission import LegacyCronAdmissionIdentity
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.sql_legacy_cron_admission_repository import (
+        SqlLegacyCronAdmissionRepository,
+    )
+
+    if not isinstance(identity, LegacyCronAdmissionIdentity):
+        return
+    cause = _delivery_cause(exc)
+    try:
+        async with async_session_factory() as session:
+            failed = await SqlLegacyCronAdmissionRepository(session).fail_unstarted(identity, cause)
+            if failed:
+                await session.commit()
+    except Exception:
+        logger.warning(
+            "[CronExecutor] Failed to close unstarted admission run=%s",
+            identity.run_id,
+            exc_info=True,
+        )
 
 
 async def execute_cron_job(job_id: str) -> None:
@@ -47,6 +105,12 @@ async def execute_cron_job(job_id: str) -> None:
     )
 
     logger.info("[CronExecutor] Executing job %s", job_id)
+    if not await _wait_for_process_host():
+        logger.warning(
+            "[CronExecutor] Job %s process host is not ready; not admitting",
+            job_id,
+        )
+        return
 
     async with async_session_factory() as session:
         job_repo = SqlCronJobRepository(session)
@@ -59,6 +123,14 @@ async def execute_cron_job(job_id: str) -> None:
         if not job.enabled:
             logger.info("[CronExecutor] Job %s is disabled -- skipping", job_id)
             return
+        open_run_id = await _open_scheduled_run_id(session, job.id)
+        if open_run_id is not None:
+            logger.warning(
+                "[CronExecutor] Job %s already has open run %s; not dispatching another",
+                job_id,
+                open_run_id,
+            )
+            return
 
         run = CronJobRun(
             job_id=job.id,
@@ -67,22 +139,22 @@ async def execute_cron_job(job_id: str) -> None:
             trigger_type=TriggerType.SCHEDULED,
             started_at=datetime.now(UTC),
         )
-        admission_attempted = False
+        admission = None
         try:
             conversation_id = await _resolve_conversation(job, session)
             run.conversation_id = conversation_id
-            admission_attempted = True
             admission = await _admit_legacy_execution(job, run, conversation_id, session)
             if admission is None:
                 return
             await _execute_payload(job, conversation_id, session, admission)
             logger.info("[CronExecutor] Job %s dispatched; awaiting execution terminal", job_id)
-        except Exception:
-            if admission_attempted:
-                # Commit/delivery uncertainty is not proof that execution has stopped.
+        except Exception as exc:
+            if admission is not None:
+                await _fail_unstarted_delivery(admission, exc)
                 logger.warning(
-                    "[CronExecutor] Job %s delivery unresolved",
+                    "[CronExecutor] Job %s delivery failed before start code=%s",
                     job_id,
+                    getattr(exc, "code", type(exc).__name__),
                     exc_info=True,
                 )
                 return
@@ -90,6 +162,23 @@ async def execute_cron_job(job_id: str) -> None:
             await _record_preparation_failure(job, run, session)
             await session.commit()
             logger.warning("[CronExecutor] Job %s preparation failed before admission", job_id)
+
+
+async def _open_scheduled_run_id(session: AsyncSession, job_id: str) -> str | None:
+    """A queued, running, or parked run is the occurrence already in flight."""
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.secondary.persistence.models import CronJobRunModel
+
+    run_id = await session.scalar(
+        select(CronJobRunModel.id)
+        .where(
+            CronJobRunModel.job_id == job_id,
+            CronJobRunModel.status.in_(("queued", "running", "waiting_human")),
+        )
+        .limit(1)
+    )
+    return run_id if isinstance(run_id, str) else None
 
 
 async def _record_preparation_failure(job: CronJob, run: CronJobRun, session: AsyncSession) -> None:
@@ -230,32 +319,11 @@ async def _execute_payload(
 ) -> None:
     """Execute the job payload with timeout.
 
-    The scheduler has no HTTP operation. When the process host has published a
-    generation, lease that generation for the dispatch so ``start_chat_actor``
-    can attach it. No host leaves the previous unpinned behavior.
+    The scheduler has no HTTP operation. Dispatch always leases the published
+    process generation for this job's tenant and project. There is no unscoped
+    fallback when the host is missing; the caller must not admit in that case.
     """
     timeout = job.timeout_seconds or 300
-
-    async def _run() -> None:
-        await asyncio.wait_for(
-            _dispatch_payload(job, conversation_id, session, admission),
-            timeout=timeout,
-        )
-
-    from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
-    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
-
-    try:
-        current_process_generation_host_v2()
-    except RuntimeV2Error as exc:
-        if exc.code != "process_generation_host_not_configured":
-            raise
-        try:
-            await _run()
-        except TimeoutError as err:
-            raise TimeoutError(f"Cron job {job.id} execution timed out after {timeout}s") from err
-        return
-
     from src.infrastructure.plugins.v2.boundary import pin_agent_turn_operation_v2
 
     try:
@@ -266,7 +334,10 @@ async def _execute_payload(
             session_id=conversation_id,
             force_process_host_lease=True,
         ):
-            await _run()
+            await asyncio.wait_for(
+                _dispatch_payload(job, conversation_id, session, admission),
+                timeout=timeout,
+            )
     except TimeoutError as err:
         raise TimeoutError(f"Cron job {job.id} execution timed out after {timeout}s") from err
 

@@ -28,6 +28,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from src.application.services.marketplace_receipt_recovery_v2 import MarketplaceReceiptRecoveryV2
+from src.configuration.api_release import API_RELEASE_VERSION
 from src.configuration.config import get_settings
 from src.configuration.factories import create_native_graph_adapter
 from src.configuration.workspace_core import WorkspaceCoreSettings, get_workspace_core_settings
@@ -274,6 +275,7 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(
         title="MemStack API",
+        version=API_RELEASE_VERSION,
         description="""
 ## MemStack API Documentation
 
@@ -324,7 +326,6 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
 *T132: Updated OpenAPI documentation with React Agent features*
         """,
-        version="0.3.0",
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
@@ -442,7 +443,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     @app.get("/health")
     async def health_check() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
-        return {"status": "ok", "version": "0.2.0"}
+        return {"status": "ok", "version": API_RELEASE_VERSION}
 
     # Serve static files (MCP Apps sandbox proxy, etc.)
     _static_dir = Path(__file__).parent / "static"
