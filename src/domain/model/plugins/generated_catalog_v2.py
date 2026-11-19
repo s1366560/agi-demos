@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:7d4e2d928059d4b8c9ef11888f15ae1ec3d327bcd15d91c2c2ae1a07c62c39'
-    '1d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:7ca5e83b1900c85066c267e9cd78f767efea6b73da9e1810f968aaea9e5853'
+    '37","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -2891,8 +2891,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'ucture.plugins.v2.conversation_collection_services:_apply_conversation_created_redis_pub'
     'lisher_v2","module_ref":"builtin://memstack/events/conversation-created-redis-publisher"'
     ',"plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"'
-    'artifact_digest":"sha256:4dca74c500d64cce09ce0c98bd3f4841d29c85dfe7964ec7ea7be944e2dba83'
-    'e","artifact_source":"repo+python://src/infrastructure/plugins/v2/graph_runtime.py","con'
+    'artifact_digest":"sha256:5fa4669c71026c6f3463680ec4dbfeec24d441050c949d03bfa32f5e7ae2f8e'
+    '5","artifact_source":"repo+python://src/infrastructure/plugins/v2/graph_runtime.py","con'
     'tract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addit'
     'ionalProperties":false,"properties":{"required":{"type":"boolean"},"strategy":{"const":"'
     'native-adapter","type":"string"}},"required":["required","strategy"],"type":"object"},"e'
@@ -4788,7 +4788,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:7d4e2d928059d4b8c9ef11888f15ae1ec3d327bcd15d91c2c2ae1a07c62c391d"
+    "sha256:7ca5e83b1900c85066c267e9cd78f767efea6b73da9e1810f968aaea9e585337"
 )
 # fmt: on
 
