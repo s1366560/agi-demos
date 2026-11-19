@@ -5,11 +5,10 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 import sqlalchemy as sa
 
-from src.infrastructure.adapters.secondary.persistence.models import Memory, MemoryChunk, Project
 from src.application.services.memory_update_jobs import execute_memory_update_job
+from src.infrastructure.adapters.secondary.persistence.models import Memory, Project
 from src.infrastructure.agent.tools.memory_tools import (
     _execute_memory_update,
     _mark_created_memory_processing_status,
