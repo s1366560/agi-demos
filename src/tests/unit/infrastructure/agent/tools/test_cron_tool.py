@@ -302,12 +302,16 @@ async def test_update_remove_and_run_forward_revision_and_idempotency(
         AsyncMock(
             return_value={
                 "scheduler_registration": "registered",
-                "executable": False,
+                "executable": True,
                 "run_state": "not_started",
             }
         ),
     )
     monkeypatch.setattr(cron_tool_module, "_try_unregister_job", AsyncMock())
+    monkeypatch.setattr(
+        "src.infrastructure.scheduler.job_executor.dispatch_queued_manual_run",
+        AsyncMock(return_value={"dispatched": True, "status": "running"}),
+    )
     tool = make_cron_tool(session_factory=session_factory)
     ctx = _make_ctx(user_id="user-1")
     updated = await tool.execute(
@@ -344,7 +348,7 @@ async def test_update_remove_and_run_forward_revision_and_idempotency(
     assert calls[2][1]["idempotency_key"] == "run-1"
     updated_payload = json.loads(updated.output)
     assert updated_payload["scheduler_registration"] == "registered"
-    assert updated_payload["executable"] is False
+    assert updated_payload["executable"] is True
     assert updated_payload["run_state"] == "not_started"
 
 

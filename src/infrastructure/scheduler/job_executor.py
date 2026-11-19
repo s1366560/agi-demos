@@ -91,6 +91,133 @@ async def _fail_unstarted_delivery(identity: object, exc: BaseException) -> None
         )
 
 
+async def dispatch_queued_manual_run(job_id: str, run_id: str) -> dict[str, object]:
+    """Start a durable manual run, or close it if it cannot start.
+
+    A queued row with no worker is not a successful trigger. When the process
+    host or payload cannot run, the run and its operation become failed.
+    """
+    if not await _wait_for_process_host():
+        message = "Cron process host is not ready; the run was not left queued"
+        await _close_queued_run(
+            job_id,
+            run_id,
+            code="cron_dispatch_unavailable",
+            message=message,
+        )
+        return {
+            "dispatched": False,
+            "status": "failed",
+            "code": "cron_dispatch_unavailable",
+            "message": message,
+        }
+    try:
+        await _dispatch_existing_manual_run(job_id, run_id)
+    except Exception as exc:
+        message = f"Cron run could not be dispatched: {exc}"
+        await _close_queued_run(
+            job_id,
+            run_id,
+            code="cron_dispatch_failed",
+            message=message,
+        )
+        return {
+            "dispatched": False,
+            "status": "failed",
+            "code": "cron_dispatch_failed",
+            "message": message,
+        }
+    return {"dispatched": True, "status": "running"}
+
+
+async def _close_queued_run(job_id: str, run_id: str, *, code: str, message: str) -> None:
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        CronJobRunModel,
+        CronOperationModel,
+    )
+
+    now = datetime.now(UTC)
+    async with async_session_factory() as session:
+        run = await session.get(CronJobRunModel, run_id)
+        if run is None or run.job_id != job_id or run.status != CronRunStatus.QUEUED.value:
+            return
+        run.status = CronRunStatus.FAILED.value
+        run.finished_at = now
+        run.error_message = f"failure_class=backend code={code} {message}"[:500]
+        if run.started_at is not None:
+            run.duration_ms = max(0, int((now - run.started_at).total_seconds() * 1000))
+        from sqlalchemy import select
+
+        operation = await session.scalar(
+            select(CronOperationModel).where(
+                CronOperationModel.run_id == run_id,
+                CronOperationModel.operation_kind == "execute_run",
+            )
+        )
+        if operation is not None and operation.status == "pending":
+            operation.status = "failed"
+            operation.last_error_code = code
+            operation.last_error_redacted = message[:500]
+            operation.completed_at = now
+            operation.updated_at = now
+            operation.next_attempt_at = None
+        await session.commit()
+
+
+async def _dispatch_existing_manual_run(job_id: str, run_id: str) -> None:
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        CronJobRunModel,
+        CronOperationModel,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
+        SqlCronJobRepository,
+    )
+
+    async with async_session_factory() as session:
+        job = await SqlCronJobRepository(session).find_by_id(job_id)
+        run_row = await session.get(CronJobRunModel, run_id)
+        if job is None or not job.enabled:
+            raise RuntimeError("cron job is missing or disabled")
+        if run_row is None or run_row.job_id != job.id:
+            raise RuntimeError("queued cron run was not found")
+        if run_row.status != CronRunStatus.QUEUED.value:
+            return
+        operation = await session.scalar(
+            select(CronOperationModel).where(
+                CronOperationModel.run_id == run_id,
+                CronOperationModel.operation_kind == "execute_run",
+            )
+        )
+        if operation is not None and operation.status == "pending":
+            operation.status = "waiting_runtime"
+            operation.started_at = datetime.now(UTC)
+            operation.updated_at = operation.started_at
+        conversation_id = run_row.conversation_id or await _resolve_conversation(job, session)
+        run = CronJobRun(
+            id=run_row.id,
+            job_id=job.id,
+            project_id=job.project_id,
+            status=CronRunStatus.QUEUED,
+            trigger_type=TriggerType.MANUAL,
+            conversation_id=conversation_id,
+            started_at=run_row.started_at,
+        )
+        admission = await _admit_legacy_execution(
+            job,
+            run,
+            conversation_id,
+            session,
+            message_id=run_row.runtime_execution_id or run_row.id,
+        )
+        if admission is None:
+            raise RuntimeError("cron scheduler ownership denied the manual run")
+        await _execute_payload(job, conversation_id, session, admission)
+
+
 async def execute_cron_job(job_id: str) -> None:
     """Execute a single cron job.
 
@@ -220,7 +347,11 @@ async def _record_preparation_failure(job: CronJob, run: CronJobRun, session: As
 
 
 async def _admit_legacy_execution(
-    job: CronJob, run: CronJobRun, conversation_id: str, session: AsyncSession
+    job: CronJob,
+    run: CronJobRun,
+    conversation_id: str,
+    session: AsyncSession,
+    message_id: str | None = None,
 ) -> LegacyCronAdmissionIdentity | None:
     """Commit the blocker and conversation before asynchronous dispatch can begin."""
     from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
@@ -235,7 +366,7 @@ async def _admit_legacy_execution(
         project_id=job.project_id,
         job_id=job.id,
         run_id=run.id,
-        message_id=str(uuid.uuid4()),
+        message_id=message_id or str(uuid.uuid4()),
         conversation_id=conversation_id,
     )
     if admission is None:
