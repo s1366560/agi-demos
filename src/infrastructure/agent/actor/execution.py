@@ -1850,7 +1850,8 @@ async def _save_context_summary(
             summary_text=summary_data.get("summary_text", ""),
             summary_tokens=tokens if type(tokens) is int and tokens >= 0 else 0,
             messages_covered_up_to=(
-                cutoff if type(cutoff) is int and 0 < cutoff <= last_event_time_us
+                cutoff
+                if type(cutoff) is int and 0 < cutoff <= last_event_time_us
                 else last_event_time_us
             ),
             messages_covered_count=summary_data.get("messages_covered_count", 0),
@@ -2206,6 +2207,7 @@ async def _finalize_child_session_result(
             event_count=event_count,
             execution_time_ms=execution_time_ms,
             error_message=error_message,
+            spawn_status=terminal_status,
         )
 
         announce_content = result_content.strip() or (error_message or "").strip()
@@ -2261,6 +2263,7 @@ async def _record_child_result_history(
     event_count: int,
     execution_time_ms: float,
     error_message: str | None,
+    spawn_status: str | None = None,
 ) -> None:
     """Persist a child agent's terminal result into its own queryable history."""
     terminal_message_id = _child_terminal_message_id(
@@ -2282,6 +2285,9 @@ async def _record_child_result_history(
         "source_message_id": request_message_id,
         "terminal_message_id": terminal_message_id,
     }
+    if spawn_status is not None:
+        metadata["spawn_status"] = spawn_status
+        metadata["turn_settled"] = True
 
     try:
         redis_client = await _get_redis_client()

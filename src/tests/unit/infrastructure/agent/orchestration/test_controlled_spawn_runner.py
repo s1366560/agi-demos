@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -22,6 +22,7 @@ from src.domain.ports.services.agent_message_bus_port import (
     AgentMessageBusPort,
     AgentMessageType,
 )
+from src.infrastructure.agent.actor import execution
 from src.infrastructure.agent.core.llm_stream import StreamEventType
 from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
@@ -176,6 +177,8 @@ class ScriptedModel:
         self.calls = 0
 
     async def generate(self, _messages: list[dict[str, Any]], **_kwargs: Any) -> Any:
+        if not self.script:
+            raise TimeoutError("model stream exceeded 0.05s")
         events = self.script[self.calls]
         self.calls += 1
         for event in events:
@@ -226,6 +229,7 @@ async def _spawn_and_run(
     script: list[list[Any]],
     tools: list[Any],
     metadata: dict[str, Any] | None = None,
+    mode: SpawnMode = SpawnMode.RUN,
 ) -> tuple[AgentOrchestrator, str]:
     bus = MemoryBus()
     sessions = AgentSessionRegistry()
@@ -250,6 +254,18 @@ async def _spawn_and_run(
             yield event
 
     processor_box = {"processor": processor}
+    orchestrator_box: dict[str, AgentOrchestrator] = {}
+
+    async def _settle(request: Any, *, success: bool) -> str:
+        with patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
+            return_value=orchestrator_box["orchestrator"],
+        ):
+            status = await execution._resolve_child_terminal_status(
+                child_session_id=request.child_session_id,
+                success=success,
+            )
+        return status or "failed"
 
     async def executor(request: Any) -> None:
         import src.infrastructure.agent.processor.processor as processor_module
@@ -261,25 +277,33 @@ async def _spawn_and_run(
                 processor_box["processor"], request.child_session_id, request.message
             )
         except Exception as exc:
-            await manager.update_status(request.child_session_id, "failed")
+            status = await _settle(request, success=False)
+            await manager.update_status(request.child_session_id, status)
             await bus.send_message(
                 from_agent_id=request.child_agent_id,
                 to_agent_id=request.parent_agent_id,
                 session_id=request.child_session_id,
                 content=f"failure_class=backend code={type(exc).__name__} {exc}",
                 message_type=AgentMessageType.RESPONSE,
+                metadata={"spawn_status": status, "turn_settled": True},
             )
             return
         finally:
             processor_module.LLMStream.generate = original  # type: ignore[method-assign]
-        await manager.update_status(request.child_session_id, "completed")
+        status = await _settle(request, success=True)
+        await manager.update_status(request.child_session_id, status)
         await bus.send_message(
             from_agent_id=request.child_agent_id,
             to_agent_id=request.parent_agent_id,
             session_id=request.child_session_id,
             content=text,
             message_type=AgentMessageType.RESPONSE,
-            metadata={"model": "controlled-runner", "tool_steps": model.calls},
+            metadata={
+                "model": "controlled-runner",
+                "tool_steps": model.calls,
+                "spawn_status": status,
+                "turn_settled": True,
+            },
         )
 
     orchestrator = AgentOrchestrator(
@@ -289,6 +313,7 @@ async def _spawn_and_run(
         bus,
         spawn_executor=executor,
     )
+    orchestrator_box["orchestrator"] = orchestrator
     await sessions.register(
         agent_id="parent",
         conversation_id="parent-session",
@@ -298,7 +323,7 @@ async def _spawn_and_run(
         parent_agent_id="parent",
         target_agent_id="child",
         message=prompt,
-        mode=SpawnMode.RUN,
+        mode=mode,
         parent_session_id="parent-session",
         project_id="project",
         tenant_id="tenant",
@@ -398,3 +423,46 @@ async def test_slow_tool_is_not_failed_for_lack_of_early_text() -> None:
     assert history[-1].content == "echo: ping"
     record = await orchestrator._spawn_manager.get_record(child_session)
     assert record is not None and record.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_session_mode_stays_running_after_first_assistant_and_stop_keeps_history() -> None:
+    orchestrator, child_session = await _spawn_and_run(
+        prompt="ping",
+        tools=[],
+        script=[_text("PONG")],
+        mode=SpawnMode.SESSION,
+    )
+    history = await orchestrator.get_agent_history(child_session, limit=10)
+    assert [item.content for item in history] == ["ping", "PONG"]
+    assert history[-1].metadata is not None
+    assert history[-1].metadata["spawn_status"] == "running"
+    assert history[-1].metadata["turn_settled"] is True
+    record = await orchestrator._spawn_manager.get_record(child_session)
+    assert record is not None
+    assert record.mode == SpawnMode.SESSION
+    assert record.status == "running"
+
+    stopped = await orchestrator.stop_agent("child", child_session, "project")
+    assert child_session in stopped
+    record = await orchestrator._spawn_manager.get_record(child_session)
+    assert record is not None and record.status == "stopped"
+    history = await orchestrator.get_agent_history(child_session, limit=10)
+    assert any(item.content == "PONG" for item in history)
+
+
+@pytest.mark.asyncio
+async def test_session_mode_timeout_is_failed_and_names_the_wait() -> None:
+    orchestrator, child_session = await _spawn_and_run(
+        prompt="ping",
+        tools=[],
+        script=[],
+        mode=SpawnMode.SESSION,
+    )
+    history = await orchestrator.get_agent_history(child_session, limit=10)
+    assert "TimeoutError" in history[-1].content
+    assert "0.05s" in history[-1].content
+    assert history[-1].metadata is not None
+    assert history[-1].metadata["spawn_status"] == "failed"
+    record = await orchestrator._spawn_manager.get_record(child_session)
+    assert record is not None and record.status == "failed"

@@ -653,6 +653,7 @@ async def test_execute_project_chat_updates_spawn_status_for_child_session() -> 
         event_count=1,
         execution_time_ms=result.execution_time_ms,
         error_message=None,
+        spawn_status="completed",
     )
 
 
@@ -719,6 +720,7 @@ async def test_execute_project_chat_marks_failed_spawn_when_child_errors() -> No
         event_count=0,
         execution_time_ms=result.execution_time_ms,
         error_message="boom",
+        spawn_status="failed",
     )
 
 
@@ -1027,7 +1029,18 @@ async def test_finalize_child_session_keeps_session_mode_running() -> None:
         status="running",
         parent_session_id="parent-conv",
     )
-    history_writer.assert_awaited_once()
+    history_writer.assert_awaited_once_with(
+        agent_id="child-agent",
+        child_session_id="child-conv",
+        request_message_id="msg-1",
+        parent_session_id="parent-conv",
+        result_content="done",
+        success=True,
+        event_count=1,
+        execution_time_ms=12.3,
+        error_message=None,
+        spawn_status="running",
+    )
     announce_writer.assert_awaited_once()
 
 
@@ -1582,10 +1595,13 @@ async def test_cancel_during_tool_after_retry_does_not_persist_duplicate_answer(
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(("data", "cutoff", "tokens"), [
-    ({"messages_covered_up_to": 123, "summary_tokens": 42}, 123, 42),
-    ({"summary_tokens": "invalid"}, 777, 0),
-])
+@pytest.mark.parametrize(
+    ("data", "cutoff", "tokens"),
+    [
+        ({"messages_covered_up_to": 123, "summary_tokens": 42}, 123, 42),
+        ({"summary_tokens": "invalid"}, 777, 0),
+    ],
+)
 async def test_save_context_summary_checkpoint(data, cutoff, tokens):
     session = MagicMock()
     session.begin.return_value = AsyncMock()
