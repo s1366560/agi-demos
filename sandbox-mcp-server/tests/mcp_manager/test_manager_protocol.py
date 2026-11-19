@@ -44,9 +44,7 @@ class TestPing:
         manager._tracker._servers["test-server"] = mock_running_server
 
         # Mock the _send_request method to return success
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}  # ping returns empty result
 
             # Act
@@ -87,9 +85,7 @@ class TestPing:
         manager._tracker._servers["test-server"] = mock_running_server
 
         # Mock the _send_request method to raise an exception
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = TimeoutError("Request timed out")
 
             # Act
@@ -114,9 +110,7 @@ class TestPing:
         manager._ws_connections["ws-server"] = mock_ws_conn
 
         # _send_request routes to _send_ws_request for websocket servers
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}
 
             # Act
@@ -145,9 +139,7 @@ class TestListResourceTemplates:
             }
         ]
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"resourceTemplates": expected_templates}
 
             # Act
@@ -155,9 +147,7 @@ class TestListResourceTemplates:
 
             # Assert
             assert result == expected_templates
-            mock_send.assert_called_once_with(
-                "test-server", "resources/templates/list"
-            )
+            mock_send.assert_called_once_with("test-server", "resources/templates/list")
 
     @pytest.mark.asyncio
     async def test_list_resource_templates_empty(self, manager, mock_running_server):
@@ -165,9 +155,7 @@ class TestListResourceTemplates:
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"resourceTemplates": []}
 
             # Act
@@ -191,9 +179,7 @@ class TestListResourceTemplates:
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Connection error")
 
             # Act
@@ -216,15 +202,11 @@ class TestListPrompts:
             {
                 "name": "code-review",
                 "description": "Review code for best practices",
-                "arguments": [
-                    {"name": "code", "description": "Code to review", "required": True}
-                ],
+                "arguments": [{"name": "code", "description": "Code to review", "required": True}],
             }
         ]
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"prompts": expected_prompts}
 
             # Act
@@ -240,9 +222,7 @@ class TestListPrompts:
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"prompts": []}
 
             # Act
@@ -266,9 +246,7 @@ class TestListPrompts:
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Connection error")
 
             # Act
@@ -297,9 +275,7 @@ class TestGetPrompt:
             ],
         }
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = expected_response
 
             # Act
@@ -326,9 +302,7 @@ class TestGetPrompt:
             "messages": [{"role": "user", "content": {"type": "text", "text": "Hello!"}}],
         }
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = expected_response
 
             # Act
@@ -357,9 +331,7 @@ class TestGetPrompt:
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Connection error")
 
             # Act
@@ -374,83 +346,118 @@ class TestSetLogLevel:
 
     @pytest.mark.asyncio
     async def test_set_log_level_success(self, manager, mock_running_server):
-        """set_log_level should successfully set log level on server."""
-        # Arrange
+        """set_log_level should send logging/setLevel as a JSON-RPC request."""
         manager._tracker._servers["test-server"] = mock_running_server
 
-        with patch.object(
-            manager, "_send_notification", new_callable=AsyncMock
-        ) as mock_send:
-            # Act
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             result = await manager.set_log_level("test-server", "debug")
 
-            # Assert
-            assert result is True
-            mock_send.assert_called_once_with(
-                "test-server", "logging/setLevel", {"level": "debug"}
-            )
+            assert result.ok is True
+            assert result.code == "ok"
+            mock_send.assert_called_once_with("test-server", "logging/setLevel", {"level": "debug"})
 
     @pytest.mark.asyncio
     async def test_set_log_level_various_levels(self, manager, mock_running_server):
         """set_log_level should support all standard log levels."""
-        # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
 
-        valid_levels = ["debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"]
+        valid_levels = [
+            "debug",
+            "info",
+            "notice",
+            "warning",
+            "error",
+            "critical",
+            "alert",
+            "emergency",
+        ]
 
         for level in valid_levels:
-            with patch.object(
-                manager, "_send_notification", new_callable=AsyncMock
-            ) as mock_send:
-                # Act
+            with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
                 result = await manager.set_log_level("test-server", level)
 
-                # Assert
-                assert result is True
+                assert result.ok is True
+                assert result.code == "ok"
                 mock_send.assert_called_once_with(
                     "test-server", "logging/setLevel", {"level": level}
                 )
 
     @pytest.mark.asyncio
     async def test_set_log_level_nonexistent_server(self, manager):
-        """set_log_level should return False for nonexistent server."""
-        # Act
+        """Missing servers are reported as server_not_found, not a generic failure."""
         result = await manager.set_log_level("nonexistent-server", "info")
 
-        # Assert
-        assert result is False
+        assert result.ok is False
+        assert result.code == "server_not_found"
+        assert "not found" in result.message
 
     @pytest.mark.asyncio
     async def test_set_log_level_stopped_server(self, manager):
-        """set_log_level should return False for stopped server."""
-        # Arrange
+        """Stopped servers are reported as server_not_running."""
         server = MagicMock(spec=ManagedServer)
         server.name = "stopped-server"
         server.status = ServerStatus.STOPPED
         manager._tracker._servers["stopped-server"] = server
 
-        # Act
         result = await manager.set_log_level("stopped-server", "info")
 
-        # Assert
-        assert result is False
+        assert result.ok is False
+        assert result.code == "server_not_running"
+        assert "not running" in result.message
 
     @pytest.mark.asyncio
-    async def test_set_log_level_error(self, manager, mock_running_server):
-        """set_log_level should return False on error."""
-        # Arrange
+    async def test_set_log_level_method_not_found(self, manager, mock_running_server):
+        """MethodNotFound is a capability limitation, not a swallowed or generic error."""
+        from src.mcp_manager.manager import JSONRPC_METHOD_NOT_FOUND, MCPRPCError
+
+        manager._tracker._servers["probe_server"] = mock_running_server
+
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
+            mock_send.side_effect = MCPRPCError(
+                "logging/setLevel",
+                "Method not found",
+                code=JSONRPC_METHOD_NOT_FOUND,
+            )
+            result = await manager.set_log_level("probe_server", "debug")
+
+        assert result.ok is False
+        assert result.code == "method_not_supported"
+        assert result.rpc_code == JSONRPC_METHOD_NOT_FOUND
+        assert "capability limitation" in result.message
+        assert "MethodNotFound" in result.message
+
+    @pytest.mark.asyncio
+    async def test_set_log_level_protocol_error(self, manager, mock_running_server):
+        """Other JSON-RPC errors stay classified as protocol_error."""
+        from src.mcp_manager.manager import MCPRPCError
+
         manager._tracker._servers["test-server"] = mock_running_server
 
-        with patch.object(
-            manager, "_send_notification", new_callable=AsyncMock
-        ) as mock_send:
-            mock_send.side_effect = Exception("Connection error")
-
-            # Act
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
+            mock_send.side_effect = MCPRPCError(
+                "logging/setLevel",
+                "Invalid params",
+                code=-32602,
+            )
             result = await manager.set_log_level("test-server", "debug")
 
-            # Assert
-            assert result is False
+        assert result.ok is False
+        assert result.code == "protocol_error"
+        assert result.rpc_code == -32602
+        assert "Invalid params" in result.message
+
+    @pytest.mark.asyncio
+    async def test_set_log_level_transport_error(self, manager, mock_running_server):
+        """Transport failures are protocol_error and are not swallowed as success."""
+        manager._tracker._servers["test-server"] = mock_running_server
+
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
+            mock_send.side_effect = Exception("Connection error")
+            result = await manager.set_log_level("test-server", "debug")
+
+        assert result.ok is False
+        assert result.code == "protocol_error"
+        assert "Connection error" in result.message
 
 
 class TestSubscribeResource:
@@ -464,9 +471,7 @@ class TestSubscribeResource:
 
         expected_subscription_id = "sub-123-abc"
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"subscriptionId": expected_subscription_id}
 
             # Act
@@ -489,9 +494,7 @@ class TestSubscribeResource:
         subscription_id = "sub-456-def"
         uri = "file:///config/settings.json"
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"subscriptionId": subscription_id}
 
             # Act
@@ -534,9 +537,7 @@ class TestSubscribeResource:
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Connection error")
 
             # Act
@@ -546,14 +547,14 @@ class TestSubscribeResource:
             assert result is None
 
     @pytest.mark.asyncio
-    async def test_subscribe_resource_no_subscription_id_in_response(self, manager, mock_running_server):
+    async def test_subscribe_resource_no_subscription_id_in_response(
+        self, manager, mock_running_server
+    ):
         """subscribe_resource should return None if response lacks subscriptionId."""
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}  # Missing subscriptionId
 
             # Act
@@ -571,13 +572,9 @@ class TestUnsubscribeResource:
         """unsubscribe_resource should return True on success."""
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
-        manager._subscriptions = {
-            "test-server": {"sub-123": "file:///logs/app.log"}
-        }
+        manager._subscriptions = {"test-server": {"sub-123": "file:///logs/app.log"}}
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}
 
             # Act
@@ -605,9 +602,7 @@ class TestUnsubscribeResource:
             }
         }
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}
 
             # Act
@@ -643,7 +638,9 @@ class TestUnsubscribeResource:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_unsubscribe_resource_nonexistent_subscription(self, manager, mock_running_server):
+    async def test_unsubscribe_resource_nonexistent_subscription(
+        self, manager, mock_running_server
+    ):
         """unsubscribe_resource should return False for nonexistent subscription."""
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
@@ -660,13 +657,9 @@ class TestUnsubscribeResource:
         """unsubscribe_resource should return False on error."""
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
-        manager._subscriptions = {
-            "test-server": {"sub-123": "file:///test.txt"}
-        }
+        manager._subscriptions = {"test-server": {"sub-123": "file:///test.txt"}}
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Connection error")
 
             # Act
@@ -678,17 +671,15 @@ class TestUnsubscribeResource:
             assert "sub-123" in manager._subscriptions["test-server"]
 
     @pytest.mark.asyncio
-    async def test_unsubscribe_resource_cleans_empty_server_entry(self, manager, mock_running_server):
+    async def test_unsubscribe_resource_cleans_empty_server_entry(
+        self, manager, mock_running_server
+    ):
         """unsubscribe_resource should remove server entry when no subscriptions remain."""
         # Arrange
         manager._tracker._servers["test-server"] = mock_running_server
-        manager._subscriptions = {
-            "test-server": {"sub-last": "file:///last.txt"}
-        }
+        manager._subscriptions = {"test-server": {"sub-last": "file:///last.txt"}}
 
-        with patch.object(
-            manager, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(manager, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}
 
             # Act
@@ -738,9 +729,7 @@ class TestGetActiveSubscriptions:
     async def test_get_active_subscriptions_returns_copy(self, manager):
         """get_active_subscriptions should return a copy, not the original dict."""
         # Arrange
-        manager._subscriptions = {
-            "test-server": {"sub-1": "file:///a.txt"}
-        }
+        manager._subscriptions = {"test-server": {"sub-1": "file:///a.txt"}}
 
         # Act
         result = manager.get_active_subscriptions("test-server")
@@ -765,14 +754,12 @@ class TestSubscriptionCleanup:
             },
             "other-server": {
                 "sub-3": "file:///c.txt",
-            }
+            },
         }
         manager._tools_cache["test-server"] = []
 
         # Mock the tracker stop
-        with patch.object(
-            manager._tracker, "stop_server", new_callable=AsyncMock
-        ) as mock_stop:
+        with patch.object(manager._tracker, "stop_server", new_callable=AsyncMock) as mock_stop:
             mock_stop.return_value = True
 
             # Act
