@@ -9,6 +9,7 @@ import pytest
 import sqlalchemy as sa
 
 from src.infrastructure.adapters.secondary.persistence.models import Memory, MemoryChunk, Project
+from src.application.services.memory_update_jobs import execute_memory_update_job
 from src.infrastructure.agent.tools.memory_tools import (
     _execute_memory_update,
     _mark_created_memory_processing_status,
@@ -51,43 +52,42 @@ def update_call(sessions, graph):
     )
 
 
-@pytest.mark.parametrize("graph_status", ["COMPLETED", "PENDING"])
-async def test_update_graph_can_lock_project_and_read_committed_content(pg_sync, graph_status):
+async def test_update_returns_before_graph_work_and_worker_indexes_committed_content(pg_sync):
     sessions, scope = pg_sync
     await seed_memory(sessions, scope)
+    graph = NativeGraphAdapter(
+        neo4j_client=AsyncMock(),
+        llm_client=MagicMock(),
+        embedding_service=SimpleNamespace(),
+        queue_port=AsyncMock(),
+    )
+    graph.process_episode = AsyncMock()
+    result = json.loads(await asyncio.wait_for(update_call(sessions, graph), timeout=5))
+    assert result["status"] == "updated"
+    assert result["saved"] is True
+    assert result["processing_status"] == "PENDING"
+    assert result["searchable"] is False
+    graph.process_episode.assert_not_awaited()
 
-    async def rebuild(**kwargs):
+    async def extract(payload):
         async with sessions() as graph_db:
-            # This would fail with LockNotAvailable under the old outer write
-            # transaction, which awaited graph work before committing.
             await graph_db.execute(
                 sa.select(Project)
                 .where(Project.id == scope.project_id)
                 .with_for_update(nowait=True)
             )
             memory = await graph_db.get(Memory, "memory")
-            assert memory.content == kwargs["content"] == "After"
+            assert memory.content == payload["content"] == "After"
             assert memory.version == 2
             await graph_db.commit()
 
-    queue = AsyncMock() if graph_status == "PENDING" else None
-    graph = NativeGraphAdapter(
-        neo4j_client=AsyncMock(),
-        llm_client=MagicMock(),
-        embedding_service=SimpleNamespace(),
-        queue_port=queue,
+    async def index(_payload):
+        return None
+
+    outcome = await execute_memory_update_job(
+        sessions, result["task_id"], extract=extract, index=index
     )
-    graph._check_embedding_dimension = AsyncMock()
-    graph.delete_episode_by_memory_id = AsyncMock()
-    graph.process_episode = AsyncMock(side_effect=rebuild)
-    graph.add_episode = AsyncMock(wraps=graph.add_episode)
-    if queue is not None:
-        queue.add_episode.side_effect = rebuild
-    result = await asyncio.wait_for(update_call(sessions, graph), timeout=5)
-    assert json.loads(result)["status"] == "updated"
-    assert json.loads(result)["processing_status"] == graph_status
-    graph.delete_episode_by_memory_id.assert_awaited_once_with("memory")
-    graph.add_episode.assert_awaited_once()
+    assert outcome == "completed"
     assert not await _mark_created_memory_processing_status(
         session_factory=sessions,
         memory_id="memory",
@@ -97,60 +97,32 @@ async def test_update_graph_can_lock_project_and_read_committed_content(pg_sync,
     )
     async with sessions() as db:
         memory = await db.get(Memory, "memory")
-        assert memory.processing_status == graph_status
+        assert memory.processing_status == "COMPLETED"
         assert memory.version == 2
-        chunks = list(
-            (
-                await db.scalars(sa.select(MemoryChunk).where(MemoryChunk.source_id == "memory"))
-            ).all()
-        )
-        assert [chunk.content for chunk in chunks] == ["After"]
 
 
-@pytest.mark.parametrize("cancelled", [False, True])
-async def test_graph_failure_or_cancellation_keeps_saved_content_and_marks_failed(
-    pg_sync, cancelled
-):
+async def test_saved_update_stays_pending_until_the_worker_records_failure(pg_sync):
     sessions, scope = pg_sync
     await seed_memory(sessions, scope)
-    graph_started = asyncio.Event()
-
-    async def rebuild(episode):
-        graph_started.set()
-        if cancelled:
-            await asyncio.Event().wait()
-        raise RuntimeError("graph unavailable")
-
     graph = AsyncMock()
     graph.embedder = None
-    graph.add_episode.side_effect = rebuild
-    task = asyncio.create_task(update_call(sessions, graph))
-    try:
-        await asyncio.wait_for(graph_started.wait(), timeout=5)
-        if cancelled:
-            assert not task.done()
-            # The slow graph keeps the operation alive, without holding SQL locks.
-            async with sessions() as observer:
-                await observer.execute(
-                    sa.select(Project)
-                    .where(Project.id == scope.project_id)
-                    .with_for_update(nowait=True)
-                )
-                memory = await observer.get(Memory, "memory")
-                assert memory.content == "After"
-                await observer.commit()
-            task.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(task, timeout=5)
-        else:
-            assert "error" in json.loads(await asyncio.wait_for(task, timeout=5))
-    finally:
-        if not task.done():
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
+    saved = json.loads(await asyncio.wait_for(update_call(sessions, graph), timeout=5))
+    assert saved["saved"] is True
+    assert saved["processing_status"] == "PENDING"
+    graph.add_episode.assert_not_awaited()
 
+    async def extract(_payload):
+        raise RuntimeError("graph unavailable")
+
+    outcome = await execute_memory_update_job(
+        sessions,
+        saved["task_id"],
+        extract=extract,
+        index=AsyncMock(),
+    )
+    assert outcome == "failed"
     async with sessions() as db:
         memory = await db.get(Memory, "memory")
         assert memory.content == "After"
         assert memory.version == 2
-        assert memory.processing_status == "FAILED"
+        assert memory.processing_status == "PENDING"

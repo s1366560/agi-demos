@@ -81,13 +81,15 @@ class TestEntityExtractorJsonParsing:
             embedding_service=MockEmbeddingService(),
         )
 
-        with caplog.at_level(
-            "ERROR",
-            logger="src.infrastructure.graph.extraction.entity_extractor",
+        with (
+            caplog.at_level(
+                "ERROR",
+                logger="src.infrastructure.graph.extraction.entity_extractor",
+            ),
+            pytest.raises(RuntimeError),
         ):
-            result = await extractor.extract("Ada discussed entity-secret-9753")
+            await extractor.extract("Ada discussed entity-secret-9753")
 
-        assert result == []
         assert "entity-secret-9753" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 

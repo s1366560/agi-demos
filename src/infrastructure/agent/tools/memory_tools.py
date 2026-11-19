@@ -92,15 +92,25 @@ async def _execute_memory_get(
                     "source_id": source_id,
                     "status": "processing",
                     "processing_status": processing_status,
-                    "message": "Memory exists but indexing has not completed yet.",
+                    "searchable": False,
+                    "message": "Memory is saved, but indexing has not completed yet.",
                 }
 
             if processing_status == "FAILED":
+                from src.infrastructure.adapters.secondary.persistence.models import TaskLog
+
+                reason = "Memory indexing failed before chunks were created."
+                task_id = getattr(memory, "task_id", None)
+                if isinstance(task_id, str) and task_id:
+                    task = await session.get(TaskLog, task_id)
+                    if task is not None and task.error_message:
+                        reason = task.error_message
                 return {
                     "source_id": source_id,
                     "status": "failed",
                     "processing_status": processing_status,
-                    "error": "Memory indexing failed before chunks were created.",
+                    "searchable": False,
+                    "error": reason,
                 }
 
             metadata = getattr(memory, "meta", None) or {}
@@ -758,7 +768,7 @@ async def memory_create_tool(
 # ---------------------------------------------------------------------------
 
 
-async def _execute_memory_update(
+async def _execute_memory_update(  # noqa: PLR0911
     *,
     memory_id: str,
     title: str | None,
@@ -768,28 +778,34 @@ async def _execute_memory_update(
     session_factory: Callable[..., Any] | None,
     graph_service: Any,
     embedding_service: Any = None,
+    project_id: str | None = None,
+    tenant_id: str | None = None,
+    user_id: str | None = None,
 ) -> str:
-    """Shared implementation for memory_update tool."""
-    if not session_factory or not graph_service:
+    """Persist a memory update, then leave indexing to a durable job."""
+    _ = graph_service
+    _ = embedding_service
+    if not session_factory:
         return json.dumps({"error": "Memory update not configured"})
-
-    try:
-        await ensure_embedding_available(getattr(graph_service, "embedder", None))
-    except NoActiveProviderError:
-        return json.dumps({"error": "provider_unconfigured", "code": "provider_unconfigured"})
 
     session = session_factory()
     try:
+        if project_id:
+            from src.infrastructure.adapters.secondary.persistence.models import Memory as DBMemory
+
+            current = await session.get(DBMemory, memory_id)
+            if current is not None and current.project_id != project_id:
+                return json.dumps({"error": "memory_forbidden", "code": "memory_forbidden"})
+            stored_tenant = (
+                current.meta.get("tenant_id")
+                if current and isinstance(current.meta, dict)
+                else None
+            )
+            if tenant_id and isinstance(stored_tenant, str) and stored_tenant != tenant_id:
+                return json.dumps({"error": "memory_forbidden", "code": "memory_forbidden"})
         from src.application.services.memory_service import MemoryService
-        from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
-            SqlChunkRepository,
-        )
         from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
             SqlMemoryRepository,
-        )
-        from src.infrastructure.memory.chunk_sync import (
-            normalize_memory_chunk_category,
-            upsert_memory_chunks,
         )
 
         repo = SqlMemoryRepository(session)
@@ -807,57 +823,47 @@ async def _execute_memory_update(
         )
 
         memory = update.memory
+        needs_index = (
+            update.content_changed
+            or title is not None
+            or tags is not None
+            or (metadata is not None and "category" in metadata)
+        )
+        task_id: str | None = None
+        if needs_index:
+            from src.application.services.memory_update_jobs import stage_memory_update_job
+
+            category = memory.metadata.get("category")
+            task_id = await stage_memory_update_job(
+                session,
+                memory_id=memory.id,
+                project_id=memory.project_id,
+                tenant_id=tenant_id or str(memory.metadata.get("tenant_id") or ""),
+                user_id=user_id or memory.author_id,
+                content_changed=update.content_changed,
+                revision=memory.version,
+                content=memory.content,
+                title=memory.title,
+                tags=list(memory.tags or []),
+                category=category if isinstance(category, str) else "fact",
+            )
         await session.commit()
 
-        if update.content_changed:
-            try:
-                # Graph adapters can use other SQL sessions; never await them
-                # while this session still holds the memory/project write locks.
-                await service.reprocess_memory(memory)
-            finally:
-                # Persist conditional FAILED status on graph failure/cancellation.
-                await session.commit()
+        logger.info("memory_update: saved memory")
 
-        # Sync searchable chunks through the shared helper whenever searchable
-        # content or metadata may have changed.
-        try:
-            if (
-                content is not None
-                or title is not None
-                or tags is not None
-                or (metadata is not None and "category" in metadata)
-            ):
-                chunk_repo = SqlChunkRepository(session)
-                await upsert_memory_chunks(
-                    chunk_repo,
-                    memory_id=memory.id,
-                    content=memory.content,
-                    project_id=memory.project_id,
-                    category=normalize_memory_chunk_category(memory.metadata.get("category")),
-                    metadata={
-                        "title": memory.title,
-                        "tags": memory.tags,
-                        "source": "agent_tool",
-                    },
-                    embedding_service=embedding_service,
-                )
-                await session.commit()
-        except Exception as chunk_err:
-            await session.rollback()
-            logger.warning(
-                "memory_update: failed to sync searchable chunks error_type=%s",
-                type(chunk_err).__name__,
-            )
-
-        logger.info("memory_update: updated memory")
-
+        processing_status = "PENDING" if task_id else memory.processing_status
         return json.dumps(
             {
                 "status": "updated",
+                "saved": True,
                 "memory_id": memory.id,
                 "title": memory.title,
                 "project_id": memory.project_id,
-                "processing_status": memory.processing_status,
+                "revision": memory.version,
+                "task_id": task_id,
+                "processing_status": processing_status,
+                "index_status": "pending" if task_id else "unchanged",
+                "searchable": processing_status == "COMPLETED",
             },
             ensure_ascii=False,
             default=str,
@@ -946,6 +952,9 @@ async def memory_update_tool(
         session_factory=runtime.session_factory,
         graph_service=runtime.graph_service,
         embedding_service=runtime.embedding_service,
+        project_id=ctx.project_id or runtime.project_id,
+        tenant_id=runtime.tenant_id,
+        user_id=ctx.user_id or runtime.user_id,
     )
 
     is_error = '"error"' in result
