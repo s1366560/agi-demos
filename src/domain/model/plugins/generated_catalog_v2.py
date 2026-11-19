@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:8034c9c067887d9c3823d9c1f44a50c4e6910dfbc9047659b52477d7321641'
-    '4b","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:7d4e2d928059d4b8c9ef11888f15ae1ec3d327bcd15d91c2c2ae1a07c62c39'
+    '1d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1125,8 +1125,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'c78589e556","entrypoint":"src.infrastructure.plugins.v2.conversation_revision_services:_'
     'apply_conversation_revision_v2","module_ref":"builtin://memstack/application/conversatio'
     'n-revision","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["p'
-    'ython"]},{"artifact_digest":"sha256:fab30b2cde87f210224a3a3c98ffaba85357167262be47ead288'
-    'f2885510c666","artifact_source":"repo+python://src/infrastructure/plugins/v2/cron_servic'
+    'ython"]},{"artifact_digest":"sha256:2dbc543450557b009be527af34f430edde2119ff9ee3ecc16213'
+    'c5de77042a45","artifact_source":"repo+python://src/infrastructure/plugins/v2/cron_servic'
     'es.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/sch'
     'ema","additionalProperties":false,"properties":{"strategy":{"const":"operation-scoped-pr'
     'ovider","type":"string"}},"required":["strategy"],"type":"object"},"events":{"emits":[],'
@@ -3930,8 +3930,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'd350380e89c1542267c1e87358ce3197","entrypoint":"src.infrastructure.plugins.v2.conversati'
     'on_revision_services:_apply_conversation_revision_provider_v2","module_ref":"builtin://m'
     'emstack/persistence/conversation-revision-provider","plugin_id":"memstack-runtime-kernel'
-    '","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:fab30b2cde87'
-    'f210224a3a3c98ffaba85357167262be47ead288f2885510c666","artifact_source":"repo+python://s'
+    '","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:2dbc54345055'
+    '7b009be527af34f430edde2119ff9ee3ecc16213c5de77042a45","artifact_source":"repo+python://s'
     'rc/infrastructure/plugins/v2/cron_services.py","contract":{"config_schema":{"$schema":"h'
     'ttps://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{'
     '"strategy":{"const":"request-async-session","type":"string"}},"required":["strategy"],"t'
@@ -4280,8 +4280,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '578c16e33e63f90a9de5d41855abf6168c414","entrypoint":"src.infrastructure.plugins.v2.chann'
     'el_runtime:channel_runtime_definition_v2","module_ref":"builtin://memstack/runtime/chann'
     'el-manager","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["p'
-    'ython"]},{"artifact_digest":"sha256:fab30b2cde87f210224a3a3c98ffaba85357167262be47ead288'
-    'f2885510c666","artifact_source":"repo+python://src/infrastructure/plugins/v2/cron_servic'
+    'ython"]},{"artifact_digest":"sha256:2dbc543450557b009be527af34f430edde2119ff9ee3ecc16213'
+    'c5de77042a45","artifact_source":"repo+python://src/infrastructure/plugins/v2/cron_servic'
     'es.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/sch'
     'ema","additionalProperties":false,"properties":{"strategy":{"const":"builtin-scheduler-b'
     'ridge","type":"string"}},"required":["strategy"],"type":"object"},"events":{"emits":[],"'
@@ -4291,8 +4291,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '513d136f67291d4cb9d39","entrypoint":"src.infrastructure.plugins.v2.cron_services:cron_sc'
     'heduler_gateway_definition_v2","module_ref":"builtin://memstack/runtime/cron-scheduler-g'
     'ateway","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["pytho'
-    'n"]},{"artifact_digest":"sha256:14f6aef565521a90cf77d1ddb790dca31e418cd1c0048b2704956e94'
-    'badc7cad","artifact_source":"repo+python://src/infrastructure/plugins/v2/docker_monitor_'
+    'n"]},{"artifact_digest":"sha256:69d0d7eee48b03610fc60101328b7c002e89648b26e33c6fa76fbd9f'
+    'ae5059e7","artifact_source":"repo+python://src/infrastructure/plugins/v2/docker_monitor_'
     'runtime.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-1'
     '2/schema","additionalProperties":false,"properties":{"enabled":{"type":"boolean"},"envir'
     'onment_overrides":{"type":"boolean"},"strategy":{"const":"docker-events","type":"string"'
@@ -4413,8 +4413,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'c90f852bb0d710cd2b0fcb28a71786db1ea2502126b7cea724a552963","entrypoint":"src.infrastruct'
     'ure.plugins.v2.builtin_modules:_apply_runtime_boundary","module_ref":"builtin://memstack'
     '/runtime/generation-boundary","plugin_id":"memstack-runtime-kernel","plugin_version":"2.'
-    '0.0","targets":["python"]},{"artifact_digest":"sha256:e253088d60be459aaa7da4a6ebf304eb6f'
-    '8d9e326267ac6dd67940ead32c34f5","artifact_source":"repo+python://src/infrastructure/plug'
+    '0.0","targets":["python"]},{"artifact_digest":"sha256:81cad75228ce69f30fd4438cbc80218edb'
+    '265fc1ee7d61ea1e7c00a78916cfe3","artifact_source":"repo+python://src/infrastructure/plug'
     'ins/v2/llm_health_runtime.py","contract":{"config_schema":{"$schema":"https://json-schem'
     'a.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"cons'
     't":"resilience-health-checker","type":"string"}},"required":["strategy"],"type":"object"'
@@ -4788,7 +4788,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:8034c9c067887d9c3823d9c1f44a50c4e6910dfbc9047659b52477d73216414b"
+    "sha256:7d4e2d928059d4b8c9ef11888f15ae1ec3d327bcd15d91c2c2ae1a07c62c391d"
 )
 # fmt: on
 

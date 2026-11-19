@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
@@ -234,12 +234,40 @@ def _docker_monitor_config_v2(config: Mapping[str, Any]) -> DockerEventMonitorCo
     return DockerEventMonitorConfigV2(enabled=enabled)
 
 
+_process_docker_event_monitor_runtime: DockerEventMonitorRuntimeV2 | None = None
+
+
+async def _start_process_docker_event_monitor(
+    *,
+    on_status_change: Callable[[str, str, str, str], Coroutine[Any, Any, bool]],
+) -> object:
+    return await start_docker_event_monitor(on_status_change=on_status_change)
+
+
+async def _stop_process_docker_event_monitor() -> None:
+    await stop_docker_event_monitor()
+
+
+def process_docker_event_monitor_runtime_v2() -> DockerEventMonitorRuntimeV2:
+    """Share one monitor runtime for every definition factory in this process."""
+    global _process_docker_event_monitor_runtime
+    if _process_docker_event_monitor_runtime is None:
+        _process_docker_event_monitor_runtime = DockerEventMonitorRuntimeV2(
+            start=_start_process_docker_event_monitor,
+            stop=_stop_process_docker_event_monitor,
+        )
+    return _process_docker_event_monitor_runtime
+
+
+def reset_process_docker_event_monitor_runtime_v2() -> None:
+    """Drop the process manager so isolated tests do not leak generation tokens."""
+    global _process_docker_event_monitor_runtime
+    _process_docker_event_monitor_runtime = None
+
+
 def docker_event_monitor_definition_v2() -> PluginDefinitionV2:
     """Bind Docker event monitoring to one reversible process-boundary effect."""
-    runtime = DockerEventMonitorRuntimeV2(
-        start=start_docker_event_monitor,
-        stop=stop_docker_event_monitor,
-    )
+    runtime = process_docker_event_monitor_runtime_v2()
 
     async def apply(context: ContextV2, config: Mapping[str, Any]) -> EffectResultV2:
         sessions = context.require(DOCKER_EVENT_MONITOR_SESSIONS_INJECT_V2)
@@ -265,7 +293,7 @@ def docker_event_monitor_definition_v2() -> PluginDefinitionV2:
                 runtime,
                 label="docker-event-monitor",
             )
-        except Exception:
+        except BaseException:
             await runtime.release_generation(token)
             raise
 
@@ -291,4 +319,6 @@ __all__ = [
     "DockerEventMonitorRuntimeV2",
     "DockerMonitorSessionFactoryV2",
     "docker_event_monitor_definition_v2",
+    "process_docker_event_monitor_runtime_v2",
+    "reset_process_docker_event_monitor_runtime_v2",
 ]

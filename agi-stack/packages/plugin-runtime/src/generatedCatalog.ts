@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:8034c9c067887d9c3823d9c1f44a50c4e6910dfbc9047659b52477d732',
-  '16414b","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:7d4e2d928059d4b8c9ef11888f15ae1ec3d327bcd15d91c2c2ae1a07c6',
+  '2c391d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1195,8 +1195,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '6747dacc73f0c78589e556","entrypoint":"src.infrastructure.plugins.v2.conversation_rev',
   'ision_services:_apply_conversation_revision_v2","module_ref":"builtin://memstack/app',
   'lication/conversation-revision","plugin_id":"memstack-runtime-kernel","plugin_versio',
-  'n":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:fab30b2cde87f210224a3a3c',
-  '98ffaba85357167262be47ead288f2885510c666","artifact_source":"repo+python://src/infra',
+  'n":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:2dbc543450557b009be527af',
+  '34f430edde2119ff9ee3ecc16213c5de77042a45","artifact_source":"repo+python://src/infra',
   'structure/plugins/v2/cron_services.py","contract":{"config_schema":{"$schema":"https',
   '://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{',
   '"strategy":{"const":"operation-scoped-provider","type":"string"}},"required":["strat',
@@ -4134,8 +4134,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '58ce3197","entrypoint":"src.infrastructure.plugins.v2.conversation_revision_services',
   ':_apply_conversation_revision_provider_v2","module_ref":"builtin://memstack/persiste',
   'nce/conversation-revision-provider","plugin_id":"memstack-runtime-kernel","plugin_ve',
-  'rsion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:fab30b2cde87f210224a',
-  '3a3c98ffaba85357167262be47ead288f2885510c666","artifact_source":"repo+python://src/i',
+  'rsion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:2dbc543450557b009be5',
+  '27af34f430edde2119ff9ee3ecc16213c5de77042a45","artifact_source":"repo+python://src/i',
   'nfrastructure/plugins/v2/cron_services.py","contract":{"config_schema":{"$schema":"h',
   'ttps://json-schema.org/draft/2020-12/schema","additionalProperties":false,"propertie',
   's":{"strategy":{"const":"request-async-session","type":"string"}},"required":["strat',
@@ -4500,8 +4500,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'a256:840483a8fbaafca8bb2acd08c2c578c16e33e63f90a9de5d41855abf6168c414","entrypoint":',
   '"src.infrastructure.plugins.v2.channel_runtime:channel_runtime_definition_v2","modul',
   'e_ref":"builtin://memstack/runtime/channel-manager","plugin_id":"memstack-runtime-ke',
-  'rnel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:fab3',
-  '0b2cde87f210224a3a3c98ffaba85357167262be47ead288f2885510c666","artifact_source":"rep',
+  'rnel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:2dbc',
+  '543450557b009be527af34f430edde2119ff9ee3ecc16213c5de77042a45","artifact_source":"rep',
   'o+python://src/infrastructure/plugins/v2/cron_services.py","contract":{"config_schem',
   'a":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":',
   'false,"properties":{"strategy":{"const":"builtin-scheduler-bridge","type":"string"}}',
@@ -4512,8 +4512,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '67291d4cb9d39","entrypoint":"src.infrastructure.plugins.v2.cron_services:cron_schedu',
   'ler_gateway_definition_v2","module_ref":"builtin://memstack/runtime/cron-scheduler-g',
   'ateway","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["p',
-  'ython"]},{"artifact_digest":"sha256:14f6aef565521a90cf77d1ddb790dca31e418cd1c0048b27',
-  '04956e94badc7cad","artifact_source":"repo+python://src/infrastructure/plugins/v2/doc',
+  'ython"]},{"artifact_digest":"sha256:69d0d7eee48b03610fc60101328b7c002e89648b26e33c6f',
+  'a76fbd9fae5059e7","artifact_source":"repo+python://src/infrastructure/plugins/v2/doc',
   'ker_monitor_runtime.py","contract":{"config_schema":{"$schema":"https://json-schema.',
   'org/draft/2020-12/schema","additionalProperties":false,"properties":{"enabled":{"typ',
   'e":"boolean"},"environment_overrides":{"type":"boolean"},"strategy":{"const":"docker',
@@ -4640,8 +4640,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'a71786db1ea2502126b7cea724a552963","entrypoint":"src.infrastructure.plugins.v2.built',
   'in_modules:_apply_runtime_boundary","module_ref":"builtin://memstack/runtime/generat',
   'ion-boundary","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","target',
-  's":["python"]},{"artifact_digest":"sha256:e253088d60be459aaa7da4a6ebf304eb6f8d9e3262',
-  '67ac6dd67940ead32c34f5","artifact_source":"repo+python://src/infrastructure/plugins/',
+  's":["python"]},{"artifact_digest":"sha256:81cad75228ce69f30fd4438cbc80218edb265fc1ee',
+  '7d61ea1e7c00a78916cfe3","artifact_source":"repo+python://src/infrastructure/plugins/',
   'v2/llm_health_runtime.py","contract":{"config_schema":{"$schema":"https://json-schem',
   'a.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"',
   'const":"resilience-health-checker","type":"string"}},"required":["strategy"],"type":',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:8034c9c067887d9c3823d9c1f44a50c4e6910dfbc9047659b52477d73216414b' as const;
+  'sha256:7d4e2d928059d4b8c9ef11888f15ae1ec3d327bcd15d91c2c2ae1a07c62c391d' as const;

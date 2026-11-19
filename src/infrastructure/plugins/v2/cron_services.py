@@ -116,17 +116,22 @@ class _CronSchedulerRuntimeManagerV2:
     start: CronSchedulerStartV2
     sync: CronSchedulerSyncV2
     stop: CronSchedulerStopV2
-    _generation_references: int = 0
+    _tokens: set[int] = field(default_factory=set)
+    _next_token: int = 0
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-    async def acquire_generation(self) -> None:
+    @property
+    def generation_references(self) -> int:
+        return len(self._tokens)
+
+    async def acquire_generation(self) -> int:
         """Start and hydrate only for the first staged generation."""
         async with self._lock:
-            if self._generation_references == 0:
+            if not self._tokens:
                 started = False
                 try:
-                    _ = await self.start()
                     started = True
+                    _ = await self.start()
                     await self.sync()
                 except BaseException:
                     if started:
@@ -135,19 +140,53 @@ class _CronSchedulerRuntimeManagerV2:
                         except Exception:
                             logger.exception("Failed to clean up Cron scheduler candidate")
                     raise
-            self._generation_references += 1
+            self._next_token += 1
+            token = self._next_token
+            self._tokens.add(token)
+            return token
 
-    async def release_generation(self) -> None:
-        """Stop only after every active or draining generation releases its effect."""
+    async def release_generation(self, token: int) -> None:
+        """Stop only after the last live token drains; repeated release is a no-op."""
         async with self._lock:
-            if self._generation_references <= 0:
-                raise RuntimeV2Error(
-                    "cron_scheduler_reference_underflow",
-                    "cron scheduler generation reference count underflow",
-                )
-            self._generation_references -= 1
-            if self._generation_references == 0:
-                await self.stop()
+            if token not in self._tokens:
+                return
+            self._tokens.remove(token)
+            if self._tokens:
+                return
+            await self.stop()
+
+
+_process_cron_scheduler_runtime: _CronSchedulerRuntimeManagerV2 | None = None
+
+
+async def _start_process_cron_scheduler() -> object:
+    return await scheduler_service.start_scheduler()
+
+
+async def _sync_process_cron_scheduler() -> None:
+    await scheduler_service.sync_all_jobs()
+
+
+async def _stop_process_cron_scheduler() -> None:
+    await scheduler_service.stop_scheduler()
+
+
+def process_cron_scheduler_runtime_v2() -> _CronSchedulerRuntimeManagerV2:
+    """Share one manager for every definition factory in this process."""
+    global _process_cron_scheduler_runtime
+    if _process_cron_scheduler_runtime is None:
+        _process_cron_scheduler_runtime = _CronSchedulerRuntimeManagerV2(
+            start=_start_process_cron_scheduler,
+            sync=_sync_process_cron_scheduler,
+            stop=_stop_process_cron_scheduler,
+        )
+    return _process_cron_scheduler_runtime
+
+
+def reset_process_cron_scheduler_runtime_v2() -> None:
+    """Drop the process manager so isolated tests do not leak generation tokens."""
+    global _process_cron_scheduler_runtime
+    _process_cron_scheduler_runtime = None
 
 
 @runtime_checkable
@@ -292,16 +331,12 @@ async def remove_cron_schedule_v2(
 
 def cron_scheduler_gateway_definition_v2() -> PluginDefinitionV2:
     """Bind scheduler startup, hydration, and teardown to V2 generation effects."""
-    runtime = _CronSchedulerRuntimeManagerV2(
-        start=scheduler_service.start_scheduler,
-        sync=scheduler_service.sync_all_jobs,
-        stop=scheduler_service.stop_scheduler,
-    )
+    runtime = process_cron_scheduler_runtime_v2()
 
     async def apply(context: ContextV2, config: Mapping[str, Any]) -> EffectResultV2:
         if config.get("strategy") != "builtin-scheduler-bridge":
             raise ValueError("cron scheduler gateway requires strategy builtin-scheduler-bridge")
-        await runtime.acquire_generation()
+        token = await runtime.acquire_generation()
         try:
             _ = context.provide(
                 CRON_SCHEDULER_GATEWAY_SERVICE_V2,
@@ -313,12 +348,12 @@ def cron_scheduler_gateway_definition_v2() -> PluginDefinitionV2:
                 BuiltinCronProducerControlV2(),
                 label="cron-producer-control",
             )
-        except Exception:
-            await runtime.release_generation()
+        except BaseException:
+            await runtime.release_generation(token)
             raise
 
         async def dispose() -> None:
-            await runtime.release_generation()
+            await runtime.release_generation(token)
 
         return dispose
 
@@ -418,6 +453,8 @@ __all__ = [
     "SqlCronProjectAccessV2",
     "cron_scheduler_gateway_definition_v2",
     "cron_service_definitions_v2",
+    "process_cron_scheduler_runtime_v2",
     "remove_cron_schedule_v2",
+    "reset_process_cron_scheduler_runtime_v2",
     "sync_cron_schedule_v2",
 ]
