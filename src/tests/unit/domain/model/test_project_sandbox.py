@@ -75,6 +75,31 @@ class TestProjectSandbox:
         assert sandbox.status == ProjectSandboxStatus.ERROR
         assert sandbox.error_message == "Connection timeout"
 
+    def test_record_health_observation_does_not_change_running_status(self) -> None:
+        """A failed probe must keep RUNNING and must not use the ERROR path."""
+        sandbox = ProjectSandbox(
+            id="test-id",
+            project_id="proj-123",
+            tenant_id="tenant-456",
+            sandbox_id="sb-789",
+            status=ProjectSandboxStatus.RUNNING,
+            error_message=None,
+        )
+
+        sandbox.record_health_observation(healthy=False, detail="Health check failed")
+
+        assert sandbox.status == ProjectSandboxStatus.RUNNING
+        assert sandbox.error_message is None
+        assert sandbox.health_checked_at is not None
+        assert sandbox.metadata["health_probe"] == "unhealthy"
+        assert sandbox.metadata["health_probe_detail"] == "Health check failed"
+
+        sandbox.record_health_observation(healthy=True)
+
+        assert sandbox.status == ProjectSandboxStatus.RUNNING
+        assert sandbox.metadata["health_probe"] == "healthy"
+        assert "health_probe_detail" not in sandbox.metadata
+
     def test_mark_error(self) -> None:
         """Should mark as error."""
         sandbox = ProjectSandbox(

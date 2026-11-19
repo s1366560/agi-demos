@@ -649,6 +649,10 @@ class ProjectSandboxLifecycleService:
         # Perform health check via adapter
         try:
             healthy = await self._adapter.health_check(association.sandbox_id)
+            association.record_health_observation(
+                healthy=healthy,
+                detail=None if healthy else "Health check failed",
+            )
 
             if healthy:
                 association.mark_healthy()
@@ -660,6 +664,7 @@ class ProjectSandboxLifecycleService:
 
         except Exception as e:
             logger.error(f"Health check error for project {project_id}: {e}")
+            association.record_health_observation(healthy=False, detail=str(e))
             association.mark_unhealthy(str(e))
             await self._repository.save(association)
             return False
