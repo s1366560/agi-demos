@@ -131,7 +131,7 @@ def _sanitize_clarification_result(value: object) -> str | list[str]:
         },
         "required": ["question"],
     },
-    permission=None,
+    permission="read",
     category="hitl",
     tags=frozenset({"hitl", "clarification"}),
 )

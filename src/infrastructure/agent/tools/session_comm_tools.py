@@ -78,7 +78,7 @@ def _json(data: Any) -> str:
         },
         "required": [],
     },
-    permission=None,
+    permission="read",
     category="session_comm",
 )
 async def sessions_list_tool(
@@ -141,7 +141,7 @@ async def sessions_list_tool(
         },
         "required": ["conversation_id"],
     },
-    permission=None,
+    permission="read",
     category="session_comm",
 )
 async def sessions_history_tool(
@@ -218,7 +218,7 @@ async def sessions_history_tool(
         },
         "required": ["conversation_id", "content"],
     },
-    permission=None,
+    permission="write",
     category="session_comm",
 )
 async def sessions_send_tool(
