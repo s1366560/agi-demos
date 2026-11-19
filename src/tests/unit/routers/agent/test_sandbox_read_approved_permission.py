@@ -57,10 +57,10 @@ async def test_canonical_sandbox_reads_pass_approved_read_only_guard(
         "glob",
         "grep",
         "ls",
-        "ast_parse",
-        "ast_get_imports",
-        "ast_find_symbols",
-        "ast_extract_function",
+        "find_definition",
+        "find_references",
+        "preview_edit",
+        "grep",
         "list_artifacts",
     )
     names = (

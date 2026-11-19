@@ -1322,7 +1322,7 @@ def _wrap_sandbox_tools(
     if sandbox_adapter is None:
         return {}
 
-    # MCP management tools are internal, not exposed to agents
+    # MCP management tools stay callable by the platform. They are not model tools.
     _MCP_MANAGEMENT_TOOLS = {
         "mcp_server_install",
         "mcp_server_start",
@@ -1330,6 +1330,8 @@ def _wrap_sandbox_tools(
         "mcp_server_list",
         "mcp_server_discover_tools",
         "mcp_server_call_tool",
+        "mcp_server_list_prompts",
+        "mcp_server_set_log_level",
     }
 
     tools: dict[str, Any] = {}

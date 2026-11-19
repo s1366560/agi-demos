@@ -12,12 +12,6 @@ from src.tools.artifact_tools import (
     create_export_artifact_tool,
     create_list_artifacts_tool,
 )
-from src.tools.ast_tools import (
-    create_ast_extract_function_tool,
-    create_ast_find_symbols_tool,
-    create_ast_get_imports_tool,
-    create_ast_parse_tool,
-)
 from src.tools.bash_tool import create_bash_tool
 from src.tools.deps_tools import (
     create_deps_check_tool,
@@ -33,7 +27,6 @@ from src.tools.desktop_tools import (
 )
 from src.tools.edit_tools import (
     create_batch_edit_tool,
-    create_edit_by_ast_tool,
     create_preview_edit_tool,
 )
 from src.tools.file_tools import (
@@ -77,11 +70,6 @@ from src.tools.terminal_tools import (
     create_start_terminal_tool,
     create_stop_terminal_tool,
     create_terminal_status_tool,
-)
-from src.tools.test_tools import (
-    create_analyze_coverage_tool,
-    create_generate_tests_tool,
-    create_run_tests_tool,
 )
 from src.tools.workspace_file_browser_tools import (
     create_download_workspace_file_tool,
@@ -160,12 +148,6 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     # Register bash tool
     registry.register(create_bash_tool())
 
-    # Register AST tools
-    registry.register(create_ast_parse_tool())
-    registry.register(create_ast_find_symbols_tool())
-    registry.register(create_ast_extract_function_tool())
-    registry.register(create_ast_get_imports_tool())
-
     # Register code indexing tools
     registry.register(create_code_index_build_tool())
     registry.register(create_find_definition_tool())
@@ -174,14 +156,8 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_dependency_graph_tool())
 
     # Register edit tools
-    registry.register(create_edit_by_ast_tool())
     registry.register(create_batch_edit_tool())
     registry.register(create_preview_edit_tool())
-
-    # Register test tools
-    registry.register(create_generate_tests_tool())
-    registry.register(create_run_tests_tool())
-    registry.register(create_analyze_coverage_tool())
 
     # Register git tools
     registry.register(create_git_diff_tool())

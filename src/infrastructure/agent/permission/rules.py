@@ -302,11 +302,6 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "find",
         "ls",
         "dir",
-        # Fixed AST inspection endpoints read source without executing it.
-        "ast_parse",
-        "ast_find_symbols",
-        "ast_extract_function",
-        "ast_get_imports",
         # Fixed sandbox protocol inspection endpoints; these do not invoke tools.
         "mcp_server_list",
         "mcp_server_list_prompts",
@@ -347,7 +342,7 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "code_index_build",
         "generate_commit",
     }
-    edit_tools = {"edit", "batch_edit", "edit_by_ast"}
+    edit_tools = {"edit", "batch_edit"}
     patch_tools = {"patch"}
 
     # Execute/bash tools - require user confirmation outside full_access.
@@ -360,9 +355,6 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "sh",
         "shell",
         "deps_check",
-        "run_tests",
-        "generate_tests",
-        "analyze_coverage",
         "start_desktop",
         "stop_desktop",
         "restart_desktop",

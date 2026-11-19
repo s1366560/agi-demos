@@ -8,7 +8,7 @@ from typing import Any
 
 _READ_TOOLS = frozenset({"read", "file_read", "batch_read"})
 _WRITE_TOOLS = frozenset({"write", "file_write", "create_file"})
-_EDIT_TOOLS = frozenset({"edit", "file_edit", "edit_by_ast", "batch_edit", "patch", "apply_patch"})
+_EDIT_TOOLS = frozenset({"edit", "file_edit", "batch_edit", "patch", "apply_patch"})
 _LIST_TOOLS = frozenset({"glob", "list", "ls", "list_files"})
 _SEARCH_TOOLS = frozenset({"grep"})
 

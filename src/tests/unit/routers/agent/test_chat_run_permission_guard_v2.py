@@ -214,10 +214,10 @@ async def test_protocol_tool_factories_obey_sql_backed_chat_permission_modes(
         persist_model_override=AsyncMock(),
     )["list_available_models"]
     read_names = (
-        "ast_parse",
-        "ast_get_imports",
-        "ast_find_symbols",
-        "ast_extract_function",
+        "find_definition",
+        "find_references",
+        "preview_edit",
+        "grep",
         "list_artifacts",
     )
     sandbox_tools = {

@@ -20,7 +20,7 @@ Sandbox 是 Agent 的隔离执行环境，通过 MCP 协议提供安全的代码
 - 需要**执行代码**（Python/Node.js/Java/Bash）
 - 需要**读写文件**（查看源码、修改配置、创建文件）
 - 需要**运行测试**（pytest、jest 等）
-- 需要**分析代码**（AST 解析、查找定义/引用）
+- 需要**分析代码**（符号索引、查找定义/引用）
 - 需要**图形界面**（Web 自动化、GUI 应用）
 - 需要**处理文档**（PDF、Word、Excel、PPT）
 
@@ -41,20 +41,10 @@ Sandbox 是 Agent 的隔离执行环境，通过 MCP 协议提供安全的代码
 
 | 工具 | 用途 |
 |------|------|
-| `ast_parse` | 解析 Python AST |
-| `ast_find_symbols` | 查找类/函数定义 |
 | `code_index_build` | 构建代码索引 |
 | `find_definition` | 查找符号定义 |
 | `find_references` | 查找符号引用 |
 | `call_graph` | 生成调用关系图 |
-
-### 测试工具
-
-| 工具 | 用途 |
-|------|------|
-| `generate_tests` | 生成测试用例 |
-| `run_tests` | 运行测试 |
-| `analyze_coverage` | 分析覆盖率 |
 
 ### 桌面/终端工具
 
@@ -122,8 +112,8 @@ tailwindcss, postcss       # CSS
 ```
 → glob pattern="**/*.py"                    # 列出所有 Python 文件
 → read file_path="README.md"                # 阅读项目说明
-→ ast_parse file_path="src/main.py"         # 分析入口文件
 → code_index_build project_path="src/"      # 建立代码索引
+→ find_definition symbol_name="main"        # 定位符号
 ```
 
 ### 2. 修改代码
@@ -132,7 +122,7 @@ tailwindcss, postcss       # CSS
 → read file_path="src/module.py"            # 查看当前代码
 → preview_edit old_text="..." new_text="..."  # 预览修改
 → edit file_path="..." old_text="..." new_text="..."  # 执行修改
-→ run_tests path="tests/"                   # 验证修改
+→ bash command="pytest tests/ -q"           # 验证修改
 ```
 
 ### 3. 运行脚本

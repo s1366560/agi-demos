@@ -39,10 +39,10 @@ def test_cron_generation_bound_metadata_survives_conversion(action, permission):
 @pytest.mark.parametrize(
     ("name", "arguments", "permission"),
     [
-        ("ast_parse", {}, "read"),
-        ("ast_get_imports", {}, "read"),
-        ("ast_find_symbols", {}, "read"),
-        ("ast_extract_function", {}, "read"),
+        ("find_definition", {}, "read"),
+        ("find_references", {}, "read"),
+        ("preview_edit", {}, "read"),
+        ("grep", {}, "read"),
         ("list_artifacts", {}, "read"),
         ("export_artifact", {}, "ask"),
         ("batch_export_artifacts", {}, "ask"),
