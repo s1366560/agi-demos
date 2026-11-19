@@ -326,6 +326,49 @@ class TestGitLog:
             assert metadata.get("commit_count") == 1
             assert metadata["commits"][0]["message"] == "Nested commit"
 
+    @pytest.mark.asyncio
+    async def test_git_log_file_path_is_relative_to_working_dir(self):
+        """A nested repo file is not looked up from the workspace root."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import subprocess
+
+            repo_dir = Path(tmpdir) / "temp" / "r10" / "gitrepo"
+            source = repo_dir / "src"
+            source.mkdir(parents=True)
+            subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=repo_dir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=repo_dir, capture_output=True
+            )
+            calc = source / "calc.py"
+            calc.write_text("def add(a, b):\n    return a + b\n")
+            subprocess.run(["git", "add", "."], cwd=repo_dir, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "add calc"], cwd=repo_dir, capture_output=True)
+
+            relative = await git_log(
+                file_path="src/calc.py",
+                working_dir="temp/r10/gitrepo",
+                _workspace_dir=tmpdir,
+            )
+            absolute = await git_log(
+                file_path=str(calc),
+                working_dir="temp/r10/gitrepo",
+                _workspace_dir=tmpdir,
+            )
+            outside = await git_log(
+                file_path="../outside.py",
+                working_dir="temp/r10/gitrepo",
+                _workspace_dir=tmpdir,
+            )
+
+            assert relative.get("isError") is False
+            assert relative["metadata"]["commit_count"] == 1
+            assert absolute.get("isError") is False
+            assert absolute["metadata"]["commit_count"] == 1
+            assert outside.get("isError") is True
+
 
 class TestGenerateCommit:
     """Test suite for generate_commit tool."""

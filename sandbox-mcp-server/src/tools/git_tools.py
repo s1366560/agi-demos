@@ -4,6 +4,7 @@ Provides git diff, log, and commit message generation capabilities.
 """
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -25,6 +26,24 @@ def _resolve_git_working_dir(
     if not resolved.is_dir():
         raise ValueError(f"Git working directory is not a directory: {requested_dir}")
     return resolved
+
+
+def _git_pathspec(git_dir: Path, workspace_dir: str, file_path: str) -> str:
+    """Resolve a file path against the git working directory.
+
+    Relative paths are relative to ``git_dir``. Absolute paths must stay inside
+    the workspace and inside that git directory. A miss is an error, not an
+    empty history.
+    """
+    if os.path.isabs(file_path):
+        resolved = _resolve_path(file_path, workspace_dir)
+    else:
+        resolved = _resolve_path(file_path, str(git_dir))
+    try:
+        relative = resolved.resolve().relative_to(git_dir.resolve())
+    except ValueError as exc:
+        raise ValueError(f"file_path is outside the git working directory: {file_path}") from exc
+    return relative.as_posix() or "."
 
 
 def _is_git_repository(path: Path) -> bool:
@@ -85,7 +104,7 @@ async def git_diff(
             cmd.append("--cached")
         if file_path:
             cmd.append("--")
-            cmd.append(file_path)
+            cmd.append(_git_pathspec(git_dir, _workspace_dir, file_path))
 
         result = subprocess.run(
             cmd,
@@ -227,7 +246,7 @@ async def git_log(
             cmd.append(f"--since={since}")
         if file_path:
             cmd.append("--")
-            cmd.append(file_path)
+            cmd.append(_git_pathspec(git_dir, _workspace_dir, file_path))
 
         result = subprocess.run(
             cmd,

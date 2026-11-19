@@ -61,6 +61,34 @@ def test_structured_file_browser_lists_reads_and_downloads_workspace_files(
     assert download_result["download"]["size_bytes"] == 3
 
 
+def test_container_workspace_prefix_reads_the_same_file_bash_sees(tmp_path) -> None:
+    folder = tmp_path / "temp" / "r10"
+    folder.mkdir(parents=True)
+    exit_file = folder / "pytest_run2.exit"
+    exit_file.write_text("0\n", encoding="utf-8")
+
+    listed = asyncio.run(
+        list_workspace_files(path=str(tmp_path), _workspace_dir=str(tmp_path))
+    )
+    nested = asyncio.run(
+        list_workspace_files(path=f"{tmp_path}/temp", _workspace_dir=str(tmp_path))
+    )
+    read = asyncio.run(
+        read_workspace_file(
+            path=f"{tmp_path}/temp/r10/pytest_run2.exit",
+            _workspace_dir=str(tmp_path),
+        )
+    )
+
+    assert listed["isError"] is False
+    assert listed["listing"]["path"] == "/"
+    assert nested["isError"] is False
+    assert nested["listing"]["path"] == "/temp"
+    assert read["isError"] is False
+    assert read["file"]["content"] == "0\n"
+    assert read["file"]["size_bytes"] == 2
+
+
 def test_file_browser_cursor_is_revision_bound_and_rejects_stale_pages(tmp_path) -> None:
     for name in ["a.txt", "b.txt", "c.txt"]:
         (tmp_path / name).write_text(name, encoding="utf-8")

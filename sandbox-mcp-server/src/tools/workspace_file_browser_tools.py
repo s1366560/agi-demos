@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import mimetypes
+import posixpath
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -73,7 +74,28 @@ def _validated_limit(value: int, maximum: int, field: str) -> int:
     return value
 
 
+def _browser_path(path: str, workspace_dir: str) -> str:
+    """Map a sandbox workspace path onto the browser root.
+
+    ``/`` is the workspace root. Callers also pass the container path
+    ``/workspace/...``; that prefix is the same root and must not be appended
+    again. Host paths outside the workspace stay outside this helper.
+    ``..`` is preserved so the resolver can reject traversal.
+    """
+    if any(part == ".." for part in PurePosixPath(path).parts):
+        return path
+    normalized = posixpath.normpath(path)
+    if not normalized.startswith("/"):
+        normalized = f"/{normalized}"
+    workspace = posixpath.normpath(workspace_dir)
+    if workspace != "/" and (normalized == workspace or normalized.startswith(f"{workspace}/")):
+        suffix = normalized[len(workspace) :]
+        return suffix or "/"
+    return normalized
+
+
 def _resolve_workspace_path(path: str, workspace_dir: str) -> tuple[Path, Path]:
+    path = _browser_path(path, workspace_dir)
     if (
         not isinstance(path, str)
         or not path.startswith("/")
@@ -123,6 +145,14 @@ def _mime_type(path: Path) -> str:
 
 def _is_text_mime(mime_type: str) -> bool:
     return mime_type.startswith("text/") or mime_type in _TEXT_APPLICATION_MIME_TYPES
+
+
+def _is_utf8(raw: bytes) -> bool:
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
 
 
 def _revision(payload: object) -> str:
@@ -272,12 +302,20 @@ async def read_workspace_file(
                 "workspace file path is not a regular file",
             )
         mime_type = _mime_type(file_path)
-        if not _is_text_mime(mime_type):
+        unknown_mime = mime_type == "application/octet-stream"
+        if not _is_text_mime(mime_type) and not unknown_mime:
             raise WorkspaceFileContractError(
                 "sandbox_file_mime_not_text",
                 "workspace file is not a supported text type",
             )
         raw = await asyncio.to_thread(file_path.read_bytes)
+        if unknown_mime:
+            if b"\x00" in raw or not _is_utf8(raw):
+                raise WorkspaceFileContractError(
+                    "sandbox_file_mime_not_text",
+                    "workspace file is not a supported text type",
+                )
+            mime_type = "text/plain"
         truncated = len(raw) > bounded_limit
         bounded = raw[:bounded_limit]
         while truncated:
