@@ -402,7 +402,7 @@ class SessionProcessor:
         }
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0915
         self,
         config: ProcessorConfig,
         tools: list[ToolDefinition],
@@ -427,6 +427,8 @@ class SessionProcessor:
         # Initialize components
         self.permission_manager = permission_manager or PermissionManager()
         self.doom_loop_detector = DoomLoopDetector(threshold=config.doom_loop_threshold)
+        self._same_cause_stop: dict[str, Any] | None = None
+        self._stop_record: dict[str, Any] | None = None
         self.retry_policy = RetryPolicy(
             max_attempts=config.max_attempts,
             initial_delay_ms=config.initial_delay_ms,
@@ -1480,6 +1482,8 @@ class SessionProcessor:
                 }
 
         self._abort_event = run_ctx.abort_signal or asyncio.Event()
+        self._same_cause_stop = None
+        self._stop_record = None
         self._step_count = 0
         self._no_progress_steps = 0
         self._goal_evaluator.set_native_control_outcome(None)
@@ -3468,6 +3472,116 @@ class SessionProcessor:
 
         return (tool_part, tool_def)
 
+    def _apply_same_cause(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        output: str,
+        metadata: Any,
+        failed: bool,
+        raw_result: Any,
+    ) -> tuple[str, Any, bool]:
+        """Count a structured unrecoverable failure and surface it as an error.
+
+        A successful call for the same tool and repository clears that cause.
+        Other tools, including repeated progress tools, are left alone.
+        """
+        from ..doom_loop.cause import (
+            classify_unrecoverable_tool_cause,
+            not_a_git_repository_fingerprint,
+        )
+
+        facts: dict[str, Any] = dict(metadata) if isinstance(metadata, dict) else {}
+        if isinstance(raw_result, dict):
+            if raw_result.get("is_error") or raw_result.get("isError"):
+                failed = True
+            code = raw_result.get("code")
+            if isinstance(code, str):
+                facts.setdefault("code", code)
+            hint = raw_result.get("hint")
+            if isinstance(hint, str):
+                facts.setdefault("hint", hint)
+            raw_metadata = raw_result.get("metadata")
+            if isinstance(raw_metadata, dict):
+                for key, value in raw_metadata.items():
+                    facts.setdefault(key, value)
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        if isinstance(raw_result, ToolResult) and isinstance(raw_result.metadata, dict):
+            for key, value in raw_result.metadata.items():
+                facts.setdefault(key, value)
+            if raw_result.is_error:
+                failed = True
+        cause = classify_unrecoverable_tool_cause(
+            tool_name,
+            arguments,
+            output=output,
+            metadata=facts,
+            is_error=failed,
+        )
+        if cause is None:
+            if tool_name == "generate_commit":
+                self.doom_loop_detector.clear_same_cause(
+                    not_a_git_repository_fingerprint(arguments)
+                )
+            return output, metadata, failed
+        count = self.doom_loop_detector.record_same_cause(cause.fingerprint)
+        observed = {
+            "output": cause.diagnosis,
+            "code": cause.code,
+            "hint": cause.hint,
+            "isError": True,
+            "fingerprint": cause.fingerprint,
+            "count": count,
+        }
+        if self.doom_loop_detector.should_stop_same_cause(cause.fingerprint):
+            self._same_cause_stop = {
+                "tool": tool_name,
+                "cause_code": cause.code,
+                "fingerprint": cause.fingerprint,
+                "count": count,
+                "hint": cause.hint,
+                "threshold": self.doom_loop_detector.error_threshold,
+            }
+        return cause.diagnosis, observed, True
+
+    def _same_cause_stop_events(
+        self,
+        tool_name: str,
+        call_id: str,
+        tool_part: ToolPart,
+    ) -> list[ProcessorEvent]:
+        record = self._same_cause_stop
+        if record is None:
+            return []
+        message = (
+            f"Stopped: {tool_name} repeated the same unrecoverable failure "
+            f"{record['count']} times ({record['fingerprint']}). {record['hint']} "
+            "The run is stopped so it does not continue this paid loop. "
+            "Retry only after changing working_dir or repo_path to a "
+            "workspace-relative git directory."
+        )
+        self._state = ProcessorState.ERROR
+        self._stop_record = {
+            **record,
+            "status": "stopped",
+            "code": "UNRECOVERABLE_TOOL_CAUSE",
+        }
+        return [
+            AgentStatusEvent(status="stopped:unrecoverable_tool_cause"),
+            AgentDoomLoopDetectedEvent(
+                tool=tool_name,
+                input={
+                    "reason": "same_unrecoverable_cause",
+                    "fingerprint": record["fingerprint"],
+                    "count": record["count"],
+                    "threshold": record["threshold"],
+                    "hint": record["hint"],
+                },
+            ),
+            AgentErrorEvent(message=message, code="UNRECOVERABLE_TOOL_CAUSE"),
+        ]
+
     async def _check_doom_loop(
         self,
         session_id: str,
@@ -4128,7 +4242,17 @@ class SessionProcessor:
                     yield pending_event
         if result_replaced:
             _consume_tool_pending_events(tool_def)
+        output_str, sse_result, failed = self._apply_same_cause(
+            tool_name,
+            arguments,
+            output_str,
+            result_metadata if isinstance(result_metadata, dict) else {},
+            failed,
+            result,
+        )
         control = self._native_control_outcome(result)
+        if self._same_cause_stop is not None:
+            control = None
         tool_part.status = (
             ToolState.ERROR if failed else ToolState.CANCELLED if control else ToolState.COMPLETED
         )
@@ -4195,6 +4319,10 @@ class SessionProcessor:
             file_metadata=file_metadata,
             control_outcome=control.value if control else None,
         )
+        if self._same_cause_stop is not None:
+            for stop_event in self._same_cause_stop_events(tool_name, call_id, tool_part):
+                yield stop_event
+            return
         await self._wait_native_control(result, control)
 
         if tool_instance and has_ui:
@@ -4635,7 +4763,7 @@ class SessionProcessor:
 
     # ── Pipeline-based tool execution ──────────────────────────────────
 
-    async def _execute_tool_via_pipeline(  # noqa: PLR0912, PLR0915
+    async def _execute_tool_via_pipeline(  # noqa: PLR0911, PLR0912, PLR0915
         self,
         session_id: str,
         call_id: str,
@@ -4777,7 +4905,17 @@ class SessionProcessor:
                     for pending_event in pending_pipeline_events:
                         yield pending_event
                 pending_pipeline_events.clear()
+                output_str, sse_result, failed = self._apply_same_cause(
+                    tool_name,
+                    arguments,
+                    output_str,
+                    result_metadata if isinstance(result_metadata, dict) else {},
+                    failed,
+                    raw_result,
+                )
                 control = self._native_control_outcome(raw_result)
+                if self._same_cause_stop is not None:
+                    control = None
                 tool_part.status = (
                     ToolState.ERROR
                     if failed
@@ -4849,6 +4987,10 @@ class SessionProcessor:
                     file_metadata=file_metadata,
                     control_outcome=control.value if control else None,
                 )
+                if self._same_cause_stop is not None:
+                    for stop_event in self._same_cause_stop_events(tool_name, call_id, tool_part):
+                        yield stop_event
+                    return
                 await self._wait_native_control(raw_result, control)
 
                 # Emit AgentMCPAppResultEvent if tool has UI

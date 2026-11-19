@@ -94,6 +94,7 @@ class DoomLoopDetector:
         # still has the data it needs to make a verdict.
         self._error_history_max = max(self._error_threshold * 2, window_size)
         self._consecutive_errors: deque[ToolErrorRecord] = deque(maxlen=self._error_history_max)
+        self._same_cause_counts: dict[str, int] = {}
 
         # Defensive concurrency guard. In normal operation a single
         # SessionProcessor owns its detector and drives it from one
@@ -168,6 +169,35 @@ class DoomLoopDetector:
         with self._lock:
             return len(self._consecutive_errors)
 
+    @property
+    def error_threshold(self) -> int:
+        """Existing consecutive-error budget. Same-cause stops reuse this number."""
+        return self._error_threshold
+
+    def record_same_cause(self, fingerprint: str) -> int:
+        """Count one unrecoverable root cause. The message is not part of the key."""
+        with self._lock:
+            count = self._same_cause_counts.get(fingerprint, 0) + 1
+            self._same_cause_counts[fingerprint] = count
+            if len(self._same_cause_counts) > 64:
+                oldest = next(iter(self._same_cause_counts))
+                if oldest != fingerprint:
+                    del self._same_cause_counts[oldest]
+            return count
+
+    def clear_same_cause(self, fingerprint: str) -> None:
+        """Forget one cause after that repository is no longer failing the same way."""
+        with self._lock:
+            self._same_cause_counts.pop(fingerprint, None)
+
+    def same_cause_count(self, fingerprint: str) -> int:
+        with self._lock:
+            return self._same_cause_counts.get(fingerprint, 0)
+
+    def should_stop_same_cause(self, fingerprint: str) -> bool:
+        """Stop once this cause reaches the existing error budget."""
+        return self.same_cause_count(fingerprint) >= self._error_threshold
+
     def should_intervene(self, tool: str, input: Any) -> bool:
         """
         Check if user intervention is needed.
@@ -226,6 +256,7 @@ class DoomLoopDetector:
         with self._lock:
             self.window.clear()
             self._consecutive_errors.clear()
+            self._same_cause_counts.clear()
 
     def reset_for_new_conversation(self) -> None:
         """Reset detector for a new conversation."""

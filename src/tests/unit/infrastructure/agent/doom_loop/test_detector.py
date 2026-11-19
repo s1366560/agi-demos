@@ -58,6 +58,47 @@ class TestDoomLoopDetectorErrors:
         assert len(d._consecutive_errors) <= max(d._error_threshold * 2, 10)
 
 
+class TestSameCauseBudget:
+    @pytest.mark.unit
+    def test_message_changes_share_one_cause_and_use_the_error_budget(self) -> None:
+        from src.infrastructure.agent.doom_loop.cause import classify_unrecoverable_tool_cause
+
+        detector = DoomLoopDetector(threshold=3)
+        assert detector.error_threshold == 6
+        fingerprints = []
+        for message in ("test message", "a", "b", "c", "d", "e"):
+            cause = classify_unrecoverable_tool_cause(
+                "generate_commit",
+                {"message": message, "auto_add": False, "dry_run": True},
+                output="Not a git repository",
+                metadata={"in_git_repo": False},
+                is_error=False,
+            )
+            assert cause is not None
+            fingerprints.append(cause.fingerprint)
+            detector.record_same_cause(cause.fingerprint)
+        assert len(set(fingerprints)) == 1
+        assert detector.should_stop_same_cause(fingerprints[0]) is True
+        other = classify_unrecoverable_tool_cause(
+            "generate_commit",
+            {"message": "z", "working_dir": "probe_repo", "dry_run": True},
+            output="Not a git repository",
+            metadata={"in_git_repo": False},
+            is_error=False,
+        )
+        assert other is not None
+        assert other.fingerprint != fingerprints[0]
+        assert detector.should_stop_same_cause(other.fingerprint) is False
+        progress = classify_unrecoverable_tool_cause(
+            "todowrite",
+            {"content": "same"},
+            output="updated",
+            metadata={},
+            is_error=False,
+        )
+        assert progress is None
+
+
 class TestDoomLoopDetectorConcurrency:
     @pytest.mark.unit
     def test_concurrent_record_does_not_corrupt(self) -> None:
