@@ -19,8 +19,8 @@ Sandbox 是一个功能完备的隔离执行环境，通过 MCP (Model Context P
 
 - **文件系统操作**: 读写、编辑、搜索文件
 - **命令执行**: 在隔离环境中安全执行 bash 命令
-- **代码分析**: AST 解析、符号索引、调用图分析
-- **测试支持**: 测试生成、运行、覆盖率分析
+- **代码分析**: 符号索引、定义、引用和调用图
+- **测试**: 用 `bash` 运行项目里的 pytest。沙箱不注册 Python AST 或 pytest 专用工具
 - **版本控制**: Git diff、log、commit 生成
 - **远程桌面**: KDE Plasma 桌面环境，通过 KasmVNC 内置 Web 客户端访问
 
@@ -270,69 +270,7 @@ remotion, puppeteer, sharp, tailwindcss
 
 ---
 
-### 3. 代码分析工具
-
-#### `ast_parse` - AST 解析
-解析 Python 文件的 AST 结构。
-
-```json
-{
-  "tool": "ast_parse",
-  "arguments": {
-    "file_path": "src/main.py",
-    "include_docstrings": true
-  }
-}
-```
-
-**返回信息**:
-- 类定义 (名称、行号、基类、方法)
-- 函数定义 (名称、参数、返回类型)
-- 导入语句
-- 变量定义
-
-#### `ast_find_symbols` - 查找符号
-在 AST 中查找特定符号。
-
-```json
-{
-  "tool": "ast_find_symbols",
-  "arguments": {
-    "file_path": "src/main.py",
-    "symbol_name": "MyClass",
-    "symbol_type": "class"    // class, function, method
-  }
-}
-```
-
-#### `ast_extract_function` - 提取函数
-提取函数的完整代码。
-
-```json
-{
-  "tool": "ast_extract_function",
-  "arguments": {
-    "file_path": "src/main.py",
-    "function_name": "process_data"
-  }
-}
-```
-
-#### `ast_get_imports` - 获取导入
-获取文件的所有导入语句。
-
-```json
-{
-  "tool": "ast_get_imports",
-  "arguments": {
-    "file_path": "src/main.py"
-  }
-}
-```
-
----
-
-### 4. 代码索引工具
+### 3. 代码索引工具
 
 #### `code_index_build` - 构建索引
 为项目构建代码索引。
@@ -399,27 +337,7 @@ remotion, puppeteer, sharp, tailwindcss
 
 ---
 
-### 5. 编辑增强工具
-
-#### `edit_by_ast` - AST 编辑
-基于 AST 进行精确编辑。
-
-```json
-{
-  "tool": "edit_by_ast",
-  "arguments": {
-    "file_path": "src/main.py",
-    "target_type": "function",   // class, function, method
-    "target_name": "old_name",
-    "operation": "rename",       // rename, delete
-    "new_value": "new_name"
-  }
-}
-```
-
-**使用场景**:
-- 重命名函数/类
-- 删除代码块
+### 4. 编辑增强工具
 
 #### `batch_edit` - 批量编辑
 一次执行多个编辑操作。
@@ -454,55 +372,7 @@ remotion, puppeteer, sharp, tailwindcss
 
 ---
 
-### 6. 测试工具
-
-#### `generate_tests` - 生成测试
-为 Python 代码生成测试用例。省略 `output_path` 时默认写入工作区 `tests/test_<filename>.py`；若该文件已存在则自动加数字后缀，避免覆盖。显式 `output_path` 仍优先生效。
-
-```json
-{
-  "tool": "generate_tests",
-  "arguments": {
-    "file_path": "src/calculator.py",
-    "function_name": "add",        // 可选
-    "class_name": "Calculator",    // 可选
-    "test_framework": "pytest",
-    "output_path": "tests/test_calculator.py"
-  }
-}
-```
-
-#### `run_tests` - 运行测试
-执行测试并返回结果。
-
-```json
-{
-  "tool": "run_tests",
-  "arguments": {
-    "path": "tests/",
-    "pattern": "test_*.py",
-    "verbose": true,
-    "coverage": true
-  }
-}
-```
-
-#### `analyze_coverage` - 覆盖率分析
-分析测试覆盖率。
-
-```json
-{
-  "tool": "analyze_coverage",
-  "arguments": {
-    "source_dir": "src/",
-    "test_dir": "tests/"
-  }
-}
-```
-
----
-
-### 7. Git 工具
+### 5. Git 工具
 
 #### `git_diff` - 查看差异
 显示代码变更。
@@ -546,7 +416,7 @@ remotion, puppeteer, sharp, tailwindcss
 
 ---
 
-### 8. 终端工具
+### 6. 终端工具
 
 #### `start_terminal` - 启动终端
 启动 Web 终端 (ttyd)。
@@ -574,7 +444,7 @@ remotion, puppeteer, sharp, tailwindcss
 
 ---
 
-### 9. 远程桌面工具
+### 7. 远程桌面工具
 
 #### `start_desktop` - 启动桌面
 启动 KDE Plasma 远程桌面（由 KasmVNC 提供 X server + VNC + 内置 Web 客户端，单进程一体化，无需单独的 Xvfb / websockify）。
@@ -624,7 +494,7 @@ remotion, puppeteer, sharp, tailwindcss
 1. glob pattern="**/*.py" → 找到所有 Python 文件
 2. read file_path="README.md" → 了解项目
 3. code_index_build project_path="src/" → 建立索引
-4. ast_parse file_path="src/main.py" → 分析代码结构
+4. find_definition symbol_name="main" → 定位符号
 ```
 
 ### 2. 修改代码
@@ -633,7 +503,7 @@ remotion, puppeteer, sharp, tailwindcss
 1. read file_path="src/module.py" → 查看当前代码
 2. preview_edit old_text="..." new_text="..." → 预览修改
 3. edit file_path="src/module.py" old_text="..." new_text="..." → 执行修改
-4. run_tests path="tests/" → 验证修改
+4. bash command="pytest tests/ -q" → 验证修改
 ```
 
 ### 3. 调试问题
@@ -695,14 +565,13 @@ bash command="pandoc input.docx -o output.md"
 ### 代码分析
 
 1. **先建索引**: 分析前先 `code_index_build`
-2. **利用 AST**: 代码重构优先使用 `edit_by_ast`
+2. **查定义和引用**: 用 `find_definition`、`find_references` 定位符号
 3. **查调用图**: 修改函数前查看 `call_graph` 了解影响
 
 ### 测试
 
-1. **先生成后运行**: 使用 `generate_tests` 生成骨架
-2. **关注覆盖率**: 定期 `analyze_coverage`
-3. **增量测试**: 修改后只运行相关测试
+1. **用 bash 跑项目测试**: `bash` 执行 `pytest`，沿用项目自己的测试配置
+2. **增量测试**: 修改后只运行相关测试
 
 ---
 

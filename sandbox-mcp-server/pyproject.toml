@@ -20,9 +20,9 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "ruff>=0.4.0",
 ]
-# Installed into the sandbox image venv at build time. run_tests and
-# analyze_coverage invoke this interpreter's pytest; they do not pip-install
-# at container start.
+# Installed into the sandbox image venv at build time so bash can run the
+# project's pytest and coverage. The image does not pip-install these at
+# container start.
 test-runtime = [
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",

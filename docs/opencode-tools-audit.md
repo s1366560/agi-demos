@@ -3,6 +3,9 @@
 > 历史审计。当前工具契约请以 `docs/TOOLS.md` 和
 > `src/infrastructure/agent/tools/` 为准；下文中的 `plan_enter` / `plan_update` /
 > `plan_exit` 反映旧审计上下文，当前代码树未提供这些工具文件。
+> `ast_parse`、`ast_find_symbols`、`ast_extract_function`、`ast_get_imports`、
+> `edit_by_ast`、`generate_tests`、`run_tests`、`analyze_coverage` 已从沙箱注册移除，
+> 下文对应条目标记的是当时的快照。
 
 > 生成日期: 2025-01-28
 > 对比基准: vendor/opencode 内置工具规范
@@ -68,10 +71,10 @@
 - `patch` ✅ - `src/tools/file_tools.py` (2025-01-28 新增)
 
 #### AST 工具
-- `ast_parse` ✅ - `src/tools/ast_tools.py`
-- `ast_find_symbols` ✅ - `src/tools/ast_tools.py`
-- `ast_extract_function` ✅ - `src/tools/ast_tools.py`
-- `ast_get_imports` ✅ - `src/tools/ast_tools.py`
+- `ast_parse` 已移除
+- `ast_find_symbols` 已移除
+- `ast_extract_function` 已移除
+- `ast_get_imports` 已移除
 
 #### 代码索引工具
 - `code_index_build` ✅ - `src/tools/index_tools.py`
@@ -81,14 +84,14 @@
 - `dependency_graph` ✅ - `src/tools/index_tools.py`
 
 #### 编辑工具
-- `edit_by_ast` ✅ - `src/tools/edit_tools.py`
+- `edit_by_ast` 已移除
 - `batch_edit` ✅ - `src/tools/edit_tools.py`
 - `preview_edit` ✅ - `src/tools/edit_tools.py`
 
 #### 测试工具
-- `generate_tests` ✅ - `src/tools/test_tools.py`
-- `run_tests` ✅ - `src/tools/test_tools.py`
-- `analyze_coverage` ✅ - `src/tools/test_tools.py`
+- `generate_tests` 已移除
+- `run_tests` 已移除
+- `analyze_coverage` 已移除
 
 #### Git 工具
 - `git_diff` ✅ - `src/tools/git_tools.py`

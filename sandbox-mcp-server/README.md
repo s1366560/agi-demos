@@ -88,10 +88,6 @@ After starting the container:
 
 | Tool | Description |
 |------|-------------|
-| `ast_parse` | Parse Python files into symbol metadata |
-| `ast_find_symbols` | Find classes, functions, and imports |
-| `ast_extract_function` | Extract function or method source |
-| `ast_get_imports` | List imports, optionally grouped by module |
 | `code_index_build` | Build a Python symbol/reference index |
 | `find_definition` | Locate symbol definitions in the index |
 | `find_references` | Locate symbol references in the index |
@@ -102,17 +98,13 @@ After starting the container:
 
 | Tool | Description |
 |------|-------------|
-| `edit_by_ast` | Rename Python classes/functions/methods via AST |
 | `batch_edit` | Apply multiple string edits in one call |
 | `preview_edit` | Preview a unified diff before editing |
 
-### Test and Git Tools
+### Git Tools
 
 | Tool | Description |
 |------|-------------|
-| `generate_tests` | Generate test skeletons from Python source |
-| `run_tests` | Run pytest suites from the sandbox |
-| `analyze_coverage` | Analyze file-level test coverage |
 | `git_diff` | Inspect current git changes |
 | `git_log` | Show recent commits |
 | `generate_commit` | Draft a commit message from current changes |

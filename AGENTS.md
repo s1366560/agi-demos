@@ -146,7 +146,7 @@ Tool.execute() → self._pending_events
 | `MCPSandboxAdapter` | Cloud Docker containers | WebSocket |
 | `LocalSandboxAdapter` | User's local machine | WebSocket + ngrok/Cloudflare tunnel |
 
-**Tool categories (30+)**: file ops (read/write/edit/glob/grep/list/patch); code intel (ast_parse/find_symbols/find_definition/find_references/call_graph); editing (edit_by_ast/batch_edit/preview_edit); testing (generate_tests/run_tests/analyze_coverage); git (diff/log/generate_commit); terminal/desktop (ttyd + noVNC).
+**Tool categories (30+)**: file ops (read/write/edit/glob/grep/list/patch); code intel (code_index_build/find_definition/find_references/call_graph); editing (batch_edit/preview_edit); git (diff/log/generate_commit); terminal/desktop (ttyd + noVNC). Project tests run through `bash`. The sandbox does not register Python AST or pytest agent tools.
 
 ### HITL (Human-in-the-Loop) Types
 
