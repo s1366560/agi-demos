@@ -48,7 +48,7 @@ async def test_register_job_accepts_legacy_every_config(monkeypatch: pytest.Monk
     assert kwargs["kwargs"] == {"job_id": "job-1"}
 
 
-async def test_register_job_logs_invalid_schedule_without_raising(
+async def test_register_job_rejects_invalid_schedule_without_queueing(
     caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -56,11 +56,37 @@ async def test_register_job_logs_invalid_schedule_without_raising(
     monkeypatch.setattr(scheduler_service, "_scheduler", fake_scheduler)
     caplog.set_level(logging.ERROR, logger=scheduler_service.logger.name)
 
-    await scheduler_service.register_job(
-        job_id="job-2",
-        schedule_type="every",
-        schedule_config={"hours": 0, "minutes": 0, "seconds": 0},
-    )
+    with pytest.raises(scheduler_service.CronScheduleRejected):
+        await scheduler_service.register_job(
+            job_id="job-2",
+            schedule_type="every",
+            schedule_config={"hours": 0, "minutes": 0, "seconds": 0},
+        )
 
     assert fake_scheduler.schedules == []
     assert "Invalid schedule config for job job-2 (every)" in caplog.text
+
+
+async def test_accepted_schedule_does_not_execute_the_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_scheduler = FakeScheduler()
+    executions: list[dict[str, object]] = []
+
+    async def execute_cron_job(**kwargs: object) -> None:
+        executions.append(kwargs)
+
+    monkeypatch.setattr(scheduler_service, "_scheduler", fake_scheduler)
+    monkeypatch.setattr(
+        "src.infrastructure.scheduler.job_executor.execute_cron_job",
+        execute_cron_job,
+    )
+
+    await scheduler_service.register_job(
+        job_id="job-3",
+        schedule_type="every",
+        schedule_config={"interval_seconds": 3600},
+    )
+
+    assert len(fake_scheduler.schedules) == 1
+    assert executions == []

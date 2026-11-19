@@ -17,6 +17,7 @@ import httpx
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -500,7 +501,16 @@ async def system_api_tool(  # noqa: PLR0911
                 "failure_class": "backend",
                 "code": exc.code,
                 "generation_status": "unpublished",
+                "publication_required": True,
+                "substitutes_other_generation": False,
                 "message": str(exc),
+                "distinction": _(
+                    "The pinned plugin generation has no staged HTTP route table. "
+                    "This is a publication gap, not an authorization denial. "
+                    "This tool does not publish routes and does not serve another "
+                    "generation's table. A scoped profile publication does not "
+                    "publish HTTP routes."
+                ),
             }
             return ToolResult(
                 output=_json(unavailable),

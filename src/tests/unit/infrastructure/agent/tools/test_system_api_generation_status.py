@@ -51,6 +51,9 @@ async def test_system_api_reports_unpublished_generation_without_authorization_l
     assert payload["failure_class"] == "backend"
     assert payload["code"] == "route_generation_unavailable"
     assert payload["generation_status"] == "unpublished"
+    assert payload["publication_required"] is True
+    assert payload["substitutes_other_generation"] is False
+    assert "scoped profile publication does not" in payload["distinction"]
     assert "does not authorize" not in result.output
 
 
@@ -114,3 +117,41 @@ async def test_system_api_lists_the_published_generation_table() -> None:
             ),
         )
     assert raised.value.code == "route_generation_unavailable"
+
+
+@pytest.mark.unit
+async def test_unpublished_pin_does_not_receive_another_generations_routes() -> None:
+    registry = RouteTableRegistryV2()
+    published = _descriptor()
+    registry.activate(registry.stage(published, _table()))
+    other = PluginGenerationDescriptorV2(
+        profile_id="profile",
+        generation=9,
+        digest="cd" * 32,
+    )
+    tool = make_system_api_tool(
+        openapi_schema_provider=lambda: openapi_for_published_generation(registry, other)
+    )
+    result = await tool.execute(
+        ToolContext(
+            session_id="session",
+            message_id="message",
+            call_id="call",
+            agent_name="agent",
+            conversation_id="conversation",
+            project_id="project",
+            tenant_id="tenant",
+            user_id="user",
+        ),
+        action="list",
+    )
+
+    payload = json.loads(result.output)
+    assert result.is_error is True
+    assert payload["generation_status"] == "unpublished"
+    assert payload["substitutes_other_generation"] is False
+    assert "/api/value" not in result.output
+    assert registry.current is not None
+    assert registry.current.descriptor == published
+    with pytest.raises(RuntimeV2Error):
+        registry.resolve(other)

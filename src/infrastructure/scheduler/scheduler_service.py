@@ -179,7 +179,9 @@ async def _register_job_unlocked(
             schedule_type,
             exc,
         )
-        return
+        raise CronScheduleRejected(
+            f"Invalid schedule config for job {job_id} ({schedule_type})"
+        ) from exc
 
     schedule_type = schedule.kind.value
     schedule_config = schedule.config
@@ -202,7 +204,7 @@ async def _register_job_unlocked(
         )
     else:
         logger.error("Unknown schedule type %s for job %s", schedule_type, job_id)
-        return
+        raise CronScheduleRejected(f"Unknown schedule type {schedule_type} for job {job_id}")
 
     _ = await scheduler.add_schedule(
         execute_cron_job,
@@ -224,6 +226,10 @@ async def unregister_job(job_id: str) -> None:
         except Exception:
             # Compatibility cleanup is not a deployment closure acknowledgement.
             logger.debug("Schedule %s could not be removed from APScheduler", job_id)
+
+
+class CronScheduleRejected(RuntimeError):
+    """The schedule was not accepted, so no run was queued."""
 
 
 class CronProducerRegistrationClosed(RuntimeError):
