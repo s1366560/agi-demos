@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f10cb'
-    'ab","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:8034c9c067887d9c3823d9c1f44a50c4e6910dfbc9047659b52477d7321641'
+    '4b","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1071,8 +1071,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'bac9a48c30d077e72e54d030f9c3f1","entrypoint":"src.infrastructure.plugins.v2.conversation'
     '_config_services:_apply_conversation_config_v2","module_ref":"builtin://memstack/applica'
     'tion/conversation-config","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0"'
-    ',"targets":["python"]},{"artifact_digest":"sha256:00e0ab3a20908fb93f4af309ff4d288e6b3eda'
-    'f1ea096b65b15cabf0e09bbc28","artifact_source":"repo+python://src/infrastructure/plugins/'
+    ',"targets":["python"]},{"artifact_digest":"sha256:62c02528b04af1809aa85ee453e0342d4f8729'
+    '56523626ddd2d373a40de7e3f9","artifact_source":"repo+python://src/infrastructure/plugins/'
     'v2/conversation_context_status_services.py","contract":{"config_schema":{"$schema":"http'
     's://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"st'
     'rategy":{"const":"operation-scoped-provider","type":"string"}},"required":["strategy"],"'
@@ -3196,8 +3196,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'd4","entrypoint":"src.infrastructure.plugins.v2.builtin_invitations_http_routes:builtin_'
     'invitations_http_routes_definition_v2","module_ref":"builtin://memstack/http/invitations'
     '-routes","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["pyth'
-    'on"]},{"artifact_digest":"sha256:c81baf534f81231ba184a0d0e7c7db15229250b5be7b4781177db4a'
-    '669024ce4","artifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_llm_pr'
+    'on"]},{"artifact_digest":"sha256:7d9fcba090dec06e9894d339c752b9bfbb0c541010dc8b4dcf8d06a'
+    '5c4871975","artifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_llm_pr'
     'oviders_http_routes.py","contract":{"config_schema":{"$schema":"https://json-schema.org/'
     'draft/2020-12/schema","additionalProperties":false,"properties":{},"type":"object"},"eve'
     'nts":{"emits":[],"handles":[]},"services":{"provides":[],"requires":[{"alias":"route_tab'
@@ -3876,7 +3876,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '1","entrypoint":"src.infrastructure.plugins.v2.cluster_services:_apply_cluster_provider_'
     'v2","module_ref":"builtin://memstack/persistence/cluster-provider","plugin_id":"memstack'
     '-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha2'
-    '56:00e0ab3a20908fb93f4af309ff4d288e6b3edaf1ea096b65b15cabf0e09bbc28","artifact_source":"'
+    '56:62c02528b04af1809aa85ee453e0342d4f872956523626ddd2d373a40de7e3f9","artifact_source":"'
     'repo+python://src/infrastructure/plugins/v2/conversation_context_status_services.py","co'
     'ntract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addi'
     'tionalProperties":false,"properties":{"strategy":{"const":"request-async-session","type"'
@@ -4788,7 +4788,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:a021969a0f08f63547d696bb2617e69d9d9080fdcce9b1819e0ed80b6f10cbab"
+    "sha256:8034c9c067887d9c3823d9c1f44a50c4e6910dfbc9047659b52477d73216414b"
 )
 # fmt: on
 

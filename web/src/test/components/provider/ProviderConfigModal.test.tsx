@@ -20,6 +20,7 @@ vi.mock('../../../services/api', () => ({
   providerAPI: {
     listModels: vi.fn(),
     getModelGuidance: vi.fn(),
+    getProviderAutoConfig: vi.fn(),
     listTypes: vi.fn(),
     detectEnvKeys: vi.fn(),
     testConnection: vi.fn(),
@@ -136,6 +137,61 @@ describe('ProviderConfigModal', () => {
       error_message: null,
       response_time_ms: 123,
     });
+  });
+
+  it('shows the coding plan and keeps an explicit credential requirement', async () => {
+    vi.mocked(providerAPI.listTypes).mockResolvedValue([
+      ...providerTypes,
+      { provider_type: 'kimi_coding', auth_methods: ['api_key'], unavailable_auth_methods: [] },
+    ]);
+    vi.mocked(providerAPI.getProviderAutoConfig).mockResolvedValue({
+      provider_type: 'kimi_coding',
+      api_key_required: true,
+      api_key_detected: true,
+      api_key_env_var: 'KIMI_API_KEY',
+      api_key_env_vars: ['KIMI_API_KEY'],
+      recommended: {
+        llm_model: 'coding-model',
+        llm_small_model: null,
+        embedding_model: null,
+        reranker_model: null,
+        base_url: 'https://api.kimi.com/coding/v1',
+      },
+      plans: {
+        coding: {
+          provider_type: 'kimi_coding',
+          source: 'provider_catalog',
+          candidate_models: ['coding-model'],
+          base_url_source: 'provider_catalog',
+          llm_model: 'coding-model',
+          llm_small_model: null,
+          base_url: 'https://api.kimi.com/coding/v1',
+        },
+      },
+    });
+    render(
+      <ProviderConfigModal
+        isOpen
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        initialProviderType="kimi_coding"
+      />
+    );
+    await waitFor(() =>
+      expect(providerAPI.getProviderAutoConfig).toHaveBeenCalledWith('kimi_coding')
+    );
+    const next = screen.getByRole('button', { name: 'Next' });
+    expect(next).toBeDisabled();
+    const input = await waitFor(() => {
+      const field = document.querySelector('input[type="password"]');
+      expect(field).toBeTruthy();
+      return field!;
+    });
+    fireEvent.change(input, { target: { value: 'test-key' } });
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.click(next);
+    expect(await screen.findByText('Coding plan')).toBeInTheDocument();
+    expect(await screen.findByText('https://api.kimi.com/coding/v1')).toBeInTheDocument();
   });
 
   it('calls onClose when Escape is pressed', async () => {

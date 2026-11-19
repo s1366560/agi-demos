@@ -461,6 +461,8 @@ class AgentContextCompressedEvent(AgentDomainEvent):
     summarized_message_count: int = 0
     tokens_saved: int = 0
     compression_ratio: float = 0.0
+    occupancy_before: float | None = None
+    pipeline: str | None = None
     pruned_tool_outputs: int = 0
     duration_ms: float = 0.0
     token_distribution: dict[str, int] = {}
@@ -479,6 +481,9 @@ class AgentContextStatusEvent(AgentDomainEvent):
     compression_history_summary: dict[str, Any] = {}
     from_cache: bool = False
     messages_in_summary: int = 0
+    source: str | None = None
+    occupancy_before: float | None = None
+    pipeline: str | None = None
 
 
 # === Pattern Events ===
@@ -1057,6 +1062,7 @@ class AgentContextSummaryGeneratedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.CONTEXT_SUMMARY_GENERATED
     summary_text: str
     summary_tokens: int
+    messages_covered_up_to: int | None = None
     messages_covered_count: int
     compression_level: str
 

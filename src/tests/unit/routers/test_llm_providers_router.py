@@ -1585,3 +1585,50 @@ class TestLLMProvidersRouterSystem:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.json()["detail"] == "Failed to reset circuit breaker"
         assert "secret-host" not in response.text
+
+
+@pytest.mark.unit
+def test_auto_config_uses_declared_models_without_exposing_credentials(llm_client, monkeypatch):
+    monkeypatch.setenv("MINIMAX_API_KEY", "fixture-never-return")
+    monkeypatch.setenv("MINIMAX_CODING_MODEL", "selected-model")
+    monkeypatch.setenv("MINIMAX_CODING_BASE_URL", "https://untrusted.example/v1")
+    path = "/api/v1/llm-providers/models/auto-config/minimax_coding"
+    response = llm_client.get(path)
+    assert response.status_code == 200
+    config = response.json()
+    assert config["api_key_detected"]
+    assert config["api_key_env_var"] == "MINIMAX_API_KEY"
+    assert config["plans"]["coding"]["llm_model"] == "selected-model"
+    assert config["recommended"]["llm_model"] == "selected-model"
+    assert config["recommended"]["base_url"] is None
+    assert "fixture-never-return" not in response.text
+    monkeypatch.delenv("MINIMAX_CODING_BASE_URL")
+    monkeypatch.delenv("MINIMAX_BASE_URL", raising=False)
+    assert llm_client.get(path).json()["recommended"]["base_url"] == "https://api.minimax.io/v1"
+    assert llm_client.get("/api/v1/llm-providers/models/auto-config/no-such").status_code == 404
+
+
+@pytest.mark.unit
+def test_auto_config_requires_admin(llm_providers_app, regular_user):
+    from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+        get_current_user_with_roles,
+    )
+
+    llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
+    response = TestClient(llm_providers_app).get("/api/v1/llm-providers/models/auto-config/openai")
+    assert response.status_code == 403
+
+
+@pytest.mark.unit
+def test_catalog_combines_capability_and_modality_before_search_limit(llm_client):
+    path = "/api/v1/llm-providers/models/catalog"
+    filters = {"provider": "openai", "capability": " Vision ", "modality": " IMAGE "}
+    models = llm_client.get(path, params={**filters, "include_deprecated": True}).json()["models"]
+    assert models
+    assert all("vision" in row["capabilities"] and "image" in row["modalities"] for row in models)
+    search = llm_client.get(f"{path}/search", params={**filters, "q": "gpt", "limit": 1})
+    assert search.status_code == 200
+    rows = search.json()["models"]
+    assert len(rows) == 1
+    assert rows[0]["name"] in {row["name"] for row in models}
+    assert llm_client.get(path, params={**filters, "modality": "not-declared"}).json()["total"] == 0

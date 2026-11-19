@@ -32,7 +32,9 @@ class SqlContextSummaryAdapter(ContextSummaryPort):
         from sqlalchemy import select
 
         result = await self._session.execute(
-            refresh_select_statement(select(DBConversation.meta).where(DBConversation.id == conversation_id))
+            refresh_select_statement(
+                select(DBConversation.meta).where(DBConversation.id == conversation_id)
+            )
         )
         meta = result.scalar_one_or_none()
         if not meta or SUMMARY_KEY not in meta:
@@ -48,17 +50,27 @@ class SqlContextSummaryAdapter(ContextSummaryPort):
         """Save context summary into conversation.meta JSON."""
         from sqlalchemy import select
 
-        # Read current meta, merge summary, write back
         result = await self._session.execute(
-            refresh_select_statement(select(DBConversation.meta).where(DBConversation.id == conversation_id))
+            refresh_select_statement(
+                select(DBConversation.meta)
+                .where(DBConversation.id == conversation_id)
+                .with_for_update()
+            )
         )
         current_meta = result.scalar_one_or_none() or {}
+        existing = current_meta.get(SUMMARY_KEY)
+        if isinstance(existing, dict) and isinstance(existing.get("summary_text"), str):
+            cutoff = existing.get("messages_covered_up_to")
+            if type(cutoff) is int and cutoff >= summary.messages_covered_up_to:
+                return
         updated_meta = {**current_meta, SUMMARY_KEY: summary.to_dict()}
 
         await self._session.execute(
-            refresh_select_statement(update(DBConversation)
-            .where(DBConversation.id == conversation_id)
-            .values(meta=updated_meta))
+            refresh_select_statement(
+                update(DBConversation)
+                .where(DBConversation.id == conversation_id)
+                .values(meta=updated_meta)
+            )
         )
         await self._session.flush()
 
@@ -74,16 +86,22 @@ class SqlContextSummaryAdapter(ContextSummaryPort):
         from sqlalchemy import select
 
         result = await self._session.execute(
-            refresh_select_statement(select(DBConversation.meta).where(DBConversation.id == conversation_id))
+            refresh_select_statement(
+                select(DBConversation.meta)
+                .where(DBConversation.id == conversation_id)
+                .with_for_update()
+            )
         )
         current_meta = result.scalar_one_or_none() or {}
 
         if SUMMARY_KEY in current_meta:
             updated_meta = {k: v for k, v in current_meta.items() if k != SUMMARY_KEY}
             await self._session.execute(
-                refresh_select_statement(update(DBConversation)
-                .where(DBConversation.id == conversation_id)
-                .values(meta=updated_meta))
+                refresh_select_statement(
+                    update(DBConversation)
+                    .where(DBConversation.id == conversation_id)
+                    .values(meta=updated_meta)
+                )
             )
             await self._session.flush()
             logger.info(f"Invalidated context summary for conversation {conversation_id}")

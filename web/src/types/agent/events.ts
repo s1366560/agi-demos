@@ -905,6 +905,8 @@ export interface SkillFallbackEventData {
  * Emitted when context window compression occurs during a conversation
  */
 export interface ContextCompressedEventData {
+  occupancy_before?: number | null;
+  pipeline?: string | null;
   was_compressed: boolean;
   compression_strategy: 'none' | 'truncate' | 'summarize';
   compression_level: string;
@@ -927,6 +929,9 @@ export interface ContextCompressedEventData {
  * Periodic context health report emitted at start of each step
  */
 export interface ContextStatusEventData {
+  occupancy_before?: number | null;
+  pipeline?: string | null;
+  source?: string | null;
   current_tokens: number;
   token_budget: number;
   occupancy_pct: number;

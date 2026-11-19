@@ -2316,6 +2316,8 @@ async def test_context_status_uses_v2_authority_without_llm_or_container(
         messages_in_summary=11,
         compression_level="l2_summarize",
         from_cache=True,
+        messages_covered_up_to=42,
+        summary_schema_version="v1",
     )
     service = SimpleNamespace(get_context_status=AsyncMock(return_value=projected))
     db = _db_with_project_access()
@@ -2342,6 +2344,9 @@ async def test_context_status_uses_v2_authority_without_llm_or_container(
         "messages_in_summary": 11,
         "compression_level": "l2_summarize",
         "from_cache": True,
+        "source": "api_snapshot",
+        "messages_covered_up_to": 42,
+        "summary_schema_version": "v1",
     }
     service.get_context_status.assert_awaited_once_with(
         conversation_id="conversation-context",

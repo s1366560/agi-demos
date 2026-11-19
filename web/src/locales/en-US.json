@@ -6823,6 +6823,8 @@
       "viewSession": "View agent session"
     },
     "contextDetail": {
+      "beforeCompression": "Context usage before compression ({{pipeline}}): {{percent}}%",
+      "cachedSummaryThrough": "Cached summary covers {{count}} messages through {{date}}.",
       "title": "Context Monitor",
       "contextUsage": "Context Usage",
       "tokenDistribution": "Token Distribution",
@@ -10142,6 +10144,7 @@
         "authLoadFailedHelp": "Authentication options could not be loaded. Reopen this dialog to try again.",
         "credentialConfigured": "Configured",
         "environmentVariable": "Environment variable",
+        "codingPlan": "Coding plan",
         "environmentVariablePlaceholder": "PROVIDER_API_KEY",
         "environmentVariableHelp": "Only the variable name is saved and sent. The secret value never enters this form.",
         "noAuthenticationHelp": "This provider does not require a credential.",

@@ -142,3 +142,59 @@ def resolve_provider_env_defaults(provider_type: ProviderType) -> ProviderEnvDef
         reranker_model_source=reranker_model_source,
         api_key_env_vars=profile.api_key.env_vars,
     )
+
+
+def provider_auto_config(provider_type: ProviderType) -> dict[str, object]:
+    """Describe configuration defaults without transferring or persisting credentials."""
+    from src.domain.llm_providers.provider_catalog import role_defaults, static_provider_models
+    from src.domain.llm_providers.security_policy import (
+        environment_credential_endpoint_is_official,
+        provider_probe_default_base_url,
+        validate_provider_base_url,
+    )
+    from src.infrastructure.llm.provider_credentials import should_require_api_key
+
+    defaults = resolve_provider_env_defaults(provider_type)
+    roles = role_defaults(provider_type)
+    requires_key = should_require_api_key(provider_type)
+    try:
+        base_url = validate_provider_base_url(
+            defaults.base_url or provider_probe_default_base_url(provider_type), provider_type
+        )
+    except ValueError:
+        base_url = None
+    if requires_key and not environment_credential_endpoint_is_official(provider_type, base_url):
+        base_url = None
+
+    primary = defaults.llm_model or roles["primary"]
+    fast = defaults.llm_small_model or roles["fast"]
+    coding = provider_type.value.endswith("_coding")
+    return {
+        "provider_type": provider_type.value,
+        "api_key_required": requires_key,
+        "api_key_detected": bool(defaults.api_key),
+        "api_key_env_var": defaults.api_key_source,
+        "api_key_env_vars": list(defaults.api_key_env_vars),
+        "recommended": {
+            "llm_model": primary,
+            "llm_small_model": fast,
+            "embedding_model": defaults.embedding_model or roles["embedding"],
+            "reranker_model": defaults.reranker_model or roles["rerank"],
+            "base_url": base_url,
+        },
+        "plans": {
+            "coding": {
+                "provider_type": provider_type.value,
+                "source": "provider_catalog" if coding else None,
+                "llm_model": primary if coding else None,
+                "llm_small_model": fast if coding else None,
+                "candidate_models": static_provider_models(provider_type.value).get("chat", [])
+                if coding
+                else [],
+                "base_url": base_url if coding else None,
+                "base_url_source": (defaults.base_url_source or "provider_catalog")
+                if coding and base_url
+                else None,
+            },
+        },
+    }

@@ -26,6 +26,7 @@ Usage:
 
 import argparse
 import json
+import importlib.util
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -1205,10 +1206,25 @@ def main():
 
     print(f"✅ Loaded {len(messages)} messages")
 
+    if args.command in {'analyze', 'relationships', 'full'}:
+        # Both bundled skills share the basic analyzers and their report format.
+        basic_path = (
+            Path(__file__).resolve().parents[1]
+            / 'anti-corruption-investigation'
+            / 'anti_corruption.py'
+        )
+        if basic_path.is_file():
+            spec = importlib.util.spec_from_file_location('anti_corruption', basic_path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f'Cannot load the investigation skill at {basic_path}')
+            basic = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(basic)
+        else:
+            import anti_corruption as basic
+
     if args.command == 'analyze':
         print("🔬 Analyzing messages...")
-        from anti_corruption import ChatAnalyzer
-        analyzer = ChatAnalyzer(messages)
+        analyzer = basic.ChatAnalyzer(messages)
         results = analyzer.analyze()
         print(f"📊 Found {results['suspicious_count']} suspicious messages")
         print(f"🎯 Risk Level: {results['risk_level']}")
@@ -1218,8 +1234,7 @@ def main():
 
     elif args.command == 'relationships':
         print("🕸️ Analyzing relationships...")
-        from anti_corruption import RelationshipAnalyzer
-        analyzer = RelationshipAnalyzer(messages)
+        analyzer = basic.RelationshipAnalyzer(messages)
         results = analyzer.analyze()
         print(f"📊 Found {results['total_relationships']} relationships")
         with open(args.output_file, 'w', encoding='utf-8') as f:
@@ -1227,8 +1242,7 @@ def main():
         print(f"✅ Results saved to {args.output_file}")
         if args.text_report:
             print("📝 Generating text report...")
-            from anti_corruption import ReportGenerator
-            report = ReportGenerator.generate_relationship_report(results)
+            report = basic.ReportGenerator.generate_relationship_report(results)
             with open(args.text_report, 'w', encoding='utf-8') as f:
                 f.write(report)
             print(f"✅ Text report saved to {args.text_report}")
@@ -1290,8 +1304,7 @@ def main():
         output_dir.mkdir(exist_ok=True)
 
         print("🔬 Analyzing messages...")
-        from anti_corruption import ChatAnalyzer
-        chat_analyzer = ChatAnalyzer(messages)
+        chat_analyzer = basic.ChatAnalyzer(messages)
         chat_results = chat_analyzer.analyze()
         chat_output = output_dir / 'chat_analysis.json'
         with open(chat_output, 'w', encoding='utf-8') as f:
@@ -1299,8 +1312,7 @@ def main():
         print(f"✅ Chat analysis saved to {chat_output}")
 
         print("🕸️ Analyzing relationships...")
-        from anti_corruption import RelationshipAnalyzer
-        rel_analyzer = RelationshipAnalyzer(messages)
+        rel_analyzer = basic.RelationshipAnalyzer(messages)
         rel_results = rel_analyzer.analyze()
         rel_output = output_dir / 'relationships.json'
         with open(rel_output, 'w', encoding='utf-8') as f:
@@ -1332,10 +1344,9 @@ def main():
         print(f"✅ Money flows saved to {money_output}")
 
         print("📝 Generating reports...")
-        from anti_corruption import ReportGenerator
         rel_report = output_dir / 'relationship_report.txt'
         with open(rel_report, 'w', encoding='utf-8') as f:
-            f.write(ReportGenerator.generate_relationship_report(rel_results))
+            f.write(basic.ReportGenerator.generate_relationship_report(rel_results))
         print(f"✅ Relationship report saved to {rel_report}")
 
         social_report = output_dir / 'social_network_report.txt'

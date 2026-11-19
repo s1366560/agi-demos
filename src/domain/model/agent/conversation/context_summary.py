@@ -35,6 +35,7 @@ class ContextSummary:
     compression_level: str = "l2_summarize"
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     model: str | None = None
+    schema_version: str = "v1"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary for JSON storage in conversation.metadata."""
@@ -46,6 +47,7 @@ class ContextSummary:
             "compression_level": self.compression_level,
             "created_at": self.created_at.isoformat(),
             "model": self.model,
+            "schema_version": self.schema_version,
         }
 
     @classmethod
@@ -65,4 +67,5 @@ class ContextSummary:
             compression_level=data.get("compression_level", "l2_summarize"),
             created_at=created_at,
             model=data.get("model"),
+            schema_version=data.get("schema_version", "v1"),
         )
