@@ -124,7 +124,7 @@ class EntityExtractor:
                 "LLM call failed during entity extraction error_type=%s",
                 type(e).__name__,
             )
-            return []
+            raise
 
         # Parse response
         entities_data = self._parse_entities_response(extracted)

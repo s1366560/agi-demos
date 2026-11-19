@@ -589,7 +589,8 @@ export const MemoryDetail: React.FC = () => {
 
               {(processingProgress ||
                 memory.processing_status === 'PENDING' ||
-                memory.processing_status === 'PROCESSING') && (
+                memory.processing_status === 'PROCESSING' ||
+                memory.processing_status === 'FAILED') && (
                 <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/60 md:px-6">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -601,14 +602,21 @@ export const MemoryDetail: React.FC = () => {
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                          {t('project.memories.detail.processing', 'Processing Memory')}
+                          {memory.processing_status === 'FAILED'
+                            ? t(
+                                'project.memories.detail.indexing_failed',
+                                'Saved, but indexing failed. The stored text was kept.'
+                              )
+                            : t('project.memories.detail.processing', 'Processing Memory')}
                         </h3>
                         <p className="text-xs text-slate-600 dark:text-slate-400">
-                          {processingProgress?.message ||
-                            t(
-                              'project.memories.detail.extracting_knowledge',
-                              'Extracting knowledge…'
-                            )}
+                          {memory.processing_status === 'FAILED'
+                            ? String(memory.metadata?.index_error || '')
+                            : processingProgress?.message ||
+                              t(
+                                'project.memories.detail.saved_not_searchable',
+                                'Saved. Indexing has not finished, so this memory is not searchable yet.'
+                              )}
                         </p>
                       </div>
                     </div>
