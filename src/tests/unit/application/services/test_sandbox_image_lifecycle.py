@@ -32,10 +32,11 @@ def test_missing_digest_is_unknown_rather_than_fresh() -> None:
 
 
 def test_image_digest_does_not_attest_the_loaded_tool_server() -> None:
+    assert "container image source bytes" in IMAGE_DIGEST_SCOPE
     assert "tool server process" in IMAGE_DIGEST_SCOPE
     assert "/opt/sandbox-mcp-venv" in IMAGE_DIGEST_SCOPE
     assert "mtime" in IMAGE_DIGEST_SCOPE
-    assert "source_digest" in IMAGE_DIGEST_SCOPE
+    assert "outside the container" not in IMAGE_DIGEST_SCOPE
 
 
 def test_different_recorded_digest_is_stale() -> None:

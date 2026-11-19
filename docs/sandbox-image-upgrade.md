@@ -4,11 +4,10 @@ This is a code path and an operator procedure. It does not upgrade a running
 sandbox, and it has not been applied to the R6 container.
 
 `org.memstack.sandbox.source_digest` identifies container image source bytes.
-It does not attest the tool server process that loaded modules for a call.
-A path inside the container, including `/opt/sandbox-mcp-venv`, is an image
-copy. Its mtime does not identify an MCP server running outside the container.
-Runtime attestation has to name that loaded component. The call, transport,
-process, and module evidence for R6 is pending and is not established here.
+It does not attest the Python modules loaded by the tool server process.
+File mtime under `/opt/sandbox-mcp-venv` does not by itself prove that loaded
+hash. Runtime attestation has to name the listening process and its loaded
+component. Missing `.py` mappings do not establish an exact in-memory hash.
 
 ## What is executable now
 

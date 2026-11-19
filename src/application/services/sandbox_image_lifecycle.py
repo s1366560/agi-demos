@@ -17,10 +17,10 @@ SOURCE_DIGEST_LABEL = "org.memstack.sandbox.source_digest"
 ACTIVE_RUN_LABEL = "org.memstack.sandbox.active_run"
 IMAGE_DIGEST_SCOPE = (
     "org.memstack.sandbox.source_digest identifies container image source bytes. "
-    "It does not attest the tool server process that loaded modules for a call. "
-    "A path inside the container, including /opt/sandbox-mcp-venv, is an image copy. "
-    "Its mtime does not identify an MCP server running outside the container. "
-    "Runtime attestation has to name that loaded component."
+    "It does not attest the Python modules loaded by the tool server process. "
+    "File mtime under /opt/sandbox-mcp-venv does not by itself prove that loaded hash. "
+    "Runtime attestation has to name the listening process and its loaded component. "
+    "Missing .py mappings do not establish an exact in-memory hash."
 )
 
 
