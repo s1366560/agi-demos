@@ -184,6 +184,9 @@ class MCPSandboxAdapter(SandboxPort):
         await adapter.terminate_sandbox(sandbox.id)
     """
 
+    _source_digest: str | None = None
+    _run_state_session_factory: Any | None = None
+
     def __init__(
         self,
         mcp_image: str = DEFAULT_SANDBOX_IMAGE,
@@ -1402,8 +1405,7 @@ class MCPSandboxAdapter(SandboxPort):
                 **({"memstack.tenant_id": tenant_id} if tenant_id else {}),
                 **(
                     {"org.memstack.sandbox.source_digest": self._source_digest}
-                    if isinstance(getattr(self, "_source_digest", None), str)
-                    and self._source_digest
+                    if isinstance(self._source_digest, str) and self._source_digest
                     else {}
                 ),
             }
