@@ -97,6 +97,7 @@ def graph_runtime_definition_v2(
             context,
             GraphRuntimeServiceV2(graph_service=graph_service),
         )
+        _recover_memory_updates_from_process_graph(graph_service)
 
         async def dispose() -> None:
             await _close_graph_service_v2(graph_service)
@@ -108,6 +109,25 @@ def graph_runtime_definition_v2(
         contract_digest=generated_contract_digest_v2(GRAPH_RUNTIME_MODULE_V2),
         apply=apply,
     )
+
+
+def _recover_memory_updates_from_process_graph(graph_service: GraphStorePort) -> None:
+    """Resume durable memory-update rows when this process binds its graph.
+
+    This runs from generation startup. It does not wait for a project chat
+    or a model call. If the dispatcher is not installed yet, the later
+    startup installer sees the binding and resumes.
+    """
+    from src.application.services.memory_update_dispatch import schedule_memory_update_recovery
+    from src.application.services.memory_update_runtime import bind_memory_update_runtime
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+
+    bind_memory_update_runtime(
+        graph_service=graph_service,
+        embedding_service=getattr(graph_service, "embedder", None),
+        session_factory=async_session_factory,
+    )
+    schedule_memory_update_recovery()
 
 
 def _provide_graph_runtime_v2(

@@ -528,6 +528,8 @@ class TestMemoryToolsChunkSync:
                     content="updated content",
                     tags=["tag-2"],
                     metadata={"category": "decision"},
+                    version=2,
+                    author_id="user-1",
                 ),
             )
         )
@@ -563,9 +565,9 @@ class TestMemoryToolsChunkSync:
 
         payload = json.loads(result)
         assert payload["status"] == "updated"
-        assert upsert_chunks.await_args.kwargs["memory_id"] == "mem-1"
-        assert upsert_chunks.await_args.kwargs["project_id"] == "proj-1"
-        assert upsert_chunks.await_args.kwargs["category"] == "decision"
+        assert payload["processing_status"] == "PENDING"
+        assert payload["searchable"] is False
+        upsert_chunks.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_update_logs_do_not_include_memory_identifier(self, caplog) -> None:
@@ -585,6 +587,8 @@ class TestMemoryToolsChunkSync:
                     content="updated content",
                     tags=[],
                     metadata={"category": "fact"},
+                    version=1,
+                    author_id="user-1",
                 ),
             )
         )
@@ -613,7 +617,7 @@ class TestMemoryToolsChunkSync:
         payload = json.loads(result)
         assert payload["status"] == "updated"
         assert secret_memory_id not in caplog.text
-        assert "memory_update: updated memory" in caplog.text
+        assert "memory_update: saved memory" in caplog.text
 
     @pytest.mark.asyncio
     async def test_update_chunk_failure_logs_do_not_include_exception_content(
@@ -637,6 +641,8 @@ class TestMemoryToolsChunkSync:
                     content="updated content",
                     tags=["tag-2"],
                     metadata={"category": "decision"},
+                    version=2,
+                    author_id="user-1",
                 ),
             )
         )
@@ -673,9 +679,10 @@ class TestMemoryToolsChunkSync:
 
         payload = json.loads(result)
         assert payload["status"] == "updated"
+        assert payload["searchable"] is False
+        upsert_chunks.assert_not_awaited()
         assert secret_memory_id not in caplog.text
         assert exception_detail not in caplog.text
-        assert "error_type=RuntimeError" in caplog.text
 
     @pytest.mark.asyncio
     async def test_update_failure_logs_do_not_include_exception_content(

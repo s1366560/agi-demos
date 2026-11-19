@@ -5614,6 +5614,8 @@
         "type": "Type",
         "processing": "Processing Memory",
         "extracting_knowledge": "Extracting knowledge…",
+        "saved_not_searchable": "Saved. Indexing has not finished, so this memory is not searchable yet.",
+        "indexing_failed": "Saved, but indexing failed. The stored text was kept.",
         "tabs": {
           "content": "Content",
           "metadata": "Metadata",

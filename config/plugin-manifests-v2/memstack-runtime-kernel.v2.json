@@ -998,7 +998,7 @@
       },
       "contract_digest": "sha256:e5912b479000b04123d4cda8d863251fecf07be458cc1eeef9deae903340a3a3",
       "artifact": {
-        "digest": "sha256:4dca74c500d64cce09ce0c98bd3f4841d29c85dfe7964ec7ea7be944e2dba83e",
+        "digest": "sha256:5fa4669c71026c6f3463680ec4dbfeec24d441050c949d03bfa32f5e7ae2f8e5",
         "source": "repo+python://src/infrastructure/plugins/v2/graph_runtime.py"
       }
     },

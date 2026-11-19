@@ -309,6 +309,20 @@ class ProjectReActAgent:
             memory_runtime, session_factory = self._init_memory_runtime(
                 graph_service, redis_client, llm_client
             )
+            if graph_service is not None and session_factory is not None:
+                from src.application.services.memory_update_dispatch import (
+                    schedule_memory_update_recovery,
+                )
+                from src.application.services.memory_update_runtime import (
+                    bind_memory_update_runtime,
+                )
+
+                bind_memory_update_runtime(
+                    graph_service=graph_service,
+                    embedding_service=getattr(graph_service, "embedder", None),
+                    session_factory=session_factory,
+                )
+                schedule_memory_update_recovery()
 
             # Phase 4: ReActAgent construction
             await self._init_react_agent(

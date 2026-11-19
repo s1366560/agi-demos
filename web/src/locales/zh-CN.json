@@ -5625,6 +5625,8 @@
         "type": "类型",
         "processing": "正在处理记忆",
         "extracting_knowledge": "正在提取知识…",
+        "saved_not_searchable": "已保存。索引尚未完成，因此这条记忆还不能被搜索。",
+        "indexing_failed": "已保存，但索引失败。已保存的正文仍然保留。",
         "tabs": {
           "content": "内容",
           "metadata": "元数据",
