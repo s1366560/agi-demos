@@ -17,6 +17,63 @@ from src.tools.file_tools import _error_result, _path_metadata, _resolve_path, _
 
 logger = logging.getLogger(__name__)
 
+# Keep enough pytest output for diagnosis without unbounded payloads.
+_PYTEST_OUTPUT_LIMIT = 8000
+
+
+def _clip_text(text: str, *, limit: int = _PYTEST_OUTPUT_LIMIT) -> str:
+    """Return text trimmed to a diagnostic budget."""
+    text = text or ""
+    if len(text) <= limit:
+        return text
+    omitted = len(text) - limit
+    return f"{text[:limit]}\n... [{omitted} more characters omitted]"
+
+
+def _format_pytest_streams(stdout: str, stderr: str) -> str:
+    """Render captured pytest streams without dropping stderr."""
+    parts: list[str] = []
+    stdout = _clip_text((stdout or "").rstrip())
+    stderr = _clip_text((stderr or "").rstrip())
+    if stdout:
+        parts.extend(["stdout:", stdout])
+    if stderr:
+        parts.extend(["stderr:", stderr])
+    return "\n".join(parts)
+
+
+def _pytest_stream_metadata(result: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+    """Expose clipped pytest streams in tool metadata."""
+    return {
+        "stdout": _clip_text(result.stdout or ""),
+        "stderr": _clip_text(result.stderr or ""),
+        "returncode": result.returncode,
+    }
+
+
+def _coverage_plugin_missing(stdout: str, stderr: str) -> bool:
+    """Detect a missing or unloadable pytest-cov plugin from pytest output."""
+    combined = f"{stdout or ''}\n{stderr or ''}".lower()
+    if "no module named pytest_cov" in combined or "no module named 'pytest_cov'" in combined:
+        return True
+    if "pytest-cov" in combined and any(
+        token in combined
+        for token in (
+            "not found",
+            "not installed",
+            "could not load",
+            "import error",
+            "importerror",
+        )
+    ):
+        return True
+    if "--cov" in combined and (
+        "unrecognized arguments" in combined or "unrecognised arguments" in combined
+    ):
+        return True
+    return False
+
+
 
 def _module_import_data(source_path: Path, workspace_dir: str) -> tuple[str, Path]:
     """Return an importable module name plus the sys.path root to prepend.
@@ -58,6 +115,93 @@ def _module_import_data(source_path: Path, workspace_dir: str) -> tuple[str, Pat
 def module_origin_for(module_name: str, import_root: Path) -> Path:
     """Return the file a module name resolves to under one import root."""
     return import_root.joinpath(*module_name.split(".")).with_suffix(".py")
+
+
+def _default_generate_tests_output_path(source_path: Path, workspace_dir: str) -> Path:
+    """Claim a unique workspace/tests/test_<file>[_N].py path without overwriting.
+
+    Defaulting to ``tests/`` is a product-layout choice (the SKILL example uses
+    that directory). It is not a previously formalized tool contract; an
+    explicit ``output_path`` still wins and may overwrite.
+
+    The file is created with ``O_EXCL`` so concurrent callers cannot select
+    the same name and clobber each other. The path is resolved and rejected
+    if it would leave the workspace (including via a ``tests/`` symlink).
+    """
+    workspace = Path(workspace_dir).resolve()
+    tests_dir = workspace / "tests"
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    resolved_tests = tests_dir.resolve()
+    if not resolved_tests.is_relative_to(workspace):
+        raise ValueError("Default test output path is outside the workspace")
+
+    stem = source_path.stem
+    index = 1
+    while index <= 10000:
+        name = f"test_{stem}.py" if index == 1 else f"test_{stem}_{index}.py"
+        candidate = resolved_tests / name
+        if not candidate.resolve().is_relative_to(workspace):
+            raise ValueError("Default test output path is outside the workspace")
+        try:
+            fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            return candidate
+        except FileExistsError:
+            index += 1
+    raise RuntimeError("Unable to allocate a unique default test output path")
+
+
+def _candidate_coverage_tests(source_path: Path, workspace_dir: str) -> list[Path]:
+    """Find tests next to the source file or under workspace/tests."""
+    stem = source_path.stem
+    pattern = f"test*{stem}*.py"
+    found: list[Path] = []
+    seen: set[Path] = set()
+    workspace = Path(workspace_dir).resolve()
+    for directory in (source_path.parent, workspace / "tests"):
+        if not directory.exists():
+            continue
+        for path in sorted(directory.glob(pattern)):
+            resolved = path.resolve()
+            if resolved in seen or resolved == source_path.resolve():
+                continue
+            seen.add(resolved)
+            found.append(path)
+    return found
+
+
+def _import_bootstrap_lines(import_root: Path, module_name: str) -> list[str]:
+    """Emit import preamble that prefers this workspace over a shadowed package.
+
+    These lines are written into the generated *test file* and execute only in
+    that test process (for example pytest). ``generate_tests`` does not exec
+    them and does not mutate ``sys.modules`` in the long-lived MCP host.
+    """
+    top_level = module_name.split(".", 1)[0]
+    return [
+        "from pathlib import Path",
+        "import sys",
+        "",
+        f'SOURCE_ROOT = Path(r"{import_root}")',
+        "_source_root = str(SOURCE_ROOT)",
+        "if _source_root in sys.path:",
+        "    sys.path.remove(_source_root)",
+        "sys.path.insert(0, _source_root)",
+        f"_top_level = {top_level!r}",
+        "for _name in list(sys.modules):",
+        "    if _name == _top_level or _name.startswith(_top_level + '.'):",
+        "        _mod = sys.modules[_name]",
+        "        _file = getattr(_mod, '__file__', None)",
+        "        if not _file:",
+        "            sys.modules.pop(_name, None)",
+        "            continue",
+        "        try:",
+        "            if not Path(_file).resolve().is_relative_to(SOURCE_ROOT.resolve()):",
+        "                sys.modules.pop(_name, None)",
+        "        except (OSError, ValueError):",
+        "            sys.modules.pop(_name, None)",
+        "",
+    ]
 
 
 def _sample_argument_value(
@@ -136,7 +280,7 @@ async def generate_tests(
         function_name: Optional function name to generate tests for
         class_name: Optional class name to generate tests for
         test_framework: Test framework to use (pytest, unittest)
-        output_path: Optional output file path
+        output_path: Optional output file path. Defaults to tests/test_<filename>.py
         _workspace_dir: Workspace directory
 
     Returns:
@@ -194,14 +338,8 @@ async def generate_tests(
             f'"""Auto-generated tests for {full_path.name}."""',
             "from __future__ import annotations",
             "",
-            "from pathlib import Path",
-            "import sys",
-            "",
+            *_import_bootstrap_lines(import_root, module_name),
             "import pytest",
-            "",
-            f'SOURCE_ROOT = Path(r"{import_root}")',
-            "if str(SOURCE_ROOT) not in sys.path:",
-            "    sys.path.insert(0, str(SOURCE_ROOT))",
             "",
             f"from {module_name} import {', '.join(sorted(import_targets))}",
             "",
@@ -242,12 +380,13 @@ async def generate_tests(
         full_test_code = "\n\n".join(generated_code).rstrip() + "\n"
         ast.parse(full_test_code)
 
-        # Write to output file if specified
+        # Write to an explicit path when provided; otherwise use tests/.
         if output_path:
             output_full_path = _resolve_path(output_path, _workspace_dir)
         else:
-            # Default to test_<filename>.py
-            output_full_path = full_path.parent / f"test_{full_path.stem}.py"
+            output_full_path = _default_generate_tests_output_path(
+                full_path, _workspace_dir
+            )
         output_full_path.parent.mkdir(parents=True, exist_ok=True)
         output_full_path.write_text(full_test_code, encoding="utf-8")
 
@@ -347,7 +486,11 @@ def create_generate_tests_tool() -> MCPTool:
                 },
                 "output_path": {
                     "type": "string",
-                    "description": "Optional output file path",
+                    "description": (
+                        "Optional output file path. When omitted, tests are written "
+                        "to tests/test_<filename>.py in the workspace; an existing "
+                        "file is not overwritten (a numeric suffix is added)."
+                    ),
                 },
             },
             "required": ["file_path"],
@@ -428,7 +571,7 @@ async def run_tests(
         )
 
         # Parse output - look for PASSED/FAILED in verbose output
-        lines = result.stdout.split("\n")
+        lines = (result.stdout or "").split("\n")
         passed = 0
         failed = 0
         errors = []
@@ -447,24 +590,42 @@ async def run_tests(
             f"Test results: {passed} passed, {failed} failed",
             f"Total tests run: {passed + failed}",
         ]
+        streams = _format_pytest_streams(result.stdout or "", result.stderr or "")
+        metadata = {
+            "total": passed + failed,
+            "passed": passed,
+            "failed": failed,
+            "resolved_test_path": str(test_dir),
+            "command": pytest_args,
+            **_pytest_stream_metadata(result),
+        }
 
+        # A non-zero pytest exit with no parsed test failures is a collection
+        # or configuration problem, not a successful empty run.
         if result.returncode != 0 and failed == 0:
             output_lines.append("Tests failed to run (check configuration)")
+            message = "\n".join(output_lines)
+            if streams:
+                message = f"{message}\n{streams}"
+            return _error_result(
+                message,
+                code="tests_failed_to_run",
+                hint="Inspect pytest stdout/stderr for collection or configuration errors.",
+                metadata=metadata,
+            )
 
         if failed > 0:
             output_lines.append(f"\nFailed tests: {failed}")
             output_lines.extend(lines[-min(10, len(lines)) :])  # Last 10 lines
 
+        message = "\n".join(output_lines)
+        # Keep assertion failures as a successful tool result, but do not hide stderr.
+        if result.stderr and result.stderr.strip():
+            message = f"{message}\nstderr:\n{_clip_text(result.stderr.rstrip())}"
+
         return _success_result(
-            "\n".join(output_lines),
-            metadata={
-                "total": passed + failed,
-                "passed": passed,
-                "failed": failed,
-                "returncode": result.returncode,
-                "resolved_test_path": str(test_dir),
-                "command": pytest_args,
-            },
+            message,
+            metadata=metadata,
         )
 
     except ValueError as e:
@@ -555,12 +716,25 @@ async def analyze_coverage(
                 metadata={"requested_path": file_path, **path_metadata},
             )
 
+        if not use_pytest:
+            return _error_result(
+                "Coverage analysis requires pytest-cov; no coverage numbers are available without it.",
+                code="coverage_unavailable",
+                hint="Call analyze_coverage with use_pytest=True and install pytest-cov.",
+                metadata={
+                    "file_path": file_path,
+                    "method": "unavailable",
+                    "requested_path": file_path,
+                    **path_metadata,
+                },
+            )
+
         if use_pytest:
             import sys
 
             module_name, import_root = _module_import_data(full_path, _workspace_dir)
 
-            candidate_tests = sorted(full_path.parent.glob(f"test*{full_path.stem}*.py"))
+            candidate_tests = _candidate_coverage_tests(full_path, _workspace_dir)
             with tempfile.TemporaryDirectory(prefix="coverage-") as temp_dir_str:
                 temp_dir = Path(temp_dir_str)
                 json_report = temp_dir / "coverage.json"
@@ -574,13 +748,7 @@ async def analyze_coverage(
                         "\n".join(
                             [
                                 "from __future__ import annotations",
-                                "from pathlib import Path",
-                                "import sys",
-                                "",
-                                f'IMPORT_ROOT = Path(r"{import_root}")',
-                                "if str(IMPORT_ROOT) not in sys.path:",
-                                "    sys.path.insert(0, str(IMPORT_ROOT))",
-                                "",
+                                *_import_bootstrap_lines(import_root, module_name),
                                 f"import {module_name}",
                                 "",
                                 f"def test_{full_path.stem}_coverage() -> None:",
@@ -634,18 +802,46 @@ async def analyze_coverage(
                     timeout=120,
                 )
 
-                coverage_data = _parse_coverage_json(json_report, full_path)
-                if coverage_data is not None:
+                coverage_data = _parse_coverage_json(json_report, full_path, roots=[import_root])
+                if coverage_data is not None and "coverage_percent" in coverage_data:
                     coverage_data.update(path_metadata)
                     coverage_data["module_name"] = module_name
                     coverage_data["import_root"] = str(import_root)
                     coverage_data["module_origin"] = str(origin)
                     coverage_data["returncode"] = result.returncode
                     coverage_data["used_tests"] = pytest_targets
+                    coverage_data.update(_pytest_stream_metadata(result))
                     return _success_result(
                         _format_coverage_result(coverage_data),
                         metadata=coverage_data,
                     )
+
+                streams = _format_pytest_streams(result.stdout or "", result.stderr or "")
+                plugin_missing = _coverage_plugin_missing(
+                    result.stdout or "", result.stderr or ""
+                )
+                if plugin_missing:
+                    code = "pytest_cov_missing"
+                    message = "pytest-cov is not available; coverage numbers were not produced."
+                else:
+                    code = "coverage_report_unavailable"
+                    message = "Coverage analysis did not produce numeric results."
+                if streams:
+                    message = f"{message}\n{streams}"
+                return _error_result(
+                    message,
+                    code=code,
+                    hint="Install pytest-cov and inspect pytest stdout/stderr for the coverage failure.",
+                    metadata={
+                        "file_path": file_path,
+                        "requested_path": file_path,
+                        "module_name": module_name,
+                        "import_root": str(import_root),
+                        "used_tests": pytest_targets,
+                        **path_metadata,
+                        **_pytest_stream_metadata(result),
+                    },
+                )
 
     except ValueError as e:
         return _error_result(
@@ -663,14 +859,47 @@ async def analyze_coverage(
         )
     except Exception as e:
         logger.error(f"Error analyzing coverage: {e}", exc_info=True)
+        return _error_result(
+            f"Coverage analysis failed: {e}",
+            code="coverage_analysis_failed",
+            hint="Inspect the error and pytest output; numeric coverage was not produced.",
+            metadata={"file_path": file_path, "requested_path": file_path},
+        )
 
-    return _success_result(
-        "Basic coverage estimation: (use pytest-cov for accurate results)",
-        metadata={"file_path": file_path, "method": "estimation"},
-    )
+
+def _candidate_paths(file_name: str, roots: list[Path]) -> list[Path]:
+    """Expand a coverage JSON path against likely roots."""
+    candidate = Path(file_name)
+    options = [candidate]
+    if not candidate.is_absolute():
+        options.extend(root / candidate for root in roots)
+    return options
 
 
-def _parse_coverage_json(report_path: Path, target_file: Path) -> Dict[str, Any] | None:
+def _paths_refer_to_same_file(candidate: Path, target: Path) -> bool:
+    """Compare coverage report paths, including macOS /var aliases."""
+    try:
+        target_resolved = target.resolve()
+    except OSError:
+        return False
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        return False
+    if resolved == target_resolved:
+        return True
+    try:
+        return candidate.exists() and target.exists() and resolved.samefile(target_resolved)
+    except OSError:
+        return False
+
+
+def _parse_coverage_json(
+    report_path: Path,
+    target_file: Path,
+    *,
+    roots: list[Path] | None = None,
+) -> Dict[str, Any] | None:
     """Parse a pytest-cov JSON report for a specific file."""
     if not report_path.exists():
         return None
@@ -682,15 +911,16 @@ def _parse_coverage_json(report_path: Path, target_file: Path) -> Dict[str, Any]
 
     files = payload.get("files", {})
     target_resolved = target_file.resolve()
+    search_roots = [target_resolved.parent]
+    if roots:
+        search_roots.extend(Path(root) for root in roots)
 
     for file_name, file_data in files.items():
-        candidate = Path(file_name)
-        try:
-            if candidate.resolve() != target_resolved:
-                continue
-        except OSError:
-            if candidate.name != target_resolved.name:
-                continue
+        if not any(
+            _paths_refer_to_same_file(option, target_resolved)
+            for option in _candidate_paths(file_name, search_roots)
+        ):
+            continue
 
         summary = file_data.get("summary", {})
         return {

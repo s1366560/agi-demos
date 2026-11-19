@@ -466,6 +466,117 @@ class TestGenerateCommit:
             assert result_log.stdout.strip().count("\n") == 0  # Only one line = one commit
 
 
+
+    @pytest.mark.asyncio
+    async def test_generate_commit_uses_nested_working_dir(self):
+        """generate_commit must honor working_dir instead of the workspace root."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import subprocess
+
+            workspace = Path(tmpdir)
+            (workspace / "root.txt").write_text("workspace root is not a repo\n")
+            repo_dir = workspace / "my-evo"
+            repo_dir.mkdir()
+            subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"],
+                cwd=repo_dir,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"],
+                cwd=repo_dir,
+                capture_output=True,
+                check=True,
+            )
+            (repo_dir / "tracked.txt").write_text("original\n")
+            subprocess.run(["git", "add", "."], cwd=repo_dir, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "Initial nested"],
+                cwd=repo_dir,
+                capture_output=True,
+                check=True,
+            )
+            (repo_dir / "tracked.txt").write_text("modified in nested repo\n")
+
+            result = await generate_commit(
+                message="Update nested file",
+                auto_add=True,
+                working_dir="my-evo",
+                _workspace_dir=tmpdir,
+            )
+
+            assert not result.get("isError")
+            metadata = result.get("metadata", {})
+            assert metadata.get("in_git_repo") is True
+            assert metadata.get("committed") is True
+            assert Path(metadata["working_dir"]).resolve() == repo_dir.resolve()
+            log = subprocess.run(
+                ["git", "log", "-1", "--pretty=%s"],
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            assert log.stdout.strip() == "Update nested file"
+
+    @pytest.mark.asyncio
+    async def test_generate_commit_uses_repo_path_alias(self):
+        """repo_path is accepted as an alias for working_dir."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import subprocess
+
+            repo_dir = Path(tmpdir) / "alias-repo"
+            repo_dir.mkdir()
+            subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"],
+                cwd=repo_dir,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"],
+                cwd=repo_dir,
+                capture_output=True,
+                check=True,
+            )
+            (repo_dir / "file.txt").write_text("v1\n")
+            subprocess.run(["git", "add", "."], cwd=repo_dir, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "Initial"],
+                cwd=repo_dir,
+                capture_output=True,
+                check=True,
+            )
+            (repo_dir / "file.txt").write_text("v2\n")
+
+            result = await generate_commit(
+                auto_add=True,
+                dry_run=True,
+                repo_path="alias-repo",
+                _workspace_dir=tmpdir,
+            )
+
+            assert not result.get("isError")
+            metadata = result.get("metadata", {})
+            assert metadata.get("in_git_repo") is True
+            assert metadata.get("dry_run") is True
+            assert Path(metadata["working_dir"]).resolve() == repo_dir.resolve()
+
+    @pytest.mark.asyncio
+    async def test_generate_commit_rejects_path_escape(self, tmp_path):
+        """working_dir must stay inside the workspace."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        result = await generate_commit(
+            working_dir="../outside",
+            _workspace_dir=str(workspace),
+        )
+        assert result.get("isError") is True
+
+
 class TestGitToolsIntegration:
     """Integration tests for git tools."""
 

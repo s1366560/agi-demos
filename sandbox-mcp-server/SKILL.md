@@ -457,7 +457,7 @@ remotion, puppeteer, sharp, tailwindcss
 ### 6. 测试工具
 
 #### `generate_tests` - 生成测试
-为 Python 代码生成测试用例。
+为 Python 代码生成测试用例。省略 `output_path` 时默认写入工作区 `tests/test_<filename>.py`；若该文件已存在则自动加数字后缀，避免覆盖。显式 `output_path` 仍优先生效。
 
 ```json
 {

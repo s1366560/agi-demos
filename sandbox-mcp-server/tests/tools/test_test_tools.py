@@ -7,15 +7,30 @@ TDD Cycle:
 """
 
 import ast
+import asyncio
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from src.tools.test_tools import (
+    _default_generate_tests_output_path,
+    _parse_coverage_json,
     analyze_coverage,
     generate_tests,
     run_tests,
 )
+
+
+def _result_text(result: dict) -> str:
+    """Join tool text content for assertions."""
+    chunks = []
+    for item in result.get("content") or []:
+        if isinstance(item, dict):
+            chunks.append(item.get("text") or "")
+    return "\n".join(chunks)
+
 
 
 class TestGenerateTests:
@@ -130,6 +145,192 @@ async def fetch(name: str) -> str:
         assert result.get("isError") is True
         assert result["metadata"]["error"]["code"] == "path_outside_workspace"
 
+    @pytest.mark.asyncio
+    async def test_generate_tests_defaults_to_tests_directory(self, tmp_path):
+        """Omitted output_path writes under tests/, not next to the source file."""
+        source = tmp_path / "src" / "pkg" / "models.py"
+        source.parent.mkdir(parents=True)
+        source.write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+
+        result = await generate_tests(
+            file_path=str(source),
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        output_file = Path(result["metadata"]["output_file"])
+        assert output_file == tmp_path / "tests" / "test_models.py"
+        assert output_file.exists()
+        assert not (source.parent / "test_models.py").exists()
+
+    @pytest.mark.asyncio
+    async def test_generate_tests_explicit_output_path_is_preserved(self, tmp_path):
+        """An explicit output_path still wins over the tests/ default."""
+        source = tmp_path / "calculator.py"
+        source.write_text("def add(a: int, b: int) -> int:\n    return a + b\n", encoding="utf-8")
+        target = tmp_path / "custom" / "test_add.py"
+
+        result = await generate_tests(
+            file_path=str(source),
+            output_path=str(target),
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        output_file = Path(result["metadata"]["output_file"])
+        assert output_file == target
+        assert target.exists()
+        assert not (tmp_path / "tests" / "test_calculator.py").exists()
+
+    @pytest.mark.asyncio
+    async def test_generate_tests_does_not_overwrite_existing_default_file(self, tmp_path):
+        """Default naming must not clobber an existing tests/test_<file>.py."""
+        source = tmp_path / "models.py"
+        source.write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+        existing = tmp_path / "tests" / "test_models.py"
+        existing.parent.mkdir()
+        existing.write_text("# existing suite\n", encoding="utf-8")
+
+        result = await generate_tests(
+            file_path=str(source),
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        output_file = Path(result["metadata"]["output_file"])
+        assert output_file == tmp_path / "tests" / "test_models_2.py"
+        assert existing.read_text(encoding="utf-8") == "# existing suite\n"
+        assert output_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_generate_tests_import_survives_shadowed_src_package(self, tmp_path):
+        """Generated imports must load the workspace file, not a venv package named src."""
+        import subprocess
+        import sys
+
+        source = tmp_path / "src" / "pkg" / "models.py"
+        source.parent.mkdir(parents=True)
+        (tmp_path / "src" / "__init__.py").write_text("", encoding="utf-8")
+        (tmp_path / "src" / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+        source.write_text("def ping() -> str:\n    return 'workspace'\n", encoding="utf-8")
+
+        shadow_root = tmp_path / "shadow"
+        shadow_pkg = shadow_root / "src"
+        (shadow_pkg / "pkg").mkdir(parents=True)
+        (shadow_pkg / "__init__.py").write_text("", encoding="utf-8")
+        (shadow_pkg / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+        (shadow_pkg / "pkg" / "models.py").write_text(
+            "def ping() -> str:\n    return 'shadow'\n",
+            encoding="utf-8",
+        )
+
+        result = await generate_tests(
+            file_path=str(source),
+            _workspace_dir=str(tmp_path),
+        )
+        assert not result.get("isError")
+        output_file = Path(result["metadata"]["output_file"])
+        generated = output_file.read_text(encoding="utf-8")
+        assert "sys.path.insert(0, _source_root)" in generated
+        assert "from src.pkg.models import ping" in generated
+
+        script = (
+            "import sys\n"
+            f"sys.path.insert(0, r'{shadow_root}')\n"
+            f"path = r'{output_file}'\n"
+            "code = open(path, encoding='utf-8').read()\n"
+            "preamble = code.split('import pytest', 1)[0]\n"
+            "ns = {}\n"
+            "exec(preamble, ns)\n"
+            "exec('from src.pkg.models import ping', ns)\n"
+            "print(ns['ping']())\n"
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_path / "tests"),
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.strip() == "workspace"
+
+
+def test_default_generate_tests_output_path_increments_collisions(tmp_path):
+    """Helper chooses the first free tests/test_<stem>[_N].py name."""
+    source = tmp_path / "models.py"
+    source.write_text("x = 1\n", encoding="utf-8")
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_models.py").write_text("old\n", encoding="utf-8")
+    (tests_dir / "test_models_2.py").write_text("old2\n", encoding="utf-8")
+
+    chosen = _default_generate_tests_output_path(source, str(tmp_path))
+    assert chosen == tests_dir / "test_models_3.py"
+    assert chosen.exists()
+
+
+@pytest.mark.asyncio
+async def test_generate_tests_does_not_mutate_host_sys_modules(tmp_path, monkeypatch):
+    """Clearing a shadowed src package must happen only in generated test code."""
+    import types
+
+    source = tmp_path / "sample.py"
+    source.write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+
+    sentinel = types.ModuleType("src")
+    sentinel.__file__ = str(tmp_path / "shadow-host" / "src" / "__init__.py")
+    monkeypatch.setitem(sys.modules, "src", sentinel)
+
+    result = await generate_tests(
+        file_path=str(source),
+        _workspace_dir=str(tmp_path),
+    )
+    assert not result.get("isError")
+    assert sys.modules.get("src") is sentinel
+
+
+@pytest.mark.asyncio
+async def test_generate_tests_default_paths_are_unique_under_concurrency(tmp_path):
+    """Two default writes of the same stem must not overwrite each other."""
+    source = tmp_path / "models.py"
+    source.write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+
+    first, second = await asyncio.gather(
+        generate_tests(file_path=str(source), _workspace_dir=str(tmp_path)),
+        generate_tests(file_path=str(source), _workspace_dir=str(tmp_path)),
+    )
+    assert not first.get("isError")
+    assert not second.get("isError")
+    paths = {
+        Path(first["metadata"]["output_file"]),
+        Path(second["metadata"]["output_file"]),
+    }
+    assert paths == {
+        tmp_path / "tests" / "test_models.py",
+        tmp_path / "tests" / "test_models_2.py",
+    }
+    for path in paths:
+        assert path.exists()
+        assert "def test_ping" in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_generate_tests_default_path_rejects_tests_symlink_escape(tmp_path):
+    """A tests/ symlink pointing outside the workspace must be rejected."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (workspace / "models.py").write_text("def ping() -> str:\n    return 'pong'\n", encoding="utf-8")
+    (workspace / "tests").symlink_to(outside)
+
+    result = await generate_tests(
+        file_path=str(workspace / "models.py"),
+        _workspace_dir=str(workspace),
+    )
+    assert result.get("isError") is True
+    assert list(outside.iterdir()) == []
+
 
 class TestRunTests:
     """Test suite for run_tests tool."""
@@ -197,6 +398,66 @@ def test_failing():
         assert not result.get("isError")
 
     @pytest.mark.asyncio
+    async def test_run_tests_no_tests_in_empty_workspace(self, tmp_path):
+        """An empty workspace should report zero tests, not a tool error."""
+        result = await run_tests(
+            file_pattern="test_*.py",
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        assert result["metadata"]["total"] == 0
+        assert result["metadata"]["passed"] == 0
+        assert result["metadata"]["failed"] == 0
+        assert "No test files found" in _result_text(result)
+
+    @pytest.mark.asyncio
+    async def test_run_tests_config_failure_is_error(self, tmp_path):
+        """Invalid pytest configuration must be reported as a tool error."""
+        (tmp_path / "pytest.ini").write_text(
+            "[pytest]\naddopts = --not-a-real-pytest-option\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "test_sample.py").write_text(
+            "def test_ok():\n    assert True\n",
+            encoding="utf-8",
+        )
+
+        result = await run_tests(
+            file_pattern="test_*.py",
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "tests_failed_to_run"
+        text = _result_text(result)
+        assert "Tests failed to run" in text
+        assert "stderr:" in text
+        assert "--not-a-real-pytest-option" in text or "--not-a-real-pytest-option" in (
+            result["metadata"].get("stderr") or ""
+        )
+
+    @pytest.mark.asyncio
+    async def test_run_tests_collection_error_is_error(self, tmp_path):
+        """Collection/import failures must be errors and must keep stderr."""
+        (tmp_path / "test_broken.py").write_text(
+            "import module_that_does_not_exist_xyz123\n\n"
+            "def test_ok():\n    assert True\n",
+            encoding="utf-8",
+        )
+
+        result = await run_tests(
+            file_pattern="test_*.py",
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "tests_failed_to_run"
+        text = _result_text(result)
+        assert "Tests failed to run" in text
+        assert "module_that_does_not_exist_xyz123" in text
+
+    @pytest.mark.asyncio
     async def test_run_tests_rejects_path_escape(self, tmp_path):
         """Escaped test directories should be rejected."""
         workspace = tmp_path / "workspace"
@@ -241,8 +502,9 @@ def function_b():
 
             assert not result.get("isError")
             metadata = result.get("metadata", {})
-            # Should return some coverage info
-            assert "file_path" in metadata
+            assert "coverage_percent" in metadata
+            assert isinstance(metadata["coverage_percent"], (int, float))
+            assert "Coverage:" in _result_text(result)
 
     @pytest.mark.asyncio
     async def test_analyze_coverage_with_pytest(self):
@@ -277,8 +539,9 @@ def test_my_function():
 
             assert not result.get("isError")
             metadata = result.get("metadata", {})
-            # Should return coverage info
-            assert "file_path" in metadata or "coverage" in metadata
+            assert "coverage_percent" in metadata
+            assert isinstance(metadata["coverage_percent"], (int, float))
+            assert "Coverage:" in _result_text(result)
 
     @pytest.mark.asyncio
     async def test_analyze_coverage_nonexistent_file(self):
@@ -313,7 +576,95 @@ def my_function():
         assert not (tmp_path / "test_mymodule_coverage.py").exists()
 
 
+
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_without_pytest_is_error(self, tmp_path):
+        """Refusing pytest-cov must not invent a numeric estimate or succeed."""
+        module_file = tmp_path / "mymodule.py"
+        module_file.write_text("def my_function():\n    return 1\n", encoding="utf-8")
+
+        result = await analyze_coverage(
+            file_path=str(module_file),
+            use_pytest=False,
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "coverage_unavailable"
+        assert "coverage_percent" not in result["metadata"]
+        assert "Basic coverage estimation" not in _result_text(result)
+
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_missing_plugin_is_error(self, tmp_path, monkeypatch):
+        """A missing pytest-cov plugin must surface as an error with stderr."""
+        module_file = tmp_path / "mymodule.py"
+        module_file.write_text("def my_function():\n    return 1\n", encoding="utf-8")
+        (tmp_path / "test_mymodule.py").write_text(
+            "from mymodule import my_function\n\ndef test_my_function():\n    assert my_function() == 1\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+
+        result = await analyze_coverage(
+            file_path=str(module_file),
+            use_pytest=True,
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "pytest_cov_missing"
+        text = _result_text(result)
+        assert "stderr:" in text or "unrecognized arguments" in text.lower()
+        assert "--cov" in text or "--cov" in (result["metadata"].get("stderr") or "")
+        assert "coverage_percent" not in result["metadata"]
+
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_missing_report_is_error(self, tmp_path, monkeypatch):
+        """Successful pytest without a coverage report must not be marked success."""
+        module_file = tmp_path / "mymodule.py"
+        module_file.write_text("def my_function():\n    return 1\n", encoding="utf-8")
+
+        def fake_run(*args, **kwargs):
+            return subprocess.CompletedProcess(args[0], 0, stdout="collected 0 items", stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        result = await analyze_coverage(
+            file_path=str(module_file),
+            use_pytest=True,
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "coverage_report_unavailable"
+        assert "numeric results" in _result_text(result)
+        assert "coverage_percent" not in result["metadata"]
+
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_exception_is_error(self, tmp_path, monkeypatch):
+        """Unexpected exceptions must be errors, not a fake coverage estimate."""
+        module_file = tmp_path / "mymodule.py"
+        module_file.write_text("def my_function():\n    return 1\n", encoding="utf-8")
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("simulated coverage crash")
+
+        monkeypatch.setattr(subprocess, "run", boom)
+
+        result = await analyze_coverage(
+            file_path=str(module_file),
+            use_pytest=True,
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "coverage_analysis_failed"
+        assert "simulated coverage crash" in _result_text(result)
+        assert "Basic coverage estimation" not in _result_text(result)
+
+
 class TestTestToolsIntegration:
+
     """Integration tests for test tools."""
 
     @pytest.mark.asyncio
@@ -361,3 +712,21 @@ def divide(a: int, b: int) -> float:
                 _workspace_dir=tmpdir,
             )
             assert not cov_result.get("isError")
+
+
+
+def test_parse_coverage_json_accepts_relative_report_paths(tmp_path):
+    """pytest-cov may record relative paths; resolve them against the import root."""
+    source = tmp_path / "mymodule.py"
+    source.write_text("def f():\n    return 1\n", encoding="utf-8")
+    report = tmp_path / "coverage.json"
+    report.write_text(
+        '''{"files": {"mymodule.py": {"summary": {"percent_covered": 75.0}, "missing_lines": [5], "executed_lines": [1, 2, 3]}}}''',
+        encoding="utf-8",
+    )
+
+    parsed = _parse_coverage_json(report, source, roots=[tmp_path])
+
+    assert parsed is not None
+    assert parsed["coverage_percent"] == 75.0
+    assert parsed["missing_lines"] == [5]
