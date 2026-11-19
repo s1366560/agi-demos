@@ -34,6 +34,7 @@ __all__ = [
     "SkillAvailabilityV2",
     "make_skill_loader_tool",
     "skill_availability_for_tool",
+    "skill_is_loadable",
     "skill_loader_tool",
 ]
 
@@ -44,6 +45,14 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Module-level state
 # ---------------------------------------------------------------------------
+
+
+def skill_is_loadable(skill: object) -> bool:
+    """A skill is advertised only when its instructions can actually be loaded."""
+    if getattr(skill, "full_content", None):
+        return True
+    path = getattr(skill, "file_path", None)
+    return isinstance(path, str) and bool(path) and Path(path).is_file()
 
 
 class SkillAvailabilityV2:
@@ -153,24 +162,6 @@ def _format_skill_content(
     )
 
 
-def _load_skill_content_from_cwd(skill_name: str) -> tuple[str | None, str | None]:
-    """Fallback skill content loading from current working directory."""
-    from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
-    from src.infrastructure.skill.markdown_parser import MarkdownParser
-
-    scanner = FileSystemSkillScanner()
-    file_info = scanner.find_skill(Path.cwd(), skill_name)
-    if not file_info:
-        return None, None
-
-    try:
-        markdown = MarkdownParser().parse_file(str(file_info.file_path))
-        return markdown.content, str(file_info.file_path)
-    except Exception as exc:
-        logger.warning("CWD fallback skill load failed for '%s': %s", skill_name, exc)
-        return None, None
-
-
 def _is_skill_allowed(ctx: ToolContext, skill_name: str) -> bool:
     """Check request-scoped skill allowlist from the runtime context."""
     allowed_skills = ctx.runtime_context.get("allowed_skills")
@@ -210,7 +201,7 @@ def _is_skill_allowed(ctx: ToolContext, skill_name: str) -> bool:
     category="knowledge",
     tags=frozenset({"skill", "knowledge"}),
 )
-async def skill_loader_tool(  # noqa: C901
+async def skill_loader_tool(
     ctx: ToolContext,
     *,
     name: str,
@@ -265,13 +256,6 @@ async def skill_loader_tool(  # noqa: C901
             )
         )
         resolved_file_path = cached_skill.file_path if cached_skill else None
-
-        if not content:
-            fallback_content, fallback_file_path = _load_skill_content_from_cwd(skill_name)
-            if fallback_content:
-                content = fallback_content
-                if not resolved_file_path:
-                    resolved_file_path = fallback_file_path
 
         if not content:
             runtime_names = (

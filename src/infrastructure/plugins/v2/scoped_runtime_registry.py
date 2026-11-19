@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 
@@ -48,6 +48,7 @@ _GLOBAL_ROUTE_SERVICES = frozenset(
 class _ScopeSlot:
     host: PlatformPluginRuntimeHostV2
     verified: bool = False
+    route_publisher: Callable[[RuntimeGenerationV2], Awaitable[PreparedGenerationPublicationV2]] | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     retired: bool = False
 
@@ -55,8 +56,10 @@ class _ScopeSlot:
         if self.retired:
             raise RuntimeV2Error("scope_retired", "scope authority has been retired")
 
-    async def stage(self, _generation: RuntimeGenerationV2) -> PreparedGenerationPublicationV2:
+    async def stage(self, generation: RuntimeGenerationV2) -> PreparedGenerationPublicationV2:
         self.require_active()
+        if self.route_publisher is not None:
+            return await self.route_publisher(generation)
 
         async def rollback() -> None:
             return None
@@ -133,6 +136,8 @@ class ScopedRuntimeRegistryV2:
         target_catalog: Mapping[str, ModuleCatalogEntryV2] | None = None,
         artifact_resolver: PluginArtifactResolverV2 | None = None,
         definitions_factory: Callable[[ScopeV2], Sequence[PluginDefinitionV2]] | None = None,
+        route_publisher: Callable[[RuntimeGenerationV2], Awaitable[PreparedGenerationPublicationV2]]
+        | None = None,
     ) -> None:
         if definitions and definitions_factory is not None:
             raise ValueError("scoped definitions require either fixed definitions or a factory")
@@ -144,6 +149,7 @@ class ScopedRuntimeRegistryV2:
         self._slots: dict[str, _ScopeSlot] = {}
         self._retirements: dict[str, set[OwnedLifecycleTaskV2]] = {}
         self._retirement_errors: list[BaseException] = []
+        self._route_publisher = route_publisher
         self._closed = False
         self._closing = OwnedLifecycleTaskV2(self._drain_all, name="scoped-runtime-close-v2")
 
@@ -183,6 +189,7 @@ class ScopedRuntimeRegistryV2:
                     )
                 ),
                 verified=verified,
+                route_publisher=self._route_publisher,
             )
             self._slots[key] = slot
         async with slot.lock:

@@ -1786,7 +1786,11 @@ class StreamMixin:
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        available_skills = list(runtime_capabilities.skills)
+        from src.infrastructure.agent.tools.skill_loader import skill_is_loadable
+
+        available_skills = [
+            skill for skill in runtime_capabilities.skills if skill_is_loadable(skill)
+        ]
         available_subagents = list(runtime_capabilities.subagents)
 
         selected_agent = await self._load_selected_agent(
