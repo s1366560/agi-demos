@@ -232,6 +232,44 @@ async def test_repeatable_progress_tool_is_not_a_same_cause_stop(
     processor.permission_manager.ask.assert_not_called()
 
 
+async def test_same_sentinel_on_another_tool_does_not_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"model": 0, "tool": 0}
+
+    async def execute(**_kwargs: Any) -> ToolResult:
+        calls["tool"] += 1
+        if calls["tool"] >= 8:
+            processor._abort_event.set()
+        return ToolResult(output="Not a git repository", is_error=False)
+
+    async def generate(_self: Any, _messages: Any, **_kwargs: Any) -> Any:
+        calls["model"] += 1
+        call_id = f"call-{calls['model']}"
+        yield _event(StreamEventType.TOOL_CALL_START, {"call_id": call_id, "name": "git_log"})
+        yield _event(
+            StreamEventType.TOOL_CALL_END,
+            {
+                "call_id": call_id,
+                "name": "git_log",
+                "arguments": {"message": f"m{calls['model']}"},
+            },
+        )
+        yield _event(StreamEventType.FINISH, {"reason": "tool_calls"})
+
+    processor = _processor(execute, pipeline=False, name="git_log")
+    _install_model(monkeypatch, generate)
+    events = [event async for event in processor._run_native_loop("session", [])]
+
+    assert calls["tool"] == 8
+    assert processor.doom_loop_detector.same_cause_count("not_a_git_repository|.") == 0
+    assert any(isinstance(event, AgentErrorEvent) and event.code == "ABORTED" for event in events)
+    assert not any(
+        isinstance(event, AgentErrorEvent) and event.code == "UNRECOVERABLE_TOOL_CAUSE"
+        for event in events
+    )
+
+
 def test_main_and_project_loops_share_the_session_processor_guard() -> None:
     assert "_react_agent.stream" in inspect.getsource(ProjectReActAgent.execute_chat)
     assert "create_for_main" in inspect.getsource(StreamMixin)

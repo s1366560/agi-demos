@@ -1860,11 +1860,18 @@ def create_sandbox_mcp_tool(  # noqa: C901, PLR0915
                     preclean_dependency_setup=preclean_dependency_setup,
                 )
             except SandboxToolResultError as exc:
+                output = _workspace_runtime_error_output(
+                    exc,
+                    tool_name=tool_name,
+                    kwargs=normalized_kwargs,
+                    root_override=root_override,
+                    declared_code_root=declared_code_root,
+                )
                 metadata = build_sandbox_tool_metadata(
                     tool_name=tool_name,
                     arguments=normalized_kwargs,
                     raw_result=exc.raw_result,
-                    output=str(exc),
+                    output=output,
                 )
                 code = exc.raw_result.get("code")
                 hint = exc.raw_result.get("hint")
@@ -1872,7 +1879,7 @@ def create_sandbox_mcp_tool(  # noqa: C901, PLR0915
                     metadata["code"] = code
                 if isinstance(hint, str):
                     metadata["hint"] = hint
-                return ToolResult(output=str(exc), metadata=metadata, is_error=True)
+                return ToolResult(output=output, metadata=metadata, is_error=True)
             if tool_name == "bash":
                 if artifact_error := _workspace_output_artifact_escape_error(
                     output,
