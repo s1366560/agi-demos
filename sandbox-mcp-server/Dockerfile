@@ -78,7 +78,7 @@ WORKDIR /src
 COPY pyproject.toml README.md ./
 COPY src ./src
 
-RUN python -m pip wheel --no-cache-dir --wheel-dir /wheelhouse .
+RUN python -m pip wheel --no-cache-dir --wheel-dir /wheelhouse ".[test-runtime]"
 
 FROM ubuntu:24.04 AS python-runtime
 
@@ -95,7 +95,7 @@ RUN python3 -m venv /opt/sandbox-mcp-venv \
         --no-cache-dir \
         --no-index \
         --find-links=/wheelhouse \
-        sandbox-mcp-server==0.1.0 \
+        "sandbox-mcp-server[test-runtime]==0.1.0" \
     && rm -rf /wheelhouse
 
 FROM ubuntu:24.04
