@@ -456,6 +456,21 @@ class TestDependencyGraph:
         metadata = result["metadata"]
         assert "internal" in metadata or "external" in metadata
 
+    @pytest.mark.asyncio
+    async def test_leaf_module_without_imports_stays_internal(self, tmp_path: Path):
+        """A definition-only local module is still internal to its importer."""
+        package = tmp_path / "src"
+        package.mkdir()
+        (package / "leaf.py").write_text("def value():\n    return 1\n", encoding="utf-8")
+        (package / "consumer.py").write_text("import src.leaf\n", encoding="utf-8")
+        reset_indexer(str(tmp_path))
+
+        result = await get_dependency_graph(".", _workspace_dir=str(tmp_path))
+
+        assert result.get("isError") is not True
+        assert "src.leaf" not in result["metadata"]["external"]
+        assert "src.leaf" in result["metadata"]["internal"]["src.consumer"]
+
 
 class TestCodeIndexer:
     """Test suite for CodeIndexer class."""

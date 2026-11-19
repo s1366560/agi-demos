@@ -877,10 +877,15 @@ def create_call_graph_tool() -> MCPTool:
 # =============================================================================
 
 
-def _indexed_module_names(import_graph: Dict[str, Any]) -> Set[str]:
-    """Module names represented by indexed project files."""
+def _indexed_module_names(files: Any) -> Set[str]:
+    """Module names represented by every indexed project file.
+
+    A leaf module with no imports is absent from ``import_graph`` but still
+    present in ``files_indexed``. Classifying only the graph keys marks that
+    leaf external.
+    """
     modules: Set[str] = set()
-    for file_path in import_graph:
+    for file_path in files:
         normalized = str(file_path).replace("\\", "/").removesuffix(".py")
         module = normalized.replace("/", ".").strip(".")
         if not module:
@@ -939,7 +944,7 @@ async def get_dependency_graph(
             )
 
         import_graph = indexer.index.import_graph
-        indexed_modules = _indexed_module_names(import_graph)
+        indexed_modules = _indexed_module_names(indexer.index.files_indexed)
 
         # Group by module
         external_deps: Dict[str, Set[str]] = {}
