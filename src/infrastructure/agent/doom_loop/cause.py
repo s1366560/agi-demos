@@ -63,7 +63,8 @@ def classify_unrecoverable_tool_cause(
     tools are not inferred from prose.
     """
     facts = metadata if isinstance(metadata, Mapping) else {}
-    code = facts.get("code") if isinstance(facts.get("code"), str) else None
+    raw_code = facts.get("code")
+    code = raw_code if isinstance(raw_code, str) else None
     if (
         code is None
         and tool_name == "generate_commit"
