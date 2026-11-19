@@ -50,6 +50,20 @@ def mock_docker_container(mock_docker):
     return container
 
 
+def _prove_project_idle(adapter: MCPSandboxAdapter, project_id: str) -> str:
+    """These rebuild cases have queried an idle project. Unknown is still a refusal."""
+
+    class _IdleSession:
+        async def scalar(self, _statement: object) -> int:
+            return 0
+
+        async def close(self) -> None:
+            return None
+
+    adapter._run_state_session_factory = lambda: _IdleSession()
+    return project_id
+
+
 @pytest.fixture
 def adapter(mock_docker):
     """Create MCPSandboxAdapter with mocked Docker."""
@@ -246,6 +260,7 @@ class TestSandboxAutoRebuild:
         """
         sandbox_id = "mcp-sandbox-test123"
         project_path = "/tmp/test_project"
+        project_id = _prove_project_idle(adapter, "project-dead-container")
 
         # Track containers created by run()
         created_containers = {}
@@ -289,6 +304,7 @@ class TestSandboxAutoRebuild:
             labels={
                 "memstack.sandbox": "true",
                 "memstack.sandbox.id": sandbox_id,
+                "memstack.project_id": project_id,
                 "memstack.sandbox.mcp_port": "18765",
                 "memstack.sandbox.desktop_port": "16080",
                 "memstack.sandbox.terminal_port": "17681",
@@ -579,6 +595,7 @@ class TestSandboxAutoRebuildIntegration:
 
         sandbox_id = "mcp-sandbox-full-flow"
         project_path = "/tmp/test_project"
+        project_id = _prove_project_idle(adapter, "project-full-flow")
 
         # Initial setup: container will be found as NotFound (killed)
         call_count = [0]
@@ -619,6 +636,11 @@ class TestSandboxAutoRebuildIntegration:
             desktop_port=16080,
             terminal_port=17681,
             mcp_client=None,  # Will be reconnected
+            labels={
+                "memstack.sandbox": "true",
+                "memstack.sandbox.id": sandbox_id,
+                "memstack.project_id": project_id,
+            },
         )
         adapter._active_sandboxes[sandbox_id] = instance
 
