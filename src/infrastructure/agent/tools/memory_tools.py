@@ -821,6 +821,16 @@ async def _execute_memory_update(  # noqa: PLR0911
     """Persist a memory update, then leave indexing to a durable job."""
     if not session_factory:
         return json.dumps({"error": "Memory update not configured"})
+    if content is not None or title is not None or tags is not None or metadata is not None:
+        try:
+            embedder = (
+                embedding_service
+                if embedding_service is not None
+                else getattr(graph_service, "embedder", None)
+            )
+            await ensure_embedding_available(embedder)
+        except NoActiveProviderError:
+            return json.dumps({"error": "provider_unconfigured", "code": "provider_unconfigured"})
 
     session = session_factory()
     try:

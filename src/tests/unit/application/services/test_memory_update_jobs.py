@@ -761,6 +761,9 @@ def test_service_startup_calls_graph_recovery_without_a_project_chat() -> None:
 async def test_process_graph_bind_recovers_without_opening_a_project(
     factory: Callable[[], AsyncSession],
 ) -> None:
+    from src.application.services.memory_update_runtime import clear_memory_update_runtime
+
+    clear_memory_update_runtime()
     await _seed(factory)
     await _stage_update(factory, content="after")
     seen: list[str] = []
@@ -783,6 +786,7 @@ async def test_process_graph_bind_recovers_without_opening_a_project(
         await dispatcher.join()
         assert seen == ["after"]
     finally:
+        clear_memory_update_runtime()
         install_memory_update_dispatcher(None)
 
 

@@ -28,6 +28,14 @@ def memory_update_runtime_ready() -> bool:
     return _graph_service is not None and _session_factory is not None
 
 
+def clear_memory_update_runtime() -> None:
+    """Drop a process binding so a later test or shutdown starts unbound."""
+    global _graph_service, _embedding_service, _session_factory
+    _graph_service = None
+    _embedding_service = None
+    _session_factory = None
+
+
 async def extract_with_graph(payload: dict[str, Any], graph_service: object | None) -> None:
     """Extract through the graph adapter. A queued adapter does not mean completion."""
     if graph_service is None:

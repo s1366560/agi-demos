@@ -18,6 +18,7 @@ from sqlalchemy import and_, false, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.processing import MemoryProcessingSource
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.memory_processing import (
     update_memory_processing_status,
 )
@@ -137,8 +138,10 @@ async def _claim_job(
             return worker_id, dict(payload or {})
         found = (
             await session.execute(
-                select(TaskLog.task_type, TaskLog.status, TaskLog.retry_count).where(
-                    TaskLog.id == task_id
+                refresh_select_statement(
+                    select(TaskLog.task_type, TaskLog.status, TaskLog.retry_count).where(
+                        TaskLog.id == task_id
+                    )
                 )
             )
         ).one_or_none()
