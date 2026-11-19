@@ -1,8 +1,10 @@
 """Explicit sandbox image staleness and migration planning.
 
-The running container is identified by the digest recorded on its labels.
-A mismatch is reported as stale. Replacing that container requires a human
-request and no active run. This module does not build or recreate containers.
+``source_digest`` compares container image source bytes recorded on a label.
+A mismatch is reported as stale for that image. It does not attest which
+tool-server process loaded modules for a call. Replacing a container requires
+a human request and no active run. This module does not build or recreate
+containers.
 """
 
 from __future__ import annotations
@@ -13,6 +15,13 @@ from dataclasses import dataclass
 
 SOURCE_DIGEST_LABEL = "org.memstack.sandbox.source_digest"
 ACTIVE_RUN_LABEL = "org.memstack.sandbox.active_run"
+IMAGE_DIGEST_SCOPE = (
+    "org.memstack.sandbox.source_digest identifies container image source bytes. "
+    "It does not attest the tool server process that loaded modules for a call. "
+    "A path inside the container, including /opt/sandbox-mcp-venv, is an image copy. "
+    "Its mtime does not identify an MCP server running outside the container. "
+    "Runtime attestation has to name that loaded component."
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -53,6 +62,7 @@ def image_status(
     labels: Mapping[str, str],
     current_digest: str | None,
 ) -> SandboxImageStatus:
+    """Compare container image labels. See ``IMAGE_DIGEST_SCOPE`` for the limit."""
     recorded = labels.get(SOURCE_DIGEST_LABEL) or None
     if not recorded or not current_digest:
         return SandboxImageStatus(

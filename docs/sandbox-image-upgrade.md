@@ -3,6 +3,13 @@
 This is a code path and an operator procedure. It does not upgrade a running
 sandbox, and it has not been applied to the R6 container.
 
+`org.memstack.sandbox.source_digest` identifies container image source bytes.
+It does not attest the tool server process that loaded modules for a call.
+A path inside the container, including `/opt/sandbox-mcp-venv`, is an image
+copy. Its mtime does not identify an MCP server running outside the container.
+Runtime attestation has to name that loaded component. The call, transport,
+process, and module evidence for R6 is pending and is not established here.
+
 ## What is executable now
 
 1. Read the container label `org.memstack.sandbox.source_digest`.
@@ -30,5 +37,6 @@ sandbox, and it has not been applied to the R6 container.
    explicit sandbox create path, using the same workspace mount and
    permission mode. Do not use automatic health rebuild for this replacement.
 
-The R6 sandbox is still the previously built image until that procedure is
-run by an operator. This document does not perform it.
+An operator has not run this procedure. A container image label, including a
+missing or different `source_digest`, leaves the loaded tool server version
+unattested. This document does not perform a rebuild.

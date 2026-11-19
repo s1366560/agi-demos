@@ -1404,6 +1404,8 @@ class MCPSandboxAdapter(SandboxPort):
                 **({"memstack.project_id": project_id} if project_id else {}),
                 **({"memstack.tenant_id": tenant_id} if tenant_id else {}),
                 **(
+                    # Image source bytes only. This label does not attest the
+                    # tool server process; see IMAGE_DIGEST_SCOPE.
                     {"org.memstack.sandbox.source_digest": self._source_digest}
                     if isinstance(self._source_digest, str) and self._source_digest
                     else {}

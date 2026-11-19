@@ -1543,7 +1543,11 @@ class ProjectSandboxLifecycleService:
         active_run: bool,
         human_requested: bool,
     ) -> tuple[object, object]:
-        """Report staleness and a human migration plan. This does not rebuild."""
+        """Report container-image staleness and a human migration plan.
+
+        The digest is the container image label. It does not attest the tool
+        server process. This does not rebuild.
+        """
         from src.application.services.sandbox_image_lifecycle import (
             image_status,
             plan_explicit_migration,

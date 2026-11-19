@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from src.application.services.sandbox_image_lifecycle import (
+    IMAGE_DIGEST_SCOPE,
     SOURCE_DIGEST_LABEL,
     automatic_rebuild_allowed,
     container_marks_active_run,
@@ -28,6 +29,13 @@ def test_missing_digest_is_unknown_rather_than_fresh() -> None:
     status = image_status({}, None)
     assert status.stale is False
     assert status.reason == "unknown"
+
+
+def test_image_digest_does_not_attest_the_loaded_tool_server() -> None:
+    assert "tool server process" in IMAGE_DIGEST_SCOPE
+    assert "/opt/sandbox-mcp-venv" in IMAGE_DIGEST_SCOPE
+    assert "mtime" in IMAGE_DIGEST_SCOPE
+    assert "source_digest" in IMAGE_DIGEST_SCOPE
 
 
 def test_different_recorded_digest_is_stale() -> None:
