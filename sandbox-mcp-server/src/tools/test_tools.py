@@ -171,15 +171,24 @@ def _candidate_coverage_tests(source_path: Path, workspace_dir: str) -> list[Pat
 
 
 def _import_bootstrap_lines(import_root: Path, module_name: str) -> list[str]:
-    """Emit import preamble that prefers this workspace over a shadowed package.
+    """Emit import preamble that loads this workspace ahead of a shadowed package.
 
     These lines are written into the generated *test file* and execute only in
     that test process (for example pytest). ``generate_tests`` does not exec
-    them and does not mutate ``sys.modules`` in the long-lived MCP host.
+    them, does not mutate ``sys.modules`` in the long-lived MCP host, and does
+    not create ``__init__.py`` files in the workspace.
+
+    A src-layout tree without ``__init__.py`` is a namespace package. Putting
+    the workspace on ``sys.path`` is not enough: Python keeps scanning and a
+    later regular package also named ``src`` (the installed server package)
+    replaces the namespace portion. The finder below owns that top-level name
+    and resolves it only under the workspace root.
     """
     top_level = module_name.split(".", 1)[0]
     return [
         "from pathlib import Path",
+        "import importlib.machinery",
+        "import importlib.util",
         "import sys",
         "",
         f'SOURCE_ROOT = Path(r"{import_root}")',
@@ -188,6 +197,33 @@ def _import_bootstrap_lines(import_root: Path, module_name: str) -> list[str]:
         "    sys.path.remove(_source_root)",
         "sys.path.insert(0, _source_root)",
         f"_top_level = {top_level!r}",
+        "",
+        "class _WorkspaceRootFinder:",
+        "    def find_spec(self, fullname, path, target=None):",
+        "        if fullname != _top_level and not fullname.startswith(_top_level + '.'):",
+        "            return None",
+        "        relative = SOURCE_ROOT.joinpath(*fullname.split('.'))",
+        "        init_file = relative / '__init__.py'",
+        "        module_file = relative.with_suffix('.py')",
+        "        if init_file.is_file():",
+        "            loader = importlib.machinery.SourceFileLoader(fullname, str(init_file))",
+        "            return importlib.util.spec_from_file_location(",
+        "                fullname,",
+        "                init_file,",
+        "                loader=loader,",
+        "                submodule_search_locations=[str(relative)],",
+        "            )",
+        "        if module_file.is_file():",
+        "            loader = importlib.machinery.SourceFileLoader(fullname, str(module_file))",
+        "            return importlib.util.spec_from_file_location(",
+        "                fullname, module_file, loader=loader",
+        "            )",
+        "        if relative.is_dir():",
+        "            spec = importlib.machinery.ModuleSpec(fullname, None, is_package=True)",
+        "            spec.submodule_search_locations = [str(relative)]",
+        "            return spec",
+        "        return None",
+        "",
         "for _name in list(sys.modules):",
         "    if _name == _top_level or _name.startswith(_top_level + '.'):",
         "        _mod = sys.modules[_name]",
@@ -200,6 +236,7 @@ def _import_bootstrap_lines(import_root: Path, module_name: str) -> list[str]:
         "                sys.modules.pop(_name, None)",
         "        except (OSError, ValueError):",
         "            sys.modules.pop(_name, None)",
+        "sys.meta_path.insert(0, _WorkspaceRootFinder())",
         "",
     ]
 
