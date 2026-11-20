@@ -242,7 +242,7 @@ def _db_with_project_access(
         execute=AsyncMock(
             return_value=SimpleNamespace(
                 scalar_one_or_none=lambda: tenant_id if allowed else None,
-                all=lambda: [],
+                all=list,
             )
         ),
         commit=AsyncMock(),
