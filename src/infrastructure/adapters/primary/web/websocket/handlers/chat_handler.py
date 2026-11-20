@@ -145,6 +145,14 @@ async def _validated_client_message_controls(
                 extra=_client_message_id_extra(client_message_id),
             )
             return None
+    if execution_target == "local":
+        await context.send_error(
+            _("Local execution is not available on the cloud chat path"),
+            code="LOCAL_EXECUTION_UNAVAILABLE",
+            conversation_id=(conversation_id if isinstance(conversation_id, str) else None),
+            extra=_client_message_id_extra(client_message_id),
+        )
+        return None
     return client_message_id, permission_mode, execution_target
 
 
