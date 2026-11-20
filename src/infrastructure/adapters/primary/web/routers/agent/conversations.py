@@ -12,6 +12,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.domain.model.agent import ConversationStatus
+from src.domain.model.agent.execution.run_execution_placement import (
+    CLOUD_RUN_EXECUTION_PLACEMENT,
+)
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
     WorkspaceAuthorityNotFoundError,
@@ -364,7 +367,11 @@ def _conversation_responses(
     responses: list[ConversationResponse] = []
     for conversation in conversations:
         placement = resolved.get(conversation.id)
-        fields = placement.public_dict() if placement is not None else {}
+        fields = (
+            placement.public_dict()
+            if placement is not None
+            else CLOUD_RUN_EXECUTION_PLACEMENT.public_dict()
+        )
         responses.append(
             ConversationResponse.from_domain(
                 conversation,
@@ -741,7 +748,11 @@ async def get_conversation(
         placement = placements.get(conversation.id)
         return ConversationResponse.from_domain(
             conversation,
-            **(placement.public_dict() if placement is not None else {}),
+            **(
+                placement.public_dict()
+                if placement is not None
+                else CLOUD_RUN_EXECUTION_PLACEMENT.public_dict()
+            ),
         )
 
     except HTTPException:

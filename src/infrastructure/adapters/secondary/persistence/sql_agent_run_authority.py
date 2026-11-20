@@ -14,6 +14,7 @@ from src.domain.model.agent.execution.run_execution_placement import (
     CLOUD_RUN_EXECUTION_PLACEMENT,
     ExecutionTarget,
     RunExecutionPlacement,
+    RunExecutionPlacementFields,
     parse_execution_target,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -35,7 +36,7 @@ def placement_from_row(row: AgentRunAuthorityModel) -> RunExecutionPlacement:
     )
 
 
-def execution_fields(row: AgentRunAuthorityModel) -> dict[str, str | None]:
+def execution_fields(row: AgentRunAuthorityModel) -> RunExecutionPlacementFields:
     """Public contract shared by REST, session projection, and WebSocket envelopes."""
 
     return placement_from_row(row).public_dict()
@@ -53,7 +54,7 @@ class ConversationExecutionIndex:
                 return self._by_key[key]
         return CLOUD_RUN_EXECUTION_PLACEMENT
 
-    def public_dict(self, *keys: object) -> dict[str, str | None]:
+    def public_dict(self, *keys: object) -> RunExecutionPlacementFields:
         return self.resolve(*keys).public_dict()
 
 

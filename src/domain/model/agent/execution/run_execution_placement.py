@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 from src.domain.shared_kernel import ValueObject
 
@@ -19,6 +19,15 @@ class ExecutionTarget(StrEnum):
 
     LOCAL = "local"
     CLOUD = "cloud"
+
+
+class RunExecutionPlacementFields(TypedDict):
+    """Public execution-location fields shared by REST and WebSocket payloads."""
+
+    execution_target: Literal["local", "cloud"]
+    execution_machine_id: str | None
+    execution_environment_id: str | None
+    local_root_label: str | None
 
 
 class InvalidExecutionTarget(ValueError):
@@ -75,11 +84,14 @@ class RunExecutionPlacement(ValueObject):
         object.__setattr__(self, "execution_environment_id", environment_id)
         object.__setattr__(self, "local_root_label", local_root_label)
 
-    def public_dict(self) -> dict[str, str | None]:
+    def public_dict(self) -> RunExecutionPlacementFields:
         """API and WebSocket fields. These never live inside environment.kind."""
 
+        target: Literal["local", "cloud"] = (
+            "local" if self.execution_target is ExecutionTarget.LOCAL else "cloud"
+        )
         return {
-            "execution_target": self.execution_target.value,
+            "execution_target": target,
             "execution_machine_id": self.execution_machine_id,
             "execution_environment_id": self.execution_environment_id,
             "local_root_label": self.local_root_label,
