@@ -103,7 +103,7 @@ export function ProjectGraphPage({
                         aria-pressed={selectedNode?.id === node.id}
                         onClick={() => controller.selectNode(node.id)}
                       >
-                        <strong>{node.name}</strong>
+                        <strong className="project-graph-node-name">{node.name}</strong>
                         <span>{node.entity_type ?? node.type}</span>
                         <small>{node.uuid ?? node.id}</small>
                       </button>

@@ -679,8 +679,17 @@ async function exerciseDesktop(page, tracker, evidenceRoot, scope, fixture) {
         ).toBeVisible();
         return;
       }
-      for (const name of FIXTURE_NAMES)
+      for (const name of FIXTURE_NAMES) {
+        if (kind === "graph") {
+          const node = stage
+            .locator(".project-graph-nodes button")
+            .filter({ hasText: name });
+          await expect(node.first()).toBeVisible();
+          await expect(node.first()).toContainText(name);
+          continue;
+        }
         await expect(stage.getByText(name).first()).toBeVisible();
+      }
     });
     records[kind] = await tracker.waitFor(kind, startIndex);
     assertNetworkRecord(records[kind], kind, scope, fixture[kind]);
