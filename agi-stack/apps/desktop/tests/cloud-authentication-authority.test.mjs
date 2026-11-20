@@ -42,6 +42,7 @@ test('native password authentication adopts the bearer in the vault without retu
       credential_kind: 'cloud_bearer',
       credential: 'vault-only-token',
       expires_at: null,
+      persist_across_restart: false,
     },
   });
   assert.equal(await authority.clearTransientSession(), true);
@@ -459,4 +460,185 @@ test('a custom loopback Cloud origin reaches the same native authentication auth
   });
   assert.equal(calls[0].url, 'http://127.0.0.1:18766/api/v1/auth/token');
   assert.equal(saved[0].input.api_base_url, 'http://127.0.0.1:18766');
+  assert.equal(saved[0].input.persist_across_restart, false);
+  assert.equal(saved[0].input.refresh_token, undefined);
+});
+
+test('a trusted password login persists the refresh token', async () => {
+  const calls = [];
+  const saved = [];
+  const authority = authorityFor({
+    calls,
+    saved,
+    responses: [
+      jsonResponse({
+        access_token: 'access-token',
+        token_type: 'bearer',
+        must_change_password: false,
+        expires_at: '2026-11-20T02:00:00.000Z',
+        refresh_token: 'ms_rt_refresh',
+        refresh_expires_at: '2026-12-20T01:00:00.000Z',
+        session: {
+          session_id: 'session-1',
+          auth_method: 'password',
+          expires_at: '2026-11-20T02:00:00.000Z',
+          trusted_device: true,
+        },
+      }),
+    ],
+  });
+  await authority.loginWithPassword({
+    apiBaseUrl: 'https://cloud.memstack.test',
+    username: 'admin@memstack.test',
+    password: 'correct horse battery staple',
+    trustedDevice: true,
+  });
+  assert.equal(saved[0].input.refresh_token, 'ms_rt_refresh');
+  assert.equal(saved[0].input.access_expires_at, '2026-11-20T02:00:00.000Z');
+  assert.equal(saved[0].input.persist_across_restart, undefined);
+  assert.equal(await authority.clearTransientSession(), false);
+});
+
+test('near-expiry refresh is single-flight and keeps the vault on success', async () => {
+  const calls = [];
+  let release;
+  const gate = new Promise((done) => {
+    release = done;
+  });
+  let trustedSession = {
+    version: 1,
+    api_base_url: 'https://cloud.memstack.test',
+    runtime_mode: 'cloud',
+    credential_kind: 'cloud_bearer',
+    credential: 'old-access',
+    expires_at: '2023-11-14T22:13:20.000Z',
+    refresh_token: 'ms_rt_old',
+    access_expires_at: '2023-11-14T22:13:20.000Z',
+  };
+  let cleared = 0;
+  const authority = new DesktopCloudAuthenticationAuthority({
+    now: () => 1_700_000_000_000,
+    randomId: () => 'device_attempt_12345678',
+    async fetch(url, init) {
+      calls.push({ url, body: init.body });
+      await gate;
+      return jsonResponse({
+        access_token: 'new-access',
+        token_type: 'bearer',
+        must_change_password: false,
+        expires_at: '2026-11-20T02:00:00.000Z',
+        refresh_token: 'ms_rt_new',
+      });
+    },
+    async loadTrustedSession() {
+      return trustedSession;
+    },
+    async saveTrustedSession(input) {
+      trustedSession = input.input;
+    },
+    async clearTrustedSession() {
+      cleared += 1;
+      trustedSession = null;
+    },
+  });
+  const first = authority.refreshStoredSession('proactive');
+  const second = authority.refreshStoredSession('unauthorized');
+  release();
+  const [left, right] = await Promise.all([first, second]);
+  assert.equal(calls.length, 1);
+  assert.equal(left.status, 'refreshed');
+  assert.equal(right.status, 'refreshed');
+  assert.equal(trustedSession.credential, 'new-access');
+  assert.equal(trustedSession.refresh_token, 'ms_rt_new');
+  assert.equal(cleared, 0);
+});
+
+test('refresh 401 clears the vault and a 503 keeps it', async () => {
+  const stored = {
+    version: 1,
+    api_base_url: 'https://cloud.memstack.test',
+    runtime_mode: 'cloud',
+    credential_kind: 'cloud_bearer',
+    credential: 'old-access',
+    expires_at: '2026-11-20T02:00:00.000Z',
+    refresh_token: 'ms_rt_old',
+    access_expires_at: '2026-11-20T02:00:00.000Z',
+  };
+  let trustedSession = stored;
+  const authority = new DesktopCloudAuthenticationAuthority({
+    now: () => 1_700_000_000_000,
+    randomId: () => 'device_attempt_12345678',
+    async fetch() {
+      return new Response(JSON.stringify({ detail: 'nope' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+    async loadTrustedSession() {
+      return trustedSession;
+    },
+    async saveTrustedSession() {
+      throw new Error('unexpected save');
+    },
+    async clearTrustedSession() {
+      trustedSession = null;
+    },
+  });
+  assert.equal((await authority.refreshStoredSession('unauthorized')).status, 'invalid');
+  assert.equal(trustedSession, null);
+
+  trustedSession = stored;
+  const unavailable = new DesktopCloudAuthenticationAuthority({
+    now: () => 1_700_000_000_000,
+    randomId: () => 'device_attempt_12345678',
+    async fetch() {
+      return new Response('unavailable', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    },
+    async loadTrustedSession() {
+      return trustedSession;
+    },
+    async saveTrustedSession() {
+      throw new Error('unexpected save');
+    },
+    async clearTrustedSession() {
+      trustedSession = null;
+    },
+  });
+  assert.equal((await unavailable.refreshStoredSession('unauthorized')).status, 'unavailable');
+  assert.equal(trustedSession, stored);
+});
+
+test('an expired vault record without a refresh token is cleared once', async () => {
+  let trustedSession = {
+    version: 1,
+    api_base_url: 'https://cloud.memstack.test',
+    runtime_mode: 'cloud',
+    credential_kind: 'cloud_bearer',
+    credential: 'legacy-access',
+    expires_at: '2023-11-14T22:13:20.000Z',
+  };
+  let cleared = 0;
+  const authority = new DesktopCloudAuthenticationAuthority({
+    now: () => 1_700_000_000_000,
+    randomId: () => 'device_attempt_12345678',
+    async fetch() {
+      throw new Error('refresh must not be attempted');
+    },
+    async loadTrustedSession() {
+      return trustedSession;
+    },
+    async saveTrustedSession() {
+      throw new Error('unexpected save');
+    },
+    async clearTrustedSession() {
+      cleared += 1;
+      trustedSession = null;
+    },
+  });
+  assert.equal((await authority.refreshStoredSession('unauthorized')).status, 'invalid');
+  assert.equal((await authority.refreshStoredSession('unauthorized')).status, 'absent');
+  assert.equal(cleared, 1);
 });

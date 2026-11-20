@@ -218,6 +218,9 @@ fn broker(directory: &TestDirectory, base: &str) -> TrustedSessionBroker {
             credential_kind: TrustedSessionCredentialKind::CloudBearer,
             credential: "cloud-test-credential".into(),
             expires_at: None,
+            refresh_token: None,
+            access_expires_at: None,
+            persist_across_restart: true,
         })
         .unwrap();
     broker

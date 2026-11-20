@@ -35,6 +35,20 @@ pub(crate) struct TrustedSessionRecord {
     pub(crate) credential: String,
     #[serde(default)]
     pub(crate) expires_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) refresh_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) access_expires_at: Option<String>,
+    #[serde(default = "default_persist_across_restart", skip_serializing_if = "is_persisted")]
+    pub(crate) persist_across_restart: bool,
+}
+
+fn default_persist_across_restart() -> bool {
+    true
+}
+
+fn is_persisted(value: &bool) -> bool {
+    *value
 }
 
 impl fmt::Debug for TrustedSessionRecord {
@@ -47,6 +61,12 @@ impl fmt::Debug for TrustedSessionRecord {
             .field("credential_kind", &self.credential_kind)
             .field("credential", &"[REDACTED]")
             .field("expires_at", &self.expires_at)
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("access_expires_at", &self.access_expires_at)
+            .field("persist_across_restart", &self.persist_across_restart)
             .finish()
     }
 }
@@ -211,6 +231,17 @@ fn validate_record(record: &TrustedSessionRecord) -> Result<(), TrustedSessionBr
             .expires_at
             .as_ref()
             .is_some_and(|expires_at| expires_at.trim().is_empty())
+        || record
+            .refresh_token
+            .as_ref()
+            .is_some_and(|token| token.trim().is_empty())
+        || record
+            .access_expires_at
+            .as_ref()
+            .is_some_and(|expires_at| expires_at.trim().is_empty())
+        || (record.refresh_token.is_some()
+            && (record.runtime_mode != TrustedSessionRuntimeMode::Cloud
+                || !record.persist_across_restart))
     {
         return Err(TrustedSessionBrokerError::InvalidRecord);
     }
@@ -315,6 +346,9 @@ mod tests {
             credential_kind: TrustedSessionCredentialKind::CloudBearer,
             credential: "secret-cloud-bearer".to_string(),
             expires_at: Some("2026-07-16T00:00:00Z".to_string()),
+            refresh_token: None,
+            access_expires_at: None,
+            persist_across_restart: true,
         }
     }
 

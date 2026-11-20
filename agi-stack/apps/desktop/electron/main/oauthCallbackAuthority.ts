@@ -7,7 +7,10 @@ type TrustedCloudSessionSaveInput = Readonly<{
     runtime_mode: 'cloud';
     credential_kind: 'cloud_bearer';
     credential: string;
-    expires_at: null;
+    expires_at: string | null;
+    refresh_token?: string;
+    access_expires_at?: string | null;
+    persist_across_restart?: boolean;
   }>;
 }>;
 
@@ -18,6 +21,7 @@ export type DesktopOAuthPendingAttemptRecord = Readonly<{
   resume_route: string;
   state: string;
   expires_at: number;
+  trusted_device: boolean;
 }>;
 
 export type DesktopOAuthPendingAttemptPersistence = Readonly<{
@@ -32,6 +36,7 @@ export type DesktopOAuthCallbackAuthorityDependencies = Readonly<{
   openExternal(url: string): Promise<void>;
   saveTrustedSession(input: TrustedCloudSessionSaveInput): Promise<void>;
   normalizeResumeRoute(route: string): string | null;
+  noteTrustedDevice?(trustedDevice: boolean): void;
   pendingAttemptPersistence?: DesktopOAuthPendingAttemptPersistence;
 }>;
 
@@ -39,6 +44,7 @@ export type DesktopOAuthBeginInput = Readonly<{
   apiBaseUrl: string;
   provider: string;
   resumeRoute: string;
+  trustedDevice?: boolean;
 }>;
 
 export type DesktopOAuthListProvidersInput = Readonly<{
@@ -105,6 +111,7 @@ type PendingOAuthAttempt = Readonly<{
   resumeRoute: string;
   state: string;
   expiresAt: number;
+  trustedDevice: boolean;
 }>;
 
 const PROVIDER_ID = /^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$/u;
@@ -121,6 +128,10 @@ const CALLBACK_RESPONSE_KEYS = new Set([
   'token_type',
   'redirect_to',
   'user',
+  'expires_at',
+  'refresh_token',
+  'refresh_expires_at',
+  'session',
 ]);
 const PENDING_ATTEMPT_RECORD_KEYS = new Set([
   'version',
@@ -129,6 +140,7 @@ const PENDING_ATTEMPT_RECORD_KEYS = new Set([
   'resume_route',
   'state',
   'expires_at',
+  'trusted_device',
 ]);
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_AUTHORIZATION_TTL_SECONDS = 3600;
@@ -182,6 +194,7 @@ export class DesktopOAuthCallbackAuthority {
       resumeRoute,
       state: parsed.state,
       expiresAt,
+      trustedDevice: input.trustedDevice !== false,
     });
     await this.#savePending(pending);
     try {
@@ -260,6 +273,8 @@ export class DesktopOAuthCallbackAuthority {
     }
 
     try {
+      const trustedDevice = pending.trustedDevice;
+      this.#dependencies.noteTrustedDevice?.(trustedDevice);
       await this.#dependencies.saveTrustedSession({
         input: Object.freeze({
           version: 1,
@@ -267,7 +282,14 @@ export class DesktopOAuthCallbackAuthority {
           runtime_mode: 'cloud',
           credential_kind: 'cloud_bearer',
           credential: session.accessToken,
-          expires_at: null,
+          expires_at: session.expiresAt,
+          ...(trustedDevice && session.refreshToken
+            ? {
+                refresh_token: session.refreshToken,
+                access_expires_at: session.expiresAt,
+              }
+            : {}),
+          ...(trustedDevice ? {} : { persist_across_restart: false }),
         }),
       });
     } catch {
@@ -374,6 +396,7 @@ function pendingAttemptRecord(pending: PendingOAuthAttempt): DesktopOAuthPending
     resume_route: pending.resumeRoute,
     state: pending.state,
     expires_at: pending.expiresAt,
+    trusted_device: pending.trustedDevice,
   });
 }
 
@@ -382,7 +405,7 @@ function parsePendingAttemptRecord(
   normalizeResumeRoute: (route: string) => string | null,
 ): PendingOAuthAttempt | null {
   if (
-    !isExactRecord(input, PENDING_ATTEMPT_RECORD_KEYS) ||
+    !isAllowedRecord(input, PENDING_ATTEMPT_RECORD_KEYS) ||
     input.version !== 1 ||
     typeof input.resume_route !== 'string' ||
     typeof input.state !== 'string' ||
@@ -400,12 +423,14 @@ function parsePendingAttemptRecord(
     return null;
   }
   if (!apiBaseUrl || !provider || resumeRoute !== input.resume_route) return null;
+  if (input.trusted_device !== undefined && typeof input.trusted_device !== 'boolean') return null;
   return Object.freeze({
     apiBaseUrl,
     provider,
     resumeRoute,
     state: input.state,
     expiresAt: input.expires_at,
+    trustedDevice: input.trusted_device !== false,
   });
 }
 
@@ -455,9 +480,9 @@ function parseAuthorizationResponse(
 
 function parseCallbackResponse(
   input: unknown,
-): Readonly<{ accessToken: string; redirectTo: string }> {
+): Readonly<{ accessToken: string; redirectTo: string; expiresAt: string | null; refreshToken: string | null }> {
   if (
-    !isExactRecord(input, CALLBACK_RESPONSE_KEYS) ||
+    !isAllowedRecord(input, CALLBACK_RESPONSE_KEYS) ||
     typeof input.access_token !== 'string' ||
     !input.access_token ||
     input.access_token !== input.access_token.trim() ||
@@ -468,7 +493,35 @@ function parseCallbackResponse(
   ) {
     throw new DesktopOAuthCallbackAuthorityError('oauth_callback_contract_invalid');
   }
-  return Object.freeze({ accessToken: input.access_token, redirectTo: input.redirect_to });
+  const expiresAt = optionalTimestamp(input.expires_at);
+  const refreshToken = optionalSecret(input.refresh_token);
+  if (expiresAt === undefined || refreshToken === undefined) {
+    throw new DesktopOAuthCallbackAuthorityError('oauth_callback_contract_invalid');
+  }
+  return Object.freeze({
+    accessToken: input.access_token,
+    redirectTo: input.redirect_to,
+    expiresAt,
+    refreshToken,
+  });
+}
+
+function isAllowedRecord(value: unknown, allowedKeys: ReadonlySet<string>): value is Record<string, unknown> {
+  return isRecord(value) && Object.keys(value).every((key) => allowedKeys.has(key));
+}
+
+function optionalSecret(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !value.trim() || value !== value.trim() || hasControlCharacter(value)) {
+    return undefined;
+  }
+  return value;
+}
+
+function optionalTimestamp(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return undefined;
+  return value;
 }
 
 async function boundedJson(response: Response): Promise<unknown> {

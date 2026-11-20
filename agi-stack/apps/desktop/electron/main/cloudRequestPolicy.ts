@@ -3,6 +3,7 @@ import {
   requireCloudSandboxFileAuthority,
 } from '../../src/api/cloudSandboxDownloadAuthority';
 import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
+import type { CloudSessionRefreshOutcome } from './cloudAuthenticationAuthority';
 import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
 import { authorizeCloudMemoryEndpoint } from './cloudMemoryEndpointPolicy';
 import {
@@ -85,10 +86,19 @@ type TrustedCloudSession = Readonly<{
   expires_at: string | null;
 }>;
 
+export type CloudSessionRefreshState = {
+  used: boolean;
+  credential: string | null;
+};
+
 export type VaultBoundCloudRequestDependencies = Readonly<{
   loadTrustedSession(): Promise<unknown>;
   fetch(url: string, init: RequestInit): Promise<Response>;
   signal?: AbortSignal;
+  refreshTrustedSession?(
+    reason: 'proactive' | 'unauthorized',
+  ): Promise<CloudSessionRefreshOutcome>;
+  refreshState?: CloudSessionRefreshState;
   withContextSwitch?(
     operation: () => Promise<VaultBoundCloudRequestResult>,
   ): Promise<VaultBoundCloudRequestResult>;
@@ -239,7 +249,7 @@ export async function authorizeVaultBoundSandboxDesktopGrant(
   dependencies.signal?.throwIfAborted();
   const tenantId = identifier(input.tenantId, 'sandbox grant tenant scope is invalid');
   const projectId = identifier(input.projectId, 'sandbox grant project scope is invalid');
-  const session = parseTrustedCloudSession(await dependencies.loadTrustedSession());
+  const session = await adoptCloudSession(await dependencies.loadTrustedSession(), dependencies);
   dependencies.signal?.throwIfAborted();
   const response = await authorizedFetch(session, dependencies, {
     path: '/api/v1/workspace-context', method: 'GET',
@@ -298,7 +308,7 @@ export async function executeVaultBoundCloudRequest(
   dependencies.signal?.throwIfAborted();
   const request = parseRequest(input);
   const endpoint = authorizeEndpoint(request);
-  const session = parseTrustedCloudSession(await dependencies.loadTrustedSession());
+  const session = await adoptCloudSession(await dependencies.loadTrustedSession(), dependencies);
   dependencies.signal?.throwIfAborted();
   const contextResponse = await authorizedFetch(
     session,
@@ -421,7 +431,7 @@ export async function projectVaultBoundCloudSession(
   dependencies.signal?.throwIfAborted();
   const storedSession = await dependencies.loadTrustedSession();
   if (storedSession === null || storedSession === undefined) return null;
-  const session = parseTrustedCloudSession(storedSession);
+  const session = await adoptCloudSession(storedSession, dependencies);
   dependencies.signal?.throwIfAborted();
 
   const contextResponse = await authorizedFetch(
@@ -945,6 +955,59 @@ function authorizeBackendEndpoint(
   return Object.freeze({ kind: 'backend-stores', tenantId, projectId: null });
 }
 
+const ACCESS_REFRESH_WINDOW_MS = 60_000;
+
+function ensureRefreshState(
+  dependencies: VaultBoundCloudRequestDependencies,
+): CloudSessionRefreshState {
+  if (dependencies.refreshState) return dependencies.refreshState;
+  const created: CloudSessionRefreshState = { used: false, credential: null };
+  Object.defineProperty(dependencies, 'refreshState', { value: created });
+  return created;
+}
+
+function rawRefreshToken(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const token = (value as { refresh_token?: unknown }).refresh_token;
+  return typeof token === 'string' && token.trim() ? token : null;
+}
+
+function rawAccessExpiry(value: unknown): number | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as { access_expires_at?: unknown; expires_at?: unknown };
+  const raw = typeof record.access_expires_at === 'string' ? record.access_expires_at : record.expires_at;
+  if (typeof raw !== 'string') return null;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function adoptCloudSession(
+  stored: unknown,
+  dependencies: VaultBoundCloudRequestDependencies,
+): Promise<TrustedCloudSession> {
+  ensureRefreshState(dependencies);
+  let raw = stored;
+  const expiry = rawAccessExpiry(raw);
+  const refresh = rawRefreshToken(raw);
+  const now = Date.now();
+  if (
+    refresh &&
+    expiry !== null &&
+    expiry - now <= ACCESS_REFRESH_WINDOW_MS &&
+    dependencies.refreshTrustedSession
+  ) {
+    const outcome = await dependencies.refreshTrustedSession('proactive');
+    if (outcome.status === 'invalid') throw new CloudSessionAuthenticationInvalidError();
+    if (outcome.status !== 'refreshed' && outcome.status !== 'current') {
+      throw new Error('cloud session refresh unavailable');
+    }
+    raw = outcome.record;
+  } else if (expiry !== null && expiry <= now && !refresh) {
+    throw new CloudSessionAuthenticationInvalidError();
+  }
+  return parseTrustedCloudSession(raw);
+}
+
 function parseTrustedCloudSession(input: unknown): TrustedCloudSession {
   if (
     !isRecord(input) ||
@@ -991,6 +1054,32 @@ async function authorizedFetch(
   dependencies: VaultBoundCloudRequestDependencies,
   request: VaultBoundCloudRequestInput,
 ): Promise<Response> {
+  const response = await sendAuthorizedFetch(session, dependencies, request);
+  const refreshState = dependencies.refreshState;
+  if (
+    response.status !== 401 ||
+    !dependencies.refreshTrustedSession ||
+    !refreshState ||
+    refreshState.used
+  ) {
+    return response;
+  }
+  refreshState.used = true;
+  const outcome = await dependencies.refreshTrustedSession('unauthorized');
+  if (outcome.status === 'invalid') throw new CloudSessionAuthenticationInvalidError();
+  if (outcome.status !== 'refreshed' && outcome.status !== 'current') {
+    throw new Error('cloud session refresh unavailable');
+  }
+  refreshState.credential = outcome.record.credential;
+  return sendAuthorizedFetch(session, dependencies, request);
+}
+
+async function sendAuthorizedFetch(
+  session: TrustedCloudSession,
+  dependencies: VaultBoundCloudRequestDependencies,
+  request: VaultBoundCloudRequestInput,
+): Promise<Response> {
+  const credential = dependencies.refreshState?.credential ?? session.credential;
   const target = new URL(request.path, `${session.api_base_url}/`);
   if (target.origin !== session.api_base_url) throw new Error('cloud request origin mismatch');
   const headers = new Headers({
@@ -999,7 +1088,7 @@ async function authorizedFetch(
       : request.response?.kind === 'event-stream'
         ? 'text/event-stream'
         : 'application/json',
-    Authorization: `Bearer ${session.credential}`,
+    Authorization: `Bearer ${credential}`,
   });
   if (request.body !== undefined) headers.set('Content-Type', 'application/json');
   if (request.mutation) {

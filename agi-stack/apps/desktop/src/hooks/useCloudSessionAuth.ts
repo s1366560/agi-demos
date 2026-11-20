@@ -241,6 +241,17 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
   };
 
   useEffect(() => {
+    const subscribe = window.__MEMSTACK_DESKTOP__?.events?.onCloudSessionInvalidated;
+    if (!subscribe) return undefined;
+    return subscribe(() => {
+      authAttemptRevisionRef.current += 1;
+      setAuth({ ...emptyAuthState, error: t('login.restoreFailed') });
+      setConnection('idle');
+      setError(t('login.restoreFailed'));
+    });
+  }, [setAuth, setConnection, setError, t]);
+
+  useEffect(() => {
     if (
       !runsInNativeDesktop ||
       config.mode !== 'cloud' ||
@@ -358,7 +369,7 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
     };
   }, [runsInNativeDesktop]);
 
-  const beginNativeOAuth = async (provider: string): Promise<void> => {
+  const beginNativeOAuth = async (provider: string, trustedDevice = true): Promise<void> => {
     const runtimeConfig = runtimeConfigForLoginAvailability(
       configRef.current,
       runsInNativeDesktop,
@@ -383,6 +394,7 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
         apiBaseUrl: runtimeConfig.apiBaseUrl,
         provider,
         resumeRoute: nativeOAuthResumeRoute(),
+        trustedDevice,
       });
       if (
         authAttemptRevisionRef.current !== authRevision ||
