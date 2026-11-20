@@ -546,6 +546,7 @@ import {
   preserveConversationRunMetadata,
   resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
+  clearWorkspaceConversationCache,
   shouldLoadWorkspaceConversations,
   shouldPreserveConversationSelectionDuringSidecarRecovery,
   supersedeWorkspaceConversationRequests,
@@ -8105,6 +8106,7 @@ export function App() {
           onExecutionTargetChange: (next) => {
             executionTargetFilterRef.current = next;
             setExecutionTargetFilter(next);
+            updateDataset((current) => clearWorkspaceConversationCache(current));
             void refreshRuntime();
           },
           onOpenAccountSettings: openSidebarSettings,
