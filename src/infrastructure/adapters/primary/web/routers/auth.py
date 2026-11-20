@@ -414,7 +414,9 @@ async def refresh_login_session(
     """Rotate a cloud login refresh token and issue a new one-hour access token."""
     try:
         issued = await _cloud_login_sessions(db).rotate(body.refresh_token)
-    except RefreshRejectedError:
+    except RefreshRejectedError as exc:
+        if exc.reused:
+            await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_("Invalid refresh token"),
@@ -762,6 +764,7 @@ async def revoke_api_key(
     if not key:
         raise HTTPException(status_code=404, detail=_("API key not found"))
 
+    await _cloud_login_sessions(db).revoke_access_key(key.id)
     await db.delete(key)
     await db.commit()
 

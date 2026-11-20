@@ -450,13 +450,15 @@ export class DesktopCloudAuthenticationAuthority {
   async #refreshStoredSession(
     reason: CloudSessionRefreshReason,
   ): Promise<CloudSessionRefreshOutcome> {
+    const revision = this.#attemptRevision;
     const current = await this.#trustedSession().catch(() => null);
     if (!current) return Object.freeze({ status: 'absent' });
     const expired = accessExpiresSoon(current, this.#dependencies.now(), 0);
     const due = accessExpiresSoon(current, this.#dependencies.now(), ACCESS_REFRESH_WINDOW_MS);
     if (!current.refresh_token) {
       if (reason === 'unauthorized' || expired) {
-        await this.#dependencies.clearTrustedSession().catch(() => undefined);
+        const retired = await this.#retireObservedSession(revision, current);
+        if (!retired) return this.#currentStoredSession();
         return Object.freeze({ status: 'invalid' });
       }
       return Object.freeze({ status: 'current', record: current });
@@ -480,7 +482,8 @@ export class DesktopCloudAuthenticationAuthority {
       return Object.freeze({ status: 'unavailable' });
     }
     if (response.status === 401) {
-      await this.#dependencies.clearTrustedSession().catch(() => undefined);
+      const retired = await this.#retireObservedSession(revision, current);
+      if (!retired) return this.#currentStoredSession();
       return Object.freeze({ status: 'invalid' });
     }
     if (response.status < 200 || response.status >= 300) {
@@ -502,15 +505,56 @@ export class DesktopCloudAuthenticationAuthority {
       expires_at: token.expiresAt,
       refresh_token: token.refreshToken,
       access_expires_at: token.expiresAt,
-      ...(current.persist_across_restart === false ? { persist_across_restart: false as const } : {}),
+      ...(current.persist_across_restart === false
+        ? { persist_across_restart: false as const }
+        : {}),
     });
+    let saved = false;
     try {
-      await this.#dependencies.saveTrustedSession({ input: record });
+      saved = await this.#mutateSession(async () => {
+        if (revision !== this.#attemptRevision) return false;
+        const latest = await this.#trustedSession().catch(() => null);
+        if (!this.#sameObservedSession(latest, current)) return false;
+        await this.#dependencies.saveTrustedSession({ input: record });
+        this.#persistAcrossRestart = current.persist_across_restart !== false;
+        return true;
+      });
     } catch {
       return Object.freeze({ status: 'unavailable' });
     }
-    this.#persistAcrossRestart = current.persist_across_restart !== false;
+    if (!saved) return this.#currentStoredSession();
     return Object.freeze({ status: 'refreshed', record });
+  }
+
+  async #currentStoredSession(): Promise<CloudSessionRefreshOutcome> {
+    const latest = await this.#trustedSession().catch(() => null);
+    if (!latest) return Object.freeze({ status: 'absent' });
+    return Object.freeze({ status: 'current', record: latest });
+  }
+
+  async #retireObservedSession(
+    revision: number,
+    observed: TrustedCloudSession,
+  ): Promise<boolean> {
+    return this.#mutateSession(async () => {
+      if (revision !== this.#attemptRevision) return false;
+      const latest = await this.#trustedSession().catch(() => null);
+      if (!this.#sameObservedSession(latest, observed)) return false;
+      await this.#dependencies.clearTrustedSession().catch(() => undefined);
+      return true;
+    });
+  }
+
+  #sameObservedSession(
+    latest: TrustedCloudSession | null,
+    observed: TrustedCloudSession,
+  ): boolean {
+    return (
+      latest !== null &&
+      latest.credential === observed.credential &&
+      latest.refresh_token === observed.refresh_token &&
+      latest.api_base_url === observed.api_base_url
+    );
   }
 
   async #requestJson(

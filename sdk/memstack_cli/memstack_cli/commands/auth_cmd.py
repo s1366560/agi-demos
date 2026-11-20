@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import sys
 import time
 from typing import Any
@@ -9,7 +10,14 @@ from typing import Any
 import click
 import httpx
 
-from ..auth import CREDENTIALS_FILE, clear_credentials, save_api_key
+from ..auth import (
+    CREDENTIALS_FILE,
+    AuthError,
+    clear_credentials,
+    load_refresh_token,
+    resolve_api_key,
+    save_login_session,
+)
 from ..client import ApiError, base_url, die, emit, request
 
 
@@ -44,7 +52,9 @@ def login(ctx: click.Context, no_browser: bool) -> None:
     user_code = resp["user_code"]
     interval = int(resp.get("interval", 5))
     expires_in = int(resp.get("expires_in", 600))
-    verify_uri = _frontend_url_for(resp.get("verification_uri_complete") or resp.get("verification_uri", "/device"))
+    verify_uri = _frontend_url_for(
+        resp.get("verification_uri_complete") or resp.get("verification_uri", "/device")
+    )
 
     if as_json:
         emit(
@@ -67,9 +77,7 @@ def login(ctx: click.Context, no_browser: bool) -> None:
     while time.time() < deadline:
         time.sleep(interval)
         try:
-            token_resp = request(
-                "POST", "/auth/device/token", json={"device_code": device_code}
-            )
+            token_resp = request("POST", "/auth/device/token", json={"device_code": device_code})
         except ApiError as e:
             if e.status_code == 428:
                 continue
@@ -79,7 +87,11 @@ def login(ctx: click.Context, no_browser: bool) -> None:
         access_token = token_resp.get("access_token")
         if not access_token:
             die("server returned no access_token")
-        path = save_api_key(access_token)
+        refresh_token = token_resp.get("refresh_token")
+        path = save_login_session(
+            access_token,
+            refresh_token if isinstance(refresh_token, str) else None,
+        )
         if as_json:
             emit({"stage": "approved", "credentials_file": str(path)}, as_json=True)
         else:
@@ -91,6 +103,13 @@ def login(ctx: click.Context, no_browser: bool) -> None:
 @click.command("logout", help="Remove the stored API key.")
 @click.pass_context
 def logout(ctx: click.Context) -> None:
+    try:
+        access_token = resolve_api_key(None)
+    except AuthError:
+        access_token = None
+    if access_token and load_refresh_token():
+        with contextlib.suppress(ApiError):
+            request("POST", "/auth/signout", api_key=access_token, timeout=5)
     removed = clear_credentials()
     if ctx.obj.get("json"):
         emit({"removed": removed, "path": str(CREDENTIALS_FILE)}, as_json=True)
@@ -101,4 +120,8 @@ def logout(ctx: click.Context) -> None:
             print("No credentials file to remove.", file=sys.stderr)
 
 
-__all__ = ["login", "logout", "httpx"]  # keep httpx re-export defensive (unused but imported for typing).
+__all__ = [
+    "login",
+    "logout",
+    "httpx",
+]  # keep httpx re-export defensive (unused but imported for typing).

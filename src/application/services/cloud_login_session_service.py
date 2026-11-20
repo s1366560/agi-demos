@@ -137,7 +137,10 @@ class CloudLoginSessionService:
         access_key = (
             await self._db.get(APIKey, row.access_api_key_id) if row.access_api_key_id else None
         )
-        permissions = list(access_key.permissions) if access_key is not None else ["read", "write"]
+        if access_key is None or not access_key.is_active:
+            await self.revoke_family(row.family_id, observed_at=now)
+            raise RefreshRejectedError(reused=True)
+        permissions = list(access_key.permissions)
         plain_key = AuthService.generate_api_key()
         new_key = APIKey(
             id=str(uuid4()),
@@ -192,6 +195,28 @@ class CloudLoginSessionService:
             if access_key is not None:
                 access_key.is_active = False
         await self._db.flush()
+
+    async def revoke_access_key(self, access_api_key_id: str) -> None:
+        """Revoke every refresh family still bound to an explicitly revoked access key."""
+        rows = (
+            (
+                await self._db.execute(
+                    refresh_select_statement(
+                        select(UserSession).where(
+                            UserSession.access_api_key_id == access_api_key_id
+                        )
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        seen: set[str] = set()
+        for row in rows:
+            if row.family_id in seen:
+                continue
+            seen.add(row.family_id)
+            await self.revoke_family(row.family_id)
 
     async def revoke_access_token(self, access_token: str) -> None:
         """Revoke the refresh family that issued this access token, when one exists."""

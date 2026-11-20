@@ -642,3 +642,73 @@ test('an expired vault record without a refresh token is cleared once', async ()
   assert.equal((await authority.refreshStoredSession('unauthorized')).status, 'absent');
   assert.equal(cleared, 1);
 });
+
+test('a refresh that loses to a newer login keeps that login', async () => {
+  let releaseRefresh;
+  const refreshGate = new Promise((done) => {
+    releaseRefresh = done;
+  });
+  let enteredRefresh;
+  const refreshEntered = new Promise((done) => {
+    enteredRefresh = done;
+  });
+  let trustedSession = {
+    version: 1,
+    api_base_url: 'https://cloud.memstack.test',
+    runtime_mode: 'cloud',
+    credential_kind: 'cloud_bearer',
+    credential: 'old-access',
+    expires_at: '2023-11-14T22:13:20.000Z',
+    refresh_token: 'ms_rt_old',
+    access_expires_at: '2023-11-14T22:13:20.000Z',
+  };
+  let cleared = 0;
+  const authority = new DesktopCloudAuthenticationAuthority({
+    now: () => 1_700_000_000_000,
+    randomId: () => 'device_attempt_12345678',
+    async fetch(url) {
+      if (String(url).endsWith('/api/v1/auth/refresh')) {
+        enteredRefresh();
+        await refreshGate;
+        return jsonResponse({
+          access_token: 'refreshed-old',
+          token_type: 'bearer',
+          must_change_password: false,
+          refresh_token: 'ms_rt_refreshed',
+          expires_at: '2026-11-20T03:00:00.000Z',
+        });
+      }
+      return jsonResponse({
+        access_token: 'fresh-login',
+        token_type: 'bearer',
+        must_change_password: false,
+        refresh_token: 'ms_rt_login',
+        expires_at: '2026-11-20T04:00:00.000Z',
+      });
+    },
+    async loadTrustedSession() {
+      return trustedSession;
+    },
+    async saveTrustedSession(input) {
+      trustedSession = input.input;
+    },
+    async clearTrustedSession() {
+      cleared += 1;
+      trustedSession = null;
+    },
+  });
+  const refresh = authority.refreshStoredSession('unauthorized');
+  await refreshEntered;
+  await authority.loginWithPassword({
+    apiBaseUrl: 'https://cloud.memstack.test',
+    username: 'admin@memstack.test',
+    password: 'correct horse battery staple',
+    trustedDevice: true,
+  });
+  releaseRefresh();
+  const outcome = await refresh;
+  assert.equal(outcome.status, 'current');
+  assert.equal(trustedSession.credential, 'fresh-login');
+  assert.equal(trustedSession.refresh_token, 'ms_rt_login');
+  assert.equal(cleared, 0);
+});

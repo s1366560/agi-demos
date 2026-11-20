@@ -3,7 +3,9 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.auth_service_v2 import AuthService
 from src.application.services.cloud_login_session_service import (
@@ -94,14 +96,49 @@ async def test_rotate_replaces_refresh_and_reuse_revokes_family(test_db, test_us
         await service.rotate(issued.refresh_token)
     assert reused.value.reused is True
     family = (
-        await test_db.execute(select(UserSession).where(UserSession.family_id == issued.family_id))
-    ).scalars().all()
+        (
+            await test_db.execute(
+                select(UserSession).where(UserSession.family_id == issued.family_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert family
     assert all(row.revoked_at is not None for row in family)
     successor_key = (
-        await test_db.execute(select(APIKey).where(APIKey.key_hash == AuthService.hash_api_key(rotated.access_token)))
+        await test_db.execute(
+            select(APIKey).where(APIKey.key_hash == AuthService.hash_api_key(rotated.access_token))
+        )
     ).scalar_one()
     assert successor_key.is_active is False
+
+
+async def test_deleted_access_key_cannot_mint_a_replacement(test_db, test_user) -> None:
+    _plain, key = await _access_key(test_db, test_user.id)
+    service = _service(test_db)
+    issued = await service.bind_access_key(
+        user_id=test_user.id,
+        access_api_key_id=key.id,
+        auth_method="password",
+        device_label="password",
+    )
+    await service.revoke_access_key(key.id)
+    await test_db.delete(key)
+    await test_db.commit()
+
+    with pytest.raises(RefreshRejectedError) as rejected:
+        await service.rotate(issued.refresh_token)
+    assert rejected.value.reused is True
+    stored = await test_db.get(UserSession, issued.session_id)
+    assert stored is not None
+    assert stored.revoked_at is not None
+    remaining = (
+        (await test_db.execute(select(APIKey).where(APIKey.user_id == test_user.id)))
+        .scalars()
+        .all()
+    )
+    assert remaining == []
 
 
 async def test_unknown_refresh_does_not_revoke_existing_family(test_db, test_user) -> None:
@@ -149,3 +186,63 @@ async def test_revoke_access_token_retires_only_its_family(test_db, test_user) -
     assert (await test_db.get(APIKey, first_key.id)).is_active is False
     assert (await test_db.get(APIKey, second_key.id)).is_active is True
     assert second_plain.startswith("ms_sk_")
+
+
+async def test_reused_refresh_route_commits_family_revocation(
+    test_db, test_engine, test_user, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.infrastructure.adapters.primary.web.routers import auth as auth_router
+    from src.infrastructure.adapters.primary.web.routers.auth import (
+        RefreshTokenRequest,
+        refresh_login_session,
+    )
+
+    monkeypatch.setattr(
+        auth_router,
+        "_cloud_login_sessions",
+        lambda db: CloudLoginSessionService(db, secret=_SECRET),
+    )
+    _plain, key = await _access_key(test_db, test_user.id)
+    service = _service(test_db)
+    issued = await service.bind_access_key(
+        user_id=test_user.id,
+        access_api_key_id=key.id,
+        auth_method="password",
+        device_label="password",
+    )
+    await service.rotate(issued.refresh_token)
+    await test_db.commit()
+
+    with pytest.raises(HTTPException) as rejected:
+        await refresh_login_session(
+            RefreshTokenRequest(refresh_token=issued.refresh_token),
+            db=test_db,
+        )
+    assert rejected.value.status_code == 401
+
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as other:
+        family = (
+            (
+                await other.execute(
+                    select(UserSession).where(UserSession.family_id == issued.family_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        successor = (
+            (
+                await other.execute(
+                    select(APIKey).where(
+                        APIKey.name == "Cloud login session", APIKey.user_id == test_user.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert family
+    assert all(row.revoked_at is not None for row in family)
+    assert successor
+    assert all(row.is_active is False for row in successor)
