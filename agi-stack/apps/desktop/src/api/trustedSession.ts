@@ -69,6 +69,18 @@ export function decodeNativeTrustedSession(value: unknown): NativeTrustedSession
   };
 }
 
+export async function probeCloudTrustedSession(): Promise<boolean> {
+  const invoke = desktopInvoke();
+  if (!invoke) return false;
+  const value = await invoke('cloud_session_presence');
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      (value as { present?: unknown }).present === true,
+  );
+}
+
 export async function selectPlatformPluginAuthorityV2(mode: RuntimeMode): Promise<void> {
   const invoke = requireDesktopInvoke();
   await invoke('platform_plugin_authority_select_v2', { mode });

@@ -173,6 +173,36 @@ class APIKey(Base):
     user: Mapped["User"] = relationship(back_populates="api_keys")
 
 
+class UserSession(Base):
+    """Rotating cloud login session. Refresh tokens are stored only as HMAC digests."""
+
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        UniqueConstraint("refresh_token_hash", name="uq_user_sessions_refresh_token_hash"),
+        Index("ix_user_sessions_family", "family_id"),
+        Index("ix_user_sessions_user", "user_id"),
+        Index("ix_user_sessions_access_api_key", "access_api_key_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    family_id: Mapped[str] = mapped_column(String, nullable=False)
+    refresh_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    access_api_key_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("api_keys.id", ondelete="SET NULL"), nullable=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    replaced_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    device_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class DesktopWorkspaceContext(Base):
     """Authoritative tenant/project selection for one desktop user."""
 

@@ -36,6 +36,7 @@ def test_auth_row_is_a_complete_explicit_v2_contribution() -> None:
     ) == (
         ("/api/v1/auth/token", ("POST",), "login_for_access_token", Token, None),
         ("/api/v1/auth/signout", ("POST",), "sign_out", dict[str, bool], None),
+        ("/api/v1/auth/refresh", ("POST",), "refresh_login_session", Token, None),
         (
             "/api/v1/auth/oauth/providers",
             ("GET",),

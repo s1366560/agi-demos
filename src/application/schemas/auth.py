@@ -121,10 +121,23 @@ class UserResponse(BaseModel):
         populate_by_name = True
 
 
+class TokenSession(BaseModel):
+    """Access-token lifetime metadata returned with an interactive login."""
+
+    session_id: str
+    auth_method: str
+    expires_at: datetime
+    trusted_device: bool = True
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
     must_change_password: bool = False
+    expires_at: datetime | None = None
+    refresh_token: str | None = None
+    refresh_expires_at: datetime | None = None
+    session: TokenSession | None = None
 
 
 class ForceChangePasswordRequest(BaseModel):

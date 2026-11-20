@@ -34,6 +34,9 @@ fn record() -> TrustedSessionRecord {
         credential_kind: TrustedSessionCredentialKind::CloudBearer,
         credential: "epoch-test-credential".into(),
         expires_at: None,
+        refresh_token: None,
+        access_expires_at: None,
+        persist_across_restart: true,
     }
 }
 

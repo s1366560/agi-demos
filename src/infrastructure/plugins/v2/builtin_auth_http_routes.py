@@ -25,6 +25,7 @@ from src.infrastructure.adapters.primary.web.routers.auth import (
     login_for_access_token,
     oauth_callback,
     read_users_me,
+    refresh_login_session,
     revoke_api_key,
     sign_out,
     update_user_me,
@@ -86,6 +87,14 @@ def auth_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             sign_out,
             "sign_out",
             dict[str, bool],
+            None,
+        ),
+        (
+            "/api/v1/auth/refresh",
+            ("POST",),
+            refresh_login_session,
+            "refresh_login_session",
+            Token,
             None,
         ),
         (

@@ -52,6 +52,7 @@ import {
   hasNativeTrustedSessionBroker,
   loadLocalTrustedSession,
   saveLocalTrustedSession,
+  probeCloudTrustedSession,
   selectPlatformPluginAuthorityV2,
 } from './api/trustedSession';
 import type { CloudSessionProjection } from './api/cloudSessionProjectionClient';
@@ -6505,6 +6506,7 @@ export function App() {
     const authAttemptRevision = ++authAttemptRevisionRef.current;
 
     void (async () => {
+      let restoringCloud = config.mode === 'cloud';
       try {
         setSessionRestoreRetryAvailable(false);
         setAuth((current) => ({
@@ -6515,8 +6517,10 @@ export function App() {
         setConnection('loading');
         setError(null);
 
-        await selectPlatformPluginAuthorityV2(config.mode);
-        if (config.mode === 'cloud') {
+        const cloudSessionPresent = await probeCloudTrustedSession();
+        restoringCloud = cloudSessionPresent || config.mode === 'cloud';
+        await selectPlatformPluginAuthorityV2(restoringCloud ? 'cloud' : config.mode);
+        if (restoringCloud) {
           const projection = await hydrateProjectedCloudSession(authAttemptRevision);
           if (
             localResumeAttemptRef.current !== attemptKey ||
@@ -6590,10 +6594,10 @@ export function App() {
         let recovery: 'reauthenticate' | 'retry' = 'retry';
         try {
           recovery = await settleTrustedSessionRestoreFailure(
-            config.mode === 'local' && caught instanceof DesktopApiError && caught.status === 401
+            !restoringCloud && caught instanceof DesktopApiError && caught.status === 401
               ? new TrustedSessionAuthenticationInvalidError()
               : caught,
-            () => config.mode === 'local' ? clearLocalTrustedSession() : clearNativeTrustedSession(),
+            () => restoringCloud ? clearNativeTrustedSession() : clearLocalTrustedSession(),
           );
         } catch {
           // Vault failures preserve a manual recovery path and the original failure.

@@ -7,6 +7,7 @@ Business logic is delegated to AuthService in the application layer.
 """
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
@@ -479,6 +480,7 @@ async def create_api_key(
     name: str,
     permissions: list[str],
     expires_in_days: int | None = None,
+    expires_at: datetime | None = None,
 ) -> tuple[str, DBAPIKey | None]:
     """
     Create a new API key for a user.
@@ -498,6 +500,7 @@ async def create_api_key(
         name=name,
         permissions=permissions,
         expires_in_days=expires_in_days,
+        expires_at=expires_at,
     )
 
     # Convert to DB model for backward compatibility

@@ -10,7 +10,10 @@ from typing import Any, NoReturn
 
 import httpx
 
+from .auth import AuthError, load_refresh_token, resolve_api_key, save_login_session
+
 DEFAULT_TIMEOUT = 60.0
+_REFRESH_SKIP_PREFIXES = ("/auth/refresh", "/auth/token", "/auth/device/")
 
 
 def base_url() -> str:
@@ -41,6 +44,7 @@ def request(
     json: Any = None,
     params: dict[str, Any] | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    _refresh: bool = True,
 ) -> Any:
     """Synchronous JSON request. Returns parsed body (or {} on empty)."""
     url = f"{base_url()}/api/v1{path}"
@@ -51,11 +55,57 @@ def request(
         )
     except httpx.HTTPError as e:  # pragma: no cover - network failure path
         raise ApiError(-1, str(e)) from e
+    if (
+        resp.status_code == 401
+        and _refresh
+        and api_key
+        and not path.startswith(_REFRESH_SKIP_PREFIXES)
+    ):
+        rotated = _rotate_stored_session(api_key, timeout=timeout)
+        if rotated:
+            return request(
+                method,
+                path,
+                api_key=rotated,
+                json=json,
+                params=params,
+                timeout=timeout,
+                _refresh=False,
+            )
     if resp.status_code >= 400:
         raise ApiError(resp.status_code, resp.text)
     if not resp.content:
         return {}
     return resp.json()
+
+
+def _rotate_stored_session(api_key: str, *, timeout: float) -> str | None:
+    """Rotate the stored login when this request used that exact access token."""
+    try:
+        stored = resolve_api_key(None)
+    except AuthError:
+        return None
+    refresh_token = load_refresh_token()
+    if stored != api_key or not refresh_token:
+        return None
+    try:
+        body = request(
+            "POST",
+            "/auth/refresh",
+            json={"refresh_token": refresh_token},
+            timeout=timeout,
+            _refresh=False,
+        )
+    except ApiError:
+        return None
+    access_token = body.get("access_token") if isinstance(body, dict) else None
+    next_refresh = body.get("refresh_token") if isinstance(body, dict) else None
+    if not isinstance(access_token, str) or not access_token:
+        return None
+    if not isinstance(next_refresh, str):
+        next_refresh = None
+    save_login_session(access_token, next_refresh)
+    return access_token
 
 
 def stream_sse(

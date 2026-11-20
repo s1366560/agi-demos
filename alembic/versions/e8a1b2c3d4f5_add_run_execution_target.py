@@ -1,11 +1,10 @@
 """Add run-level execution target columns to agent run authorities.
 
 Revision ID: e8a1b2c3d4f5
-Revises: c4e5f6a7b8c0
+Revises: d7e8f9a0b1c2
 Create Date: 2026-11-20 00:00:00.000000
 
-Independent of the parallel refresh-token migration. If that revision lands
-first, retarget ``down_revision`` to its revision id.
+Linear follow-up to the refresh-token migration on main.
 """
 
 from collections.abc import Sequence
@@ -15,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "e8a1b2c3d4f5"
-down_revision: str | Sequence[str] | None = "c4e5f6a7b8c0"
+down_revision: str | Sequence[str] | None = "d7e8f9a0b1c2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
