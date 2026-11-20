@@ -36,6 +36,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+    execution_fields,
+)
 from src.infrastructure.i18n import gettext as _
 
 from .run_authority_common import (
@@ -129,6 +132,7 @@ async def get_active_run(
         authority_revision=run.revision,
         created_at=run.created_at,
         updated_at=run.updated_at,
+        **execution_fields(run),
     )
     return ActiveRunResponse(
         conversation_id=conversation.id,
@@ -215,6 +219,7 @@ async def get_latest_run(
         authority_revision=run.revision,
         created_at=run.created_at,
         updated_at=run.updated_at,
+        **execution_fields(run),
     )
     return LatestRunResponse(
         conversation_id=conversation.id,

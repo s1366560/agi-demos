@@ -1339,6 +1339,7 @@ export class DesktopApiClient {
     const options: {
       workspaceId?: string | null;
       unboundOnly?: boolean;
+      executionTarget?: 'local' | 'cloud';
       signal?: AbortSignal;
     } =
       workspaceIdOrOptions !== null && typeof workspaceIdOrOptions === 'object'
@@ -1367,6 +1368,7 @@ export class DesktopApiClient {
       });
       if (requiredWorkspaceId) params.set('workspace_id', requiredWorkspaceId);
       if (unboundOnly) params.set('unbound_only', 'true');
+      if (options.executionTarget) params.set('execution_target', options.executionTarget);
       const path = `/api/v1/agent/conversations?${params.toString()}`;
       const requestPage = () => this.request<unknown>(path, { signal });
       let payload: unknown;
@@ -2543,7 +2545,13 @@ function normalizeAgentConversation(
     !isOptionalNullableString(value.workspace_name) ||
     !isOptionalStringArray(value.participant_agents) ||
     !isOptionalNullableString(value.coordinator_agent_id) ||
-    !isOptionalNullableString(value.focused_agent_id)
+    !isOptionalNullableString(value.focused_agent_id) ||
+    (value.execution_target !== undefined &&
+      value.execution_target !== 'local' &&
+      value.execution_target !== 'cloud') ||
+    !isOptionalNullableString(value.execution_machine_id) ||
+    !isOptionalNullableString(value.execution_environment_id) ||
+    !isOptionalNullableString(value.local_root_label)
   ) {
     return null;
   }
@@ -2580,6 +2588,18 @@ function normalizeAgentConversation(
     ...(value.focused_agent_id === undefined
       ? {}
       : { focused_agent_id: value.focused_agent_id }),
+    ...(value.execution_target === undefined
+      ? {}
+      : { execution_target: value.execution_target as AgentConversation['execution_target'] }),
+    ...(value.execution_machine_id === undefined
+      ? {}
+      : { execution_machine_id: value.execution_machine_id }),
+    ...(value.execution_environment_id === undefined
+      ? {}
+      : { execution_environment_id: value.execution_environment_id }),
+    ...(value.local_root_label === undefined
+      ? {}
+      : { local_root_label: value.local_root_label }),
   };
 }
 

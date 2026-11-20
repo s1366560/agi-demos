@@ -7545,6 +7545,14 @@
       "switchPreserve": "该对话会被保留，你可以切回此项目后再次访问。",
       "loadConversationsFailed": "加载对话失败"
     },
+    "executionTarget": {
+      "all": "全部",
+      "local": "此计算机",
+      "cloud": "云端",
+      "filterLabel": "执行位置",
+      "defaultEnvironment": "默认环境",
+      "localDirectory": "本地目录"
+    },
     "sidebar": {
       "title": "智能对话",
       "workspaceTitle": "智能体工作区",

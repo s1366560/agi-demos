@@ -332,7 +332,8 @@ class DevServices:
                 # created here; it is never persisted or used to adopt a service.
                 observations[child.pid] = actual
                 if self._belongs(actual, pending):
-                    self._write(actual)
+                    # fsync must not stall the loop: the sibling bind shares this deadline.
+                    await asyncio.to_thread(self._write, actual)
                     return actual
             await asyncio.sleep(min(0.01, max(0, deadline - time.monotonic())))
 

@@ -4,6 +4,41 @@
   color: var(--desktop-muted);
 }
 
+.execution-target-filter {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+
+.execution-target-filter button {
+  border: 1px solid var(--desktop-border);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.execution-target-filter button[aria-pressed='true'] {
+  border-color: var(--desktop-border-strong);
+  background: var(--desktop-panel-raised);
+}
+
+.execution-target-badge {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.execution-target-badge small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace-session-tree .dock-list,
 .workspace-session-tree .dock-list > [data-radix-scroll-area-viewport] {
   height: 100%;

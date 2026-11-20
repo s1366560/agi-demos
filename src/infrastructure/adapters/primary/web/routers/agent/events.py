@@ -33,6 +33,10 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.primary.web.workspace_authority import require_workspace_scope
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+    load_conversation_execution_index,
+    stamp_event_envelope,
+)
 from src.infrastructure.i18n import gettext as _
 
 from .access import get_tenant_role
@@ -163,9 +167,23 @@ async def get_conversation_events(
             from_counter=from_counter,
             limit=limit,
         )
+        execution_index = await load_conversation_execution_index(
+            db,
+            conversation_id=conversation_id,
+        )
 
-        # Convert events to SSE format
-        event_dicts = [event.to_sse_format() for event in events]
+        # Convert events to SSE format and attach each event's run location.
+        event_dicts = [
+            stamp_event_envelope(
+                {
+                    **event.to_sse_format(),
+                    "message_id": event.message_id,
+                },
+                execution_index,
+                event.message_id,
+            )
+            for event in events
+        ]
 
         return EventReplayResponse(
             events=event_dicts,

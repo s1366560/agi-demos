@@ -2125,6 +2125,15 @@ class AgentRunAuthorityModel(Base):
     revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     permission_profile: Mapped[str] = mapped_column(String(30), nullable=False)
     authorization_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    execution_target: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="cloud",
+        server_default="cloud",
+    )
+    execution_machine_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    execution_environment_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    local_root_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -2160,6 +2169,10 @@ class AgentRunAuthorityModel(Base):
         CheckConstraint(
             "revision >= 1",
             name="ck_agent_run_authorities_revision_positive",
+        ),
+        CheckConstraint(
+            "execution_target IN ('local', 'cloud')",
+            name="ck_agent_run_authorities_execution_target",
         ),
     )
 

@@ -33,6 +33,7 @@ export interface LoadConversationsOptions {
   force?: boolean | undefined;
   silent?: boolean | undefined;
   limit?: number | undefined;
+  executionTarget?: 'all' | 'local' | 'cloud' | undefined;
 }
 
 export interface AgentV3State {

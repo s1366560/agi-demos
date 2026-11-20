@@ -97,6 +97,10 @@ class AgentPlanRunAuthority:
     revision: int
     permission_profile: PermissionProfile
     environment: dict[str, Any] | None
+    execution_target: Literal["local", "cloud"] = "cloud"
+    execution_machine_id: str | None = None
+    execution_environment_id: str | None = None
+    local_root_label: str | None = None
     created_at: datetime
     started_at: datetime | None
     updated_at: datetime
@@ -419,6 +423,10 @@ class ConversationSessionProjectionService:
             error=source.error,
             environment=environment,
             permission_profile=source.permission_profile,
+            execution_target=source.execution_target,
+            execution_machine_id=source.execution_machine_id,
+            execution_environment_id=source.execution_environment_id,
+            local_root_label=source.local_root_label,
             authorization_snapshot={
                 "conversation_id": source.conversation_id,
                 "project_id": source.project_id,

@@ -46,6 +46,11 @@ import {
 
 import { AppModal } from '@/components/common/AppModal';
 import {
+  ExecutionTargetBadge,
+  ExecutionTargetFilterBar,
+} from '@/components/execution-target/ExecutionTargetBadge';
+import type { ExecutionTargetFilter } from '@/components/execution-target/executionTargetModel';
+import {
   getContextualTopNavItems,
   groupTenantTopNavItems,
   isContextualTopNavItemActive,
@@ -445,6 +450,10 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
                 <span aria-hidden />
               )}
               <div className="flex shrink-0 items-center gap-1">
+                <ExecutionTargetBadge
+                  executionTarget={conversation.execution_target}
+                  localRootLabel={conversation.local_root_label}
+                />
                 {conversation.status === 'active' ? (
                   <LazyTooltip title={t('agent.sidebar.active', 'Active')}>
                     <span className="inline-flex items-center">
@@ -591,6 +600,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const [conversationsLoadError, setConversationsLoadError] = useState(false);
   const [conversationsRetryToken, setConversationsRetryToken] = useState(0);
   const [conversationFilter, setConversationFilter] = useState('');
+  const [executionTargetFilter, setExecutionTargetFilter] = useState<ExecutionTargetFilter>('all');
+  const executionTargetFilterRef = useRef(executionTargetFilter);
+  executionTargetFilterRef.current = executionTargetFilter;
   const loadedProjectIdRef = useRef<string | null>(null);
   const loadedSidebarWorkspaceSurfaceRef = useRef<string | null>(null);
   const autoSelectedProjectIdRef = useRef<string | null>(null);
@@ -981,7 +993,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       setConversationsLoadError(false);
       // Use ref to call latest function without triggering effect re-run
       void Promise.resolve(
-        loadConversationsRef.current(selectedProjectId, controller.signal)
+        loadConversationsRef.current(selectedProjectId, {
+          signal: controller.signal,
+          executionTarget: executionTargetFilterRef.current,
+          force: true,
+        })
       ).catch((error: unknown) => {
         if (controller.signal.aborted || (error as { name?: string }).name === 'CanceledError') {
           return;
@@ -1831,6 +1847,19 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       {/* Conversation filter */}
       {isAgentWorkspaceRoute && (
         <div className="px-3 pb-2">
+          <ExecutionTargetFilterBar
+            value={executionTargetFilter}
+            onChange={(next) => {
+              setExecutionTargetFilter(next);
+              executionTargetFilterRef.current = next;
+              if (selectedProjectId) {
+                void loadConversations(selectedProjectId, {
+                  force: true,
+                  executionTarget: next,
+                });
+              }
+            }}
+          />
           <LazyInput
             aria-label={t('agent.sidebar.filterConversations', 'Filter conversations by title')}
             placeholder={t('agent.sidebar.filterConversations', 'Filter conversations by title')}

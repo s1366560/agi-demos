@@ -547,6 +547,7 @@ import {
   preserveConversationRunMetadata,
   resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
+  clearWorkspaceConversationCache,
   shouldLoadWorkspaceConversations,
   shouldPreserveConversationSelectionDuringSidecarRecovery,
   supersedeWorkspaceConversationRequests,
@@ -718,6 +719,11 @@ export function App() {
   const appShellRef = useRef<HTMLDivElement>(null);
   const loginRestoreTargetRef = useRef<HTMLElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [executionTargetFilter, setExecutionTargetFilter] = useState<'all' | 'local' | 'cloud'>(
+    'all',
+  );
+  const executionTargetFilterRef = useRef(executionTargetFilter);
+  executionTargetFilterRef.current = executionTargetFilter;
   const rightPanels = useWorkPanels();
   const openRightCanvasPanel = rightPanels.open;
   // Workbench tabs: view tabs follow the fixed model order, conversation tabs
@@ -3798,6 +3804,9 @@ export function App() {
                   config: resolvedConfig,
                   workspaceId: isUnboundGroup ? null : targetWorkspaceId,
                   unboundOnly: isUnboundGroup,
+                  ...(executionTargetFilterRef.current === 'all'
+                    ? {}
+                    : { executionTarget: executionTargetFilterRef.current }),
                 });
               return {
                 workspaceId: targetWorkspaceId,
@@ -4382,6 +4391,9 @@ export function App() {
             config: requestConfig,
             workspaceId: isUnboundGroup ? null : workspaceId,
             unboundOnly: isUnboundGroup,
+            ...(executionTargetFilterRef.current === 'all'
+              ? {}
+              : { executionTarget: executionTargetFilterRef.current }),
           });
         const refreshedConversations = response.items;
         if (!requestIsCurrent()) return;
@@ -8094,6 +8106,13 @@ export function App() {
           workspaceCreateDisabledReason,
           onCreateWorkspace: () => setWorkspaceCreateOpen(true),
           onNewTask: startNewSession,
+          executionTarget: executionTargetFilter,
+          onExecutionTargetChange: (next) => {
+            executionTargetFilterRef.current = next;
+            setExecutionTargetFilter(next);
+            updateDataset((current) => clearWorkspaceConversationCache(current));
+            void refreshRuntime();
+          },
           onOpenAccountSettings: openSidebarSettings,
           onSwitchWorkspace: openProfileWorkspaceSettings,
           onSignOut: () => void logout(),

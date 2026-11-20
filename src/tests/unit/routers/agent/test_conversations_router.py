@@ -240,7 +240,10 @@ def _db_with_project_access(
     return SimpleNamespace(
         service=SimpleNamespace(require_access=AsyncMock(side_effect=require_access)),
         execute=AsyncMock(
-            return_value=SimpleNamespace(scalar_one_or_none=lambda: tenant_id if allowed else None)
+            return_value=SimpleNamespace(
+                scalar_one_or_none=lambda: tenant_id if allowed else None,
+                all=list,
+            )
         ),
         commit=AsyncMock(),
         rollback=AsyncMock(),
@@ -2163,11 +2166,13 @@ async def test_list_conversations_uses_authorized_project_tenant(
         "limit": 50,
         "offset": 0,
         "status": None,
+        "execution_target": None,
     }
     assert list_use_case.count_kwargs == {
         "project_id": project.id,
         "tenant_id": "tenant-project",
         "status": None,
+        "execution_target": None,
     }
     assert response.items == []
     assert response.total == 0

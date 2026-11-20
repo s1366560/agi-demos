@@ -1,5 +1,6 @@
 import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { ConversationToolbarItem } from './ConversationToolbar';
+import { ExecutionTargetBadge } from '../session/ExecutionTargetBadge';
 import { BrowserAuthRequests } from './BrowserAuthRequests';
 import type { DesktopVoiceSessionOperationsV2 } from '../../plugins/desktopVoiceSessionAuthorityModuleV2';
 import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
@@ -389,6 +390,28 @@ function equalStringArrays(
   return (
     left.length === right.length &&
     left.every((value, index) => value === right[index])
+  );
+}
+
+function ExecutionTargetHeader({
+  conversations,
+  selectedConversationId,
+  running,
+}: {
+  conversations: readonly AgentConversation[];
+  selectedConversationId?: string | null;
+  running: boolean;
+}) {
+  const conversation = conversations.find((item) => item.id === selectedConversationId);
+  if (!conversation) return null;
+  return (
+    <div className="execution-target-header">
+      <ExecutionTargetBadge
+        executionTarget={conversation.execution_target}
+        localRootLabel={conversation.local_root_label}
+        running={running}
+      />
+    </div>
   );
 }
 
@@ -1386,6 +1409,11 @@ export const ChatPanel = memo(function ChatPanel({
           : 'workspace-chat-panel'
       }`}
     >
+      <ExecutionTargetHeader
+        conversations={conversations}
+        selectedConversationId={selectedConversationId}
+        running={runActive}
+      />
       {composerPresentation.showPaneHeader ? (
         <header className="pane-head">
           <div>

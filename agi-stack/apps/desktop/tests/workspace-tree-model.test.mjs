@@ -35,6 +35,7 @@ const {
   preserveConversationRunMetadata,
   resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
+  clearWorkspaceConversationCache,
   shouldLoadWorkspaceConversations,
   supersedeWorkspaceConversationRequests,
   workspaceConversationLoadTargets,
@@ -702,6 +703,24 @@ test('workspace conversations load once and can retry after a node error', () =>
   assert.equal(shouldLoadWorkspaceConversations({ loading: true, error: null }), false);
   assert.equal(shouldLoadWorkspaceConversations({ loading: false, error: null }), false);
   assert.equal(shouldLoadWorkspaceConversations({ loading: false, error: 'offline' }), true);
+  const cleared = clearWorkspaceConversationCache({
+    conversationsByWorkspace: {
+      'workspace-a': [{ id: 'conversation-a' }],
+      [UNBOUND_CONVERSATIONS_KEY]: [{ id: 'conversation-b' }],
+    },
+    nodeState: {
+      projects: { 'project-1': { loading: false, error: null } },
+      workspaces: {
+        'workspace-a': { loading: false, error: null },
+      },
+    },
+  });
+  assert.deepEqual(cleared.conversationsByWorkspace, {});
+  assert.deepEqual(cleared.nodeState.workspaces, {});
+  assert.deepEqual(cleared.nodeState.projects, {
+    'project-1': { loading: false, error: null },
+  });
+  assert.equal(shouldLoadWorkspaceConversations(cleared.nodeState.workspaces['workspace-a']), true);
 
   assert.equal(workspaceTreeSessionAvailability(undefined, 0), 'deferred');
   assert.equal(

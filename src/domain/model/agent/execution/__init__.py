@@ -20,10 +20,18 @@ from src.domain.model.agent.execution.reflection_result import (
     ReflectionResult,
     StepAdjustment,
 )
+from src.domain.model.agent.execution.run_execution_placement import (
+    CLOUD_RUN_EXECUTION_PLACEMENT,
+    ExecutionTarget,
+    InvalidExecutionTarget,
+    RunExecutionPlacement,
+    parse_execution_target,
+)
 from src.domain.model.agent.execution.step_result import StepOutcome, StepResult
 from src.domain.model.agent.execution.thought_level import ThoughtLevel
 
 __all__ = [
+    "CLOUD_RUN_EXECUTION_PLACEMENT",
     "AdjustmentType",
     "AgentExecution",
     "AgentExecutionEvent",
@@ -35,11 +43,15 @@ __all__ = [
     "ExecutionStatus",
     "ExecutionStep",
     "ExecutionStepStatus",
+    "ExecutionTarget",
+    "InvalidExecutionTarget",
     "PlanSnapshot",
     "ReflectionAssessment",
     "ReflectionResult",
+    "RunExecutionPlacement",
     "StepAdjustment",
     "StepOutcome",
     "StepResult",
     "ThoughtLevel",
+    "parse_execution_target",
 ]

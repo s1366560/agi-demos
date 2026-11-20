@@ -77,6 +77,9 @@ export const restApi = {
     if (options?.unboundOnly) {
       params.unbound_only = true;
     }
+    if (options?.executionTarget) {
+      params.execution_target = options.executionTarget;
+    }
     return await api.get<PaginatedConversationsResponse>('/agent/conversations', {
       params,
       ...(signal ? { signal } : {}),

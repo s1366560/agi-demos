@@ -350,6 +350,39 @@ async def test_projects_latest_persisted_run_and_exact_cloud_environment() -> No
         "environment": projection.execution.current_run.environment.model_dump(mode="json"),
     }
     assert projection.updated_at == NOW
+    assert projection.execution.current_run.execution_target == "cloud"
+    assert projection.execution.current_run.local_root_label is None
+    assert "execution_target" not in projection.execution.current_run.authorization_snapshot
+
+
+async def test_local_execution_target_stays_outside_the_worktree_environment() -> None:
+    local_run = replace(
+        plan_run(),
+        execution_target="local",
+        execution_machine_id="machine-1",
+        local_root_label="agi-demos",
+    )
+    projection = await ConversationSessionProjectionService(
+        FakeConversationSessionReader(replace(snapshot(), runs=(local_run,)))
+    ).get_projection(
+        conversation_id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+        now=NOW,
+    )
+
+    current = projection.execution.current_run
+    assert current is not None
+    assert current.execution_target == "local"
+    assert current.execution_machine_id == "machine-1"
+    assert current.local_root_label == "agi-demos"
+    assert current.environment is not None
+    assert current.environment.kind == "worktree"
+    assert current.environment.workspace_path == "/workspace"
+    assert current.authorization_snapshot["environment"]["kind"] == "worktree"
+    assert "local_root_label" not in current.authorization_snapshot["environment"]
 
 
 async def test_standalone_session_uses_conversation_record_authority() -> None:

@@ -27,6 +27,10 @@ from src.domain.model.agent import (
     AgentClientTurnStatus,
 )
 from src.domain.model.agent.display_content import validate_display_content
+from src.domain.model.agent.execution.run_execution_placement import (
+    InvalidExecutionTarget,
+    parse_execution_target,
+)
 from src.domain.model.agent.execution_backend import execution_backend_from_metadata
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.conversation_access_application_authority_v2 import (
@@ -50,7 +54,11 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserTenant,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+    ConversationExecutionIndex,
     ensure_chat_run_authority,
+    execution_fields,
+    load_conversation_execution_index,
+    stamp_event_envelope,
 )
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.agent_definition import (
@@ -98,7 +106,7 @@ async def _validated_client_message_controls(
     *,
     message: dict[str, Any],
     conversation_id: object,
-) -> tuple[str | None, str | None] | None:
+) -> tuple[str | None, str | None, str] | None:
     message_id = message.get("message_id")
     if message_id is not None and (
         not isinstance(message_id, str)
@@ -124,7 +132,47 @@ async def _validated_client_message_controls(
             extra=_client_message_id_extra(client_message_id),
         )
         return None
-    return client_message_id, permission_mode
+    if "execution_target" not in message or message.get("execution_target") is None:
+        execution_target = "cloud"
+    else:
+        try:
+            execution_target = parse_execution_target(message.get("execution_target")).value
+        except InvalidExecutionTarget:
+            await context.send_error(
+                _("execution_target must be local or cloud"),
+                code="INVALID_EXECUTION_TARGET",
+                conversation_id=(conversation_id if isinstance(conversation_id, str) else None),
+                extra=_client_message_id_extra(client_message_id),
+            )
+            return None
+    if execution_target == "local":
+        await context.send_error(
+            _("Local execution is not available on the cloud chat path"),
+            code="LOCAL_EXECUTION_UNAVAILABLE",
+            conversation_id=(conversation_id if isinstance(conversation_id, str) else None),
+            extra=_client_message_id_extra(client_message_id),
+        )
+        return None
+    return client_message_id, permission_mode, execution_target
+
+
+async def _stream_execution_index(
+    db: object,
+    *,
+    conversation_id: str,
+) -> ConversationExecutionIndex:
+    """Load run placements when the caller holds a database session.
+
+    Live envelopes still stream when a unit fixture passes a sentinel without
+    ``execute``. Unknown runs stay the cloud default.
+    """
+
+    if not callable(getattr(db, "execute", None)):
+        return ConversationExecutionIndex({})
+    return await load_conversation_execution_index(
+        cast(Any, db),
+        conversation_id=conversation_id,
+    )
 
 
 class _ExternalACPSessionResult(Protocol):
@@ -284,7 +332,7 @@ class SendMessageHandler(WebSocketMessageHandler):
             )
         ) is None:
             return
-        client_message_id, permission_mode = controls
+        client_message_id, permission_mode, execution_target = controls
         if (
             presentation := await _validated_display_content(
                 context, message, conversation_id, client_message_id
@@ -381,6 +429,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                     app_model_context=app_model_context,
                     permission_mode=permission_mode,
                     permission_snapshot=permission_snapshot,
+                    execution_target=execution_target,
                 )
 
                 # Auto-subscribe this session to this conversation
@@ -392,6 +441,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                     "execution_message_id": execution_message_id,
                     "run_id": run.id,
                     "run_revision": run.revision,
+                    **execution_fields(run),
                 }
                 if client_message_id is not None:
                     ack_fields["message_id"] = client_message_id
@@ -1808,6 +1858,10 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
                 execution_message_id=execution_message_id,
             ),
         )
+        execution_index = await _stream_execution_index(
+            context.db,
+            conversation_id=conversation_id,
+        )
         async with contextlib.aclosing(agent_stream) as events:
             async for event in events:
                 event_count += 1
@@ -1826,15 +1880,19 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
                     break
 
                 # Add conversation_id to event for routing
-                ws_event = {
-                    "type": event.get("type"),
-                    "conversation_id": conversation_id,
-                    "data": event_data,
-                    "seq": event.get("id"),
-                    "timestamp": event.get("timestamp", datetime.now(UTC).isoformat()),
-                    "event_time_us": event.get("event_time_us"),
-                    "event_counter": event.get("event_counter"),
-                }
+                ws_event = stamp_event_envelope(
+                    {
+                        "type": event.get("type"),
+                        "conversation_id": conversation_id,
+                        "data": event_data,
+                        "seq": event.get("id"),
+                        "timestamp": event.get("timestamp", datetime.now(UTC).isoformat()),
+                        "event_time_us": event.get("event_time_us"),
+                        "event_counter": event.get("event_counter"),
+                    },
+                    execution_index,
+                    execution_message_id,
+                )
 
                 # Broadcast to ALL sessions subscribed to this conversation
                 await manager.broadcast_agent_stream_event(
@@ -1887,6 +1945,12 @@ async def stream_hitl_response_to_websocket(
 
     manager = get_connection_manager()
     event_count = 0
+    execution_db = getattr(agent_service, "_db_session", None)
+    execution_index = (
+        await _stream_execution_index(execution_db, conversation_id=conversation_id)
+        if execution_db is not None
+        else ConversationExecutionIndex({})
+    )
 
     try:
         logger.info(
@@ -1924,7 +1988,7 @@ async def stream_hitl_response_to_websocket(
             if not manager.is_subscribed(session_id, conversation_id):
                 break
             # Add conversation_id to event for routing
-            ws_event = {
+            envelope = {
                 "type": event_type,
                 "conversation_id": conversation_id,
                 "data": event_data,
@@ -1933,6 +1997,11 @@ async def stream_hitl_response_to_websocket(
                 "event_time_us": event.get("event_time_us"),
                 "event_counter": event.get("event_counter"),
             }
+            ws_event = stamp_event_envelope(
+                envelope,
+                execution_index or ConversationExecutionIndex({}),
+                message_id,
+            )
 
             # This independently authorized recovery bridge owns only its socket.
             await manager.send_agent_stream_event(

@@ -597,6 +597,10 @@ export type DesktopRun = {
   error?: string | null;
   environment?: DesktopExecutionEnvironment | null;
   permission_profile?: 'read_only' | 'workspace_write' | 'full_access';
+  execution_target?: 'local' | 'cloud';
+  execution_machine_id?: string | null;
+  execution_environment_id?: string | null;
+  local_root_label?: string | null;
   authorization_snapshot: Record<string, unknown>;
 };
 
@@ -915,6 +919,10 @@ export type AgentConversation = {
   participant_agents?: string[];
   coordinator_agent_id?: string | null;
   focused_agent_id?: string | null;
+  execution_target?: 'local' | 'cloud';
+  execution_machine_id?: string | null;
+  execution_environment_id?: string | null;
+  local_root_label?: string | null;
 };
 
 export type ApprovePlanAndStartResponse = {

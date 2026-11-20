@@ -5,13 +5,16 @@ CRUD operations for Agent conversations.
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.domain.model.agent import ConversationStatus
+from src.domain.model.agent.execution.run_execution_placement import (
+    CLOUD_RUN_EXECUTION_PLACEMENT,
+)
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
     WorkspaceAuthorityNotFoundError,
@@ -57,6 +60,9 @@ from src.infrastructure.adapters.primary.web.workspace_authority import (
     workspace_core_unavailable_error,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+    latest_execution_placements,
+)
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.conversation_collection_services import (
@@ -355,16 +361,27 @@ def _conversation_responses(
     conversations: list["Conversation"],
     *,
     workspace_names: dict[str, str],
+    placements: dict[str, Any] | None = None,
 ) -> list[ConversationResponse]:
-    return [
-        ConversationResponse.from_domain(
-            conversation,
-            workspace_id=_workspace_id_for_response(conversation),
-            linked_workspace_task_id=_linked_workspace_task_id_for_response(conversation),
-            workspace_name=workspace_names.get(_workspace_id_for_response(conversation) or ""),
+    resolved = placements or {}
+    responses: list[ConversationResponse] = []
+    for conversation in conversations:
+        placement = resolved.get(conversation.id)
+        fields = (
+            placement.public_dict()
+            if placement is not None
+            else CLOUD_RUN_EXECUTION_PLACEMENT.public_dict()
         )
-        for conversation in conversations
-    ]
+        responses.append(
+            ConversationResponse.from_domain(
+                conversation,
+                workspace_id=_workspace_id_for_response(conversation),
+                linked_workspace_task_id=_linked_workspace_task_id_for_response(conversation),
+                workspace_name=workspace_names.get(_workspace_id_for_response(conversation) or ""),
+                **fields,
+            )
+        )
+    return responses
 
 
 async def _enforce_conversation_invariants(
@@ -501,7 +518,7 @@ async def create_conversation(
 
 
 @router.get("/conversations", response_model=PaginatedConversationsResponse)
-async def list_conversations(
+async def list_conversations(  # noqa: PLR0913
     request: Request,
     project_id: str = Query(..., description="Project ID to filter by"),
     status: str | None = Query(None, description="Filter by status"),
@@ -520,6 +537,10 @@ async def list_conversations(
     group_by_workspace: bool = Query(
         False,
         description="Expand paged workspace entries so each returned workspace group is complete",
+    ),
+    execution_target: Literal["local", "cloud"] | None = Query(
+        None,
+        description="Keep conversations that contain a run with this execution target",
     ),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -551,6 +572,9 @@ async def list_conversations(
         )
 
         conv_status = ConversationStatus(status) if status else None
+        requested_execution_target = (
+            execution_target if execution_target in {"local", "cloud"} else None
+        )
         requested_workspace_id, requested_unbound_only = _conversation_list_filters(
             workspace_id,
             unbound_only=unbound_only,
@@ -564,12 +588,14 @@ async def list_conversations(
                 status=conv_status,
                 limit=limit,
                 offset=offset,
+                execution_target=requested_execution_target,
             )
             total = await conversation_collection.service.count_unbound_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 user_id=current_user.id,
                 status=conv_status,
+                execution_target=requested_execution_target,
             )
         elif requested_workspace_id:
             await _ensure_workspace_access(
@@ -586,12 +612,14 @@ async def list_conversations(
                 status=conv_status,
                 limit=limit,
                 offset=offset,
+                execution_target=requested_execution_target,
             )
             total = await conversation_collection.service.count_workspace_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 workspace_id=requested_workspace_id,
                 status=conv_status,
+                execution_target=requested_execution_target,
             )
         else:
             conversations = await conversation_collection.service.list_conversations(
@@ -600,12 +628,14 @@ async def list_conversations(
                 limit=limit,
                 offset=offset,
                 status=conv_status,
+                execution_target=requested_execution_target,
             )
 
             total = await conversation_collection.service.count_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 status=conv_status,
+                execution_target=requested_execution_target,
             )
 
             workspace_ids: set[str] = set()
@@ -629,6 +659,7 @@ async def list_conversations(
                         status=conv_status,
                         limit=_workspace_group_expansion_limit(limit),
                         offset=0,
+                        execution_target=requested_execution_target,
                     )
                 )
                 conversations = _merge_workspace_groups(conversations, workspace_conversations)
@@ -645,7 +676,17 @@ async def list_conversations(
             tenant_id=tenant_id,
             workspace_ids=response_workspace_ids,
         )
-        items = _conversation_responses(conversations, workspace_names=workspace_names)
+        placements = await latest_execution_placements(
+            conversation_collection.db,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            conversation_ids=[conversation.id for conversation in conversations],
+        )
+        items = _conversation_responses(
+            conversations,
+            workspace_names=workspace_names,
+            placements=placements,
+        )
         next_offset = min(offset + limit, total)
         unique_item_count = len({item.id for item in items})
         has_more = next_offset < total and unique_item_count < total
@@ -698,7 +739,21 @@ async def get_conversation(
         if not conversation:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
-        return ConversationResponse.from_domain(conversation)
+        placements = await latest_execution_placements(
+            conversation_http.db,
+            tenant_id=conversation.tenant_id,
+            project_id=project_id,
+            conversation_ids=[conversation.id],
+        )
+        placement = placements.get(conversation.id)
+        return ConversationResponse.from_domain(
+            conversation,
+            **(
+                placement.public_dict()
+                if placement is not None
+                else CLOUD_RUN_EXECUTION_PLACEMENT.public_dict()
+            ),
+        )
 
     except HTTPException:
         raise

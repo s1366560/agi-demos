@@ -7524,6 +7524,14 @@
       "switchPreserve": "The conversation will be preserved and can be accessed again by switching back to this project.",
       "loadConversationsFailed": "Failed to load conversations"
     },
+    "executionTarget": {
+      "all": "All",
+      "local": "This computer",
+      "cloud": "Cloud",
+      "filterLabel": "Execution location",
+      "defaultEnvironment": "Default environment",
+      "localDirectory": "Local directory"
+    },
     "sidebar": {
       "title": "Agent Chat",
       "workspaceTitle": "Agent Workspace",

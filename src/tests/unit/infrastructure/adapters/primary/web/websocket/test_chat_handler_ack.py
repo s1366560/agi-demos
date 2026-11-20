@@ -285,6 +285,26 @@ def successful_chat_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+async def test_cloud_send_message_rejects_local_execution_before_dispatch(
+    successful_chat_dependencies: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    del successful_chat_dependencies
+
+    async def fail_if_called(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("local target must not create a cloud run")
+
+    monkeypatch.setattr(chat_handler, "ensure_chat_run_authority", fail_if_called)
+    context = _MessageContext()
+    await SendMessageHandler().handle(
+        context,  # type: ignore[arg-type]
+        {**_message(), "execution_target": "local"},
+    )
+
+    assert context.connection_manager.tasks == []
+    _assert_error_code(context, "LOCAL_EXECUTION_UNAVAILABLE")
+
+
 def _message(
     *,
     message_id: str | None = None,
@@ -481,6 +501,10 @@ async def test_started_duplicate_replays_authoritative_ack_without_new_task(
             "execution_message_id": "desktop-turn-started",
             "run_id": "desktop-turn-started",
             "run_revision": 1,
+            "execution_target": "cloud",
+            "execution_machine_id": None,
+            "execution_environment_id": None,
+            "local_root_label": None,
         }
     ]
 

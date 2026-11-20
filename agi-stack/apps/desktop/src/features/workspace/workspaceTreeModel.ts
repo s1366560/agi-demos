@@ -260,6 +260,20 @@ export function shouldLoadWorkspaceConversations(
   return !state || (!state.loading && Boolean(state.error));
 }
 
+export function clearWorkspaceConversationCache<T extends {
+  conversationsByWorkspace: Record<string, unknown>;
+  nodeState: { workspaces: Record<string, unknown> };
+}>(dataset: T): T {
+  return {
+    ...dataset,
+    conversationsByWorkspace: {},
+    nodeState: {
+      ...dataset.nodeState,
+      workspaces: {},
+    },
+  };
+}
+
 export function beginWorkspaceConversationRequest(
   generations: Map<string, number>,
   workspaceId: string,

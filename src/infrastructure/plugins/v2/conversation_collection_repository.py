@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
-from sqlalchemy import String, case, func, select
+from sqlalchemy import String, case, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql import ColumnElement, Select, Subquery
@@ -17,6 +17,7 @@ from src.domain.model.agent import Conversation, ConversationStatus
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent as AgentExecutionEventModel,
+    AgentRunAuthorityModel,
     Conversation as ConversationModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
@@ -165,6 +166,33 @@ def _unbound_workspace_filter() -> ColumnElement[bool]:
     return _effective_workspace_id_expression().is_(None)
 
 
+def _execution_target_filter(execution_target: str | None) -> ColumnElement[bool] | None:
+    """Match conversations that contain at least one run with the requested target."""
+
+    if execution_target is None:
+        return None
+    if execution_target not in {"local", "cloud"}:
+        raise ValueError("execution_target must be local or cloud")
+    return exists(
+        select(AgentRunAuthorityModel.id).where(
+            AgentRunAuthorityModel.conversation_id == ConversationModel.id,
+            AgentRunAuthorityModel.tenant_id == ConversationModel.tenant_id,
+            AgentRunAuthorityModel.project_id == ConversationModel.project_id,
+            AgentRunAuthorityModel.execution_target == execution_target,
+        )
+    )
+
+
+def _with_execution_target[SelectT: Select[Any]](
+    query: SelectT,
+    execution_target: str | None,
+) -> SelectT:
+    clause = _execution_target_filter(execution_target)
+    if clause is None:
+        return query
+    return query.where(clause)
+
+
 @runtime_checkable
 class ConversationCollectionRepositoryProtocolV2(Protocol):
     """Persistence surface for all create/list collection shapes."""
@@ -179,6 +207,7 @@ class ConversationCollectionRepositoryProtocolV2(Protocol):
         status: ConversationStatus | None,
         limit: int,
         offset: int,
+        execution_target: str | None = None,
     ) -> list[Conversation]: ...
 
     async def count_default(
@@ -187,6 +216,7 @@ class ConversationCollectionRepositoryProtocolV2(Protocol):
         project_id: str,
         tenant_id: str,
         status: ConversationStatus | None,
+        execution_target: str | None = None,
     ) -> int: ...
 
     async def list_workspace(
@@ -198,6 +228,7 @@ class ConversationCollectionRepositoryProtocolV2(Protocol):
         status: ConversationStatus | None,
         limit: int | None,
         offset: int,
+        execution_target: str | None = None,
     ) -> list[Conversation]: ...
 
     async def count_workspace(
@@ -207,6 +238,7 @@ class ConversationCollectionRepositoryProtocolV2(Protocol):
         tenant_id: str,
         workspace_id: str,
         status: ConversationStatus | None,
+        execution_target: str | None = None,
     ) -> int: ...
 
     async def list_unbound(
@@ -218,6 +250,7 @@ class ConversationCollectionRepositoryProtocolV2(Protocol):
         status: ConversationStatus | None,
         limit: int,
         offset: int,
+        execution_target: str | None = None,
     ) -> list[Conversation]: ...
 
     async def count_unbound(
@@ -227,6 +260,7 @@ class ConversationCollectionRepositoryProtocolV2(Protocol):
         tenant_id: str,
         user_id: str,
         status: ConversationStatus | None,
+        execution_target: str | None = None,
     ) -> int: ...
 
 
@@ -248,6 +282,7 @@ class SqlConversationCollectionRepositoryV2:
         status: ConversationStatus | None,
         limit: int,
         offset: int,
+        execution_target: str | None = None,
     ) -> list[Conversation]:
         query = _ordered_conversation_query().where(
             ConversationModel.project_id == project_id,
@@ -255,6 +290,7 @@ class SqlConversationCollectionRepositoryV2:
         )
         if status is not None:
             query = query.where(ConversationModel.status == status.value)
+        query = _with_execution_target(query, execution_target)
         return await self._list(query.offset(offset).limit(limit))
 
     async def count_default(
@@ -263,6 +299,7 @@ class SqlConversationCollectionRepositoryV2:
         project_id: str,
         tenant_id: str,
         status: ConversationStatus | None,
+        execution_target: str | None = None,
     ) -> int:
         query = (
             select(func.count())
@@ -274,6 +311,7 @@ class SqlConversationCollectionRepositoryV2:
         )
         if status is not None:
             query = query.where(ConversationModel.status == status.value)
+        query = _with_execution_target(query, execution_target)
         return await self._count(query)
 
     async def list_workspace(
@@ -285,6 +323,7 @@ class SqlConversationCollectionRepositoryV2:
         status: ConversationStatus | None,
         limit: int | None,
         offset: int,
+        execution_target: str | None = None,
     ) -> list[Conversation]:
         if not workspace_ids:
             return []
@@ -295,6 +334,7 @@ class SqlConversationCollectionRepositoryV2:
         )
         if status is not None:
             query = query.where(ConversationModel.status == status.value)
+        query = _with_execution_target(query, execution_target)
         if limit is not None:
             query = query.offset(offset).limit(limit)
         return await self._list(query)
@@ -306,6 +346,7 @@ class SqlConversationCollectionRepositoryV2:
         tenant_id: str,
         workspace_id: str,
         status: ConversationStatus | None,
+        execution_target: str | None = None,
     ) -> int:
         query = (
             select(func.count())
@@ -318,6 +359,7 @@ class SqlConversationCollectionRepositoryV2:
         )
         if status is not None:
             query = query.where(ConversationModel.status == status.value)
+        query = _with_execution_target(query, execution_target)
         return await self._count(query)
 
     async def list_unbound(
@@ -329,6 +371,7 @@ class SqlConversationCollectionRepositoryV2:
         status: ConversationStatus | None,
         limit: int,
         offset: int,
+        execution_target: str | None = None,
     ) -> list[Conversation]:
         query = _ordered_conversation_query().where(
             ConversationModel.project_id == project_id,
@@ -338,6 +381,7 @@ class SqlConversationCollectionRepositoryV2:
         )
         if status is not None:
             query = query.where(ConversationModel.status == status.value)
+        query = _with_execution_target(query, execution_target)
         return await self._list(query.offset(offset).limit(limit))
 
     async def count_unbound(
@@ -347,6 +391,7 @@ class SqlConversationCollectionRepositoryV2:
         tenant_id: str,
         user_id: str,
         status: ConversationStatus | None,
+        execution_target: str | None = None,
     ) -> int:
         query = (
             select(func.count())
@@ -360,6 +405,7 @@ class SqlConversationCollectionRepositoryV2:
         )
         if status is not None:
             query = query.where(ConversationModel.status == status.value)
+        query = _with_execution_target(query, execution_target)
         return await self._count(query)
 
     async def _list(self, query: Select[tuple[ConversationModel]]) -> list[Conversation]:
