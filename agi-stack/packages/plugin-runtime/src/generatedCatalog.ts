@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:7ca5e83b1900c85066c267e9cd78f767efea6b73da9e1810f968aaea9e',
-  '585337","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:cc5de86d3746d19a5c6f6cf820115446f30bf55b4aed9cf8673ef1b402',
+  '590fb1","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1103,8 +1103,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'd271844eebe775c1bb53080161593f74bb2a8de14f8a4d936","entrypoint":"src.infrastructure.',
   'plugins.v2.conversation_access_services:_apply_conversation_access_v2","module_ref":',
   '"builtin://memstack/application/conversation-access","plugin_id":"memstack-runtime-k',
-  'ernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:57f',
-  '8a5db7a344d272fd122f132329b7ba2e8f44928cc404998d788ebcb45d49a","artifact_source":"re',
+  'ernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:882',
+  'fcab59db4f7851829f292b6f0a67884ddaaad1f5c9db16748173eca5398e9","artifact_source":"re',
   'po+python://src/infrastructure/plugins/v2/conversation_collection_services.py","cont',
   'ract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","ad',
   'ditionalProperties":false,"properties":{"strategy":{"const":"operation-scoped-provid',
@@ -2835,8 +2835,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '8ea2fac66867eabfc7b7f0c8d1a4f3a7e10dad3e02a61f7c","entrypoint":"applyDesktopWorkspac',
   'eContextAuthorityV2","module_ref":"builtin://memstack/desktop/workspace-context-auth',
   'ority","plugin_id":"memstack-renderer-target-hosts","plugin_version":"2.0.0","target',
-  's":["desktop-renderer"]},{"artifact_digest":"sha256:68108e1fc2b58fc0f61df9300fc7f9e9',
-  '90c77339984de310aeaebc6929fa101f","artifact_source":"repo+typescript://agi-stack/app',
+  's":["desktop-renderer"]},{"artifact_digest":"sha256:2b07dd3c5dfcd5db5491540c5c46c4f4',
+  '2fa0cd5605bdc96759bea6cca5940e58","artifact_source":"repo+typescript://agi-stack/app',
   's/desktop/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts","cont',
   'ract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","ad',
   'ditionalProperties":false,"properties":{"strategy":{"const":"desktop-api-client","ty',
@@ -3026,8 +3026,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'c79556ada240540ce4f35cb67263d5ca2f2e3b7abe625323841","entrypoint":"src.infrastructur',
   'e.plugins.v2.artifact_events:_apply_artifact_event_publisher_v2","module_ref":"built',
   'in://memstack/events/artifact-publisher","plugin_id":"memstack-runtime-kernel","plug',
-  'in_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:57f8a5db7a344d2',
-  '72fd122f132329b7ba2e8f44928cc404998d788ebcb45d49a","artifact_source":"repo+python://',
+  'in_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:882fcab59db4f78',
+  '51829f292b6f0a67884ddaaad1f5c9db16748173eca5398e9","artifact_source":"repo+python://',
   'src/infrastructure/plugins/v2/conversation_collection_services.py","contract":{"conf',
   'ig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProp',
   'erties":false,"properties":{"strategy":{"const":"redis-project-stream","type":"strin',
@@ -4088,8 +4088,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '","entrypoint":"src.infrastructure.plugins.v2.conversation_context_status_services:_',
   'apply_context_summary_provider_v2","module_ref":"builtin://memstack/persistence/cont',
   'ext-summary-provider","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0"',
-  ',"targets":["python"]},{"artifact_digest":"sha256:258a9d03f4c2241128f7d693064583b9f5',
-  '321ad178d5d41f68e69905dc857d21","artifact_source":"repo+python://src/infrastructure/',
+  ',"targets":["python"]},{"artifact_digest":"sha256:deca1c86ce3471aa93e6c84184430ae2e6',
+  'a22fe9b042f3ebb2dd7ab1584ca554","artifact_source":"repo+python://src/infrastructure/',
   'plugins/v2/conversation_collection_repository.py","contract":{"config_schema":{"$sch',
   'ema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"pr',
   'operties":{"strategy":{"const":"request-async-session","type":"string"}},"required":',
@@ -5038,4 +5038,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:7ca5e83b1900c85066c267e9cd78f767efea6b73da9e1810f968aaea9e585337' as const;
+  'sha256:cc5de86d3746d19a5c6f6cf820115446f30bf55b4aed9cf8673ef1b402590fb1' as const;

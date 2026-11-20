@@ -475,7 +475,11 @@ describe('TenantChatSidebar', () => {
     await waitFor(() => {
       expect(agentState.loadConversations).toHaveBeenCalledWith(
         'project-1',
-        expect.any(AbortSignal)
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          executionTarget: 'all',
+          force: true,
+        })
       );
       expect(screen.getByText('Conversation One')).toBeInTheDocument();
     });
@@ -985,7 +989,11 @@ describe('TenantChatSidebar', () => {
       expect(projectSwitcher).toHaveValue('project-2');
       expect(agentState.loadConversations).toHaveBeenCalledWith(
         'project-2',
-        expect.any(AbortSignal)
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          executionTarget: 'all',
+          force: true,
+        })
       );
     });
     expect(projectState.setCurrentProject).toHaveBeenLastCalledWith({
@@ -1049,7 +1057,11 @@ describe('TenantChatSidebar', () => {
     await waitFor(() => {
       expect(agentState.loadConversations).toHaveBeenCalledWith(
         'project-1',
-        expect.any(AbortSignal)
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          executionTarget: 'all',
+          force: true,
+        })
       );
     });
     agentState.loadConversations.mockClear();
@@ -1068,7 +1080,11 @@ describe('TenantChatSidebar', () => {
       expect(projectSwitcher).toHaveValue('project-2');
       expect(agentState.loadConversations).toHaveBeenCalledWith(
         'project-2',
-        expect.any(AbortSignal)
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          executionTarget: 'all',
+          force: true,
+        })
       );
     });
     expect(projectState.setCurrentProject).toHaveBeenLastCalledWith({

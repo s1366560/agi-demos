@@ -6225,7 +6225,7 @@
       },
       "contract_digest": "sha256:a3d29d20769468661ddc0f0f39c1bd46f2cb223ca1374debb2289f2658327fa9",
       "artifact": {
-        "digest": "sha256:258a9d03f4c2241128f7d693064583b9f5321ad178d5d41f68e69905dc857d21",
+        "digest": "sha256:deca1c86ce3471aa93e6c84184430ae2e6a22fe9b042f3ebb2dd7ab1584ca554",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_collection_repository.py"
       }
     },
@@ -12967,7 +12967,7 @@
       },
       "contract_digest": "sha256:cdf9ea7c837c2901f3ffcee49751b2b4aabf2efa6cb9859714b358b6df2d7b87",
       "artifact": {
-        "digest": "sha256:57f8a5db7a344d272fd122f132329b7ba2e8f44928cc404998d788ebcb45d49a",
+        "digest": "sha256:882fcab59db4f7851829f292b6f0a67884ddaaad1f5c9db16748173eca5398e9",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_collection_services.py"
       }
     },
@@ -13057,7 +13057,7 @@
       },
       "contract_digest": "sha256:d5c156fdac0bc214e29b6e51aa76722e4c899c631fffa1672afbabfa631e40a7",
       "artifact": {
-        "digest": "sha256:57f8a5db7a344d272fd122f132329b7ba2e8f44928cc404998d788ebcb45d49a",
+        "digest": "sha256:882fcab59db4f7851829f292b6f0a67884ddaaad1f5c9db16748173eca5398e9",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_collection_services.py"
       }
     },

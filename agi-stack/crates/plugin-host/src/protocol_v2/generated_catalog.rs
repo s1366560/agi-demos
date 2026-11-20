@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:7ca5e83b1900c85066c267e9cd78f767efea6b73da9e1810f968aaea9e5853",
-    "37\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:cc5de86d3746d19a5c6f6cf820115446f30bf55b4aed9cf8673ef1b402590f",
+    "b1\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1034,8 +1034,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "4e8cd271844eebe775c1bb53080161593f74bb2a8de14f8a4d936\",\"entrypoint\":\"src.infrastructure.",
     "plugins.v2.conversation_access_services:_apply_conversation_access_v2\",\"module_ref\":\"bui",
     "ltin://memstack/application/conversation-access\",\"plugin_id\":\"memstack-runtime-kernel\",\"",
-    "plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:57f8a5db7a344d2",
-    "72fd122f132329b7ba2e8f44928cc404998d788ebcb45d49a\",\"artifact_source\":\"repo+python://src/",
+    "plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:882fcab59db4f78",
+    "51829f292b6f0a67884ddaaad1f5c9db16748173eca5398e9\",\"artifact_source\":\"repo+python://src/",
     "infrastructure/plugins/v2/conversation_collection_services.py\",\"contract\":{\"config_schem",
     "a\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":fals",
     "e,\"properties\":{\"strategy\":{\"const\":\"operation-scoped-provider\",\"type\":\"string\"}},\"requi",
@@ -2687,8 +2687,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "st\":\"sha256:3981cd7f7216bc938ea2fac66867eabfc7b7f0c8d1a4f3a7e10dad3e02a61f7c\",\"entrypoin",
     "t\":\"applyDesktopWorkspaceContextAuthorityV2\",\"module_ref\":\"builtin://memstack/desktop/wo",
     "rkspace-context-authority\",\"plugin_id\":\"memstack-renderer-target-hosts\",\"plugin_version\"",
-    ":\"2.0.0\",\"targets\":[\"desktop-renderer\"]},{\"artifact_digest\":\"sha256:68108e1fc2b58fc0f61d",
-    "f9300fc7f9e990c77339984de310aeaebc6929fa101f\",\"artifact_source\":\"repo+typescript://agi-s",
+    ":\"2.0.0\",\"targets\":[\"desktop-renderer\"]},{\"artifact_digest\":\"sha256:2b07dd3c5dfcd5db5491",
+    "540c5c46c4f42fa0cd5605bdc96759bea6cca5940e58\",\"artifact_source\":\"repo+typescript://agi-s",
     "tack/apps/desktop/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts\",\"",
     "contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"ad",
     "ditionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"desktop-api-client\",\"type\":",
@@ -2870,8 +2870,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "2f2e3b7abe625323841\",\"entrypoint\":\"src.infrastructure.plugins.v2.artifact_events:_apply_",
     "artifact_event_publisher_v2\",\"module_ref\":\"builtin://memstack/events/artifact-publisher\"",
     ",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"",
-    "artifact_digest\":\"sha256:57f8a5db7a344d272fd122f132329b7ba2e8f44928cc404998d788ebcb45d49",
-    "a\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/conversation_collectio",
+    "artifact_digest\":\"sha256:882fcab59db4f7851829f292b6f0a67884ddaaad1f5c9db16748173eca5398e",
+    "9\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/conversation_collectio",
     "n_services.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/202",
     "0-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"redis-proje",
     "ct-stream\",\"type\":\"string\"}},\"required\":[\"strategy\"],\"type\":\"object\"},\"events\":{\"emits\":",
@@ -3883,8 +3883,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "d4182ca86dad048bc103178f9fe331f5\",\"entrypoint\":\"src.infrastructure.plugins.v2.conversati",
     "on_context_status_services:_apply_context_summary_provider_v2\",\"module_ref\":\"builtin://m",
     "emstack/persistence/context-summary-provider\",\"plugin_id\":\"memstack-runtime-kernel\",\"plu",
-    "gin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:258a9d03f4c2241128",
-    "f7d693064583b9f5321ad178d5d41f68e69905dc857d21\",\"artifact_source\":\"repo+python://src/inf",
+    "gin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:deca1c86ce3471aa93",
+    "e6c84184430ae2e6a22fe9b042f3ebb2dd7ab1584ca554\",\"artifact_source\":\"repo+python://src/inf",
     "rastructure/plugins/v2/conversation_collection_repository.py\",\"contract\":{\"config_schema",
     "\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false",
     ",\"properties\":{\"strategy\":{\"const\":\"request-async-session\",\"type\":\"string\"}},\"required\":",
@@ -4785,4 +4785,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "rsion\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:7ca5e83b1900c85066c267e9cd78f767efea6b73da9e1810f968aaea9e585337";
+    "sha256:cc5de86d3746d19a5c6f6cf820115446f30bf55b4aed9cf8673ef1b402590fb1";
