@@ -59,13 +59,7 @@ export type AgentConversationParams = {
     canResume: boolean;
   } | null;
   permissionPreset: PermissionPreset;
-  resolveExecutionSend?: (
-    kind?: 'session' | 'new_task',
-    input?: {
-      permissionPreset?: 'default' | 'relaxed' | 'full' | null;
-      permissionPending?: boolean;
-    },
-  ) => ExecutionSendDecision;
+  resolveExecutionSend?: (kind?: 'session' | 'new_task') => ExecutionSendDecision;
   runInputReferences: CodeRangeReference[];
   runInputDelivery: RunInputDelivery | null;
   runInputDeliveryOptions: RunInputDelivery[];

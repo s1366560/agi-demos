@@ -6730,12 +6730,7 @@ export function App() {
     sessionRunInputOperationsV2: desktopSessionRunInputOperationsV2,
     pendingNewTaskAgentTurnsRef,
     permissionPreset,
-    resolveExecutionSend: (kind) =>
-      executionPlacementController.resolveSend(kind, {
-        permissionPreset:
-          kind === 'session' && selectedConversation ? permissionPreset : null,
-        permissionPending: approvalSync.pending,
-      }),
+    resolveExecutionSend: (kind) => executionPlacementController.resolveSend(kind),
     resetConversationTimeline,
     runInputDelivery,
     runInputDeliveryOptions,

@@ -2951,6 +2951,21 @@ function ChatComposer({
                 ))}
               </div>
             ) : null}
+            {composerPresentation.showRuntimeControls &&
+            modelLabel &&
+            modelOptions?.length &&
+            onModelChange ? (
+              <ComposerControls
+                disabledHint={disabledReason}
+                modelLabel={modelLabel}
+                modelOptions={modelOptions}
+                modelValue={selectedModelValue}
+                modelPending={modelSwitching}
+                modelError={modelError}
+                onModelChange={onModelChange}
+                onModelReset={onModelReset}
+              />
+            ) : null}
             {composerPresentation.showRuntimeStatus ? (
               <span
                 className={`composer-status-button composer-status-dot ${

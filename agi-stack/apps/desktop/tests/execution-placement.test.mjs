@@ -154,18 +154,17 @@ test('local send is an explicit unsupported error and cloud send cannot carry th
   const blocked = decideExecutionSend({
     surface: 'desktop',
     placement,
-    permissionPreset: 'full',
   });
   assert.equal(blocked.ok, false);
   assert.equal(blocked.code, 'LOCAL_EXECUTION_UNAVAILABLE');
   const cloud = decideExecutionSend({
     surface: 'desktop',
     placement: { ...placement, target: 'cloud', localRootLabel: null, pathUnavailable: false },
-    permissionPreset: 'full',
   });
   assert.equal(cloud.ok, true);
   assert.equal(cloud.wire.execution_target, 'cloud');
-  assert.equal(cloud.permissionMode, 'full_access');
+  assert.equal(cloud.permissionMode, null);
+  assert.equal(messagePermissionMode('full'), 'full_access');
   assert.equal(wireContainsAbsolutePath(cloud.wire, [absoluteRoot, 'alice']), false);
   assert.equal(decideExecutionSwitch(true).ok, false);
   assert.equal(decideExecutionSwitch(false).ok, true);
@@ -250,4 +249,8 @@ test('the placement bar sits above the editor for both composer variants and dro
   assert.ok(bar > 0 && editor > bar);
   assert.equal(chatPanel.includes('onRuntimeTargetChange'), false);
   assert.equal(chatPanel.includes('runtimeTargetLabel'), false);
+  assert.match(
+    chatPanel,
+    /showRuntimeControls &&[\s\S]*?<ComposerControls[\s\S]*?onModelChange=\{onModelChange\}/,
+  );
 });

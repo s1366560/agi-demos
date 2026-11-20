@@ -300,12 +300,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
             fileMetadata: execution.fileMetadata,
             appModelContext: execution.appModelContext,
             ...(placementDecision?.ok
-              ? {
-                  executionTarget: placementDecision.wire.execution_target,
-                  ...(placementDecision.permissionMode
-                    ? { permissionMode: placementDecision.permissionMode }
-                    : {}),
-                }
+              ? { executionTarget: placementDecision.wire.execution_target }
               : {}),
           });
           setConversationTimeline((current) => {

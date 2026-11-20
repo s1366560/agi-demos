@@ -316,12 +316,7 @@ export function useConversationThreads(params: AgentConversationParams) {
       fileMetadata: input.fileMetadata,
       appModelContext: input.appModelContext,
       ...(placementDecision?.ok
-        ? {
-            executionTarget: placementDecision.wire.execution_target,
-            ...(placementDecision.permissionMode
-              ? { permissionMode: placementDecision.permissionMode }
-              : {}),
-          }
+        ? { executionTarget: placementDecision.wire.execution_target }
         : {}),
     });
     const transport = newTaskAgentTurnTransport(input.config.mode, queued);

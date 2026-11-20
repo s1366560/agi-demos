@@ -35,13 +35,7 @@ export type ExecutionPlacementController = {
   noticeDetail: string | null;
   selectTarget: (target: ExecutionPlacementTarget, scope?: 'session' | 'new_task') => void;
   pickDirectory: (scope?: 'session' | 'new_task') => Promise<void>;
-  resolveSend: (
-    kind?: 'session' | 'new_task',
-    input?: {
-      permissionPreset?: 'default' | 'relaxed' | 'full' | null;
-      permissionPending?: boolean;
-    },
-  ) => ExecutionSendDecision;
+  resolveSend: (kind?: 'session' | 'new_task') => ExecutionSendDecision;
 };
 
 function browserStorage(): PlacementStorage | null {
@@ -242,18 +236,10 @@ export function useExecutionPlacement(input: {
   }, [persist, placement.readOnly]);
 
   const resolveSend = useCallback(
-    (
-      kind: 'session' | 'new_task' = 'session',
-      sendInput?: {
-        permissionPreset?: 'default' | 'relaxed' | 'full' | null;
-        permissionPending?: boolean;
-      },
-    ): ExecutionSendDecision => {
+    (kind: 'session' | 'new_task' = 'session'): ExecutionSendDecision => {
       const decision = decideExecutionSend({
         surface: 'desktop',
         placement: kind === 'new_task' ? newTaskPlacement : placement,
-        permissionPreset: sendInput?.permissionPreset,
-        permissionPending: sendInput?.permissionPending,
       });
       if (!decision.ok) setNoticeCode(decision.code);
       return decision;

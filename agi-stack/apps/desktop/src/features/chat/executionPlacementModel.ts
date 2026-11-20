@@ -292,8 +292,6 @@ export function resolveComposerPlacement(input: {
 export function decideExecutionSend(input: {
   surface: 'desktop' | 'web';
   placement: ResolvedComposerPlacement;
-  permissionPreset?: 'default' | 'relaxed' | 'full' | null;
-  permissionPending?: boolean;
   permissionDenied?: boolean;
 }): ExecutionSendDecision {
   if (input.permissionDenied) return { ok: false, code: 'EXECUTION_PERMISSION_DENIED' };
@@ -307,14 +305,12 @@ export function decideExecutionSend(input: {
     // Local run upload is P4. Refuse here so the cloud path cannot relabel it.
     return { ok: false, code: 'LOCAL_EXECUTION_UNAVAILABLE' };
   }
-  const wire = cloudExecutionWire();
   return {
     ok: true,
-    wire,
-    permissionMode: messagePermissionMode(
-      input.permissionPreset,
-      input.permissionPending === true,
-    ),
+    wire: cloudExecutionWire(),
+    // The approval preset stays on the conversation config. Requesting it as
+    // this turn's permission_mode is rejected when the workspace ceiling is ask.
+    permissionMode: null,
   };
 }
 
