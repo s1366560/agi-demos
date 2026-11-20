@@ -1,7 +1,10 @@
 use std::{
     collections::HashSet,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 
@@ -35,7 +38,8 @@ use super::{
 
 const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 30;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
-const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
+const LEGACY_LOCAL_LOGIN_METADATA_KEYS: &[&str] =
+    &["local_trusted_session_v1", "local_session_reference"];
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
 const LEGACY_TASK_SESSION_RECEIPT_TABLE: &str = "desktop_new_task_sessions_v15";
 const RETIRED_AUTHORITY_TASK_SESSION_RECEIPT_TABLE: &str =
@@ -277,6 +281,7 @@ impl DesktopCheckpointAuthority {
 pub(super) struct DesktopSessionStore {
     connection: Arc<Mutex<Connection>>,
     installation_id: Arc<str>,
+    legacy_local_login_cleared: Arc<AtomicBool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -331,6 +336,20 @@ pub(super) struct ConversationSessionSnapshot {
     pub(super) artifact_versions: Vec<DesktopArtifactVersion>,
     pub(super) artifact_deliveries: Vec<DesktopArtifactDelivery>,
     pub(super) tool_invocations: Vec<ToolInvocation>,
+}
+
+fn delete_legacy_local_login_metadata(connection: &Connection) -> Result<bool, String> {
+    let mut deleted = false;
+    for key in LEGACY_LOCAL_LOGIN_METADATA_KEYS {
+        let changed = connection
+            .execute(
+                "DELETE FROM desktop_runtime_metadata WHERE key = ?1",
+                params![key],
+            )
+            .map_err(|error| error.to_string())?;
+        deleted |= changed > 0;
+    }
+    Ok(deleted)
 }
 
 impl DesktopSessionStore {
@@ -771,9 +790,11 @@ impl DesktopSessionStore {
             .map_err(|error| error.to_string())?;
         recover_inflight_tool_invocations(&connection, chrono::Utc::now().timestamp_millis())?;
         recover_interrupted_runs(&connection, &super::now_iso())?;
+        let legacy_local_login_cleared = delete_legacy_local_login_metadata(&connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
             installation_id: Arc::from(installation_id),
+            legacy_local_login_cleared: Arc::new(AtomicBool::new(legacy_local_login_cleared)),
         })
     }
 
@@ -1043,39 +1064,14 @@ impl DesktopSessionStore {
         }
     }
 
-    pub(super) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
-        if value.trim().is_empty() {
-            return Err("local trusted session record is invalid".to_string());
+    pub(super) fn purge_legacy_local_login_residue(&self) -> Result<bool, String> {
+        let connection = self.connection()?;
+        let deleted = delete_legacy_local_login_metadata(&connection)?;
+        if deleted {
+            self.legacy_local_login_cleared
+                .store(true, Ordering::Release);
         }
-        self.connection()?
-            .execute(
-                "INSERT INTO desktop_runtime_metadata(key, value_text) VALUES (?1, ?2)
-                 ON CONFLICT(key) DO UPDATE SET value_text = excluded.value_text",
-                params![LOCAL_TRUSTED_SESSION_METADATA_KEY, value],
-            )
-            .map_err(|error| error.to_string())?;
-        Ok(())
-    }
-
-    pub(super) fn load_local_trusted_session(&self) -> Result<Option<String>, String> {
-        self.connection()?
-            .query_row(
-                "SELECT value_text FROM desktop_runtime_metadata WHERE key = ?1",
-                params![LOCAL_TRUSTED_SESSION_METADATA_KEY],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|error| error.to_string())
-    }
-
-    pub(super) fn clear_local_trusted_session(&self) -> Result<(), String> {
-        self.connection()?
-            .execute(
-                "DELETE FROM desktop_runtime_metadata WHERE key = ?1",
-                params![LOCAL_TRUSTED_SESSION_METADATA_KEY],
-            )
-            .map_err(|error| error.to_string())?;
-        Ok(())
+        Ok(self.legacy_local_login_cleared.load(Ordering::Acquire))
     }
 
     pub(super) fn conversation_session_snapshot(
@@ -5725,49 +5721,64 @@ fn timeline_has_cursor_collision(
 
 #[cfg(test)]
 mod tests {
+    use rusqlite::{params, OptionalExtension};
+
     use super::*;
 
     #[test]
-    fn local_trusted_session_reference_survives_reopen_and_can_be_cleared() {
+    fn startup_purges_legacy_local_login_keys_and_keeps_other_metadata() {
         let path = std::env::temp_dir().join(format!(
             "agistack-local-trusted-session-{}.db",
             Uuid::new_v4()
         ));
-        let record = r#"{"version":1,"credential":"local-session-reference"}"#;
+        let record = r#"{"version":1,"credential_kind":"local_session_reference"}"#;
 
         {
             let store = DesktopSessionStore::open(&path).expect("open local session store");
-            store
-                .save_local_trusted_session(record)
-                .expect("save local trusted session reference");
-            assert_eq!(
-                store
-                    .load_local_trusted_session()
-                    .expect("load local trusted session reference"),
-                Some(record.to_string())
-            );
+            {
+                let connection = store.connection().expect("connection");
+                for key in ["local_trusted_session_v1", "local_session_reference"] {
+                    connection
+                        .execute(
+                            "INSERT INTO desktop_runtime_metadata(key, value_text) VALUES (?1, ?2)",
+                            params![key, record],
+                        )
+                        .expect("seed legacy local login key");
+                }
+            }
         }
 
         {
             let store = DesktopSessionStore::open(&path).expect("reopen local session store");
-            assert_eq!(
-                store
-                    .load_local_trusted_session()
-                    .expect("load reopened local trusted session reference"),
-                Some(record.to_string())
-            );
-            store
-                .clear_local_trusted_session()
-                .expect("clear local trusted session reference");
-            store
-                .clear_local_trusted_session()
-                .expect("clear missing local trusted session reference");
-            assert_eq!(
-                store
-                    .load_local_trusted_session()
-                    .expect("load cleared local trusted session reference"),
-                None
-            );
+            assert!(store
+                .legacy_local_login_cleared
+                .load(std::sync::atomic::Ordering::Acquire));
+            {
+                let connection = store.connection().expect("connection");
+                for key in ["local_trusted_session_v1", "local_session_reference"] {
+                    let remaining: Option<String> = connection
+                        .query_row(
+                            "SELECT value_text FROM desktop_runtime_metadata WHERE key = ?1",
+                            params![key],
+                            |row| row.get(0),
+                        )
+                        .optional()
+                        .expect("query legacy key");
+                    assert_eq!(remaining, None, "{key}");
+                }
+                let installation_id: Option<String> = connection
+                    .query_row(
+                        "SELECT value_text FROM desktop_runtime_metadata WHERE key = 'installation_id'",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .expect("query installation id");
+                assert!(installation_id.is_some());
+            }
+            assert!(store
+                .purge_legacy_local_login_residue()
+                .expect("repeat purge"));
         }
 
         let _ = std::fs::remove_file(path);

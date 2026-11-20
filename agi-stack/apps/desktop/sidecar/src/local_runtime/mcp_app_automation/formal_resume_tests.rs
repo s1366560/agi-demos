@@ -147,9 +147,15 @@ impl FormalFixture {
             .platform_plugin_authority_v2
             .publish_local_baseline(&snapshot, &wire, generation)
             .await;
-        let (status, login) = post(&state, None, "/api/v1/auth/local-session", json!({})).await;
-        assert_eq!(status, StatusCode::OK, "{login}");
-        let token = login["access_token"].as_str().unwrap().to_owned();
+        let token = state
+            .session_store
+            .create_local_session(
+                format!("formal-resume-{}", uuid::Uuid::new_v4()),
+                false,
+                chrono::Utc::now().timestamp_millis(),
+            )
+            .expect("mint session")
+            .access_token;
         let auth = state
             .session_store
             .validate_session_credential(&token, chrono::Utc::now().timestamp_millis())

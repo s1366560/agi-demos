@@ -448,7 +448,7 @@ test('Local workbench preserves degraded Project Overview authority metadata', a
   );
   assert.equal(projectCall?.init?.signal, signal);
   const headers = new Headers(projectCall?.init?.headers);
-  assert.equal(headers.get('Authorization'), 'Bearer local-session');
+  assert.equal(headers.get('Authorization'), 'Bearer desktop-test-session');
   assert.equal(headers.get('X-Agistack-Launch'), 'launch-capability');
 });
 
@@ -615,7 +615,7 @@ function localConfig() {
   return {
     ...DEFAULT_CONFIG,
     apiBaseUrl: 'http://127.0.0.1:4777',
-    apiKey: 'local-session',
+    apiKey: 'desktop-test-session',
     localApiToken: 'launch-capability',
     mode: 'local',
     tenantId: 'tenant-1',

@@ -148,21 +148,13 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
     let app = local_router(test_state(credential));
     let mut missing_router_routes = Vec::new();
     let mut automation_id = None;
-    let mut trusted_session_id = None;
 
     for route in routes {
         let resolved_uri = automation_id.as_ref().map_or_else(
             || route.uri.clone(),
             |automation_id: &String| route.uri.replace("route-parity-automation", automation_id),
         );
-        let mut resolved_body = route.body.clone();
-        if route.uri == "/api/v1/auth/local-session/resume" {
-            resolved_body["session_id"] = Value::String(
-                trusted_session_id
-                    .clone()
-                    .expect("trusted local session probe must follow session creation"),
-            );
-        }
+        let resolved_body = route.body.clone();
 
         let response = app
             .clone()
@@ -211,20 +203,6 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
             );
             continue;
         }
-        if route.area == "auth"
-            && route.method == "POST"
-            && route.uri == "/api/v1/auth/local-session"
-        {
-            let payload = response_json(response).await;
-            trusted_session_id = Some(
-                payload["session"]["session_id"]
-                    .as_str()
-                    .expect("trusted local session probe must return a session id")
-                    .to_string(),
-            );
-            continue;
-        }
-
         if route.authority == "agent_bindings_unavailable" {
             assert_eq!(
                 response.status(),

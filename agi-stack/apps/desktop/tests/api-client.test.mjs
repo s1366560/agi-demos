@@ -1,6 +1,7 @@
 import { createBrowserIntegrationHttpClientV2Fixture } from './browserIntegrationOperationsV2Fixture.mjs';
 import { createTenantSkillHttpClientV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { createTenantSubAgentDefinitionsHttpClientV2Fixture } from './tenantSubAgentDefinitionsOperationsV2Fixture.mjs';
@@ -713,7 +714,7 @@ test('workspace Agent binding catalog keeps cloud and local authority contracts 
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-capability',
       tenantId,
       projectId,
@@ -1011,7 +1012,7 @@ test('local identity catalogs use the same authoritative page contract', async (
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-capability',
     });
     assert.deepEqual(await client.listTenants(), [
@@ -3239,7 +3240,12 @@ test('agent WebSocket keeps launch and identity credentials in separate subproto
   ]);
 });
 
-test('local session bootstrap and context switch preserve the dual credential boundary', async () => {
+test('desktop client no longer calls the retired local login routes', async () => {
+  const source = readFileSync(new URL('../src/api/client.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /\/api\/v1\/auth\/local-session/);
+  assert.equal(typeof DesktopApiClient.prototype.createLocalSession, 'undefined');
+  assert.equal(typeof DesktopApiClient.prototype.resumeLocalSession, 'undefined');
+
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -3249,16 +3255,7 @@ test('local session bootstrap and context switch preserve the dual credential bo
       headers: { 'content-type': 'application/json' },
     });
   };
-
   try {
-    const bootstrap = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      apiBaseUrl: 'http://127.0.0.1:8088',
-      apiKey: '',
-      localApiToken: 'sidecar-capability',
-    });
-    await bootstrap.createLocalSession(false);
-
     const authenticated = new DesktopApiClient({
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
@@ -3267,73 +3264,8 @@ test('local session bootstrap and context switch preserve the dual credential bo
     });
     await authenticated.switchWorkspaceContext('orbital', 'agent-evals', 4, 'switch-5');
     await authenticated.signOut();
-
-    const bootstrapHeaders = new Headers(calls[0]?.init?.headers);
-    assert.equal(bootstrapHeaders.get('Authorization'), null);
-    assert.equal(bootstrapHeaders.get('X-Agistack-Launch'), 'sidecar-capability');
-    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { trusted_device: false });
-
-    const switchHeaders = new Headers(calls[1]?.init?.headers);
-    assert.equal(switchHeaders.get('Authorization'), 'Bearer authenticated-session');
-    assert.equal(switchHeaders.get('X-Agistack-Launch'), 'sidecar-capability');
-    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
-      tenant_id: 'orbital',
-      project_id: 'agent-evals',
-      expected_revision: 4,
-      idempotency_key: 'switch-5',
-    });
-    assert.equal(
-      String(calls[2]?.input),
-      'http://127.0.0.1:8088/api/v1/auth/signout',
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('trusted local resume sends only the launch capability and non-secret session reference', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input, init });
-    if (calls.length === 2) {
-      return new Response(JSON.stringify({ detail: 'trusted local session unavailable' }), {
-        status: 401,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return new Response(
-      JSON.stringify({
-        access_token: 'rotated-bearer',
-        token_type: 'bearer',
-        must_change_password: false,
-      }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    );
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      apiBaseUrl: 'http://127.0.0.1:8088',
-      apiKey: 'stale-bearer-must-not-be-sent',
-      localApiToken: 'current-launch-capability',
-    });
-    const resumed = await client.resumeLocalSession('local-session-1');
-    const unavailable = await client.resumeLocalSession('revoked-session');
-
-    assert.equal(resumed?.access_token, 'rotated-bearer');
-    assert.equal(unavailable, null);
-    const headers = new Headers(calls[0]?.init?.headers);
-    assert.equal(headers.get('Authorization'), null);
-    assert.equal(headers.get('X-Agistack-Launch'), 'current-launch-capability');
-    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
-      session_id: 'local-session-1',
-    });
-    assert.equal(
-      String(calls[0]?.input),
-      'http://127.0.0.1:8088/api/v1/auth/local-session/resume',
-    );
+    assert.equal(new Headers(calls[0]?.init?.headers).get('Authorization'), 'Bearer authenticated-session');
+    assert.equal(String(calls[1]?.input), 'http://127.0.0.1:8088/api/v1/auth/signout');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -5090,7 +5022,7 @@ test('browser origin grants list and revoke follow the sidecar contract', async 
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-token',
     });
     const listed = await client.listBrowserOriginGrants();
@@ -5102,14 +5034,14 @@ test('browser origin grants list and revoke follow the sidecar contract', async 
     assert.equal(calls.length, 2);
     assert.equal(calls[0].request, 'http://127.0.0.1:47832/api/v1/browser-bridge/origin-grants');
     assert.equal(calls[0].init.method, 'GET');
-    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer local-session');
+    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer desktop-test-session');
     assert.equal(calls[0].init.headers.get('X-Agistack-Launch'), 'launch-token');
     assert.equal(
       calls[1].request,
       'http://127.0.0.1:47832/api/v1/browser-bridge/origin-grants/grant-2',
     );
     assert.equal(calls[1].init.method, 'DELETE');
-    assert.equal(calls[1].init.headers.get('Authorization'), 'Bearer local-session');
+    assert.equal(calls[1].init.headers.get('Authorization'), 'Bearer desktop-test-session');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -5127,7 +5059,7 @@ test('browser origin grant responses reject malformed payloads', async () => {
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-token',
     });
     await assert.rejects(
@@ -5179,7 +5111,7 @@ test('browser capability grants list and revoke follow the sidecar contract', as
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-token',
     });
     const listed = await client.listBrowserCapabilityGrants();
@@ -5194,7 +5126,7 @@ test('browser capability grants list and revoke follow the sidecar contract', as
       'http://127.0.0.1:47832/api/v1/browser-bridge/capability-grants',
     );
     assert.equal(calls[0].init.method, 'GET');
-    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer local-session');
+    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer desktop-test-session');
     assert.equal(
       calls[1].request,
       'http://127.0.0.1:47832/api/v1/browser-bridge/capability-grants/cap-2',
@@ -5219,7 +5151,7 @@ test('browser capability grant responses reject malformed payloads', async () =>
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-token',
     });
     await assert.rejects(
@@ -5265,7 +5197,7 @@ test('browser site credentials upsert, list, and delete follow the sidecar contr
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-token',
     });
     const saved = await client.upsertBrowserSiteCredential({
@@ -5317,7 +5249,7 @@ test('browser site credential responses reject malformed payloads', async () => 
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-token',
     });
     await assert.rejects(
@@ -5367,7 +5299,7 @@ test('browser audit entries list follows the sidecar contract with filters', asy
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-token',
     });
     const unfiltered = await client.listBrowserAuditEntries({ limit: 200 });
@@ -5403,7 +5335,7 @@ test('browser audit entry responses reject malformed payloads', async () => {
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
-      apiKey: 'local-session',
+      apiKey: 'desktop-test-session',
       localApiToken: 'launch-token',
     });
     await assert.rejects(
@@ -5425,7 +5357,7 @@ test('browser audit numeric storage rows preserve denied outcomes without tenant
   try {
     const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG, mode: 'local', tenantId: '', projectId: '',
-      apiBaseUrl: 'http://127.0.0.1:47832', apiKey: 'local-session', localApiToken: 'launch-token',
+      apiBaseUrl: 'http://127.0.0.1:47832', apiKey: 'desktop-test-session', localApiToken: 'launch-token',
     });
     const entries = await client.listBrowserAuditEntries();
     const [entry] = entries;

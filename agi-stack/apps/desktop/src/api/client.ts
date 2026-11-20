@@ -439,27 +439,6 @@ export class DesktopApiClient {
     });
   }
 
-  async createLocalSession(trustedDevice = false): Promise<LoginOutcome> {
-    return this.request<LoginOutcome>('/api/v1/auth/local-session', {
-      method: 'POST',
-      body: { trusted_device: trustedDevice },
-      skipAuth: true,
-    });
-  }
-
-  async resumeLocalSession(sessionId: string): Promise<LoginOutcome | null> {
-    try {
-      return await this.request<LoginOutcome>('/api/v1/auth/local-session/resume', {
-        method: 'POST',
-        body: { session_id: sessionId },
-        skipAuth: true,
-      });
-    } catch (error) {
-      if (error instanceof DesktopApiError && error.status === 401) return null;
-      throw error;
-    }
-  }
-
   async signOut(): Promise<{ success: boolean }> {
     return this.request<{ success: boolean }>('/api/v1/auth/signout', { method: 'POST' });
   }

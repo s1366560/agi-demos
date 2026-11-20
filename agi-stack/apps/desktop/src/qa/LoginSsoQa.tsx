@@ -56,17 +56,13 @@ function LoginSsoQa() {
     <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <LoginScreen
         auth={qaAuth}
-        mode="cloud"
-        localReady={false}
         cloudApiBaseUrl={cloudApiBaseUrl}
         onCloudApiBaseUrlChange={setCloudApiBaseUrl}
         email={email}
         password={password}
-        onModeChange={() => undefined}
         onEmailChange={setEmail}
         onPasswordChange={setPassword}
         onEmailLogin={() => undefined}
-        onLocalSession={() => undefined}
         onWorkspaceSso={() => {
           setExpiresAt(Date.now() + 10 * 60 * 1000);
           setDeviceDialogOpen(true);

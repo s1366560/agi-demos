@@ -182,7 +182,7 @@ test('Local Snapshot observes stable sidecar dispositions without promoting decl
   const localConfig = {
     ...cloudConfig,
     apiBaseUrl: 'http://127.0.0.1:43117',
-    apiKey: 'local-session',
+    apiKey: 'desktop-test-session',
     localApiToken: 'private-launch',
     mode: 'local',
   };

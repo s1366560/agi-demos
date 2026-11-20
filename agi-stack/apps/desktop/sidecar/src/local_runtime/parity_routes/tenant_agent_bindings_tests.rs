@@ -41,25 +41,16 @@ fn test_runtime(launch_credential: &str) -> AgentBindingsTestRuntime {
     AgentBindingsTestRuntime { root, state }
 }
 
-async fn create_session(app: &Router, launch_credential: &str) -> String {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/auth/local-session")
-                .header("x-agistack-launch", launch_credential)
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"trusted_device":false}"#))
-                .expect("create session request"),
+fn create_session(state: &super::super::LocalRuntimeState) -> String {
+    state
+        .session_store
+        .create_local_session(
+            format!("parity-session-{}", uuid::Uuid::new_v4()),
+            false,
+            chrono::Utc::now().timestamp_millis(),
         )
-        .await
-        .expect("create session response");
-    assert_eq!(response.status(), StatusCode::OK);
-    response_json(response).await["access_token"]
-        .as_str()
-        .expect("session access token")
-        .to_string()
+        .expect("create session")
+        .access_token
 }
 
 async fn response_json(response: Response) -> Value {
@@ -96,7 +87,7 @@ async fn tenant_agent_bindings_read_is_authenticated_scoped_and_structured() {
     let launch = "tenant-agent-bindings-launch";
     let runtime = test_runtime(launch);
     let app = local_router(Arc::clone(&runtime.state));
-    let session = create_session(&app, launch).await;
+    let session = create_session(&runtime.state);
     let uri = format!("/api/v1/agent/bindings?tenant_id={ACTIVE_TENANT_ID}");
 
     let missing_launch = app
@@ -144,7 +135,7 @@ async fn tenant_agent_binding_mutations_and_resolution_test_fail_closed() {
     let launch = "tenant-agent-bindings-mutation-launch";
     let runtime = test_runtime(launch);
     let app = local_router(Arc::clone(&runtime.state));
-    let session = create_session(&app, launch).await;
+    let session = create_session(&runtime.state);
     let cases = [
         (
             "POST",

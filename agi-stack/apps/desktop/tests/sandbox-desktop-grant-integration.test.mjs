@@ -375,12 +375,10 @@ test('authority replacement awaits MCP frame retirement before revoking grants a
     'vault-mutated',
   ]);
 });
-test('actual sidecar default branch revokes before local-session replacement clear and authority select', async () => {
+test('actual sidecar default branch revokes before cloud vault clear and authority select', async () => {
   const clause = nodes(fn(mainAst, 'executeDesktopCommand'), ts.isDefaultClause)[0];
   const commands = [
     'trusted_session_clear',
-    'local_trusted_session_save',
-    'local_trusted_session_clear',
     'platform_plugin_authority_select_v2',
   ];
   for (const command of commands) {
@@ -658,7 +656,7 @@ test('actual local runtime exit retires pending cloud login before and after the
   const invoke = compileFunction(
     `async function invoke(command,args){${clause.statements.map((node) => node.getText()).join('\n')}}`,
     {
-      SIDECAR_COMMANDS: new Set(['local_trusted_session_clear']),
+      SIDECAR_COMMANDS: new Set(['trusted_session_clear']),
       computerUseActivity: { clear: () => events.push('cua-clear') },
       cloudAuthenticationAuthority,
       sandboxDesktopGrants: {
@@ -671,8 +669,8 @@ test('actual local runtime exit retires pending cloud login before and after the
     },
     'invoke',
   );
-  await invoke('local_trusted_session_clear', {});
-  assert.deepEqual(events, ['cua-clear', 'revoke', 'local_trusted_session_clear']);
+  await invoke('trusted_session_clear', {});
+  assert.deepEqual(events, ['cua-clear', 'revoke', 'trusted_session_clear']);
   response.resolve(
     new Response(
       JSON.stringify({

@@ -123,7 +123,7 @@ test('local runtime capability requests never send browser cookies to the sideca
   const client = createSandboxRuntimeSurfaceClient({
     ...DEFAULT_CONFIG,
     apiBaseUrl: 'http://127.0.0.1:4777',
-    apiKey: 'local-session',
+    apiKey: 'desktop-test-session',
     localApiToken: 'launch-capability',
     mode: 'local',
     projectId: 'local-project',

@@ -94,17 +94,6 @@ pub(super) struct LocalSessionOutcome {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct LocalSessionRequest {
-    #[serde(default = "default_trusted_device")]
-    pub(super) trusted_device: bool,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub(super) struct TrustedSessionResumeRequest {
-    pub(super) session_id: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
 pub(super) struct ContextSwitchRequest {
     pub(super) tenant_id: String,
     pub(super) project_id: String,
@@ -144,10 +133,6 @@ impl fmt::Display for AuthContextError {
             Self::Storage(error) => formatter.write_str(error),
         }
     }
-}
-
-fn default_trusted_device() -> bool {
-    false
 }
 
 pub(super) fn initialize_auth_context_schema(connection: &Connection) -> Result<(), String> {
@@ -440,85 +425,6 @@ impl DesktopSessionStore {
             },
             context,
         })
-    }
-
-    pub(super) fn resume_trusted_local_session(
-        &self,
-        session_id: &str,
-        credential: String,
-        now_ms: i64,
-    ) -> Result<Option<LocalSessionOutcome>, AuthContextError> {
-        let digest = credential_digest(&credential);
-        let mut connection = self.connection().map_err(AuthContextError::Storage)?;
-        let transaction = connection
-            .transaction()
-            .map_err(|error| AuthContextError::Storage(error.to_string()))?;
-        let session = transaction
-            .query_row(
-                "SELECT s.id, s.user_id, s.expires_at_ms, s.token_digest
-                 FROM desktop_user_sessions s
-                 JOIN desktop_users u ON u.id = s.user_id
-                 JOIN desktop_workspace_contexts c ON c.user_id = s.user_id
-                 JOIN desktop_tenant_memberships m
-                   ON m.user_id = s.user_id AND m.tenant_id = c.tenant_id
-                 JOIN desktop_tenants t ON t.id = c.tenant_id
-                 JOIN desktop_projects p
-                   ON p.id = c.project_id AND p.tenant_id = c.tenant_id
-                 WHERE s.id = ?1 AND s.status = 'active' AND s.trusted_device = 1
-                   AND s.expires_at_ms > ?2 AND u.status = 'active'
-                   AND m.status = 'active' AND t.status = 'active' AND p.status = 'active'",
-                params![session_id, now_ms],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, i64>(2)?,
-                        row.get::<_, String>(3)?,
-                    ))
-                },
-            )
-            .optional()
-            .map_err(|error| AuthContextError::Storage(error.to_string()))?;
-        let Some((session_id, user_id, expires_at_ms, previous_digest)) = session else {
-            transaction
-                .commit()
-                .map_err(|error| AuthContextError::Storage(error.to_string()))?;
-            return Ok(None);
-        };
-
-        let context = query_workspace_context(&transaction, &user_id)?;
-        transaction
-            .execute(
-                "INSERT OR IGNORE INTO desktop_session_credential_aliases(
-                   token_digest, session_id, rotated_at_ms
-                 ) VALUES (?1, ?2, ?3)",
-                params![previous_digest, session_id, now_ms],
-            )
-            .map_err(|error| AuthContextError::Storage(error.to_string()))?;
-        transaction
-            .execute(
-                "UPDATE desktop_user_sessions
-                 SET token_digest = ?1, last_seen_at_ms = ?2
-                 WHERE id = ?3 AND status = 'active' AND trusted_device = 1",
-                params![digest, now_ms, session_id],
-            )
-            .map_err(|error| AuthContextError::Storage(error.to_string()))?;
-        transaction
-            .commit()
-            .map_err(|error| AuthContextError::Storage(error.to_string()))?;
-
-        Ok(Some(LocalSessionOutcome {
-            access_token: credential,
-            token_type: "bearer".to_string(),
-            must_change_password: false,
-            session: DesktopSessionDescriptor {
-                session_id,
-                auth_method: "local".to_string(),
-                expires_at: iso_from_millis(expires_at_ms),
-                trusted_device: true,
-            },
-            context,
-        }))
     }
 
     pub(super) fn validate_session_credential(
@@ -1164,105 +1070,6 @@ mod tests {
             .is_none());
         drop(reopened);
         let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
-    fn trusted_session_resume_rotates_the_credential_and_skips_untrusted_sessions() {
-        let store = DesktopSessionStore::in_memory().expect("session store");
-        let now_ms = Utc::now().timestamp_millis();
-        let original = store
-            .create_local_session("trusted-original".to_string(), true, now_ms)
-            .expect("create trusted session");
-
-        let resumed = store
-            .resume_trusted_local_session(
-                &original.session.session_id,
-                "trusted-rotated".to_string(),
-                now_ms + 1,
-            )
-            .expect("resume trusted session")
-            .expect("trusted session available");
-        assert_eq!(resumed.session.session_id, original.session.session_id);
-        assert!(resumed.session.trusted_device);
-        assert!(store
-            .validate_session_credential("trusted-original", now_ms + 2)
-            .expect("validate rotated credential")
-            .is_none());
-        assert!(store
-            .validate_session_credential("trusted-rotated", now_ms + 2)
-            .expect("validate resumed credential")
-            .is_some());
-
-        assert!(store
-            .revoke_session("trusted-original", now_ms + 3)
-            .expect("revoke trusted session through rotated credential alias"));
-        assert!(store
-            .validate_session_credential("trusted-rotated", now_ms + 3)
-            .expect("validate revoked rotated credential")
-            .is_none());
-        let untrusted = store
-            .create_local_session("untrusted".to_string(), false, now_ms + 4)
-            .expect("create untrusted session");
-        assert!(store
-            .resume_trusted_local_session(
-                &untrusted.session.session_id,
-                "should-not-resume".to_string(),
-                now_ms + 5,
-            )
-            .expect("resume lookup")
-            .is_none());
-    }
-
-    #[test]
-    fn trusted_session_reference_survives_store_reopen_without_persisting_the_bearer() {
-        let path = std::env::temp_dir().join(format!(
-            "agistack-trusted-session-{}.sqlite3",
-            Uuid::new_v4()
-        ));
-        let now_ms = Utc::now().timestamp_millis();
-        let original = {
-            let store = DesktopSessionStore::open(&path).expect("open session store");
-            store
-                .create_local_session("restart-original".to_string(), true, now_ms)
-                .expect("create trusted session")
-        };
-
-        let reopened = DesktopSessionStore::open(&path).expect("reopen session store");
-        let resumed = reopened
-            .resume_trusted_local_session(
-                &original.session.session_id,
-                "restart-rotated".to_string(),
-                now_ms + 1,
-            )
-            .expect("resume after reopen")
-            .expect("trusted session available");
-        assert_eq!(resumed.session.expires_at, original.session.expires_at);
-        assert!(reopened
-            .validate_session_credential("restart-original", now_ms + 2)
-            .expect("validate old bearer")
-            .is_none());
-        assert!(reopened
-            .validate_session_credential("restart-rotated", now_ms + 2)
-            .expect("validate rotated bearer")
-            .is_some());
-        drop(reopened);
-        let reopened_after_rotation =
-            DesktopSessionStore::open(&path).expect("reopen rotated session store");
-        assert!(reopened_after_rotation
-            .revoke_session("restart-original", now_ms + 3)
-            .expect("revoke through persisted rotated credential alias"));
-        assert!(reopened_after_rotation
-            .validate_session_credential("restart-rotated", now_ms + 4)
-            .expect("validate revoked rotated bearer")
-            .is_none());
-        drop(reopened_after_rotation);
-        let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
-    fn local_session_request_defaults_to_untrusted() {
-        let request: LocalSessionRequest = serde_json::from_str("{}").expect("request");
-        assert!(!request.trusted_device);
     }
 
     #[test]

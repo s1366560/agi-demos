@@ -5,12 +5,10 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
-  clearLocalTrustedSession,
   clearNativeTrustedSession,
   decodeNativeTrustedSession,
   hasNativeTrustedSessionBroker,
-  loadLocalTrustedSession,
-  saveLocalTrustedSession,
+  purgeLegacyLocalLoginResidue,
   selectPlatformPluginAuthorityV2,
 } = require('/tmp/agistack-desktop-test-dist/src/api/trustedSession.js');
 
@@ -21,15 +19,6 @@ const cloudRecord = {
   credential_kind: 'cloud_bearer',
   credential: 'ms_sk_redacted-test-only',
   expires_at: null,
-};
-
-const localRecord = {
-  version: 1,
-  api_base_url: 'http://127.0.0.1:61877/api/v1',
-  runtime_mode: 'local',
-  credential_kind: 'local_session_reference',
-  credential: 'session-reference-test-only',
-  expires_at: '2026-08-20T00:00:00Z',
 };
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
@@ -48,6 +37,14 @@ test('native trusted session decoder accepts only the versioned broker contract'
   assert.equal(decodeNativeTrustedSession({ ...cloudRecord, extra: true }), null);
   assert.equal(
     decodeNativeTrustedSession({ ...cloudRecord, credential_kind: 'password' }),
+    null,
+  );
+  assert.equal(
+    decodeNativeTrustedSession({
+      ...cloudRecord,
+      runtime_mode: 'local',
+      credential_kind: 'local_session_reference',
+    }),
     null,
   );
 });
@@ -99,7 +96,7 @@ test('legacy Tauri globals cannot impersonate the dedicated desktop bridge', asy
   delete globalThis.window;
 });
 
-test('local trusted session references use the SQLite broker instead of native credential storage', async () => {
+test('startup purge reports cleared legacy local login residue without touching the cloud vault', async () => {
   const commands = [];
   globalThis.window = {
     __MEMSTACK_DESKTOP__: {
@@ -107,36 +104,29 @@ test('local trusted session references use the SQLite broker instead of native c
       core: {
         invoke: async (command, args) => {
           commands.push({ command, args });
-          return command === 'local_trusted_session_load' ? localRecord : null;
+          return { cleared: true };
         },
       },
     },
   };
 
-  assert.deepEqual(await loadLocalTrustedSession(), localRecord);
-  await saveLocalTrustedSession(localRecord);
-  await clearLocalTrustedSession();
-
-  assert.deepEqual(commands, [
-    { command: 'local_trusted_session_load', args: undefined },
-    { command: 'local_trusted_session_save', args: { input: localRecord } },
-    { command: 'local_trusted_session_clear', args: undefined },
-  ]);
-  assert.equal(commands.some(({ command }) => command === 'trusted_session_load'), false);
-  assert.equal(commands.some(({ command }) => command === 'trusted_session_save'), false);
-  assert.equal(commands.some(({ command }) => command === 'trusted_session_clear'), false);
+  assert.equal(await purgeLegacyLocalLoginResidue(), true);
+  assert.deepEqual(commands, [{ command: 'legacy_local_login_purge', args: undefined }]);
+  delete globalThis.window;
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      runtime: 'electron',
+      core: { invoke: async () => ({ cleared: false }) },
+    },
+  };
+  assert.equal(await purgeLegacyLocalLoginResidue(), false);
   delete globalThis.window;
 });
 
-test('local login never invokes the native credential broker', () => {
-  const localLogin = desktopAuthSource.slice(
-    desktopAuthSource.indexOf('const loginLocalSession = async'),
-    desktopAuthSource.indexOf('const handleConfigChange ='),
-  );
-  assert.match(localLogin, /clearLocalTrustedSession/);
-  assert.match(localLogin, /saveLocalTrustedSession/);
-  assert.doesNotMatch(localLogin, /clearNativeTrustedSession/);
-  assert.doesNotMatch(localLogin, /saveNativeTrustedSession/);
+test('renderer no longer saves or restores a local trusted session', () => {
+  assert.doesNotMatch(desktopAuthSource, /loginLocalSession|hydrateLocalSession|clearLocalTrustedSession/);
+  assert.doesNotMatch(appSource, /local_trusted_session_(?:save|load|clear)/);
+  assert.match(appSource, /purgeLegacyLocalLoginResidue\(/);
 });
 
 test('renderer source does not expose Cloud vault load or save helpers', () => {
@@ -150,9 +140,7 @@ test('session restore waits for explicit platform plugin authority selection', (
   const cloudRestore = appSource.indexOf(
     'await hydrateProjectedCloudSession(authAttemptRevision)',
   );
-  const localRestore = appSource.indexOf('await loadLocalTrustedSession()');
-
   assert.ok(selection >= 0);
   assert.ok(selection < cloudRestore);
-  assert.ok(selection < localRestore);
+  assert.doesNotMatch(appSource, /loadLocalTrustedSession\(/);
 });

@@ -89,7 +89,7 @@ test('tenant catalog V2 owns transport only and leaves authentication reads in t
   );
   assert.equal(oldProvider, '');
   assert.match(cloudAuth, /identityClient\.listTenants\(\)/u);
-  assert.match(localAuth, /identityClient\.listTenants\(\)/u);
+  assert.doesNotMatch(localAuth, /identityClient\.listTenants\(\)|createLocalSession|hydrateLocalSession/u);
 });
 
 function sourceBetween(sourceText, startMarker, endMarker) {

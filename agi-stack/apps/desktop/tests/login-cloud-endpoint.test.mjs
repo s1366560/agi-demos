@@ -22,17 +22,13 @@ function renderLogin(overrides = {}) {
       null,
       React.createElement(LoginScreen, {
         auth: emptyAuthState,
-        mode: 'cloud',
-        localReady: true,
         cloudApiBaseUrl: endpoint,
         onCloudApiBaseUrlChange: noop,
         email: '',
         password: '',
-        onModeChange: noop,
         onEmailChange: noop,
         onPasswordChange: noop,
         onEmailLogin: noop,
-        onLocalSession: noop,
         onWorkspaceSso: noop,
         nativeOAuthProviders: [],
         nativeOAuthPendingProvider: null,
@@ -50,14 +46,19 @@ function endpointInput(html) {
   return html.match(/<input[^>]*aria-label="Server URL"[^>]*>/u)?.[0];
 }
 
-test('Cloud sign-in exposes the controlled server URL and Local keeps its endpoint hidden', () => {
+test('sign-in exposes the cloud server URL and a retired local session notice', () => {
   const input = endpointInput(renderLogin());
   assert.ok(input, 'Cloud sign-in must expose Server URL');
   assert.match(input, /type="url"/u);
   assert.match(input, /value="http:\/\/127\.0\.0\.1:18766"/u);
   assert.doesNotMatch(input, /disabled/u);
-  assert.equal(endpointInput(renderLogin({ mode: 'local' })), undefined);
-  assert.ok(endpointInput(renderLogin({ mode: 'local', localModeAvailable: false })));
+  const html = renderLogin();
+  assert.doesNotMatch(html, /Local workspace|本地工作区|desktop-login-mode/u);
+  assert.match(html, /Continue with workspace SSO|使用工作区 SSO 继续/u);
+  assert.match(
+    renderLogin({ legacyLocalLoginNotice: true }),
+    /Local workspace sign-in was removed|本地工作区登录已移除/u,
+  );
 });
 
 test('Cloud endpoint cannot change while sign-in is pending', () => {
@@ -103,28 +104,17 @@ function authHarness(initialConfig) {
   return { configRef, handlers };
 }
 
-test('the active auth hook retains an edited Cloud endpoint across Local and Cloud mode changes', () => {
-  const { configRef, handlers } = authHarness({ ...DEFAULT_CONFIG, mode: 'local' });
-  handlers.changeLoginMode('cloud');
-  assert.equal(configRef.current.apiBaseUrl, 'http://127.0.0.1:8000');
-  handlers.handleConfigChange({ ...configRef.current, apiBaseUrl: endpoint });
-  handlers.changeLoginMode('local');
-  assert.equal(configRef.current.apiBaseUrl, 'http://127.0.0.1:8088');
-  assert.equal(configRef.current.tenantId, 'local');
-  handlers.changeLoginMode('cloud');
-  assert.equal(configRef.current.apiBaseUrl, endpoint);
-  assert.equal(configRef.current.tenantId, 'default');
-  assert.equal(configRef.current.apiKey, '');
-  assert.equal(configRef.current.localApiToken, '');
-});
-
-test('a restored Cloud endpoint survives mode changes without persisting a separate URL preference', () => {
+test('editing the cloud endpoint does not reseed a local workspace', () => {
   const { configRef, handlers } = authHarness({
     ...DEFAULT_CONFIG,
     mode: 'cloud',
-    apiBaseUrl: endpoint,
+    apiBaseUrl: 'http://127.0.0.1:8000',
+    tenantId: 'default',
+    projectId: '',
   });
-  handlers.changeLoginMode('local');
-  handlers.changeLoginMode('cloud');
+  handlers.handleConfigChange({ ...configRef.current, apiBaseUrl: endpoint });
   assert.equal(configRef.current.apiBaseUrl, endpoint);
+  assert.equal(configRef.current.mode, 'cloud');
+  assert.notEqual(configRef.current.tenantId, 'local');
+  assert.notEqual(configRef.current.projectId, 'local-project');
 });

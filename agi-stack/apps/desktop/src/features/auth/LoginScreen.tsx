@@ -16,31 +16,26 @@ import {
 
 import { useI18n } from '../../i18n';
 import type { NativeOAuthProvider } from '../../api/nativeOAuthClient';
-import type { AuthState, RuntimeMode } from '../../types';
+import type { AuthState } from '../../types';
 import { useModalDialog } from '../settings/useModalDialog';
 import {
   resolveWorkspaceContinueLabelKey,
   resolveWorkspaceSsoAction,
   validateLoginCredentials,
 } from './loginScreenModel';
-import { loginModeForRuntimeAvailability } from './loginRuntimeModel';
 import './LoginScreen.css';
 
 type LoginScreenProps = {
   auth: AuthState;
   onRetrySavedSession?: () => void;
-  mode: RuntimeMode;
-  localReady: boolean;
-  localModeAvailable?: boolean;
+  legacyLocalLoginNotice?: boolean;
   cloudApiBaseUrl: string;
   onCloudApiBaseUrlChange: (value: string) => void;
   email: string;
   password: string;
-  onModeChange: (mode: RuntimeMode) => void;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onEmailLogin: (trustedDevice: boolean) => void;
-  onLocalSession: (trustedDevice: boolean) => void;
   onWorkspaceSso: (trustedDevice: boolean) => void;
   nativeOAuthProviders: readonly NativeOAuthProvider[];
   nativeOAuthPendingProvider: string | null;
@@ -84,18 +79,14 @@ function verificationAddress(authorizationUrl: string): string {
 export function LoginScreen({
   auth,
   onRetrySavedSession,
-  mode,
-  localReady,
-  localModeAvailable = true,
+  legacyLocalLoginNotice = false,
   cloudApiBaseUrl,
   onCloudApiBaseUrlChange,
   email,
   password,
-  onModeChange,
   onEmailChange,
   onPasswordChange,
   onEmailLogin,
-  onLocalSession,
   onWorkspaceSso,
   nativeOAuthProviders,
   nativeOAuthPendingProvider,
@@ -105,7 +96,6 @@ export function LoginScreen({
   onCancelWorkspaceSso,
 }: LoginScreenProps) {
   const { t } = useI18n();
-  const effectiveMode = loginModeForRuntimeAvailability(mode, localModeAvailable);
   const [showPassword, setShowPassword] = useState(false);
   const [trustedDevice, setTrustedDevice] = useState(true);
   const [interactionError, setInteractionError] = useState<string | null>(null);
@@ -143,16 +133,10 @@ export function LoginScreen({
 
   const continueWithWorkspace = () => {
     setInteractionError(null);
-    const action = resolveWorkspaceSsoAction(effectiveMode, localReady, trustedDevice);
-    if (action.kind === 'local_session') {
-      onLocalSession(action.trustedDevice);
-      return;
-    }
+    const action = resolveWorkspaceSsoAction();
     if (action.kind === 'workspace_sso') {
       onWorkspaceSso(trustedDevice);
-      return;
     }
-    setInteractionError(t('login.localWorkspaceUnavailable'));
   };
 
   const visibleError = interactionError ?? auth.error;
@@ -229,42 +213,19 @@ export function LoginScreen({
             onEmailLogin(trustedDevice);
           }}
         >
-          {localModeAvailable ? (
-            <div className="desktop-login-mode" role="group" aria-label={t('login.modeLabel')}>
-              <button
-                type="button"
-                aria-pressed={effectiveMode === 'local'}
-                disabled={busy}
-                onClick={() => {
-                  setInteractionError(null);
-                  onModeChange('local');
-                }}
-              >
-                {t('login.modeLocal')}
-              </button>
-              <button
-                type="button"
-                aria-pressed={effectiveMode === 'cloud'}
-                disabled={busy}
-                onClick={() => {
-                  setInteractionError(null);
-                  onModeChange('cloud');
-                }}
-              >
-                {t('login.modeCloud')}
-              </button>
-            </div>
-          ) : null}
-
           <header>
             <span>{t('login.welcome')}</span>
             <h2>{t('login.signInTitle')}</h2>
             <p>{t('login.organizationDescription')}</p>
           </header>
 
-          {effectiveMode === 'cloud' ? (
-            <>
-              <label>
+          {legacyLocalLoginNotice ? (
+            <div className="desktop-login-notice" role="status">
+              {t('login.legacyLocalSessionCleared')}
+            </div>
+          ) : null}
+
+          <label>
                 <span>{t('runtime.serverUrl')}</span>
                 <input
                   aria-label={t('runtime.serverUrl')}
@@ -304,7 +265,7 @@ export function LoginScreen({
                 disabled={busy}
               >
                 <img src="/icon-192.png" alt="" />
-                {t(resolveWorkspaceContinueLabelKey(effectiveMode))}
+                {t(resolveWorkspaceContinueLabelKey())}
                 <ArrowRightIcon />
               </button>
 
@@ -351,20 +312,6 @@ export function LoginScreen({
                   </button>
                 </div>
               </label>
-            </>
-          ) : (
-            <button
-              className="desktop-login-sso desktop-login-local"
-              type="button"
-              onClick={continueWithWorkspace}
-              disabled={busy}
-              autoFocus
-            >
-              <img src="/icon-192.png" alt="" />
-              {t(resolveWorkspaceContinueLabelKey(effectiveMode))}
-              <ArrowRightIcon />
-            </button>
-          )}
 
           <div className="desktop-login-options">
             <label>
@@ -378,9 +325,7 @@ export function LoginScreen({
                 {t('login.keepSignedIn')}
               </span>
             </label>
-            {effectiveMode === 'cloud' ? (
-              <button type="button">{t('login.forgotPassword')}</button>
-            ) : null}
+            <button type="button">{t('login.forgotPassword')}</button>
           </div>
 
           {visibleError ? (
@@ -401,12 +346,10 @@ export function LoginScreen({
             </button>
           ) : null}
 
-          {effectiveMode === 'cloud' ? (
-            <button className="desktop-login-submit" type="submit" disabled={busy}>
-              {busy ? t('login.signingIn') : t('login.signIn')}
-              <ArrowRightIcon />
-            </button>
-          ) : null}
+          <button className="desktop-login-submit" type="submit" disabled={busy}>
+            {busy ? t('login.signingIn') : t('login.signIn')}
+            <ArrowRightIcon />
+          </button>
           <p className="desktop-login-legal">{t('login.legal')}</p>
         </form>
         <div className="desktop-login-help">
@@ -481,17 +424,6 @@ export function LoginScreen({
               </div>
             ) : null}
             <div className="desktop-device-auth-actions">
-              {localModeAvailable ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInteractionError(null);
-                    onModeChange('local');
-                  }}
-                >
-                  {t('login.switchToLocal')}
-                </button>
-              ) : null}
               <button type="button" onClick={onCancelWorkspaceSso}>
                 {t('login.deviceCancel')}
               </button>

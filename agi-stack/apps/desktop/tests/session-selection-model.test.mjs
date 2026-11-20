@@ -10,7 +10,7 @@ const { sessionSelectionRequiresRuntimeRefresh, sessionTimelineRequestIsCurrent 
 const current = {
   mode: 'local',
   apiBaseUrl: 'http://127.0.0.1:45123',
-  apiKey: 'local-session',
+  apiKey: 'desktop-test-session',
   localApiToken: 'local-runtime',
   tenantId: 'northstar',
   projectId: 'desktop-client',

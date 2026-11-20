@@ -104,14 +104,6 @@ test(
       credential: 'legacy-cloud-credential-test-value',
       expires_at: null,
     };
-    const localRecord = {
-      version: 1,
-      api_base_url: 'http://127.0.0.1:1',
-      runtime_mode: 'local',
-      credential_kind: 'local_session_reference',
-      credential: 'legacy-local-session-reference',
-      expires_at: null,
-    };
     const legacySupervisor = new SidecarSupervisor({
       binaryPath: resolve(binaryPath),
       workspaceCoreBinaryPath: resolve(workspaceCoreBinaryPath),
@@ -132,7 +124,6 @@ test(
     try {
       await legacySupervisor.start();
       await legacySupervisor.invoke('trusted_session_save', { input: cloudRecord });
-      await legacySupervisor.invoke('local_trusted_session_save', { input: localRecord });
       await legacySupervisor.stop();
 
       await migratedSupervisor.start();
@@ -144,13 +135,8 @@ test(
         credential: cloudRecord.credential,
         expires_at: cloudRecord.expires_at,
       });
-      assert.deepEqual(await migratedSupervisor.invoke('local_trusted_session_load'), {
-        version: localRecord.version,
-        api_base_url: localRecord.api_base_url,
-        runtime_mode: localRecord.runtime_mode,
-        credential_kind: localRecord.credential_kind,
-        credential: localRecord.credential,
-        expires_at: localRecord.expires_at,
+      assert.deepEqual(await migratedSupervisor.invoke('legacy_local_login_purge'), {
+        cleared: false,
       });
       const marker = JSON.parse(
         await readFile(

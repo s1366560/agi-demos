@@ -184,12 +184,14 @@ test('Electron renderer protocol confines assets to the real application directo
   }
 });
 
-test('Electron startup failures are caught and local mode follows native sidecar authority', () => {
+test('Electron startup failures are caught without restoring a local login session', () => {
   assert.match(mainSource, /whenReady\(\)\.then\(bootstrapApplication\)\.catch\(handleFatalStartup\)/);
   assert.match(mainSource, /createMainWindow\(\)\.catch\(handleFatalStartup\)/);
   assert.match(mainSource, /dialog\.showErrorBox/);
-  assert.match(appSource, /localModeAvailable=\{runsInNativeDesktop\}/);
-  assert.match(loginScreenSource, /localModeAvailable \?/);
+  assert.doesNotMatch(appSource, /localModeAvailable=\{runsInNativeDesktop\}/);
+  assert.doesNotMatch(loginScreenSource, /localModeAvailable/);
+  assert.match(appSource, /purgeLegacyLoginModePreference\(/);
+  assert.match(mainSource, /legacy_local_login_purge/);
   assert.match(mainSource, /onRecovered:[\s\S]*SIDECAR_RECOVERED_CHANNEL/u);
   assert.match(appSource, /onSidecarRecovered[\s\S]*refreshRuntime\(configRef\.current\)/u);
 });
@@ -199,6 +201,8 @@ test('Electron delegates trusted-session secrets to the authenticated Rust sidec
   assert.match(mainSource, /sidecarSupervisor\.invoke/u);
   assert.match(sidecarControlSource, /ApplicationCredentialVault/u);
   assert.match(sidecarControlSource, /trusted_session_save/u);
+  assert.match(sidecarControlSource, /legacy_local_login_purge/u);
+  assert.doesNotMatch(sidecarControlSource, /local_trusted_session_(?:save|load|clear)/u);
   assert.doesNotMatch(mainSource, /safeStorage|keytar|keyring|localStorage/u);
   assert.doesNotMatch(mainSource, /console\.(?:log|info|debug)\([^)]*credential/s);
 });

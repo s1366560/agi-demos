@@ -145,42 +145,15 @@
   width: min(430px, 100%);
 }
 
-.desktop-login-mode {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
-  padding: 3px;
-  margin-bottom: 24px;
-  background: var(--desktop-surface-10);
-  border: 1px solid var(--desktop-border-5);
-  border-radius: 8px;
-}
-
-.desktop-login-mode button {
-  height: 34px;
-  padding: 0 12px;
-  color: var(--desktop-gray-25);
+.desktop-login-notice {
+  padding: 8px 10px;
+  margin: 0 0 16px;
+  color: var(--desktop-text-soft);
   font-size: 10px;
-  font-weight: 650;
-  background: transparent;
-  border: 1px solid transparent;
+  line-height: 1.45;
+  background: var(--desktop-surface-15);
+  border: 1px solid var(--desktop-border-cyan-3);
   border-radius: 6px;
-}
-
-.desktop-login-mode button[aria-pressed='true'] {
-  color: var(--desktop-text-mist);
-  background: var(--desktop-surface-30);
-  border-color: var(--desktop-border-cyan-3);
-}
-
-.desktop-login-mode button:focus-visible {
-  border-color: var(--desktop-cyan);
-  outline: 0;
-}
-
-.desktop-login-mode button:disabled {
-  cursor: wait;
-  opacity: 0.56;
 }
 
 .desktop-login-card > header h2 {

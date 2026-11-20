@@ -40,25 +40,16 @@ fn test_runtime(launch_credential: &str) -> AnalyticsTestRuntime {
     AnalyticsTestRuntime { root, state }
 }
 
-async fn create_session(app: &Router, launch_credential: &str) -> String {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/auth/local-session")
-                .header("x-agistack-launch", launch_credential)
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"trusted_device":false}"#))
-                .expect("create session request"),
+fn create_session(state: &super::super::LocalRuntimeState) -> String {
+    state
+        .session_store
+        .create_local_session(
+            format!("parity-session-{}", uuid::Uuid::new_v4()),
+            false,
+            chrono::Utc::now().timestamp_millis(),
         )
-        .await
-        .expect("create session response");
-    assert_eq!(response.status(), StatusCode::OK);
-    response_json(response).await["access_token"]
-        .as_str()
-        .expect("session access token")
-        .to_string()
+        .expect("create session")
+        .access_token
 }
 
 async fn response_json(response: Response) -> Value {
@@ -88,7 +79,7 @@ async fn tenant_analytics_returns_project_totals_and_structured_memory_unavailab
     let launch = "tenant-analytics-launch";
     let runtime = test_runtime(launch);
     let app = local_router(Arc::clone(&runtime.state));
-    let session = create_session(&app, launch).await;
+    let session = create_session(&runtime.state);
     let uri = format!("/api/v1/tenants/{ACTIVE_TENANT_ID}/analytics?period=30d");
 
     let missing_launch = app

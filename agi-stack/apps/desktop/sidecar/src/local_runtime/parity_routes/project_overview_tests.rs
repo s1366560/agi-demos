@@ -74,25 +74,16 @@ fn overview_request(
         .expect("project overview request")
 }
 
-async fn create_session(app: &Router, launch_credential: &str) -> String {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/auth/local-session")
-                .header("x-agistack-launch", launch_credential)
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"trusted_device":false}"#))
-                .expect("create session request"),
+fn create_session(state: &super::super::LocalRuntimeState) -> String {
+    state
+        .session_store
+        .create_local_session(
+            format!("parity-session-{}", uuid::Uuid::new_v4()),
+            false,
+            chrono::Utc::now().timestamp_millis(),
         )
-        .await
-        .expect("create session response");
-    assert_eq!(response.status(), StatusCode::OK);
-    response_json(response).await["access_token"]
-        .as_str()
-        .expect("session access token")
-        .to_string()
+        .expect("create session")
+        .access_token
 }
 
 async fn response_json(response: Response) -> Value {
@@ -146,7 +137,7 @@ async fn project_overview_requires_launch_capability_and_authenticated_session()
     let launch_credential = "project-overview-auth-launch";
     let runtime = test_runtime(launch_credential);
     let app = local_router(Arc::clone(&runtime.state));
-    let session_credential = create_session(&app, launch_credential).await;
+    let session_credential = create_session(&runtime.state);
     let uri = format!("/api/v1/projects/{ACTIVE_PROJECT_ID}/overview");
 
     let missing_launch = app
@@ -168,7 +159,7 @@ async fn project_overview_rejects_a_project_outside_the_active_scope() {
     let launch_credential = "project-overview-scope-launch";
     let runtime = test_runtime(launch_credential);
     let app = local_router(Arc::clone(&runtime.state));
-    let session_credential = create_session(&app, launch_credential).await;
+    let session_credential = create_session(&runtime.state);
 
     let (status, payload) = load_overview(
         &app,
@@ -189,7 +180,7 @@ async fn project_overview_exposes_only_local_authoritative_and_degraded_fields()
     let launch_credential = "project-overview-success-launch";
     let runtime = test_runtime(launch_credential);
     let app = local_router(Arc::clone(&runtime.state));
-    let session_credential = create_session(&app, launch_credential).await;
+    let session_credential = create_session(&runtime.state);
     let conversation = LocalConversation {
         id: "project-overview-success-conversation".to_string(),
         project_id: ACTIVE_PROJECT_ID.to_string(),
@@ -308,7 +299,7 @@ async fn project_overview_partitions_every_conversation_by_its_latest_persisted_
     let launch_credential = "project-overview-run-summary-launch";
     let runtime = test_runtime(launch_credential);
     let app = local_router(Arc::clone(&runtime.state));
-    let session_credential = create_session(&app, launch_credential).await;
+    let session_credential = create_session(&runtime.state);
     let statuses = [
         ("idle", None),
         ("queued", Some("queued")),
@@ -413,7 +404,7 @@ async fn project_overview_status_summary_is_tenant_scoped_and_uses_chronological
     let launch_credential = "project-overview-status-boundary-launch";
     let runtime = test_runtime(launch_credential);
     let app = local_router(Arc::clone(&runtime.state));
-    let session_credential = create_session(&app, launch_credential).await;
+    let session_credential = create_session(&runtime.state);
     for (id, tenant_id) in [
         ("project-overview-mixed-rfc3339", ACTIVE_TENANT_ID),
         ("project-overview-unknown-status", ACTIVE_TENANT_ID),
