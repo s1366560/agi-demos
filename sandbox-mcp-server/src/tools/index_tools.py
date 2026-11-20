@@ -877,6 +877,39 @@ def create_call_graph_tool() -> MCPTool:
 # =============================================================================
 
 
+def _indexed_module_names(files: Any) -> Set[str]:
+    """Module names represented by every indexed project file.
+
+    A leaf module with no imports is absent from ``import_graph`` but still
+    present in ``files_indexed``. Classifying only the graph keys marks that
+    leaf external.
+    """
+    modules: Set[str] = set()
+    for file_path in files:
+        normalized = str(file_path).replace("\\", "/").removesuffix(".py")
+        module = normalized.replace("/", ".").strip(".")
+        if not module:
+            continue
+        modules.add(module)
+        if module.endswith(".__init__"):
+            modules.add(module.removesuffix(".__init__"))
+    return modules
+
+
+def _import_is_internal(imported: str, indexed_modules: Set[str]) -> bool:
+    """A local module is internal even when its name does not contain ``src``."""
+    if imported.startswith("."):
+        return True
+    for module in indexed_modules:
+        if (
+            imported == module
+            or module.startswith(f"{imported}.")
+            or module.endswith(f".{imported}")
+        ):
+            return True
+    return False
+
+
 async def get_dependency_graph(
     project_path: str,
     format_output: str = "text",
@@ -911,6 +944,7 @@ async def get_dependency_graph(
             )
 
         import_graph = indexer.index.import_graph
+        indexed_modules = _indexed_module_names(indexer.index.files_indexed)
 
         # Group by module
         external_deps: Dict[str, Set[str]] = {}
@@ -920,25 +954,12 @@ async def get_dependency_graph(
             module = file_path.replace("/", ".").removesuffix(".py")
 
             for imp in imports:
-                # Determine if internal or external
-                if imp.startswith("."):
-                    # Relative import
-                    if module not in internal_deps:
-                        internal_deps[module] = set()
-                    internal_deps[module].add(imp)
-                elif any(
-                    root in imp
-                    for root in ["src", project_path.split("/")[-1] if project_path else ""]
-                ):
-                    # Internal import
-                    if module not in internal_deps:
-                        internal_deps[module] = set()
-                    internal_deps[module].add(imp)
-                else:
-                    # External import
-                    if module not in external_deps:
-                        external_deps[module] = set()
-                    external_deps[module].add(imp)
+                target = (
+                    internal_deps
+                    if _import_is_internal(imp, indexed_modules)
+                    else external_deps
+                )
+                target.setdefault(module, set()).add(imp)
 
         lines = [f"Dependency graph for {project_path}:", ""]
 

@@ -35,6 +35,8 @@ test('dedicated graph surface exposes directed endpoint navigation and exact sou
   assert.match(html, /episode-uuid/);
   assert.match(html, /missing-episode/);
   assert.match(html, /Neighbor and source lists may be incomplete/);
+  assert.match(html, /class="project-graph-node-name"/);
+  assert.match(html, /project-graph-nodes[\s\S]*Same name/);
   assert.match(html, /Community membership alone is not source evidence/);
   assert.doesNotMatch(html, /<iframe|<webview|Open in browser/);
 });

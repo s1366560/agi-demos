@@ -2686,6 +2686,15 @@ async def _merge_generation_catalog_skills_for_worker(
         )
         if has_content:
             continue
+        from pathlib import Path
+
+        if not (getattr(skill, "full_content", None) or getattr(skill, "file_path", None)):
+            continue
+        path = getattr(skill, "file_path", None)
+        if not getattr(skill, "full_content", None) and (
+            not isinstance(path, str) or not Path(path).is_file()
+        ):
+            continue
         loaded_by_name[skill.name] = skill
         added += 1
     if added:

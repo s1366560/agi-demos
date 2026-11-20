@@ -101,8 +101,9 @@ class HITLRequest(Entity):
         if not self.question:
             raise ValueError("question is required")
 
-        # Set default expiration if not provided
-        if self.expires_at is None:
+        # A2UI interactions can wait without a user-response deadline.
+        unbounded = (self.metadata or {}).get("user_response_deadline") is False
+        if self.expires_at is None and not unbounded:
             self.expires_at = self.created_at + timedelta(minutes=5)
 
     @property
@@ -123,6 +124,8 @@ class HITLRequest(Entity):
     @property
     def is_expired(self) -> bool:
         """Check if request has expired."""
+        if (self.metadata or {}).get("user_response_deadline") is False:
+            return False
         return datetime.now(UTC) > self.expires_at if self.expires_at else False
 
     def answer(

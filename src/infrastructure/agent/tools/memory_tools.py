@@ -76,13 +76,27 @@ async def _execute_memory_get(
         result = await session.execute(query)
         chunks = list(result.scalars().all())
 
+        memory_query = select(Memory).where(
+            Memory.id == source_id,
+            Memory.project_id == project_id,
+        )
+        memory_result = await session.execute(memory_query)
+        memory = memory_result.scalar_one_or_none()
+        processing_status = str(getattr(memory, "processing_status", "") or "").upper()
+        if memory is not None and processing_status in {"PENDING", "PROCESSING"}:
+            return {
+                "source_id": source_id,
+                "status": "processing",
+                "processing_status": processing_status,
+                "revision": getattr(memory, "version", None),
+                "searchable": False,
+                "message": (
+                    "Memory is saved, but indexing has not completed yet. "
+                    "Search stays empty until this revision is indexed."
+                ),
+            }
+
         if not chunks:
-            memory_query = select(Memory).where(
-                Memory.id == source_id,
-                Memory.project_id == project_id,
-            )
-            memory_result = await session.execute(memory_query)
-            memory = memory_result.scalar_one_or_none()
             if memory is None:
                 return {"error": f"No memory found for source_id: {source_id}"}
 

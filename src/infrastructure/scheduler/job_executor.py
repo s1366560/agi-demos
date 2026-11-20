@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from src.application.services.agent.runtime_bootstrapper import (
         AgentRuntimeBootstrapper,
     )
+    from src.infrastructure.adapters.secondary.persistence.models import CronOperationModel
 
 logger = logging.getLogger(__name__)
 _HOST_READY_TIMEOUT_S = 30.0
@@ -89,6 +90,169 @@ async def _fail_unstarted_delivery(identity: object, exc: BaseException) -> None
             identity.run_id,
             exc_info=True,
         )
+
+
+async def dispatch_queued_manual_run(job_id: str, run_id: str) -> dict[str, object]:
+    """Start a durable manual run, or close it if it cannot start.
+
+    A queued row with no worker is not a successful trigger. When the process
+    host or payload cannot run, the run and its operation become failed.
+    """
+    if not await _wait_for_process_host():
+        message = "Cron process host is not ready; the run was not left queued"
+        await _close_queued_run(
+            job_id,
+            run_id,
+            code="cron_dispatch_unavailable",
+            message=message,
+        )
+        return {
+            "dispatched": False,
+            "status": "failed",
+            "code": "cron_dispatch_unavailable",
+            "message": message,
+        }
+    try:
+        await _dispatch_existing_manual_run(job_id, run_id)
+    except Exception as exc:
+        message = f"Cron run could not be dispatched: {exc}"
+        await _close_queued_run(
+            job_id,
+            run_id,
+            code=getattr(exc, "code", None) or "cron_dispatch_failed",
+            message=message,
+        )
+        return {
+            "dispatched": False,
+            "status": "failed",
+            "code": "cron_dispatch_failed",
+            "message": message,
+        }
+    return {"dispatched": True, "status": "running"}
+
+
+async def _close_queued_run(job_id: str, run_id: str, *, code: str, message: str) -> None:
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        CronJobRunModel,
+        CronOperationModel,
+    )
+
+    now = datetime.now(UTC)
+    async with async_session_factory() as session:
+        run = await session.get(CronJobRunModel, run_id)
+        if run is None or run.job_id != job_id:
+            return
+        # A running or already successful run has started. A failed row can
+        # still have a waiting_runtime operation from an unstarted dispatch.
+        if run.status == CronRunStatus.QUEUED.value:
+            run.status = CronRunStatus.FAILED.value
+            run.finished_at = now
+            run.error_message = f"failure_class=backend code={code} {message}"[:500]
+            if run.started_at is not None:
+                run.duration_ms = max(0, int((now - run.started_at).total_seconds() * 1000))
+        elif run.status != CronRunStatus.FAILED.value:
+            return
+        from sqlalchemy import select
+
+        operation = await session.scalar(
+            select(CronOperationModel).where(
+                CronOperationModel.run_id == run_id,
+                CronOperationModel.operation_kind == "execute_run",
+            )
+        )
+        if operation is not None and operation.status in {"pending", "waiting_runtime"}:
+            operation.status = "failed"
+            operation.last_error_code = str(code)[:100]
+            operation.last_error_redacted = message[:500]
+            operation.completed_at = now
+            operation.updated_at = now
+            operation.next_attempt_at = None
+        await session.commit()
+
+
+def _mark_operation_waiting(operation: CronOperationModel | None) -> None:
+    if operation is None or getattr(operation, "status", None) != "pending":
+        return
+    now = datetime.now(UTC)
+    operation.status = "waiting_runtime"
+    operation.started_at = now
+    operation.updated_at = now
+
+
+async def _dispatch_existing_manual_run(job_id: str, run_id: str) -> None:
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        CronJobRunModel,
+        CronOperationModel,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
+        SqlCronJobRepository,
+    )
+
+    admission: LegacyCronAdmissionIdentity | None = None
+    try:
+        async with async_session_factory() as session:
+            job = await SqlCronJobRepository(session).find_by_id(job_id)
+            run_row = await session.get(CronJobRunModel, run_id)
+            if job is None or not job.enabled:
+                raise RuntimeError("cron job is missing or disabled")
+            if run_row is None or run_row.job_id != job.id:
+                raise RuntimeError("queued cron run was not found")
+            if run_row.status != CronRunStatus.QUEUED.value:
+                return
+            operation = await session.scalar(
+                select(CronOperationModel).where(
+                    CronOperationModel.run_id == run_id,
+                    CronOperationModel.operation_kind == "execute_run",
+                )
+            )
+            runtime_execution_id = run_row.runtime_execution_id
+            if isinstance(runtime_execution_id, str) and runtime_execution_id:
+                if runtime_execution_id != run_row.id:
+                    raise RuntimeError(
+                        "durable cron run id does not match its runtime execution id"
+                    )
+                conversation_id = run_row.conversation_id or await _resolve_conversation(
+                    job, session
+                )
+                run_row.conversation_id = conversation_id
+                _mark_operation_waiting(operation)
+                await session.commit()
+                await _execute_durable_payload(
+                    job,
+                    conversation_id,
+                    session,
+                    runtime_execution_id,
+                )
+                return
+            conversation_id = run_row.conversation_id or await _resolve_conversation(job, session)
+            _mark_operation_waiting(operation)
+            run = CronJobRun(
+                id=run_row.id,
+                job_id=job.id,
+                project_id=job.project_id,
+                status=CronRunStatus.QUEUED,
+                trigger_type=TriggerType.MANUAL,
+                conversation_id=conversation_id,
+                started_at=run_row.started_at,
+            )
+            admission = await _admit_legacy_execution(
+                job,
+                run,
+                conversation_id,
+                session,
+                message_id=run_row.id,
+            )
+            if admission is None:
+                raise RuntimeError("cron scheduler ownership denied the manual run")
+            await _execute_payload(job, conversation_id, session, admission)
+    except Exception as exc:
+        if admission is not None:
+            await _fail_unstarted_delivery(admission, exc)
+        raise
 
 
 async def execute_cron_job(job_id: str) -> None:
@@ -220,7 +384,11 @@ async def _record_preparation_failure(job: CronJob, run: CronJobRun, session: As
 
 
 async def _admit_legacy_execution(
-    job: CronJob, run: CronJobRun, conversation_id: str, session: AsyncSession
+    job: CronJob,
+    run: CronJobRun,
+    conversation_id: str,
+    session: AsyncSession,
+    message_id: str | None = None,
 ) -> LegacyCronAdmissionIdentity | None:
     """Commit the blocker and conversation before asynchronous dispatch can begin."""
     from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
@@ -235,7 +403,7 @@ async def _admit_legacy_execution(
         project_id=job.project_id,
         job_id=job.id,
         run_id=run.id,
-        message_id=str(uuid.uuid4()),
+        message_id=message_id or str(uuid.uuid4()),
         conversation_id=conversation_id,
     )
     if admission is None:
@@ -311,6 +479,66 @@ async def _resolve_conversation(
 # ---------------------------------------------------------------------------
 
 
+async def _execute_durable_payload(
+    job: CronJob,
+    conversation_id: str,
+    session: AsyncSession,
+    runtime_execution_id: str,
+) -> None:
+    """Dispatch a queued manual run through the durable automation protocol.
+
+    The run already has ``runtime_execution_id``. Legacy admission claims only
+    rows whose execution id is still null, so this path never creates one.
+    The actor correlates ``message_id`` with that execution id and projects
+    running and terminal state itself.
+    """
+    timeout = job.timeout_seconds or 300
+    from src.infrastructure.plugins.v2.boundary import pin_agent_turn_operation_v2
+
+    try:
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"cron-payload:{job.id}:{runtime_execution_id}",
+            tenant_id=job.tenant_id,
+            project_id=job.project_id,
+            session_id=conversation_id,
+            force_process_host_lease=True,
+        ):
+            await asyncio.wait_for(
+                _dispatch_durable_payload(job, conversation_id, session, runtime_execution_id),
+                timeout=timeout,
+            )
+    except TimeoutError as err:
+        raise TimeoutError(f"Cron job {job.id} execution timed out after {timeout}s") from err
+
+
+async def _dispatch_durable_payload(
+    job: CronJob,
+    conversation_id: str,
+    session: AsyncSession,
+    runtime_execution_id: str,
+) -> None:
+    payload_type = job.payload.kind
+    if payload_type == PayloadType.AGENT_TURN:
+        await _execute_agent_turn(
+            job,
+            conversation_id,
+            session,
+            admission=None,
+            automation_run_id=runtime_execution_id,
+        )
+        return
+    if payload_type == PayloadType.SYSTEM_EVENT:
+        await _execute_system_event(
+            job,
+            conversation_id,
+            session,
+            admission=None,
+            automation_run_id=runtime_execution_id,
+        )
+        return
+    raise ValueError(f"Unknown payload type: {payload_type}")
+
+
 async def _execute_payload(
     job: CronJob,
     conversation_id: str,
@@ -363,7 +591,8 @@ async def _execute_agent_turn(
     job: CronJob,
     conversation_id: str,
     session: AsyncSession,
-    admission: LegacyCronAdmissionIdentity,
+    admission: LegacyCronAdmissionIdentity | None = None,
+    automation_run_id: str | None = None,
 ) -> None:
     """Execute an agent turn via the runtime bootstrapper."""
     from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
@@ -376,7 +605,9 @@ async def _execute_agent_turn(
         raise ValueError(f"Conversation {conversation_id} not found for agent turn")
 
     message = job.payload.config.get("message", "")
-    message_id = admission.message_id
+    message_id = automation_run_id or (admission.message_id if admission is not None else "")
+    if not message_id:
+        raise RuntimeError("cron agent turn has no execution id")
     await _ensure_cron_chat_authority(session, conversation, message_id, message)
 
     bootstrapper = _get_bootstrapper()
@@ -386,7 +617,8 @@ async def _execute_agent_turn(
         user_message=message,
         conversation_context=[],
         correlation_id=f"cron:{job.id}",
-        legacy_cron_admission=admission.to_wire(),
+        automation_run_id=automation_run_id,
+        legacy_cron_admission=None if admission is None else admission.to_wire(),
         canonical_run_id=message_id,
     )
 
@@ -401,7 +633,8 @@ async def _execute_system_event(
     job: CronJob,
     conversation_id: str,
     session: AsyncSession,
-    admission: LegacyCronAdmissionIdentity,
+    admission: LegacyCronAdmissionIdentity | None = None,
+    automation_run_id: str | None = None,
 ) -> None:
     """Execute a system event payload by injecting content as an agent message."""
     from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
@@ -414,7 +647,9 @@ async def _execute_system_event(
         raise ValueError(f"Conversation {conversation_id} not found for system event")
 
     content = job.payload.config.get("content", "")
-    message_id = admission.message_id
+    message_id = automation_run_id or (admission.message_id if admission is not None else "")
+    if not message_id:
+        raise RuntimeError("cron system event has no execution id")
     user_message = f"[System Event] {content}"
     await _ensure_cron_chat_authority(session, conversation, message_id, user_message)
 
@@ -425,7 +660,8 @@ async def _execute_system_event(
         user_message=user_message,
         conversation_context=[],
         correlation_id=f"cron:{job.id}",
-        legacy_cron_admission=admission.to_wire(),
+        automation_run_id=automation_run_id,
+        legacy_cron_admission=None if admission is None else admission.to_wire(),
         canonical_run_id=message_id,
     )
 

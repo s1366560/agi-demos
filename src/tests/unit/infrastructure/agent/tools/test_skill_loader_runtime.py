@@ -130,10 +130,7 @@ async def test_bound_skill_loader_runtimes_are_isolated_during_interleaved_await
 
 
 @pytest.mark.unit
-async def test_bound_skill_loader_available_names_do_not_use_legacy_global_cache(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from src.infrastructure.agent.tools import skill_loader as skill_loader_module
+async def test_bound_skill_loader_available_names_do_not_use_legacy_global_cache() -> None:
     from src.infrastructure.agent.tools.skill_loader import make_skill_loader_tool
 
     service = SimpleNamespace(
@@ -149,11 +146,6 @@ async def test_bound_skill_loader_available_names_do_not_use_legacy_global_cache
 
     service.list_available_skills = _empty_list
     service.load_skill_content = _missing_content
-    monkeypatch.setattr(
-        skill_loader_module,
-        "_load_skill_content_from_cwd",
-        lambda _name: (None, None),
-    )
 
     tool_a = make_skill_loader_tool(
         skill_service=service,

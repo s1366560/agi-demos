@@ -102,6 +102,11 @@
 .project-graph-nodes button {
   width: 100%;
 }
+/* Native buttons can paint an inline child while that child reports an empty
+   box. The matched-state check needs the node name itself to have a box. */
+.project-graph-node-name {
+  display: block;
+}
 .project-graph-edge-list {
   max-height: 28rem;
   overflow: auto;

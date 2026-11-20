@@ -424,7 +424,7 @@ async def list_available_models_tool(
         },
         "required": ["model"],
     },
-    permission=None,
+    permission="write",
     category="llm",
 )
 async def switch_model_next_turn_tool(

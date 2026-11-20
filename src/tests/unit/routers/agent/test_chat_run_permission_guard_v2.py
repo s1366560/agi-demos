@@ -256,8 +256,8 @@ async def test_protocol_tool_factories_obey_sql_backed_chat_permission_modes(
         ("deps_check", {"package_type": []}, None),
         ("deps_check", {"package_type": None}, None),
         ("ast_parse_and_execute", {}, "ask"),
-        ("export_artifact", {}, "ask"),
-        ("batch_export_artifacts", {}, "ask"),
+        ("export_artifact", {}, "write"),
+        ("batch_export_artifacts", {}, "write"),
     ]
     async with chat_guard_case(mode):
         for name, arguments, expected_permission in cases:

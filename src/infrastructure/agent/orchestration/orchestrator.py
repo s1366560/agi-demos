@@ -12,6 +12,7 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.domain.model.agent.agent_definition import Agent
@@ -1051,13 +1052,45 @@ class AgentOrchestrator:
     ) -> list[SpawnRecord]:
         """Get spawn records for a parent session."""
         if include_children:
-            return await self._spawn_manager.find_descendants(
+            records = await self._spawn_manager.find_descendants(
                 parent_session_id,
                 include_self=True,
             )
-        return await self._spawn_manager.find_children(
-            parent_session_id,
-        )
+        else:
+            records = await self._spawn_manager.find_children(
+                parent_session_id,
+            )
+        refreshed = [await self._with_observed_activity(record) for record in records]
+        if all(updated is original for updated, original in zip(refreshed, records, strict=True)):
+            return records
+        return refreshed
+
+    async def _with_observed_activity(self, record: SpawnRecord) -> SpawnRecord:
+        """Show the latest child message time without marking the session complete."""
+        try:
+            history = await self._message_bus.get_message_history(
+                session_id=record.child_session_id,
+                limit=20,
+            )
+        except Exception:
+            return record
+        if not isinstance(history, list | tuple) or not history:
+            return record
+        timestamps = [
+            message.timestamp
+            for message in history
+            if isinstance(getattr(message, "timestamp", None), datetime)
+        ]
+        if not timestamps:
+            return record
+        latest = max(timestamps)
+        if record.last_activity_at is not None and latest <= record.last_activity_at:
+            return record
+        note = getattr(self._spawn_manager, "note_activity", None)
+        if note is None:
+            return replace(record, last_activity_at=latest)
+        updated = await note(record.child_session_id, latest)
+        return updated or replace(record, last_activity_at=latest)
 
     async def get_agent_history(
         self,

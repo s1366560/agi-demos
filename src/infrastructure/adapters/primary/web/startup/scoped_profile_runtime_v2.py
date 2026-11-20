@@ -16,17 +16,21 @@ from src.application.services.scoped_profile_publication_service_v2 import (
     ScopedProfilePublicationResultV2,
     ScopedProfilePublicationServiceV2,
 )
-from src.domain.model.plugins.generated_v2 import ScopeV2, ServiceRequiredV2
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2, ServiceRequiredV2
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PYTHON_API_DATA_PLANE_ID_V2,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_recovery_repository_v2 import (
     PlatformPluginRecoveryRepositoryV2,
 )
+from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 from src.infrastructure.plugins.v2.bundle_archive import VerifiedBundleArchiveV2
+from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
 from src.infrastructure.plugins.v2.production_bundle import production_bundle_sources_v2
 from src.infrastructure.plugins.v2.profile_composition_cache import ProfileCompositionCacheV2
-from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.reconciler import PreparedGenerationPublicationV2
+from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
+from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.scoped_builtin_runtime import (
     scoped_builtin_runtime_definitions_v2,
@@ -157,6 +161,53 @@ class ScopedProfileRuntimeV2:
         await self._coordinator.close()
 
 
+async def _noop_route_rollback() -> None:
+    return None
+
+
+def _noop_route_publication() -> PreparedGenerationPublicationV2:
+    return PreparedGenerationPublicationV2(commit=lambda: None, rollback=_noop_route_rollback)
+
+
+async def publish_scoped_generation_routes_v2(
+    app: FastAPI,
+    generation: RuntimeGenerationV2,
+) -> PreparedGenerationPublicationV2:
+    """Stage this scoped generation's own HTTP table without replacing the root one.
+
+    Chat turns pin the scoped generation. system_api reads that generation's
+    published OpenAPI. Copying the root table would cross the generation boundary.
+    """
+    registry = getattr(app.state, "platform_plugin_route_registry_v2", None)
+    if not isinstance(registry, RouteTableRegistryV2):
+        return _noop_route_publication()
+    try:
+        builder = generation.resolve(
+            ROUTE_TABLE_BUILDER_SERVICE_V2,
+            ScopeV2(kind=ScopeKindV2.ROOT),
+        )
+    except Exception:
+        return _noop_route_publication()
+    if not isinstance(builder, RouteTableBuilderV2):
+        return _noop_route_publication()
+    graph = build_builtin_route_graph_v2(
+        workspace_core_settings=None,
+        route_definitions=builder.seal(),
+        required_v2_row_ids=(),
+    )
+    try:
+        publication = registry.stage(generation.descriptor, graph.table)
+    except RuntimeV2Error as exc:
+        if exc.code == "route_generation_conflict":
+            return _noop_route_publication()
+        raise
+
+    async def rollback() -> None:
+        registry.discard(publication)
+
+    return PreparedGenerationPublicationV2(commit=lambda: None, rollback=rollback)
+
+
 def initialize_scoped_profile_runtime_v2(
     app: FastAPI,
     *,
@@ -188,7 +239,8 @@ def initialize_scoped_profile_runtime_v2(
     registry = ScopedRuntimeRegistryV2(
         definitions_factory=lambda scope: scoped_builtin_runtime_definitions_v2(
             scope, sandbox_owner_host=host, redis_client=redis_client
-        )
+        ),
+        route_publisher=lambda generation: publish_scoped_generation_routes_v2(app, generation),
     )
     runtime = ScopedProfileRuntimeV2(
         session_factory=session_factory,

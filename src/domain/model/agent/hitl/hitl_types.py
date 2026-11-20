@@ -348,7 +348,7 @@ class HITLRequest:
 
     # Common fields
     status: HITLStatus = HITLStatus.PENDING
-    timeout_seconds: float = 300.0
+    timeout_seconds: float | None = 300.0
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
 
@@ -358,7 +358,7 @@ class HITLRequest:
     user_id: str | None = None
 
     def __post_init__(self) -> None:
-        if self.expires_at is None:
+        if self.expires_at is None and self.timeout_seconds is not None:
             from datetime import timedelta
 
             self.expires_at = self.created_at + timedelta(seconds=self.timeout_seconds)

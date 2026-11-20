@@ -713,7 +713,7 @@ async def _handle_get(
         },
         "required": ["action"],
     },
-    permission=None,
+    permission="write",
     category="multi_agent",
 )
 async def agent_definition_manage_tool(  # noqa: PLR0913

@@ -391,6 +391,35 @@ class SpawnManager:
         )
         return updated
 
+    async def note_activity(
+        self,
+        child_session_id: str,
+        observed_at: datetime,
+    ) -> SpawnRecord | None:
+        """Record observable activity without changing lifecycle status."""
+        async with self._lock:
+            old = self._records_by_child_session.get(child_session_id)
+            if old is None:
+                return None
+            if old.last_activity_at is not None and observed_at <= old.last_activity_at:
+                return old
+            updated = SpawnRecord(
+                id=old.id,
+                parent_agent_id=old.parent_agent_id,
+                child_agent_id=old.child_agent_id,
+                child_session_id=old.child_session_id,
+                project_id=old.project_id,
+                mode=old.mode,
+                task_summary=old.task_summary,
+                status=old.status,
+                trace_id=old.trace_id,
+                span_id=old.span_id,
+                created_at=old.created_at,
+                last_activity_at=observed_at,
+            )
+            self._records_by_child_session[child_session_id] = updated
+            return updated
+
     # ------------------------------------------------------------------
     # Cascade Stop
     # ------------------------------------------------------------------

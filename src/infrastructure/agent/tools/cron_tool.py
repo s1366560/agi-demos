@@ -143,7 +143,7 @@ def _registration_report(*, registered: bool) -> dict[str, Any]:
     if registered:
         return {
             "scheduler_registration": "registered",
-            "executable": False,
+            "executable": True,
             "run_state": "not_started",
         }
     return {
@@ -234,6 +234,7 @@ async def _handle_status(
             limit=20,
         )
         summaries = [_job_summary(j) for j in jobs]
+        unreadable = _unreadable_count(total=total, listed=len(summaries), limit=20)
 
     return ToolResult(
         output=_json(
@@ -241,6 +242,8 @@ async def _handle_status(
                 "total": total,
                 "enabled": enabled,
                 "disabled": disabled,
+                "listed": len(summaries),
+                "unreadable": unreadable,
                 "jobs": summaries,
                 "items": summaries,
             }
@@ -274,23 +277,63 @@ async def _handle_list(
             project_id,
             include_disabled=include_disabled,
         )
+        summaries = [_job_summary(j) for j in jobs]
+        unreadable = _unreadable_count(total=total, listed=len(summaries), limit=50)
 
     return ToolResult(
         output=_json(
             {
-                "items": [_job_summary(j) for j in jobs],
-                "jobs": [_job_summary(j) for j in jobs],
+                "items": summaries,
+                "jobs": summaries,
+                "count": len(summaries),
                 "total": total,
+                "unreadable": unreadable,
             }
         ),
-        metadata={"count": len(jobs), "total": total},
+        metadata={"count": len(summaries), "total": total},
     )
 
 
-async def _handle_add(  # noqa: C901, PLR0911
+def _unreadable_count(*, total: int, listed: int, limit: int) -> int:
+    """Rows counted in storage but omitted because they cannot be displayed.
+
+    ``total`` is the stored count. ``jobs`` is only the readable page. A stored
+    job that fails domain conversion stays in ``total`` and is reported here
+    instead of being mistaken for a broken counter or a pagination gap.
+    """
+    if total <= limit:
+        return max(total - listed, 0)
+    return 0
+
+
+def _add_idempotency_key(
+    job: dict[str, Any],
+    idempotency_key: str | None,
+) -> str | ToolResult:
+    """Accept the top-level replay key, or the same key nested in ``job``."""
+    nested = job.get("idempotency_key")
+    nested_key = nested.strip() if isinstance(nested, str) else ""
+    top_key = idempotency_key.strip() if isinstance(idempotency_key, str) else ""
+    if top_key and nested_key and top_key != nested_key:
+        return ToolResult(
+            output=_json(
+                {
+                    "error": (
+                        "idempotency_key at the top level and inside job must match; "
+                        "no job was created"
+                    )
+                }
+            ),
+            is_error=True,
+        )
+    return top_key or nested_key
+
+
+async def _handle_add(  # noqa: C901, PLR0911, PLR0912
     ctx: ToolContext,
     *,
     job: dict[str, Any] | None,
+    idempotency_key: str | None = None,
 ) -> ToolResult:
     """Create a new cron job."""
     project_id = ctx.project_id
@@ -304,6 +347,11 @@ async def _handle_add(  # noqa: C901, PLR0911
             output=_json({"error": "Missing 'job' parameter for add action"}),
             is_error=True,
         )
+
+    resolved_key = _add_idempotency_key(job, idempotency_key)
+    if isinstance(resolved_key, ToolResult):
+        return resolved_key
+    _resolved_add_key = resolved_key
 
     name = job.get("name")
     if not name:
@@ -412,7 +460,7 @@ async def _handle_add(  # noqa: C901, PLR0911
                 timeout_seconds=job.get("timeout_seconds", 300),
                 max_retries=job.get("max_retries", 3),
                 created_by=ctx.user_id,
-                idempotency_key=str(job.get("idempotency_key") or ""),
+                idempotency_key=_resolved_add_key,
             )
         except CronMutationUnavailableError as exc:
             return ToolResult(
@@ -575,7 +623,7 @@ async def _handle_remove(
     )
 
 
-async def _handle_run(
+async def _handle_run(  # noqa: PLR0911
     ctx: ToolContext,
     *,
     job_id: str | None,
@@ -626,11 +674,39 @@ async def _handle_run(
             )
         await session.commit()
 
+    from src.infrastructure.scheduler.job_executor import dispatch_queued_manual_run
+
+    outcome = await dispatch_queued_manual_run(job_id, run.id)
+    if not outcome.get("dispatched"):
+        return ToolResult(
+            output=_json(
+                {
+                    "triggered": False,
+                    "executable": False,
+                    "run": {
+                        **_run_summary(run),
+                        "status": outcome.get("status", "failed"),
+                        "finished_at": outcome.get("finished_at"),
+                        "error_message": outcome.get("message"),
+                    },
+                    "failure_class": "backend",
+                    "code": outcome.get("code", "cron_dispatch_unavailable"),
+                    "message": outcome.get("message"),
+                }
+            ),
+            is_error=True,
+            metadata={"run_id": run.id, "job_id": job_id},
+        )
+
     return ToolResult(
         output=_json(
             {
                 "triggered": True,
-                "run": _run_summary(run),
+                "executable": True,
+                "run": {
+                    **_run_summary(run),
+                    "status": outcome.get("status", run.status.value),
+                },
             }
         ),
         metadata={"run_id": run.id, "job_id": job_id},
@@ -877,7 +953,11 @@ def _cron_permission(arguments: dict[str, Any]) -> str | None:
             },
             "idempotency_key": {
                 "type": "string",
-                "description": "Replay key. Required for update, remove, and run.",
+                "description": (
+                    "Replay key. Required for add, update, remove, and run. "
+                    "For add, the same key may be placed inside job and must match "
+                    "this top-level value when both are set."
+                ),
             },
         },
         "required": ["action"],
@@ -923,7 +1003,7 @@ async def cron_tool(  # noqa: PLR0911
                 include_disabled=include_disabled,
             )
         elif action == "add":
-            return await _handle_add(ctx, job=job)
+            return await _handle_add(ctx, job=job, idempotency_key=idempotency_key)
         elif action == "update":
             return await _handle_update(
                 ctx,

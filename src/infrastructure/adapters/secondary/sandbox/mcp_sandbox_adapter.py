@@ -820,6 +820,9 @@ class MCPSandboxAdapter(SandboxPort):
                 )
             return normalized
 
+        if tool_name in {"git_diff", "git_log", "generate_commit"}:
+            self._rebase_git_file_path(normalized)
+
         if tool_name == "mcp_server_call_tool":
             raw_arguments = normalized.get("arguments")
             if isinstance(raw_arguments, str):
@@ -935,6 +938,31 @@ class MCPSandboxAdapter(SandboxPort):
 
         return value
 
+    @staticmethod
+    def _rebase_git_file_path(arguments: dict[str, Any]) -> None:
+        """Keep a relative git pathspec beside working_dir, not the workspace root.
+
+        The generic normalizer anchors every relative path at ``/workspace``.
+        ``git log -- src/calc.py`` from ``working_dir=temp/repo`` must become
+        ``/workspace/temp/repo/src/calc.py``. An absolute path is left alone.
+        """
+        file_path = arguments.get("file_path")
+        working = arguments.get("working_dir") or arguments.get("repo_path")
+        if not isinstance(file_path, str) or not isinstance(working, str):
+            return
+        relative_file = file_path.strip()
+        relative_dir = working.strip()
+        if not relative_file or not relative_dir or os.path.isabs(relative_file):
+            return
+        if os.path.isabs(relative_dir):
+            return
+        base = posixpath.normpath(relative_dir)
+        leaf = posixpath.normpath(relative_file)
+        if leaf == base or leaf.startswith(f"{base}/"):
+            arguments["file_path"] = leaf
+            return
+        arguments["file_path"] = posixpath.normpath(posixpath.join(base, leaf))
+
     def _normalize_path_value(
         self,
         instance: MCPSandboxInstance,
@@ -948,6 +976,10 @@ class MCPSandboxAdapter(SandboxPort):
         raw_value = value.strip()
         if not raw_value:
             return value
+
+        if raw_value == "/":
+            # Platform file tools use "/" as the workspace browser root.
+            return "/workspace"
 
         if os.path.isabs(raw_value):
             mapped = self._map_host_path_to_container(
