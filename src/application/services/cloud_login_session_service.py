@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.auth_service_v2 import AuthService
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import APIKey, UserSession
 
 ACCESS_TOKEN_TTL = timedelta(hours=1)
@@ -123,7 +124,7 @@ class CloudLoginSessionService:
         statement = select(UserSession).where(UserSession.refresh_token_hash == digest)
         if self._db.bind is not None and self._db.bind.dialect.name != "sqlite":
             statement = statement.with_for_update()
-        row = (await self._db.execute(statement)).scalar_one_or_none()
+        row = (await self._db.execute(refresh_select_statement(statement))).scalar_one_or_none()
         if row is None:
             raise RefreshRejectedError(reused=False)
         now = datetime.now(UTC)
@@ -176,7 +177,11 @@ class CloudLoginSessionService:
         """Revoke every refresh in a family and deactivate its access keys."""
         now = observed_at or datetime.now(UTC)
         rows = (
-            await self._db.execute(select(UserSession).where(UserSession.family_id == family_id))
+            await self._db.execute(
+                refresh_select_statement(
+                    select(UserSession).where(UserSession.family_id == family_id)
+                )
+            )
         ).scalars()
         for row in rows:
             if row.revoked_at is None:
@@ -194,16 +199,20 @@ class CloudLoginSessionService:
             return
         digest = AuthService.hash_api_key(access_token)
         access_key = (
-            await self._db.execute(select(APIKey).where(APIKey.key_hash == digest))
+            await self._db.execute(
+                refresh_select_statement(select(APIKey).where(APIKey.key_hash == digest))
+            )
         ).scalar_one_or_none()
         if access_key is None:
             return
         session = (
             (
                 await self._db.execute(
-                    select(UserSession)
-                    .where(UserSession.access_api_key_id == access_key.id)
-                    .order_by(UserSession.created_at.desc())
+                    refresh_select_statement(
+                        select(UserSession)
+                        .where(UserSession.access_api_key_id == access_key.id)
+                        .order_by(UserSession.created_at.desc())
+                    )
                 )
             )
             .scalars()

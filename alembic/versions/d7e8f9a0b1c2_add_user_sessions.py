@@ -17,7 +17,15 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _has_login_tables() -> bool:
+    """Workspace-only upgrade paths stamp past the MemStack login tables."""
+    inspector = sa.inspect(op.get_bind())
+    return inspector.has_table("users") and inspector.has_table("api_keys")
+
+
 def upgrade() -> None:
+    if not _has_login_tables():
+        return
     op.create_table(
         "user_sessions",
         sa.Column("id", sa.String(), nullable=False),
@@ -47,6 +55,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not sa.inspect(op.get_bind()).has_table("user_sessions"):
+        return
     op.drop_index("ix_user_sessions_access_api_key", table_name="user_sessions")
     op.drop_index("ix_user_sessions_user", table_name="user_sessions")
     op.drop_index("ix_user_sessions_family", table_name="user_sessions")
