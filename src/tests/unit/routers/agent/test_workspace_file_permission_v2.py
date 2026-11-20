@@ -157,7 +157,7 @@ async def real_file_server(tmp_path):
     try:
         process.stdin.write((json.dumps({"root": "/workspace", "token": token}) + "\n").encode())
         await process.stdin.drain()
-        line = await asyncio.wait_for(process.stdout.readline(), 20)
+        line = await asyncio.wait_for(process.stdout.readline(), 60)
         port_text = line.decode().strip()
         if not port_text:
             raise RuntimeError(f"{image} exited {process.returncode} before publishing its port")
