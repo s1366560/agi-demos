@@ -55,6 +55,7 @@ interface ConversationsState {
   conversationsNextOffset: number;
   unboundConversationsNextOffset: number;
   conversationListProjectId: string | null;
+  executionTargetFilter: 'all' | 'local' | 'cloud';
 
   // Actions
   listConversations: (
@@ -86,6 +87,7 @@ interface ConversationsState {
 interface ListConversationsOptions {
   signal?: AbortSignal | undefined;
   silent?: boolean | undefined;
+  executionTarget?: 'all' | 'local' | 'cloud' | undefined;
 }
 
 function isAbortSignal(
@@ -122,6 +124,7 @@ export const initialState = {
   conversationsNextOffset: 0,
   unboundConversationsNextOffset: 0,
   conversationListProjectId: null,
+  executionTargetFilter: 'all' as const,
 };
 
 const groupedConversationListOptions = { groupByWorkspace: true };
@@ -140,9 +143,10 @@ let activeLoadMoreConversationsRequest: {
 function conversationListRequestKey(
   projectId: string,
   status: ConversationStatus | undefined,
-  limit: number
+  limit: number,
+  executionTarget: 'all' | 'local' | 'cloud'
 ): string {
-  return `${projectId}:${status ?? 'all'}:${String(limit)}`;
+  return `${projectId}:${status ?? 'all'}:${String(limit)}:${executionTarget}`;
 }
 
 function startListConversationsRequest(key: string): number {
@@ -269,9 +273,13 @@ export const useConversationsStore = create<ConversationsState>()(
         limit = 10,
         signalOrOptions?: AbortSignal | ListConversationsOptions
       ) => {
-        const { signal, silent = false } = normalizeListOptions(signalOrOptions);
+        const { signal, silent = false, executionTarget } = normalizeListOptions(signalOrOptions);
         const state = get();
-        const requestKey = conversationListRequestKey(projectId, status, limit);
+        const requestedTarget = executionTarget ?? state.executionTargetFilter;
+        if (requestedTarget !== state.executionTargetFilter) {
+          set({ executionTargetFilter: requestedTarget });
+        }
+        const requestKey = conversationListRequestKey(projectId, status, limit, requestedTarget);
         if (activeListConversationsRequest?.key === requestKey) {
           return;
         }
@@ -294,6 +302,8 @@ export const useConversationsStore = create<ConversationsState>()(
           set({ conversationsLoadingMore: false });
         }
         try {
+          const listOptions = (base: { groupByWorkspace?: boolean; unboundOnly?: boolean }) =>
+            requestedTarget === 'all' ? base : { ...base, executionTarget: requestedTarget };
           const [response, unboundResponse] = await Promise.all([
             agentService.listConversations(
               projectId,
@@ -301,7 +311,7 @@ export const useConversationsStore = create<ConversationsState>()(
               limit,
               0,
               signal,
-              groupedConversationListOptions
+              listOptions(groupedConversationListOptions)
             ),
             agentService.listConversations(
               projectId,
@@ -309,7 +319,7 @@ export const useConversationsStore = create<ConversationsState>()(
               limit,
               0,
               signal,
-              unboundConversationListOptions
+              listOptions(unboundConversationListOptions)
             ),
           ]);
           if (!isActiveListConversationsRequest(requestSequence)) {
@@ -369,6 +379,10 @@ export const useConversationsStore = create<ConversationsState>()(
           const shouldLoadUnboundConversations = state.unboundConversationsHasMore;
           const projectOffset = state.conversationsNextOffset;
           const unboundOffset = state.unboundConversationsNextOffset;
+          const moreOptions = (base: { groupByWorkspace?: boolean; unboundOnly?: boolean }) =>
+            state.executionTargetFilter === 'all'
+              ? base
+              : { ...base, executionTarget: state.executionTargetFilter };
           const [response, unboundResponse] = await Promise.all([
             shouldLoadProjectConversations
               ? agentService.listConversations(
@@ -377,7 +391,7 @@ export const useConversationsStore = create<ConversationsState>()(
                   10,
                   projectOffset,
                   undefined,
-                  groupedConversationListOptions
+                  moreOptions(groupedConversationListOptions)
                 )
               : Promise.resolve(null),
             shouldLoadUnboundConversations
@@ -387,7 +401,7 @@ export const useConversationsStore = create<ConversationsState>()(
                   10,
                   unboundOffset,
                   undefined,
-                  unboundConversationListOptions
+                  moreOptions(unboundConversationListOptions)
                 )
               : Promise.resolve(null),
           ]);

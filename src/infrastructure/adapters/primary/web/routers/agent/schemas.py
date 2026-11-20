@@ -146,6 +146,10 @@ class ConversationResponse(BaseModel):
     participant_agents: list[str] = Field(default_factory=list)
     coordinator_agent_id: str | None = None
     focused_agent_id: str | None = None
+    execution_target: Literal["local", "cloud"] = "cloud"
+    execution_machine_id: str | None = None
+    execution_environment_id: str | None = None
+    local_root_label: str | None = None
 
     @classmethod
     def from_domain(
@@ -155,6 +159,10 @@ class ConversationResponse(BaseModel):
         workspace_id: str | None = None,
         linked_workspace_task_id: str | None = None,
         workspace_name: str | None = None,
+        execution_target: Literal["local", "cloud"] = "cloud",
+        execution_machine_id: str | None = None,
+        execution_environment_id: str | None = None,
+        local_root_label: str | None = None,
     ) -> "ConversationResponse":
         """Create response from domain entity."""
         return cls(
@@ -184,6 +192,10 @@ class ConversationResponse(BaseModel):
             participant_agents=list(conversation.participant_agents),
             coordinator_agent_id=conversation.coordinator_agent_id,
             focused_agent_id=conversation.focused_agent_id,
+            execution_target=execution_target,
+            execution_machine_id=execution_machine_id,
+            execution_environment_id=execution_environment_id,
+            local_root_label=local_root_label,
         )
 
 

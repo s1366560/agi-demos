@@ -327,6 +327,8 @@ function readCloudRun(
   ) {
     return null;
   }
+  const placement = readExecutionPlacement(run);
+  if (!placement) return null;
 
   return {
     id: run.id as string,
@@ -347,8 +349,30 @@ function readCloudRun(
     environment,
     permission_profile:
       run.permission_profile as DesktopRun["permission_profile"],
+    ...placement,
     authorization_snapshot: expectedAuthorizationSnapshot,
   };
+}
+
+function readExecutionPlacement(run: Record<string, unknown>): Pick<
+  DesktopRun,
+  | "execution_target"
+  | "execution_machine_id"
+  | "execution_environment_id"
+  | "local_root_label"
+> | null {
+  const target = run.execution_target;
+  if (target !== undefined && target !== "local" && target !== "cloud") return null;
+  return {
+    execution_target: target === "local" ? "local" : "cloud",
+    execution_machine_id: optionalPlacementText(run.execution_machine_id),
+    execution_environment_id: optionalPlacementText(run.execution_environment_id),
+    local_root_label: optionalPlacementText(run.local_root_label),
+  };
+}
+
+function optionalPlacementText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 function readCloudRunEnvironment(

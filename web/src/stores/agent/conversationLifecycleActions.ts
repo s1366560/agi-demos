@@ -78,6 +78,7 @@ function conversationLoadKey(projectId: string, options: LoadConversationsOption
     options.force ? 'force' : 'cached',
     options.silent ? 'silent' : 'visible',
     String(options.limit ?? 'default'),
+    options.executionTarget ?? 'stored',
   ].join(':');
 }
 
@@ -125,7 +126,12 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
       // Prevent duplicate calls for the same project
       const currentConvos = get().conversations;
       const conversationListState = useConversationsStore.getState();
-      if (!options.force && conversationListState.conversationListProjectId === projectId) {
+      const requestedTarget = options.executionTarget ?? conversationListState.executionTargetFilter;
+      if (
+        !options.force &&
+        conversationListState.conversationListProjectId === projectId &&
+        conversationListState.executionTargetFilter === requestedTarget
+      ) {
         const currentState = get() as ReturnType<ConversationLifecycleDeps['get']> & {
           conversationsTotal?: number | undefined;
         };
@@ -155,6 +161,9 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
         await useConversationsStore.getState().listConversations(projectId, undefined, limit, {
           signal: options.signal,
           silent: options.silent,
+          ...(options.executionTarget === undefined
+            ? {}
+            : { executionTarget: options.executionTarget }),
         });
         // If the request was aborted (e.g. user switched projects), stop here.
         if (options.signal?.aborted) {

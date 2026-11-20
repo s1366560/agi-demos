@@ -19,6 +19,10 @@ export interface ActiveAgentRun {
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   allowed_actions: RunInputAllowedAction[];
   authority_revision: number;
+  execution_target?: 'local' | 'cloud';
+  execution_machine_id?: string | null;
+  execution_environment_id?: string | null;
+  local_root_label?: string | null;
 }
 
 export interface CancelRunReceipt {
@@ -132,6 +136,10 @@ interface AgentRunProjectionResponse {
   revision: number;
   allowed_actions: RunInputAllowedAction[];
   authority_revision: number;
+  execution_target?: 'local' | 'cloud';
+  execution_machine_id?: string | null;
+  execution_environment_id?: string | null;
+  local_root_label?: string | null;
 }
 
 interface ActiveRunResponse {
@@ -154,6 +162,10 @@ const normalizeRunProjection = (
         status: projection.status,
         allowed_actions: projection.allowed_actions,
         authority_revision: projection.authority_revision,
+        execution_target: projection.execution_target === 'local' ? 'local' : 'cloud',
+        execution_machine_id: projection.execution_machine_id ?? null,
+        execution_environment_id: projection.execution_environment_id ?? null,
+        local_root_label: projection.local_root_label ?? null,
       }
     : null;
 

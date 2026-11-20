@@ -154,6 +154,10 @@ class ActiveRunProjection(_AuthorityModel):
     reason_code: str | None
     allowed_actions: list[Literal["steer_now", "queue_next", "kill_run"]]
     authority_revision: int
+    execution_target: Literal["local", "cloud"] = "cloud"
+    execution_machine_id: str | None = None
+    execution_environment_id: str | None = None
+    local_root_label: str | None = None
     created_at: datetime
     updated_at: datetime
 

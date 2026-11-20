@@ -25,6 +25,7 @@ export const DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_VERSION_V2 = '1.0.
 export type DesktopWorkspaceConversationCatalogFiltersV2 = Readonly<{
   workspaceId: string | null;
   unboundOnly: boolean;
+  executionTarget?: 'local' | 'cloud';
   signal?: AbortSignal;
 }>;
 
@@ -32,6 +33,7 @@ export type DesktopWorkspaceConversationCatalogOperationInputV2 = Readonly<{
   config: DesktopRuntimeConfig;
   workspaceId: string | null;
   unboundOnly: boolean;
+  executionTarget?: 'local' | 'cloud';
   signal?: AbortSignal;
 }>;
 
@@ -70,8 +72,14 @@ type PreparedWorkspaceConversationCatalogOperationV2 = Readonly<{
   filters: DesktopWorkspaceConversationCatalogFiltersV2;
 }>;
 
-const OPERATION_INPUT_KEYS_V2 = new Set(['config', 'signal', 'unboundOnly', 'workspaceId']);
-const FILTER_KEYS_V2 = new Set(['signal', 'unboundOnly', 'workspaceId']);
+const OPERATION_INPUT_KEYS_V2 = new Set([
+  'config',
+  'executionTarget',
+  'signal',
+  'unboundOnly',
+  'workspaceId',
+]);
+const FILTER_KEYS_V2 = new Set(['executionTarget', 'signal', 'unboundOnly', 'workspaceId']);
 const RESPONSE_KEYS_V2 = new Set(['has_more', 'items', 'limit', 'next_offset', 'offset', 'total']);
 const CONVERSATION_REQUIRED_KEYS_V2 = new Set([
   'created_at',
@@ -88,8 +96,12 @@ const CONVERSATION_OPTIONAL_KEYS_V2 = new Set([
   'conversation_mode',
   'coordinator_agent_id',
   'current_mode',
+  'execution_environment_id',
+  'execution_machine_id',
+  'execution_target',
   'focused_agent_id',
   'linked_workspace_task_id',
+  'local_root_label',
   'metadata',
   'participant_agents',
   'summary',
@@ -229,6 +241,9 @@ function createDesktopWorkspaceConversationCatalogAuthorityV2(
         .listConversations(operationConfig.projectId, {
           workspaceId: preparedFilters.workspaceId,
           unboundOnly: preparedFilters.unboundOnly,
+          ...(preparedFilters.executionTarget === undefined
+            ? {}
+            : { executionTarget: preparedFilters.executionTarget }),
           ...(preparedFilters.signal === undefined ? {} : { signal: preparedFilters.signal }),
         })
         .then((value) =>
@@ -255,6 +270,7 @@ function createRevocableDesktopWorkspaceConversationCatalogAuthorityV2(
       if (
         preparedFilters.workspaceId !== expected.filters.workspaceId ||
         preparedFilters.unboundOnly !== expected.filters.unboundOnly ||
+        preparedFilters.executionTarget !== expected.filters.executionTarget ||
         preparedFilters.signal !== expected.filters.signal
       ) {
         throw invalidWorkspaceConversationCatalogInputV2();
@@ -283,6 +299,9 @@ function prepareWorkspaceConversationCatalogOperationV2(
     filters: prepareWorkspaceConversationCatalogFiltersV2({
       workspaceId: input.workspaceId,
       unboundOnly: input.unboundOnly,
+      ...(input.executionTarget === undefined
+        ? {}
+        : { executionTarget: input.executionTarget }),
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     }),
   });
@@ -298,7 +317,10 @@ function prepareWorkspaceConversationCatalogFiltersV2(
     !Object.hasOwn(filters, 'unboundOnly') ||
     (filters.workspaceId !== null && !isCanonicalStringV2(filters.workspaceId)) ||
     typeof filters.unboundOnly !== 'boolean' ||
-    (filters.workspaceId !== null && filters.unboundOnly)
+    (filters.workspaceId !== null && filters.unboundOnly) ||
+    (filters.executionTarget !== undefined &&
+      filters.executionTarget !== 'local' &&
+      filters.executionTarget !== 'cloud')
   ) {
     throw invalidWorkspaceConversationCatalogInputV2();
   }
@@ -306,6 +328,9 @@ function prepareWorkspaceConversationCatalogFiltersV2(
   return Object.freeze({
     workspaceId: filters.workspaceId,
     unboundOnly: filters.unboundOnly,
+    ...(filters.executionTarget === undefined
+      ? {}
+      : { executionTarget: filters.executionTarget }),
     ...(signal === undefined ? {} : { signal }),
   });
 }
@@ -408,6 +433,10 @@ function cloneConversationV2(
     !isOptionalCanonicalStringArrayV2(value.participant_agents) ||
     !isOptionalNullableCanonicalStringV2(value.coordinator_agent_id) ||
     !isOptionalNullableCanonicalStringV2(value.focused_agent_id) ||
+    !isOptionalExecutionTargetV2(value.execution_target) ||
+    !isOptionalBoundedTextV2(value.execution_machine_id, 128) ||
+    !isOptionalBoundedTextV2(value.execution_environment_id, 64) ||
+    !isOptionalBoundedTextV2(value.local_root_label, 255) ||
     (filters.workspaceId !== null && value.workspace_id !== filters.workspaceId) ||
     (filters.unboundOnly && value.workspace_id !== null)
   ) {
@@ -449,6 +478,18 @@ function cloneConversationV2(
       ? {}
       : { coordinator_agent_id: value.coordinator_agent_id }),
     ...(value.focused_agent_id === undefined ? {} : { focused_agent_id: value.focused_agent_id }),
+    ...(value.execution_target === undefined
+      ? {}
+      : { execution_target: value.execution_target as AgentConversation['execution_target'] }),
+    ...(value.execution_machine_id === undefined
+      ? {}
+      : { execution_machine_id: value.execution_machine_id as string | null }),
+    ...(value.execution_environment_id === undefined
+      ? {}
+      : { execution_environment_id: value.execution_environment_id as string | null }),
+    ...(value.local_root_label === undefined
+      ? {}
+      : { local_root_label: value.local_root_label as string | null }),
   };
   return Object.freeze(copy);
 }
@@ -582,6 +623,18 @@ function isCanonicalStringV2(value: unknown): value is string {
 
 function isUnsignedSafeIntegerV2(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+function isOptionalExecutionTargetV2(value: unknown): value is 'local' | 'cloud' | undefined {
+  return value === undefined || value === 'local' || value === 'cloud';
+}
+
+function isOptionalBoundedTextV2(value: unknown, limit: number): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    (isCanonicalStringV2(value) && value.length <= limit)
+  );
 }
 
 function isOptionalNullableCanonicalStringV2(value: unknown): value is string | null | undefined {

@@ -149,12 +149,17 @@ export interface Conversation {
   participant_agents?: string[] | undefined;
   coordinator_agent_id?: string | null | undefined;
   focused_agent_id?: string | null | undefined;
+  execution_target?: 'local' | 'cloud' | null | undefined;
+  execution_machine_id?: string | null | undefined;
+  execution_environment_id?: string | null | undefined;
+  local_root_label?: string | null | undefined;
 }
 
 export interface ListConversationsRequestOptions {
   groupByWorkspace?: boolean | undefined;
   unboundOnly?: boolean | undefined;
   workspaceId?: string | null | undefined;
+  executionTarget?: 'local' | 'cloud' | undefined;
 }
 
 /**

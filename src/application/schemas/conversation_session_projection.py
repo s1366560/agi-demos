@@ -92,6 +92,10 @@ class SessionPlanRunResponse(_ProjectionModel):
     error: str | None
     environment: SessionRunEnvironmentResponse | None
     permission_profile: Literal["read_only", "workspace_write", "full_access"]
+    execution_target: Literal["local", "cloud"] = "cloud"
+    execution_machine_id: str | None = None
+    execution_environment_id: str | None = None
+    local_root_label: str | None = None
     authorization_snapshot: dict[str, Any]
 
 

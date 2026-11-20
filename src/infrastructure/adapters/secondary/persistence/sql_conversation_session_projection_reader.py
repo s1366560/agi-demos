@@ -356,6 +356,19 @@ class SqlConversationSessionProjectionReader:
                     revision=item.revision,
                     permission_profile=self._run_permission_profile(item.permission_profile),
                     environment=self._run_environment(item.authorization_snapshot),
+                    execution_target=self._execution_target(item.execution_target),
+                    execution_machine_id=self._optional_execution_text(
+                        item.execution_machine_id,
+                        limit=128,
+                    ),
+                    execution_environment_id=self._optional_execution_text(
+                        item.execution_environment_id,
+                        limit=64,
+                    ),
+                    local_root_label=self._optional_execution_text(
+                        item.local_root_label,
+                        limit=255,
+                    ),
                     created_at=item.created_at,
                     started_at=item.started_at,
                     updated_at=item.updated_at,
@@ -703,6 +716,27 @@ class SqlConversationSessionProjectionReader:
             **optional_fields,
             "created_at": parsed_created_at,
         }
+
+    @staticmethod
+    def _execution_target(value: object) -> Literal["local", "cloud"]:
+        if value == "local":
+            return "local"
+        if value == "cloud":
+            return "cloud"
+        raise ValueError("Persisted run has an unsupported execution target")
+
+    @staticmethod
+    def _optional_execution_text(value: object, *, limit: int) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Persisted run execution label is not text")
+        text = value.strip()
+        if not text:
+            return None
+        if len(text) > limit:
+            raise ValueError("Persisted run execution label exceeds its column")
+        return text
 
     @staticmethod
     def _run_permission_profile(value: str) -> PermissionProfile:

@@ -127,6 +127,7 @@ class ConversationCollectionServiceV2:
         status: ConversationStatus | None,
         limit: int,
         offset: int,
+        execution_target: str | None = None,
     ) -> list[Conversation]:
         return await self.repository.list_default(
             project_id=project_id,
@@ -134,6 +135,7 @@ class ConversationCollectionServiceV2:
             status=status,
             limit=limit,
             offset=offset,
+            execution_target=execution_target,
         )
 
     async def count_conversations(
@@ -142,11 +144,13 @@ class ConversationCollectionServiceV2:
         project_id: str,
         tenant_id: str,
         status: ConversationStatus | None,
+        execution_target: str | None = None,
     ) -> int:
         return await self.repository.count_default(
             project_id=project_id,
             tenant_id=tenant_id,
             status=status,
+            execution_target=execution_target,
         )
 
     async def list_workspace_conversations(
@@ -158,6 +162,7 @@ class ConversationCollectionServiceV2:
         status: ConversationStatus | None,
         limit: int | None = None,
         offset: int = 0,
+        execution_target: str | None = None,
     ) -> list[Conversation]:
         return await self.repository.list_workspace(
             project_id=project_id,
@@ -166,6 +171,7 @@ class ConversationCollectionServiceV2:
             status=status,
             limit=limit,
             offset=offset,
+            execution_target=execution_target,
         )
 
     async def count_workspace_conversations(
@@ -175,12 +181,14 @@ class ConversationCollectionServiceV2:
         tenant_id: str,
         workspace_id: str,
         status: ConversationStatus | None,
+        execution_target: str | None = None,
     ) -> int:
         return await self.repository.count_workspace(
             project_id=project_id,
             tenant_id=tenant_id,
             workspace_id=workspace_id,
             status=status,
+            execution_target=execution_target,
         )
 
     async def list_unbound_conversations(
@@ -192,6 +200,7 @@ class ConversationCollectionServiceV2:
         status: ConversationStatus | None,
         limit: int,
         offset: int,
+        execution_target: str | None = None,
     ) -> list[Conversation]:
         return await self.repository.list_unbound(
             project_id=project_id,
@@ -200,6 +209,7 @@ class ConversationCollectionServiceV2:
             status=status,
             limit=limit,
             offset=offset,
+            execution_target=execution_target,
         )
 
     async def count_unbound_conversations(
@@ -209,12 +219,14 @@ class ConversationCollectionServiceV2:
         tenant_id: str,
         user_id: str,
         status: ConversationStatus | None,
+        execution_target: str | None = None,
     ) -> int:
         return await self.repository.count_unbound(
             project_id=project_id,
             tenant_id=tenant_id,
             user_id=user_id,
             status=status,
+            execution_target=execution_target,
         )
 
     async def after_create_committed(self, conversation: Conversation) -> None:

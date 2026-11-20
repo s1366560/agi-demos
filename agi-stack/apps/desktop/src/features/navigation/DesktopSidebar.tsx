@@ -19,6 +19,7 @@ import type {
   WorkspaceSummary,
 } from '../../types';
 import { WorkspaceDock } from '../workspace/WorkspaceDock';
+import type { ExecutionTargetFilter } from '../session/ExecutionTargetBadge';
 import type { WorkspaceTreeSelectionMode } from '../workspace/workspaceTreeModel';
 import './DesktopSidebar.css';
 
@@ -69,6 +70,8 @@ type DesktopSidebarProps = {
   workspaceCreateDisabledReason?: string | null;
   onCreateWorkspace?: () => void;
   onNewTask: () => void;
+  executionTarget?: ExecutionTargetFilter;
+  onExecutionTargetChange?: (value: ExecutionTargetFilter) => void;
   onOpenAccountSettings: () => void;
   onSwitchWorkspace: () => void;
   onSignOut: () => void;
@@ -101,6 +104,8 @@ export function DesktopSidebar({
   workspaceCreateDisabledReason,
   onCreateWorkspace,
   onNewTask,
+  executionTarget,
+  onExecutionTargetChange,
   onOpenAccountSettings,
   onSwitchWorkspace,
   onSignOut,
@@ -206,6 +211,8 @@ export function DesktopSidebar({
           onRenameConversation={onRenameConversation}
           onDeleteConversation={onDeleteConversation}
           onCreateWorkspace={workspaceCreateDisabledReason ? undefined : onCreateWorkspace}
+          executionTarget={executionTarget}
+          onExecutionTargetChange={onExecutionTargetChange}
         />
       </section>
 

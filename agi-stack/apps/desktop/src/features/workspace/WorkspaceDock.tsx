@@ -38,6 +38,11 @@ import {
 } from './ConversationLifecycleDialogs';
 import { ConversationActionsMenu } from './ConversationActionsMenu';
 import './WorkspaceDock.css';
+import {
+  ExecutionTargetBadge,
+  ExecutionTargetFilterBar,
+  type ExecutionTargetFilter,
+} from '../session/ExecutionTargetBadge';
 
 type ConversationLifecycleRequest = {
   mode: Exclude<ConversationLifecycleMode, null>;
@@ -76,6 +81,8 @@ type WorkspaceDockProps = {
     conversation: AgentConversation,
   ) => Promise<void>;
   onCreateWorkspace?: () => void;
+  executionTarget?: ExecutionTargetFilter;
+  onExecutionTargetChange?: (value: ExecutionTargetFilter) => void;
 };
 
 export function WorkspaceDock({
@@ -95,6 +102,8 @@ export function WorkspaceDock({
   onRenameConversation,
   onDeleteConversation,
   onCreateWorkspace,
+  executionTarget = 'all',
+  onExecutionTargetChange,
 }: WorkspaceDockProps) {
   const { t } = useI18n();
   // Live socket state: while disconnected, non-terminal run dots degrade to a
@@ -192,6 +201,9 @@ export function WorkspaceDock({
       >
         <ScrollArea className="dock-list">
           <div>
+          {onExecutionTargetChange ? (
+            <ExecutionTargetFilterBar value={executionTarget} onChange={onExecutionTargetChange} />
+          ) : null}
           {hasProjectScope && availability === 'refreshing' ? (
             <WorkspaceTreeState compact title={t('workspaceTree.refreshing')} />
           ) : hasProjectScope && availability === 'stale-error' ? (
@@ -576,6 +588,10 @@ function ConversationTreeRow({
         ) : null}
         <span>
           <strong>{title}</strong>
+        <ExecutionTargetBadge
+          executionTarget={conversation.execution_target}
+          localRootLabel={conversation.local_root_label}
+        />
         </span>
       </button>
       {hasLifecycleActions ? (

@@ -481,6 +481,10 @@ async def test_started_duplicate_replays_authoritative_ack_without_new_task(
             "execution_message_id": "desktop-turn-started",
             "run_id": "desktop-turn-started",
             "run_revision": 1,
+            "execution_target": "cloud",
+            "execution_machine_id": None,
+            "execution_environment_id": None,
+            "local_root_label": None,
         }
     ]
 

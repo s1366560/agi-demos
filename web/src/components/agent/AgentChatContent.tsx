@@ -84,6 +84,7 @@ import {
   downloadConversationMarkdown,
   downloadConversationPdf,
 } from '../../utils/exportConversation';
+import { ExecutionTargetBadge } from '../execution-target/ExecutionTargetBadge';
 import { PluginSlotOutlet } from '../plugins/PluginSlotOutlet';
 import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 
@@ -990,6 +991,17 @@ ${content}`;
         {(currentConversation || activeAgentNode?.name) && (
           <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/40 px-4 py-2 flex items-center gap-2 min-w-0">
             <ConversationAgentBadge conversation={currentConversation} />
+            <ExecutionTargetBadge
+              executionTarget={
+                runInputAuthority.activeRun?.execution_target ??
+                currentConversation?.execution_target
+              }
+              localRootLabel={
+                runInputAuthority.activeRun?.local_root_label ??
+                currentConversation?.local_root_label
+              }
+              running={Boolean(runInputAuthority.activeRun)}
+            />
             {currentConversation && (
               <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                 <span
