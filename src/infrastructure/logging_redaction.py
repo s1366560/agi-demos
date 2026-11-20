@@ -32,7 +32,7 @@ _SENSITIVE_QUERY_PARAM_RE = re.compile(
     rf"(?i)([?&](?:{'|'.join(_SENSITIVE_QUERY_PARAMS)})=)([^&#\s]+)"
 )
 _BEARER_TOKEN_RE = re.compile(r"(?i)\b(Bearer\s+)([A-Za-z0-9._~+/\-=]+)")
-_MEMSTACK_API_KEY_RE = re.compile(r"\bms_sk_[0-9a-fA-F]{16,}\b")
+_MEMSTACK_API_KEY_RE = re.compile(r"\bms_(?:sk|rt)_[0-9a-fA-F]{16,}\b")
 
 
 def redact_sensitive_log_text(text: str) -> str:

@@ -10,6 +10,7 @@ import logging
 import secrets
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import uuid4
 
@@ -26,10 +27,18 @@ from src.application.schemas.auth import (
     ForceChangePasswordRequest,
     ForceChangePasswordResponse,
     Token,
+    TokenSession,
     User as UserSchema,
     UserUpdate,
 )
+from src.application.services.cloud_login_session_service import (
+    ACCESS_TOKEN_TTL,
+    CloudLoginSessionService,
+    IssuedCloudLogin,
+    RefreshRejectedError,
+)
 from src.application.use_cases.auth.list_api_keys import ListAPIKeysQuery, ListAPIKeysUseCase
+from src.configuration.config import get_settings
 from src.infrastructure.adapters.primary.web.dependencies import (
     create_api_key,
     get_api_key_from_header,
@@ -92,6 +101,18 @@ class OAuthLoginResponse(BaseModel):
     token_type: str
     redirect_to: str
     user: UserSchema
+    expires_at: datetime | None = None
+    refresh_token: str | None = None
+    refresh_expires_at: datetime | None = None
+    session: TokenSession | None = None
+
+
+class RefreshTokenRequest(BaseModel):
+    """Body for rotating a cloud login refresh token. Extra fields are rejected."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_token: str
 
 
 class DeviceCodeCancelRequest(BaseModel):
@@ -104,6 +125,109 @@ class DeviceCodeCancelRequest(BaseModel):
 
 def _user_profile(user: DBUser) -> dict[str, Any]:
     return dict(user.profile or {})
+
+
+def _cloud_login_sessions(db: AsyncSession) -> CloudLoginSessionService:
+    return CloudLoginSessionService(db, secret=get_settings().secret_key)
+
+
+def _token_from_login(
+    *,
+    access_token: str,
+    issued: IssuedCloudLogin,
+    auth_method: str,
+    must_change_password: bool = False,
+) -> Token:
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        must_change_password=must_change_password,
+        expires_at=issued.access_expires_at,
+        refresh_token=issued.refresh_token,
+        refresh_expires_at=issued.refresh_expires_at,
+        session=TokenSession(
+            session_id=issued.session_id,
+            auth_method=auth_method,
+            expires_at=issued.access_expires_at,
+            trusted_device=True,
+        ),
+    )
+
+
+async def _issue_device_approval(
+    db: AsyncSession,
+    current_user: DBUser,
+    user_code: str,
+    session: dict[str, Any],
+) -> tuple[str, IssuedCloudLogin | None, str]:
+    """Create the device access key and optional refresh binding."""
+    role_result = await db.execute(
+        refresh_select_statement(
+            select(Role.name)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .where(UserRole.user_id == current_user.id)
+        )
+    )
+    is_admin = "admin" in role_result.scalars().all()
+    permissions = ["read", "write"] + (["admin"] if is_admin else [])
+    plain_key, api_key = await create_api_key(
+        db,
+        user_id=current_user.id,
+        name=f"CLI device login ({user_code})",
+        permissions=permissions,
+        expires_at=datetime.now(UTC) + ACCESS_TOKEN_TTL,
+    )
+    issued = None
+    if api_key is not None:
+        issued = await _bind_login_refresh(
+            db,
+            user_id=current_user.id,
+            api_key_id=api_key.id,
+            auth_method="device",
+            device_label="device",
+        )
+    session["status"] = "approved"
+    session["approved_user_id"] = current_user.id
+    session["access_token"] = plain_key
+    if issued is not None:
+        session["refresh_token"] = issued.refresh_token
+        session["expires_at"] = issued.access_expires_at.isoformat()
+        session["refresh_expires_at"] = issued.refresh_expires_at.isoformat()
+        session["session_id"] = issued.session_id
+        session["family_id"] = issued.family_id
+    return plain_key, issued, _json.dumps(session)
+
+
+async def _discard_unclaimed_device_login(
+    db: AsyncSession,
+    plain_key: str,
+    issued: IssuedCloudLogin | None,
+) -> None:
+    """Drop a device login that never became claimable by the polling client."""
+    if issued is not None:
+        await _cloud_login_sessions(db).revoke_family(issued.family_id)
+    repository = SqlAPIKeyRepository(db)
+    await repository.delete_by_hash(hash_api_key(plain_key))
+    await db.commit()
+
+
+async def _bind_login_refresh(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    api_key_id: str | None,
+    auth_method: str,
+    device_label: str,
+) -> IssuedCloudLogin | None:
+    """Bind a refresh token when the access key was actually persisted."""
+    if not api_key_id:
+        return None
+    return await _cloud_login_sessions(db).bind_access_key(
+        user_id=user_id,
+        access_api_key_id=api_key_id,
+        auth_method=auth_method,
+        device_label=device_label,
+    )
 
 
 async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
@@ -182,7 +306,7 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Token:
     """
     Login endpoint to get an access token (API Key).
     """
@@ -224,14 +348,31 @@ async def login_for_access_token(
     if is_admin:
         permissions.append("admin")
 
-    # Generate a temporary session API key
-    plain_key, _hashed_key = await create_api_key(
+    access_expires_at = datetime.now(UTC) + ACCESS_TOKEN_TTL
+    plain_key, api_key = await create_api_key(
         db,
         user_id=user.id,
         name=f"Login Session {form_data.username}",
         permissions=permissions,
-        expires_in_days=1,  # Short lived token
+        expires_at=access_expires_at,
     )
+    if api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Login session could not be issued"),
+        )
+    issued = await _bind_login_refresh(
+        db,
+        user_id=user.id,
+        api_key_id=api_key.id,
+        auth_method="password",
+        device_label="password",
+    )
+    if issued is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Login session could not be issued"),
+        )
 
     # Ensure user has a default project (first-time login)
     await _ensure_default_project(db, user)
@@ -239,11 +380,12 @@ async def login_for_access_token(
     # Commit the transaction to persist the API key and default project (if created)
     await db.commit()
 
-    return {
-        "access_token": plain_key,
-        "token_type": "bearer",
-        "must_change_password": bool(user.must_change_password),
-    }
+    return _token_from_login(
+        access_token=plain_key,
+        issued=issued,
+        auth_method="password",
+        must_change_password=bool(user.must_change_password),
+    )
 
 
 @router.post("/auth/signout")
@@ -257,10 +399,35 @@ async def sign_out(
     bearer hash makes repeated sign-out calls successful without authenticating
     a key that may already have been deleted.
     """
+    await _cloud_login_sessions(db).revoke_access_token(api_key)
     repository = SqlAPIKeyRepository(db)
     await repository.delete_by_hash(hash_api_key(api_key))
     await db.commit()
     return {"success": True}
+
+
+@router.post("/auth/refresh", response_model=Token)
+async def refresh_login_session(
+    body: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+) -> Token:
+    """Rotate a cloud login refresh token and issue a new one-hour access token."""
+    try:
+        issued = await _cloud_login_sessions(db).rotate(body.refresh_token)
+    except RefreshRejectedError as exc:
+        if exc.reused:
+            await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_("Invalid refresh token"),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+    await db.commit()
+    return _token_from_login(
+        access_token=issued.access_token,
+        issued=issued,
+        auth_method="refresh",
+    )
 
 
 @router.get("/auth/oauth/providers")
@@ -374,13 +541,31 @@ async def oauth_callback(
     permissions = ["read", "write"]
     if user.is_superuser is True or "admin" in role_names:
         permissions.append("admin")
-    plain_key, _ = await create_api_key(
+    access_expires_at = datetime.now(UTC) + ACCESS_TOKEN_TTL
+    plain_key, api_key = await create_api_key(
         db,
         user_id=user.id,
         name=f"OAuth Session {identity.provider_id}",
         permissions=permissions,
-        expires_in_days=1,
+        expires_at=access_expires_at,
     )
+    if api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Login session could not be issued"),
+        )
+    issued = await _bind_login_refresh(
+        db,
+        user_id=user.id,
+        api_key_id=api_key.id,
+        auth_method="oauth",
+        device_label=identity.provider_id,
+    )
+    if issued is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Login session could not be issued"),
+        )
     await _ensure_default_project(db, user)
     await db.commit()
 
@@ -388,6 +573,15 @@ async def oauth_callback(
         access_token=plain_key,
         token_type="bearer",
         redirect_to=callback.redirect_to,
+        expires_at=issued.access_expires_at,
+        refresh_token=issued.refresh_token,
+        refresh_expires_at=issued.refresh_expires_at,
+        session=TokenSession(
+            session_id=issued.session_id,
+            auth_method="oauth",
+            expires_at=issued.access_expires_at,
+            trusted_device=True,
+        ),
         user=UserSchema(
             user_id=user.id,
             email=user.email,
@@ -570,6 +764,7 @@ async def revoke_api_key(
     if not key:
         raise HTTPException(status_code=404, detail=_("API key not found"))
 
+    await _cloud_login_sessions(db).revoke_access_key(key.id)
     await db.delete(key)
     await db.commit()
 
@@ -899,28 +1094,12 @@ async def device_code_approve(
                 detail=_("Device code has already been handled"),
             )
 
-        # Determine permissions like /auth/token does without async lazy loading.
-        role_result = await db.execute(
-            refresh_select_statement(
-                select(Role.name)
-                .join(UserRole, UserRole.role_id == Role.id)
-                .where(UserRole.user_id == current_user.id)
-            )
-        )
-        is_admin = "admin" in role_result.scalars().all()
-        permissions = ["read", "write"] + (["admin"] if is_admin else [])
-
-        plain_key, _api_key = await create_api_key(
+        plain_key, issued, approved = await _issue_device_approval(
             db,
-            user_id=current_user.id,
-            name=f"CLI device login ({user_code})",
-            permissions=permissions,
-            expires_in_days=30,
+            current_user,
+            user_code,
+            session,
         )
-        session["status"] = "approved"
-        session["approved_user_id"] = current_user.id
-        session["access_token"] = plain_key
-        approved = _json.dumps(session)
         try:
             await db.commit()
         except BaseException:
@@ -939,14 +1118,10 @@ async def device_code_approve(
                 approved,
             )
         except BaseException:
-            repository = SqlAPIKeyRepository(db)
-            await repository.delete_by_hash(hash_api_key(plain_key))
-            await db.commit()
+            await _discard_unclaimed_device_login(db, plain_key, issued)
             raise
         if not published:
-            repository = SqlAPIKeyRepository(db)
-            await repository.delete_by_hash(hash_api_key(plain_key))
-            await db.commit()
+            await _discard_unclaimed_device_login(db, plain_key, issued)
             raise HTTPException(
                 status_code=409,
                 detail=_("Device code has already been handled"),
@@ -1001,7 +1176,29 @@ async def device_code_token(payload: dict[str, Any]) -> dict[str, Any]:
         if not consumed:
             raise HTTPException(status_code=410, detail=_("expired_token"))
 
-        return {"access_token": access_token, "token_type": "bearer"}
+        response: dict[str, Any] = {"access_token": access_token, "token_type": "bearer"}
+        refresh_token = session.get("refresh_token")
+        expires_at = session.get("expires_at")
+        refresh_expires_at = session.get("refresh_expires_at")
+        session_id = session.get("session_id")
+        if (
+            isinstance(refresh_token, str)
+            and refresh_token
+            and isinstance(expires_at, str)
+            and isinstance(refresh_expires_at, str)
+            and isinstance(session_id, str)
+            and session_id
+        ):
+            response["refresh_token"] = refresh_token
+            response["expires_at"] = expires_at
+            response["refresh_expires_at"] = refresh_expires_at
+            response["session"] = {
+                "session_id": session_id,
+                "auth_method": "device",
+                "expires_at": expires_at,
+                "trusted_device": True,
+            }
+        return response
 
 
 @router.post("/auth/device/cancel")
@@ -1026,6 +1223,9 @@ async def device_code_cancel(
             original = raw.decode() if isinstance(raw, bytes) else str(raw)
             session = _json.loads(original)
             access_token = session.get("access_token")
+            family_id = session.get("family_id")
+            if isinstance(family_id, str) and family_id:
+                await _cloud_login_sessions(db).revoke_family(family_id)
             if isinstance(access_token, str) and access_token:
                 repository = SqlAPIKeyRepository(db)
                 await repository.delete_by_hash(hash_api_key(access_token))

@@ -10,8 +10,10 @@ import memstack_cli.auth as auth_mod
 from memstack_cli.auth import (
     AuthError,
     clear_credentials,
+    load_refresh_token,
     resolve_api_key,
     save_api_key,
+    save_login_session,
 )
 
 
@@ -60,3 +62,12 @@ class TestSaveAndClear:
         save_api_key("old")
         save_api_key("new")
         assert auth_mod.CREDENTIALS_FILE.read_text().strip() == "new"
+
+    def test_login_session_stores_refresh_separately(self, isolated_home: Path) -> None:
+        save_login_session("ms_sk_access", "ms_rt_refresh")
+        assert resolve_api_key(None) == "ms_sk_access"
+        assert load_refresh_token() == "ms_rt_refresh"
+        mode = (auth_mod.CREDENTIALS_DIR / "refresh").stat().st_mode & 0o777
+        assert mode == 0o600
+        assert clear_credentials() is True
+        assert load_refresh_token() is None

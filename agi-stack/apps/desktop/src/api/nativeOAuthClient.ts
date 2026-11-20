@@ -20,6 +20,7 @@ export type NativeOAuthBeginRequest = Readonly<{
   apiBaseUrl: string;
   provider: string;
   resumeRoute: string;
+  trustedDevice?: boolean;
 }>;
 
 export type NativeOAuthAuthorizationOpened = Readonly<{
@@ -89,7 +90,12 @@ export function desktopNativeOAuthClient(): NativeOAuthClient | null {
       return providers;
     },
     async begin(request: NativeOAuthBeginRequest): Promise<NativeOAuthAuthorizationOpened> {
-      const value = await invoke('oauth_begin_authorization', request);
+      const value = await invoke('oauth_begin_authorization', {
+        apiBaseUrl: request.apiBaseUrl,
+        provider: request.provider,
+        resumeRoute: request.resumeRoute,
+        ...(request.trustedDevice === undefined ? {} : { trustedDevice: request.trustedDevice }),
+      });
       const result = decodeAuthorizationOpened(value);
       if (!result) throw new Error('oauth_begin_authorization_contract_invalid');
       return result;

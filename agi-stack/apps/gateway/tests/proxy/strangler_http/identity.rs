@@ -75,8 +75,8 @@ async fn assert_tenant_read_and_device_routes(ctx: &StranglerHttpContext) {
         let body = ctx.public_body("POST", path, body_in).await;
         assert_backend(
             &body,
-            "rust",
-            &format!("public device-code {path} POST -> rust"),
+            "python",
+            &format!("public device-code {path} POST stays on the Python session authority"),
         );
     }
 
@@ -87,7 +87,11 @@ async fn assert_tenant_read_and_device_routes(ctx: &StranglerHttpContext) {
             "{'user_code':'ABCDEFGH'}",
         )
         .await;
-    assert_backend(&body, "rust", "authenticated device-code approval -> rust");
+    assert_backend(
+        &body,
+        "python",
+        "authenticated device-code approval stays on the Python session authority",
+    );
 
     let body = ctx.public_body("GET", "/api/v1/auth/device/code", "").await;
     assert_backend(&body, "python", "device-code GET remains python");

@@ -40,7 +40,7 @@ test('approved email path owns the trusted-device choice and inline alert', () =
 test('login keeps cloud email, device, and OAuth entry points without a local workspace switch', () => {
   assert.match(loginSource, /onEmailLogin: \(trustedDevice: boolean\) => void/);
   assert.match(loginSource, /onWorkspaceSso: \(trustedDevice: boolean\) => void/);
-  assert.match(loginSource, /onNativeOAuth: \(provider: string\) => void/);
+  assert.match(loginSource, /onNativeOAuth: \(provider: string, trustedDevice: boolean\) => void/);
   assert.match(loginSource, /legacyLocalLoginNotice/);
   assert.match(loginSource, /t\('login\.legacyLocalSessionCleared'\)/);
   assert.match(loginSource, /type="email"/);

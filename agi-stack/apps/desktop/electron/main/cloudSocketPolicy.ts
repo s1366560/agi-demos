@@ -1,3 +1,6 @@
+import type { CloudSessionRefreshOutcome } from './cloudAuthenticationAuthority';
+import { CloudSessionAuthenticationInvalidError } from './cloudRequestPolicy';
+
 export type CloudSocketKind = 'agent' | 'terminal' | 'voice';
 
 export type CloudSocketScope = Readonly<{
@@ -46,6 +49,9 @@ export type VaultBoundCloudSocketDependencies = Readonly<{
   loadTrustedSession(): Promise<unknown>;
   fetch(url: string, init: RequestInit): Promise<Response>;
   now?: () => number;
+  refreshTrustedSession?(
+    reason: 'proactive' | 'unauthorized',
+  ): Promise<CloudSessionRefreshOutcome>;
 }>;
 
 export type CloudSocketCloseDirective = Readonly<{
@@ -134,17 +140,76 @@ const defaultScheduler: TimerScheduler = Object.freeze({
   },
 });
 
+class CloudSocketAuthenticationRejected extends Error {
+  constructor() {
+    super('cloud socket authentication rejected');
+    this.name = 'CloudSocketAuthenticationRejected';
+  }
+}
+
+async function refreshSocketSession(
+  raw: unknown,
+  dependencies: VaultBoundCloudSocketDependencies,
+  reason: 'proactive' | 'unauthorized',
+  now: number,
+): Promise<unknown> {
+  if (!raw || typeof raw !== 'object') return raw;
+  const record = raw as {
+    refresh_token?: unknown;
+    access_expires_at?: unknown;
+    expires_at?: unknown;
+  };
+  const refresh = typeof record.refresh_token === 'string' ? record.refresh_token : '';
+  const expiryRaw =
+    typeof record.access_expires_at === 'string' ? record.access_expires_at : record.expires_at;
+  const expiry = typeof expiryRaw === 'string' ? Date.parse(expiryRaw) : Number.NaN;
+  const due = Number.isFinite(expiry) && expiry - now <= 60_000;
+  if (reason === 'proactive' && (!refresh || !due)) {
+    if (!refresh && Number.isFinite(expiry) && expiry <= now) {
+      throw new CloudSessionAuthenticationInvalidError();
+    }
+    return raw;
+  }
+  if (!refresh || !dependencies.refreshTrustedSession) {
+    throw new CloudSessionAuthenticationInvalidError();
+  }
+  const outcome = await dependencies.refreshTrustedSession(reason);
+  if (outcome.status === 'invalid') throw new CloudSessionAuthenticationInvalidError();
+  if (outcome.status !== 'refreshed' && outcome.status !== 'current') {
+    throw new Error('cloud session refresh unavailable');
+  }
+  return outcome.record;
+}
+
 export async function authorizeVaultBoundCloudSocket(
   input: unknown,
   dependencies: VaultBoundCloudSocketDependencies
 ): Promise<AuthorizedCloudSocket> {
   const request = parseSocketInput(input);
-  const session = parseTrustedCloudSession(
-    await dependencies.loadTrustedSession(),
-    dependencies.now?.() ?? Date.now()
-  );
+  const now = dependencies.now?.() ?? Date.now();
+  let raw = await dependencies.loadTrustedSession();
+  raw = await refreshSocketSession(raw, dependencies, 'proactive', now);
+  let session = parseTrustedCloudSession(raw, now);
+  let observed;
+  try {
+    observed = await observeWorkspaceContext(session, dependencies);
+  } catch (error) {
+    if (!(error instanceof CloudSocketAuthenticationRejected) || !dependencies.refreshTrustedSession) {
+      throw error;
+    }
+    raw = await refreshSocketSession(raw, dependencies, 'unauthorized', now);
+    session = parseTrustedCloudSession(raw, dependencies.now?.() ?? Date.now());
+    try {
+      observed = await observeWorkspaceContext(session, dependencies);
+    } catch (retryError) {
+      if (retryError instanceof CloudSocketAuthenticationRejected) {
+        throw new CloudSessionAuthenticationInvalidError();
+      }
+      throw retryError;
+    }
+  }
   const observedScope = await observeSocketWorkspaceScope(
-    request.scope, await observeWorkspaceContext(session, dependencies), session, dependencies,
+    request.scope, observed, session, dependencies,
   );
   assertObservedScope(request.scope, observedScope);
   const target = authorizeSocketUrl(request, session);
@@ -505,6 +570,7 @@ async function observeWorkspaceContext(
     credentials: 'omit',
     redirect: 'manual',
   });
+  if (response.status === 401) throw new CloudSocketAuthenticationRejected();
   if (!response.ok) throw new Error('cloud socket scope observation failed');
   const text = await boundedResponseText(response);
   if (text.includes(session.credential)) {

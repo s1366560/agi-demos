@@ -124,6 +124,7 @@ class AuthService:
         name: str,
         permissions: list[str],
         expires_in_days: int | None = None,
+        expires_at: datetime | None = None,
     ) -> tuple[str, APIKey]:
         """
         Create a new API key for a user.
@@ -133,6 +134,7 @@ class AuthService:
             name: Name/description for the key
             permissions: List of permissions granted to this key
             expires_in_days: Optional expiration in days
+            expires_at: Optional absolute expiration; overrides expires_in_days
 
         Returns:
             Tuple of (plain_key, api_key_object)
@@ -140,8 +142,7 @@ class AuthService:
         plain_key = self.generate_api_key()
         hashed_key = self.hash_api_key(plain_key)
 
-        expires_at = None
-        if expires_in_days:
+        if expires_at is None and expires_in_days:
             expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
 
         api_key = APIKey(

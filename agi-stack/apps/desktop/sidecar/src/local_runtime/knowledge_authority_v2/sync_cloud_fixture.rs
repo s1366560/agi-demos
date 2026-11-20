@@ -60,6 +60,9 @@ pub(super) fn install_unbound(
             credential_kind: TrustedSessionCredentialKind::CloudBearer,
             credential: "cloud-test-credential".into(),
             expires_at: None,
+            refresh_token: None,
+            access_expires_at: None,
+            persist_across_restart: true,
         })
         .unwrap();
     state

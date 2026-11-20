@@ -39,7 +39,7 @@ type LoginScreenProps = {
   onWorkspaceSso: (trustedDevice: boolean) => void;
   nativeOAuthProviders: readonly NativeOAuthProvider[];
   nativeOAuthPendingProvider: string | null;
-  onNativeOAuth: (provider: string) => void;
+  onNativeOAuth: (provider: string, trustedDevice: boolean) => void;
   workspaceSso: WorkspaceSsoPresentation | null;
   onOpenWorkspaceSso: () => void;
   onCancelWorkspaceSso: () => void;
@@ -249,7 +249,7 @@ export function LoginScreen({
                       key={provider.id}
                       disabled={busy}
                       aria-busy={nativeOAuthPendingProvider === provider.id}
-                      onClick={() => onNativeOAuth(provider.id)}
+                      onClick={() => onNativeOAuth(provider.id, trustedDevice)}
                     >
                       <ExternalLinkIcon />
                       {provider.displayName}

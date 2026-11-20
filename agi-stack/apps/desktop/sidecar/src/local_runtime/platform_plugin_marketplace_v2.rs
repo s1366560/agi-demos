@@ -488,6 +488,9 @@ mod tests {
                     credential_kind: TrustedSessionCredentialKind::CloudBearer,
                     credential: cloud_credential.to_string(),
                     expires_at: None,
+                    refresh_token: None,
+                    access_expires_at: None,
+                    persist_across_restart: true,
                 })
                 .expect("trusted cloud session");
             state

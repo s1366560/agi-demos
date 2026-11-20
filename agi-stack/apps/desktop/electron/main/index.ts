@@ -117,6 +117,7 @@ const NATIVE_FILE_OPEN_CHANNEL = 'agistack:native-file-open';
 const NATIVE_FILE_INGEST_CHANNEL = 'agistack:native-file-ingest';
 const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
+const CLOUD_SESSION_INVALID_CHANNEL = 'agistack:cloud-session-invalid';
 const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
 const IAB_TABS_CHANGED_CHANNEL = 'agistack:iab-tabs-changed';
 const IAB_VISIBILITY_REQUESTED_CHANNEL = 'agistack:iab-visibility-requested';
@@ -278,15 +279,21 @@ function parseOAuthBeginArgs(args: DesktopCommandArgs): Readonly<{
   apiBaseUrl: string;
   provider: string;
   resumeRoute: string;
+  trustedDevice: boolean;
 }> {
   if (
     !args ||
     Object.keys(args).some(
-      (key) => key !== 'apiBaseUrl' && key !== 'provider' && key !== 'resumeRoute',
+      (key) =>
+        key !== 'apiBaseUrl' &&
+        key !== 'provider' &&
+        key !== 'resumeRoute' &&
+        key !== 'trustedDevice',
     ) ||
     typeof args.apiBaseUrl !== 'string' ||
     typeof args.provider !== 'string' ||
-    typeof args.resumeRoute !== 'string'
+    typeof args.resumeRoute !== 'string' ||
+    (args.trustedDevice !== undefined && typeof args.trustedDevice !== 'boolean')
   ) {
     throw new Error('oauth_authorization_contract_invalid');
   }
@@ -294,7 +301,20 @@ function parseOAuthBeginArgs(args: DesktopCommandArgs): Readonly<{
     apiBaseUrl: args.apiBaseUrl,
     provider: args.provider,
     resumeRoute: args.resumeRoute,
+    trustedDevice: args.trustedDevice !== false,
   });
+}
+
+function notifyCloudSessionInvalid(): void {
+  const contents = mainWindow?.webContents;
+  if (contents && !contents.isDestroyed()) {
+    contents.send(CLOUD_SESSION_INVALID_CHANNEL, { reason: 'authentication_invalid' });
+  }
+}
+
+function cloudSessionRefresher(reason: 'proactive' | 'unauthorized') {
+  if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
+  return cloudAuthenticationAuthority.refreshStoredSession(reason);
 }
 
 function parseOAuthListProvidersArgs(args: DesktopCommandArgs): Readonly<{ apiBaseUrl: string }> {
@@ -820,6 +840,7 @@ async function executeDesktopCommand(
         const settled = await settleCloudRequest(() => executeVaultBoundCloudRequest(args?.request, {
           loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
           fetch: (url, init) => net.fetch(url, init),
+          refreshTrustedSession: (reason) => cloudSessionRefresher(reason),
           signal: lease.signal,
           withContextSwitch: (operation) => {
             if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
@@ -842,7 +863,7 @@ async function executeDesktopCommand(
               }
               return redacted;
             }
-            if (typeof value === 'string' && /^(Bearer\s+\S+|ms_(?:sk|dp)_[0-9a-f]+)$/i.test(value)) {
+            if (typeof value === 'string' && /^(Bearer\s+\S+|ms_(?:sk|rt|dp)_[0-9a-f]+)$/i.test(value)) {
               return '[redacted]';
             }
             return value;
@@ -876,9 +897,40 @@ async function executeDesktopCommand(
           });
         }
         return result;
+      } catch (error) {
+        if (error instanceof Error && error.name === 'CloudSessionAuthenticationInvalidError') {
+          notifyCloudSessionInvalid();
+          return {
+            status: 401,
+            body: { detail: 'trusted_session_authentication_invalid' },
+          };
+        }
+        throw error;
       } finally {
         lease.release();
       }
+    }
+    case 'cloud_session_presence': {
+      if (!sidecarSupervisor) return { present: false };
+      const stored = await sidecarSupervisor.invoke('trusted_session_load');
+      if (!stored || typeof stored !== 'object') return { present: false };
+      const record = stored as {
+        runtime_mode?: unknown;
+        credential_kind?: unknown;
+        credential?: unknown;
+        persist_across_restart?: unknown;
+      };
+      if (record.runtime_mode !== 'cloud' || record.credential_kind !== 'cloud_bearer') {
+        return { present: false };
+      }
+      if (typeof record.credential !== 'string' || !record.credential.trim()) {
+        return { present: false };
+      }
+      if (record.persist_across_restart === false) {
+        await sidecarSupervisor.invoke('trusted_session_clear');
+        return { present: false };
+      }
+      return { present: true };
     }
     case 'cloud_session_projection': {
       const ownerId = authorizedCloudRequestOwner(event);
@@ -888,6 +940,7 @@ async function executeDesktopCommand(
         return await projectVaultBoundCloudSession({
           loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
           fetch: (url, init) => net.fetch(url, init),
+          refreshTrustedSession: (reason) => cloudSessionRefresher(reason),
           signal: lease.signal,
         });
       } catch (error) {
@@ -902,7 +955,14 @@ async function executeDesktopCommand(
     case 'cloud_socket_open': {
       const ownerId = authorizedCloudRequestOwner(event);
       if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
-      await cloudSocketBroker.open(ownerId, args);
+      try {
+        await cloudSocketBroker.open(ownerId, args);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'CloudSessionAuthenticationInvalidError') {
+          notifyCloudSessionInvalid();
+        }
+        throw error;
+      }
       return undefined;
     }
     case 'cloud_socket_send': {
@@ -1570,10 +1630,11 @@ async function bootstrapApplication(): Promise<void> {
   });
   cloudSocketBroker = new DesktopCloudSocketBroker({
     computerUse:createComputerUseCloudDeviceBridge((command,args)=>applicationSupervisor.invoke(command,args)),
-    authorize: (input) =>
+      authorize: (input) =>
       authorizeVaultBoundCloudSocket(input, {
         loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
         fetch: (url, init) => net.fetch(url, init),
+        refreshTrustedSession: (reason) => cloudSessionRefresher(reason),
       }),
     createSocket: (url, protocols) =>
       new WebSocket(url, [...protocols]) as unknown as CloudSocketLike,
@@ -1608,6 +1669,9 @@ async function bootstrapApplication(): Promise<void> {
       );
     },
     normalizeResumeRoute: normalizeOAuthResumeRoute,
+    noteTrustedDevice: (trustedDevice) => {
+      cloudAuthenticationAuthority?.rememberPersistence(trustedDevice);
+    },
     pendingAttemptPersistence: {
       load: () => sidecarSupervisor!.invoke('oauth_pending_attempt_load'),
       save: (input) => sidecarSupervisor!.invoke('oauth_pending_attempt_save', input),

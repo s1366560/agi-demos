@@ -7,11 +7,10 @@ pub const STRANGLED_PREFIXES: &[&str] = &[
     "/api/v1/memories",
     "/api/v1/episodes",
     "/api/v1/recall",
-    // P2 password-login vertical. OAuth remains Python-owned because its Redis
-    // state, PKCE exchange, provider verification, account binding, and session
-    // minting must stay on one server-side authority until the whole flow moves.
-    // Other `/auth/*` siblings (force-change-password, keys, ...) stay in Python.
-    "/api/v1/auth/token",
+    // Password login, device-code, refresh, and sign-out stay on Python. The
+    // cloud session family (`user_sessions`) is minted only there; splitting
+    // those routes back to Rust drops the refresh token the desktop and CLI
+    // now require. OAuth was already Python-owned for the same reason.
 ];
 
 /// Method-scoped strangler rules for resources where the Rust backend only owns
@@ -1729,26 +1728,6 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         method: "GET",
         path: "/api/v1/shared",
         match_kind: MethodMatchKind::SingleChild,
-    },
-    MethodRule {
-        method: "POST",
-        path: "/api/v1/auth/device/code",
-        match_kind: MethodMatchKind::Exact,
-    },
-    MethodRule {
-        method: "POST",
-        path: "/api/v1/auth/device/approve",
-        match_kind: MethodMatchKind::Exact,
-    },
-    MethodRule {
-        method: "POST",
-        path: "/api/v1/auth/device/token",
-        match_kind: MethodMatchKind::Exact,
-    },
-    MethodRule {
-        method: "POST",
-        path: "/api/v1/auth/device/cancel",
-        match_kind: MethodMatchKind::Exact,
     },
     MethodRule {
         method: "GET",

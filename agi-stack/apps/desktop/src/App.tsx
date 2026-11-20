@@ -48,6 +48,7 @@ import type {
 import {
   clearNativeTrustedSession,
   hasNativeTrustedSessionBroker,
+  probeCloudTrustedSession,
   purgeLegacyLocalLoginResidue,
   selectPlatformPluginAuthorityV2,
 } from './api/trustedSession';
@@ -6518,7 +6519,15 @@ export function App() {
           return;
         }
 
-        await selectPlatformPluginAuthorityV2(config.mode);
+        const cloudSessionPresent = await probeCloudTrustedSession();
+        const restoringCloud = cloudSessionPresent || config.mode === 'cloud';
+        await selectPlatformPluginAuthorityV2(restoringCloud ? 'cloud' : config.mode);
+        if (!restoringCloud) {
+          setLegacyLocalLoginNotice(legacyResidueCleared);
+          setAuth(emptyAuthState);
+          setConnection('idle');
+          return;
+        }
         const projection = await hydrateProjectedCloudSession(authAttemptRevision);
         if (
           localResumeAttemptRef.current !== attemptKey ||

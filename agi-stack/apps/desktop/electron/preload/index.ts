@@ -36,6 +36,7 @@ const NATIVE_FILE_OPEN_CHANNEL = 'agistack:native-file-open';
 const NATIVE_FILE_INGEST_CHANNEL = 'agistack:native-file-ingest';
 const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
+const CLOUD_SESSION_INVALID_CHANNEL = 'agistack:cloud-session-invalid';
 const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
 const IAB_TABS_CHANGED_CHANNEL = 'agistack:iab-tabs-changed';
 const IAB_VISIBILITY_REQUESTED_CHANNEL = 'agistack:iab-visibility-requested';
@@ -59,6 +60,7 @@ const allowedCommands = new Set([
   'capture_current_display',
   'open_web_control_plane',
   'cloud_request',
+  'cloud_session_presence',
   'cloud_session_projection',
   'cloud_socket_open',
   'cloud_socket_send',
@@ -249,6 +251,16 @@ function onOAuthSessionChanged(listener: (payload: unknown) => void): () => void
   return () => ipcRenderer.removeListener(OAUTH_SESSION_CHANGED_CHANNEL, wrappedListener);
 }
 
+function onCloudSessionInvalidated(listener: (payload: unknown) => void): () => void {
+  if (typeof listener !== 'function') {
+    throw new Error('Cloud session listener is invalid');
+  }
+  const wrappedListener = (_event: Electron.IpcRendererEvent, payload: unknown): void =>
+    listener(payload);
+  ipcRenderer.on(CLOUD_SESSION_INVALID_CHANNEL, wrappedListener);
+  return () => ipcRenderer.removeListener(CLOUD_SESSION_INVALID_CHANNEL, wrappedListener);
+}
+
 function onCloudSocketEvent(listener: (payload: unknown) => void): () => void {
   if (typeof listener !== 'function') {
     throw new Error('Cloud socket listener is invalid');
@@ -367,6 +379,7 @@ contextBridge.exposeInMainWorld(
       onMcpAppGuest,
       onSidecarRecovered,
       onOAuthSessionChanged,
+      onCloudSessionInvalidated,
       onCloudSocketEvent,
       onComputerUseActivity,
       onComputerUseInput,
