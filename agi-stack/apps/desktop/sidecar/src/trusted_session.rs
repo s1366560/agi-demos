@@ -39,7 +39,10 @@ pub(crate) struct TrustedSessionRecord {
     pub(crate) refresh_token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) access_expires_at: Option<String>,
-    #[serde(default = "default_persist_across_restart", skip_serializing_if = "is_persisted")]
+    #[serde(
+        default = "default_persist_across_restart",
+        skip_serializing_if = "is_persisted"
+    )]
     pub(crate) persist_across_restart: bool,
 }
 
