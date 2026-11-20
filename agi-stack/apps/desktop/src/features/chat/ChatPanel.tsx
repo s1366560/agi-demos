@@ -88,6 +88,8 @@ import { ComposerControls } from './ComposerControls';
 import { ChatOverflowMenu } from './ChatOverflowMenu';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { PermissionPresetControl } from './PermissionPresetControl';
+import { ComposerExecutionPlacement } from './ComposerExecutionPlacement';
+import type { ExecutionPlacementTarget } from './executionPlacementModel';
 import type { PermissionPreset } from './permissionPresetModel';
 import { PickerMenu } from './PickerMenu';
 import { useToast } from '../feedback/ToastCenter';
@@ -285,8 +287,16 @@ type ChatPanelProps = {
   selectedModelValue?: string | null;
   modelSwitching?: boolean;
   modelError?: string | null;
-  runtimeTargetLabel?: string;
-  runtimeTargetOptions?: string[];
+  executionPlacement?: {
+    target: ExecutionPlacementTarget;
+    localRootLabel: string | null;
+    readOnly: boolean;
+    pathUnavailable: boolean;
+    notice: string | null;
+    onTargetChange: (target: ExecutionPlacementTarget) => void;
+    onPickDirectory: () => void;
+    onManageEnvironment: () => void;
+  } | null;
   composeAheadFallbackAllowed?: boolean;
   canonicalRunStatus?: DesktopRunStatus | null;
   draftPlan?: SessionProjectionPlan | null;
@@ -329,7 +339,6 @@ type ChatPanelProps = {
   authorityNotice?: ChatAuthorityNotice;
   onAuthorityAction?: () => void;
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
-  onRuntimeTargetChange?: (value: string) => void;
   onModelChange?: (value: string) => Promise<void>;
   onModelReset?: () => Promise<void>;
   onOpenMCPAppResult?: (item: AgentTimelineItem) => void;
@@ -443,8 +452,7 @@ export const ChatPanel = memo(function ChatPanel({
   selectedModelValue,
   modelSwitching,
   modelError,
-  runtimeTargetLabel,
-  runtimeTargetOptions,
+  executionPlacement = null,
   composeAheadFallbackAllowed = false,
   canonicalRunStatus = null,
   draftPlan = null,
@@ -481,7 +489,6 @@ export const ChatPanel = memo(function ChatPanel({
   authorityNotice,
   onAuthorityAction,
   onWorkflowSelect,
-  onRuntimeTargetChange,
   onModelChange,
   onModelReset,
   onOpenMCPAppResult,
@@ -1825,8 +1832,11 @@ export const ChatPanel = memo(function ChatPanel({
             selectedModelValue={selectedModelValue}
             modelSwitching={modelSwitching}
             modelError={modelError}
-            runtimeTargetLabel={runtimeTargetLabel}
-            runtimeTargetOptions={runtimeTargetOptions}
+            executionPlacement={
+              executionPlacement
+                ? { ...executionPlacement, readOnly: executionPlacement.readOnly || runActive }
+                : null
+            }
             authorityNotice={authorityNotice}
             onAuthorityAction={onAuthorityAction}
             permissionPreset={permissionPreset}
@@ -1840,7 +1850,6 @@ export const ChatPanel = memo(function ChatPanel({
             onPromoteRunInput={onPromoteRunInput}
             onRemoveReference={onRemoveReference}
             onWorkflowSelect={onWorkflowSelect}
-            onRuntimeTargetChange={onRuntimeTargetChange}
             onModelChange={onModelChange}
             onModelReset={onModelReset}
             onOpenCommands={onOpenCommands}
@@ -1950,8 +1959,7 @@ type ChatComposerProps = {
   selectedModelValue?: string | null;
   modelSwitching?: boolean;
   modelError?: string | null;
-  runtimeTargetLabel?: string;
-  runtimeTargetOptions?: string[];
+  executionPlacement?: ChatPanelProps['executionPlacement'];
   authorityNotice?: ChatAuthorityNotice;
   onAuthorityAction?: () => void;
   permissionPreset?: PermissionPreset;
@@ -1963,7 +1971,6 @@ type ChatComposerProps = {
   onPromoteRunInput: (input: DesktopRunInput) => void;
   onRemoveReference: (reference: CodeRangeReference) => void;
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
-  onRuntimeTargetChange?: (value: string) => void;
   onModelChange?: (value: string) => Promise<void>;
   onModelReset?: () => Promise<void>;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
@@ -2013,8 +2020,7 @@ function ChatComposer({
   selectedModelValue,
   modelSwitching,
   modelError,
-  runtimeTargetLabel,
-  runtimeTargetOptions,
+  executionPlacement = null,
   authorityNotice,
   onAuthorityAction,
   permissionPreset,
@@ -2026,7 +2032,6 @@ function ChatComposer({
   onPromoteRunInput,
   onRemoveReference,
   onWorkflowSelect,
-  onRuntimeTargetChange,
   onModelChange,
   onModelReset,
   onOpenCommands,
@@ -2738,6 +2743,19 @@ function ChatComposer({
           )}
         />
       ) : null}
+      {executionPlacement ? (
+        <ComposerExecutionPlacement
+          variant={composerVariant}
+          target={executionPlacement.target}
+          localRootLabel={executionPlacement.localRootLabel}
+          readOnly={executionPlacement.readOnly}
+          pathUnavailable={executionPlacement.pathUnavailable}
+          notice={executionPlacement.notice}
+          onTargetChange={executionPlacement.onTargetChange}
+          onPickDirectory={executionPlacement.onPickDirectory}
+          onManageEnvironment={executionPlacement.onManageEnvironment}
+        />
+      ) : null}
       <div
         className={`session-composer-editor${isFileDragging ? ' is-file-dragging' : ''}`}
         data-file-drop-target
@@ -2934,9 +2952,9 @@ function ChatComposer({
               </div>
             ) : null}
             {composerPresentation.showRuntimeControls &&
-            runtimeTargetLabel &&
-            runtimeTargetOptions?.length &&
-            onRuntimeTargetChange ? (
+            modelLabel &&
+            modelOptions?.length &&
+            onModelChange ? (
               <ComposerControls
                 disabledHint={disabledReason}
                 modelLabel={modelLabel}
@@ -2944,11 +2962,8 @@ function ChatComposer({
                 modelValue={selectedModelValue}
                 modelPending={modelSwitching}
                 modelError={modelError}
-                runtimeTargetLabel={runtimeTargetLabel}
-                runtimeTargetOptions={runtimeTargetOptions}
                 onModelChange={onModelChange}
                 onModelReset={onModelReset}
-                onRuntimeTargetChange={onRuntimeTargetChange}
               />
             ) : null}
             {composerPresentation.showRuntimeStatus ? (

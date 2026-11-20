@@ -269,8 +269,6 @@ function ComposeAheadQa() {
               activeWorkflowTarget="plan"
               modelLabel="gpt-5.5"
               selectedModelValue="gpt-5.5"
-              runtimeTargetLabel="Local Rust Core"
-              runtimeTargetOptions={['Local Rust Core']}
               runInputDelivery={null}
               runInputDeliveryOptions={[]}
               runInputs={[]}
@@ -289,7 +287,6 @@ function ComposeAheadQa() {
               onRespondToHitl={async () => undefined}
               respondableHitlRequestIds={[]}
               onWorkflowSelect={() => undefined}
-              onRuntimeTargetChange={() => undefined}
               onOpenCommands={() => undefined}
             />
           </div>

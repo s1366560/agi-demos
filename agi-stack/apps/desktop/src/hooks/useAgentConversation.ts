@@ -12,6 +12,7 @@ import type { DesktopConversationMessagingOperationsV2 } from '../plugins/deskto
 import {
   type PermissionPreset,
 } from '../features/chat/permissionPresetModel';
+import type { ExecutionSendDecision } from '../features/chat/executionPlacementModel';
 import type { AgentTaskSignal } from '../features/chat/agentTaskSignalModel';
 import {
   type NewTaskResumeDraft,
@@ -58,6 +59,7 @@ export type AgentConversationParams = {
     canResume: boolean;
   } | null;
   permissionPreset: PermissionPreset;
+  resolveExecutionSend?: (kind?: 'session' | 'new_task') => ExecutionSendDecision;
   runInputReferences: CodeRangeReference[];
   runInputDelivery: RunInputDelivery | null;
   runInputDeliveryOptions: RunInputDelivery[];
