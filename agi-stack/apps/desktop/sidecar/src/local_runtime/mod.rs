@@ -406,9 +406,7 @@ impl LocalRuntimeService {
     }
 
     pub(crate) fn purge_legacy_local_login_residue(&self) -> Result<bool, String> {
-        self.state
-            .session_store
-            .purge_legacy_local_login_residue()
+        self.state.session_store.purge_legacy_local_login_residue()
     }
 
     /// Dev/diagnostic hook: forward a raw JSON-RPC request to the connected
@@ -13145,7 +13143,10 @@ mod tests {
     #[tokio::test]
     async fn local_login_routes_are_not_registered() {
         let app = local_router(test_state_without_session("launch-secret"));
-        for uri in ["/api/v1/auth/local-session", "/api/v1/auth/local-session/resume"] {
+        for uri in [
+            "/api/v1/auth/local-session",
+            "/api/v1/auth/local-session/resume",
+        ] {
             let response = app
                 .clone()
                 .oneshot(
