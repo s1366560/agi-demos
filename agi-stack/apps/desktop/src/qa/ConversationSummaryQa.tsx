@@ -244,8 +244,6 @@ function ConversationSummaryQa() {
               activeWorkflowTarget="plan"
               modelLabel="gpt-5.5"
               selectedModelValue="gpt-5.5"
-              runtimeTargetLabel="Cloud runtime"
-              runtimeTargetOptions={['Cloud runtime']}
               runInputDelivery={null}
               runInputDeliveryOptions={[]}
               runInputs={[]}
@@ -264,7 +262,6 @@ function ConversationSummaryQa() {
               onRespondToHitl={async () => undefined}
               respondableHitlRequestIds={[]}
               onWorkflowSelect={() => undefined}
-              onRuntimeTargetChange={() => undefined}
               onOpenCommands={() => undefined}
             />
           </div>

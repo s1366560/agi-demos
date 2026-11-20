@@ -13,6 +13,8 @@ import type {
   WorkspaceSummary,
 } from '../../types';
 import type { WorkspaceRuntimeModelOption } from '../settings/workspaceRuntimeProviderModel';
+import { ComposerExecutionPlacement } from '../chat/ComposerExecutionPlacement';
+import type { ExecutionPlacementTarget } from '../chat/executionPlacementModel';
 import { ComposerPlusMenu } from '../chat/ComposerPlusMenu';
 import { appendComposerContextItem } from '../chat/chatComposerModel';
 import type { ComposerCatalogClient } from '../chat/composerCatalogModel';
@@ -52,6 +54,16 @@ type NewThreadComposerProps = {
   onCreate: (input: NewThreadComposerInput) => void;
   onOpenThread: (conversation: AgentConversation) => void;
   onManageModels: () => void;
+  executionPlacement?: {
+    target: ExecutionPlacementTarget;
+    localRootLabel: string | null;
+    readOnly: boolean;
+    pathUnavailable: boolean;
+    notice: string | null;
+    onTargetChange: (target: ExecutionPlacementTarget) => void;
+    onPickDirectory: () => void;
+    onManageEnvironment: () => void;
+  } | null;
 };
 
 export function NewThreadComposer({
@@ -73,6 +85,7 @@ export function NewThreadComposer({
   onWorkspaceChange,
   onCreate,
   onManageModels,
+  executionPlacement = null,
 }: NewThreadComposerProps) {
   const { t } = useI18n();
   const shortcutAuthority = useDesktopRendererAuthorityV2();
@@ -219,6 +232,19 @@ export function NewThreadComposer({
         </header>
 
         <section className="new-thread-composer">
+          {executionPlacement ? (
+            <ComposerExecutionPlacement
+              variant="workspace"
+              target={executionPlacement.target}
+              localRootLabel={executionPlacement.localRootLabel}
+              readOnly={executionPlacement.readOnly || creating}
+              pathUnavailable={executionPlacement.pathUnavailable}
+              notice={executionPlacement.notice}
+              onTargetChange={executionPlacement.onTargetChange}
+              onPickDirectory={executionPlacement.onPickDirectory}
+              onManageEnvironment={executionPlacement.onManageEnvironment}
+            />
+          ) : null}
           {contextItems.length ? (
             <div className="composer-context-chips" aria-label={t('composer.addedContext')}>
               {contextItems.map((item) => (

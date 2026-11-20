@@ -645,14 +645,14 @@ import {
   runControlLabels,
   SESSION_RUN_ACTION_LABEL_KEY,
   runtimeHealthLabels,
-  runtimeTargetComposerOptions,
-  runtimeTargetLabels,
   titlebarRunLabelFromStatus,
   titlebarRunStateFromStatus,
   type RunControlState,
   type RuntimeHealthState,
-  type RuntimeTarget,
 } from './features/runtime/runStatusModel';
+import { executionPlacementNoticeText } from './features/chat/ComposerExecutionPlacement';
+import { placementNoticeCode } from './features/chat/executionPlacementModel';
+import { useExecutionPlacement } from './features/chat/useExecutionPlacement';
 import { useDesktopAuth } from './hooks/useDesktopAuth';
 import { useAgentConversation } from './hooks/useAgentConversation';
 
@@ -776,7 +776,6 @@ export function App() {
   const [selectedSidebarRunId, setSelectedSidebarRunId] = useState('');
   const [runStateById, setRunStateById] = useState<Record<string, RunControlState>>({});
   const [runControlState, setRunControlState] = useState<RunControlState>('running');
-  const [runtimeTarget, setRuntimeTarget] = useState<RuntimeTarget>('local');
   const [runLiveMode, setRunLiveMode] = useState(true);
   const [myWorkRefreshing, setMyWorkRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -6688,6 +6687,16 @@ export function App() {
       : 'browser' });
   };
 
+  const executionPlacementController = useExecutionPlacement({
+    userId: auth.user?.user_id ?? '',
+    projectId: config.projectId,
+    conversationId: selectedConversation?.id ?? null,
+    runs: sessionProjection?.runHistory ?? [],
+    active:
+      currentArtifactRun?.status === 'queued' || currentArtifactRun?.status === 'running',
+    nativeDesktop: runsInNativeDesktop,
+  });
+
   const {
     activateNewTaskSession,
     changeNewThreadWorkspace,
@@ -6721,6 +6730,12 @@ export function App() {
     sessionRunInputOperationsV2: desktopSessionRunInputOperationsV2,
     pendingNewTaskAgentTurnsRef,
     permissionPreset,
+    resolveExecutionSend: (kind) =>
+      executionPlacementController.resolveSend(kind, {
+        permissionPreset:
+          kind === 'session' && selectedConversation ? permissionPreset : null,
+        permissionPending: approvalSync.pending,
+      }),
     resetConversationTimeline,
     runInputDelivery,
     runInputDeliveryOptions,
@@ -7176,10 +7191,6 @@ export function App() {
     selectedConversation,
   ]);
 
-  const handleChatRuntimeTargetChange = useCallback((value: string) => {
-    setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local');
-  }, []);
-
   const showShortcutsDefinition = shortcutById('show-shortcuts');
   const showShortcutsChord = showShortcutsDefinition
     ? shortcutChordFor(
@@ -7407,8 +7418,23 @@ export function App() {
       selectedModelValue: chatRuntimeModelSelection.selectedValue,
       modelSwitching: chatRuntimeModelSwitching,
       modelError: chatRuntimeModelError,
-      runtimeTargetLabel: runtimeTargetLabels[runtimeTarget],
-      runtimeTargetOptions: runtimeTargetComposerOptions,
+      executionPlacement: {
+        target: executionPlacementController.placement.target,
+        localRootLabel: executionPlacementController.placement.localRootLabel,
+        readOnly: executionPlacementController.placement.readOnly,
+        pathUnavailable: executionPlacementController.placement.pathUnavailable,
+        notice: executionPlacementNoticeText(
+          t,
+          placementNoticeCode({
+            placement: executionPlacementController.placement,
+            noticeCode: executionPlacementController.noticeCode,
+          }),
+          executionPlacementController.noticeDetail,
+        ),
+        onTargetChange: executionPlacementController.selectTarget,
+        onPickDirectory: () => void executionPlacementController.pickDirectory(),
+        onManageEnvironment: () => openSettingsEntry('runtime_connection'),
+      },
       composeAheadFallbackAllowed: false,
       canonicalRunStatus: currentArtifactRun?.status ?? null,
       draftPlan:
@@ -7470,7 +7496,6 @@ export function App() {
         scopedConversation && chatRuntimeModelSelection.canReset
           ? resetChatRuntimeModel
           : undefined,
-      onRuntimeTargetChange: handleChatRuntimeTargetChange,
       onOpenMCPAppResult: openMCPAppResult,
       onOpenCommands: openCommandPalette,
       runCompletionSummary: selectedConversation ? runCompletionSummary : null,
@@ -7741,6 +7766,23 @@ export function App() {
           onManageModels: () => {
             setSettingsInitialSection('models');
             setSettingsWindowOpen(true);
+          },
+          executionPlacement: {
+            target: executionPlacementController.newTaskPlacement.target,
+            localRootLabel: executionPlacementController.newTaskPlacement.localRootLabel,
+            readOnly: executionPlacementController.newTaskPlacement.readOnly,
+            pathUnavailable: executionPlacementController.newTaskPlacement.pathUnavailable,
+            notice: executionPlacementNoticeText(
+              t,
+              placementNoticeCode({
+                placement: executionPlacementController.newTaskPlacement,
+                noticeCode: executionPlacementController.noticeCode,
+              }),
+              executionPlacementController.noticeDetail,
+            ),
+            onTargetChange: (target) => executionPlacementController.selectTarget(target, 'new_task'),
+            onPickDirectory: () => void executionPlacementController.pickDirectory('new_task'),
+            onManageEnvironment: () => openSettingsEntry('runtime_connection'),
           },
         },
       },

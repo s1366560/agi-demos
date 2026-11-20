@@ -1106,6 +1106,25 @@ async function executeDesktopCommand(
       return process.platform === 'darwin'
         ? systemPreferences.askForMediaAccess('microphone')
         : true;
+    case 'choose_workspace_directory': {
+      void authorizedCloudRequestOwner(event);
+      const ownerWindow = mainWindow;
+      if (!ownerWindow || ownerWindow.isDestroyed()) {
+        throw new Error('workspace directory picker is unavailable');
+      }
+      const result = await dialog.showOpenDialog(ownerWindow, {
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Choose local workspace directory',
+      });
+      if (result.canceled || result.filePaths.length !== 1) {
+        return { status: 'cancelled' };
+      }
+      const selected = result.filePaths[0];
+      if (!selected || !isAbsolute(selected)) {
+        throw new Error('workspace directory must be absolute');
+      }
+      return { status: 'selected', path: selected };
+    }
     case 'focus_main_window':
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore();

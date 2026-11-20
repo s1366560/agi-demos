@@ -85,6 +85,8 @@ import {
   downloadConversationPdf,
 } from '../../utils/exportConversation';
 import { ExecutionTargetBadge } from '../execution-target/ExecutionTargetBadge';
+import { WebComposerExecutionPlacement } from '../execution-target/WebComposerExecutionPlacement';
+import { webComposerPlacement } from '../execution-target/webExecutionPlacement';
 import { PluginSlotOutlet } from '../plugins/PluginSlotOutlet';
 import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 
@@ -690,6 +692,21 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       newConversationNavigationSuffix,
     ]);
 
+    const composerPlacement = useMemo(
+      () =>
+        webComposerPlacement(
+          runInputAuthority.activeRun ??
+            (currentConversation?.execution_target === 'local'
+              ? {
+                  status: 'completed',
+                  execution_target: 'local' as const,
+                  local_root_label: currentConversation.local_root_label ?? null,
+                }
+              : null)
+        ),
+      [currentConversation, runInputAuthority.activeRun]
+    );
+
     const handleSend = useCallback(
       async (
         content: string,
@@ -700,6 +717,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         mentions?: string[]
       ) => {
         if (!projectId) return;
+        if (composerPlacement.readOnly) {
+          void message.error(
+            t('agent.executionPlacement.webLocalReadonly', {
+              defaultValue: 'This session ran on a computer. The web composer can only view it.',
+            })
+          );
+          return;
+        }
         if (
           isExternalAcpAgent &&
           (fileMetadata?.length ||
@@ -748,6 +773,7 @@ ${content}`;
         isExternalAcpAgent,
         message,
         t,
+        composerPlacement.readOnly,
       ]
     );
 
@@ -1059,6 +1085,9 @@ ${content}`;
               <GripHorizontal size={12} />
             </div>
           </div>
+          <div className="px-4 pt-3">
+            <WebComposerExecutionPlacement placement={composerPlacement} />
+          </div>
           <InputBar
             ref={inputBarRef}
             onSend={(...args) => {
@@ -1066,7 +1095,7 @@ ${content}`;
             }}
             onAbort={abortStream}
             isStreaming={isStreaming}
-            disabled={isLoadingHistory || isCreatingConversation}
+            disabled={isLoadingHistory || isCreatingConversation || composerPlacement.readOnly}
             projectId={projectId || undefined}
             conversationId={activeConversationId || undefined}
             onTogglePlanMode={() => {

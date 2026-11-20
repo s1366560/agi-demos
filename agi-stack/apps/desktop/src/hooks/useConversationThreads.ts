@@ -6,6 +6,7 @@ import {
 import {
   composerAgentExecutionContext,
 } from '../features/chat/chatComposerModel';
+import { executionPlacementMessageKey } from '../features/chat/executionPlacementModel';
 import {
   canonicalJsonSha256,
 } from '../features/session/canonicalJsonDigest';
@@ -276,6 +277,10 @@ export function useConversationThreads(params: AgentConversationParams) {
     input: NewTaskAgentTurnInput,
     delivery: { deferUntilNextConnection?: boolean } = {},
   ): Promise<NewTaskAgentTurnOutcome> => {
+    const placementDecision = params.resolveExecutionSend?.('new_task') ?? null;
+    if (placementDecision && !placementDecision.ok) {
+      throw new Error(t(executionPlacementMessageKey(placementDecision.code)));
+    }
     const acknowledgment = new Promise<NewTaskAgentTurnOutcome>(
       (resolve, reject) => {
         const timeoutId = window.setTimeout(() => {
@@ -310,8 +315,20 @@ export function useConversationThreads(params: AgentConversationParams) {
       mentions: input.mentions,
       fileMetadata: input.fileMetadata,
       appModelContext: input.appModelContext,
+      ...(placementDecision?.ok
+        ? {
+            executionTarget: placementDecision.wire.execution_target,
+            ...(placementDecision.permissionMode
+              ? { permissionMode: placementDecision.permissionMode }
+              : {}),
+          }
+        : {}),
     });
     const transport = newTaskAgentTurnTransport(input.config.mode, queued);
+    if (transport === 'local_http' && placementDecision?.ok) {
+      clearPendingAgentTurn();
+      throw new Error(t('task.liveConnectionRequired'));
+    }
     if (transport === 'socket') {
       return acknowledgment;
     }
@@ -332,6 +349,13 @@ export function useConversationThreads(params: AgentConversationParams) {
   };
 
   const createComposerThread = async (input: NewThreadComposerInput) => {
+    const placementDecision = params.resolveExecutionSend?.('new_task') ?? null;
+    if (placementDecision && !placementDecision.ok) {
+      const detail = t(executionPlacementMessageKey(placementDecision.code));
+      setNewThreadError(detail);
+      setError(detail);
+      return;
+    }
     const actorId = auth.user?.user_id.trim() ?? '';
     const workspaceId = input.workspaceId.trim();
     const title = input.prompt.split(/\r?\n/, 1)[0].trim().slice(0, 96).trimEnd();

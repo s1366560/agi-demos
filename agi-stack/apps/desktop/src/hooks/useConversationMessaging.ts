@@ -6,6 +6,7 @@ import {
   workspaceMessageRequiresDefaultAgentLaunch,
 } from '../features/chat/chatComposerModel';
 import { resolveSessionComposerDispatch } from '../features/session/sessionComposerDispatchModel';
+import { executionPlacementMessageKey } from '../features/chat/executionPlacementModel';
 import {
   AgentConversation,
   CodeRangeReference,
@@ -77,6 +78,11 @@ export function useConversationMessaging(params: AgentConversationParams) {
     referencesOverride = referencesOverride && structuredClone(referencesOverride);
     const content = rawContent.trim();
     if (!content) return;
+    const placementDecision = params.resolveExecutionSend?.('session') ?? null;
+    if (placementDecision && !placementDecision.ok) {
+      setError(t(executionPlacementMessageKey(placementDecision.code)));
+      return;
+    }
     // Review-panel comment sends carry their own deduplicated anchors; the
     // composer's selected references otherwise stay the default.
     const outgoingReferences = structuredClone(referencesOverride ?? runInputReferences);
@@ -293,6 +299,14 @@ export function useConversationMessaging(params: AgentConversationParams) {
             mentions: execution.mentions,
             fileMetadata: execution.fileMetadata,
             appModelContext: execution.appModelContext,
+            ...(placementDecision?.ok
+              ? {
+                  executionTarget: placementDecision.wire.execution_target,
+                  ...(placementDecision.permissionMode
+                    ? { permissionMode: placementDecision.permissionMode }
+                    : {}),
+                }
+              : {}),
           });
           setConversationTimeline((current) => {
             if (current.conversationId !== conversation.id) return current;
@@ -311,7 +325,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
               lastCursor: timelineCursorFromLast(items),
             };
           });
-          if (!queued && localRuntimeMode) {
+          if (!queued && localRuntimeMode && placementDecision?.ok !== true) {
             await client.runAgentMessage(conversation, execution.message, messageId, {
               ...execution,
             });
