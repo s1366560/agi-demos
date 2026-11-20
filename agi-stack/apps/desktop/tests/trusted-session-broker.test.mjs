@@ -146,7 +146,9 @@ test('renderer source does not expose Cloud vault load or save helpers', () => {
 });
 
 test('session restore waits for explicit platform plugin authority selection', () => {
-  const selection = appSource.indexOf('await selectPlatformPluginAuthorityV2(config.mode)');
+  const selection = appSource.indexOf(
+    "await selectPlatformPluginAuthorityV2(restoringCloud ? 'cloud' : config.mode)",
+  );
   const cloudRestore = appSource.indexOf(
     'await hydrateProjectedCloudSession(authAttemptRevision)',
   );

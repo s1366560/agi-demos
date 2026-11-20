@@ -5,7 +5,18 @@ type TrustedCloudSession = Readonly<{
   credential_kind: 'cloud_bearer';
   credential: string;
   expires_at: string | null;
+  refresh_token?: string;
+  access_expires_at?: string | null;
+  persist_across_restart?: boolean;
 }>;
+
+export type CloudSessionRefreshReason = 'proactive' | 'unauthorized';
+
+export type CloudSessionRefreshOutcome =
+  | Readonly<{ status: 'current' | 'refreshed'; record: TrustedCloudSession }>
+  | Readonly<{ status: 'invalid' | 'unavailable' | 'absent' }>;
+
+const ACCESS_REFRESH_WINDOW_MS = 60_000;
 
 type TrustedSessionSaveInput = Readonly<{ input: TrustedCloudSession }>;
 
@@ -62,6 +73,8 @@ type ParsedToken = Readonly<{
   credential: string;
   mustChangePassword: boolean;
   expiresAt: string | null;
+  refreshToken: string | null;
+  refreshExpiresAt: string | null;
 }>;
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -73,6 +86,9 @@ const LOGIN_RESPONSE_KEYS = new Set([
   'must_change_password',
   'session',
   'context',
+  'expires_at',
+  'refresh_token',
+  'refresh_expires_at',
 ]);
 const SESSION_KEYS = new Set(['session_id', 'auth_method', 'expires_at', 'trusted_device']);
 const DEVICE_CODE_KEYS = new Set([
@@ -83,7 +99,14 @@ const DEVICE_CODE_KEYS = new Set([
   'expires_in',
   'interval',
 ]);
-const DEVICE_TOKEN_KEYS = new Set(['access_token', 'token_type']);
+const DEVICE_TOKEN_KEYS = new Set([
+  'access_token',
+  'token_type',
+  'expires_at',
+  'refresh_token',
+  'refresh_expires_at',
+  'session',
+]);
 const FORCE_PASSWORD_KEYS = new Set(['success', 'message']);
 
 export class DesktopCloudAuthenticationAuthority {
@@ -93,6 +116,7 @@ export class DesktopCloudAuthenticationAuthority {
   #attemptRevision = 0;
   #passwordChangeCredential: string | null = null;
   #sessionMutation: Promise<unknown> = Promise.resolve();
+  #refreshFlight: Promise<CloudSessionRefreshOutcome> | null = null;
 
   constructor(dependencies: DesktopCloudAuthenticationDependencies) {
     this.#dependencies = dependencies;
@@ -284,7 +308,14 @@ export class DesktopCloudAuthenticationAuthority {
   async clearTransientSession(): Promise<boolean> {
     this.#retireAttempt();
     return this.#mutateSession(async () => {
-      if (this.#persistAcrossRestart) return false;
+      let stored: unknown = null;
+      try {
+        stored = await this.#dependencies.loadTrustedSession();
+      } catch {
+        stored = null;
+      }
+      const persisted = this.#persistAcrossRestart && sessionPersists(stored);
+      if (persisted) return false;
       try {
         await this.#dependencies.clearTrustedSession();
         return true;
@@ -292,6 +323,21 @@ export class DesktopCloudAuthenticationAuthority {
         return false;
       }
     });
+  }
+
+  rememberPersistence(trustedDevice: boolean): void {
+    this.#persistAcrossRestart = trustedDevice;
+  }
+
+  async refreshStoredSession(
+    reason: CloudSessionRefreshReason,
+  ): Promise<CloudSessionRefreshOutcome> {
+    if (this.#refreshFlight) return this.#refreshFlight;
+    const flight = this.#refreshStoredSession(reason).finally(() => {
+      if (this.#refreshFlight === flight) this.#refreshFlight = null;
+    });
+    this.#refreshFlight = flight;
+    return flight;
   }
 
   #retireAttempt(): number {
@@ -337,6 +383,7 @@ export class DesktopCloudAuthenticationAuthority {
   ): Promise<void> {
     await this.#mutateSession(async () => {
       this.#assertCurrent(revision);
+      const persistRefresh = trustedDevice && token.refreshToken !== null;
       await this.#dependencies.saveTrustedSession({
         input: Object.freeze({
           version: 1,
@@ -345,6 +392,13 @@ export class DesktopCloudAuthenticationAuthority {
           credential_kind: 'cloud_bearer',
           credential: token.credential,
           expires_at: token.expiresAt,
+          ...(persistRefresh
+            ? {
+                refresh_token: token.refreshToken,
+                access_expires_at: token.expiresAt,
+              }
+            : {}),
+          ...(trustedDevice ? {} : { persist_across_restart: false }),
         }),
       });
       if (revision !== this.#attemptRevision) {
@@ -372,6 +426,14 @@ export class DesktopCloudAuthenticationAuthority {
     ) {
       throw new Error('cloud_auth_session_invalid');
     }
+    const refreshToken = optionalSecret(value.refresh_token);
+    const accessExpiresAt = optionalTimestamp(value.access_expires_at);
+    if (refreshToken === undefined || accessExpiresAt === undefined) {
+      throw new Error('cloud_auth_session_invalid');
+    }
+    if (value.persist_across_restart !== undefined && typeof value.persist_across_restart !== 'boolean') {
+      throw new Error('cloud_auth_session_invalid');
+    }
     return Object.freeze({
       version: 1,
       api_base_url: apiBaseUrl,
@@ -379,7 +441,120 @@ export class DesktopCloudAuthenticationAuthority {
       credential_kind: 'cloud_bearer',
       credential: value.credential,
       expires_at: value.expires_at as string | null,
+      ...(refreshToken ? { refresh_token: refreshToken } : {}),
+      ...(accessExpiresAt ? { access_expires_at: accessExpiresAt } : {}),
+      ...(value.persist_across_restart === false ? { persist_across_restart: false } : {}),
     });
+  }
+
+  async #refreshStoredSession(
+    reason: CloudSessionRefreshReason,
+  ): Promise<CloudSessionRefreshOutcome> {
+    const revision = this.#attemptRevision;
+    const current = await this.#trustedSession().catch(() => null);
+    if (!current) return Object.freeze({ status: 'absent' });
+    const expired = accessExpiresSoon(current, this.#dependencies.now(), 0);
+    const due = accessExpiresSoon(current, this.#dependencies.now(), ACCESS_REFRESH_WINDOW_MS);
+    if (!current.refresh_token) {
+      if (reason === 'unauthorized' || expired) {
+        const retired = await this.#retireObservedSession(revision, current);
+        if (!retired) return this.#currentStoredSession();
+        return Object.freeze({ status: 'invalid' });
+      }
+      return Object.freeze({ status: 'current', record: current });
+    }
+    if (reason === 'proactive' && !due) {
+      return Object.freeze({ status: 'current', record: current });
+    }
+    let response: { status: number; body: unknown };
+    try {
+      response = await this.#requestJson(
+        current.api_base_url,
+        '/api/v1/auth/refresh',
+        {
+          method: 'POST',
+          body: JSON.stringify({ refresh_token: current.refresh_token }),
+        },
+        false,
+        true,
+      );
+    } catch {
+      return Object.freeze({ status: 'unavailable' });
+    }
+    if (response.status === 401) {
+      const retired = await this.#retireObservedSession(revision, current);
+      if (!retired) return this.#currentStoredSession();
+      return Object.freeze({ status: 'invalid' });
+    }
+    if (response.status < 200 || response.status >= 300) {
+      return Object.freeze({ status: 'unavailable' });
+    }
+    let token: ParsedToken;
+    try {
+      token = parseLoginToken(response.body);
+    } catch {
+      return Object.freeze({ status: 'unavailable' });
+    }
+    if (!token.refreshToken) return Object.freeze({ status: 'unavailable' });
+    const record = Object.freeze({
+      version: 1 as const,
+      api_base_url: current.api_base_url,
+      runtime_mode: 'cloud' as const,
+      credential_kind: 'cloud_bearer' as const,
+      credential: token.credential,
+      expires_at: token.expiresAt,
+      refresh_token: token.refreshToken,
+      access_expires_at: token.expiresAt,
+      ...(current.persist_across_restart === false
+        ? { persist_across_restart: false as const }
+        : {}),
+    });
+    let saved = false;
+    try {
+      saved = await this.#mutateSession(async () => {
+        if (revision !== this.#attemptRevision) return false;
+        const latest = await this.#trustedSession().catch(() => null);
+        if (!this.#sameObservedSession(latest, current)) return false;
+        await this.#dependencies.saveTrustedSession({ input: record });
+        this.#persistAcrossRestart = current.persist_across_restart !== false;
+        return true;
+      });
+    } catch {
+      return Object.freeze({ status: 'unavailable' });
+    }
+    if (!saved) return this.#currentStoredSession();
+    return Object.freeze({ status: 'refreshed', record });
+  }
+
+  async #currentStoredSession(): Promise<CloudSessionRefreshOutcome> {
+    const latest = await this.#trustedSession().catch(() => null);
+    if (!latest) return Object.freeze({ status: 'absent' });
+    return Object.freeze({ status: 'current', record: latest });
+  }
+
+  async #retireObservedSession(
+    revision: number,
+    observed: TrustedCloudSession,
+  ): Promise<boolean> {
+    return this.#mutateSession(async () => {
+      if (revision !== this.#attemptRevision) return false;
+      const latest = await this.#trustedSession().catch(() => null);
+      if (!this.#sameObservedSession(latest, observed)) return false;
+      await this.#dependencies.clearTrustedSession().catch(() => undefined);
+      return true;
+    });
+  }
+
+  #sameObservedSession(
+    latest: TrustedCloudSession | null,
+    observed: TrustedCloudSession,
+  ): boolean {
+    return (
+      latest !== null &&
+      latest.credential === observed.credential &&
+      latest.refresh_token === observed.refresh_token &&
+      latest.api_base_url === observed.api_base_url
+    );
   }
 
   async #requestJson(
@@ -392,6 +567,7 @@ export class DesktopCloudAuthenticationAuthority {
       authorization?: string;
     }>,
     allowExpectedDeviceStatus = false,
+    allowRefreshStatus = false,
   ): Promise<Readonly<{ status: number; body: unknown }>> {
     const headers = new Headers(init.headers ?? { Accept: 'application/json' });
     if (!headers.has('Accept')) headers.set('Accept', 'application/json');
@@ -403,8 +579,19 @@ export class DesktopCloudAuthenticationAuthority {
       redirect: 'manual',
       body: init.body,
     });
-    const body = await boundedJson(response);
-    if (!response.ok && !(allowExpectedDeviceStatus && [410, 428].includes(response.status))) {
+    let body: unknown = null;
+    try {
+      body = await boundedJson(response);
+    } catch (error) {
+      if (allowRefreshStatus && response.status === 401) {
+        return Object.freeze({ status: 401, body: null });
+      }
+      throw error;
+    }
+    const expectedDeviceStatus =
+      allowExpectedDeviceStatus && [410, 428].includes(response.status);
+    const refreshStatus = allowRefreshStatus && response.status >= 400;
+    if (!response.ok && !expectedDeviceStatus && !refreshStatus) {
       throw requestFailed();
     }
     return Object.freeze({ status: response.status, body });
@@ -422,21 +609,43 @@ function parseLoginToken(value: unknown): ParsedToken {
       throw responseInvalid();
     }
     expiresAt = value.session.expires_at as string | null;
+  } else if (value.expires_at !== undefined) {
+    if (value.expires_at !== null && typeof value.expires_at !== 'string') throw responseInvalid();
+    expiresAt = value.expires_at as string | null;
   }
+  const refreshToken = optionalSecret(value.refresh_token);
+  const refreshExpiresAt = optionalTimestamp(value.refresh_expires_at);
+  if (refreshToken === undefined || refreshExpiresAt === undefined) throw responseInvalid();
   return Object.freeze({
     credential: parsed.credential,
     mustChangePassword: value.must_change_password,
     expiresAt,
+    refreshToken,
+    refreshExpiresAt,
   });
 }
 
 function parseDeviceToken(value: unknown): ParsedToken {
-  if (!isExactRecord(value, DEVICE_TOKEN_KEYS)) throw responseInvalid();
+  if (!isAllowedRecord(value, DEVICE_TOKEN_KEYS)) throw responseInvalid();
   const parsed = parseBearer(value);
+  const refreshToken = optionalSecret(value.refresh_token);
+  const refreshExpiresAt = optionalTimestamp(value.refresh_expires_at);
+  let expiresAt = optionalTimestamp(value.expires_at);
+  if (refreshToken === undefined || refreshExpiresAt === undefined || expiresAt === undefined) {
+    throw responseInvalid();
+  }
+  if (value.session !== undefined) {
+    if (!isAllowedRecord(value.session, SESSION_KEYS)) throw responseInvalid();
+    const sessionExpiry = optionalTimestamp(value.session.expires_at);
+    if (sessionExpiry === undefined) throw responseInvalid();
+    expiresAt = expiresAt ?? sessionExpiry;
+  }
   return Object.freeze({
     credential: parsed.credential,
     mustChangePassword: false,
-    expiresAt: null,
+    expiresAt,
+    refreshToken,
+    refreshExpiresAt,
   });
 }
 
@@ -585,6 +794,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function contractInvalid(): Error {
   return new Error('cloud_auth_contract_invalid');
+}
+
+function optionalSecret(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  return boundedString(value, 4096, false) ?? undefined;
+}
+
+function optionalTimestamp(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !value.trim() || Number.isNaN(Date.parse(value))) return undefined;
+  return value;
+}
+
+function sessionPersists(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return true;
+  return (value as { persist_across_restart?: unknown }).persist_across_restart !== false;
+}
+
+function accessExpiresSoon(session: TrustedCloudSession, nowMs: number, windowMs: number): boolean {
+  const raw = session.access_expires_at ?? session.expires_at;
+  if (!raw) return false;
+  const expiresAt = Date.parse(raw);
+  if (!Number.isFinite(expiresAt)) return false;
+  return expiresAt - nowMs <= windowMs;
 }
 
 function responseInvalid(): Error {

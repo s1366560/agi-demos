@@ -14,7 +14,7 @@ const loginSource = readFileSync(
 
 test('Cloud LoginScreen renders main-owned OAuth providers without authorization metadata', () => {
   assert.match(loginSource, /nativeOAuthProviders\.map/u);
-  assert.match(loginSource, /onNativeOAuth\(provider\.id\)/u);
+  assert.match(loginSource, /onNativeOAuth\(provider\.id, trustedDevice\)/u);
   assert.doesNotMatch(loginSource, /authorizationUrl.*nativeOAuth|nativeOAuth.*authorizationUrl/u);
 });
 

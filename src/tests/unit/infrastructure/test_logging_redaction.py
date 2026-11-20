@@ -46,10 +46,12 @@ def test_redacts_formatted_log_record_args() -> None:
 
 def test_redacts_memstack_api_keys() -> None:
     key = "ms_sk_" + ("a" * 64)
+    refresh = "ms_rt_" + ("b" * 64)
 
-    redacted = redact_sensitive_log_text(f"Authorization failed for {key}")
+    redacted = redact_sensitive_log_text(f"Authorization failed for {key} refresh {refresh}")
 
     assert key not in redacted
+    assert refresh not in redacted
     assert "<redacted>" in redacted
 
 

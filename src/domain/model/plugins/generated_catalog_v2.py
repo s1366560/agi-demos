@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:7ca5e83b1900c85066c267e9cd78f767efea6b73da9e1810f968aaea9e5853'
-    '37","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:2e39365f88e8f5a6a3498d55c1b1bb1bb278703ab0902ce8373a18c485eb03'
+    'c9","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -2979,8 +2979,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4","entrypoint":"src.infrastructure.plugins'
     '.v2.builtin_audit_http_routes:builtin_audit_http_routes_definition_v2","module_ref":"bui'
     'ltin://memstack/http/audit-routes","plugin_id":"memstack-runtime-kernel","plugin_version'
-    '":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:9d213b4601df62a178b29747d3a29'
-    '621a67d5f5b008776febb9fca0fed2a75bd","artifact_source":"repo+python://src/infrastructure'
+    '":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:eb45f2ff597ad80c4ca4720ae24e8'
+    '210847d24077d93c58fa5e0e2d1ec77f1a4","artifact_source":"repo+python://src/infrastructure'
     '/plugins/v2/builtin_auth_http_routes.py","contract":{"config_schema":{"$schema":"https:/'
     '/json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{},"typ'
     'e":"object"},"events":{"emits":[],"handles":[]},"services":{"provides":[],"requires":[{"'
@@ -4788,7 +4788,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:7ca5e83b1900c85066c267e9cd78f767efea6b73da9e1810f968aaea9e585337"
+    "sha256:2e39365f88e8f5a6a3498d55c1b1bb1bb278703ab0902ce8373a18c485eb03c9"
 )
 # fmt: on
 

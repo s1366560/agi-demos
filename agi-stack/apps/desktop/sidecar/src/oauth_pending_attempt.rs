@@ -23,6 +23,12 @@ pub(crate) struct OAuthPendingAttemptRecord {
     pub(crate) resume_route: String,
     pub(crate) state: String,
     pub(crate) expires_at: u64,
+    #[serde(default = "default_trusted_device")]
+    pub(crate) trusted_device: bool,
+}
+
+fn default_trusted_device() -> bool {
+    true
 }
 
 impl fmt::Debug for OAuthPendingAttemptRecord {
@@ -214,6 +220,7 @@ mod tests {
             resume_route: "/tenant/tenant-1/overview".to_string(),
             state: "a234567890123456789012345678901234567890123".to_string(),
             expires_at: 1_700_000_600_000,
+            trusted_device: true,
         }
     }
 

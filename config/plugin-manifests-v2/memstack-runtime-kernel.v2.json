@@ -8078,7 +8078,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:9d213b4601df62a178b29747d3a29621a67d5f5b008776febb9fca0fed2a75bd",
+        "digest": "sha256:eb45f2ff597ad80c4ca4720ae24e8210847d24077d93c58fa5e0e2d1ec77f1a4",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_auth_http_routes.py"
       }
     },

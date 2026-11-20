@@ -58,7 +58,7 @@ fn strangled_prefixes_route_to_rust() {
     assert!(is_strangled("/api/v1/episodes/"));
     assert!(is_strangled("/api/v1/recall/short"));
     // P2 login vertical.
-    assert!(is_strangled("/api/v1/auth/token"));
+    assert!(!is_strangled("/api/v1/auth/token"));
     assert!(!is_strangled("/api/v1/auth/oauth/google/callback"));
     assert!(is_strangled_request(&get, "/api/v1/tenants"));
     assert!(is_strangled_request(&get, "/api/v1/tenants/"));
@@ -451,7 +451,6 @@ fn strangled_prefixes_route_to_rust() {
         "/api/v1/memories",
         "/api/v1/episodes/",
         "/api/v1/recall/short",
-        "/api/v1/auth/token",
     ] {
         assert_eq!(upstream_for(p, &ups()), "http://rust:8088");
     }
@@ -471,7 +470,13 @@ fn everything_else_routes_to_python() {
     let post = Method::POST;
     for p in [
         "/api/v1/projects",
-        // Other `/auth/*` siblings remain in Python (surgical strangling).
+        // Login, device-code, refresh, and the other `/auth/*` siblings stay
+        // on the Python session authority.
+        "/api/v1/auth/token",
+        "/api/v1/auth/refresh",
+        "/api/v1/auth/signout",
+        "/api/v1/auth/device/code",
+        "/api/v1/auth/device/token",
         "/api/v1/auth/force-change-password",
         "/api/v1/auth/keys",
         "/api/v1/auth/tokens", // not a segment boundary of `/auth/token`

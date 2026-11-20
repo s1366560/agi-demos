@@ -156,6 +156,10 @@ class TestOAuthLoginRoutes:
         result = MagicMock()
         result.scalar_one_or_none.return_value = user
         db.execute.return_value = result
+        db.get.return_value = SimpleNamespace(
+            user_id=user.id,
+            expires_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
+        )
 
         with (
             patch(
@@ -173,8 +177,11 @@ class TestOAuthLoginRoutes:
             )
 
         assert response.status_code == 200
-        assert response.json()["access_token"] == "ms_sk_oauth"
-        assert response.json()["redirect_to"] == "/tenant/t-1/overview"
+        body = response.json()
+        assert body["access_token"] == "ms_sk_oauth"
+        assert body["refresh_token"].startswith("ms_rt_")
+        assert body["expires_at"]
+        assert body["redirect_to"] == "/tenant/t-1/overview"
         assert response.json()["user"]["user_id"] == "user-1"
         assert user.profile["oauth_identities"]["google"]["subject"] == "subject-1"
         assert "provider-code" not in repr(user.profile)
