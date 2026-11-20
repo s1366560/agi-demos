@@ -279,6 +279,7 @@ async def test_collection_service_proxies_all_scoped_query_shapes() -> None:
         status=ConversationStatus.ACTIVE,
         limit=10,
         offset=2,
+        execution_target=None,
     )
     repository.list_workspace.assert_awaited_once_with(
         project_id="project-a",
@@ -287,6 +288,7 @@ async def test_collection_service_proxies_all_scoped_query_shapes() -> None:
         status=None,
         limit=5,
         offset=1,
+        execution_target=None,
     )
     repository.list_unbound.assert_awaited_once_with(
         project_id="project-a",
@@ -295,6 +297,7 @@ async def test_collection_service_proxies_all_scoped_query_shapes() -> None:
         status=None,
         limit=5,
         offset=1,
+        execution_target=None,
     )
 
 

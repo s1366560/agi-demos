@@ -98,7 +98,7 @@ class SteerMessageHandler(WebSocketMessageHandler):
         )
         if controls is None:
             return
-        client_message_id, _permission_mode = controls
+        client_message_id, _permission_mode, _execution_target = controls
         request = await self._parse_request(
             context,
             message,

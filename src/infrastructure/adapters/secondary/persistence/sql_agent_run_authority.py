@@ -357,7 +357,9 @@ async def latest_execution_placements(
         )
         .subquery()
     )
-    result = await db.execute(select(ranked).where(ranked.c.placement_rank == 1))
+    result = await db.execute(
+        refresh_select_statement(select(ranked).where(ranked.c.placement_rank == 1))
+    )
     placements: dict[str, RunExecutionPlacement] = {}
     for row in result.all():
         placements[str(row.conversation_id)] = RunExecutionPlacement(

@@ -156,6 +156,25 @@ async def _validated_client_message_controls(
     return client_message_id, permission_mode, execution_target
 
 
+async def _stream_execution_index(
+    db: object,
+    *,
+    conversation_id: str,
+) -> ConversationExecutionIndex:
+    """Load run placements when the caller holds a database session.
+
+    Live envelopes still stream when a unit fixture passes a sentinel without
+    ``execute``. Unknown runs stay the cloud default.
+    """
+
+    if not callable(getattr(db, "execute", None)):
+        return ConversationExecutionIndex({})
+    return await load_conversation_execution_index(
+        cast(Any, db),
+        conversation_id=conversation_id,
+    )
+
+
 class _ExternalACPSessionResult(Protocol):
     session_id: str
 
@@ -1839,7 +1858,7 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
                 execution_message_id=execution_message_id,
             ),
         )
-        execution_index = await load_conversation_execution_index(
+        execution_index = await _stream_execution_index(
             context.db,
             conversation_id=conversation_id,
         )
@@ -1928,9 +1947,9 @@ async def stream_hitl_response_to_websocket(
     event_count = 0
     execution_db = getattr(agent_service, "_db_session", None)
     execution_index = (
-        await load_conversation_execution_index(execution_db, conversation_id=conversation_id)
+        await _stream_execution_index(execution_db, conversation_id=conversation_id)
         if execution_db is not None
-        else None
+        else ConversationExecutionIndex({})
     )
 
     try:
