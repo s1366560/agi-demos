@@ -651,7 +651,7 @@ test('command palette exposes Browser Integration as a native settings entry', (
 test('connection recovery cannot bypass governed model or workspace settings', () => {
   assert.match(runtimeConfigSource, /update\('apiBaseUrl'/);
   assert.match(runtimeConfigSource, /update\('apiKey'/);
-  assert.match(runtimeConfigSource, /update\('mode'/);
+  assert.doesNotMatch(runtimeConfigSource, /update\('mode'/);
   assert.match(runtimeConfigSource, /onClick=\{onRefresh\}/);
   assert.doesNotMatch(
     runtimeConfigSource,
@@ -662,7 +662,7 @@ test('connection recovery cannot bypass governed model or workspace settings', (
     /runtime\.(llmProvider|llmBaseUrl|llmModel|llmApiKey|workspaceRoot|tenantId|projectId|workspaceId)/,
   );
   assert.match(runtimeConfigSource, /t\(`runtime\.status\.\$\{connection\}`\)/);
-  assert.match(runtimeConfigSource, /aria-label=\{t\('runtime\.connectionMode'\)\}/);
+  assert.doesNotMatch(runtimeConfigSource, /aria-label=\{t\('runtime\.connectionMode'\)\}/);
   assert.equal((runtimeConfigSource.match(/role="status"/g) ?? []).length, 2);
   assert.equal((runtimeConfigSource.match(/aria-live="polite"/g) ?? []).length, 2);
   assert.doesNotMatch(

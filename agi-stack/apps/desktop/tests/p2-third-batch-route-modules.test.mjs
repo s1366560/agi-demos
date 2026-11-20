@@ -49,7 +49,7 @@ const cloudConfig = Object.freeze({
 const localConfig = Object.freeze({
   ...cloudConfig,
   apiBaseUrl: 'http://127.0.0.1:43117',
-  apiKey: 'local-session',
+  apiKey: 'desktop-test-session',
   localApiToken: 'private-launch',
   mode: 'local',
 });
@@ -155,7 +155,7 @@ test('Evolution client uses Cloud trusted-session actions and Local sidecar reas
     restoreLocal();
   }
   assert.equal(new URL(localRequests[0].url).pathname, '/api/v1/skills/evolution/overview');
-  assertAuthorityHeaders(localRequests, 'local-session', 'private-launch');
+  assertAuthorityHeaders(localRequests, 'desktop-test-session', 'private-launch');
 });
 
 test('Channels client exposes project CRUD/test authority and fails closed in Local mode', async () => {
@@ -219,7 +219,7 @@ test('Channels client exposes project CRUD/test authority and fails closed in Lo
   } finally {
     restoreLocal();
   }
-  assertAuthorityHeaders(localRequests, 'local-session', 'private-launch');
+  assertAuthorityHeaders(localRequests, 'desktop-test-session', 'private-launch');
 });
 
 test('Templates client owns list, categories, detail, install, and seed contracts', async () => {
@@ -284,7 +284,7 @@ test('Templates client owns list, categories, detail, install, and seed contract
   }
   assert.equal(localRequests.length, 1);
   assert.equal(new URL(localRequests[0].url).pathname, '/api/v1/subagents/templates/list');
-  assertAuthorityHeaders(localRequests, 'local-session', 'private-launch');
+  assertAuthorityHeaders(localRequests, 'desktop-test-session', 'private-launch');
 });
 
 test('Profile client is Cloud editable and Local observed read-only with stable mutation reason', async () => {
@@ -352,7 +352,7 @@ test('Profile client is Cloud editable and Local observed read-only with stable 
     restoreLocal();
   }
   assert.equal(localRequests.length, 1);
-  assertAuthorityHeaders(localRequests, 'local-session', 'private-launch');
+  assertAuthorityHeaders(localRequests, 'desktop-test-session', 'private-launch');
 });
 
 test('third-batch controllers reject stale scopes and preserve stable reason codes', async () => {

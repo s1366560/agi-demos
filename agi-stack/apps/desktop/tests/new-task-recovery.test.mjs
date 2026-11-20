@@ -396,10 +396,9 @@ test('runtime identity changes clear the trusted authority owned by the previous
   assert.match(source, /runtimeTransportIdentityChanged\(/);
   assert.match(source, /transportIdentityChanged[\s\S]*apiKey: ''[\s\S]*localApiToken: ''/);
   assert.match(source, /setAuth\(emptyAuthState\)/);
-  assert.match(source, /previousConfig\.mode === 'local'/);
-  assert.match(source, /clearLocalTrustedSession/);
+  assert.doesNotMatch(source, /tenantId: transportSafeConfig\.tenantId\.trim\(\) \|\| 'local'/);
+  assert.doesNotMatch(source, /clearLocalTrustedSession/);
   assert.match(source, /clearNativeTrustedSession/);
-  assert.match(source, /void clearTrustedSession\(\)/);
 });
 
 test('cloud task-list sessions reopen the exact conversation through guarded legacy review', () => {

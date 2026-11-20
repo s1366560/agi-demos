@@ -28,7 +28,8 @@ test('the private sidecar command surface exposes only local-runtime capabilitie
   assert.match(localControlSource, /local_runtime_status[\s\S]*runtime\.status\(\)/u);
   assert.match(controlSource, /local_runtime_configure/u);
   assert.match(controlSource, /trusted_session_(?:save|load|clear)/u);
-  assert.match(controlSource, /local_trusted_session_(?:save|load|clear)/u);
+  assert.match(controlSource, /legacy_local_login_purge/u);
+  assert.doesNotMatch(controlSource, /local_trusted_session_(?:save|load|clear)/u);
   assert.match(controlSource, /platform_plugin_authority_select_v2/u);
   assert.match(controlSource, /platform_plugin_renderer_distribution_current_v2/u);
   assert.match(

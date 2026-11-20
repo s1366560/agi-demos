@@ -2,7 +2,7 @@ import type { RuntimeMode } from '../types';
 
 type DesktopInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 
-export type NativeTrustedCredentialKind = 'cloud_bearer' | 'local_session_reference';
+export type NativeTrustedCredentialKind = 'cloud_bearer';
 
 export type NativeTrustedSession = {
   version: 1;
@@ -43,13 +43,7 @@ export function decodeNativeTrustedSession(value: unknown): NativeTrustedSession
   if (Object.keys(record).some((key) => !trustedSessionKeys.has(key))) return null;
   if (record.version !== 1) return null;
   if (typeof record.api_base_url !== 'string' || !record.api_base_url.trim()) return null;
-  if (record.runtime_mode !== 'cloud' && record.runtime_mode !== 'local') return null;
-  if (
-    record.credential_kind !== 'cloud_bearer' &&
-    record.credential_kind !== 'local_session_reference'
-  ) {
-    return null;
-  }
+  if (record.runtime_mode !== 'cloud' || record.credential_kind !== 'cloud_bearer') return null;
   if (typeof record.credential !== 'string' || !record.credential.trim()) return null;
   if (
     record.expires_at !== undefined &&
@@ -91,34 +85,10 @@ export async function clearNativeTrustedSession(): Promise<void> {
   await invoke('trusted_session_clear');
 }
 
-function requireLocalTrustedSession(session: NativeTrustedSession): NativeTrustedSession {
-  if (
-    session.runtime_mode !== 'local' ||
-    session.credential_kind !== 'local_session_reference'
-  ) {
-    throw new Error('The local trusted desktop session record is invalid.');
-  }
-  return session;
-}
-
-export async function loadLocalTrustedSession(): Promise<NativeTrustedSession | null> {
-  const invoke = requireDesktopInvoke();
-  const value = await invoke('local_trusted_session_load');
-  if (value === null || value === undefined) return null;
-  const session = decodeNativeTrustedSession(value);
-  if (!session) {
-    await clearLocalTrustedSession();
-    throw new Error('The local trusted desktop session record is invalid.');
-  }
-  return requireLocalTrustedSession(session);
-}
-
-export async function saveLocalTrustedSession(session: NativeTrustedSession): Promise<void> {
-  const invoke = requireDesktopInvoke();
-  await invoke('local_trusted_session_save', { input: requireLocalTrustedSession(session) });
-}
-
-export async function clearLocalTrustedSession(): Promise<void> {
-  const invoke = requireDesktopInvoke();
-  await invoke('local_trusted_session_clear');
+export async function purgeLegacyLocalLoginResidue(): Promise<boolean> {
+  const invoke = desktopInvoke();
+  if (!invoke) return false;
+  const value = await invoke('legacy_local_login_purge');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return (value as { cleared?: unknown }).cleared === true;
 }

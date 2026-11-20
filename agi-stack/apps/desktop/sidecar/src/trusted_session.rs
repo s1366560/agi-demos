@@ -15,14 +15,12 @@ const TRUSTED_SESSION_VAULT_KEY: &str = "trusted-session.v1";
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TrustedSessionRuntimeMode {
     Cloud,
-    Local,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TrustedSessionCredentialKind {
     CloudBearer,
-    LocalSessionReference,
 }
 
 #[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
@@ -253,9 +251,6 @@ fn validate_record(record: &TrustedSessionRecord) -> Result<(), TrustedSessionBr
         (
             TrustedSessionRuntimeMode::Cloud,
             TrustedSessionCredentialKind::CloudBearer
-        ) | (
-            TrustedSessionRuntimeMode::Local,
-            TrustedSessionCredentialKind::LocalSessionReference
         )
     );
     if !mode_matches_kind {
@@ -283,31 +278,6 @@ impl TrustedSessionStore for ApplicationCredentialVault {
         self.clear(TRUSTED_SESSION_VAULT_KEY)
             .map_err(|_| TrustedSessionStoreError::Unavailable)
     }
-}
-
-pub(crate) fn serialize_local_record(
-    record: &TrustedSessionRecord,
-) -> Result<String, TrustedSessionBrokerError> {
-    validate_record(record)?;
-    if !matches!(
-        (record.runtime_mode, record.credential_kind),
-        (
-            TrustedSessionRuntimeMode::Local,
-            TrustedSessionCredentialKind::LocalSessionReference
-        )
-    ) {
-        return Err(TrustedSessionBrokerError::InvalidRecord);
-    }
-    serde_json::to_string(record).map_err(|_| TrustedSessionBrokerError::InvalidRecord)
-}
-
-pub(crate) fn deserialize_local_record(
-    serialized: &str,
-) -> Result<TrustedSessionRecord, TrustedSessionBrokerError> {
-    let record = serde_json::from_str::<TrustedSessionRecord>(serialized)
-        .map_err(|_| TrustedSessionBrokerError::CorruptRecord)?;
-    serialize_local_record(&record)?;
-    Ok(record)
 }
 
 #[cfg(test)]
@@ -440,10 +410,19 @@ mod tests {
     }
 
     #[test]
-    fn local_record_storage_rejects_cloud_bearers() {
-        assert_eq!(
-            serialize_local_record(&cloud_record()),
-            Err(TrustedSessionBrokerError::InvalidRecord)
+    fn legacy_local_session_reference_is_discarded_without_exposing_the_credential() {
+        let store = Arc::new(InMemoryTrustedSessionStore::default());
+        store.replace_raw(
+            r#"{"version":1,"api_base_url":"http://127.0.0.1:1","runtime_mode":"local","credential_kind":"local_session_reference","credential":"secret-local-reference","expires_at":null}"#,
         );
+        let broker = TrustedSessionBroker::new(store.clone());
+
+        let error = broker
+            .load()
+            .expect_err("legacy local login record must fail closed");
+
+        assert_eq!(error, TrustedSessionBrokerError::CorruptRecord);
+        assert_eq!(store.load_raw().expect("inspect store"), None);
+        assert!(!error.to_string().contains("secret-local-reference"));
     }
 }

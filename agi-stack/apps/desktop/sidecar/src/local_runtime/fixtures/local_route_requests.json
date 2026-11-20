@@ -957,26 +957,6 @@
     "body": {}
   },
   {
-    "area": "auth",
-    "method": "POST",
-    "uri": "/api/v1/auth/local-session",
-    "authority": "local_session",
-    "expected_status": 200,
-    "body": {
-      "trusted_device": true
-    }
-  },
-  {
-    "area": "auth",
-    "method": "POST",
-    "uri": "/api/v1/auth/local-session/resume",
-    "authority": "local_session",
-    "expected_status": 200,
-    "body": {
-      "session_id": "route-parity-session"
-    }
-  },
-  {
     "area": "my_work",
     "method": "GET",
     "uri": "/api/v1/projects/local-project/my-work",

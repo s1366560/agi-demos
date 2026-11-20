@@ -38,23 +38,16 @@ fn test_runtime(launch_credential: &str) -> TenantProjectsTestRuntime {
     TenantProjectsTestRuntime { root, state }
 }
 
-async fn create_session(app: &Router, launch: &str) -> String {
-    let response = app
-        .clone()
-        .oneshot(json_request(
-            "POST",
-            "/api/v1/auth/local-session",
-            launch,
-            None,
-            r#"{"trusted_device":false}"#,
-        ))
-        .await
-        .expect("create session response");
-    assert_eq!(response.status(), StatusCode::OK);
-    response_json(response).await["access_token"]
-        .as_str()
-        .expect("session access token")
-        .to_string()
+fn create_session(state: &super::super::LocalRuntimeState) -> String {
+    state
+        .session_store
+        .create_local_session(
+            format!("parity-session-{}", uuid::Uuid::new_v4()),
+            false,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .expect("create session")
+        .access_token
 }
 
 #[tokio::test]
@@ -62,7 +55,7 @@ async fn local_project_crud_is_tenant_scoped_and_returns_structured_authority() 
     let launch = "tenant-projects-launch";
     let runtime = test_runtime(launch);
     let app = local_router(Arc::clone(&runtime.state));
-    let session = create_session(&app, launch).await;
+    let session = create_session(&runtime.state);
 
     let list = app
         .clone()
@@ -157,7 +150,7 @@ async fn local_project_mutations_replay_receipts_and_reject_changed_payloads() {
     let launch = "tenant-projects-idempotency-launch";
     let runtime = test_runtime(launch);
     let app = local_router(Arc::clone(&runtime.state));
-    let session = create_session(&app, launch).await;
+    let session = create_session(&runtime.state);
     let create_body =
         r#"{"tenant_id":"northstar","name":"Replay Project","description":"Created once"}"#;
 
@@ -278,7 +271,7 @@ async fn local_project_routes_reject_scope_drift_and_active_project_deletion() {
     let launch = "tenant-projects-scope-launch";
     let runtime = test_runtime(launch);
     let app = local_router(Arc::clone(&runtime.state));
-    let session = create_session(&app, launch).await;
+    let session = create_session(&runtime.state);
 
     let drift = app
         .clone()

@@ -58,7 +58,7 @@ mod tests {
         assert_eq!(html.as_ref(), SANDBOX_PROXY.as_bytes());
         for path in [
             "/api/v1/mcp/apps",
-            "/api/v1/auth/local-session",
+            "/api/v1/auth/me",
             "/static/private.html",
             "/static/sandbox_proxy.html/private",
         ] {

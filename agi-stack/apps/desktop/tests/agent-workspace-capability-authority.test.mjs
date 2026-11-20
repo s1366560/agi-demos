@@ -78,7 +78,7 @@ test('Agent Workspace authority keeps Local launch authority separate from the s
   const config = Object.freeze({
     ...cloudConfig,
     apiBaseUrl: 'http://127.0.0.1:4777',
-    apiKey: 'local-session',
+    apiKey: 'desktop-test-session',
     localApiToken: 'private-launch',
     mode: 'local',
   });
@@ -93,7 +93,7 @@ test('Agent Workspace authority keeps Local launch authority separate from the s
       assert.deepEqual(observation, expectedObservation('local'));
     },
   );
-  assert.equal(headers.get('Authorization'), 'Bearer local-session');
+  assert.equal(headers.get('Authorization'), 'Bearer desktop-test-session');
   assert.equal(headers.get('X-Agistack-Launch'), 'private-launch');
 });
 

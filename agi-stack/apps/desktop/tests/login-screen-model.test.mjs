@@ -13,14 +13,11 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/auth/loginScreenModel.js',
 );
 const {
-  LOGIN_MODE_PREFERENCE_KEY,
+  LEGACY_LOGIN_MODE_PREFERENCE_KEY,
   initialDesktopRuntimeConfig,
-  loginModeForRuntimeAvailability,
-  readLoginModePreference,
+  purgeLegacyLoginModePreference,
   runsInElectronShell,
   runtimeConfigForLoginAvailability,
-  runtimeConfigForLoginMode,
-  writeLoginModePreference,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/auth/loginRuntimeModel.js',
 );
@@ -29,12 +26,12 @@ function createMemoryStorage(initialValue = null) {
   let value = initialValue;
   return {
     getItem(key) {
-      assert.equal(key, LOGIN_MODE_PREFERENCE_KEY);
+      assert.equal(key, LEGACY_LOGIN_MODE_PREFERENCE_KEY);
       return value;
     },
-    setItem(key, nextValue) {
-      assert.equal(key, LOGIN_MODE_PREFERENCE_KEY);
-      value = nextValue;
+    removeItem(key) {
+      assert.equal(key, LEGACY_LOGIN_MODE_PREFERENCE_KEY);
+      value = null;
     },
     value() {
       return value;
@@ -42,113 +39,54 @@ function createMemoryStorage(initialValue = null) {
   };
 }
 
-test('login mode preference persists only a versioned mode and restores it', () => {
-  const storage = createMemoryStorage();
-  writeLoginModePreference('cloud', storage);
-  assert.equal(storage.value(), '{"version":1,"mode":"cloud"}');
-  assert.equal(readLoginModePreference(storage), 'cloud');
-});
-
-test('invalid or inaccessible login mode preferences fail closed to local', () => {
-  for (const value of [
-    null,
-    '',
-    'not-json',
-    '{"version":2,"mode":"cloud"}',
-    '{"version":1,"mode":"remote"}',
-    '{"version":1,"mode":"cloud","apiKey":"secret"}',
-  ]) {
-    assert.equal(readLoginModePreference(createMemoryStorage(value)), 'local');
-  }
-
-  const inaccessibleStorage = {
-    getItem() {
-      throw new Error('storage unavailable');
-    },
-    setItem() {
-      throw new Error('storage unavailable');
-    },
-  };
-  assert.equal(readLoginModePreference(inaccessibleStorage), 'local');
-  assert.doesNotThrow(() => writeLoginModePreference('cloud', inaccessibleStorage));
-});
-
-test('login mode config mapping selects the matching API and clears cross-mode identity', () => {
-  const current = {
-    apiBaseUrl: 'http://127.0.0.1:9999',
-    deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
-    apiKey: 'secret-token',
-    localApiToken: 'local-token',
-    tenantId: 'tenant-a',
-    projectId: 'project-a',
-    workspaceId: 'workspace-a',
-    mode: 'local',
-    workspaceRoot: '/workspace',
-  };
-  assert.deepEqual(runtimeConfigForLoginMode(current, 'cloud'), {
-    apiBaseUrl: 'http://127.0.0.1:8000',
-    deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
-    apiKey: '',
-    localApiToken: '',
-    tenantId: 'default',
-    projectId: '',
-    workspaceId: '',
-    mode: 'cloud',
-    workspaceRoot: '/workspace',
-  });
-  assert.deepEqual(runtimeConfigForLoginMode(current, 'local'), {
-    apiBaseUrl: 'http://127.0.0.1:8088',
-    deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
-    apiKey: '',
-    localApiToken: '',
-    tenantId: 'local',
-    projectId: 'local-project',
-    workspaceId: '',
-    mode: 'local',
-    workspaceRoot: '/workspace',
-  });
-});
-
-test('startup restores the preferred mode before session recovery', () => {
-  const config = initialDesktopRuntimeConfig(
-    createMemoryStorage('{"version":1,"mode":"cloud"}'),
-    false,
-  );
-  assert.equal(config.mode, 'cloud');
-  assert.equal(config.apiBaseUrl, 'http://127.0.0.1:8000');
-  assert.equal(config.deviceAuthorizationBaseUrl, 'http://127.0.0.1:3000');
-});
-
-test('browser fallback overrides a persisted local login with the cloud runtime', () => {
-  const config = initialDesktopRuntimeConfig(
-    createMemoryStorage('{"version":1,"mode":"local"}'),
-    false,
-  );
-  assert.equal(loginModeForRuntimeAvailability('local', false), 'cloud');
+test('startup clears a retired local login preference and does not seed a local workspace', () => {
+  const storage = createMemoryStorage('{"version":1,"mode":"local"}');
+  assert.equal(purgeLegacyLoginModePreference(storage), true);
+  assert.equal(storage.value(), null);
+  const config = initialDesktopRuntimeConfig();
   assert.equal(config.mode, 'cloud');
   assert.equal(config.apiBaseUrl, 'http://127.0.0.1:8000');
   assert.equal(config.tenantId, 'default');
   assert.equal(config.projectId, '');
+  assert.equal(config.apiKey, '');
   assert.equal(config.localApiToken, '');
 });
 
-test('email and SSO login runtime selection force cloud outside Electron and preserve local inside it', () => {
-  const local = runtimeConfigForLoginMode(
-    {
-      apiBaseUrl: 'http://127.0.0.1:9999',
-      deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
-      apiKey: 'secret-token',
-      localApiToken: 'local-token',
-      tenantId: 'tenant-a',
-      projectId: 'project-a',
-      workspaceId: 'workspace-a',
-      mode: 'cloud',
-      workspaceRoot: '/workspace',
-    },
-    'local',
-  );
+test('clearing a cloud login-mode preference does not claim a local session was removed', () => {
+  const storage = createMemoryStorage('{"version":1,"mode":"cloud"}');
+  assert.equal(purgeLegacyLoginModePreference(storage), false);
+  assert.equal(storage.value(), null);
+  assert.equal(purgeLegacyLoginModePreference(createMemoryStorage(null)), false);
+});
 
-  assert.deepEqual(runtimeConfigForLoginAvailability(local, false), {
+test('unreadable login-mode residue is removed and reported as a retired local session', () => {
+  const storage = createMemoryStorage('not-json');
+  assert.equal(purgeLegacyLoginModePreference(storage), true);
+  assert.equal(storage.value(), null);
+  const inaccessibleStorage = {
+    getItem() {
+      throw new Error('storage unavailable');
+    },
+    removeItem() {
+      throw new Error('storage unavailable');
+    },
+  };
+  assert.equal(purgeLegacyLoginModePreference(inaccessibleStorage), false);
+});
+
+test('login always uses the cloud runtime and drops local workspace seeds', () => {
+  const local = {
+    apiBaseUrl: 'http://127.0.0.1:8088',
+    deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
+    apiKey: 'secret-token',
+    localApiToken: 'local-token',
+    tenantId: 'local',
+    projectId: 'local-project',
+    workspaceId: 'workspace-a',
+    mode: 'local',
+    workspaceRoot: '/workspace',
+  };
+  assert.deepEqual(runtimeConfigForLoginAvailability(local), {
     apiBaseUrl: 'http://127.0.0.1:8000',
     deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
     apiKey: '',
@@ -159,28 +97,14 @@ test('email and SSO login runtime selection force cloud outside Electron and pre
     mode: 'cloud',
     workspaceRoot: '/workspace',
   });
-  assert.equal(runtimeConfigForLoginAvailability(local, true), local);
-});
-
-test('Electron startup restores local mode now that the sidecar provides local authority', () => {
-  globalThis.window = {
-    __MEMSTACK_DESKTOP__: {
-      runtime: 'electron',
-      core: { invoke: async () => undefined },
-    },
+  const cloud = {
+    ...local,
+    mode: 'cloud',
+    apiBaseUrl: 'https://cloud.example.test',
+    tenantId: 'tenant-a',
+    projectId: 'project-a',
   };
-  try {
-    const config = initialDesktopRuntimeConfig(
-      createMemoryStorage('{"version":1,"mode":"local"}'),
-      true,
-    );
-    assert.equal(config.mode, 'local');
-    assert.equal(config.apiBaseUrl, 'http://127.0.0.1:8088');
-    assert.equal(config.tenantId, 'local');
-    assert.equal(config.projectId, 'local-project');
-  } finally {
-    delete globalThis.window;
-  }
+  assert.equal(runtimeConfigForLoginAvailability(cloud), cloud);
 });
 
 test('Electron shell detection requires the dedicated allow-listed bridge', () => {
@@ -199,27 +123,9 @@ test('Electron shell detection requires the dedicated allow-listed bridge', () =
   delete globalThis.window;
 });
 
-test('local workspace continue preserves the trusted-device choice when the runtime is ready', () => {
-  assert.equal(resolveWorkspaceContinueLabelKey('local'), 'login.localWorkspace');
-  assert.deepEqual(resolveWorkspaceSsoAction('local', true, true), {
-    kind: 'local_session',
-    trustedDevice: true,
-  });
-  assert.deepEqual(resolveWorkspaceSsoAction('local', true, false), {
-    kind: 'local_session',
-    trustedDevice: false,
-  });
-});
-
-test('workspace continue starts device authorization in cloud and fails closed for local startup', () => {
-  assert.equal(resolveWorkspaceContinueLabelKey('cloud'), 'login.workspaceSso');
-  assert.deepEqual(resolveWorkspaceSsoAction('local', false, false), {
-    kind: 'unavailable',
-    capability: 'local_workspace',
-  });
-  assert.deepEqual(resolveWorkspaceSsoAction('cloud', true, false), {
-    kind: 'workspace_sso',
-  });
+test('workspace continue is cloud SSO and has no local session action', () => {
+  assert.equal(resolveWorkspaceContinueLabelKey(), 'login.workspaceSso');
+  assert.deepEqual(resolveWorkspaceSsoAction(), { kind: 'workspace_sso' });
 });
 
 test('device authorization URLs preserve the configured authority and reject unsafe shapes', () => {
@@ -382,13 +288,14 @@ test('email login enforces the approved structural credential boundary', () => {
   assert.equal(validateLoginCredentials('', ''), 'invalid_credentials');
 });
 
-test('explicit Cloud login endpoint is kept while Local continues to use its sidecar preset', () => {
-  const current = initialDesktopRuntimeConfig(createMemoryStorage(), true);
-  const cloud = runtimeConfigForLoginMode(current, 'cloud', 'http://127.0.0.1:18766');
-  assert.equal(cloud.apiBaseUrl, 'http://127.0.0.1:18766');
-  assert.equal(
-    runtimeConfigForLoginMode(cloud, 'local', cloud.apiBaseUrl).apiBaseUrl,
-    'http://127.0.0.1:8088',
-  );
-  assert.equal(runtimeConfigForLoginMode(current, 'cloud', '').apiBaseUrl, '');
+test('an edited cloud login endpoint is preserved without restoring a local seed', () => {
+  const current = {
+    ...initialDesktopRuntimeConfig(),
+    apiBaseUrl: 'http://127.0.0.1:18766',
+    tenantId: 'tenant-a',
+    projectId: 'project-a',
+  };
+  assert.equal(runtimeConfigForLoginAvailability(current).apiBaseUrl, 'http://127.0.0.1:18766');
+  assert.equal(runtimeConfigForLoginAvailability(current).tenantId, 'tenant-a');
+  assert.equal(runtimeConfigForLoginAvailability(current).projectId, 'project-a');
 });

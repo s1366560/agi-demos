@@ -133,11 +133,17 @@ async fn revoke_owner_while_http_is_held(stage: ResponseStage, change: OwnerChan
         assert_eq!(*observer.text.lock().unwrap(), "partial");
     }
 
-    let unrelated =
-        owner_request(&state, OWNER_TOKEN, "/api/v1/auth/local-session", json!({})).await;
-    assert_ne!(unrelated["session"]["session_id"], auth.session_id);
-    let unrelated_token = unrelated["access_token"].as_str().unwrap();
-    let outcome = owner_request(&state, unrelated_token, "/api/v1/auth/signout", json!({})).await;
+    let unrelated = state
+        .session_store
+        .create_local_session(
+            format!("unrelated-session-{}", uuid::Uuid::new_v4()),
+            false,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .expect("mint unrelated session");
+    assert_ne!(unrelated.session.session_id, auth.session_id);
+    let unrelated_token = unrelated.access_token;
+    let outcome = owner_request(&state, &unrelated_token, "/api/v1/auth/signout", json!({})).await;
     assert_eq!(outcome["success"], true);
     assert_eq!(
         control.directive(&conversation.id, 0).await.unwrap(),

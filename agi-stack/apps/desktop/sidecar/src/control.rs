@@ -31,10 +31,7 @@ use crate::{
     plugin_data_plane_credential_v2::{
         PluginDataPlaneCredentialBrokerV2, PluginDataPlaneCredentialRecordV2,
     },
-    trusted_session::{
-        deserialize_local_record, serialize_local_record, TrustedSessionBroker,
-        TrustedSessionRecord,
-    },
+    trusted_session::{TrustedSessionBroker, TrustedSessionRecord},
     workspace_core_helper::WorkspaceCoreSupervisor,
 };
 
@@ -645,6 +642,12 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 .map_err(|error| error.to_string())
                 .map(|()| Value::Null)
         }
+        "legacy_local_login_purge" => task::block_in_place(|| {
+            state
+                .runtime
+                .purge_legacy_local_login_residue()
+                .map(|cleared| serde_json::json!({ "cleared": cleared }))
+        }),
         "oauth_pending_attempt_save" => {
             let broker = state.oauth_pending_attempts.clone();
             parse_arg::<OAuthPendingAttemptRecord>(request.args.as_ref(), "input").and_then(
@@ -665,32 +668,6 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
             let broker = state.oauth_pending_attempts.clone();
             task::block_in_place(|| broker.clear())
                 .map_err(|error| error.to_string())
-                .map(|()| Value::Null)
-        }
-        "local_trusted_session_save" => {
-            parse_arg::<TrustedSessionRecord>(request.args.as_ref(), "input")
-                .and_then(|record| {
-                    serialize_local_record(&record).map_err(|error| error.to_string())
-                })
-                .and_then(|serialized| {
-                    task::block_in_place(|| state.runtime.save_local_trusted_session(&serialized))
-                        .map(|()| Value::Null)
-                })
-        }
-        "local_trusted_session_load" => task::block_in_place(|| {
-            let Some(serialized) = state.runtime.load_local_trusted_session()? else {
-                return Ok(Value::Null);
-            };
-            match deserialize_local_record(&serialized) {
-                Ok(record) => serde_json::to_value(record).map_err(|error| error.to_string()),
-                Err(error) => {
-                    state.runtime.clear_local_trusted_session()?;
-                    Err(error.to_string())
-                }
-            }
-        }),
-        "local_trusted_session_clear" => {
-            task::block_in_place(|| state.runtime.clear_local_trusted_session())
                 .map(|()| Value::Null)
         }
         "browser_bridge_install" => task::block_in_place(native_host::install_manifests)

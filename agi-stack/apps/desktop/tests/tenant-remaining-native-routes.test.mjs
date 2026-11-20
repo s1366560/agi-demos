@@ -85,7 +85,7 @@ const cloudConfig = Object.freeze({
 const localConfig = Object.freeze({
   ...cloudConfig,
   apiBaseUrl: 'http://127.0.0.1:43117',
-  apiKey: 'local-session',
+  apiKey: 'desktop-test-session',
   localApiToken: 'private-launch-capability',
   tenantId: 'local',
   mode: 'local',
@@ -324,7 +324,7 @@ test('tenant management transport presents launch capability before Local sideca
     await requestTenantManagementJson(cloudConfig, '/api/v1/events?tenant_id=tenant-1'),
     { ok: true }
   );
-  assert.equal(calls[0].headers.get('Authorization'), 'Bearer local-session');
+  assert.equal(calls[0].headers.get('Authorization'), 'Bearer desktop-test-session');
   assert.equal(calls[1].headers.get('Authorization'), 'Bearer trusted-session');
 });
 
@@ -442,7 +442,7 @@ test('Local native clients probe sidecar and return stable unavailable reasons',
     const parsed = new URL(String(url));
     calls.push(parsed.pathname);
     const headers = new Headers(init.headers);
-    assert.equal(headers.get('Authorization'), 'Bearer local-session');
+    assert.equal(headers.get('Authorization'), 'Bearer desktop-test-session');
     if (headers.get('X-Agistack-Launch') !== 'private-launch-capability') {
       return json({ detail: 'Launch capability required' }, 401);
     }

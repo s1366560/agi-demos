@@ -82,16 +82,18 @@ async fn suspend_owned_run(fixture: &Fixture, status: DesktopRunStatus) -> Deskt
 }
 
 async fn unrelated_signout_preserves_idle_run(fixture: &Fixture, waiting: &DesktopRun) {
-    let other = post(
-        &fixture.state,
-        None,
-        "/api/v1/auth/local-session",
-        json!({}),
-    )
-    .await;
+    let other = fixture
+        .state
+        .session_store
+        .create_local_session(
+            format!("idle-unrelated-{}", uuid::Uuid::new_v4()),
+            false,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .expect("mint unrelated session");
     post(
         &fixture.state,
-        Some(other["access_token"].as_str().unwrap()),
+        Some(other.access_token.as_str()),
         "/api/v1/auth/signout",
         json!({}),
     )

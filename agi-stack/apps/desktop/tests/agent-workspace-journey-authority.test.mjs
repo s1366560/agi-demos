@@ -162,7 +162,7 @@ test("Local probe uses launch authority and preserves structured runtime unavail
   const config = Object.freeze({
     ...cloudConfig,
     apiBaseUrl: "http://127.0.0.1:4777",
-    apiKey: "local-session",
+    apiKey: "desktop-test-session",
     localApiToken: "private-launch",
     mode: "local",
   });
@@ -217,7 +217,7 @@ test("Local probe uses launch authority and preserves structured runtime unavail
     calls.every(
       (call) =>
         new Headers(call.init.headers).get("Authorization") ===
-        "Bearer local-session",
+        "Bearer desktop-test-session",
     ),
   );
   assert.equal(

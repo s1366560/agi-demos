@@ -176,10 +176,7 @@ const CHECKPOINT_CONTROL_AUTHORITY_ERROR: &str =
 const DEFAULT_TIMELINE_LIMIT: i64 = 50;
 const MAX_TIMELINE_LIMIT: i64 = 500;
 
-use auth_context::{
-    AuthContextError, AuthenticatedContext, ContextSwitchRequest, LocalSessionRequest,
-    TrustedSessionResumeRequest,
-};
+use auth_context::{AuthContextError, AuthenticatedContext, ContextSwitchRequest};
 use authority_store::{
     credential_fill_once_key, full_cdp_once_key, BrowserCapabilityDecision, BrowserCapabilityGrant,
     BrowserOriginDecision, BrowserOriginGrant, BrowserSiteCredential, DesktopArtifactStatus,
@@ -408,16 +405,8 @@ impl LocalRuntimeService {
         operation(&connection)
     }
 
-    pub(crate) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
-        self.state.session_store.save_local_trusted_session(value)
-    }
-
-    pub(crate) fn load_local_trusted_session(&self) -> Result<Option<String>, String> {
-        self.state.session_store.load_local_trusted_session()
-    }
-
-    pub(crate) fn clear_local_trusted_session(&self) -> Result<(), String> {
-        self.state.session_store.clear_local_trusted_session()
+    pub(crate) fn purge_legacy_local_login_residue(&self) -> Result<bool, String> {
+        self.state.session_store.purge_legacy_local_login_residue()
     }
 
     /// Dev/diagnostic hook: forward a raw JSON-RPC request to the connected
@@ -3873,11 +3862,6 @@ fn local_router_with_generation_admission(
         ));
 
     let public_router = Router::new()
-        .route("/api/v1/auth/local-session", post(create_local_session))
-        .route(
-            "/api/v1/auth/local-session/resume",
-            post(resume_local_session),
-        )
         .route("/api/v1/auth/signout", post(sign_out))
         .merge(kernel_protected)
         .merge(protected)
@@ -4279,56 +4263,6 @@ fn path_workspace_scope(path: &str) -> (Option<&str>, Option<&str>) {
         ["api", "v1", "projects", project_id, ..] => (None, Some(project_id)),
         _ => (None, None),
     }
-}
-
-async fn create_local_session(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Json(request): Json<LocalSessionRequest>,
-) -> LocalJsonResult {
-    let credential = format!(
-        "local-session-{}.{}",
-        Uuid::new_v4(),
-        generate_capability_token()
-    );
-    let outcome = state
-        .session_store
-        .create_local_session(
-            credential,
-            request.trusted_device,
-            Utc::now().timestamp_millis(),
-        )
-        .map_err(auth_context_error)?;
-    serde_json::to_value(outcome)
-        .map(Json)
-        .map_err(|error| local_store_error(error.to_string()))
-}
-
-async fn resume_local_session(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Json(request): Json<TrustedSessionResumeRequest>,
-) -> LocalJsonResult {
-    let credential = format!(
-        "local-session-{}.{}",
-        Uuid::new_v4(),
-        generate_capability_token()
-    );
-    let outcome = state
-        .session_store
-        .resume_trusted_local_session(
-            request.session_id.trim(),
-            credential,
-            Utc::now().timestamp_millis(),
-        )
-        .map_err(auth_context_error)?;
-    let Some(outcome) = outcome else {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "detail": "trusted local session unavailable" })),
-        ));
-    };
-    serde_json::to_value(outcome)
-        .map(Json)
-        .map_err(|error| local_store_error(error.to_string()))
 }
 
 async fn sign_out(
@@ -12943,6 +12877,17 @@ mod tests {
     #[tokio::test]
     async fn local_session_and_workspace_context_require_two_credentials_and_revoke_cleanly() {
         let state = test_state_without_session("launch-secret");
+        let created = state
+            .session_store
+            .create_local_session(
+                "workspace-context-session".to_string(),
+                true,
+                Utc::now().timestamp_millis(),
+            )
+            .expect("mint session");
+        let credential = created.access_token.clone();
+        assert_eq!(created.context.tenant_id, "northstar");
+        assert_eq!(created.context.revision, 0);
         let app = local_router(state);
 
         let capability_only = app
@@ -12960,30 +12905,6 @@ mod tests {
             capability_only.status(),
             axum::http::StatusCode::UNAUTHORIZED
         );
-
-        let create = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/auth/local-session")
-                    .header("x-agistack-launch", "launch-secret")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"trusted_device":true}"#))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(create.status(), axum::http::StatusCode::OK);
-        let body = axum::body::to_bytes(create.into_body(), usize::MAX)
-            .await
-            .expect("session body");
-        let created: Value = serde_json::from_slice(&body).expect("session json");
-        let credential = created["access_token"]
-            .as_str()
-            .expect("session credential");
-        assert_eq!(created["context"]["tenant_id"], "northstar");
-        assert_eq!(created["context"]["revision"], 0);
 
         let authenticated = app
             .clone()
@@ -13220,121 +13141,33 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn trusted_local_session_resume_requires_reference_and_rotates_the_bearer() {
-        let state = test_state_without_session("launch-secret");
-        let app = local_router(state);
-
-        let created = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/auth/local-session")
-                    .header("x-agistack-launch", "launch-secret")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"trusted_device":true}"#))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(created.status(), axum::http::StatusCode::OK);
-        let body = axum::body::to_bytes(created.into_body(), usize::MAX)
-            .await
-            .expect("session body");
-        let created: Value = serde_json::from_slice(&body).expect("session json");
-        let original_credential = created["access_token"]
-            .as_str()
-            .expect("original credential");
-        let session_id = created["session"]["session_id"]
-            .as_str()
-            .expect("session id");
-
-        let missing_launch = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/auth/local-session/resume")
-                    .header("content-type", "application/json")
-                    .body(Body::from(format!(r#"{{"session_id":"{session_id}"}}"#)))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(
-            missing_launch.status(),
-            axum::http::StatusCode::UNAUTHORIZED
-        );
-
-        let resumed = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/auth/local-session/resume")
-                    .header("x-agistack-launch", "launch-secret")
-                    .header("content-type", "application/json")
-                    .body(Body::from(format!(r#"{{"session_id":"{session_id}"}}"#)))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(resumed.status(), axum::http::StatusCode::OK);
-        let body = axum::body::to_bytes(resumed.into_body(), usize::MAX)
-            .await
-            .expect("resume body");
-        let resumed: Value = serde_json::from_slice(&body).expect("resume json");
-        let rotated_credential = resumed["access_token"]
-            .as_str()
-            .expect("rotated credential");
-        assert_ne!(rotated_credential, original_credential);
-        assert_eq!(resumed["session"]["session_id"], session_id);
-
-        let stale_bearer = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/auth/me")
-                    .header("x-agistack-launch", "launch-secret")
-                    .header("authorization", format!("Bearer {original_credential}"))
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(stale_bearer.status(), axum::http::StatusCode::UNAUTHORIZED);
-
-        let signout = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/auth/signout")
-                    .header("x-agistack-launch", "launch-secret")
-                    .header("authorization", format!("Bearer {rotated_credential}"))
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(signout.status(), axum::http::StatusCode::OK);
-
-        let revoked_resume = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/auth/local-session/resume")
-                    .header("x-agistack-launch", "launch-secret")
-                    .header("content-type", "application/json")
-                    .body(Body::from(format!(r#"{{"session_id":"{session_id}"}}"#)))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(
-            revoked_resume.status(),
-            axum::http::StatusCode::UNAUTHORIZED
-        );
+    async fn local_login_routes_are_not_registered() {
+        let app = local_router(test_state_without_session("launch-secret"));
+        for uri in [
+            "/api/v1/auth/local-session",
+            "/api/v1/auth/local-session/resume",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(uri)
+                        .header("x-agistack-launch", "launch-secret")
+                        .header("content-type", "application/json")
+                        .body(Body::from("{}"))
+                        .expect("retired login request"),
+                )
+                .await
+                .expect("retired login response");
+            let status = response.status();
+            assert_ne!(status, axum::http::StatusCode::OK, "{uri}");
+            assert!(
+                status == axum::http::StatusCode::NOT_FOUND
+                    || status == axum::http::StatusCode::UNAUTHORIZED,
+                "{uri} returned {status}"
+            );
+        }
     }
 
     #[tokio::test]
@@ -15032,7 +14865,7 @@ mod tests {
     #[tokio::test]
     async fn signout_preserves_runtime_selection_for_the_next_local_session() {
         let state = test_state("selection-signout-secret");
-        let app = local_router(state);
+        let app = local_router(Arc::clone(&state));
 
         let update = app
             .clone()
@@ -15076,24 +14909,15 @@ mod tests {
             .expect("sign out");
         assert_eq!(signout.status(), axum::http::StatusCode::OK);
 
-        let next_session = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/auth/local-session")
-                    .header("x-agistack-launch", "selection-signout-secret")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"trusted_device":false}"#))
-                    .expect("new local session request"),
+        let next_credential = state
+            .session_store
+            .create_local_session(
+                "selection-next-session".to_string(),
+                false,
+                Utc::now().timestamp_millis(),
             )
-            .await
-            .expect("new local session");
-        assert_eq!(next_session.status(), axum::http::StatusCode::OK);
-        let next_session = response_json(next_session).await;
-        let next_credential = next_session["access_token"]
-            .as_str()
-            .expect("next session credential");
+            .expect("mint next session")
+            .access_token;
         let providers = app
             .oneshot(
                 Request::builder()
@@ -15899,29 +15723,16 @@ mod tests {
     #[tokio::test]
     async fn opaque_agent_resources_are_rejected_outside_active_workspace_context() {
         let state = test_state_without_session("launch-secret");
-        let app = local_router(state);
-
-        let session = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/auth/local-session")
-                    .header("x-agistack-launch", "launch-secret")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"trusted_device":true}"#))
-                    .expect("request"),
+        let credential = state
+            .session_store
+            .create_local_session(
+                "opaque-agent-session".to_string(),
+                true,
+                Utc::now().timestamp_millis(),
             )
-            .await
-            .expect("response");
-        assert_eq!(session.status(), axum::http::StatusCode::OK);
-        let body = axum::body::to_bytes(session.into_body(), usize::MAX)
-            .await
-            .expect("session body");
-        let session: Value = serde_json::from_slice(&body).expect("session json");
-        let credential = session["access_token"]
-            .as_str()
-            .expect("session credential");
+            .expect("mint session")
+            .access_token;
+        let app = local_router(state);
 
         let conversation = app
             .clone()

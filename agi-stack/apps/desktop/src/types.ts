@@ -10,7 +10,7 @@ export type AuthStatus =
   | 'signed_in'
   | 'manual';
 
-export type CredentialKind = 'cloud_session' | 'manual_api_key' | 'local_session';
+export type CredentialKind = 'cloud_session' | 'manual_api_key';
 
 export type WorkbenchSection = 'workspace' | 'home' | 'chat' | 'board' | 'activity' | 'settings';
 
@@ -137,8 +137,6 @@ export function mergeLocalRuntimeStatus(
     ...config,
     apiBaseUrl: status.api_base_url || config.apiBaseUrl,
     localApiToken: status.api_token,
-    tenantId: config.tenantId.trim() || 'local',
-    projectId: config.projectId.trim() || 'local-project',
     workspaceRoot: status.workspace_root || config.workspaceRoot,
   };
 }

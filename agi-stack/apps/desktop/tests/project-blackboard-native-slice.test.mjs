@@ -39,7 +39,7 @@ const localScope = Object.freeze({ ...cloudScope, authority: 'local' });
 const localConfig = Object.freeze({
   apiBaseUrl: 'http://127.0.0.1:43117',
   deviceAuthorizationBaseUrl: 'http://127.0.0.1:43117',
-  apiKey: 'local-session',
+  apiKey: 'desktop-test-session',
   localApiToken: 'private-launch',
   tenantId: 'tenant-1',
   projectId: 'project-1',
@@ -143,7 +143,7 @@ test('Project Blackboard local client reads sidecar plan/tasks and makes every u
   assert.equal(requests.length, 4);
   for (const { init } of requests) {
     const headers = new Headers(init.headers);
-    assert.equal(headers.get('Authorization'), 'Bearer local-session');
+    assert.equal(headers.get('Authorization'), 'Bearer desktop-test-session');
     assert.equal(headers.get('X-Agistack-Launch'), 'private-launch');
   }
 });

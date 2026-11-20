@@ -501,10 +501,6 @@ async function primeDesktopPreferences(page) {
   await page.addInitScript(() => {
     window.localStorage.setItem("agistack.desktop.locale", "en");
     window.localStorage.setItem("agistack.desktop.theme", "light");
-    window.localStorage.setItem(
-      "agistack.desktop.login-mode",
-      JSON.stringify({ version: 1, mode: "cloud" }),
-    );
   });
 }
 

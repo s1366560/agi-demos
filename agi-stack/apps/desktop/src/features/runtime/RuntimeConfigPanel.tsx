@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { Badge, Button, Flex, Grid, Select, Text, TextField } from '@radix-ui/themes';
+import { Badge, Button, Flex, Grid, Text, TextField } from '@radix-ui/themes';
 
 import { LOCAL_DEV_SERVER_PRESETS } from '../../types';
-import type { ConnectionState, DesktopRuntimeConfig, RuntimeMode } from '../../types';
+import type { ConnectionState, DesktopRuntimeConfig } from '../../types';
 import { useI18n } from '../../i18n';
 import {
   applyRuntimeServerPreset,
@@ -123,16 +123,6 @@ export function RuntimeConfigPanel({
       </Grid>
 
       <Flex align="center" gap="2">
-        <Select.Root
-          value={config.mode}
-          onValueChange={(value) => update('mode', value as RuntimeMode)}
-        >
-          <Select.Trigger aria-label={t('runtime.connectionMode')} />
-          <Select.Content>
-            <Select.Item value="local">{t('runtime.mode.local')}</Select.Item>
-            <Select.Item value="cloud">{t('runtime.mode.cloud')}</Select.Item>
-          </Select.Content>
-        </Select.Root>
         <Button
           size="2"
           aria-label={t('runtime.connectRuntime')}

@@ -37,28 +37,21 @@ test('approved email path owns the trusted-device choice and inline alert', () =
   assert.match(loginSource, /t\('login\.invalidCredentials'\)/);
 });
 
-test('login exposes an accessible local and cloud workspace selector', () => {
-  assert.match(loginSource, /onModeChange: \(mode: RuntimeMode\) => void/);
-  assert.match(loginSource, /localModeAvailable \?/);
-  assert.match(
-    loginSource,
-    /loginModeForRuntimeAvailability\(mode, localModeAvailable\)/,
-  );
-  assert.match(loginSource, /role="group"/);
-  assert.match(loginSource, /aria-label=\{t\('login\.modeLabel'\)\}/);
-  assert.match(loginSource, /aria-pressed=\{effectiveMode === 'local'\}/);
-  assert.match(loginSource, /aria-pressed=\{effectiveMode === 'cloud'\}/);
-  assert.match(loginSource, /onModeChange\('local'\)/);
-  assert.match(loginSource, /onModeChange\('cloud'\)/);
-  assert.match(loginSource, /effectiveMode === 'cloud'/);
-  assert.match(appSource, /onModeChange=\{changeLoginMode\}/);
-  assert.match(appSource, /localModeAvailable=\{runsInNativeDesktop\}/);
+test('login keeps cloud email, device, and OAuth entry points without a local workspace switch', () => {
+  assert.match(loginSource, /onEmailLogin: \(trustedDevice: boolean\) => void/);
+  assert.match(loginSource, /onWorkspaceSso: \(trustedDevice: boolean\) => void/);
+  assert.match(loginSource, /onNativeOAuth: \(provider: string, trustedDevice: boolean\) => void/);
+  assert.match(loginSource, /legacyLocalLoginNotice/);
+  assert.match(loginSource, /t\('login\.legacyLocalSessionCleared'\)/);
+  assert.match(loginSource, /type="email"/);
+  assert.doesNotMatch(loginSource, /onLocalSession|onModeChange|login\.modeLocal|desktop-login-mode/);
+  assert.doesNotMatch(appSource, /onLocalSession|changeLoginMode|loginLocalSession/);
 });
 
 test('browser fallback uses the cloud runtime for email login and workspace SSO', () => {
   assert.match(
     appSource,
-    /initialDesktopRuntimeConfig\(undefined, runsInNativeDesktop\)/,
+    /initialDesktopRuntimeConfig\(\)/,
   );
   const ssoHandler = desktopAuthSource.slice(
     desktopAuthSource.indexOf('const loginWithWorkspaceSso'),
@@ -66,16 +59,16 @@ test('browser fallback uses the cloud runtime for email login and workspace SSO'
   );
   const emailHandler = desktopAuthSource.slice(
     desktopAuthSource.indexOf('const login = async'),
-    desktopAuthSource.indexOf('const hydrateLocalSession'),
+    desktopAuthSource.indexOf('const handleConfigChange'),
   );
   assert.match(
     ssoHandler,
-    /runtimeConfigForLoginAvailability\(\s*configRef\.current,\s*runsInNativeDesktop,\s*\)/,
+    /runtimeConfigForLoginAvailability\(configRef\.current\)/,
   );
   assert.match(ssoHandler, /new DesktopApiClient\(\{ \.\.\.runtimeConfig, apiKey: '' \}\)/);
   assert.match(
     emailHandler,
-    /runtimeConfigForLoginAvailability\(\s*configRef\.current,\s*runsInNativeDesktop,\s*\)/,
+    /runtimeConfigForLoginAvailability\(\s*configRef\.current\s*\)/,
   );
   assert.match(emailHandler, /new DesktopApiClient\(\{ \.\.\.runtimeConfig, apiKey: '' \}\)/);
   assert.match(emailHandler, /hydrateCloudSession\(outcome, runtimeConfig, authAttemptRevision\)/);
@@ -104,46 +97,32 @@ test('login validation remains localized in English and Simplified Chinese', () 
     i18nSource,
     /'login\.credentialStoreUnavailable':[\s\S]*'The encrypted application credential vault is unavailable\. Check desktop app-data access before switching accounts\.'/,
   );
-  assert.match(i18nSource, /'login\.localWorkspace': 'Continue with local workspace'/);
-  assert.match(i18nSource, /'login\.localWorkspace': '继续使用本地工作区'/);
   assert.match(
     i18nSource,
-    /'login\.localWorkspaceUnavailable': 'The trusted local workspace is not ready yet\.'/,
+    /'login\.legacyLocalSessionCleared':\s*'Local workspace sign-in was removed\. Sign in with your cloud account to continue\.'/,
   );
-  assert.match(i18nSource, /'login\.localWorkspaceUnavailable': '受信任的本地工作区尚未就绪。'/);
+  assert.match(
+    i18nSource,
+    /'login\.legacyLocalSessionCleared': '本地工作区登录已移除。请登录云端账号以继续。'/,
+  );
+  assert.doesNotMatch(i18nSource, /'login\.localWorkspace'/);
+  assert.doesNotMatch(i18nSource, /'login\.modeLocal'/);
+  assert.doesNotMatch(i18nSource, /'login\.switchToLocal'/);
   assert.match(i18nSource, /'login\.deviceTitle': 'Continue in your browser'/);
   assert.match(i18nSource, /'login\.deviceTitle': '在浏览器中继续'/);
   assert.match(i18nSource, /'login\.deviceWaiting': 'Waiting for approval…'/);
   assert.match(i18nSource, /'login\.deviceWaiting': '正在等待授权…'/);
-  assert.match(i18nSource, /'login\.switchToLocal': 'Switch to local workspace'/);
-  assert.match(i18nSource, /'login\.switchToLocal': '切换到本地工作区'/);
-  assert.match(i18nSource, /'login\.modeLabel': 'Workspace mode'/);
-  assert.match(i18nSource, /'login\.modeLabel': '工作区模式'/);
-  assert.match(i18nSource, /'login\.modeLocal': 'Local workspace'/);
-  assert.match(i18nSource, /'login\.modeCloud': 'Cloud workspace'/);
   assert.match(i18nSource, /'runtime\.deviceAuthorizationUrl': 'Authorization portal URL'/);
   assert.match(i18nSource, /'runtime\.deviceAuthorizationUrl': '授权门户地址'/);
 });
 
-test('the workspace continue action exposes available authority without a fake success path', () => {
-  assert.match(loginSource, /resolveWorkspaceContinueLabelKey\(effectiveMode\)/);
-  assert.match(
-    loginSource,
-    /resolveWorkspaceSsoAction\(effectiveMode, localReady, trustedDevice\)/,
-  );
-  assert.match(loginSource, /onLocalSession\(action\.trustedDevice\)/);
-  assert.match(
-    appSource,
-    /onLocalSession=\{\(trustedDevice\) => void loginLocalSession\(trustedDevice\)\}/,
-  );
-  assert.match(desktopAuthSource, /createLocalSession\(trustedDevice\)/);
-  assert.match(
-    desktopAuthSource,
-    /if \(trustedDevice && hasNativeTrustedSessionBroker\(\) && sessionId\)/,
-  );
+test('the workspace continue action starts cloud device authorization', () => {
+  assert.match(loginSource, /resolveWorkspaceContinueLabelKey\(\)/);
+  assert.match(loginSource, /resolveWorkspaceSsoAction\(\)/);
   assert.match(loginSource, /action\.kind === 'workspace_sso'/);
-  assert.match(loginSource, /t\('login\.localWorkspaceUnavailable'\)/);
   assert.match(loginSource, /onWorkspaceSso\(trustedDevice\)/);
+  assert.doesNotMatch(loginSource, /local_session|login\.localWorkspaceUnavailable/);
+  assert.doesNotMatch(desktopAuthSource, /createLocalSession\(/);
   assert.doesNotMatch(loginSource, /t\('login\.workspaceSsoUnavailable'\)/);
 });
 
@@ -154,7 +133,7 @@ test('workspace SSO shows one accessible device authorization checkpoint', () =>
   assert.match(loginSource, /workspaceSso\.userCode/);
   assert.match(loginSource, /onOpenWorkspaceSso/);
   assert.match(loginSource, /onCancelWorkspaceSso/);
-  assert.match(loginSource, /t\('login\.switchToLocal'\)/);
+  assert.doesNotMatch(loginSource, /t\('login\.switchToLocal'\)/);
   assert.match(loginSource, /'login\.deviceWaiting'/);
   assert.match(loginSource, /'login\.deviceExpiresCountdown'/);
   assert.match(loginSource, /'login\.deviceExpiredStatus'/);
@@ -231,7 +210,7 @@ test('device grant cleanup covers cancellation, expiry, retry, supersession, unm
 
 test('email login revokes failed tokens while retaining only the guarded password-change token', () => {
   const loginStart = desktopAuthSource.indexOf('const login = async (trustedDevice: boolean) =>');
-  const loginEnd = desktopAuthSource.indexOf('const hydrateLocalSession = async', loginStart);
+  const loginEnd = desktopAuthSource.indexOf('const handleConfigChange', loginStart);
   const emailLoginSource = desktopAuthSource.slice(loginStart, loginEnd);
   assert.match(emailLoginSource, /let issuedAccessToken = '';/);
   assert.match(emailLoginSource, /issuedAccessToken = outcome\.access_token;/);
@@ -253,10 +232,6 @@ test('authentication and workspace context failures are localized at their sourc
     'login.authenticatedTenantUnavailable',
     'login.authoritativeProjectUnavailable',
     'login.authenticatedContextMismatch',
-    'login.localContextMissing',
-    'login.localTenantUnavailable',
-    'login.localProjectUnavailable',
-    'login.localRuntimeNotReady',
     'login.manualApiKeyRequiresValidation',
     'settings.selectedTenantUnavailable',
     'settings.selectedProjectUnavailable',
@@ -308,7 +283,9 @@ test('browser storage never receives a trusted session credential or recovery ca
   assert.doesNotMatch(appSource, /readTrustedLocalSessionReference/);
   assert.doesNotMatch(desktopAuthSource, /credential_kind: 'cloud_bearer'/);
   assert.match(cloudAuthAuthoritySource, /credential_kind: 'cloud_bearer'/);
-  assert.match(appSource, /credential_kind: 'local_session_reference'/);
+  assert.doesNotMatch(appSource, /credential_kind: 'local_session_reference'/);
+  assert.match(appSource, /purgeLegacyLoginModePreference\(/);
+  assert.match(appSource, /purgeLegacyLocalLoginResidue\(/);
   assert.doesNotMatch(appSource, /loadNativeTrustedSession\(\)/);
   assert.match(
     appSource,
@@ -329,12 +306,9 @@ test('browser storage never receives a trusted session credential or recovery ca
   assert.match(desktopAuthSource, /if \(outcome\.must_change_password\)/);
   assert.match(appSource, /authAttemptRevisionRef/);
   assert.match(appSource, /authAttemptRevisionRef\.current !== authAttemptRevision/);
-  assert.match(appSource, /localReady=\{localRuntimeAuthorityReady\}/);
+  assert.match(appSource, /legacyLocalLoginNotice=\{legacyLocalLoginNotice\}/);
   assert.match(loginRuntimeSource, /agistack\.desktop\.login-mode/);
-  assert.match(loginRuntimeSource, /JSON\.stringify\(\{ version: 1, mode \}\)/);
-  const preferenceWriter = loginRuntimeSource.slice(
-    loginRuntimeSource.indexOf('export function writeLoginModePreference'),
-    loginRuntimeSource.indexOf('export function runtimeConfigForLoginMode'),
-  );
-  assert.doesNotMatch(preferenceWriter, /apiKey|password|token|session|workspaceRoot|BaseUrl/);
+  assert.match(loginRuntimeSource, /purgeLegacyLoginModePreference/);
+  assert.doesNotMatch(loginRuntimeSource, /JSON\.stringify\(\{ version: 1, mode \}\)/);
+  assert.doesNotMatch(loginRuntimeSource, /tenantId: 'local'|projectId: 'local-project'/);
 });

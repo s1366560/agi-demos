@@ -188,7 +188,7 @@ test('App retains fallback tokens only for the guarded flow and keeps native tok
   assert.match(appSource, /<ForcePasswordChangeScreen/);
 
   const flowStart = desktopAuthSource.indexOf('const submitForcedPasswordChange');
-  const flowEnd = desktopAuthSource.indexOf('const hydrateLocalSession', flowStart);
+  const flowEnd = desktopAuthSource.indexOf('const handleConfigChange', flowStart);
   const flowSource = desktopAuthSource.slice(flowStart, flowEnd);
   const passwordChange = flowSource.indexOf('.forceChangePassword(');
   const projectedSession = flowSource.indexOf('hydrateProjectedCloudSession(');

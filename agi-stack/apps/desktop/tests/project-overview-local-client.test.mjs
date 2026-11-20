@@ -18,7 +18,7 @@ const scope = {
 const config = {
   apiBaseUrl: 'http://127.0.0.1:4777/',
   deviceAuthorizationBaseUrl: 'https://auth.example.test',
-  apiKey: ' local-session ',
+  apiKey: ' desktop-test-session ',
   localApiToken: ' launch-capability ',
   tenantId: 'tenant-1',
   projectId: 'project-1',
@@ -132,7 +132,7 @@ test('Local Project Overview adapter uses the scoped sidecar route, credentials,
   assert.equal(requests[0].init.credentials, 'omit');
   const headers = new Headers(requests[0].init.headers);
   assert.equal(headers.get('Accept'), 'application/json');
-  assert.equal(headers.get('Authorization'), 'Bearer local-session');
+  assert.equal(headers.get('Authorization'), 'Bearer desktop-test-session');
   assert.equal(headers.get('X-Agistack-Launch'), 'launch-capability');
 
   assert.deepEqual(snapshot, {

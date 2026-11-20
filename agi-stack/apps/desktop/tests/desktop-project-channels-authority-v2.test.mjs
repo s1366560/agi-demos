@@ -33,7 +33,7 @@ afterEach(() => {
 const config = (mode = 'cloud') => ({
   apiBaseUrl: mode === 'cloud' ? 'https://api.test' : 'http://127.0.0.1:43117',
   deviceAuthorizationBaseUrl: 'https://api.test',
-  apiKey: mode === 'cloud' ? 'trusted-session' : 'local-session',
+  apiKey: mode === 'cloud' ? 'trusted-session' : 'desktop-test-session',
   localApiToken: mode === 'local' ? 'private-launch' : '',
   tenantId: mode === 'cloud' ? 'tenant-1' : 'local',
   projectId: 'project-1',

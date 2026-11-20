@@ -38,7 +38,6 @@ import {
 import { desktopNativeCloudAuthClient } from './api/nativeCloudAuthClient';
 import {
   settleTrustedSessionRestoreFailure,
-  TrustedSessionAuthenticationInvalidError,
 } from './api/trustedSessionRecovery';
 import type {
   WorkspaceBindingAgentDefinition,
@@ -47,12 +46,10 @@ import type {
   WorkspaceUpdateInput,
 } from './api/client';
 import {
-  clearLocalTrustedSession,
   clearNativeTrustedSession,
   hasNativeTrustedSessionBroker,
-  loadLocalTrustedSession,
-  saveLocalTrustedSession,
   probeCloudTrustedSession,
+  purgeLegacyLocalLoginResidue,
   selectPlatformPluginAuthorityV2,
 } from './api/trustedSession';
 import type { CloudSessionProjection } from './api/cloudSessionProjectionClient';
@@ -83,7 +80,10 @@ import {
   createProjectCronJobsRouteBindingProviderV2,
 } from './features/automations/projectCronJobsRouteBindingProviderV2';
 import { createAutomationConversationOpener } from './features/automations/automationConversationNavigation';
-import { initialDesktopRuntimeConfig } from './features/auth/loginRuntimeModel';
+import {
+  initialDesktopRuntimeConfig,
+  purgeLegacyLoginModePreference,
+} from './features/auth/loginRuntimeModel';
 import { resolveNativeOAuthResumePath } from './features/auth/nativeOAuthSessionModel';
 import type { ChatWorkflowTarget } from './features/chat/ChatWorkflowStrip';
 import { isDesktopNavigationRouteEnabledV2 } from './plugins/desktopRendererAuthorityStateV2';
@@ -689,10 +689,9 @@ export function App() {
   const { locale, t } = useI18n();
   const { resolved: themeAppearance } = useThemePreference();
   const { showToast } = useToast();
-  const [config, setConfig] = useState<DesktopRuntimeConfig>(() =>
-    initialDesktopRuntimeConfig(undefined, runsInNativeDesktop),
-  );
+  const [config, setConfig] = useState<DesktopRuntimeConfig>(() => initialDesktopRuntimeConfig());
   const [auth, setAuth] = useState<AuthState>(emptyAuthState);
+  const [legacyLocalLoginNotice, setLegacyLocalLoginNotice] = useState(false);
   const [sessionRestoreRetryAvailable, setSessionRestoreRetryAvailable] = useState(false);
   const [sessionRestoreRetryRevision, setSessionRestoreRetryRevision] = useState(0);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
@@ -6434,13 +6433,10 @@ export function App() {
     beginNativeOAuth,
     cancelForcedPasswordChange,
     cancelWorkspaceSso,
-    changeLoginMode,
     handleConfigChange,
     hydrateCloudSession,
     hydrateProjectedCloudSession,
-    hydrateLocalSession,
     login,
-    loginLocalSession,
     loginWithWorkspaceSso,
     nativeOAuthPendingProvider,
     nativeOAuthProviders,
@@ -6495,9 +6491,14 @@ export function App() {
   useEffect(() => {
     if (auth.status === 'signed_in') {
       setSessionRestoreRetryAvailable(false);
+      setLegacyLocalLoginNotice(false);
       return;
     }
+    const legacyPreferenceCleared = purgeLegacyLoginModePreference();
     if (!runsInNativeDesktop || auth.status !== 'signed_out' || !hasNativeTrustedSessionBroker()) {
+      if (legacyPreferenceCleared && auth.status === 'signed_out') {
+        setLegacyLocalLoginNotice(true);
+      }
       return;
     }
     const attemptKey = `${config.mode}|${config.apiBaseUrl}|${config.localApiToken}`;
@@ -6506,7 +6507,7 @@ export function App() {
     const authAttemptRevision = ++authAttemptRevisionRef.current;
 
     void (async () => {
-      let restoringCloud = config.mode === 'cloud';
+      let legacyResidueCleared = legacyPreferenceCleared;
       try {
         setSessionRestoreRetryAvailable(false);
         setAuth((current) => ({
@@ -6517,73 +6518,42 @@ export function App() {
         setConnection('loading');
         setError(null);
 
+        try {
+          legacyResidueCleared =
+            legacyResidueCleared || (await purgeLegacyLocalLoginResidue());
+        } catch {
+          // A purge failure must not block cloud session recovery.
+        }
+        if (
+          localResumeAttemptRef.current !== attemptKey ||
+          authAttemptRevisionRef.current !== authAttemptRevision
+        ) {
+          return;
+        }
+
         const cloudSessionPresent = await probeCloudTrustedSession();
-        restoringCloud = cloudSessionPresent || config.mode === 'cloud';
+        const restoringCloud = cloudSessionPresent || config.mode === 'cloud';
         await selectPlatformPluginAuthorityV2(restoringCloud ? 'cloud' : config.mode);
-        if (restoringCloud) {
-          const projection = await hydrateProjectedCloudSession(authAttemptRevision);
-          if (
-            localResumeAttemptRef.current !== attemptKey ||
-            authAttemptRevisionRef.current !== authAttemptRevision
-          ) {
-            return;
-          }
-          if (!projection) {
-            setAuth(emptyAuthState);
-            setConnection('idle');
-          }
-          return;
-        }
-
-        const trustedSession = await loadLocalTrustedSession();
-        if (!trustedSession) {
+        if (!restoringCloud) {
+          setLegacyLocalLoginNotice(legacyResidueCleared);
           setAuth(emptyAuthState);
           setConnection('idle');
           return;
         }
+        const projection = await hydrateProjectedCloudSession(authAttemptRevision);
         if (
           localResumeAttemptRef.current !== attemptKey ||
           authAttemptRevisionRef.current !== authAttemptRevision
         ) {
           return;
         }
-
-        if (trustedSession.runtime_mode !== 'local' || !localRuntimeAuthorityReady) {
-          localResumeAttemptRef.current = '';
+        if (!projection) {
+          setLegacyLocalLoginNotice(legacyResidueCleared);
           setAuth(emptyAuthState);
           setConnection('idle');
           return;
         }
-
-        // The native local runtime uses an ephemeral port after each launch. Bind recovery to the
-        // exact live endpoint and launch capability reported by the sidecar, then rotate the record.
-        const bootstrapClient = new DesktopApiClient({ ...config, apiKey: '' });
-        const outcome = await bootstrapClient.resumeLocalSession(trustedSession.credential);
-        if (
-          localResumeAttemptRef.current !== attemptKey ||
-          authAttemptRevisionRef.current !== authAttemptRevision
-        ) {
-          return;
-        }
-        if (!outcome?.session?.session_id) {
-          await clearLocalTrustedSession();
-          if (authAttemptRevisionRef.current !== authAttemptRevision) return;
-          setAuth(emptyAuthState);
-          setConnection('idle');
-          return;
-        }
-        await saveLocalTrustedSession({
-          version: 1,
-          api_base_url: config.apiBaseUrl,
-          runtime_mode: 'local',
-          credential_kind: 'local_session_reference',
-          credential: outcome.session.session_id,
-          expires_at: outcome.session.expires_at ?? null,
-        });
-        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
-        const hydrated = await hydrateLocalSession(outcome, config, authAttemptRevision);
-        if (!hydrated) return;
-        applySectionSideEffects('workspace');
+        setLegacyLocalLoginNotice(false);
       } catch (caught) {
         if (
           localResumeAttemptRef.current !== attemptKey ||
@@ -6594,15 +6564,14 @@ export function App() {
         let recovery: 'reauthenticate' | 'retry' = 'retry';
         try {
           recovery = await settleTrustedSessionRestoreFailure(
-            !restoringCloud && caught instanceof DesktopApiError && caught.status === 401
-              ? new TrustedSessionAuthenticationInvalidError()
-              : caught,
-            () => restoringCloud ? clearNativeTrustedSession() : clearLocalTrustedSession(),
+            caught,
+            () => clearNativeTrustedSession(),
           );
         } catch {
           // Vault failures preserve a manual recovery path and the original failure.
         }
         if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+        setLegacyLocalLoginNotice(legacyResidueCleared);
         setSessionRestoreRetryAvailable(recovery === 'retry');
         const message = t(recovery === 'retry' ? 'login.restoreUnavailable' : 'login.restoreFailed');
         setAuth({ ...emptyAuthState, error: message });
@@ -6615,7 +6584,6 @@ export function App() {
     config.apiBaseUrl,
     config.localApiToken,
     config.mode,
-    localRuntimeAuthorityReady,
     runsInNativeDesktop,
     sessionRestoreRetryRevision,
   ]);
@@ -7945,20 +7913,16 @@ export function App() {
                     }
                   : undefined
               }
-              mode={config.mode}
-              localReady={localRuntimeAuthorityReady}
-              localModeAvailable={runsInNativeDesktop}
+              legacyLocalLoginNotice={legacyLocalLoginNotice}
               cloudApiBaseUrl={config.apiBaseUrl}
               onCloudApiBaseUrlChange={(apiBaseUrl) =>
                 handleConfigChange({ ...configRef.current, apiBaseUrl })
               }
               email={loginEmail}
               password={loginPassword}
-              onModeChange={changeLoginMode}
               onEmailChange={setLoginEmail}
               onPasswordChange={setLoginPassword}
               onEmailLogin={(trustedDevice) => void login(trustedDevice)}
-              onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
               onWorkspaceSso={(trustedDevice) => void loginWithWorkspaceSso(trustedDevice)}
               nativeOAuthProviders={nativeOAuthProviders}
               nativeOAuthPendingProvider={nativeOAuthPendingProvider}

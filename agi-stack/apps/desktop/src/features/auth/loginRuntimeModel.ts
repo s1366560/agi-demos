@@ -1,20 +1,10 @@
-import {
-  DEFAULT_CONFIG,
-  LOCAL_DEV_SERVER_PRESETS,
-  type DesktopRuntimeConfig,
-  type RuntimeMode,
-} from '../../types';
+import { DEFAULT_CONFIG, LOCAL_DEV_SERVER_PRESETS, type DesktopRuntimeConfig } from '../../types';
 
-export const LOGIN_MODE_PREFERENCE_KEY = 'agistack.desktop.login-mode';
+export const LEGACY_LOGIN_MODE_PREFERENCE_KEY = 'agistack.desktop.login-mode';
 
-type LoginModePreference = {
-  version: 1;
-  mode: RuntimeMode;
-};
+type LegacyLoginModeStorage = Pick<Storage, 'getItem' | 'removeItem'>;
 
-type LoginModeStorage = Pick<Storage, 'getItem' | 'setItem'>;
-
-function browserStorage(): LoginModeStorage | null {
+function browserStorage(): LegacyLoginModeStorage | null {
   if (typeof window === 'undefined') return null;
   try {
     return window.localStorage;
@@ -31,80 +21,60 @@ export function runsInElectronShell(): boolean {
   );
 }
 
-function isLoginModePreference(value: unknown): value is LoginModePreference {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    Object.keys(record).length === 2 &&
-    record.version === 1 &&
-    (record.mode === 'local' || record.mode === 'cloud')
-  );
-}
-
-export function readLoginModePreference(storage = browserStorage()): RuntimeMode {
-  if (!storage) return 'local';
+function legacyPreferenceWasLocalSession(rawValue: string): boolean {
   try {
-    const rawValue = storage.getItem(LOGIN_MODE_PREFERENCE_KEY);
-    if (!rawValue) return 'local';
     const preference: unknown = JSON.parse(rawValue);
-    return isLoginModePreference(preference) ? preference.mode : 'local';
+    if (!preference || typeof preference !== 'object' || Array.isArray(preference)) return true;
+    return (preference as { mode?: unknown }).mode === 'local';
   } catch {
-    return 'local';
+    return true;
   }
 }
 
-export function writeLoginModePreference(
-  mode: RuntimeMode,
-  storage = browserStorage(),
-): void {
-  if (!storage) return;
+/** Removes the retired login-mode preference. Returns true when it recorded a local session. */
+export function purgeLegacyLoginModePreference(
+  storage: LegacyLoginModeStorage | null = browserStorage(),
+): boolean {
+  if (!storage) return false;
   try {
-    storage.setItem(LOGIN_MODE_PREFERENCE_KEY, JSON.stringify({ version: 1, mode }));
+    const rawValue = storage.getItem(LEGACY_LOGIN_MODE_PREFERENCE_KEY);
+    if (!rawValue) return false;
+    storage.removeItem(LEGACY_LOGIN_MODE_PREFERENCE_KEY);
+    return legacyPreferenceWasLocalSession(rawValue);
   } catch {
-    // The preference is non-essential. An inaccessible store safely falls back to local next time.
+    return false;
   }
 }
 
-export function runtimeConfigForLoginMode(
-  current: DesktopRuntimeConfig,
-  mode: RuntimeMode,
-  cloudApiBaseUrl?: string,
-): DesktopRuntimeConfig {
-  const preset = mode === 'local' ? LOCAL_DEV_SERVER_PRESETS[0] : LOCAL_DEV_SERVER_PRESETS[1];
+export function initialDesktopRuntimeConfig(): DesktopRuntimeConfig {
+  const cloudPreset = LOCAL_DEV_SERVER_PRESETS.find((preset) => preset.mode === 'cloud');
   return {
-    ...current,
-    apiBaseUrl: mode === 'cloud' ? cloudApiBaseUrl ?? preset.apiBaseUrl : preset.apiBaseUrl,
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: cloudPreset?.apiBaseUrl ?? DEFAULT_CONFIG.apiBaseUrl,
     apiKey: '',
     localApiToken: '',
-    tenantId: mode === 'local' ? 'local' : 'default',
-    projectId: mode === 'local' ? 'local-project' : '',
+    tenantId: 'default',
+    projectId: '',
     workspaceId: '',
-    mode,
+    mode: 'cloud',
   };
-}
-
-export function loginModeForRuntimeAvailability(
-  mode: RuntimeMode,
-  localModeAvailable: boolean,
-): RuntimeMode {
-  return localModeAvailable ? mode : 'cloud';
 }
 
 export function runtimeConfigForLoginAvailability(
   current: DesktopRuntimeConfig,
-  localModeAvailable: boolean,
 ): DesktopRuntimeConfig {
-  const mode = loginModeForRuntimeAvailability(current.mode, localModeAvailable);
-  return mode === current.mode ? current : runtimeConfigForLoginMode(current, mode);
-}
-
-export function initialDesktopRuntimeConfig(
-  storage = browserStorage(),
-  localModeAvailable = runsInElectronShell(),
-): DesktopRuntimeConfig {
-  const preferredConfig = runtimeConfigForLoginMode(
-    DEFAULT_CONFIG,
-    readLoginModePreference(storage),
-  );
-  return runtimeConfigForLoginAvailability(preferredConfig, localModeAvailable);
+  if (
+    current.mode === 'cloud' &&
+    current.tenantId !== 'local' &&
+    current.projectId !== 'local-project'
+  ) {
+    return current;
+  }
+  const cloud = initialDesktopRuntimeConfig();
+  return {
+    ...cloud,
+    apiBaseUrl: current.mode === 'cloud' ? current.apiBaseUrl : cloud.apiBaseUrl,
+    deviceAuthorizationBaseUrl: current.deviceAuthorizationBaseUrl,
+    workspaceRoot: current.workspaceRoot,
+  };
 }

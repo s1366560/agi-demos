@@ -132,9 +132,7 @@ const SIDECAR_COMMANDS = new Set([
   'platform_plugin_authority_select_v2',
   'platform_plugin_renderer_distribution_current_v2',
   'trusted_session_clear',
-  'local_trusted_session_save',
-  'local_trusted_session_load',
-  'local_trusted_session_clear',
+  'legacy_local_login_purge',
   'local_runtime_status',
   'local_runtime_configure',
   'workspace_core_status',
@@ -1134,8 +1132,6 @@ async function executeDesktopCommand(
         if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
         if ([
           'trusted_session_clear',
-          'local_trusted_session_save',
-          'local_trusted_session_clear',
           'platform_plugin_authority_select_v2',
         ].includes(command)) {
           await cloudAuthenticationAuthority?.cancelPendingAuthentication();

@@ -370,10 +370,7 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
   }, [runsInNativeDesktop]);
 
   const beginNativeOAuth = async (provider: string, trustedDevice = true): Promise<void> => {
-    const runtimeConfig = runtimeConfigForLoginAvailability(
-      configRef.current,
-      runsInNativeDesktop,
-    );
+    const runtimeConfig = runtimeConfigForLoginAvailability(configRef.current);
     const client = desktopNativeOAuthClient();
     if (!client || runtimeConfig.mode !== 'cloud') return;
 
@@ -571,10 +568,7 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
   };
 
   const loginWithWorkspaceSso = async (trustedDevice: boolean) => {
-    const runtimeConfig = runtimeConfigForLoginAvailability(
-      configRef.current,
-      runsInNativeDesktop,
-    );
+    const runtimeConfig = runtimeConfigForLoginAvailability(configRef.current);
     if (runtimeConfig.mode !== 'cloud') return;
 
     const preserveExpiredPresentation = Boolean(

@@ -33,7 +33,7 @@ afterEach(() => {
 const config = (mode = 'cloud') => ({
   apiBaseUrl: mode === 'cloud' ? 'https://api.test' : 'http://127.0.0.1:43117',
   deviceAuthorizationBaseUrl: 'https://api.test',
-  apiKey: mode === 'cloud' ? 'trusted-session' : 'local-session',
+  apiKey: mode === 'cloud' ? 'trusted-session' : 'desktop-test-session',
   localApiToken: mode === 'local' ? 'private-launch' : '',
   tenantId: 'tenant-1',
   projectId: 'project-1',
@@ -429,7 +429,7 @@ test('Local observes through authenticated sidecar and rejects both mutations be
   );
   assert.equal(calls.length, 1);
   assert.equal(new URL(calls[0].input).pathname, '/api/v1/auth/me');
-  assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Bearer local-session');
+  assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Bearer desktop-test-session');
   assert.equal(new Headers(calls[0].init.headers).get('X-Agistack-Launch'), 'private-launch');
 });
 

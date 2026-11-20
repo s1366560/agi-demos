@@ -1,11 +1,6 @@
-import type { RuntimeMode } from '../../types';
+export type WorkspaceSsoAction = { kind: 'workspace_sso' };
 
-export type WorkspaceSsoAction =
-  | { kind: 'local_session'; trustedDevice: boolean }
-  | { kind: 'workspace_sso' }
-  | { kind: 'unavailable'; capability: 'local_workspace' | 'workspace_sso' };
-
-export type WorkspaceContinueLabelKey = 'login.localWorkspace' | 'login.workspaceSso';
+export type WorkspaceContinueLabelKey = 'login.workspaceSso';
 
 export type LoginCredentialValidation = 'invalid_credentials' | null;
 
@@ -16,18 +11,12 @@ export function validateLoginCredentials(
   return email.trim().includes('@') && password.length >= 6 ? null : 'invalid_credentials';
 }
 
-export function resolveWorkspaceSsoAction(
-  mode: RuntimeMode,
-  localReady: boolean,
-  trustedDevice: boolean,
-): WorkspaceSsoAction {
-  if (mode !== 'local') return { kind: 'workspace_sso' };
-  if (!localReady) return { kind: 'unavailable', capability: 'local_workspace' };
-  return { kind: 'local_session', trustedDevice };
+export function resolveWorkspaceSsoAction(): WorkspaceSsoAction {
+  return { kind: 'workspace_sso' };
 }
 
-export function resolveWorkspaceContinueLabelKey(mode: RuntimeMode): WorkspaceContinueLabelKey {
-  return mode === 'local' ? 'login.localWorkspace' : 'login.workspaceSso';
+export function resolveWorkspaceContinueLabelKey(): WorkspaceContinueLabelKey {
+  return 'login.workspaceSso';
 }
 
 export function resolveDeviceAuthorizationUrl(

@@ -3004,7 +3004,7 @@ test('pure Local startup never invokes the implicit Electron cloud broker', asyn
   globalThis.fetch = async () => new Response(JSON.stringify({}), {headers:{'content-type':'application/json'}});
   try {
     const client = createWorkbenchCapabilityClient({getAutomationCapabilities: async()=>automationContract}, {
-      ...DEFAULT_CONFIG, mode:'local', apiBaseUrl:'http://127.0.0.1:4123',apiKey:'local-session',localApiToken:'launch-capability',tenantId:'tenant-1',projectId:'project-1',workspaceId:'',
+      ...DEFAULT_CONFIG, mode:'local', apiBaseUrl:'http://127.0.0.1:4123',apiKey:'desktop-test-session',localApiToken:'launch-capability',tenantId:'tenant-1',projectId:'project-1',workspaceId:'',
     });
     const snapshot = await client.loadSnapshot();
     assert.equal(snapshot.capabilities['project-playbooks'].availability, 'unavailable');

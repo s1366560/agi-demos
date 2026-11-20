@@ -1,19 +1,13 @@
-import { useRef } from 'react';
-
 import { useI18n } from '../i18n';
 import {
   DesktopApiClient,
 } from '../api/client';
 import { desktopNativeCloudAuthClient } from '../api/nativeCloudAuthClient';
 import {
-  clearLocalTrustedSession,
   clearNativeTrustedSession,
   hasNativeTrustedSessionBroker,
-  saveLocalTrustedSession,
-  type NativeTrustedSession,
 } from '../api/trustedSession';
 import {
-  findWorkspaceProject,
   isSameDesktopRequestScope,
   resolveSignOutDisposition,
 } from '../features/auth/authContextModel';
@@ -23,8 +17,6 @@ import {
 } from '../features/auth/forcePasswordChangeModel';
 import {
   runtimeConfigForLoginAvailability,
-  runtimeConfigForLoginMode,
-  writeLoginModePreference,
 } from '../features/auth/loginRuntimeModel';
 import {
   runtimeTransportIdentityChanged,
@@ -33,7 +25,6 @@ import {
   DEFAULT_CONFIG,
   DesktopRuntimeConfig,
   LoginOutcome,
-  RuntimeMode,
 } from '../types';
 import {
   formatLoginError,
@@ -70,7 +61,6 @@ export function useLocalCredentialAuth(
     loginEmail,
     loginPassword,
     api,
-    localRuntimeAuthorityReady,
     setAuth,
     setLoginModalOpen,
     setLoginEmail,
@@ -94,17 +84,11 @@ export function useLocalCredentialAuth(
     refreshRuntime,
     applySectionSideEffects,
   } = params;
-  const cloudApiBaseUrlRef = useRef<string | undefined>(
-    config.mode === 'cloud' ? config.apiBaseUrl : undefined,
-  );
   const login = async (trustedDevice: boolean) => {
     supersedeWorkspaceSsoAttempt();
     const username = loginEmail.trim();
     if (!username || !loginPassword) return;
-    const runtimeConfig = runtimeConfigForLoginAvailability(
-      configRef.current,
-      runsInNativeDesktop,
-    );
+    const runtimeConfig = runtimeConfigForLoginAvailability(configRef.current);
 
     const authAttemptRevision = ++authAttemptRevisionRef.current;
     localResumeAttemptRef.current = '';
@@ -325,132 +309,6 @@ export function useLocalCredentialAuth(
     }
   };
 
-  const hydrateLocalSession = async (
-    outcome: LoginOutcome,
-    runtimeConfig: DesktopRuntimeConfig,
-    authAttemptRevision: number,
-  ): Promise<boolean> => {
-    if (!outcome.context) {
-      throw new Error(t('login.localContextMissing'));
-    }
-    const localContext = outcome.context;
-    const tokenConfig = {
-      ...runtimeConfig,
-      apiKey: outcome.access_token,
-      tenantId: localContext.tenant_id,
-      projectId: localContext.project_id,
-      workspaceId: '',
-    };
-    const identityClient = new DesktopApiClient(tokenConfig);
-    const [user, tenants, projects] = await Promise.all([
-      identityClient.currentUser(),
-      identityClient.listTenants(),
-      identityClient.listProjects(localContext.tenant_id),
-    ]);
-    if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
-    if (!tenants.some((tenant) => tenant.id === localContext.tenant_id)) {
-      throw new Error(t('login.localTenantUnavailable'));
-    }
-    const scopedProjects = projects.filter(
-      (project) => project.tenant_id === localContext.tenant_id,
-    );
-    const selectedProject = findWorkspaceProject(
-      scopedProjects,
-      localContext.tenant_id,
-      localContext.project_id,
-    );
-    if (!selectedProject) {
-      throw new Error(t('login.localProjectUnavailable'));
-    }
-
-    contextRevisionRef.current = localContext.revision;
-    resetProjectScopedState();
-    commitRuntimeConfig(tokenConfig);
-    setAuth({
-      status: 'signed_in',
-      credentialKind: 'local_session',
-      session: outcome.session ?? null,
-      context: localContext,
-      user,
-      tenants,
-      projects: scopedProjects,
-      mustChangePassword: false,
-      error: null,
-    });
-    await refreshRuntime(tokenConfig, [selectedProject], user.user_id);
-    return authAttemptRevisionRef.current === authAttemptRevision;
-  };
-
-  const loginLocalSession = async (trustedDevice: boolean) => {
-    supersedeWorkspaceSsoAttempt();
-    if (!localRuntimeAuthorityReady) {
-      setAuth((current) => ({
-        ...current,
-        error: t('login.localRuntimeNotReady'),
-      }));
-      return;
-    }
-
-    const authAttemptRevision = ++authAttemptRevisionRef.current;
-    localResumeAttemptRef.current = '';
-    setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
-    setConnection('loading');
-    setError(null);
-    let persistenceWarning: string | null = null;
-    try {
-      if (hasNativeTrustedSessionBroker()) {
-        try {
-          await clearLocalTrustedSession();
-        } catch {
-          // An uncleared local reference may belong to another local session. Fail closed.
-          throw new Error(t('login.credentialStoreUnavailable'));
-        }
-        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
-      }
-      const bootstrapClient = new DesktopApiClient({ ...config, apiKey: '' });
-      const outcome = await bootstrapClient.createLocalSession(trustedDevice);
-      if (authAttemptRevisionRef.current !== authAttemptRevision) return;
-      const sessionId = outcome.session?.session_id?.trim();
-      if (trustedDevice && hasNativeTrustedSessionBroker() && sessionId) {
-        const trustedSession: NativeTrustedSession = {
-          version: 1,
-          api_base_url: config.apiBaseUrl,
-          runtime_mode: 'local',
-          credential_kind: 'local_session_reference',
-          credential: sessionId,
-          expires_at: outcome.session?.expires_at ?? null,
-        };
-        try {
-          await saveLocalTrustedSession(trustedSession);
-        } catch {
-          persistenceWarning = t('login.persistenceUnavailable');
-        }
-        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
-      }
-      const hydrated = await hydrateLocalSession(
-        outcome,
-        config,
-        authAttemptRevision,
-      );
-      if (!hydrated) return;
-      applySectionSideEffects('workspace');
-      if (persistenceWarning) setError(persistenceWarning);
-    } catch (caught) {
-      if (authAttemptRevisionRef.current !== authAttemptRevision) return;
-      if (hasNativeTrustedSessionBroker()) {
-        try {
-          await clearLocalTrustedSession();
-        } catch {
-          // Preserve the original authentication failure without exposing credential-store detail.
-        }
-      }
-      const message = formatLoginError(caught, config.apiBaseUrl);
-      setAuth({ ...emptyAuthState, error: message });
-      setConnection('error');
-      setError(message);
-    }
-  };
-
   const handleConfigChange = (nextConfig: DesktopRuntimeConfig) => {
     const previousConfig = configRef.current;
     const transportIdentityChanged = runtimeTransportIdentityChanged(
@@ -460,32 +318,18 @@ export function useLocalCredentialAuth(
     const transportSafeConfig = transportIdentityChanged
       ? { ...nextConfig, apiKey: '', localApiToken: '' }
       : nextConfig;
-    const resolvedConfig =
-      transportSafeConfig.mode === 'local'
-        ? {
-            ...transportSafeConfig,
-            tenantId: transportSafeConfig.tenantId.trim() || 'local',
-            projectId: transportSafeConfig.projectId.trim() || 'local-project',
-          }
-        : transportSafeConfig;
+    const resolvedConfig = transportSafeConfig;
     const requestScopeChanged = !isSameDesktopRequestScope(
       previousConfig,
       resolvedConfig,
     );
-    if (previousConfig.mode !== resolvedConfig.mode) {
-      writeLoginModePreference(resolvedConfig.mode);
-    }
     if (transportIdentityChanged) {
       supersedeWorkspaceSsoAttempt();
       const authAttemptRevision = ++authAttemptRevisionRef.current;
       localResumeAttemptRef.current = '';
       setAuth(emptyAuthState);
       if (hasNativeTrustedSessionBroker()) {
-        const clearTrustedSession =
-          previousConfig.mode === 'local'
-            ? clearLocalTrustedSession
-            : clearNativeTrustedSession;
-        void clearTrustedSession().catch(() => {
+        void clearNativeTrustedSession().catch(() => {
           if (authAttemptRevisionRef.current === authAttemptRevision) {
             setError(t('login.persistenceUnavailable'));
           }
@@ -501,19 +345,6 @@ export function useLocalCredentialAuth(
     setAgentConversationSession(null);
     resetConversationTimeline();
     setAgentTaskSignals([]);
-  };
-
-  const changeLoginMode = (mode: RuntimeMode) => {
-    const nextMode: RuntimeMode = mode;
-    if (nextMode === configRef.current.mode) return;
-    if (configRef.current.mode === 'cloud') {
-      cloudApiBaseUrlRef.current = configRef.current.apiBaseUrl;
-    }
-    setLoginEmail('');
-    setLoginPassword('');
-    handleConfigChange(
-      runtimeConfigForLoginMode(configRef.current, nextMode, cloudApiBaseUrlRef.current),
-    );
   };
 
   const useApiKeyManually = () => {
@@ -545,12 +376,9 @@ export function useLocalCredentialAuth(
       nativeSignOut
         ? nativeSignOut.then(() => true).catch(() => false)
         : hasCredentialBroker
-        ? (config.mode === 'local'
-            ? clearLocalTrustedSession()
-            : clearNativeTrustedSession()
-          )
-            .then(() => true)
-            .catch(() => false)
+          ? clearNativeTrustedSession()
+              .then(() => true)
+              .catch(() => false)
         : Promise.resolve(true),
     ]);
     if (authAttemptRevisionRef.current !== authAttemptRevision) return;
@@ -592,11 +420,8 @@ export function useLocalCredentialAuth(
   };
   return {
     cancelForcedPasswordChange,
-    changeLoginMode,
     handleConfigChange,
-    hydrateLocalSession,
     login,
-    loginLocalSession,
     logout,
     submitForcedPasswordChange,
     useApiKeyManually,

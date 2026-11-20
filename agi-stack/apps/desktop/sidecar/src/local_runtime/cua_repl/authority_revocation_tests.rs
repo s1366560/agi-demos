@@ -62,8 +62,15 @@ impl Fixture {
             .platform_plugin_authority_v2
             .publish_local_baseline(&snapshot, &wire, generation)
             .await;
-        let outcome = post(&state, None, "/api/v1/auth/local-session", json!({})).await;
-        let token = outcome["access_token"].as_str().unwrap().to_owned();
+        let token = state
+            .session_store
+            .create_local_session(
+                format!("cua-authority-{}", uuid::Uuid::new_v4()),
+                false,
+                chrono::Utc::now().timestamp_millis(),
+            )
+            .expect("mint session")
+            .access_token;
         let auth = state
             .session_store
             .validate_session_credential(&token, chrono::Utc::now().timestamp_millis())
@@ -273,15 +280,17 @@ async fn formal_workspace_switch_revokes_retained_local_cua_authorities_before_d
 #[tokio::test]
 async fn formal_unrelated_session_signout_preserves_retained_local_cua_authorities() {
     let fixture = Fixture::new().await;
-    let other = post(
-        &fixture.state,
-        None,
-        "/api/v1/auth/local-session",
-        json!({}),
-    )
-    .await;
-    let other_token = other["access_token"].as_str().unwrap();
-    assert_ne!(other["session"]["session_id"], fixture.auth.session_id);
+    let other = fixture
+        .state
+        .session_store
+        .create_local_session(
+            format!("revocation-unrelated-{}", uuid::Uuid::new_v4()),
+            false,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .expect("mint unrelated session");
+    let other_token = other.access_token.as_str();
+    assert_ne!(other.session.session_id, fixture.auth.session_id);
     agent_access::scope(Some(fixture.authorization()), async {
         let (authority, native) = fixture.retained();
         dispatch(&authority, 1).await.unwrap();
