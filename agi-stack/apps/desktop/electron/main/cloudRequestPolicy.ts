@@ -473,7 +473,10 @@ export async function executeVaultBoundCloudRequest(
       ),
     });
   }
-  const body = await boundedJson(response, true, session.credential);
+  const resolvingArchive = request.method === 'POST' &&
+    request.path === '/api/v1/platform-plugins/v2/optional-business/npm/resolve';
+  const body = await boundedJson(response, true, session.credential,
+    resolvingArchive ? 16 * 1024 * 1024 + 65536 : MAX_RESPONSE_BYTES);
   dependencies.signal?.throwIfAborted();
   if (fullDesktop && response.ok && runReview?.action === 'summary') {
     requireCloudRunSummaryScope(body, runReview.runId, context);
@@ -1444,6 +1447,7 @@ async function boundedJson(
   response: Response,
   allowNoContent = false,
   protectedCredential: string | null = null,
+  maxBytes = MAX_RESPONSE_BYTES,
 ): Promise<unknown> {
   const declaredLengthHeader = response.headers.get('content-length');
   const declaredLength = Number(declaredLengthHeader ?? '0');
@@ -1454,11 +1458,11 @@ async function boundedJson(
     await cancelResponseBody(response);
     throw new Error('cloud response contract is invalid');
   }
-  if (declaredLength > MAX_RESPONSE_BYTES) {
+  if (declaredLength > maxBytes) {
     await cancelResponseBody(response);
     throw new Error('cloud response is too large');
   }
-  const text = await readBoundedResponseText(response);
+  const text = await readBoundedResponseText(response, maxBytes);
   if (!text && allowNoContent && response.status === 204) return null;
   if (!(response.headers.get('content-type') ?? '').toLowerCase().includes('application/json')) {
     throw new Error('cloud response contract is invalid');
@@ -1473,7 +1477,7 @@ async function boundedJson(
   }
 }
 
-async function readBoundedResponseText(response: Response): Promise<string> {
+async function readBoundedResponseText(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) return '';
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -1484,7 +1488,7 @@ async function readBoundedResponseText(response: Response): Promise<string> {
       const chunk = await reader.read();
       if (chunk.done) break;
       receivedBytes += chunk.value.byteLength;
-      if (receivedBytes > MAX_RESPONSE_BYTES) {
+      if (receivedBytes > maxBytes) {
         await reader.cancel('cloud response is too large');
         throw new Error('cloud response is too large');
       }

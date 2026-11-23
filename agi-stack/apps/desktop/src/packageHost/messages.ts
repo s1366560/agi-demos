@@ -1,4 +1,6 @@
 const en = {
+  backToMarket: 'Back to marketplace',
+  moreIntegrations: 'Other integrations and credentials',
   signIn: 'Sign in',
   signOut: 'Sign out',
   origin: 'Cloud API address',
@@ -25,6 +27,8 @@ const en = {
   device: 'Device authorization',
 };
 const zh: typeof en = {
+  backToMarket: '返回插件市场',
+  moreIntegrations: '其他集成与凭据',
   signIn: '登录',
   signOut: '退出登录',
   origin: '云端 API 地址',

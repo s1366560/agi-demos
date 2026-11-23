@@ -367,3 +367,53 @@ test('npm source accepts a scoped package and exact version from the selected cl
     assert.equal(h.requests.filter((item) => item.path === path).length, before);
   }
 });
+
+test('market catalog, detail and reviewed updates stay bound to exact project requests', async () => {
+  const base = '/api/v1/platform-plugins/v2/optional-business/npm';
+  const query = new URLSearchParams(scope).toString();
+  const read = (suffix) => ({ method: 'GET', path: base + suffix });
+  const candidate = { ...scope, package_name: '@memstack/workspace', version: '1.2.0',
+    expected_digest: 'sha256:' + '1'.repeat(64), expected_revision: 1, approved_permissions: [] };
+  const apply = (body) => ({ method: 'POST', path: base + '/apply', body });
+  const h = harness();
+  for (const request of [
+    read('/catalog?' + query + '&q=memory&view=updates&limit=24&offset=0'),
+    read('/detail?' + query + '&plugin_id=memstack-workspace&package_name=%40memstack%2Fworkspace&version=1.2.0'),
+    apply(candidate),
+  ]) assert.equal((await executeVaultBoundCloudRequest(request, h.dependencies)).status, 200);
+
+  for (const request of [
+    read('/catalog?' + query + '&origin=https://other.invalid'),
+    read('/catalog?' + query + '&limit=0'),
+    read('/catalog?' + query + '&offset=-1'),
+    read('/catalog?' + query + '&project_id=elsewhere'),
+    read('/detail?' + query + '&plugin_id=memstack-workspace&version=latest'),
+    apply({ ...candidate, expected_digest: 'unsigned' }),
+    apply({ ...candidate, project_id: 'elsewhere' }),
+    apply({ ...candidate, expected_revision: null }),
+    apply({ ...candidate, alternate_registry: 'another' }),
+  ]) await assert.rejects(executeVaultBoundCloudRequest(request, h.dependencies));
+});
+
+test('only verified npm archive resolution receives the larger JSON response budget', async () => {
+  const path = '/api/v1/platform-plugins/v2/optional-business/npm/';
+  const archive = 'A'.repeat(2 * 1024 * 1024 + 1);
+  const h = harness();
+  const fetch = h.dependencies.fetch;
+  h.dependencies.fetch = async (url, init) => new URL(url).pathname.startsWith(path)
+    ? Response.json({archive_base64: archive})
+    : fetch(url, init);
+  const resolved = await executeVaultBoundCloudRequest(
+    { path: path + 'resolve', method: 'POST',
+      body: { ...scope, package_name: '@memstack/knowledge', version: '1.0.0' } },
+    h.dependencies,
+  );
+  assert.equal(resolved.body.archive_base64.length, archive.length);
+  await assert.rejects(
+    executeVaultBoundCloudRequest(
+      { path: path + 'catalog?' + new URLSearchParams(scope), method: 'GET' },
+      h.dependencies,
+    ),
+    /cloud response is too large/,
+  );
+});

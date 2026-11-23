@@ -1,4 +1,7 @@
 export const localPluginEnUS = {
+  'localPlugins.deviceReady': 'Device authorization active',
+  'localPlugins.devicePending': 'This release is awaiting installation and device authorization.',
+  'localPlugins.prepareRelease': 'Review this release for the device',
   'localPlugins.deviceGrantUnavailable': 'Device authorization unavailable',
   'localPlugins.deviceLastRun': 'Last successful invocation',
   'localPlugins.deviceTitle': 'Signed packages on this device',
@@ -49,6 +52,9 @@ export const localPluginEnUS = {
   'localPlugins.scope': 'Project scope',
 };
 export const localPluginZhCN: Record<keyof typeof localPluginEnUS, string> = {
+  'localPlugins.deviceReady': '设备授权有效',
+  'localPlugins.devicePending': '此版本等待安装和设备授权。',
+  'localPlugins.prepareRelease': '审阅此版本并授权设备',
   'localPlugins.deviceGrantUnavailable': '设备授权不可用',
   'localPlugins.deviceLastRun': '最近成功调用',
   'localPlugins.deviceTitle': '本机签名包',

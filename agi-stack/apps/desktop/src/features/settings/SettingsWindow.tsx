@@ -3,6 +3,8 @@ import { mcpManagementOwnerKey } from './mcpManagementLocationModel';
 import { PluginInstancesV2 } from './PluginInstancesV2';
 import { ComputerUseSettingsPage } from './ComputerUseSettingsPage';
 import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
+import { PackageManagement } from '../../packageHost/PackageManagement';
+import { messages as marketLabels } from '../../packageHost/messages';
 import { PluginMarketplaceV3 } from './PluginMarketplaceV3';
 import { DevicePluginSettings } from './DevicePluginSettings';
 import { LocalPluginSettings } from './LocalPluginSettings';
@@ -888,6 +890,11 @@ export function SettingsWindow({
               ) : null}
               {isResourceSection ? (
                 <div className={`settings-resource-container${section === 'plugins' ? ' settings-resource-container--plugins' : ''}`}>
+                  {section === 'plugins' && config.mode === 'cloud' && config.tenantId && config.projectId ? (
+                    <PackageManagement tenant={config.tenantId} project={config.projectId}
+                      full canManage locale={locale} />
+                  ) : null}
+                  <SettingsIntegrations collapsible={section === 'plugins' && config.mode === 'cloud'}>
                   {section === 'plugins' ? <ComputerUseSettingsPage /> : null}
                   {section === 'plugins' ? <PluginInstancesV2 config={config} operations={pluginMarketplaceOperationsV2} canManage={canManagePluginControlPlane} /> : null}
                   {section === 'plugins' ? (
@@ -1023,6 +1030,7 @@ export function SettingsWindow({
                       loading={platformPluginUiSlots.loading}
                     />
                   ) : null}
+                  </SettingsIntegrations>
                 </div>
               ) : null}
             </main>
@@ -1034,6 +1042,16 @@ export function SettingsWindow({
   );
 
   return createPortal(windowContent, document.body);
+}
+
+function SettingsIntegrations({collapsible, children}: {collapsible: boolean; children: React.ReactNode}) {
+  const [open, setOpen] = useState(false);
+  return collapsible ? (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>{marketLabels.moreIntegrations}</summary>
+      {open && children}
+    </details>
+  ) : <>{children}</>;
 }
 
 function SettingsGroup({

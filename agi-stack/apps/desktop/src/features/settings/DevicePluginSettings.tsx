@@ -17,10 +17,14 @@ export function DevicePluginSettings({
   tenant,
   project,
   pluginId,
+  digest,
+  loadArchive,
 }: {
   tenant: string;
   project: string;
   pluginId?: string;
+  digest?: string | null;
+  loadArchive?: () => Promise<string>;
 }) {
   const messages = document.documentElement.lang.startsWith('zh')
     ? localPluginZhCN
@@ -42,7 +46,7 @@ export function DevicePluginSettings({
   const invoke = useCallback(
     <T,>(operation: Record<string, unknown>, token?: string): Promise<T> =>
       deviceRequest<T>(tenant, project, pluginId, operation, token),
-    [tenant, project, pluginId]
+    [tenant, project, pluginId],
   );
 
   const refresh = useCallback(async () => {
@@ -93,16 +97,28 @@ export function DevicePluginSettings({
       if (!catalog) return;
       setPreview(null);
       setApproved(false);
-      const files = await openFilesWithDesktopDialog('plugin_package');
-      if (!mounted.current || files.status === 'cancelled') return;
-      const file = files.files[0];
-      if (files.files.length !== 1 || !file) throw new Error('device_plugin_archive_invalid');
-      const archive = await pluginArchiveBase64(file);
+      let archive: string;
+      if (loadArchive && manager) {
+        archive = await loadArchive();
+      } else {
+        const files = await openFilesWithDesktopDialog('plugin_package');
+        if (!mounted.current || files.status === 'cancelled') return;
+        const file = files.files[0];
+        if (files.files.length !== 1 || !file) throw new Error('device_plugin_archive_invalid');
+        archive = await pluginArchiveBase64(file);
+      }
       if (!mounted.current) return;
       const data = await invoke<Preview>(
         { action: 'inspect', archive_base64: archive },
-        catalog.context_token
+        catalog.context_token,
       );
+      if (
+        (pluginId && data.reference.bundle_id !== pluginId) ||
+        (digest &&
+          data.reference.digest.replace(/^sha256:/u, '') !== digest.replace(/^sha256:/u, ''))
+      ) {
+        throw new Error('device_plugin_release_changed');
+      }
       if (mounted.current) setPreview({ ...data, archive });
     });
   const install = () =>
@@ -123,11 +139,16 @@ export function DevicePluginSettings({
               local_model: { base_url: modelUrl, model: modelName },
             }),
         },
-        catalog.context_token
+        catalog.context_token,
       );
       if (mounted.current) await refresh();
     });
 
+  const installations = (catalog?.installations ?? []).filter(
+    ({ reference }) =>
+      (!pluginId || reference.bundle_id === pluginId) &&
+      (!digest || reference.digest.replace(/^sha256:/u, '') === digest.replace(/^sha256:/u, '')),
+  );
   return (
     <section className="local-plugin-settings">
       <h2>{t('localPlugins.deviceTitle')}</h2>
@@ -158,9 +179,12 @@ export function DevicePluginSettings({
         disabled={busy || !catalog?.trust_configured}
         onClick={() => void choose()}
       >
-        {t('localPlugins.choose')}
+        {t(loadArchive && manager ? 'localPlugins.prepareRelease' : 'localPlugins.choose')}
       </button>
       {catalog && !catalog.trust_configured ? <p>{t('localPlugins.noTrust')}</p> : null}
+      {catalog && pluginId && installations.length === 0 ? (
+        <p role="status">{t('localPlugins.devicePending')}</p>
+      ) : null}
       {error ? <p role="alert">{error}</p> : null}
       {preview ? (
         <div>
@@ -191,7 +215,7 @@ export function DevicePluginSettings({
                     setApproved(false);
                     const offer = await invoke<Preview>(
                       { action: 'inspect', archive_base64: preview.archive },
-                      catalog.context_token
+                      catalog.context_token,
                     );
                     if (mounted.current) setPreview({ ...offer, archive: preview.archive });
                   })
@@ -235,85 +259,92 @@ export function DevicePluginSettings({
           </button>
         </div>
       ) : null}
-      {catalog && catalog.installations.length > 0 ? (
+      {catalog && installations.length > 0 ? (
         <label>
           {t('localPlugins.deviceArgs')}
           <textarea value={args} onChange={(event) => setArgs(event.target.value)} />
         </label>
       ) : null}
-      {catalog?.installations.map((item) => (
-        <article key={item.reference.bundle_id}>
-          <h3>
-            {item.reference.bundle_id} · {item.reference.version}
-          </h3>
-          <code>{item.reference.digest}</code>
-          {item.grant_status !== 'approved' ? (
-            <p role="status">
-              {t('localPlugins.deviceGrantUnavailable')} · {item.grant_status}
-            </p>
-          ) : null}
-          {item.last_invoked_at ? (
-            <p>
-              {t('localPlugins.deviceLastRun')} · {item.reference.version} · {item.last_invoked_at}
-            </p>
-          ) : null}
-          {item.last_error ? <p role="alert">{item.last_error}</p> : null}
-          {manager && item.grant_status === 'approved' ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                revoke !== item.grant_id
-                  ? setRevoke(item.grant_id)
-                  : void perform(async () => {
-                      await invoke(
-                        {
-                          action: 'revoke',
-                          reference: item.reference,
-                          grant_id: item.grant_id,
-                        },
-                        catalog.context_token
-                      );
-                      if (mounted.current) await refresh();
-                    })
-              }
-            >
-              {t(revoke === item.grant_id ? 'localPlugins.confirm' : 'localPlugins.revoke')}
-            </button>
-          ) : null}
-          {item.tools.map((tool) => (
-            <button
-              type="button"
-              key={tool}
-              disabled={
-                busy ||
-                item.grant_status !== 'approved' ||
-                catalog.generation_id !== item.generation_id
-              }
-              onClick={() =>
-                void perform(async () => {
-                  const output = await invoke(
-                    {
-                      action: 'invoke',
-                      reference: item.reference,
-                      grant_id: item.grant_id,
-                      tool,
-                      input: JSON.parse(args),
-                    },
-                    catalog.context_token
-                  );
-                  if (mounted.current) {
-                    await refresh();
-                    if (mounted.current) setResult(JSON.stringify(output, null, 2));
-                  }
-                })
-              }
-            >
-              {t('localPlugins.deviceRun')} {tool}
-            </button>
-          ))}
-        </article>
-      ))}
+      {catalog &&
+        installations.map((item) => (
+          <article key={item.reference.bundle_id}>
+            <h3>
+              {item.reference.bundle_id} · {item.reference.version}
+            </h3>
+            <code>{item.reference.digest}</code>
+            {item.grant_status !== 'approved' || catalog.generation_id !== item.generation_id ? (
+              <p role="status">
+                {t('localPlugins.deviceGrantUnavailable')} ·{' '}
+                {catalog.generation_id !== item.generation_id
+                  ? t('localPlugins.deviceGeneration')
+                  : item.grant_status}
+              </p>
+            ) : (
+              <p role="status">{t('localPlugins.deviceReady')}</p>
+            )}
+            {item.last_invoked_at ? (
+              <p>
+                {t('localPlugins.deviceLastRun')} · {item.reference.version} ·{' '}
+                {item.last_invoked_at}
+              </p>
+            ) : null}
+            {item.last_error ? <p role="alert">{item.last_error}</p> : null}
+            {manager && item.grant_status === 'approved' ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  revoke !== item.grant_id
+                    ? setRevoke(item.grant_id)
+                    : void perform(async () => {
+                        await invoke(
+                          {
+                            action: 'revoke',
+                            reference: item.reference,
+                            grant_id: item.grant_id,
+                          },
+                          catalog.context_token,
+                        );
+                        if (mounted.current) await refresh();
+                      })
+                }
+              >
+                {t(revoke === item.grant_id ? 'localPlugins.confirm' : 'localPlugins.revoke')}
+              </button>
+            ) : null}
+            {item.tools.map((tool) => (
+              <button
+                type="button"
+                key={tool}
+                disabled={
+                  busy ||
+                  item.grant_status !== 'approved' ||
+                  catalog.generation_id !== item.generation_id
+                }
+                onClick={() =>
+                  void perform(async () => {
+                    const output = await invoke(
+                      {
+                        action: 'invoke',
+                        reference: item.reference,
+                        grant_id: item.grant_id,
+                        tool,
+                        input: JSON.parse(args),
+                      },
+                      catalog.context_token,
+                    );
+                    if (mounted.current) {
+                      await refresh();
+                      if (mounted.current) setResult(JSON.stringify(output, null, 2));
+                    }
+                  })
+                }
+              >
+                {t('localPlugins.deviceRun')} {tool}
+              </button>
+            ))}
+          </article>
+        ))}
       {result ? <pre aria-live="polite">{result}</pre> : null}
     </section>
   );

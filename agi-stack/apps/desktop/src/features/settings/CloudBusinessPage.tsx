@@ -11,11 +11,13 @@ export function CloudBusinessPage({
   item,
   digest,
   label,
+  canExecute = true,
 }: {
   client: MarketplaceClient;
-  item: MarketplaceInstallation;
+  item: Pick<MarketplaceInstallation, 'plugin_id' | 'commands'>;
   digest: string;
   label: string;
+  canExecute?: boolean;
 }) {
   const [resource, setResource] = useState<Omit<SignedSlotResourceV2, 'target'> | null>(null);
   const [result, setResult] = useState('');
@@ -24,7 +26,7 @@ export function CloudBusinessPage({
   useEffect(() => () => request.current?.abort(), [client, digest]);
 
   async function run(action?: string, payload?: Record<string, unknown>) {
-    if (busy || (action !== undefined && !item.commands?.includes(action))) return;
+    if (busy || (action !== undefined && (!canExecute || !item.commands?.includes(action)))) return;
     const controller = new AbortController();
     request.current?.abort();
     request.current = controller;

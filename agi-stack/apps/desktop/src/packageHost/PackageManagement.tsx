@@ -1,182 +1,148 @@
-import { useEffect, useState } from 'react';
-import { NpmPackageSource } from '../../../../packages/plugin-marketplace-ui/src/NpmPackageSource';
-import { openFilesWithDesktopDialog } from '../features/runtime/nativeFileBridge';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { createMarketplaceClient } from '../../../../packages/plugin-marketplace-ui/src/client';
+import { marketText } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketText';
+import type { Installation } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketTypes';
+import { CloudBusinessPage } from '../features/settings/CloudBusinessPage';
+import { PluginMarket } from '../../../../packages/plugin-marketplace-ui/src/PluginMarket';
+import { RichPackagePages } from '../../../../packages/plugin-marketplace-ui/src/RichPackagePages';
 import { pluginArchiveBase64 } from '../api/localPluginClient';
+import { openFilesWithDesktopDialog } from '../features/runtime/nativeFileBridge';
 import { DevicePluginSettings } from '../features/settings/DevicePluginSettings';
+import { devicePageCall } from './device';
 import { messages as t } from './messages';
-import { packages, transport } from './transport';
+import { packages, streamCommand, transport } from './transport';
 
-type Release = {
-  plugin_id: string;
-  running_version: string | null;
-  version: string;
-  actual_digest: string | null;
-  desired_revision: number;
-  failure?: string;
-};
-type Review = {
-  plugin_id: string;
-  version: string;
-  permissions: string[];
-  digest: string;
-  archive_base64: string;
-};
+const currentLocation = () => window.location.hash;
+function subscribe(listener: () => void) {
+  window.addEventListener('hashchange', listener);
+  return () => window.removeEventListener('hashchange', listener);
+}
+async function importArchive() {
+  const files = await openFilesWithDesktopDialog('plugin_package');
+  if (files.status === 'cancelled') return null;
+  if (files.files.length !== 1 || !files.files[0]) throw new Error('device_plugin_archive_invalid');
+  return pluginArchiveBase64(files.files[0]);
+}
+
+type NpmRelease = { packageName: string; version: string };
+
 export function PackageManagement({
   tenant,
   project,
   canManage,
-  revision,
   refresh,
+  full = false,
+  locale = document.documentElement.lang,
 }: {
   tenant: string;
   project: string;
   canManage: boolean;
-  revision: number;
-  refresh(): void;
+  refresh?: () => void;
+  full?: boolean;
+  locale?: string;
 }) {
-  const [releases, setReleases] = useState<Release[]>([]);
-  const [selected, select] = useState('');
-  const [review, setReview] = useState<Review | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const scope = { tenant_id: tenant, project_id: project };
-  const release = releases.find((row) => row.plugin_id === selected);
-  useEffect(() => {
-    const controller = new AbortController();
-    transport<{ items: Release[] }>(
-      packages + '/?' + new URLSearchParams({ tenant_id: tenant, project_id: project }),
-      { signal: controller.signal },
-    )
-      .then((data) => {
-        if (!controller.signal.aborted) setReleases(data.items);
-      })
-      .catch((reason) => {
-        if (!controller.signal.aborted) setError(String(reason));
-      });
-    return () => controller.abort();
-  }, [tenant, project, revision]);
-  async function perform(action: () => Promise<void>) {
-    setBusy(true);
-    setError('');
-    try {
-      await action();
-    } catch (cause) {
-      setError(String(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function choose() {
-    setReview(null);
-    const file = await openFilesWithDesktopDialog('plugin_package');
-    if (file.status === 'cancelled') return;
-    if (file.files.length !== 1 || !file.files[0]) throw new Error('signed_archive_required');
-    const archive_base64 = await pluginArchiveBase64(file.files[0]);
-    const checked = await transport<Omit<Review, 'archive_base64'>>(packages + '/inspect', {
-      method: 'POST',
-      body: { ...scope, archive_base64 },
-    });
-    setReview({ ...checked, archive_base64 });
-  }
-  async function install() {
-    if (!review) return;
-    await transport(packages + '/install', {
-      method: 'POST',
-      body: {
-        ...scope,
-        archive_base64: review.archive_base64,
-        approved_permissions: review.permissions,
-      },
-    });
-    select(review.plugin_id);
-    setReview(null);
-    refresh();
-  }
-  async function mutate(action: string) {
-    if (!release) return;
-    await transport(packages + '/' + encodeURIComponent(release.plugin_id) + '/' + action, {
-      method: 'POST',
-      body: { ...scope, expected_revision: release.desired_revision },
-    });
-    refresh();
-  }
-  return (
-    <details>
-      <summary>{t.packages}</summary>
-      <button onClick={refresh}>{t.retry}</button>
-      {canManage && (
-        <button disabled={busy} onClick={() => void perform(choose)}>
-          {t.import}
+  const marketplace = useMemo(
+    () => createMarketplaceClient(transport, { tenant_id: tenant, project_id: project }),
+    [tenant, project],
+  );
+  const declarativePage = (installation: Installation, canExecute: boolean) =>
+    installation.actual_digest && (
+      <CloudBusinessPage
+        key={installation.actual_digest}
+        client={marketplace}
+        item={installation}
+        digest={installation.actual_digest}
+        label={marketText(locale).open}
+        canExecute={canExecute}
+      />
+    );
+  const hash = useSyncExternalStore(subscribe, currentLocation).slice(1);
+  const base = full ? '/tenant/' + encodeURIComponent(tenant) + '/plugins' : '/plugins';
+  const index = hash.indexOf('?');
+  const pathname = index < 0 ? hash : hash.slice(0, index);
+  const params = new URLSearchParams(index < 0 ? '' : hash.slice(index + 1));
+  const plugin = pathname === base ? params.get('marketPlugin') : null;
+  const page = full && pathname === base ? params.get('marketPage') : null;
+  const navigate = (id: string | null, path?: string) => {
+    const query = pathname === base ? new URLSearchParams(params) : new URLSearchParams();
+    if (id) query.set('marketPlugin', id);
+    else query.delete('marketPlugin');
+    if (path) query.set('marketPage', path);
+    else query.delete('marketPage');
+    const search = query.toString();
+    window.location.hash = base + (search ? '?' + search : '');
+  };
+  const open = (path: string) => {
+    if (full) navigate(plugin, path);
+    else window.location.hash = path;
+  };
+  const device = useCallback(
+    (pluginId: string, digest: string | null, release?: NpmRelease) => (
+      <DevicePluginSettings
+        key={JSON.stringify([tenant, project, pluginId, digest])}
+        tenant={tenant}
+        project={project}
+        pluginId={pluginId}
+        digest={digest}
+        loadArchive={
+          release && canManage
+            ? async () => {
+                const result = await transport<{ archive_base64: string; digest: string }>(
+                  packages + '/npm/resolve',
+                  {
+                    method: 'POST',
+                    body: {
+                      tenant_id: tenant,
+                      project_id: project,
+                      package_name: release.packageName,
+                      version: release.version,
+                    },
+                  },
+                );
+                if (!digest || result.digest !== digest)
+                  throw new Error('device_plugin_release_changed');
+                return result.archive_base64;
+              }
+            : undefined
+        }
+      />
+    ),
+    [tenant, project, canManage],
+  );
+  if (page)
+    return (
+      <>
+        <button type="button" onClick={() => navigate(plugin)}>
+          {t.backToMarket}
         </button>
-      )}
-      {canManage && (
-        <NpmPackageSource
-          disabled={busy}
-          labels={{ name: t.npmName, version: t.exactVersion, preview: t.previewNpm }}
-          onChange={() => { setReview(null); setError(''); }}
-          onPreview={(name, version) => void perform(async () => {
-            setReview(null);
-            const candidate = await transport<Review>(packages + '/npm/resolve', {
-              method: 'POST', body: { ...scope, package_name: name, version },
-            });
-            setReview(candidate);
-          })}
+        <RichPackagePages
+          scope={{ tenantId: tenant, projectId: project }}
+          target="desktop-renderer"
+          pathname={page}
+          navigate={open}
+          locale={locale}
+          transport={transport}
+          streamCommand={streamCommand}
+          invokeDevice={devicePageCall(tenant, project)}
         />
-      )}
-      {review && canManage && (
-        <section>
-          <p>
-            {review.plugin_id} · {review.version} · {review.digest}
-          </p>
-          <p>
-            {t.inspect} · {review.permissions.join(', ')}
-          </p>
-          <button disabled={busy} onClick={() => void perform(install)}>
-            {t.install}
-          </button>
-        </section>
-      )}
-      <label>
-        {t.choose}
-        <select value={selected} onChange={(e) => select(e.target.value)}>
-          <option value="">{t.choose}</option>
-          {releases.map((row) => (
-            <option key={row.plugin_id} value={row.plugin_id}>
-              {row.plugin_id}
-            </option>
-          ))}
-        </select>
-      </label>
-      {release && (
-        <section>
-          <p>
-            {release.version} / {release.running_version} · <code>{release.actual_digest}</code>
-          </p>
-          {release.failure && <p role="alert">{release.failure}</p>}
-          {canManage &&
-            (['enable', 'disable', 'rollback'] as const).map((action) => (
-              <button
-                key={action}
-                disabled={busy}
-                onClick={() => void perform(() => mutate(action))}
-              >
-                {t[action]}
-              </button>
-            ))}
-          {release.actual_digest && (
-            <details>
-              <summary>{t.device}</summary>
-              <DevicePluginSettings
-                key={release.actual_digest}
-                pluginId={selected}
-                tenant={tenant}
-                project={project}
-              />
-            </details>
-          )}
-        </section>
-      )}
-      {error && <p role="alert">{error}</p>}
-    </details>
+      </>
+    );
+  return (
+    <PluginMarket
+      key={JSON.stringify([tenant, project])}
+      tenantId={tenant}
+      projectId={project}
+      target="desktop-renderer"
+      transport={transport}
+      canManage={canManage}
+      locale={locale}
+      pluginId={plugin}
+      onSelect={(id) => navigate(id)}
+      onOpen={open}
+      importArchive={importArchive}
+      deviceSettings={device}
+      declarativePage={declarativePage}
+      onChanged={refresh}
+    />
   );
 }

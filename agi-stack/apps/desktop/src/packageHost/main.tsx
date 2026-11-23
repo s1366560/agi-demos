@@ -103,7 +103,7 @@ function ProjectHost({
           <RichPackagePages
             scope={{ tenantId, projectId }}
             target="desktop-renderer"
-            pathname={path}
+            pathname={path.split('?')[0] ?? '/'}
             navigate={(next, options) => {
               if (options?.replace) location.replace('#' + next);
               else location.hash = next;
@@ -116,7 +116,6 @@ function ProjectHost({
                 tenant={tenantId}
                 project={projectId}
                 canManage={projects.some((item) => item.project_id === projectId && item.can_manage)}
-                revision={version}
                 refresh={() => bump((value) => value + 1)}
               />
             }

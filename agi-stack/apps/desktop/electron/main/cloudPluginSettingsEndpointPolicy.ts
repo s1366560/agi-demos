@@ -1,4 +1,4 @@
-import { isNpmPackageReference } from '../../../../packages/plugin-marketplace-ui/src/npmPackageReference';
+import { isExactNpmVersion, isNpmPackageName, isNpmPackageReference } from '../../../../packages/plugin-marketplace-ui/src/npmPackageReference';
 import type { CloudProductEndpoint, CloudProductRequestMethod } from './cloudProductEndpointPolicy';
 
 type Request = Readonly<{
@@ -11,6 +11,35 @@ const SCOPE = ['tenant_id', 'project_id'];
 const MARKETPLACE = '/api/v1/plugin-marketplace/v3';
 const INSTANCES = '/api/v1/platform-plugins/v2/instances';
 
+function releaseDigest(value: unknown): boolean {
+  return typeof value === 'string' && /^sha256:[a-f0-9]{64}$/u.test(value);
+}
+
+function revision(value: unknown): boolean {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+function marketRead(url: URL, catalog: boolean): CloudProductEndpoint | null {
+  const entries = [...url.searchParams];
+  const params = Object.fromEntries(entries);
+  if (entries.length !== Object.keys(params).length || !identifier(params.project_id))
+    return null;
+  if (catalog) {
+    if (!fields(params, [...SCOPE, 'q', 'view', 'offset', 'limit']) ||
+        (params.q !== undefined && params.q.length > 160) ||
+        (params.view !== undefined && !['all', 'installed', 'updates'].includes(params.view)) ||
+        (params.offset !== undefined && (!/^\d+$/u.test(params.offset) || !revision(Number(params.offset)))) ||
+        (params.limit !== undefined && (!/^\d+$/u.test(params.limit) || Number(params.limit) < 1 || Number(params.limit) > 100)))
+      return null;
+  } else if (!fields(params, [...SCOPE, 'plugin_id', 'package_name', 'version']) ||
+      !/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(params.plugin_id ?? '') ||
+      (params.package_name !== undefined && !isNpmPackageName(params.package_name)) ||
+      (params.version !== undefined && !isExactNpmVersion(params.version))) {
+    return null;
+  }
+  return scoped(params);
+}
+
 /** Project-scoped signed package lifecycle and capability invocation. */
 export function authorizePackageEndpoint(
   request: Request,
@@ -22,15 +51,22 @@ export function authorizePackageEndpoint(
   if (path === '/api/v1/project-packages/projects/' && read && noQuery(target))
     return { kind: 'identity-catalog', tenantId: null, projectId: null, workspaceId: null };
   const prefix = '/api/v1/platform-plugins/v2/optional-business/';
+  if (read && (path === prefix + 'npm/catalog' || path === prefix + 'npm/detail'))
+    return marketRead(target, path === prefix + 'npm/catalog');
   if (path.startsWith(prefix) && request.method === 'POST' && noQuery(target)) {
     const operation = path.slice(prefix.length);
     const body = request.body;
     if (body && identifier(body.project_id)) {
       if (operation === 'npm/resolve' && fields(body, [...SCOPE, 'package_name', 'version']) &&
           isNpmPackageReference(body.package_name, body.version)) return scoped(body);
+      if (operation === 'npm/apply' &&
+          fields(body, [...SCOPE, 'package_name', 'version', 'expected_revision', 'expected_digest', 'approved_permissions']) &&
+          isNpmPackageReference(body.package_name, body.version) && revision(body.expected_revision) &&
+          releaseDigest(body.expected_digest) && stringList(body.approved_permissions)) return scoped(body);
       if (operation === 'inspect' || operation === 'install') {
-        const keys = [...SCOPE, 'archive_base64', ...(operation === 'install' ? ['approved_permissions'] : [])];
-        if (fields(body, keys) && typeof body.archive_base64 === 'string' && body.archive_base64.length > 0 &&
+        const keys = [...SCOPE, 'archive_base64', ...(operation === 'install' ? ['approved_permissions', 'expected_revision', 'expected_digest'] : [])];
+        if (fields(body, keys) && (body.expected_revision === undefined || revision(body.expected_revision)) &&
+            (body.expected_digest === undefined || releaseDigest(body.expected_digest)) && typeof body.archive_base64 === 'string' && body.archive_base64.length > 0 &&
             body.archive_base64.length <= 16 * 1024 * 1024 && (operation === 'inspect' || stringList(body.approved_permissions)))
           return scoped(body);
       }
@@ -47,8 +83,6 @@ export function authorizePackageEndpoint(
       path,
     );
   if (business) {
-    const digest = (value: unknown) =>
-      typeof value === 'string' && /^sha256:[a-f0-9]{64}$/u.test(value);
     if (business[2] === 'ui' && read) {
       const entries = [...target.searchParams];
       const data = Object.fromEntries(entries);
@@ -59,7 +93,7 @@ export function authorizePackageEndpoint(
         (data.page_id !== undefined && !/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(data.page_id)) ||
         !identifier(data.project_id) ||
         data.target !== 'desktop-renderer' ||
-        !digest(data.expected_digest)
+        !releaseDigest(data.expected_digest)
       )
         return null;
       return scoped(data);
@@ -72,7 +106,7 @@ export function authorizePackageEndpoint(
       (body.payload === undefined || record(body.payload)) &&
       identifier(body.project_id) &&
       identifier(body.command_id) &&
-      digest(body.expected_digest)
+      releaseDigest(body.expected_digest)
       ? scoped(body)
       : null;
   }
