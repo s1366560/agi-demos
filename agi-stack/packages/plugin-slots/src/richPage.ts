@@ -79,7 +79,7 @@ export async function verifyPageDocument(
   const css = style ? '<link rel="stylesheet" href="data:text/css;base64,' + style + '">' : '';
   const guest = btoa(guestSource);
   const baseStyle =
-    '<style>html{font:16px/1.5 system-ui;color-scheme:light dark}body{margin:0;padding:1.25rem}main{max-width:72rem;margin:auto}form,label{display:grid;gap:.5rem}form{gap:1rem;margin-bottom:1rem}input,textarea,select,button{box-sizing:border-box;font:inherit;padding:.45rem}button{cursor:pointer}fieldset{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:start;padding:.4rem .65rem}</style>';
+    '<style>html{font:16px/1.5 system-ui;color-scheme:light dark}body{margin:0;padding:1.25rem}main{max-width:72rem;margin:auto}form,label{display:grid;gap:.5rem}form{gap:1rem;margin-bottom:1rem}input,textarea,select,button{max-width:100%;box-sizing:border-box;font:inherit;padding:.45rem}button{cursor:pointer}fieldset{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:start;padding:.4rem .65rem}</style>';
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
     baseStyle +

@@ -30,6 +30,35 @@ def _sign_in(browser, url, owner):
     return page
 
 
+def test_mobile_package_host_and_guests_fit_viewport():
+    state = Path(os.environ["MEMSTACK_QA_STANDARD_DIRECTORY"])
+    url = os.environ.get("MEMSTACK_QA_STANDARD_ORIGIN", "http://127.0.0.1:3000")
+    assert urlsplit(url).hostname in {"localhost", "127.0.0.1", "::1"}
+    owner = json.loads((state / "owner.json").read_bytes())
+    fits = "element => element.scrollWidth <= element.clientWidth + 1"
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = _sign_in(browser, url, owner)
+        page.set_viewport_size({"width": 390, "height": 844})
+        for route, title in [("/agent/chat", "Agent chat"), ("/workspaces", "Workspace directory")]:
+            page.goto(url + route)
+            guest = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
+            expect(guest.get_by_role("heading", name=title)).to_be_visible()
+            if route == "/agent/chat":
+                # Conversation titles are user content and can exceed a phone's width.
+                guest.get_by_label("Conversation", exact=True).evaluate(
+                    "select => select.add(new Option('Conversation '.repeat(12)))"
+                )
+            else:
+                editor = guest.get_by_role("region", name="Workspace rows")
+                expect(editor).to_be_visible()
+                guest.get_by_label("Archived", exact=True).check()
+                assert editor.evaluate("element => element.scrollLeft > 0")
+            assert page.locator("html").evaluate(fits), route
+            assert guest.locator("html").evaluate(fits), route
+        browser.close()
+
+
 def test_six_pages_execute_the_declared_operations():
     state = Path(os.environ["MEMSTACK_QA_STANDARD_DIRECTORY"])
     url = os.environ.get("MEMSTACK_QA_STANDARD_ORIGIN", "http://127.0.0.1:3000")

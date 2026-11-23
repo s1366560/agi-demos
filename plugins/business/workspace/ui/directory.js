@@ -83,6 +83,12 @@
       browse.disabled = false;
     }
   };
-  form.append(browse, table, add, submit);
+  const editor = document.createElement('div');
+  editor.className = 'directory-rows';
+  editor.tabIndex = 0;
+  editor.setAttribute('role', 'region');
+  editor.setAttribute('aria-label', label('Workspace rows', '工作区记录'));
+  editor.append(table);
+  form.append(browse, editor, add, submit);
   root.append(title, project, form, output);
 })();

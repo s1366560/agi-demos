@@ -126,13 +126,17 @@
       ],
       "entry": {
         "path": "ui/directory.js",
-        "digest": "sha256:25f3e84f7ace0fe4ab1adc1a286a590c3bc1f76872992c7df43c28c54b79e8b6"
+        "digest": "sha256:76e8d20edff83bc0a702d4c013e6b6075e6760e870a032af6296e69182d74ec6"
       },
       "commands": [
         "export-csv",
         "list-directory"
       ],
-      "device_tools": []
+      "device_tools": [],
+      "style": {
+        "path": "ui/directory.css",
+        "digest": "sha256:a0eb0bb18956a450e8ac13cf5d0f1f40f8facaf1a08db29f36f02a20b6370d2e"
+      }
     },
     {
       "id": "overview",

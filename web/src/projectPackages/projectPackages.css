@@ -46,6 +46,7 @@ body {
 }
 .package-shell label {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.4rem;
   margin: 0.8rem 0;
   font-weight: 600;
@@ -53,6 +54,7 @@ body {
 .package-shell select,
 .package-shell input,
 .package-shell button {
+  max-width: 100%;
   font: inherit;
   border: 1px solid #8993a4;
   border-radius: 0.3rem;
