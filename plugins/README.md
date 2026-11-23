@@ -1,15 +1,15 @@
 # 插件源码导航
 
-先按用户要完成的业务找目录。同一业务的工具、命令、页面、后台任务和数据迁移随业务包发布。一个包可以有多个模块、进程和执行目标。独立对接外部服务、需要单独信任和撤销的集成，放在适配器目录。
+先按用户要完成的业务找目录。每个业务目录有自己的发布入口。签名归档中的贡献声明决定该版本实际交付的工具、命令、页面和权限。一个包可以有多个模块、进程和执行目标。独立对接外部服务、需要单独信任和撤销的集成，放在适配器目录。
 
 | 业务包 | 已接入独立发布的能力 | 继续迁移的边界 |
 | --- | --- | --- |
-| [Agent](business/agent/README.md) | 同一个包拥有 ReAct 与 SessionProcessor 的实现、循环控制、Skill 校验、审阅 SubAgent 和会话执行统计 | 聊天传输、模型及实际工具调用仍通过已授权运行上下文 |
+| [Agent](business/agent/README.md) | 同一个包拥有 ReAct 与 SessionProcessor 的实现、循环控制、云端流式对话、取消、P5 只读回放、Skill 校验、审阅 SubAgent 和会话执行统计 | 聊天传输、模型及实际工具调用仍通过已授权运行上下文 |
 | [Knowledge](business/knowledge/README.md) | 一次发布包含云端图投影和设备侧检索，设备单独授权 | 记忆写入、图存储、索引更新及检索管线 |
-| [Workspace](business/workspace/README.md) | 按项目权限读取工作区目录并导出 CSV | 工作区协作、成员管理和项目视图 |
-| [Automation](business/automation/README.md) | Asyncio 工作流引擎、签名工作流执行与调度预览 | 外部事件消费、Webhook 和已授权的持久化任务执行上下文 |
-| [Environments](business/environments/README.md) | Sandbox 生命周期及 MCP 工具源码、隔离补丁计算和集群指标 | 实例与部署所需的基础设施权限、Sandbox WebSocket 服务的配置 |
-| [Billing](business/billing/README.md) | 报价、发票示例、命令、页面及迁移 | 全量账务流程和租户配额接口 |
+| [Workspace](business/workspace/README.md) | 项目概览、获授权工作区详情、目录和 CSV 导出 | 工作区协作、成员管理和项目视图 |
+| [Automation](business/automation/README.md) | Asyncio 工作流引擎、签名工作流编辑、执行与项目剧本读取 | 外部事件消费、Webhook 和已授权的持久化任务执行上下文 |
+| [Environments](business/environments/README.md) | Sandbox 生命周期及 MCP 工具源码、隔离补丁计算、集群指标、项目 Sandbox 准备和按运行代授权终端 | 实例与部署所需的基础设施权限、Sandbox WebSocket 服务的配置 |
+| [Billing](business/billing/README.md) | 报价、项目发票开具及列表、共享 React 发票表、命令及迁移 | 全量账务流程和租户配额接口 |
 
 [模型适配器](adapters/models)分别对接 OpenAI、DeepSeek 和 Cohere。[渠道适配器](adapters/channels/feishu)负责飞书。发布者可以独立更新和授权各适配器。增加业务工具时，先定位持有数据及规则的业务包。增加模型厂商或渠道时，先检查账号凭据、网络出口和可撤销权限是否需要独立安装。通用设备授权在宿主；现有 Computer Use 的原生实现仍在桌面 Sidecar。
 
@@ -60,3 +60,13 @@ memstack packages --tenant "$TENANT" --project "$PROJECT" list
 ```
 
 命令逐包验签、核对实际声明的权限并启用。中途失败时，CLI 显示已经启用的包，项目管理员可以从失败项继续。项目使用哪家模型、是否连接飞书、哪台设备可以执行检索，分别在选定适配器及设备授权时决定。
+
+
+默认客户端从已签名的 `contributions.json` 读取路由与页面。开发业务功能时先找 `plugins/business/<包>/ui`。其中 `ui/web` 与 `ui/desktop` 也存放完整旧客户端仍在使用的视图和控制器。新增的共享页使用独立发布的 [页面 SDK](../sdk/memstack-plugin-sdk/src/pageRuntime.ts)。[Web 宿主](../web/src/projectPackages) 和 [桌面宿主](../agi-stack/apps/desktop/src/packageHost) 负责身份、作用域、页面装载和授权。
+
+验证默认业务时，在独立目录执行 `STANDARD_DIRECTORY="$QA_DIR" MEMSTACK_DEV_PROFILE=standard make dev`。使用该实例的 Web 地址和目录执行下列测试。测试会在该项目内创建发票、安装签名版本并回退。
+
+```sh
+MEMSTACK_QA_STANDARD_DIRECTORY="$QA_DIR" MEMSTACK_QA_STANDARD_ORIGIN=http://127.0.0.1:3000 \
+  uv run pytest src/tests/integration/test_standard_project_pages.py
+```

@@ -1,6 +1,6 @@
 # 独立业务包、最小宿主与设备执行
 
-项目包实现以 `1789c930d` 为起点，并整合了随后合并的 P4（#49，`56357dd1f`）。Billing 在已构建的 API、Web 和桌面客户端上安装、升级和回退。知识检索在云登录用户批准的指定设备上运行，账号切换或撤权后原句柄失效。新项目的默认入口由空宿主安装六个签名业务包。既有全量部署仍可使用原基础包。
+项目包实现以 `1789c930d` 为起点，并整合了 P4（#49，`56357dd1f`）与 P5（#50，`497386eb2`）。Billing 在已构建的 API、Web 和桌面客户端上安装、升级和回退。知识检索在云登录用户批准的指定设备上运行，账号切换或撤权后原句柄失效。新项目的默认入口由空宿主安装六个签名业务包。既有全量部署仍可使用原基础包。
 
 业务包和适配器的当前目录、实际发布能力与剩余迁移范围见[插件源码导航](../../plugins/README.md)。
 
@@ -92,9 +92,17 @@ python -m src.cli.package_kernel_owner --email "$OWNER_EMAIL" --tenant "$TENANT_
   --project "$PROJECT_NAME" --password-file /run/secrets/initial-owner-password
 ```
 
-### 独立 Web 入口
+### 共享页面与两个客户端宿主
 
 独立 Web 项目包入口使用与完整 Web 相同的云身份、签名页面组件和项目包 API。在仓库根目录执行 `pnpm --dir web run build:project-packages`，将 `web/dist-project-packages/` 部署到站点根目录，把同源 `/api/` 转发给最小 API。也可执行 `docker build -t memstack-package-web:latest -f web/Dockerfile.project-packages web`，通过 Helm 的空宿主配置部署已构建的静态站点。访问 `/project-packages.html` 可选择当前账户有权读取的项目。直达链接支持 `?tenant=<租户 ID>&project=<项目 ID>&optionalPlugin=<包 ID>`。开发时可通过 `MEMSTACK_API_PROXY` 指定隔离 API，再运行 `pnpm --dir web run dev:project-packages`。
+
+Web 和 Electron 默认从当前项目已启用的发布版本读取页面贡献。一个签名归档中的 `pages` 可以把同一入口发给 `web` 和 `desktop-renderer`，也可以声明不同的目标入口。深链接由贡献声明。运行时先检查 ABI、目标和资源摘要，再在隔离 iframe 中加载资源。切换项目、版本或账户时，原页面的能力通道随之释放。
+
+包作者在归档中提供独立构建的 JavaScript IIFE 及可选 CSS。页面可通过 `window.memstack.scope()` 读取项目、语言、目标及获批操作。使用 `invoke(command)` 调用无参命令，使用 `invoke(command, payload, {signal, onEvent})` 接收进度、取消调用。桌面可通过 `device(tool, payload)` 请求设备授权范围内的操作。用户凭据、设备证明和本机路径由宿主管理。[页面 SDK 类型](../../sdk/memstack-plugin-sdk/src/pageRuntime.ts) · [Billing 共享页面源码](../../plugins/business/billing/ui/shared/AccountPage.tsx)
+
+独立启动默认桌面客户端使用 `make -C agi-stack run-desktop`。完整旧客户端仍可通过显式 full 配置构建，供迁移中的旧页面使用。固定宿主的浏览器回归在宿主构建后签发未知包，检查深链接、版本切换和回退。[未知包发行与宿主集成测试](../../src/tests/integration/test_package_kernel_image.py) · [六包业务页面验收](../../src/tests/integration/test_standard_project_pages.py)
+
+需要应用数据的页面声明具名命令及对应权限，如项目目录、剧本、会话回放或运行终端。完整 API 使用已有的业务授权接口。最小 API 可通过 `PACKAGE_APPLICATION_RUNTIME_URL` 连接同一云身份及发布库的可信运行时。接收端再次核验用户、项目、命令及归档摘要。纯计算、本地检索和发票 worker 可在各自已声明目标独立执行。会话及工作区历史沿用 P5 云端记录。终端授权还需要项目对应的运行服务及有效 run revision。[云端能力转发](../../src/host/operations/remote_application_commands.py) · [终端运行授权](../../plugins/business/environments/README.md#project-sandbox-and-run-terminal)
 
 ### 计算与容器入口
 
@@ -168,7 +176,7 @@ memstack --json plugin memstack-billing quote-pro --tenant "$TENANT_ID" --projec
 | 环境管理 | Environments 的独立 worker 和集群 HTTP 接口共用健康指标计算。实例、部署与模板服务已移入业务源码目录。 | Sandbox 生命周期、MCP 工具服务与旧环境页面源码归入 Environments；部署真实实例和终端仍需配置基础设施权限和 Sandbox 服务。 |
 | 工作流 | Automation 持有 asyncio 引擎和处理器。独立 worker 可执行调度工作流，也可预览 cron、单次和间隔作业，与正式调度器共用触发规则。 | 迁移各执行引擎的幂等回调、事件消费位置、撤销与重放。 |
 | 记忆图谱、Workspace、系统管理 | 图服务回收、任务恢复、逐副本就绪与最小 API 可单独运行 | 拆出引擎和迁移、清除跨域读写，打包原有前端页面与 Gateway 业务端点。 |
-| 部署 | 新环境默认以 `Dockerfile.kernel` 空宿主启动，从签名归档原子安装六个业务包。全量宿主继续提供旧业务与 ROOT 市场发布。Ray 构建只复制所需路径 | 旧全量部署使用 1 个基础包；协议清单及制品数以其构建器输出为准。飞书工厂迁入适配器后有了独立的源码制品。完整 Web/Electron 客户端仍预编译业务包里的原有富页面；Rust Gateway 仍包含部分业务端点。 |
+| 部署 | 新环境默认以 `Dockerfile.kernel` 空宿主启动，从签名归档原子安装六个业务包。全量宿主继续提供旧业务与 ROOT 市场发布。Ray 构建只复制所需路径 | 旧全量部署使用 1 个基础包；协议清单及制品数以其构建器输出为准。飞书工厂迁入适配器后有了独立的源码制品。显式启用的旧版全量客户端仍预编译原有页面；Rust Gateway 仍包含部分业务端点。 |
 
 在原工作区目录的 GET 请求中添加 `export_package=memstack-workspace`，可以下载该页的 UTF-8 CSV。BCS 按成员、租户及项目筛选并分页，包仅接收 ID、名称、办公状态和归档标志。导出按本次版本完成；不带该参数的请求继续直接返回 Core 的 JSON。[工作区目录包](../../plugins/business/workspace/README.md)
 

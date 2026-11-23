@@ -87,5 +87,28 @@
         "ui.slot"
       ]
     }
+  ],
+  "pages": [
+    {
+      "id": "account",
+      "title": "Plans and invoices",
+      "routes": [
+        "/billing"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/account.js",
+        "digest": "sha256:e245d29274d5740c50ca8835cf50daab9d11ef4c8d2200101ca18eda14345a0e"
+      },
+      "commands": [
+        "quote-free",
+        "quote-pro",
+        "quote-enterprise"
+      ],
+      "device_tools": []
+    }
   ]
 }

@@ -198,5 +198,29 @@
         "ui.slot"
       ]
     }
+  ],
+  "pages": [
+    {
+      "id": "knowledge",
+      "title": "Knowledge",
+      "routes": [
+        "/knowledge",
+        "/tenant/:tenantId/project/:projectId/graph"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/knowledge.js",
+        "digest": "sha256:57005f6aaec4a3bf10d8b2779179fbc4da156173c4f7a7c6715bf4d433e965f4"
+      },
+      "commands": [
+        "project-graph"
+      ],
+      "device_tools": [
+        "search_documents"
+      ]
+    }
   ]
 }

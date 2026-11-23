@@ -75,7 +75,7 @@ def build_release(
     worker_image: str | None = None,
     plan_service: bool = False,
 ) -> bytes:
-    from memstack_plugin_sdk.pack import build
+    from memstack_plugin_sdk.pack import build, stage_contribution
 
     with tempfile.TemporaryDirectory() as path:
         root = Path(path)
@@ -107,13 +107,22 @@ def build_release(
             for plan in plans
         ]
         if worker_image:
-            commands.append(
-                {
-                    "id": "list-invoices",
-                    "tool": "invoice.list",
-                    "payload": {"limit": 16},
-                    "permissions": ["tools.execute", "storage.read"],
-                }
+            commands.extend(
+                [
+                    {
+                        "id": "list-invoices",
+                        "tool": "invoice.list",
+                        "payload": {"limit": 16},
+                        "permissions": ["tools.execute", "storage.read"],
+                    },
+                    {
+                        "id": "create-invoice",
+                        "tool": "invoice.create",
+                        "payload": {},
+                        "accepts_input": True,
+                        "permissions": ["tools.execute", "storage.read", "storage.write"],
+                    },
+                ]
             )
         actions = [
             {"id": f"quote-{plan}", "label": f"{plan.title()} storage allowance"} for plan in plans
@@ -121,6 +130,8 @@ def build_release(
         if worker_image:
             actions.append({"id": "list-invoices", "label": "View project invoices"})
         contribution = json.loads((ROOT / spec["contribution"]).read_bytes())
+        stage_contribution(ROOT, root, spec["contribution"])
+        contribution["pages"][0]["commands"] = [command["id"] for command in commands]
         contribution["commands"] = commands
         contribution["tools"][0]["input_schema"]["properties"]["plan"]["enum"] = list(plans)
         page_path = Path(contribution["ui"][0]["path"])

@@ -78,6 +78,24 @@
         "tools.execute"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "list-directory",
+      "host_operation": "app.workspace.directory.read",
+      "permissions": [
+        "app.workspace.directory.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "read-workspace",
+      "host_operation": "app.workspace.detail.read",
+      "permissions": [
+        "app.workspace.detail.read"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -92,6 +110,69 @@
       "permissions": [
         "ui.slot"
       ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "directory",
+      "title": "Workspace directory",
+      "routes": [
+        "/workspaces",
+        "/tenant/:tenantId/project/:projectId/workspaces"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/directory.js",
+        "digest": "sha256:25f3e84f7ace0fe4ab1adc1a286a590c3bc1f76872992c7df43c28c54b79e8b6"
+      },
+      "commands": [
+        "export-csv",
+        "list-directory"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "overview",
+      "title": "Project overview",
+      "routes": [
+        "/workspace/overview",
+        "/tenant/:tenantId/project/:projectId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "list-directory"
+      ],
+      "entry": {
+        "path": "ui/overview.js",
+        "digest": "sha256:d3bbbd3fd6cd908ff842e540ea211251bf8c427fc7a475fdf82d6257ba67dbc6"
+      },
+      "device_tools": []
+    },
+    {
+      "id": "detail",
+      "title": "Workspace details",
+      "routes": [
+        "/workspaces/:workspaceId",
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "read-workspace"
+      ],
+      "entry": {
+        "path": "ui/overview.js",
+        "digest": "sha256:d3bbbd3fd6cd908ff842e540ea211251bf8c427fc7a475fdf82d6257ba67dbc6"
+      },
+      "device_tools": []
     }
   ]
 }

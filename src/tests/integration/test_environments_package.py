@@ -11,7 +11,11 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from memstack_plugin_sdk.pack import build, stage_contribution
 
+from plugins.business.environments.backend.package_sandbox_operations import SANDBOX_OPERATIONS
 from src.configuration.config import get_settings
+from src.infrastructure.adapters.primary.web.routers.project_sandbox import (
+    get_project_sandbox_runtime_capabilities,
+)
 from src.infrastructure.plugins.v2 import project_package_execution
 from src.tests.integration.test_automation_schedule_package import signed_automation  # noqa: F401
 from src.tests.integration.test_oci_mcp_worker_docker import disposable_worker_registry
@@ -97,7 +101,13 @@ async def test_environment_worker_through_project_http(http, environment_release
         json={
             **scope,
             "archive_base64": archive,
-            "approved_permissions": ["ui.slot", "tools.execute"],
+            "approved_permissions": [
+                "ui.slot",
+                "tools.execute",
+                "app.environments.sandbox.read",
+                "app.environments.sandbox.prepare",
+                "app.environments.terminal.authorize",
+            ],
         },
     )
     assert install.status_code == 200, install.text
@@ -134,6 +144,31 @@ async def test_environment_worker_through_project_http(http, environment_release
     result.raise_for_status()
     assert result.json() == {"content": "after\r\n"}
 
+    terminal = {
+        **scope,
+        "command_id": "authorize-run-terminal",
+        "payload": {
+            "run_id": "run",
+            "expected_run_revision": 1,
+        },
+    }
+    unavailable = await client.post(package + "/commands", headers=headers, json=terminal)
+    assert unavailable.status_code == 503
+    app = client._transport.app
+    app.state.package_operations_v1 = SANDBOX_OPERATIONS
+    app.add_api_route(
+        "/api/v1/projects/{project_id}/sandbox/capabilities",
+        get_project_sandbox_runtime_capabilities,
+        methods=["GET"],
+    )
+    degraded = await client.post(package + "/commands", headers=headers, json=terminal)
+    assert degraded.status_code == 503
+    assert "canonical_run_authority_unavailable" in degraded.json()["detail"]
+    denied = await client.post(
+        package + "/commands", headers={"Authorization": f"Bearer {keys['viewer']}"}, json=terminal
+    )
+    assert denied.status_code == 403
+
 
 async def test_sandbox_patch_upgrade_and_rollback_keep_workflow_available(
     http,  # noqa: F811
@@ -161,8 +196,9 @@ async def test_sandbox_patch_upgrade_and_rollback_keep_workflow_available(
         return response.json()
 
     async def activate(path, archive):
+        inspected = await post("/inspect", archive_base64=archive)
         await post(
-            "/install", archive_base64=archive, approved_permissions=["ui.slot", "tools.execute"]
+            "/install", archive_base64=archive, approved_permissions=inspected["permissions"]
         )
         await post(path + "/enable")
 

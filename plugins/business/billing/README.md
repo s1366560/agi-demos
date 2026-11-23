@@ -1,5 +1,7 @@
 # Billing
 
+The [desktop billing controls](ui/desktop/tenant-admin) own the client, controller, route and view model. [InvoiceTable](ui/shared/InvoiceTable.tsx) is shared with the independently built account page.
+
 The installable identity is `memstack-billing`. Start with [package.json](package.json) for the default signed quote release and [build.py](build.py) for a release with a digest-pinned invoice worker. A single worker release exports quotes, invoices, page actions, and CLI commands together.
 
 | Change | Entry point |
@@ -12,6 +14,8 @@ The installable identity is `memstack-billing`. Start with [package.json](packag
 
 
 The plan catalog in `plans.json` supplies the `quote` Wasm guest used by the tenant upgrade API. The guest accepts a plan identifier and returns its storage limit in bytes. The API authenticates the caller, checks the current tenant owner, validates the guest response and commits the quota update through the tenancy service. Invoice data and its Alembic revision history belong to this package.
+
+The signed account page is built from `ui/shared/AccountPage.tsx`. It bundles React and reuses the invoice table from the desktop billing screen. To regenerate its checked-in browser artifact and resource digest after editing it, run `corepack pnpm --dir plugins/business/billing/ui/shared install --frozen-lockfile` followed by `corepack pnpm --dir plugins/business/billing/ui/shared run build`. The Python publisher includes the prepared artifact without a Node toolchain.
 
 ## Publish a release
 

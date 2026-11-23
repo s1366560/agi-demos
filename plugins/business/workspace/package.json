@@ -1,6 +1,6 @@
 {
   "plugin_id": "memstack-workspace",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "target": "python",
   "tool_name": "export_csv",
   "wasm": "directory.wasm",

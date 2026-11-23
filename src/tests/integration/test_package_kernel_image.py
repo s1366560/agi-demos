@@ -364,3 +364,72 @@ def test_workspace_web_and_desktop_pages_upgrade_and_rollback(replicas, business
                 )
                 expect(area.locator("pre")).to_contain_text("Browser export")
         browser.close()
+
+
+@pytest.mark.skipif(not _WEB_IMAGE, reason="requires the built package Web image")
+@pytest.mark.parametrize("replicas", ["standalone"], indirect=True)
+def test_unknown_rich_page_deep_link_follows_release_while_hosts_stay_up(
+    replicas, business_signer, tmp_path
+):
+    import base64
+
+    from playwright.sync_api import expect, sync_playwright
+
+    from src.tests.integration.rich_page_publisher import publish_page
+
+    one, _, web_origin, owner = replicas
+    login = one.post("/api/v1/auth/token", data={"username": owner[0], "password": owner[1]})
+    login.raise_for_status()
+    headers = {"Authorization": "Bearer " + login.json()["access_token"]}
+    project = one.get("/api/v1/project-packages/projects/", headers=headers).json()[0]
+    scope = {key: project[key] for key in ("tenant_id", "project_id")}
+    base = "/api/v1/platform-plugins/v2/optional-business"
+    plugin = "qa-" + uuid4().hex
+    route = "/" + plugin + "/labels"
+    origin = web_origin()
+
+    def activate(revision):
+        archive = publish_page(tmp_path / str(revision), plugin, revision, business_signer)
+        body = {**scope, "archive_base64": base64.b64encode(archive).decode()}
+        preview = one.post(base + "/inspect", json=body, headers=headers)
+        preview.raise_for_status()
+        body["approved_permissions"] = preview.json()["permissions"]
+        one.post(base + "/install", json=body, headers=headers).raise_for_status()
+        one.post(base + "/" + plugin + "/enable", json=scope, headers=headers).raise_for_status()
+        return preview.json()["digest"]
+
+    first = activate(1)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        web = browser.new_page(locale="en-US")
+        web.goto(origin + route)
+        web.get_by_label("Email", exact=True).fill(owner[0])
+        web.get_by_label("Password", exact=True).fill(owner[1])
+        web.get_by_role("button", name="Sign In", exact=True).click()
+
+        def verify(digest, revision):
+            shell = web.frame_locator(
+                f'iframe[data-page-ready="true"][data-release-digest="{digest}"]'
+            )
+            guest = shell.frame_locator("iframe")
+            expect(guest.get_by_role("heading")).to_have_text(
+                f"Inventory labels {revision}", timeout=20000
+            )
+            guest.get_by_role("button", name="Cloud label").click()
+            expect(guest.locator("output")).to_contain_text(f"python-{revision}")
+            frame = guest.locator("html")
+            assert (
+                frame.evaluate("memstack.device('device_label', {}).catch(e => e.message)")
+                == "page_capability_unavailable"
+            )
+            assert frame.evaluate("memstack.invoke('get-label', undefined, {onEvent() {}})") == {
+                "label": f"python-{revision}"
+            }
+            assert web.url == origin + route
+
+        verify(first, 1)
+        verify(activate(2), 2)
+        one.post(base + "/" + plugin + "/rollback", headers=headers, json=scope).raise_for_status()
+        web.reload()
+        verify(first, 1)
+        browser.close()

@@ -1,6 +1,7 @@
 """Install the six business packages together and withdraw one optional model adapter."""
 
 import base64
+import hashlib
 import json
 import os
 import subprocess
@@ -113,6 +114,9 @@ async def test_packages_coexist_after_model_adapter_withdrawal(http, deployment,
         state.raise_for_status()
         assert state.json()["actual_digest"] == info["digest"]
         if info["kind"] == "business":
+            rich_pages = state.json()["pages"]
+            assert rich_pages
+            desktop_assets = {}
             for target in ("web", "desktop-renderer"):
                 page = await client.get(
                     base + path + "/ui",
@@ -122,6 +126,27 @@ async def test_packages_coexist_after_model_adapter_withdrawal(http, deployment,
                 page.raise_for_status()
                 document = json.loads(base64.b64decode(page.json()["bytes_base64"]))
                 assert document["actions"][0]["id"] in state.json()["commands"]
+                for descriptor in rich_pages:
+                    assert target in descriptor["targets"]
+                    rich = await client.get(
+                        base + path + "/ui",
+                        headers=headers,
+                        params={
+                            **scope,
+                            "expected_digest": info["digest"],
+                            "target": target,
+                            "page_id": descriptor["id"],
+                        },
+                    )
+                    rich.raise_for_status()
+                    entry = rich.json()["entry"]
+                    digest = (
+                        "sha256:"
+                        + hashlib.sha256(base64.b64decode(entry["bytes_base64"])).hexdigest()
+                    )
+                    assert entry["digest"] == digest
+                    assert rich.json()["release_digest"] == info["digest"]
+                    assert desktop_assets.setdefault(descriptor["id"], digest) == digest
         installed[info["kind"]].add(info["plugin_id"])
 
     assert len(installed["business"]) == 6

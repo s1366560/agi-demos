@@ -251,6 +251,51 @@
         "tools.execute"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "chat-list",
+      "host_operation": "app.agent.list",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.list"
+      ]
+    },
+    {
+      "id": "chat-create",
+      "host_operation": "app.agent.create",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.create"
+      ]
+    },
+    {
+      "id": "chat-history",
+      "host_operation": "app.agent.history",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.history"
+      ]
+    },
+    {
+      "id": "chat-turn",
+      "host_operation": "app.agent.turn",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.turn"
+      ]
+    },
+    {
+      "id": "chat-cancel",
+      "host_operation": "app.agent.cancel",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.cancel"
+      ]
     }
   ],
   "ui": [
@@ -265,6 +310,52 @@
       "permissions": [
         "ui.slot"
       ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "skill",
+      "title": "Agent skills",
+      "routes": [
+        "/agent/skills"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/skill.js",
+        "digest": "sha256:e23700c885031b17840724f53b4225fd150e340f6566a15023b10b8a8059cb82"
+      },
+      "commands": [
+        "validate-skill"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "chat",
+      "title": "Cloud chat",
+      "routes": [
+        "/agent/chat",
+        "/tenant/:tenantId/agent-workspace",
+        "/tenant/:tenantId/agent-workspace/:conversationId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/chat.js",
+        "digest": "sha256:c011058c1b73d59aba5c18ed2f116ee08c081f6ba9da7452db4280ae687246a9"
+      },
+      "commands": [
+        "chat-list",
+        "chat-create",
+        "chat-history",
+        "chat-turn",
+        "chat-cancel"
+      ],
+      "device_tools": []
     }
   ]
 }

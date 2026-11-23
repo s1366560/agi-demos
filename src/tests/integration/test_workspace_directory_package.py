@@ -19,6 +19,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 import docker
 from alembic import command
+from plugins.business.workspace.backend.workspace_directory_export import (
+    read_directory_operation,
+    read_workspace_operation,
+)
 from src.configuration.workspace_core import WorkspaceCoreSettings
 from src.infrastructure.adapters.primary.web import workspace_core_routes as routes
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -173,6 +177,10 @@ async def _project_host(http, db_session, core, public, monkeypatch):
         entries=(SimpleNamespace(entry_id="builtin-web-default-routes", enabled=True),)
     )[0]
     app.state.workspace_core_client = core
+    app.state.package_operations_v1 = {
+        "app.workspace.directory.read": read_directory_operation,
+        "app.workspace.detail.read": read_workspace_operation,
+    }
     install_route_definitions_v2(app, workspace_core_route_definitions_v2())
     monkeypatch.setattr(
         routes, "async_session_factory", async_sessionmaker(db_session.bind, expire_on_commit=False)
@@ -217,7 +225,7 @@ async def test_directory_exports_only_actual_core_memberships(
             return result.json()["id"]
 
         visible = await create(list_path, title, actor)
-        await create(other_path, "other project", actor)
+        other = await create(other_path, "other project", actor)
         tenant_path = "/api/v1/tenants/z/projects/r/workspaces"
         await create(tenant_path, "other tenant", actor)
 
@@ -231,7 +239,12 @@ async def test_directory_exports_only_actual_core_memberships(
                 json={
                     "tenant_id": "t",
                     "project_id": "p",
-                    "approved_permissions": ["ui.slot", "tools.execute"],
+                    "approved_permissions": [
+                        "ui.slot",
+                        "tools.execute",
+                        "app.workspace.directory.read",
+                        "app.workspace.detail.read",
+                    ],
                     "archive_base64": base64.b64encode(raw).decode(),
                 },
             )
@@ -242,6 +255,9 @@ async def test_directory_exports_only_actual_core_memberships(
                 json={"tenant_id": "t", "project_id": "p"},
             )
             assert enabled.is_success, enabled.text
+            await _verify_directory_command(api, base, actor, visible)
+
+            await _verify_detail_command(api, base, actor, viewer, visible, other, title)
             response = await report(list_path, actor)
             assert response.is_success, response.text
             assert response.headers["content-type"].startswith("text/csv")
@@ -259,8 +275,9 @@ async def test_directory_exports_only_actual_core_memberships(
             next(csv.DictReader(io.StringIO((await report(list_path, actor)).text)))["name"]
             == "'" + title
         )
-        own = await api.get(other_path, headers=actor)
-        assert [r["name"] for r in own.json()] == ["other project"]
+        assert [r["name"] for r in (await api.get(other_path, headers=actor)).json()] == [
+            "other project"
+        ]
         assert (await report(other_path, actor)).status_code == 409
         assert (await report(tenant_path, actor)).status_code == 409
         assert (await report(tenant_path, viewer)).status_code in (403, 404)
@@ -282,6 +299,26 @@ async def test_directory_exports_only_actual_core_memberships(
         await _verify_exported_pages(api, list_path, actor, create, report)
 
 
+async def _verify_directory_command(api, base, actor, visible):
+    async def directory(headers, payload):
+        return await api.post(
+            f"{base}/{PACKAGE}/commands",
+            headers=headers,
+            json={
+                "tenant_id": "t",
+                "project_id": "p",
+                "command_id": "list-directory",
+                "payload": payload,
+            },
+        )
+
+    directory_result = await directory(actor, {"limit": 1})
+    assert directory_result.is_success, directory_result.text
+    assert directory_result.json()["rows"][0]["id"] == visible
+    assert "metadata-is-not" not in directory_result.text
+    assert (await directory(actor, {"user_id": "viewer"})).status_code == 422
+
+
 async def _verify_exported_pages(api, list_path, actor, create, report):
     # A page spanning multiple bounded Wasm invocations still has exactly one header.
     for i in range(8):
@@ -296,3 +333,30 @@ async def _verify_exported_pages(api, list_path, actor, create, report):
     whole = await report(list_path, actor)
     assert whole.is_success and whole.text.count("workspace_id,name,office_status,archived") == 1
     assert len(list(csv.DictReader(io.StringIO(whole.text)))) == 9
+
+
+async def _verify_detail_command(api, base, actor, viewer, visible, other, title):
+    async def detail(workspace, headers):
+        return await api.post(
+            f"{base}/{PACKAGE}/commands",
+            headers=headers,
+            json={
+                "tenant_id": "t",
+                "project_id": "p",
+                "command_id": "read-workspace",
+                "payload": {"workspace_id": workspace},
+            },
+        )
+
+    own_detail = await detail(visible, actor)
+    assert own_detail.status_code == 200, own_detail.text
+    assert own_detail.json()["name"] == title and set(own_detail.json()) == {
+        "id",
+        "name",
+        "description",
+        "office_status",
+        "is_archived",
+    }
+    assert (await detail(other, actor)).status_code in (403, 404)
+    assert (await detail(visible, viewer)).status_code in (403, 404)
+    assert (await detail("../other", actor)).status_code == 422

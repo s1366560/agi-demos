@@ -155,6 +155,11 @@ async def test_signed_skill_validator_upgrade_changes_project_behavior(
                     "tools.execute",
                     "subagents.register",
                     "agent.loop.drive",
+                    "app.agent.list",
+                    "app.agent.create",
+                    "app.agent.history",
+                    "app.agent.turn",
+                    "app.agent.cancel",
                 ],
             },
         )

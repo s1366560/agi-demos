@@ -1,7 +1,7 @@
 {
   "kind": "business",
   "plugin_id": "memstack-environments",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "target": "python",
   "tool_name": "cluster_health",
   "worker": "worker.json",

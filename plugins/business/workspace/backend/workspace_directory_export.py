@@ -2,10 +2,11 @@
 
 import csv
 import io
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
+from urllib.parse import quote, urlencode
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
@@ -23,7 +24,14 @@ from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
     ScopeBindingV2,
     SignedPackageBytesV2,
 )
-from src.infrastructure.workspace_core.client import WorkspaceCoreProxyResponse
+from src.infrastructure.workspace_core.client import (
+    WorkspaceCoreClientError,
+    WorkspaceCoreProxyResponse,
+)
+
+if TYPE_CHECKING:
+    from src.host.operations.application_commands import PackageOperationContext
+    from src.infrastructure.plugins.v2.project_package_execution import Progress
 
 
 class _WorkspaceRow(BaseModel):
@@ -39,18 +47,107 @@ class _WorkspaceRow(BaseModel):
 _PAGE = TypeAdapter[list[_WorkspaceRow]](Annotated[list[_WorkspaceRow], Field(max_length=500)])
 
 
-async def _authorized_page(
-    upstream: WorkspaceCoreProxyResponse, scope: ScopeBindingV2
-) -> list[dict[str, Any]]:
+async def _body(upstream: WorkspaceCoreProxyResponse) -> bytes:
     raw = bytearray()
     async for chunk in upstream.aiter_raw():
         if len(raw) + len(chunk) > 8 * 1024 * 1024:
             raise HTTPException(413, _("Reduce the workspace export page size"))
         raw.extend(chunk)
-    rows = _PAGE.validate_json(raw)
+    return bytes(raw)
+
+
+async def _authorized_page(
+    upstream: WorkspaceCoreProxyResponse, scope: ScopeBindingV2
+) -> list[dict[str, Any]]:
+    rows = _PAGE.validate_json(await _body(upstream))
     if any((r.tenant_id, r.project_id) != (scope.tenant_id, scope.project_id) for r in rows):
         raise ValueError("workspace directory scope mismatch")
     return [r.model_dump(exclude={"tenant_id", "project_id"}) for r in rows]
+
+
+class DirectoryQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=8, ge=1, le=8)
+
+
+async def read_directory_operation(
+    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+) -> dict[str, Any]:
+    try:
+        query = DirectoryQuery.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(422, _("Invalid workspace directory query")) from exc
+    upstream = await _read_core(ctx, query=urlencode(query.model_dump()).encode())
+    try:
+        if upstream.status_code != 200:
+            raise HTTPException(upstream.status_code, _("Workspace directory unavailable"))
+        return {"rows": await _authorized_page(upstream, ctx.scope)}
+    finally:
+        await upstream.aclose()
+
+
+class _WorkspaceQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    workspace_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
+
+
+class _WorkspaceDetail(_WorkspaceRow):
+    description: str | None = Field(default=None, max_length=65536)
+
+
+async def _read_core(
+    ctx: "PackageOperationContext", *, workspace: str | None = None, query: bytes = b""
+) -> WorkspaceCoreProxyResponse:
+    from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
+        workspace_core_client_v2_from_request,
+    )
+
+    tenant, project = ctx.scope.tenant_id, ctx.scope.project_id
+    if not tenant or not project:
+        raise HTTPException(403, _("A project is required to read its workspace directory"))
+    path = f"/api/v1/tenants/{quote(tenant, safe='')}/projects/{quote(project, safe='')}/workspaces"
+    if workspace:
+        path += "/" + quote(workspace, safe="")
+    try:
+        core = workspace_core_client_v2_from_request(ctx.request)
+        return await core.proxy_request(
+            method="GET",
+            path=path,
+            query=query,
+            body=b"",
+            headers=[
+                ("X-MemStack-Tenant-ID", tenant),
+                ("X-MemStack-Project-ID", project),
+                ("X-MemStack-User-ID", ctx.user.id),
+                ("X-MemStack-User-Is-Superuser", "true" if ctx.user.is_superuser else "false"),
+            ],
+        )
+    except (RuntimeError, TypeError, WorkspaceCoreClientError) as exc:
+        raise HTTPException(503, _("Workspace Core is unavailable")) from exc
+
+
+async def read_workspace_operation(
+    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+) -> dict[str, Any]:
+    try:
+        query = _WorkspaceQuery.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(422, _("Invalid workspace detail query")) from exc
+    upstream = await _read_core(ctx, workspace=query.workspace_id)
+    try:
+        if upstream.status_code != 200:
+            raise HTTPException(upstream.status_code, _("Workspace unavailable"))
+        detail = _WorkspaceDetail.model_validate_json(await _body(upstream))
+        if (detail.tenant_id, detail.project_id, detail.id) != (
+            ctx.scope.tenant_id,
+            ctx.scope.project_id,
+            query.workspace_id,
+        ):
+            raise OptionalBusinessError("forbidden", "Workspace detail scope mismatch")
+        return detail.model_dump(exclude={"tenant_id", "project_id"})
+    finally:
+        await upstream.aclose()
 
 
 def _check_csv(document: object, expected_rows: int, columns: int | None) -> tuple[str, int]:
@@ -100,9 +197,12 @@ async def export_workspace_directory(
         service = ProjectPluginInstallationService(db, scope, keys, actor_id=actor.id)
 
         async def render(package: SignedPackageBytesV2) -> str:
-            if package.worker is not None or package.approved_permissions != frozenset(
-                {"tools.execute"}
-            ):
+            if package.worker is not None or not package.approved_permissions <= {
+                "tools.execute",
+                "ui.slot",
+                "app.workspace.directory.read",
+                "app.workspace.detail.read",
+            }:
                 raise ValueError("workspace exporters only accept isolated computation")
             parts: list[str] = []
             columns = None

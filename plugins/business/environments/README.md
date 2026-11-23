@@ -14,7 +14,7 @@ Build and push the worker image from this directory. Use the digest returned by 
 stage=$(mktemp -d)
 cp package.json contributions.json "$stage/"
 mkdir "$stage/ui"
-cp ui/settings.json "$stage/ui/"
+cp ui/settings.json ui/patch.js ui/sandbox.js "$stage/ui/"
 python - "$IMAGE" "$stage/worker.json" <<'PY'
 import json
 import sys
@@ -29,4 +29,10 @@ PY
 memstack-plugin-pack "$stage/package.json" --key "$SIGNING_KEY" --out "$stage/environments.mspkg"
 ```
 
-Install the archive through the project package API with the `tools.execute` and `ui.slot` permissions and enable the release. The host must trust the signer and allow the worker registry. Tests for the projection and application services live in `tests/`. The signed install and container execution test lives in `src/tests/integration/test_environments_package.py`.
+Install the archive through the project package API after approving the tool, page, sandbox and terminal permissions shown by package inspection and enable the release. The host must trust the signer and allow the worker registry. Tests for the projection and application services live in `tests/`. The signed install and container execution test lives in `src/tests/integration/test_environments_package.py`.
+
+## Project sandbox and run terminal
+
+Open the signed **Project sandbox** page to query or prepare the current project's sandbox. Project and tenant identifiers come from the installed package's authenticated scope. The page shows the terminal capability declared by that project's authority. An available terminal requires the current run ID and its exact revision. The terminal service rechecks the user's access to the running full-access environment. The page receives the expiry and run binding. Session credentials, working directories, and internal network addresses stay with the authority.
+
+The full API uses its project sandbox routes by default. Its Python sandbox router reports the interactive run authority as degraded. Set `PROJECT_SANDBOX_AUTHORITY_URL` on the full API to the deployment's trusted Gateway origin when its Rust sandbox service supplies terminal-v2 authorization. An empty host can delegate signed application commands to that full API using `PACKAGE_APPLICATION_RUNTIME_URL`.

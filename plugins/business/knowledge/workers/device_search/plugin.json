@@ -1,6 +1,6 @@
 {
   "plugin_id": "memstack-knowledge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "target": "desktop-sidecar",
   "tool_name": "search_documents",
   "wasm": "target/wasm32-unknown-unknown/release/memstack_device_knowledge.wasm",

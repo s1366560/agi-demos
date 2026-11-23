@@ -84,7 +84,7 @@ def build_trigger(kind, config, *, timezone="UTC", start=None):
             )
             .decode(),
             registry,
-            archive(metadata["version"], current),
+            archive("1.0.0", current),
             archive("2.0.0", upgraded),
         )
 
@@ -103,7 +103,7 @@ async def test_authorized_preview_uses_production_trigger(http, signed_automatio
         headers=headers,
         json={
             **scope,
-            "approved_permissions": ["ui.slot", "tools.execute"],
+            "approved_permissions": ["ui.slot", "tools.execute", "app.automation.playbooks.read"],
             "archive_base64": base64.b64encode(raw).decode(),
         },
     )
@@ -161,7 +161,7 @@ async def test_workflow_upgrade_and_rollback_restore_schedule_semantics(
         await post(
             "/install",
             archive_base64=base64.b64encode(raw).decode(),
-            approved_permissions=["ui.slot", "tools.execute"],
+            approved_permissions=["ui.slot", "tools.execute", "app.automation.playbooks.read"],
         )
         await post(path + "/enable")
 

@@ -199,6 +199,25 @@
         "tools.execute"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "run-workflow",
+      "tool": "run_schedule_workflow",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "steps": []
+      },
+      "accepts_input": true
+    },
+    {
+      "id": "list-playbooks",
+      "host_operation": "app.automation.playbooks.read",
+      "permissions": [
+        "app.automation.playbooks.read"
+      ],
+      "payload": {}
     }
   ],
   "ui": [
@@ -213,6 +232,48 @@
       "permissions": [
         "ui.slot"
       ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "workflow",
+      "title": "Schedule workflow",
+      "routes": [
+        "/automation",
+        "/tenant/:tenantId/project/:projectId/cron-jobs"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workflow.js",
+        "digest": "sha256:3051e0a0c15c942006f010abe14786015dfa22d5a3c6d6ab589fe0c7c8a67cec"
+      },
+      "commands": [
+        "run-workflow"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "playbooks",
+      "title": "Project playbooks",
+      "routes": [
+        "/playbooks",
+        "/tenant/:tenantId/project/:projectId/playbooks"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/playbooks.js",
+        "digest": "sha256:6c66ad31d1be41a671d51e8105291ca7f22e8e224ad46c4054aea7230b0c15ae"
+      },
+      "commands": [
+        "list-playbooks"
+      ],
+      "device_tools": []
     }
   ]
 }

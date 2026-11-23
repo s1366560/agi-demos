@@ -132,6 +132,44 @@
         "tools.execute"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "patch-text",
+      "tool": "patch_text",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "content": "",
+        "patch": ""
+      },
+      "accepts_input": true
+    },
+    {
+      "id": "sandbox-status",
+      "host_operation": "app.environments.sandbox.read",
+      "permissions": [
+        "app.environments.sandbox.read"
+      ],
+      "payload": {}
+    },
+    {
+      "id": "prepare-sandbox",
+      "host_operation": "app.environments.sandbox.prepare",
+      "permissions": [
+        "app.environments.sandbox.prepare"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "authorize-run-terminal",
+      "host_operation": "app.environments.terminal.authorize",
+      "permissions": [
+        "app.environments.terminal.authorize"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -146,6 +184,49 @@
       "permissions": [
         "ui.slot"
       ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "patch",
+      "title": "Sandbox patch preview",
+      "routes": [
+        "/environments/patch"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/patch.js",
+        "digest": "sha256:1bd26fc558664e4e4a26cd07d823c261a6adb144016adb4bb03a16c421964d26"
+      },
+      "commands": [
+        "patch-text"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "sandbox",
+      "title": "Project sandbox",
+      "routes": [
+        "/environments/sandbox",
+        "/tenant/:tenantId/project/:projectId/sandbox"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/sandbox.js",
+        "digest": "sha256:49c7f018c86e99b334f7e7174e50dc88d16d3f0230e82f8f03c920b6e248fab1"
+      },
+      "commands": [
+        "sandbox-status",
+        "prepare-sandbox",
+        "authorize-run-terminal"
+      ],
+      "device_tools": []
     }
   ]
 }
