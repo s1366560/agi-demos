@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:96771c3ebc6129ae92ac5592d8334e5c5e139f130a9c5248e7f6a32e6a3554",
-    "81\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:0237a224999476588d4f3d4d1840bd00e94fa8873dcf6283323e57d1708a66",
+    "99\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -2215,8 +2215,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "85f2b2f753533f4fc5ee31a0afb624589e108edccd18db\",\"entrypoint\":\"applyDesktopSessionArtifac",
     "tActionAuthorityV2\",\"module_ref\":\"builtin://memstack/desktop/session-artifact-action-aut",
     "hority\",\"plugin_id\":\"memstack-renderer-target-hosts\",\"plugin_version\":\"2.0.0\",\"targets\":",
-    "[\"desktop-renderer\"]},{\"artifact_digest\":\"sha256:cbd06430215035e773369af627c40b0b7b44e0f",
-    "c62d812026d796e38569dd9b7\",\"artifact_source\":\"repo+typescript://agi-stack/apps/desktop/s",
+    "[\"desktop-renderer\"]},{\"artifact_digest\":\"sha256:8915de7deb6f611ab5a8714f7c89c5c8433cf8f",
+    "40b2140afdf9bef35a13d2f64\",\"artifact_source\":\"repo+typescript://agi-stack/apps/desktop/s",
     "rc/plugins/desktopSessionProjectionAuthorityModuleV2.ts\",\"contract\":{\"config_schema\":{\"$",
     "schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"pro",
     "perties\":{\"strategy\":{\"const\":\"desktop-api-client\",\"type\":\"string\"}},\"required\":[\"strate",
@@ -4785,4 +4785,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "rsion\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:96771c3ebc6129ae92ac5592d8334e5c5e139f130a9c5248e7f6a32e6a355481";
+    "sha256:0237a224999476588d4f3d4d1840bd00e94fa8873dcf6283323e57d1708a6699";

@@ -3342,7 +3342,7 @@
       "module_ref": "builtin://memstack/desktop/session-projection-authority",
       "entrypoint": "applyDesktopSessionProjectionAuthorityV2",
       "artifact": {
-        "digest": "sha256:cbd06430215035e773369af627c40b0b7b44e0fc62d812026d796e38569dd9b7",
+        "digest": "sha256:8915de7deb6f611ab5a8714f7c89c5c8433cf8f40b2140afdf9bef35a13d2f64",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionProjectionAuthorityModuleV2.ts"
       },
       "targets": [

@@ -198,8 +198,7 @@ impl WorkspaceCoreSupervisor {
                 staged_snapshot_from_marker(&runtime_directory, marker).await?
             }
             _ => {
-                let snapshot =
-                    stage_empty_workspace_history_snapshot(&runtime_directory).await?;
+                let snapshot = stage_empty_workspace_history_snapshot(&runtime_directory).await?;
                 persist_cutover_marker(
                     &runtime_directory,
                     WorkspaceCoreCutoverState::Importing,
