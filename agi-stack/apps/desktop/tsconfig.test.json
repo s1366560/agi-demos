@@ -132,6 +132,7 @@
     "src/features/chat/composerStopResponse.ts",
     "src/features/chat/chatComposerModel.ts",
     "src/features/chat/executionPlacementModel.ts",
+    "src/features/chat/localRunDispatch.ts",
     "src/features/chat/ComposerExecutionPlacement.tsx",
     "src/features/chat/useExecutionPlacement.ts",
     "src/features/chat/voiceTranscriptionModel.ts",

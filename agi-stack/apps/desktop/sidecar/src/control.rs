@@ -225,6 +225,7 @@ pub(crate) async fn run() -> Result<(), String> {
     });
     let mut output_failure = None;
     let mut device_calls = task::JoinSet::new();
+    let mut local_run_tasks = task::JoinSet::new();
     let mut local_requests = local_requests::LocalControlRequests::default();
     loop {
         let line = tokio::select! {
@@ -239,7 +240,37 @@ pub(crate) async fn run() -> Result<(), String> {
             }
         };
         while device_calls.try_join_next().is_some() {}
+        while local_run_tasks.try_join_next().is_some() {}
         let response = match serde_json::from_str::<ControlRequest>(&line) {
+            Ok(request) if request.command == "local_run_execute" => {
+                if local_run_tasks.len() >= 2 {
+                    failure(request.id, "local_run_executor_busy")
+                } else {
+                    let runtime = state.runtime.clone();
+                    let output_tx = output_tx.clone();
+                    local_run_tasks.spawn(async move {
+                        let id = request.id;
+                        let args = request.args.unwrap_or(Value::Null);
+                        let response = match runtime.execute_uploaded_local_run(args).await {
+                            Ok(result) => ControlResponse {
+                                message_type: "response",
+                                id,
+                                ok: true,
+                                result: Some(result),
+                                error: None,
+                            },
+                            Err(error) => failure(id, &error),
+                        };
+                        let value =
+                            serde_json::to_value(response).map_err(|error| error.to_string())?;
+                        output_tx
+                            .send(value)
+                            .await
+                            .map_err(|_| "sidecar output closed".to_owned())
+                    });
+                    continue;
+                }
+            }
             Ok(request) if parallel_cloud_call(&request) => {
                 if device_calls.len() >= 32 {
                     failure(request.id, "cua_device_busy")
@@ -476,6 +507,11 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
         }
         "workspace_core_status" => serde_json::to_value(state.workspace_core.status().await)
             .map_err(|error| error.to_string()),
+        "local_run_stop" => {
+            let runtime = state.runtime.clone();
+            let args = request.args.clone().unwrap_or(Value::Null);
+            runtime.stop_uploaded_local_run(args).await
+        }
         "local_runtime_configure" => {
             let runtime = state.runtime.clone();
             parse_arg::<LocalRuntimeConfigPatch>(request.args.as_ref(), "config")

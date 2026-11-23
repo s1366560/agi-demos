@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import inspect
+import json
 from collections import Counter
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
@@ -12,6 +14,7 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 
 from src.configuration.workspace_core import get_workspace_core_settings
+from src.domain.model.plugins.artifact_attestation_v2 import artifact_digest_v2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.primary.web.routers.agent import (
     router as legacy_agent_router,
@@ -98,6 +101,11 @@ _EXPECTED_ROUTES: tuple[ExpectedRoute, ...] = (
     ("GET", "/conversations/{conversation_id}/execution-status", "get_execution_status"),
     ("POST", "/conversations/{conversation_id}/resume", "resume_execution"),
     ("GET", "/conversations/{conversation_id}/workflow-status", "get_workflow_status"),
+    ("POST", "/conversations/{conversation_id}/local-runs", "post_local_run"),
+    ("POST", "/runs/{run_id}/events:batch", "post_local_run_events"),
+    ("PATCH", "/runs/{run_id}/local-terminal", "patch_local_run_terminal"),
+    ("POST", "/runs/{run_id}/local-stop", "post_local_run_stop"),
+    ("GET", "/runs/{run_id}/local-events", "get_local_run_events"),
     (
         "GET",
         "/conversations/{conversation_id}/messages/{message_id}/model-requests/{attempt_id}",
@@ -304,11 +312,27 @@ class _FakeContext:
                 await dispose()
 
 
+def test_agent_route_source_digest_matches_generated_manifest() -> None:
+    root = Path(__file__).resolve().parents[6]
+    source = root / "src/infrastructure/plugins/v2/builtin_agent_http_routes.py"
+    manifest = json.loads(
+        (root / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    module = next(
+        item
+        for item in manifest["modules"]
+        if item["module_ref"] == subject.AGENT_HTTP_ROUTES_MODULE_V2
+    )
+    assert module["artifact"]["digest"] == artifact_digest_v2(source.read_bytes())
+
+
 def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:
     definitions = subject.agent_route_definitions_v2()
     legacy = _legacy_route_map()
 
-    assert len(definitions) == 108
+    assert len(definitions) == 113
     assert tuple(_route_signature(definition) for definition in definitions) == _EXPECTED_ROUTES
     assert len(legacy) == len(definitions)
     for definition in definitions:
@@ -320,9 +344,9 @@ def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:
         assert definition.deprecated == route.deprecated
     assert Counter(definition.methods[0] for definition in definitions) == {
         "DELETE": 7,
-        "GET": 59,
-        "PATCH": 7,
-        "POST": 30,
+        "GET": 60,
+        "PATCH": 8,
+        "POST": 33,
         "PUT": 5,
     }
     assert {definition.owner_entry_id for definition in definitions} == {
@@ -336,7 +360,7 @@ def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:
         f"{_PREFIX}/conversations/{{conversation_id}}/generate-title"
     ]
     assert Counter(definition.tags for definition in definitions) == {
-        ("agent",): 104,
+        ("agent",): 109,
         ("agent", "plan"): 4,
     }
     source = inspect.getsource(subject)
@@ -387,13 +411,13 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         "src.infrastructure.adapters.primary.web.agent_workflow_status_http_application_authority_v2.agent_workflow_status_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2.agent_execution_query_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.routers.agent.binding_router.agent_binding_http_application_authority_dependency_v2": 6,
-        "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 101,
+        "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 106,
         "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user_tenant": 29,
         "src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2.project_access_create_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2.project_access_query_http_application_authority_dependency_v2": 9,
         "src.infrastructure.adapters.primary.web.routers.agent.definitions_router._get_selected_definition_tenant_id": 6,
         "src.infrastructure.adapters.primary.web.workflow_pattern_application_authority_v2.workflow_pattern_application_authority_dependency_v2": 5,
-        "src.infrastructure.adapters.secondary.persistence.database.get_db": 55,
+        "src.infrastructure.adapters.secondary.persistence.database.get_db": 60,
     }
     assert claimed.v2_owned_row_ids == ("agent",)
 

@@ -1,0 +1,23 @@
+[package]
+name = "agistack-local-run-upload"
+description = "Durable upload queue and local execution record for desktop runs."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agistack-adapters-mem = { path = "../adapters-mem" }
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+base64 = "0.22"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde_json.workspace = true
+sha2 = "0.10"
+tokio = { version = "1", features = ["fs", "macros", "rt", "sync", "time"] }
+
+[dev-dependencies]
+agistack-adapters-local-tools = { path = "../adapters-local-tools" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

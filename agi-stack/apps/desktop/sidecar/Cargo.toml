@@ -49,6 +49,7 @@ agistack-adapters-cua = { path = "../../../crates/adapters-cua" }
 agistack-adapters-device = { path = "../../../crates/adapters-device" }
 agistack-adapters-http-llm = { path = "../../../crates/adapters-http-llm" }
 agistack-adapters-local-tools = { path = "../../../crates/adapters-local-tools" }
+agistack-local-run-upload = { path = "../../../crates/local-run-upload" }
 agistack-adapters-mem = { path = "../../../crates/adapters-mem" }
 agistack-adapters-wasmtime = { path = "../../../crates/adapters-wasmtime" }
 agistack-plugin-host = { path = "../../../crates/plugin-host", features = ["external-wasm-v2"] }

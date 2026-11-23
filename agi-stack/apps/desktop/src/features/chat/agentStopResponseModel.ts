@@ -6,12 +6,13 @@ export type AgentStopErrorCode =
   | 'SESSION_NOT_RUNNING';
 
 export type AgentStopTarget = Readonly<{
-  kind: 'local_run' | 'local_turn' | 'cloud';
+  kind: 'local_run' | 'local_turn' | 'cloud' | 'desktop_local';
   scopeKey: string;
   conversationId: string;
   runId?: string;
   revision?: number;
   messageId?: string;
+  deviceId?: string;
 }>;
 
 export type AgentStopReceipt =

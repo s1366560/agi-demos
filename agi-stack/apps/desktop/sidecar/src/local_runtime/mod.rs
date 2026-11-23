@@ -107,6 +107,7 @@ mod local_plugin_routes_v2;
 mod local_plugin_tool_host_v2;
 #[cfg(test)]
 mod local_route_parity_tests;
+mod local_run_upload_command;
 #[cfg(test)]
 mod managed_resource_tests;
 mod mcp_agent_tool_host;

@@ -7,8 +7,8 @@
 
 export const EXECUTION_PLACEMENT_STORAGE_KEY = 'agistack.desktop.execution-placement.v1';
 
-/** P4 local-runs/events:batch is intentionally not implemented. */
-export const LOCAL_EXECUTION_PROTOCOL_AVAILABLE = false;
+/** Local runs register on the cloud and execute on this computer. */
+export const LOCAL_EXECUTION_PROTOCOL_AVAILABLE = true;
 
 export type ExecutionPlacementTarget = 'local' | 'cloud';
 
@@ -35,6 +35,13 @@ export type PublicExecutionWire = {
   local_root_label: null;
 };
 
+export type LocalExecutionWire = {
+  execution_target: 'local';
+  execution_machine_id: string;
+  execution_environment_id: null;
+  local_root_label: string;
+};
+
 export type MessagePermissionMode = 'ask' | 'automatic' | 'full_access';
 
 export type ExecutionSendBlockCode =
@@ -48,8 +55,18 @@ export type ExecutionSendBlockCode =
 export type ExecutionSendDecision =
   | {
       ok: true;
+      transport: 'cloud';
       wire: PublicExecutionWire;
-      permissionMode: MessagePermissionMode | null;
+      permissionMode: null;
+    }
+  | {
+      ok: true;
+      transport: 'local';
+      wire: LocalExecutionWire;
+      /** Absolute directory. It stays on this computer and is not part of `wire`. */
+      localRoot: string;
+      permissionMode: null;
+      sync: 'pending';
     }
   | {
       ok: false;
@@ -293,6 +310,8 @@ export function decideExecutionSend(input: {
   surface: 'desktop' | 'web';
   placement: ResolvedComposerPlacement;
   permissionDenied?: boolean;
+  machineId?: string | null;
+  localRoot?: string | null;
 }): ExecutionSendDecision {
   if (input.permissionDenied) return { ok: false, code: 'EXECUTION_PERMISSION_DENIED' };
   if (input.surface === 'web' && input.placement.target === 'local') {
@@ -302,11 +321,31 @@ export function decideExecutionSend(input: {
     if (input.placement.pathUnavailable || !input.placement.localRootLabel) {
       return { ok: false, code: 'LOCAL_ROOT_UNAVAILABLE' };
     }
-    // Local run upload is P4. Refuse here so the cloud path cannot relabel it.
-    return { ok: false, code: 'LOCAL_EXECUTION_UNAVAILABLE' };
+    const machineId = input.machineId?.trim() ?? '';
+    const localRoot = absoluteLocalRoot(input.localRoot);
+    if (!LOCAL_EXECUTION_PROTOCOL_AVAILABLE || !machineId || !localRoot) {
+      return { ok: false, code: 'LOCAL_EXECUTION_UNAVAILABLE' };
+    }
+    if (localRootBasename(localRoot) !== input.placement.localRootLabel) {
+      return { ok: false, code: 'LOCAL_ROOT_UNAVAILABLE' };
+    }
+    return {
+      ok: true,
+      transport: 'local',
+      wire: {
+        execution_target: 'local',
+        execution_machine_id: machineId,
+        execution_environment_id: null,
+        local_root_label: input.placement.localRootLabel,
+      },
+      localRoot,
+      permissionMode: null,
+      sync: 'pending',
+    };
   }
   return {
     ok: true,
+    transport: 'cloud',
     wire: cloudExecutionWire(),
     // The approval preset stays on the conversation config. Requesting it as
     // this turn's permission_mode is rejected when the workspace ceiling is ask.
@@ -343,7 +382,6 @@ export function placementNoticeCode(input: {
     return input.noticeCode;
   }
   if (input.placement.pathUnavailable) return 'LOCAL_ROOT_UNAVAILABLE';
-  if (input.placement.target === 'local') return 'LOCAL_EXECUTION_UNAVAILABLE';
   return null;
 }
 

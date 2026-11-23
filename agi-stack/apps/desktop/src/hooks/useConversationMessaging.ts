@@ -7,6 +7,7 @@ import {
 } from '../features/chat/chatComposerModel';
 import { resolveSessionComposerDispatch } from '../features/session/sessionComposerDispatchModel';
 import { executionPlacementMessageKey } from '../features/chat/executionPlacementModel';
+import { dispatchDesktopLocalRun } from '../features/chat/localRunDispatch';
 import {
   AgentConversation,
   CodeRangeReference,
@@ -279,6 +280,44 @@ export function useConversationMessaging(params: AgentConversationParams) {
           workspaceMessageSaved = false,
         ) => {
           assertOperationActive();
+          if (placementDecision?.ok && placementDecision.transport === 'local') {
+            const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
+            if (!invoke) {
+              setError(t('executionPlacement.localExecutionUnavailable'));
+              upsertAgentTaskSignal({
+                id: signalId,
+                conversationId: conversation.id,
+                messageId,
+                status: 'failed',
+                detail: t('executionPlacement.localExecutionUnavailable'),
+              });
+              return;
+            }
+            const localReport = await dispatchDesktopLocalRun(
+              {
+                apiBaseUrl: config.apiBaseUrl,
+                apiKey: config.apiKey,
+                userId,
+                tenantId: config.tenantId,
+                conversationId: conversation.id,
+                message: execution.message,
+                idempotencyKey: messageId,
+                wire: placementDecision.wire,
+                localRoot: placementDecision.localRoot,
+              },
+              invoke,
+            );
+            const failed = localReport.sync === 'failed' || localReport.sync === 'conflict';
+            if (failed) setError(localReport.detail);
+            upsertAgentTaskSignal({
+              id: signalId,
+              conversationId: conversation.id,
+              messageId,
+              status: failed ? 'failed' : 'acknowledged',
+              detail: localReport.detail,
+            });
+            return;
+          }
           upsertAgentTaskSignal({
             id: signalId,
             conversationId: conversation.id,

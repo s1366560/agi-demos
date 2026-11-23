@@ -135,6 +135,8 @@ const SIDECAR_COMMANDS = new Set([
   'legacy_local_login_purge',
   'local_runtime_status',
   'local_runtime_configure',
+  'local_run_execute',
+  'local_run_stop',
   'workspace_core_status',
   'browser_bridge_install',
   'browser_bridge_uninstall',

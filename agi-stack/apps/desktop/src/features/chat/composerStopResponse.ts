@@ -26,10 +26,27 @@ export function composerStopTarget(input: {
   conversationId: string;
   run: DesktopRun | null;
   messageId?: string;
+  desktopLocal?: {
+    idempotencyKey: string;
+    deviceId: string;
+    runId?: string | null;
+    revision?: number | null;
+  } | null;
 }): AgentStopTarget | undefined {
   const conversationId = input.conversationId.trim();
   if (!conversationId) return undefined;
   const base = { scopeKey: input.scopeKey, conversationId };
+  const desktopLocal = input.desktopLocal;
+  if (desktopLocal?.idempotencyKey.trim() && desktopLocal.deviceId.trim()) {
+    return {
+      ...base,
+      kind: 'desktop_local',
+      messageId: desktopLocal.idempotencyKey.trim(),
+      deviceId: desktopLocal.deviceId.trim(),
+      ...(desktopLocal.runId ? { runId: desktopLocal.runId } : {}),
+      ...(typeof desktopLocal.revision === 'number' ? { revision: desktopLocal.revision } : {}),
+    };
+  }
   if (input.mode === 'cloud') {
     return { ...base, kind: 'cloud', messageId: input.messageId };
   }
@@ -51,10 +68,20 @@ export async function dispatchComposerStop(
   operations: {
     cancelRun: (runId: string, revision: number) => Promise<RunControlOutcome>;
     stopSession: (conversationId: string, target?: { messageId: string }) => boolean;
+    stopDesktopLocal?: (target: AgentStopTarget) => Promise<boolean>;
     onRunOutcome?: (outcome: RunControlOutcome) => void;
   },
 ): Promise<AgentStopReceipt> {
   const { kind, conversationId, runId, revision, messageId } = target;
+  if (kind === 'desktop_local') {
+    if (!operations.stopDesktopLocal) {
+      return { status: 'rejected', errorCode: 'STOP_SESSION_FAILED' };
+    }
+    const stopped = await operations.stopDesktopLocal(target);
+    return stopped
+      ? { status: 'cancel_requested' }
+      : { status: 'rejected', errorCode: 'STOP_SESSION_FAILED' };
+  }
   if (kind !== 'local_run') {
     if (kind === 'local_turn' && !messageId?.trim()) {
       return { status: 'rejected', errorCode: 'SESSION_NOT_RUNNING' };

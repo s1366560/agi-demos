@@ -20,12 +20,21 @@ const NATIVE_COMPONENT_INSTALL_TIMEOUT_MS = 310_000;
 const MAX_CLOUD_EXECUTION_TIMEOUT_MS = 321_000;
 
 /** Waiting limits do not grant authority; the sidecar still claims the server request. */
+const LOCAL_RUN_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000;
+
 export function sidecarRequestTimeoutMs(
   command: string,
   args?: Record<string, unknown>,
   configuredTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   now = Date.now(),
 ): number {
+  if (
+    command === 'local_run_execute' ||
+    command === 'local_run_upload_resume' ||
+    command === 'local_run_stop'
+  ) {
+    return Math.max(configuredTimeoutMs, LOCAL_RUN_EXECUTION_TIMEOUT_MS);
+  }
   const input = args?.input;
   if (!input || typeof input !== 'object' || Array.isArray(input)) return configuredTimeoutMs;
   const value = input as Record<string, unknown>;

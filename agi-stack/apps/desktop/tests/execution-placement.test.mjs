@@ -45,7 +45,7 @@ const render = (element) =>
   renderToStaticMarkup(React.createElement(I18nProvider, null, element));
 
 test('new desktop placement defaults to this computer and keeps full access broad', () => {
-  assert.equal(LOCAL_EXECUTION_PROTOCOL_AVAILABLE, false);
+  assert.equal(LOCAL_EXECUTION_PROTOCOL_AVAILABLE, true);
   assert.deepEqual(defaultExecutionPlacementPreference(), {
     target: 'local',
     localRoot: null,
@@ -141,7 +141,7 @@ test('continuing a session inherits the newest non-cancelled run and rejects ano
   assert.equal('wire' in decision, false);
 });
 
-test('local send is an explicit unsupported error and cloud send cannot carry the absolute path', () => {
+test('local send stays on this computer and cloud send cannot carry the absolute path', () => {
   const placement = resolveComposerPlacement({
     surface: 'desktop',
     preference: { target: 'local', localRoot: absoluteRoot },
@@ -151,12 +151,24 @@ test('local send is an explicit unsupported error and cloud send cannot carry th
     localMachineId: 'machine-a',
     sessionOverride: null,
   });
-  const blocked = decideExecutionSend({
+  const local = decideExecutionSend({
     surface: 'desktop',
     placement,
+    machineId: 'machine-a',
+    localRoot: absoluteRoot,
   });
-  assert.equal(blocked.ok, false);
-  assert.equal(blocked.code, 'LOCAL_EXECUTION_UNAVAILABLE');
+  assert.equal(local.ok, true);
+  if (!local.ok || local.transport !== 'local') {
+    assert.fail('local send must not fall back to cloud');
+  }
+  assert.equal(local.wire.execution_target, 'local');
+  assert.equal(local.wire.local_root_label, 'agi-demos');
+  assert.equal(local.sync, 'pending');
+  assert.equal(wireContainsAbsolutePath(local.wire, [absoluteRoot, 'alice']), false);
+  assert.equal(local.localRoot, absoluteRoot);
+  const missingMachine = decideExecutionSend({ surface: 'desktop', placement });
+  assert.equal(missingMachine.ok, false);
+  if (!missingMachine.ok) assert.equal(missingMachine.code, 'LOCAL_EXECUTION_UNAVAILABLE');
   const cloud = decideExecutionSend({
     surface: 'desktop',
     placement: { ...placement, target: 'cloud', localRootLabel: null, pathUnavailable: false },

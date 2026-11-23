@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import {
+  inheritableWebRun,
   publicDirectoryLabel,
+  webCanCreateLocalRun,
   webCloudWire,
   webComposerPlacement,
 } from '@/components/execution-target/webExecutionPlacement';
@@ -31,5 +36,29 @@ describe('web composer execution placement', () => {
     const wire = webCloudWire();
     expect(wire.execution_target).toBe('cloud');
     expect(JSON.stringify(wire).includes('/Users/alice/src/agi-demos')).toBe(false);
+    expect(webCanCreateLocalRun()).toBe(false);
+  });
+
+  it('inherits an earlier local run when the newest run was cancelled', () => {
+    const inherited = inheritableWebRun([
+      {
+        status: 'cancelled',
+        execution_target: 'cloud',
+        updated_at: '2026-11-23T03:00:00Z',
+      },
+      {
+        status: 'completed',
+        execution_target: 'local',
+        local_root_label: 'agi-demos',
+        updated_at: '2026-11-23T02:00:00Z',
+      },
+    ]);
+    expect(inherited?.execution_target).toBe('local');
+    const placement = webComposerPlacement(inherited);
+    expect(placement.readOnly).toBe(true);
+    expect(placement.offersLocal).toBe(false);
+    const source = readFileSync(resolve(process.cwd(), 'src/services/agentService.ts'), 'utf8');
+    expect(source.includes("execution_target: 'cloud'")).toBe(true);
+    expect(source.includes('/local-runs')).toBe(false);
   });
 });

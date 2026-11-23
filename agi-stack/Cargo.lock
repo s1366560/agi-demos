@@ -349,6 +349,7 @@ dependencies = [
  "agistack-adapters-wasmtime",
  "agistack-automation-schedule",
  "agistack-core",
+ "agistack-local-run-upload",
  "agistack-plugin-host",
  "async-trait",
  "axum",
@@ -399,6 +400,23 @@ dependencies = [
  "reqwest",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "agistack-local-run-upload"
+version = "0.1.0"
+dependencies = [
+ "agistack-adapters-local-tools",
+ "agistack-adapters-mem",
+ "agistack-core",
+ "async-trait",
+ "base64",
+ "regex",
+ "reqwest",
+ "rusqlite",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
 ]
 
 [[package]]
