@@ -114,16 +114,20 @@ pub(super) fn terminal_error_message() -> String {
     .to_string()
 }
 
-pub(super) fn ttyd_initial_terminal_message(size: TerminalSize) -> TungsteniteMessage {
-    TungsteniteMessage::Binary(
+pub(super) fn ttyd_initial_terminal_message(
+    size: TerminalSize,
+    authorization: &axum::http::HeaderValue,
+) -> Option<TungsteniteMessage> {
+    let token = authorization.to_str().ok()?.strip_prefix("Basic ")?;
+    Some(TungsteniteMessage::Binary(
         json!({
-            "AuthToken": "",
+            "AuthToken": token,
             "columns": size.cols,
             "rows": size.rows,
         })
         .to_string()
         .into_bytes(),
-    )
+    ))
 }
 
 pub(super) fn ttyd_input_message(data: &[u8]) -> TungsteniteMessage {

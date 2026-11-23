@@ -31,12 +31,13 @@ class _Run(_Input):
 
 
 class _Capability(BaseModel):
+    contract_version: Literal[2]
     availability: Literal["available", "unavailable", "degraded"]
     reason_code: str | None = None
 
 
 class _Capabilities(BaseModel):
-    terminal_interactive: _Capability
+    terminal_resume: _Capability
 
 
 class _Sandbox(BaseModel):
@@ -101,7 +102,7 @@ async def _capability(ctx: "PackageOperationContext") -> _Capability:
     try:
         return _Capabilities.model_validate(
             await _request(ctx, "GET", "/capabilities")
-        ).terminal_interactive
+        ).terminal_resume
     except ValidationError as exc:
         raise OptionalBusinessError("runtime_unavailable", "Invalid terminal capability") from exc
 

@@ -35,4 +35,14 @@ Install the archive through the project package API after approving the tool, pa
 
 Open the signed **Project sandbox** page to query or prepare the current project's sandbox. Project and tenant identifiers come from the installed package's authenticated scope. The page shows the terminal capability declared by that project's authority. An available terminal requires the current run ID and its exact revision. The terminal service rechecks the user's access to the running full-access environment. The page receives the expiry and run binding. Session credentials, working directories, and internal network addresses stay with the authority.
 
-The full API uses its project sandbox routes by default. Its Python sandbox router reports the interactive run authority as degraded. Set `PROJECT_SANDBOX_AUTHORITY_URL` on the full API to the deployment's trusted Gateway origin when its Rust sandbox service supplies terminal-v2 authorization. An empty host can delegate signed application commands to that full API using `PACKAGE_APPLICATION_RUNTIME_URL`.
+The full API uses its project sandbox routes by default. Its Python sandbox router reports the resumable terminal-v2 authority as unavailable. Set `PROJECT_SANDBOX_AUTHORITY_URL` on the full API to the deployment's trusted Gateway origin when its Rust sandbox service supplies terminal-v2 authorization. An empty host can delegate signed application commands to that full API using `PACKAGE_APPLICATION_RUNTIME_URL`.
+
+To verify a signed terminal authorization and trusted-client shell input on a disposable project, build the native server and the sandbox image, then run from the repository root:
+
+```sh
+cargo build --manifest-path agi-stack/Cargo.toml -p agistack-server --bin agistack-server
+make sandbox-build
+RUST_SANDBOX_TERMINAL_TESTS=1 OCI_WORKER_DOCKER_TESTS=1 uv run pytest -q src/tests/integration/test_environments_terminal_docker.py
+```
+
+The test starts PostgreSQL, Redis, Rust and a project sandbox on loopback, installs a signed Environments archive, verifies rejection of a stale run revision, and checks a shell-generated value through the trusted client's terminal session. Set `AGISTACK_TERMINAL_TEST_IMAGE` to select a locally built sandbox image.

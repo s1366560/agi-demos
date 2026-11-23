@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -44,12 +45,22 @@ async def cron_application_authority_dependency_v2(
     db: AsyncSession = Depends(get_db),
 ) -> AsyncIterator[CronApplicationAuthorityV2]:
     """Yield Cron services from the generation pinned to this request."""
-    user_id = str(current_user.id)
     project_id = _scope_id_v2(request.path_params.get("project_id"))
+    async with cron_authority(
+        request, current_user, db, project_id, ScopeV2(kind=ScopeKindV2.ROOT)
+    ) as authority:
+        yield authority
+
+
+@asynccontextmanager
+async def cron_authority(
+    request: Request, current_user: User, db: AsyncSession, project_id: str | None, scope: ScopeV2
+) -> AsyncIterator[CronApplicationAuthorityV2]:
+    user_id = str(current_user.id)
     operation = OperationContextV2(
         generation=current_generation_v2(),
         operation_id=f"http-cron-application:{uuid4()}",
-        scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        scope=scope,
     )
     async with operation:
         _ = operation.provide(OPERATION_DB_SESSION_SERVICE_V2, db)

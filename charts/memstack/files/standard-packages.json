@@ -36,7 +36,10 @@
     "permissions": [
       "tools.execute",
       "ui.slot",
-      "app.automation.playbooks.read"
+      "app.automation.playbooks.read",
+      "app.automation.schedules.read",
+      "app.automation.schedules.write",
+      "app.automation.schedules.run"
     ]
   },
   {

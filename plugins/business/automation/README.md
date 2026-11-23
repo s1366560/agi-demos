@@ -16,11 +16,13 @@ DIGEST=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["contai
 STAGE=$(mktemp -d)
 cp contributions.json "$STAGE/"
 mkdir "$STAGE/ui"
-cp ui/settings.json ui/workflow.js ui/playbooks.js "$STAGE/ui/"
+cp ui/settings.json ui/workflow.js ui/playbooks.js ui/schedules.js "$STAGE/ui/"
 python3 -c 'import json,sys; print(json.dumps({**json.load(open("package.json")), "version": sys.argv[1]}))' "$VERSION" > "$STAGE/package.json"
 python3 -c 'import json,sys; print(json.dumps({"schema":"memstack.mcp-oci-worker/1","image":sys.argv[1],"entrypoint":"/app/schedule-worker"}))' "$IMAGE@$DIGEST" > "$STAGE/worker.json"
 uv run --with ../../../sdk/memstack-plugin-sdk memstack-plugin-pack "$STAGE/package.json" --key "$SIGNING_KEY" --out automation.mspkg
-memstack packages --tenant "$TENANT" --project "$PROJECT" install --approve ui.slot --approve tools.execute --approve app.automation.playbooks.read automation.mspkg
+memstack packages --tenant "$TENANT" --project "$PROJECT" install --approve ui.slot --approve tools.execute --approve app.automation.playbooks.read \
+  --approve app.automation.schedules.read --approve app.automation.schedules.write \
+  --approve app.automation.schedules.run automation.mspkg
 ```
 
 From the repository root run the scheduler regressions under `src/tests/unit/infrastructure/scheduler`. Run `OCI_WORKER_DOCKER_TESTS=1 uv run pytest src/tests/integration/test_automation_schedule_package.py` to verify the signed worker through both full and minimal HTTP hosts.

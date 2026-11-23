@@ -218,6 +218,33 @@
         "app.automation.playbooks.read"
       ],
       "payload": {}
+    },
+    {
+      "id": "list-schedules",
+      "host_operation": "app.automation.schedules.read",
+      "permissions": [
+        "app.automation.schedules.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "save-schedule",
+      "host_operation": "app.automation.schedules.write",
+      "permissions": [
+        "app.automation.schedules.write"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "run-schedule",
+      "host_operation": "app.automation.schedules.run",
+      "permissions": [
+        "app.automation.schedules.run"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -239,8 +266,7 @@
       "id": "workflow",
       "title": "Schedule workflow",
       "routes": [
-        "/automation",
-        "/tenant/:tenantId/project/:projectId/cron-jobs"
+        "/automation"
       ],
       "targets": [
         "web",
@@ -272,6 +298,28 @@
       },
       "commands": [
         "list-playbooks"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "schedules",
+      "title": "Project schedules",
+      "routes": [
+        "/cron-jobs",
+        "/tenant/:tenantId/project/:projectId/cron-jobs"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/schedules.js",
+        "digest": "sha256:bb795a0f3b66abdd53d499743d10db8a7ac39a22f963d52ae29bf4126eec86f9"
+      },
+      "commands": [
+        "list-schedules",
+        "save-schedule",
+        "run-schedule"
       ],
       "device_tools": []
     }

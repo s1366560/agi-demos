@@ -103,7 +103,14 @@ async def test_authorized_preview_uses_production_trigger(http, signed_automatio
         headers=headers,
         json={
             **scope,
-            "approved_permissions": ["ui.slot", "tools.execute", "app.automation.playbooks.read"],
+            "approved_permissions": [
+                "ui.slot",
+                "tools.execute",
+                "app.automation.playbooks.read",
+                "app.automation.schedules.read",
+                "app.automation.schedules.write",
+                "app.automation.schedules.run",
+            ],
             "archive_base64": base64.b64encode(raw).decode(),
         },
     )
@@ -161,7 +168,14 @@ async def test_workflow_upgrade_and_rollback_restore_schedule_semantics(
         await post(
             "/install",
             archive_base64=base64.b64encode(raw).decode(),
-            approved_permissions=["ui.slot", "tools.execute", "app.automation.playbooks.read"],
+            approved_permissions=[
+                "ui.slot",
+                "tools.execute",
+                "app.automation.playbooks.read",
+                "app.automation.schedules.read",
+                "app.automation.schedules.write",
+                "app.automation.schedules.run",
+            ],
         )
         await post(path + "/enable")
 

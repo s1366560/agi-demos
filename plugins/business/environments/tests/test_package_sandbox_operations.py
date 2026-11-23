@@ -30,14 +30,17 @@ def authority(monkeypatch):
         "cwd": "private",
     }
     calls = []
-    capability = {"availability": "available", "reason_code": None}
+    capability = {"contract_version": 2, "availability": "available", "reason_code": None}
 
     @app.api_route("/api/v1/projects/p/sandbox{suffix:path}", methods=["GET", "POST"])
     async def dispatch(suffix: str, request: Request):
         assert request.headers["authorization"] == "Bearer test"
         calls.append((suffix, request.method))
         if suffix == "/capabilities":
-            return {"terminal_interactive": capability}
+            return {
+                "terminal_resume": capability,
+                "terminal_interactive": {"availability": "available", "contract_version": 1},
+            }
         if suffix == "/terminal/sessions":
             body = await request.json()
             if body != {"run_id": "run", "expected_run_revision": 7}:
