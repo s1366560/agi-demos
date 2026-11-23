@@ -65,8 +65,11 @@ def stage_contribution(source: Path, destination: Path, path: str = "contributio
     source = source.resolve()
     raw = _file(source, path)
     document = parse_contribution(json.loads(raw))
-    for name in (path, *(ui.path for ui in document.ui)):
+    assets = {asset.path: asset for page in document.pages for asset in page.assets}
+    for name in (path, *(ui.path for ui in document.ui), *assets):
         data = raw if name == path else _file(source, name)
+        if name in assets:
+            assets[name].verify(data)
         target = destination / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
@@ -145,6 +148,11 @@ def _collect_contributions(
             raise ValueError("UI digest differs from the contribution")
         parse_bound_slot_ui(json.loads(raw), item.slot, commands, input_commands)
         files[f"ui/{item.path}"] = raw
+    if contribution.pages:
+        permissions.add("ui.slot")
+    for page in contribution.pages:
+        for asset in page.assets:
+            files[f"pages/{asset.path}"] = asset.verify(_file(root, asset.path))
     files["contributions.json"] = rfc8785.dumps(doc)
     return permissions, contribution
 
@@ -179,6 +187,7 @@ def build(config: Path, signer: Ed25519PrivateKey) -> bytes:
             children["python"],
             signer,
             device_archive=native,
+            device_tool=children["desktop-sidecar"]["tool_name"],
         )
     return _build_target(root, spec, signer)
 
@@ -189,6 +198,7 @@ def _build_target(
     signer: Ed25519PrivateKey,
     *,
     device_archive: bytes | None = None,
+    device_tool: str | None = None,
 ) -> bytes:
     if not isinstance(spec, dict) or spec.keys() - {
         "kind",
@@ -236,6 +246,10 @@ def _build_target(
     if device_archive is not None:
         files[device_path] = device_archive
     permissions, contribution = _collect_contributions(root, spec, files)
+    if contribution and contribution.pages:
+        from .rich_pages import validate_device_tools
+
+        validate_device_tools(contribution.pages, device_tool)
     approved = sorted(permissions)
     native = target == "desktop-sidecar"
     catalog = "service:tool-set-catalog"
@@ -329,6 +343,10 @@ def _build_target(
                 if path == device_path
                 else media_type
                 if path == executable_path
+                else "text/javascript"
+                if path.startswith("pages/") and path.endswith(".js")
+                else "text/css"
+                if path.startswith("pages/") and path.endswith(".css")
                 else "application/json"
             ),
         }

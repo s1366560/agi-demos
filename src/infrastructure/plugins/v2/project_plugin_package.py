@@ -49,6 +49,7 @@ def admit_package(
 ) -> SignedPackageBytesV2:
     from memstack_plugin_sdk.compatibility import DESCRIPTOR, require_compatible
     from memstack_plugin_sdk.contract import PERMISSIONS
+    from memstack_plugin_sdk.rich_pages import validate_device_tools
 
     archive = parse_bundle_archive_v2(
         raw,
@@ -78,6 +79,7 @@ def admit_package(
     if kind not in ({"kind": "business"}, {"kind": "adapter"}):
         raise OptionalBusinessError("invalid_package", "invalid release kind")
     targets: tuple[str, ...] = ("python",)
+    device_tool: object = None
     device_bytes = artifacts.get("targets/desktop-sidecar.mspkg")
     if device_bytes is not None:
         native = parse_bundle_archive_v2(
@@ -98,6 +100,9 @@ def admit_package(
             or native.manifests[0].modules[0].targets != (DataPlaneTargetV2.DESKTOP_SIDECAR,)
         ):
             raise OptionalBusinessError("invalid_package", "invalid device release target")
+        if len(native.layers) != 1 or len(native.layers[0].entries) != 1:
+            raise OptionalBusinessError("invalid_package", "expected one device module entry")
+        device_tool = native.layers[0].entries[0].config.get("tool_name")
         targets = ("python", "desktop-sidecar")
     require_compatible(artifacts.get(DESCRIPTOR))
     wasm, worker = _executable(archive, plugin, module, artifacts, binding)
@@ -107,6 +112,7 @@ def admit_package(
     # The executor uses an offline registry. Validate schemas before staging a release.
     services = _check_host_contract(plugin, module, contribution)
     _check_contributions(contribution, module.entrypoint)
+    validate_device_tools(contribution.pages, device_tool)
     files = _ui_files(contribution, artifacts)
     entry = _bound_entry(bundle, plugin, binding)
     granted = frozenset(plugin.permissions) & frozenset(entry.permissions) & approved
@@ -216,7 +222,7 @@ def _check_contributions(contribution: "ContributionDocument", entrypoint: str) 
     if not names or len(names) != len(contribution.tools):
         raise OptionalBusinessError("invalid_package", "expected unique signed tools")
     if len({c.command_id for c in contribution.commands}) != len(contribution.commands) or any(
-        c.tool not in names for c in contribution.commands
+        c.host_operation is None and c.tool not in names for c in contribution.commands
     ):
         raise OptionalBusinessError("invalid_package", "commands must bind one declared tool")
     for tool in contribution.tools:
@@ -295,6 +301,10 @@ def _ui_files(
             )
         parse_bound_slot_ui(json.loads(data), ui.slot, commands, input_commands)
         files[ui.path] = data
+    for page in contribution.pages:
+        for asset in page.assets:
+            path = "pages/" + asset.path
+            files[path] = asset.verify(artifacts.get(path, b""))
     return files
 
 

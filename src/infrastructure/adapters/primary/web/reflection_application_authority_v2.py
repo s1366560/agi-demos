@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -42,7 +43,14 @@ async def reflection_application_authority_dependency_v2(
     db: AsyncSession = Depends(get_db),
 ) -> AsyncIterator[ReflectionApplicationAuthorityV2]:
     """Yield reflection services from the generation pinned to this HTTP request."""
-    scope = _request_scope_v2(request)
+    async with reflection_authority(request, current_user, db, _request_scope_v2(request)) as bound:
+        yield bound
+
+
+@asynccontextmanager
+async def reflection_authority(
+    request: Request, current_user: User, db: AsyncSession, scope: ScopeV2
+) -> AsyncIterator[ReflectionApplicationAuthorityV2]:
     operation = OperationContextV2(
         generation=current_generation_v2(),
         operation_id=f"http-reflection-application:{uuid4()}",

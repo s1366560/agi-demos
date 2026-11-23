@@ -151,10 +151,13 @@ async def projects(
 
 
 @router.get("/projects/{project_id}")
-async def project(project_id: str, tenant_id: str, user: Actor, db: Database) -> ProjectSummary:
-    row = await db.scalar(
-        visible_projects(user).where(Project.tenant_id == tenant_id, Project.id == project_id)
-    )
+async def project(
+    project_id: str, user: Actor, db: Database, tenant_id: str | None = None
+) -> ProjectSummary:
+    query = visible_projects(user).where(Project.id == project_id)
+    if tenant_id is not None:
+        query = query.where(Project.tenant_id == tenant_id)
+    row = await db.scalar(query)
     if row is None:
         raise HTTPException(404, _("Project not found"))
     return ProjectSummary.model_validate(row, from_attributes=True)

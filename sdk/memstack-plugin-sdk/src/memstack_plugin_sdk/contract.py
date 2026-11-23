@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .rich_pages import RichPage, parse_rich_pages
+
 CONTRIBUTION_SCHEMA = "memstack.plugin.contributions/1"
 UNIMPLEMENTED_EXECUTORS = frozenset({"channels", "llm_providers", "workflows", "mcp"})
 SLOT_UI_SCHEMA = "memstack.slot-ui/1"
@@ -22,6 +24,17 @@ PERMISSIONS = frozenset(
         "services.call",
         "graph.projection.compute",
         "agent.loop.drive",
+        "app.agent.list",
+        "app.agent.create",
+        "app.agent.history",
+        "app.agent.turn",
+        "app.agent.cancel",
+        "app.automation.playbooks.read",
+        "app.workspace.directory.read",
+        "app.workspace.detail.read",
+        "app.environments.sandbox.read",
+        "app.environments.sandbox.prepare",
+        "app.environments.terminal.authorize",
         "model.chat.adapt",
         "model.chat.adapt.openai",
         "model.chat.adapt.deepseek",
@@ -81,6 +94,7 @@ class UiContribution:
 class CommandContribution:
     accepts_input: bool = False
     command_id: str
+    host_operation: str | None = None
     tool: str
     payload: dict[str, Any]
     permissions: frozenset[str]
@@ -100,6 +114,7 @@ class ContributionDocument:
     ui: tuple[UiContribution, ...]
     storage: StorageContribution | None
     subagents: tuple[SubAgentContribution, ...] = ()
+    pages: tuple[RichPage, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -133,6 +148,7 @@ def parse_contribution(payload: dict[str, Any]) -> ContributionDocument:
         "commands",
         "ui",
         "storage",
+        "pages",
     }
     if unknown_sections:
         raise ContractError(
@@ -158,11 +174,23 @@ def parse_contribution(payload: dict[str, Any]) -> ContributionDocument:
     declared = {permission for item in exports for permission in item.permissions}
     if storage is not None:
         declared |= storage.permissions
+    for command in commands:
+        declared |= command.permissions
     unknown = sorted(declared - PERMISSIONS)
     if unknown:
         raise ContractError("permission_unknown", f"unknown permissions: {', '.join(unknown)}")
+    try:
+        pages = parse_rich_pages(payload.get("pages", []), {c.command_id for c in commands})
+    except ValueError as error:
+        raise ContractError("rich_page", str(error)) from error
     return ContributionDocument(
-        tools=tools, skills=skills, subagents=subagents, commands=commands, ui=ui, storage=storage
+        pages=pages,
+        tools=tools,
+        skills=skills,
+        subagents=subagents,
+        commands=commands,
+        ui=ui,
+        storage=storage,
     )
 
 
@@ -281,9 +309,23 @@ def _command(value: object) -> CommandContribution:
     if not isinstance(value, dict):
         raise ContractError("command", "command contribution must be an object")
     command_id = value.get("id")
-    tool = value.get("tool")
+    operation = value.get("host_operation")
+    permissions = _permissions(value.get("permissions"))
+    if "host_operation" in value and (
+        "tool" in value
+        or not isinstance(operation, str)
+        or not operation.startswith("app.")
+        or permissions != frozenset({operation})
+    ):
+        raise ContractError("command", "a host command requires its exact capability grant")
+    tool = value.get("tool", "" if operation else None)
     payload = value.get("payload")
-    if not isinstance(command_id, str) or not command_id or not isinstance(tool, str) or not tool:
+    if (
+        not isinstance(command_id, str)
+        or not command_id
+        or not isinstance(tool, str)
+        or not (tool or operation)
+    ):
         raise ContractError("command", "command id or tool is invalid")
     if not isinstance(payload, dict):
         raise ContractError("command", "command payload must be an object")
@@ -293,6 +335,7 @@ def _command(value: object) -> CommandContribution:
     return CommandContribution(
         accepts_input=accepts_input,
         command_id=command_id,
+        host_operation=operation,
         tool=tool,
         payload=payload,
         permissions=_permissions(value.get("permissions")),

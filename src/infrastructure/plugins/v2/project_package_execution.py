@@ -17,6 +17,7 @@ from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
 )
 
 if TYPE_CHECKING:
+    from src.host.operations.application_commands import PackageOperationContext
     from src.infrastructure.plugins.v2.oci_mcp_worker import OciWorkerSession
 
 type Progress = Callable[[dict[str, Any]], Awaitable[None]]
@@ -104,6 +105,8 @@ async def dispatch_project_command(
     scope: ScopeBindingV2,
     command_id: str,
     payload: dict[str, Any] | None = None,
+    on_progress: Progress | None = None,
+    application: "PackageOperationContext | None" = None,
 ) -> dict[str, Any]:
     identify_signed_operation(package, command=command_id)
     command = next((c for c in package.contribution.commands if c.command_id == command_id), None)
@@ -111,8 +114,24 @@ async def dispatch_project_command(
         raise OptionalBusinessError("forbidden", "command is unavailable for this installation")
     if payload is not None and not command.accepts_input:
         raise OptionalBusinessError("forbidden", "command does not accept user input")
+    if command.host_operation:
+        if application is None or application.scope != scope:
+            raise OptionalBusinessError("runtime_unavailable", "application command unavailable")
+        return await application.invoke(
+            command.host_operation,
+            dict(command.payload) if payload is None else payload,
+            on_progress,
+            plugin=package.plugin_id,
+            digest=package.digest,
+            command=command_id,
+            supplied_payload=payload,
+        )
     return await invoke_project_tool(
-        package, scope, command.tool, dict(command.payload) if payload is None else payload
+        package,
+        scope,
+        command.tool,
+        dict(command.payload) if payload is None else payload,
+        on_progress,
     )
 
 

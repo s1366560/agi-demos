@@ -13,7 +13,7 @@ Capability = Annotated[str, Field(min_length=1, max_length=128)]
 class DevicePackageBinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
     machine_id: Identifier
-    generation_id: Digest
+    generation_id: Annotated[str, Field(pattern=r"^(?:[0-9a-f]{64}|p[0-9a-f]{63})$")]
     bundle_digest: Digest
     approved_permissions: list[Capability] = Field(max_length=128)
 

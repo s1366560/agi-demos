@@ -24,6 +24,7 @@ from src.host.operations.project_package_audit import configure_project_package_
 from src.host.operations.project_package_readiness import (
     project_packages_ready,
 )
+from src.host.operations.remote_application_commands import application_runtime_origin
 from src.host.packages.bootstrap import bootstrap_empty_project
 from src.host.runtime.oci_mcp_lease import worker_recovery
 from src.host.transport.project_package_routes import project_package_router
@@ -123,6 +124,8 @@ def create_app() -> FastAPI:
         lifespan=_lifespan,
         dependencies=[Depends(_check_generation)],
     )
+    if origin := get_settings().package_application_runtime_url:
+        app.state.package_application_runtime_origin = application_runtime_origin(origin)
     app.add_middleware(LocaleMiddleware)
     app.add_middleware(
         CORSMiddleware,

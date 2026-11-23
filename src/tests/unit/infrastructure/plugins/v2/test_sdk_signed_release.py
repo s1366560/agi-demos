@@ -294,3 +294,79 @@ def test_multi_target_release_uses_one_signed_identity(tmp_path):
     changed = admit_package(build(spec, signer), (key,), frozenset({"tools.execute"}), None)
     assert changed.digest != package.digest
     assert changed.wasm == package.wasm
+
+
+def test_rich_release_binds_page_to_same_signed_device_tool(tmp_path):
+    import hashlib
+
+    from memstack_plugin_sdk.pack import build
+
+    from src.infrastructure.plugins.v2.project_plugin_package import admit_package
+
+    key = Ed25519PrivateKey.generate()
+    public = (
+        key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode()
+    )
+    targets = {}
+    for target in ("python", "desktop-sidecar"):
+        folder = tmp_path / target
+        folder.mkdir()
+        (folder / "guest.wasm").write_bytes(wasmtime.wat2wasm("(module)"))
+        spec = {
+            "target": target,
+            "tool_name": "read_notes",
+            "wasm": "guest.wasm",
+            "provenance": "repo://qa/notes",
+        }
+        if target == "python":
+            spec["contribution"] = "contributions.json"
+        (folder / "spec.json").write_text(json.dumps(spec))
+        targets[target] = f"{target}/spec.json"
+    root = tmp_path / "package.json"
+    root.write_text(
+        json.dumps(
+            {
+                "plugin_id": "unknown.notes",
+                "version": "1.0.0",
+                "kind": "business",
+                "targets": targets,
+            }
+        )
+    )
+    raw = b"console.log('notes')"
+    (tmp_path / "python/app.js").write_bytes(raw)
+    page = {
+        "id": "notes",
+        "title": "Notes",
+        "routes": ["/notes"],
+        "targets": ["web", "desktop-renderer"],
+        "entry": {"path": "app.js", "digest": "sha256:" + hashlib.sha256(raw).hexdigest()},
+        "device_tools": ["read_notes"],
+    }
+    doc = {
+        "schema": "memstack.plugin.contributions/1",
+        "tools": [
+            {
+                "name": "read_notes",
+                "abi": "invoke",
+                "input_schema": {},
+                "output_schema": {},
+                "permissions": ["tools.execute"],
+            }
+        ],
+        "pages": [page],
+    }
+    contribution = tmp_path / "python/contributions.json"
+    contribution.write_text(json.dumps(doc))
+    signed = build(root, key)
+    permissions = frozenset({"tools.execute", "ui.slot"})
+    candidate = admit_package(signed, (public,), permissions, None)
+    assert candidate.contribution.pages[0].device_tools == ("read_notes",)
+    with pytest.raises(ValueError, match="lacks approval for ui.slot"):
+        admit_package(signed, (public,), frozenset({"tools.execute"}), None)
+    page["device_tools"] = ["another_tool"]
+    contribution.write_text(json.dumps(doc))
+    with pytest.raises(ValueError, match="undeclared device tool"):
+        build(root, key)

@@ -5,17 +5,19 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any, override
 
 from anyio import CancelScope
 from jsonschema.exceptions import SchemaError
 
 from fastapi import Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.host.operations.application_commands import PackageOperationContext
+from src.host.packages.rich_pages import rich_page_resource
 from src.host.packages.project_plugin_installation import ProjectPluginInstallationService
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -37,6 +39,7 @@ from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
     OptionalBusinessError,
     ScopeBindingV2,
+    SignedPackageBytesV2,
 )
 from src.infrastructure.plugins.v2.plugin_namespace_store_v2 import PluginStorageError
 
@@ -107,13 +110,17 @@ def _http(error: Exception) -> HTTPException:
         status = 404 if error.code == "scope_resource_unavailable" else 403
         return HTTPException(status, _(str(error)))
     if isinstance(error, OptionalBusinessError):
-        if error.code == "invalid_package":
-            return HTTPException(400, _(str(error)))
-        if error.code == "quota_exceeded":
-            return HTTPException(413, _(str(error)))
         if error.code == "busy":
             return HTTPException(429, _("Package concurrency limit reached"))
-        status = 409 if error.code in {"apply_failed", "rollback_unavailable", "conflict"} else 403
+        status = {
+            "runtime_unavailable": 503,
+            "page_not_found": 404,
+            "invalid_package": 400,
+            "quota_exceeded": 413,
+            "apply_failed": 409,
+            "rollback_unavailable": 409,
+            "conflict": 409,
+        }.get(error.code, 403)
         return HTTPException(status, _(str(error)))
     return HTTPException(400, _(str(error)))
 
@@ -339,18 +346,6 @@ async def invoke_optional_business_v2(
         raise _http(exc) from exc
 
 
-async def _stream_digest(
-    service: ProjectPluginInstallationService, plugin: str, expected_digest: str | None
-) -> str:
-    view = await service.projection(plugin)
-    active = view["actual_digest"]
-    if not isinstance(active, str):
-        raise HTTPException(409, _("Package has no active release"))
-    if expected_digest is not None and expected_digest != active:
-        raise HTTPException(409, _("The package release changed"))
-    return active
-
-
 class _InvocationStream(StreamingResponse):
     def __init__(self, events: AsyncGenerator[bytes, None]) -> None:
         self._events = events
@@ -377,30 +372,82 @@ async def stream_optional_business_v2(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
+    return await _package_stream(plugin_id, body, request, current_user, db)
+
+
+async def _stream_operation(
+    package: SignedPackageBytesV2,
+    scope: ScopeBindingV2,
+    body: OptionalBusinessInvokeV2 | OptionalBusinessCommandV2,
+    progress: Callable[[dict[str, Any]], Awaitable[None]],
+    application: PackageOperationContext,
+) -> dict[str, Any]:
+    if isinstance(body, OptionalBusinessCommandV2):
+        return await dispatch_project_command(
+            package, scope, body.command_id, body.payload, progress, application
+        )
+    return await invoke_project_tool(package, scope, body.tool_name, body.payload, progress)
+
+
+async def _stream_frames(
+    queue: asyncio.Queue[dict[str, Any]], request: Request
+) -> AsyncGenerator[bytes, None]:
+    while True:
+        try:
+            message = await asyncio.wait_for(queue.get(), timeout=2.0)
+        except TimeoutError:
+            if await request.is_disconnected():
+                break
+            # ASGI 2.4 also reports a lost socket on the next write.
+            yield b'{"type":"keepalive"}\n'
+            continue
+        yield (json.dumps(message, ensure_ascii=False, allow_nan=False) + "\n").encode()
+        if message["type"] != "progress":
+            break
+
+
+async def _package_stream(
+    plugin_id: str,
+    body: OptionalBusinessInvokeV2 | OptionalBusinessCommandV2,
+    request: Request,
+    current_user: User,
+    db: AsyncSession,
+) -> StreamingResponse:
     await _authorize_execution(db, current_user, body.tenant_id, body.project_id)
     service = _service(request, db, body.tenant_id, body.project_id, actor_id=current_user.id)
     scope = _binding(body.tenant_id, body.project_id)
-    digest = await _stream_digest(service, plugin_id, body.expected_digest)
+    try:
+        pin, _package = await service.pin_active_release(plugin_id, body.expected_digest)
+    except (ValueError, OptionalBusinessError) as error:
+        raise _http(error) from error
 
     async def events() -> AsyncGenerator[bytes, None]:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=16)
 
+        async def authorize_delivery() -> None:
+            await _authorize_execution(db, current_user, body.tenant_id, body.project_id)
+            await service.pinned_package(pin)
+
         async def progress(data: dict[str, Any]) -> None:
+            await authorize_delivery()
             await queue.put({"type": "progress", "data": data})
 
         async def execute() -> None:
             try:
                 result = await service.call_active(
                     plugin_id,
-                    lambda package: invoke_project_tool(
-                        package, scope, body.tool_name, body.payload, progress
-                    ),
-                    operation_kind="tool",
-                    expected_digest=digest,
+                    lambda package: _stream_operation(package, scope, body, progress, PackageOperationContext(request, db, current_user, scope)),
+                    application_command=body.command_id if isinstance(body, OptionalBusinessCommandV2) else None,
+                    operation_kind="command"
+                    if isinstance(body, OptionalBusinessCommandV2)
+                    else "tool",
+                    expected_digest=pin.digest,
+                    admitted=pin,
                     check_access=lambda: _authorize_execution(
                         db, current_user, body.tenant_id, body.project_id
                     ),
                 )
+                await authorize_delivery()
             except (ValueError, OptionalBusinessError) as error:
                 await queue.put({"type": "error", "detail": str(error)[:512]})
             except Exception:
@@ -410,18 +457,8 @@ async def stream_optional_business_v2(
 
         task = asyncio.create_task(execute())
         try:
-            while True:
-                try:
-                    message = await asyncio.wait_for(queue.get(), timeout=2.0)
-                except TimeoutError:
-                    if await request.is_disconnected():
-                        break
-                    # ASGI 2.4 also reports a lost socket on the next write.
-                    yield b'{"type":"keepalive"}\n'
-                    continue
-                yield (json.dumps(message, ensure_ascii=False, allow_nan=False) + "\n").encode()
-                if message["type"] != "progress":
-                    break
+            async for frame in _stream_frames(queue, request):
+                yield frame
         finally:
             # The ASGI disconnect scope is already cancelled. Let the worker drain its
             # call and relinquish its container and database lease before the response returns.
@@ -436,23 +473,28 @@ async def command_optional_business_v2(
     plugin_id: str,
     body: OptionalBusinessCommandV2,
     request: Request,
+    stream: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> Response:
+    if stream:
+        return await _package_stream(plugin_id, body, request, current_user, db)
     await _authorize_execution(db, current_user, body.tenant_id, body.project_id)
     try:
         scope = _binding(body.tenant_id, body.project_id)
-        return await _service(
+        result = await _service(
             request, db, body.tenant_id, body.project_id, actor_id=current_user.id
         ).call_active(
             plugin_id,
-            lambda package: dispatch_project_command(package, scope, body.command_id, body.payload),
+            lambda package: dispatch_project_command(package, scope, body.command_id, body.payload, application=PackageOperationContext(request, db, current_user, scope)),
+            application_command=body.command_id,
             operation_kind="command",
             expected_digest=body.expected_digest,
             check_access=lambda: _authorize_execution(
                 db, current_user, body.tenant_id, body.project_id
             ),
         )
+        return JSONResponse(result)
     except (ValueError, OptionalBusinessError, PluginStorageError) as exc:
         raise _http(exc) from exc
 
@@ -503,6 +545,7 @@ async def ui_optional_business_v2(
     target: str,
     request: Request,
     expected_digest: str | None = None,
+    page_id: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -516,6 +559,12 @@ async def ui_optional_business_v2(
         package = await _service(request, db, tenant_id, project_id).active_release(
             plugin_id, expected_digest=expected_digest
         )
+        if page_id is not None:
+            if expected_digest is None:
+                raise OptionalBusinessError(
+                    "invalid_package", "rich pages require a release digest"
+                )
+            return rich_page_resource(package, page_id, target)
         return project_page(package, target)
     except (ValueError, OptionalBusinessError, PluginStorageError) as exc:
         raise _http(exc) from exc

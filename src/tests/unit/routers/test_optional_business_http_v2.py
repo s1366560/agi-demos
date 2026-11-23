@@ -105,9 +105,30 @@ def publisher(tmp_path):
         skill_instructions=None,
         subagents=None,
         compatibility=None,
+        pages=None,
+        application_command=None,
+        plugin_id="sample.notes",
     ):
         source = _body()
         doc = source["contribution"]
+        bindings = (
+            {"chat": application_command}
+            if isinstance(application_command, str)
+            else application_command
+        )
+        for command, capability in (bindings or {}).items():
+            doc["commands"].append(
+                {
+                    "id": command,
+                    "host_operation": capability,
+                    "payload": {},
+                    "accepts_input": True,
+                    "permissions": [capability],
+                }
+            )
+            source["approved_permissions"].append(capability)
+        if pages:
+            doc["pages"] = pages
         doc["tools"][0]["description"] = f"Return the signed {result} response."
         doc["tools"][0]["output_schema"] = {
             **PING_OUTPUT,
@@ -139,7 +160,7 @@ def publisher(tmp_path):
         config.write_text(
             json.dumps(
                 {
-                    "plugin_id": "sample.notes",
+                    "plugin_id": plugin_id,
                     "version": version,
                     **({"compatibility": compatibility} if compatibility is not None else {}),
                     "target": "python",

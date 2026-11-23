@@ -286,3 +286,65 @@ async def test_grant_cannot_cross_managed_projects_and_double_revoke_is_idempote
     await test_db.refresh(row)
     assert row.revoked_at == when_revoked
     assert (await client.post(path + "/check", json=invoke)).status_code == 403
+
+
+async def test_grant_is_fenced_by_active_release_and_epoch(endpoint, test_db, test_project_db):
+    from src.infrastructure.adapters.secondary.persistence.project_plugin_installation import (
+        ProjectPluginInstallation,
+        ProjectPluginRelease,
+    )
+
+    client, path, approval, check = endpoint
+    plugin = "selected-device"
+    project = test_project_db.id
+    for version, digest in (("1", "a"), ("2", "c")):
+        test_db.add(
+            ProjectPluginRelease(
+                project_id=project,
+                tenant_id=test_project_db.tenant_id,
+                plugin_id=plugin,
+                version=version,
+                digest=f"sha256:{digest * 64}",
+                permissions=["tools.execute"],
+                archive=b"test",
+                approved_by=approval["user_id"],
+            )
+        )
+    recorded = ProjectPluginInstallation(
+        project_id=project,
+        plugin_id=plugin,
+        desired="1",
+        active="1",
+        enabled=True,
+    )
+    test_db.add(recorded)
+    await test_db.commit()
+    response = await client.get(path + "/selection", params={"plugin_id": plugin})
+    assert response.status_code == 200
+    generation = response.json()["generation_id"]
+    assert generation.startswith("p")
+    assert (await client.post(path + "/", json=approval)).status_code == 403
+    grant = await client.post(path + "/", json=approval | {"generation_id": generation})
+    assert grant.status_code == 201, grant.text
+    invoke = check | {
+        "generation_id": generation,
+        "permission": "invoke",
+        "grant_id": grant.json()["grant_id"],
+    }
+    assert (await client.post(path + "/check", json=invoke)).status_code == 200
+    for enabled, active in ((True, "2"), (False, "1"), (True, "1")):
+        await test_db.execute(
+            update(ProjectPluginInstallation)
+            .where(ProjectPluginInstallation.project_id == project)
+            .values(
+                enabled=enabled,
+                active=active,
+                generation=ProjectPluginInstallation.generation + 1,
+                authorization_epoch=ProjectPluginInstallation.authorization_epoch + 1,
+            )
+        )
+        await test_db.commit()
+        assert (await client.post(path + "/check", json=invoke)).status_code == 403
+        assert (
+            await client.post(path + "/", json=approval | {"generation_id": generation})
+        ).status_code == 403

@@ -455,14 +455,14 @@ async def get_current_user_tenant(
     Raises:
         HTTPException: If the user does not belong to any tenant
     """
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserTenant.tenant_id)
-            .where(UserTenant.user_id == current_user.id)
-            .order_by(UserTenant.created_at.asc(), UserTenant.id.asc())
-            .limit(1)
-        )
-    )
+    from src.host.identity.application_scope import application_tenant_for
+
+    statement = select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id)
+    if tenant := application_tenant_for(current_user.id):
+        statement = statement.where(UserTenant.tenant_id == tenant)
+    result = await db.execute(refresh_select_statement(
+        statement.order_by(UserTenant.created_at.asc(), UserTenant.id.asc()).limit(1)
+    ))
     tenant_id = result.scalar_one_or_none()
 
     if not tenant_id:

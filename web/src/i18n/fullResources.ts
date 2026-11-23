@@ -21,8 +21,11 @@ function mergeResources(...sources: ResourceLanguage[]): ResourceLanguage {
   const result: ResourceLanguage = {};
   for (const source of sources) {
     for (const [key, value] of Object.entries(source)) {
+      const existing = result[key];
       result[key] =
-        typeof value === 'object' && result[key] ? mergeResources(result[key], value) : value;
+        typeof value === 'object' && typeof existing === 'object'
+          ? mergeResources(existing, value)
+          : value;
     }
   }
   return result;

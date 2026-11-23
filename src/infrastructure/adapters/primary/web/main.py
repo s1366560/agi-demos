@@ -415,6 +415,24 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
         },
     )
 
+    from plugins.business.automation.backend.playbook_operation import read_playbooks
+    from plugins.business.environments.backend.package_sandbox_operations import SANDBOX_OPERATIONS
+    from plugins.business.workspace.backend.workspace_directory_export import (
+        read_directory_operation,
+        read_workspace_operation,
+    )
+    from src.infrastructure.adapters.primary.web.routers.agent.package_chat_operations import (
+        AGENT_OPERATIONS,
+    )
+
+    app.state.package_operations_v1 = {
+        "app.automation.playbooks.read": read_playbooks,
+        **AGENT_OPERATIONS,
+        **SANDBOX_OPERATIONS,
+        "app.workspace.directory.read": read_directory_operation,
+        "app.workspace.detail.read": read_workspace_operation,
+    }
+
     # Instrument FastAPI for OpenTelemetry (must be done before router registration)
     if settings.enable_telemetry:
         from src.infrastructure.telemetry.config import configure_tracer_provider

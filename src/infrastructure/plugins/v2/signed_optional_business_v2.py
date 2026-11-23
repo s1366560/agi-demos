@@ -388,6 +388,8 @@ class SignedOptionalBusinessRuntimeV2:
             )
         command = matches[0]
         self._require_permissions(active, command.permissions)
+        if command.host_operation:
+            raise OptionalBusinessError("runtime_unavailable", "application capability unavailable")
         return self.invoke(plugin_id, scope, command.tool, dict(command.payload))
 
     def _apply(self, package: SignedPackageBytesV2) -> None:
@@ -515,7 +517,7 @@ def load_contribution_v2(payload: dict[str, Any]) -> ContributionDocument:
 
 
 def declared_permissions(contribution: ContributionDocument) -> frozenset[str]:
-    declared: set[str] = set()
+    declared: set[str] = {"ui.slot"} if contribution.pages else set()
     for tool in contribution.tools:
         declared |= tool.permissions
     for skill in contribution.skills:

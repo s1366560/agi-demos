@@ -5,15 +5,16 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from typing import Any
 
-from pydantic import TypeAdapter
 from sqlalchemy import BigInteger, bindparam, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.chat_adapter_scope import chat_adapter_pin
 from src.host.operations.project_package_audit import PackageAudit, project_operation
+from src.host.packages.release_pin import AGENT_PACKAGE_PINS, AgentPackagePin as AgentPackagePin
+from src.host.packages.rich_pages import check_page_routes, renderer_projection
 from src.host.runtime.package_call import admit_package_call
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentRunAuthorityModel,
@@ -47,22 +48,6 @@ from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
     SignedPackageBytesV2,
 )
 from src.infrastructure.plugins.wasm_host import WasmHostError
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentPackagePin:
-    tenant_id: str
-    project_id: str
-    plugin_id: str
-    version: str
-    digest: str
-    authorization_epoch: int
-    drives_agent_loop: bool = False
-    chat_adapter: bool = False
-    chat_provider: str | None = None
-
-
-_AGENT_PACKAGE_PINS = TypeAdapter(tuple[AgentPackagePin, ...])
 
 
 class ProjectPluginInstallationService:
@@ -137,6 +122,7 @@ class ProjectPluginInstallationService:
             "targets": view["targets"],
             "has_desktop_ui": view["has_desktop_ui"],
             "commands": view["commands"],
+            "pages": view["pages"],
             "name": plugin,
             "plugin_id": plugin,
             "version": view["installed_version"] or "",
@@ -323,6 +309,7 @@ class ProjectPluginInstallationService:
             )
             if conflict:
                 raise OptionalBusinessError("conflict", conflict)
+            await check_page_routes(self, package)
             await self.resolve_service_pins(package)
             if state.active and state.active != candidate:
                 await self._check_service_replacement(state.active, package)
@@ -441,8 +428,7 @@ class ProjectPluginInstallationService:
             failure=failure,
             retention=state.retention if state else "retained",
         )
-        has_web_ui = False
-        has_desktop_ui = False
+        renderer = renderer_projection()
         commands: list[str] = []
         kind: str | None = None
         targets: tuple[str, ...] = ()
@@ -457,8 +443,7 @@ class ProjectPluginInstallationService:
                 live = await self._verified(plugin, active)
                 if desired == active:
                     kind, targets = live.kind, live.targets
-                has_desktop_ui = live.page_slot("desktop-renderer") is not None
-                has_web_ui = live.page_slot("web") is not None
+                renderer = renderer_projection(live)
                 commands = [
                     c.command_id
                     for c in live.contribution.commands
@@ -477,8 +462,7 @@ class ProjectPluginInstallationService:
             "installed_version": desired,
             "running_version": active,
             "commands": commands,
-            "has_web_ui": has_web_ui,
-            "has_desktop_ui": has_desktop_ui,
+            **renderer,
         }
 
     async def _active(self, plugin: str) -> SignedPackageBytesV2:
@@ -543,7 +527,7 @@ class ProjectPluginInstallationService:
             )
             self.db.add(selection)
             await self.db.commit()
-        return _AGENT_PACKAGE_PINS.validate_python(selection.releases)
+        return AGENT_PACKAGE_PINS.validate_python(selection.releases)
 
     async def pinned_package(self, pin: AgentPackagePin) -> SignedPackageBytesV2:
         """A regular upgrade keeps a live run's release. Withdrawal ends its admission."""
@@ -649,6 +633,26 @@ class ProjectPluginInstallationService:
             raise OptionalBusinessError("conflict", "the package was replaced, reload its commands")
         return package
 
+    async def pin_active_release(
+        self, plugin: str, expected_digest: str | None, audit: PackageAudit | None = None
+    ) -> tuple[AgentPackagePin, SignedPackageBytesV2]:
+        state = await self._state(plugin)
+        if not state or not state.enabled or not state.active:
+            raise OptionalBusinessError("not_enabled", "package is not enabled")
+        version, epoch = state.active, state.authorization_epoch
+        package = await self._verified(plugin, version, audit)
+        if expected_digest is not None and package.digest != expected_digest:
+            raise OptionalBusinessError("conflict", "the package was replaced, reload its commands")
+        pin = AgentPackagePin(
+            tenant_id=self.scope.tenant_id,
+            project_id=self.scope.project_id,
+            plugin_id=plugin,
+            version=version,
+            digest=package.digest,
+            authorization_epoch=epoch,
+        )
+        return pin, package
+
     async def call_active[T](
         self,
         plugin: str,
@@ -656,27 +660,29 @@ class ProjectPluginInstallationService:
         *,
         operation_kind: str = "call",
         expected_digest: str | None = None,
+        admitted: AgentPackagePin | None = None,
+        application_command: str | None = None,
         check_access: Callable[[], Awaitable[None]] | None = None,
     ) -> T:
         with self._audit(operation_kind) as audit:
-            state = await self._state(plugin)
-            if not state or not state.enabled or not state.active:
-                raise OptionalBusinessError("not_enabled", "package is not enabled")
-            version, epoch = state.active, state.authorization_epoch
-            package = await self._verified(plugin, version, audit)
+            if admitted is None:
+                pin, package = await self.pin_active_release(plugin, expected_digest, audit)
+            else:
+                if (plugin, expected_digest) != (admitted.plugin_id, admitted.digest):
+                    raise OptionalBusinessError("conflict", "invalid admitted release")
+                pin, package = admitted, await self.pinned_package(admitted)
             audit.release(package)
-            if expected_digest is not None and package.digest != expected_digest:
-                raise OptionalBusinessError(
-                    "conflict", "the package was replaced, reload its commands"
-                )
-            pin = AgentPackagePin(
-                tenant_id=self.scope.tenant_id,
-                project_id=self.scope.project_id,
-                plugin_id=plugin,
-                version=version,
-                digest=package.digest,
-                authorization_epoch=epoch,
-            )
+            if application_command and any(
+                c.command_id == application_command and c.host_operation
+                for c in package.contribution.commands
+            ):
+                if check_access:
+                    await check_access()
+                result = await operation(package)
+                if check_access:
+                    await check_access()
+                await self.pinned_package(pin)
+                return result
             return await self.run_guest(
                 package,
                 lambda: operation(package),

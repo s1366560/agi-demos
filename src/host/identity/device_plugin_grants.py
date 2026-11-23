@@ -1,6 +1,7 @@
 """Authenticated project administration and online device package admission."""
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Literal, cast
 from uuid import uuid4
@@ -28,6 +29,7 @@ from src.infrastructure.adapters.primary.web.dependencies.plugin_scope_auth_v2 i
     resolve_plugin_publication_scope_v2,
     resolve_plugin_read_scope_v2,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.device_plugin_grant_model import (
     DevicePluginGrant,
@@ -37,6 +39,10 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     User,
     UserSession,
+)
+from src.infrastructure.adapters.secondary.persistence.project_plugin_installation import (
+    ProjectPluginInstallation,
+    ProjectPluginRelease,
 )
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
@@ -96,6 +102,65 @@ async def _scope(
         raise _denied() from error
 
 
+async def _project_generation(
+    db: AsyncSession, scope: ScopeV2, *, plugin_id: str | None = None, digest: str | None = None
+) -> tuple[str, str]:
+    release, installation = ProjectPluginRelease, ProjectPluginInstallation
+    query = (
+        select(
+            release.plugin_id,
+            release.digest,
+            installation.generation,
+            installation.authorization_epoch,
+        )
+        .join(
+            installation,
+            (installation.project_id == release.project_id)
+            & (installation.plugin_id == release.plugin_id)
+            & (installation.active == release.version),
+        )
+        .where(
+            release.tenant_id == scope.tenant_id,
+            release.project_id == scope.project_id,
+            installation.enabled.is_(True),
+        )
+    )
+    if plugin_id is not None:
+        query = query.where(release.plugin_id == plugin_id)
+    if digest is not None:
+        query = query.where(release.digest.in_((digest, "sha256:" + digest)))
+    row = (await db.execute(refresh_select_statement(query))).one_or_none()
+    if row is None:
+        raise _denied()
+    # A distinct namespace lets a stored device grant require live project selection
+    # even when presented by an older client that sends no plugin ID.
+    binding = json.dumps([scope.tenant_id, scope.project_id, *row], separators=(",", ":")).encode()
+    return "p" + hashlib.sha256(binding).hexdigest()[:63], row.digest
+
+
+async def _require_active_release(
+    db: AsyncSession, scope: ScopeV2, body: DevicePackageBinding
+) -> None:
+    if body.generation_id.startswith("p"):
+        generation, _digest = await _project_generation(db, scope, digest=body.bundle_digest)
+        if generation != body.generation_id:
+            raise _denied()
+        return
+    # Older ROOT grants can only operate on packages outside the project release
+    # catalog. Omitting the project ID in a native request must not revive a release.
+    registered = await db.scalar(
+        select(ProjectPluginRelease.plugin_id)
+        .where(
+            ProjectPluginRelease.tenant_id == scope.tenant_id,
+            ProjectPluginRelease.project_id == scope.project_id,
+            ProjectPluginRelease.digest.in_((body.bundle_digest, "sha256:" + body.bundle_digest)),
+        )
+        .limit(1)
+    )
+    if registered:
+        raise _denied()
+
+
 async def _current_grant(
     db: AsyncSession, scope: ScopeV2, user_id: str, binding: DevicePackageBinding, fingerprint: str
 ) -> DevicePluginGrant | None:
@@ -149,6 +214,18 @@ async def device_package_authority(
     return {"can_manage": True}
 
 
+@router.get("/selection")
+async def selected_device_package(
+    project_id: str,
+    plugin_id: str,
+    user: User = Depends(_cloud_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    scope = await _scope(db, project_id, user, access="execute")
+    generation, digest = await _project_generation(db, scope, plugin_id=plugin_id)
+    return {"plugin_id": plugin_id, "generation_id": generation, "digest": digest}
+
+
 @router.post("/", status_code=201)
 async def approve_device_package(
     project_id: str,
@@ -159,6 +236,7 @@ async def approve_device_package(
     with project_operation("device.approve", actor_id=user.id) as audit:
         scope = await _scope(db, project_id, user, access="manage")
         audit.tenant_id, audit.project_id = scope.tenant_id, scope.project_id
+        await _require_active_release(db, scope, body)
         target = await db.get(User, body.user_id)
         if target is None or not target.is_active:
             raise _denied()
@@ -209,6 +287,7 @@ async def check_device_package(
     with project_operation("device.check", actor_id=user.id) as audit:
         scope = await _scope(db, project_id, user, access="execute")
         audit.tenant_id, audit.project_id = scope.tenant_id, scope.project_id
+        await _require_active_release(db, scope, body)
         fingerprint = (
             "sha256:" + hashlib.sha256(body.device_proof.get_secret_value().encode()).hexdigest()
         )

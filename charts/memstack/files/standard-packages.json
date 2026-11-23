@@ -5,7 +5,12 @@
       "tools.execute",
       "ui.slot",
       "agent.loop.drive",
-      "subagents.register"
+      "subagents.register",
+      "app.agent.list",
+      "app.agent.create",
+      "app.agent.history",
+      "app.agent.turn",
+      "app.agent.cancel"
     ]
   },
   {
@@ -20,21 +25,27 @@
     "plugin_id": "memstack-workspace",
     "permissions": [
       "tools.execute",
-      "ui.slot"
+      "ui.slot",
+      "app.workspace.directory.read",
+      "app.workspace.detail.read"
     ]
   },
   {
     "plugin_id": "memstack-automation",
     "permissions": [
       "tools.execute",
-      "ui.slot"
+      "ui.slot",
+      "app.automation.playbooks.read"
     ]
   },
   {
     "plugin_id": "memstack-environments",
     "permissions": [
       "tools.execute",
-      "ui.slot"
+      "ui.slot",
+      "app.environments.sandbox.read",
+      "app.environments.sandbox.prepare",
+      "app.environments.terminal.authorize"
     ]
   },
   {

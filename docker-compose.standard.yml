@@ -43,6 +43,7 @@ services:
       ENVIRONMENT: development
       PACKAGE_KERNEL_DATABASE_MODE: standalone
       PACKAGE_KERNEL_BOOTSTRAP_DIRECTORY: /run/memstack-initial
+      PACKAGE_APPLICATION_RUNTIME_URL: ${PACKAGE_APPLICATION_RUNTIME_URL:-}
       REDIS_HOST: redis
       PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES: '["/run/memstack-initial/publisher.pem"]'
       PLUGIN_WORKER_ALLOWED_REGISTRIES: '["http://127.0.0.1:${STANDARD_REGISTRY_PORT:-5095}"]'

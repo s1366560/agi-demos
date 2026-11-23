@@ -12,6 +12,17 @@ export const PERMISSIONS = [
   'services.provide',
   'graph.projection.compute',
   'agent.loop.drive',
+  'app.agent.list',
+  'app.agent.create',
+  'app.agent.history',
+  'app.agent.turn',
+  'app.agent.cancel',
+  'app.automation.playbooks.read',
+  'app.workspace.directory.read',
+  'app.workspace.detail.read',
+  'app.environments.sandbox.read',
+  'app.environments.sandbox.prepare',
+  'app.environments.terminal.authorize',
   'model.chat.adapt',
   'model.chat.adapt.openai',
   'model.chat.adapt.deepseek',
@@ -27,3 +38,5 @@ export interface ScanEvidence {
   readonly status: 'unknown' | 'passed' | 'failed';
   readonly reportDigest: string | null;
 }
+
+export type { RichPageCallOptions, RichPageContext, RichPageRuntime } from './pageRuntime';
