@@ -14,6 +14,7 @@ from src.infrastructure.adapters.primary.web.routers.optional_business_http_v2 i
     projection_optional_business_v2,
     purge_optional_business_v2,
     put_optional_business_storage_v2,
+    resolve_npm_release,
     rollback_optional_business_v2,
     stream_optional_business_v2,
     ui_optional_business_v2,
@@ -30,6 +31,7 @@ project_package_router = APIRouter(
 )
 
 project_package_router.add_api_route("/", list_project_packages, methods=["GET"])
+project_package_router.add_api_route("/npm/resolve", resolve_npm_release, methods=["POST"])
 project_package_router.add_api_route("/inspect", inspect_optional_business_v2, methods=["POST"])
 project_package_router.add_api_route("/install", install_optional_business_v2, methods=["POST"])
 project_package_router.add_api_route(

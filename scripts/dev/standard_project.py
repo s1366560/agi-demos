@@ -148,6 +148,8 @@ def main() -> None:
         "-f",
         "docker-compose.standard.yml",
     ]
+    if os.environ.get("STANDARD_NPM_SOURCE") == "1" or (directory / "npm-source.enabled").is_file():
+        compose.extend(["-f", "docker-compose.standard.npm.yml"])
     if (
         args.command not in {"init", "start", "restart"}
         and not (directory / "owner.json").is_file()

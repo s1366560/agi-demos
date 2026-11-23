@@ -595,6 +595,7 @@ class Settings(BaseSettings):
     project_sandbox_authority_url: HttpUrl | None = Field(
         default=None, alias="PROJECT_SANDBOX_AUTHORITY_URL"
     )
+    package_npm_registry_url: str | None = Field(default=None, alias="PACKAGE_NPM_REGISTRY_URL")
     package_application_runtime_url: str | None = Field(default=None, alias="PACKAGE_APPLICATION_RUNTIME_URL")
     package_kernel_database_mode: Literal["shared", "standalone"] = Field(
         default="shared", alias="PACKAGE_KERNEL_DATABASE_MODE"

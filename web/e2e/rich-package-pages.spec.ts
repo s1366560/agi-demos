@@ -349,3 +349,84 @@ test('the project opens its signed home, keeps deep links, and exposes managemen
   await page.getByRole('button', { name: 'Manage plugins' }).click();
   await expect(page.getByTestId('optional-business-panel')).toBeVisible();
 });
+
+test('npm source previews the signed release and installs its reviewed permissions only on approval', async ({
+  page,
+}) => {
+  const scope = { tenant_id: 't', project_id: 'p' };
+  const preview = {
+    plugin_id: 'memstack-sample',
+    version: '2.1.0',
+    digest: 'sha256:' + 'a'.repeat(64),
+    permissions: ['tools.execute'],
+    archive_base64: 'dGVzdA==',
+  };
+  let resolves = 0;
+  let installs = 0;
+  await page.route('**/api/v1/**', async (request) => {
+    const path = new URL(request.request().url()).pathname;
+    if (path.endsWith('/auth/token'))
+      return request.fulfill({ json: { access_token: 'local-fixture' } });
+    if (path.endsWith('/auth/me'))
+      return request.fulfill({
+        json: { user_id: 'admin', email: 'admin@example.test', preferred_language: 'en-US' },
+      });
+    if (path.endsWith('/project-packages/projects/'))
+      return request.fulfill({
+        json: [
+          {
+            ...scope,
+            tenant_name: 'Tenant',
+            project_name: 'Project',
+            can_manage: true,
+            can_execute: true,
+          },
+        ],
+      });
+    if (path.endsWith('/npm/resolve')) {
+      expect(request.request().postDataJSON()).toEqual({
+        ...scope,
+        package_name: '@memstack/sample',
+        version: '2.1.0',
+      });
+      resolves++;
+      return request.fulfill({ json: preview });
+    }
+    if (path.endsWith('/install')) {
+      expect(request.request().postDataJSON()).toEqual({
+        ...scope,
+        archive_base64: preview.archive_base64,
+        approved_permissions: preview.permissions,
+      });
+      installs++;
+      return request.fulfill({ json: { status: 'recorded' } });
+    }
+    return request.fulfill({ json: { items: [] } });
+  });
+  await page.goto('/plugins');
+  await page.getByLabel('Email', { exact: true }).fill('admin@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('test-only');
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  const name = page.getByLabel('npm package name');
+  const version = page.getByLabel('Exact npm version');
+  const resolve = page.getByRole('button', { name: 'Preview signed package' });
+  const install = page.getByTestId('optional-business-install');
+  await name.fill('https://invalid.example/package.tgz');
+  await version.fill('2.1.0');
+  await expect(resolve).toBeDisabled();
+  await name.fill('@memstack/sample');
+  await version.fill('latest');
+  await expect(resolve).toBeDisabled();
+  await version.fill('2.1.0');
+  await resolve.click();
+  await expect(page.getByText(preview.digest, { exact: false })).toContainText('tools.execute');
+  await expect(install).toBeEnabled();
+  expect(installs).toBe(0);
+  await version.fill('2.1.1');
+  await expect(install).toBeDisabled();
+  await version.fill('2.1.0');
+  await resolve.click();
+  await install.click();
+  await expect.poll(() => installs).toBe(1);
+  expect(resolves).toBe(2);
+});

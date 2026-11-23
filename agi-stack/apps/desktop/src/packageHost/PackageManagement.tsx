@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { NpmPackageSource } from '../../../../packages/plugin-marketplace-ui/src/NpmPackageSource';
 import { openFilesWithDesktopDialog } from '../features/runtime/nativeFileBridge';
 import { pluginArchiveBase64 } from '../api/localPluginClient';
 import { DevicePluginSettings } from '../features/settings/DevicePluginSettings';
@@ -108,7 +109,21 @@ export function PackageManagement({
           {t.import}
         </button>
       )}
-      {review && (
+      {canManage && (
+        <NpmPackageSource
+          disabled={busy}
+          labels={{ name: t.npmName, version: t.exactVersion, preview: t.previewNpm }}
+          onChange={() => { setReview(null); setError(''); }}
+          onPreview={(name, version) => void perform(async () => {
+            setReview(null);
+            const candidate = await transport<Review>(packages + '/npm/resolve', {
+              method: 'POST', body: { ...scope, package_name: name, version },
+            });
+            setReview(candidate);
+          })}
+        />
+      )}
+      {review && canManage && (
         <section>
           <p>
             {review.plugin_id} · {review.version} · {review.digest}

@@ -348,3 +348,22 @@ test('signed cloud page and command are scoped to one release', async () => {
     assert.deepEqual(denied.requests, []);
   }
 });
+
+test('npm source accepts a scoped package and exact version from the selected cloud project', async () => {
+  const path = '/api/v1/platform-plugins/v2/optional-business/npm/resolve';
+  const body = { ...scope, package_name: '@memstack/agent', version: '1.2.3-rc.1+dev' };
+  const h = harness();
+  const result = await executeVaultBoundCloudRequest({ path, method: 'POST', body }, h.dependencies);
+  assert.equal(result.status, 200);
+  assert.deepEqual(h.requests.at(-1), { path, method: 'POST', body });
+  for (const changed of [
+    { version: '^1.2.0' }, { version: 'latest' }, { package_name: 'https://registry.invalid/x' },
+    { registry: 'https://registry.invalid' }, { project_id: 'another-project' },
+  ]) {
+    const before = h.requests.filter((item) => item.path === path).length;
+    await assert.rejects(executeVaultBoundCloudRequest({
+      path, method: 'POST', body: { ...body, ...changed },
+    }, h.dependencies));
+    assert.equal(h.requests.filter((item) => item.path === path).length, before);
+  }
+});

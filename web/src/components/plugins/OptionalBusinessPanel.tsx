@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
+import { NpmPackageSource } from '../../../../agi-stack/packages/plugin-marketplace-ui/src/NpmPackageSource';
+
 import { ApiError } from '@/services/client/ApiError';
 import {
   type OptionalBusinessService,
@@ -133,6 +135,27 @@ export function OptionalBusinessPanel({
     };
   }, [tenantId, projectId, revision, optionalBusinessService]);
 
+  function clearCandidate() {
+    inspection.current++;
+    setFile(null);
+    setError(null);
+  }
+
+  async function inspectCandidate(candidate: Promise<OptionalBusinessPackageFileV2>) {
+    clearCandidate();
+    const current = inspection.current;
+    try {
+      const verified = await candidate;
+      if (current === inspection.current) setFile(verified);
+    } catch (caught) {
+      if (current === inspection.current) {
+        setError(
+          responseOf(caught).detail || t('tenant.pluginHub.optionalBusiness.packageInvalid')
+        );
+      }
+    }
+  }
+
   async function refresh(nextPluginId: string) {
     const generation = ++refreshGeneration.current;
     if (!scope || nextPluginId.trim() === '') {
@@ -241,26 +264,26 @@ export function OptionalBusinessPanel({
           disabled={!canManage || busy || !scope}
           onChange={(event) => {
             const selected = event.target.files?.[0];
-            const current = ++inspection.current;
-            setFile(null);
-            if (!selected || !scope) return;
-            void optionalBusinessService.inspect(selected, scope).then(
-              (verified) => {
-                if (current !== inspection.current) return;
-                setFile(verified);
-                setError(null);
-              },
-              (caught: unknown) => {
-                if (current === inspection.current)
-                  setError(
-                    responseOf(caught).detail ||
-                      t('tenant.pluginHub.optionalBusiness.packageInvalid')
-                  );
-              }
-            );
+            if (selected && scope)
+              void inspectCandidate(optionalBusinessService.inspect(selected, scope));
+            else clearCandidate();
           }}
         />
       </label>
+      <NpmPackageSource
+        key={JSON.stringify([tenantId, projectId])}
+        disabled={!canManage || busy || !scope}
+        labels={{
+          name: t('tenant.pluginHub.optionalBusiness.npmName'),
+          version: t('tenant.pluginHub.optionalBusiness.exactVersion'),
+          preview: t('tenant.pluginHub.optionalBusiness.previewNpm'),
+        }}
+        onChange={clearCandidate}
+        onPreview={(name, version) => {
+          if (scope && canManage)
+            void inspectCandidate(optionalBusinessService.resolveNpm(scope, name, version));
+        }}
+      />
       {file && (
         <p>
           {t('tenant.pluginHub.optionalBusiness.approval', {

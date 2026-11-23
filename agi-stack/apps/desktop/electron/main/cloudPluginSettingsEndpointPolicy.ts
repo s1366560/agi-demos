@@ -1,3 +1,4 @@
+import { isNpmPackageReference } from '../../../../packages/plugin-marketplace-ui/src/npmPackageReference';
 import type { CloudProductEndpoint, CloudProductRequestMethod } from './cloudProductEndpointPolicy';
 
 type Request = Readonly<{
@@ -25,6 +26,8 @@ export function authorizePackageEndpoint(
     const operation = path.slice(prefix.length);
     const body = request.body;
     if (body && identifier(body.project_id)) {
+      if (operation === 'npm/resolve' && fields(body, [...SCOPE, 'package_name', 'version']) &&
+          isNpmPackageReference(body.package_name, body.version)) return scoped(body);
       if (operation === 'inspect' || operation === 'install') {
         const keys = [...SCOPE, 'archive_base64', ...(operation === 'install' ? ['approved_permissions'] : [])];
         if (fields(body, keys) && typeof body.archive_base64 === 'string' && body.archive_base64.length > 0 &&

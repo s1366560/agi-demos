@@ -82,6 +82,17 @@ export function createOptionalBusinessService(httpClient: PackageClient) {
       );
       return { ...verified, archive_base64: encoded };
     },
+    resolveNpm(
+      scope: Scope,
+      name: string,
+      version: string
+    ): Promise<OptionalBusinessPackageFileV2> {
+      return httpClient.post(BASE_URL + '/npm/resolve', {
+        ...scopeBody(scope),
+        package_name: name,
+        version,
+      });
+    },
     install(
       scope: Scope,
       file: OptionalBusinessPackageFileV2,

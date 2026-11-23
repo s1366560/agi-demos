@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.host.operations.application_commands import PackageOperationContext
+from src.configuration.config import get_settings
+from src.host.packages.npm_source import fetch_npm_archive, npm_plugin_id
 from src.host.packages.rich_pages import rich_page_resource
 from src.host.packages.project_plugin_installation import ProjectPluginInstallationService
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
@@ -61,6 +63,12 @@ class OptionalBusinessInstallV2(OptionalBusinessArchiveV2):
 class OptionalBusinessScopeV2(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=64)
     project_id: str = Field(min_length=1, max_length=64)
+
+
+class NpmReleaseRequest(OptionalBusinessScopeV2):
+    model_config = ConfigDict(extra="forbid")
+    package_name: str = Field(min_length=1, max_length=214)
+    version: str = Field(min_length=1, max_length=128)
 
 
 class OptionalBusinessMutationV2(OptionalBusinessScopeV2):
@@ -115,6 +123,7 @@ def _http(error: Exception) -> HTTPException:
         status = {
             "runtime_unavailable": 503,
             "page_not_found": 404,
+            "npm_not_found": 404,
             "invalid_package": 400,
             "quota_exceeded": 413,
             "apply_failed": 409,
@@ -181,6 +190,33 @@ async def inspect_optional_business_v2(
         package = await service.inspect(base64.b64decode(body.archive_base64, validate=True))
     except (ValueError, KeyError, TypeError, SchemaError, OptionalBusinessError) as exc:
         raise _http(exc) from exc
+    return _inspection(package)
+
+
+async def resolve_npm_release(
+    body: NpmReleaseRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    await _authorize_write(db, current_user, body.tenant_id, body.project_id)
+    try:
+        archive = await fetch_npm_archive(
+            get_settings().package_npm_registry_url, body.package_name, body.version
+        )
+        service = _service(request, db, body.tenant_id, body.project_id, actor_id=current_user.id)
+        package = await service.inspect(archive)
+        if (
+            package.plugin_id != npm_plugin_id(body.package_name, body.version)
+            or package.version != body.version
+        ):
+            raise ValueError("Signed plugin identity differs from the npm release")
+    except (ValueError, KeyError, TypeError, SchemaError, OptionalBusinessError) as exc:
+        raise _http(exc) from exc
+    return {**_inspection(package), "archive_base64": base64.b64encode(archive).decode()}
+
+
+def _inspection(package: SignedPackageBytesV2) -> dict[str, Any]:
     return {
         "plugin_id": package.plugin_id,
         "version": package.version,
@@ -436,8 +472,16 @@ async def _package_stream(
             try:
                 result = await service.call_active(
                     plugin_id,
-                    lambda package: _stream_operation(package, scope, body, progress, PackageOperationContext(request, db, current_user, scope)),
-                    application_command=body.command_id if isinstance(body, OptionalBusinessCommandV2) else None,
+                    lambda package: _stream_operation(
+                        package,
+                        scope,
+                        body,
+                        progress,
+                        PackageOperationContext(request, db, current_user, scope),
+                    ),
+                    application_command=body.command_id
+                    if isinstance(body, OptionalBusinessCommandV2)
+                    else None,
                     operation_kind="command"
                     if isinstance(body, OptionalBusinessCommandV2)
                     else "tool",
@@ -486,7 +530,13 @@ async def command_optional_business_v2(
             request, db, body.tenant_id, body.project_id, actor_id=current_user.id
         ).call_active(
             plugin_id,
-            lambda package: dispatch_project_command(package, scope, body.command_id, body.payload, application=PackageOperationContext(request, db, current_user, scope)),
+            lambda package: dispatch_project_command(
+                package,
+                scope,
+                body.command_id,
+                body.payload,
+                application=PackageOperationContext(request, db, current_user, scope),
+            ),
             application_command=body.command_id,
             operation_kind="command",
             expected_digest=body.expected_digest,

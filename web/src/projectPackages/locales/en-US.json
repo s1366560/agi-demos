@@ -290,6 +290,9 @@
       "optionalBusiness": {
         "title": "Signed optional business",
         "pluginId": "Plugin id",
+        "npmName": "npm package name",
+        "exactVersion": "Exact npm version",
+        "previewNpm": "Preview signed package",
         "packageFile": "Signed package file",
         "install": "Install signed package",
         "enable": "Enable",
