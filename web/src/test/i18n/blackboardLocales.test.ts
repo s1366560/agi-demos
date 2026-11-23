@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import enUS from '@/locales/en-US.json';
-import zhCN from '@/locales/zh-CN.json';
+import { enUS, zhCN } from '@/i18n/fullResources';
 
 const BLACKBOARD_PRODUCT_KEYS = [
   'blackboard.title',

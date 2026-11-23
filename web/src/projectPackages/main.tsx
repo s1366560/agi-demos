@@ -4,9 +4,14 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { createRoot } from 'react-dom/client';
 
-import '@/i18n/config';
+import { initializeTranslations } from '@/i18n/initialize';
+
+import enUS from './locales/en-US.json';
+import zhCN from './locales/zh-CN.json';
 import { ProjectPackagesApp } from './ProjectPackagesApp';
 import './projectPackages.css';
+
+initializeTranslations({ 'en-US': { translation: enUS }, 'zh-CN': { translation: zhCN } });
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing project package root');

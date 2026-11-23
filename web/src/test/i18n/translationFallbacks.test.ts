@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import enUS from '@/locales/en-US.json';
+import { enUS } from '@/i18n/fullResources';
 
 const sourceModules = import.meta.glob('../../**/*.{ts,tsx}', {
   eager: true,

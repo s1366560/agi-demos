@@ -2,8 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import enUS from '../../../locales/en-US.json';
-import zhCN from '../../../locales/zh-CN.json';
+import { enUS, zhCN } from '@/i18n/fullResources';
 import { AuditLogs } from '../../../pages/tenant/AuditLogs';
 import { useAuditStore } from '../../../stores/audit';
 import { useTenantStore } from '../../../stores/tenant';
