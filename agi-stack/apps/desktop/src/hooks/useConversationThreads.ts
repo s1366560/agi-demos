@@ -7,6 +7,7 @@ import {
   composerAgentExecutionContext,
 } from '../features/chat/chatComposerModel';
 import { executionPlacementMessageKey } from '../features/chat/executionPlacementModel';
+import { dispatchDesktopLocalRun } from '../features/chat/localRunDispatch';
 import {
   canonicalJsonSha256,
 } from '../features/session/canonicalJsonDigest';
@@ -280,6 +281,28 @@ export function useConversationThreads(params: AgentConversationParams) {
     const placementDecision = params.resolveExecutionSend?.('new_task') ?? null;
     if (placementDecision && !placementDecision.ok) {
       throw new Error(t(executionPlacementMessageKey(placementDecision.code)));
+    }
+    if (placementDecision?.ok && placementDecision.transport === 'local') {
+      const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
+      if (!invoke) throw new Error(t('executionPlacement.localExecutionUnavailable'));
+      const localReport = await dispatchDesktopLocalRun(
+        {
+          apiBaseUrl: input.config.apiBaseUrl,
+          apiKey: input.config.apiKey,
+          userId: auth.user?.user_id ?? '',
+          tenantId: input.config.tenantId,
+          conversationId: input.conversationId,
+          message: input.message,
+          idempotencyKey: input.messageId,
+          wire: placementDecision.wire,
+          localRoot: placementDecision.localRoot,
+        },
+        invoke,
+      );
+      if (localReport.sync === 'failed' || localReport.sync === 'conflict') {
+        throw new Error(localReport.detail);
+      }
+      return 'acknowledged';
     }
     const acknowledgment = new Promise<NewTaskAgentTurnOutcome>(
       (resolve, reject) => {

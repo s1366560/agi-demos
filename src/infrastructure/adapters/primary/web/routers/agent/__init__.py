@@ -17,6 +17,7 @@ from . import (
     definitions_router,
     events,
     hitl,
+    local_run_upload,
     messages,
     model_requests_v2,
     participants,
@@ -86,6 +87,7 @@ router.include_router(patterns.router)
 router.include_router(config.router)
 router.include_router(hitl.router, prefix="/hitl")
 router.include_router(events.router)
+router.include_router(local_run_upload.router)
 router.include_router(model_requests_v2.router)
 router.include_router(computer_use_device.router)
 router.include_router(computer_use_media.router)

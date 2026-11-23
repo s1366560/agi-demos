@@ -9,6 +9,7 @@ members = [
     "crates/adapters-cua",
     "crates/adapters-device",
     "crates/adapters-local-tools",
+    "crates/local-run-upload",
     "crates/adapters-http-llm",
     "crates/adapters-cli-harness",
     "crates/adapters-postgres",

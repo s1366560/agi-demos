@@ -182,7 +182,7 @@ export function useExecutionPlacement(input: {
         setNoticeCode(decision.code);
         return;
       }
-      setNoticeCode(target === 'local' ? 'LOCAL_EXECUTION_UNAVAILABLE' : null);
+      setNoticeCode(null);
       setNoticeDetail(null);
       persist({ ...preferenceRef.current, target });
       if (scopeKind === 'session' && input.conversationId) {
@@ -222,7 +222,7 @@ export function useExecutionPlacement(input: {
       }
       setConfiguredRoot(applied.preference.localRoot);
       persist(applied.preference);
-      setNoticeCode('LOCAL_EXECUTION_UNAVAILABLE');
+      setNoticeCode(null);
       setNoticeDetail(null);
     } catch (caught) {
       const failed = decideDirectoryConfig({
@@ -237,14 +237,17 @@ export function useExecutionPlacement(input: {
 
   const resolveSend = useCallback(
     (kind: 'session' | 'new_task' = 'session'): ExecutionSendDecision => {
+      const activePlacement = kind === 'new_task' ? newTaskPlacement : placement;
       const decision = decideExecutionSend({
         surface: 'desktop',
-        placement: kind === 'new_task' ? newTaskPlacement : placement,
+        placement: activePlacement,
+        machineId,
+        localRoot: preferenceRef.current.localRoot ?? configuredRoot,
       });
       if (!decision.ok) setNoticeCode(decision.code);
       return decision;
     },
-    [newTaskPlacement, placement],
+    [configuredRoot, machineId, newTaskPlacement, placement],
   );
 
   return {

@@ -38,6 +38,24 @@ export function publicDirectoryLabel(value: string | null | undefined): string |
   return trimmed;
 }
 
+/** Web never creates a local run. Desktop registration is a separate protocol. */
+export function webCanCreateLocalRun(): false {
+  return false;
+}
+
+export function inheritableWebRun<T extends WebExecutionRun & { updated_at?: string | null }>(
+  runs: readonly T[],
+): T | null {
+  let selected: { run: T; rank: number } | null = null;
+  runs.forEach((run, index) => {
+    if (run.status === 'cancelled') return;
+    const parsed = Date.parse(run.updated_at || '');
+    const rank = Number.isFinite(parsed) ? parsed : index;
+    if (!selected || rank >= selected.rank) selected = { run, rank };
+  });
+  return selected?.run ?? null;
+}
+
 export function webCloudWire(): {
   execution_target: 'cloud';
   execution_machine_id: null;

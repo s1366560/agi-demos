@@ -4969,6 +4969,46 @@ class ReflectionVerdictRecord(Base):
     )
 
 
+class AgentLocalRunEventModel(Base):
+    """Monotonic local-execution event accepted from a desktop machine.
+
+    The payload is the redacted canonical body. ``payload_sha256`` identifies
+    that body so a retry is idempotent and a different body at the same seq
+    conflicts instead of overwriting.
+    """
+
+    __tablename__ = "agent_local_run_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("agent_run_authorities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    project_id: Mapped[str] = mapped_column(String, nullable=False)
+    conversation_id: Mapped[str] = mapped_column(String, nullable=False)
+    seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "seq", name="uq_agent_local_run_events_run_seq"),
+        Index("ix_agent_local_run_events_conversation_seq", "conversation_id", "seq"),
+        CheckConstraint("seq >= 1", name="ck_agent_local_run_events_seq_positive"),
+        CheckConstraint(
+            "kind IN ('user_message', 'assistant_message', 'tool_call', 'tool_result', "
+            "'log', 'artifact', 'error', 'status')",
+            name="ck_agent_local_run_events_kind",
+        ),
+    )
+
+
 # Register private publication-source metadata without a circular class re-export.
 from . import (  # noqa: E402
     platform_plugin_namespace_model_v2 as _namespace_model_v2,

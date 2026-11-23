@@ -102,6 +102,7 @@ mod fan_out_tool_host;
 mod hitl_model_response;
 mod knowledge_authority_v2;
 mod local_feature_authority_v2;
+mod local_run_upload_command;
 mod local_plugin_instances_v2;
 mod local_plugin_routes_v2;
 mod local_plugin_tool_host_v2;
