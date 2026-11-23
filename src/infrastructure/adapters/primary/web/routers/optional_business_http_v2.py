@@ -57,6 +57,8 @@ class OptionalBusinessArchiveV2(BaseModel):
 
 
 class OptionalBusinessInstallV2(OptionalBusinessArchiveV2):
+    expected_revision: int | None = Field(None, ge=0, strict=True)
+    expected_digest: str | None = Field(None, pattern="^sha256:[a-f0-9]{64}$")
     approved_permissions: list[str] = Field(max_length=32)
 
 
@@ -251,17 +253,24 @@ async def install_optional_business_v2(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     await _authorize_write(db, current_user, body.tenant_id, body.project_id)
     try:
         raw = base64.b64decode(body.archive_base64, validate=True)
-        package = await _service(
+        package, revision = await _service(
             request, db, body.tenant_id, body.project_id, actor_id=current_user.id
-        ).record(raw, frozenset(body.approved_permissions), current_user.id)
+        ).record_selection(
+            raw,
+            frozenset(body.approved_permissions),
+            current_user.id,
+            expected_revision=body.expected_revision,
+            expected_digest=body.expected_digest,
+        )
     except (ValueError, KeyError, TypeError, SchemaError, OptionalBusinessError) as exc:
         raise _http(exc) from exc
     return {
         "status": "recorded",
+        "desired_revision": revision,
         "plugin_id": package.plugin_id,
         "version": package.version,
         "digest": package.digest,

@@ -261,3 +261,46 @@ async def test_unversioned_database_refused_and_package_owned_tables_ignored(dat
         await connection.run_sync(add_business_table)
         await connection.run_sync(lambda sync: command.check(migration_config(sync)))
     assert "package_owned_rows" in await _tables(database)
+
+
+async def test_concurrent_reviewed_installations_activate_exactly_one_version(database, publisher):
+    from base64 import b64decode
+
+    from src.host.packages.project_plugin_installation import ProjectPluginInstallationService
+    from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
+        OptionalBusinessError,
+        ScopeBindingV2,
+    )
+
+    await initialize_package_kernel_database(database)
+    _, _, ids = await _first_owner(database)
+    scope = ScopeBindingV2(**ids)
+    sessions = async_sessionmaker(database, expire_on_commit=False)
+
+    async def choose(version):
+        body, digest = publisher[1](version)
+        async with sessions() as db:
+            service = ProjectPluginInstallationService(db, scope, (publisher[0],))
+            try:
+                await service.record_selection(
+                    b64decode(body["archive_base64"]),
+                    frozenset(body["approved_permissions"]),
+                    "test-owner",
+                    expected_revision=0,
+                    expected_digest=digest,
+                    expected_identity=("sample.notes", version),
+                    activate=True,
+                )
+            except OptionalBusinessError as exc:
+                assert exc.code == "conflict"
+                return None
+            return digest
+
+    results = await asyncio.gather(choose("1.0.0"), choose("2.0.0"))
+    assert results.count(None) == 1
+    async with sessions() as db:
+        service = ProjectPluginInstallationService(db, scope, (publisher[0],))
+        installation = await service.projection("sample.notes")
+        assert installation["desired_revision"] == 1
+        assert installation["actual_digest"] == installation["desired_digest"]
+        assert installation["actual_digest"] in results

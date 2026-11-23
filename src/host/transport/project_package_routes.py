@@ -2,6 +2,11 @@
 
 from fastapi import APIRouter
 
+from src.host.transport.project_marketplace import (
+    apply_npm_market_release,
+    browse_npm_market,
+    read_npm_market_release,
+)
 from src.infrastructure.adapters.primary.web.routers.optional_business_http_v2 import (
     command_optional_business_v2,
     disable_optional_business_v2,
@@ -31,6 +36,9 @@ project_package_router = APIRouter(
 )
 
 project_package_router.add_api_route("/", list_project_packages, methods=["GET"])
+project_package_router.add_api_route("/npm/catalog", browse_npm_market, methods=["GET"])
+project_package_router.add_api_route("/npm/detail", read_npm_market_release, methods=["GET"])
+project_package_router.add_api_route("/npm/apply", apply_npm_market_release, methods=["POST"])
 project_package_router.add_api_route("/npm/resolve", resolve_npm_release, methods=["POST"])
 project_package_router.add_api_route("/inspect", inspect_optional_business_v2, methods=["POST"])
 project_package_router.add_api_route("/install", install_optional_business_v2, methods=["POST"])

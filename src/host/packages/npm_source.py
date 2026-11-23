@@ -29,7 +29,12 @@ _TAR_LIMIT = _ARCHIVE_LIMIT + 1024 * 1024
 
 
 def npm_plugin_id(name: str, version: str) -> str:
-    if not _PACKAGE.fullmatch(name) or not _VERSION.fullmatch(version):
+    if (
+        len(name) > 214
+        or len(version) > 128
+        or not _PACKAGE.fullmatch(name)
+        or not _VERSION.fullmatch(version)
+    ):
         raise ValueError("An npm package name and exact version are required")
     return name.removeprefix("@").replace("/", "-")
 
@@ -71,7 +76,7 @@ def _unpack(raw: bytes, name: str, version: str) -> bytes:
     return files["package/plugin.mspkg"]
 
 
-async def _download(client: httpx.AsyncClient, url: str, limit: int) -> bytes:
+async def download_bounded(client: httpx.AsyncClient, url: str, limit: int) -> bytes:
     async with client.stream("GET", url, headers={"Accept-Encoding": "identity"}) as response:
         if response.status_code == 404:
             raise OptionalBusinessError("npm_not_found", "npm release was not found")
@@ -86,11 +91,14 @@ async def _download(client: httpx.AsyncClient, url: str, limit: int) -> bytes:
     return bytes(out)
 
 
-async def fetch_npm_archive(registry: str | None, name: str, version: str) -> bytes:
-    npm_plugin_id(name, version)
+def registry_base(registry: str | None) -> str:
     if not registry:
         raise OptionalBusinessError("runtime_unavailable", "No npm plugin source is configured")
-    root = urlsplit(registry)
+    try:
+        root = urlsplit(registry)
+        _ = root.port
+    except ValueError as exc:
+        raise OptionalBusinessError("runtime_unavailable", "Invalid npm plugin source") from exc
     if (
         root.scheme not in {"https", "http"}
         or not root.hostname
@@ -100,13 +108,20 @@ async def fetch_npm_archive(registry: str | None, name: str, version: str) -> by
         or root.fragment
     ):
         raise OptionalBusinessError("runtime_unavailable", "Invalid npm plugin source")
+    return registry.rstrip("/")
+
+
+async def fetch_npm_archive(registry: str | None, name: str, version: str) -> bytes:
+    npm_plugin_id(name, version)
+    registry = registry_base(registry)
+    root = urlsplit(registry)
     endpoint = f"{registry.rstrip('/')}/{quote(name, safe='@')}/{quote(version, safe='')}"
     try:
         async with (
             asyncio.timeout(35),
             httpx.AsyncClient(trust_env=False, follow_redirects=False, timeout=10) as client,
         ):
-            doc = _metadata(await _download(client, endpoint, 1024 * 1024), name, version)
+            doc = _metadata(await download_bounded(client, endpoint, 1024 * 1024), name, version)
             dist = doc.get("dist")
             if not isinstance(dist, dict) or not isinstance(url := dist.get("tarball"), str):
                 raise ValueError("Missing npm distribution")
@@ -123,7 +138,7 @@ async def fetch_npm_archive(registry: str | None, name: str, version: str) -> by
                 or not tar.path.startswith(root.path.rstrip("/") + "/")
             ):
                 raise ValueError("npm tarball is outside the configured source")
-            raw = await _download(client, url, _TAR_LIMIT)
+            raw = await download_bounded(client, url, _TAR_LIMIT)
             integrity = "sha512-" + base64.b64encode(hashlib.sha512(raw).digest()).decode()
             if dist.get("integrity") != integrity:
                 raise ValueError("npm tarball integrity mismatch")

@@ -5,7 +5,6 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager
-from dataclasses import asdict
 from typing import Any
 
 from sqlalchemy import BigInteger, bindparam, delete, func, select
@@ -13,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.chat_adapter_scope import chat_adapter_pin
 from src.host.operations.project_package_audit import PackageAudit, project_operation
+from src.host.packages.project_installation_view import installation_view
 from src.host.packages.release_pin import AGENT_PACKAGE_PINS, AgentPackagePin as AgentPackagePin
-from src.host.packages.rich_pages import check_page_routes, renderer_projection
+from src.host.packages.rich_pages import check_page_routes
 from src.host.runtime.package_call import admit_package_call
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentRunAuthorityModel,
@@ -42,7 +42,6 @@ from src.infrastructure.plugins.v2.plugin_namespace_store_v2 import (
 )
 from src.infrastructure.plugins.v2.project_plugin_package import admit_package
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
-    LifecycleProjectionV2,
     OptionalBusinessError,
     ScopeBindingV2,
     SignedPackageBytesV2,
@@ -95,7 +94,7 @@ class ProjectPluginInstallationService:
         state = await self._state(plugin)
         return bool(state and state.desired)
 
-    async def marketplace_items(self) -> list[dict[str, Any]]:
+    async def installed_ids(self) -> list[str]:
         ids = await self.db.scalars(
             select(Installation.plugin_id)
             .where(
@@ -103,7 +102,10 @@ class ProjectPluginInstallationService:
             )
             .order_by(Installation.plugin_id)
         )
-        return [await self.marketplace_item(plugin) for plugin in ids.all()]
+        return list(ids.all())
+
+    async def marketplace_items(self) -> list[dict[str, Any]]:
+        return [await self.marketplace_item(plugin) for plugin in await self.installed_ids()]
 
     async def marketplace_item(self, plugin: str) -> dict[str, Any]:
         view = await self.projection(plugin)
@@ -191,12 +193,43 @@ class ProjectPluginInstallationService:
     async def record(
         self, raw: bytes, permissions: frozenset[str], approved_by: str
     ) -> SignedPackageBytesV2:
+        package, _ = await self.record_selection(raw, permissions, approved_by)
+        return package
+
+    async def record_selection(
+        self,
+        raw: bytes,
+        permissions: frozenset[str],
+        approved_by: str,
+        *,
+        expected_revision: int | None = None,
+        expected_digest: str | None = None,
+        expected_identity: tuple[str, str] | None = None,
+        activate: bool = False,
+    ) -> tuple[SignedPackageBytesV2, int]:
         with self._audit("install", approved_by) as audit:
             package = await asyncio.to_thread(
                 admit_package, raw, self.keys, permissions, self.scope
             )
+            if expected_digest is not None and package.digest != expected_digest:
+                raise OptionalBusinessError(
+                    "conflict", "signed release differs from the reviewed digest"
+                )
+            if (
+                expected_identity is not None
+                and (package.plugin_id, package.version) != expected_identity
+            ):
+                raise OptionalBusinessError(
+                    "invalid_package", "signed identity differs from the npm release"
+                )
             audit.release(package)
             await self._lock()
+            state = await self._state(package.plugin_id)
+            revision = state.revision if state else 0
+            if expected_revision is not None and expected_revision != revision:
+                raise OptionalBusinessError(
+                    "conflict", "package selection changed, reload its state"
+                )
             await self._catalog_check(package.plugin_id, package.version, raw)
             release = await self.db.get(
                 Release, (self.scope.project_id, package.plugin_id, package.version)
@@ -216,19 +249,24 @@ class ProjectPluginInstallationService:
                         approved_by=approved_by,
                     )
                 )
-            state = await self._state(package.plugin_id)
             if state is None:
                 state = Installation(
                     project_id=self.scope.project_id, plugin_id=package.plugin_id, revision=0
                 )
                 self.db.add(state)
-            if state.desired != package.version:
+            if state.desired != package.version or (
+                activate and (state.active != package.version or not state.enabled or state.failure)
+            ):
                 state.desired = package.version
                 state.revision += 1
                 state.failure = None
             state.retention = "retained"
+            if activate:
+                await self.db.flush()
+                await self._activate(state, package.version)
+            revision = state.revision
             await self.db.commit()
-            return package
+            return package, revision
 
     async def _verified(
         self, plugin: str, version: str, audit: PackageAudit | None = None
@@ -244,6 +282,9 @@ class ProjectPluginInstallationService:
         return await asyncio.to_thread(
             admit_package, release.archive, self.keys, frozenset(release.permissions), self.scope
         )
+
+    async def reviewed_release(self, plugin: str, version: str) -> SignedPackageBytesV2:
+        return await self._verified(plugin, version)
 
     async def _check_service_replacement(
         self, active: str, candidate: SignedPackageBytesV2
@@ -392,79 +433,9 @@ class ProjectPluginInstallationService:
             return await self.projection(plugin)
 
     async def projection(self, plugin: str) -> dict[str, Any]:
-        state = await self._state(plugin)
-        versions = [v for v in (state.desired, state.active) if v] if state else []
-        digests = dict(
-            (
-                await self.db.execute(
-                    select(Release.version, Release.digest)
-                    .where(
-                        Release.project_id == self.scope.project_id,
-                        Release.tenant_id == self.scope.tenant_id,
-                        Release.plugin_id == plugin,
-                        Release.version.in_(versions),
-                    )
-                    .execution_options(populate_existing=True)
-                )
-            )
-            .tuples()
-            .all()
+        return await installation_view(
+            self.db, self.scope, plugin, await self._state(plugin), self._verified
         )
-        active = state.active if state else None
-        desired = state.desired if state else None
-        failure = state.failure if state else None
-        view = LifecycleProjectionV2(
-            plugin_id=plugin,
-            source="signed-package",
-            version=active or desired or "",
-            package_recorded=bool(desired),
-            desired_enabled=bool(state and state.enabled),
-            runtime_phase="active" if active else "failed" if failure else "inactive",
-            ui_mounted=False,
-            sync="degraded" if failure else "current" if active == desired else "staged",
-            desired_revision=state.revision if state else 0,
-            actual_generation=state.generation if state else 0,
-            desired_digest=digests.get(desired) if desired else None,
-            actual_digest=digests.get(active) if active else None,
-            failure=failure,
-            retention=state.retention if state else "retained",
-        )
-        renderer = renderer_projection()
-        commands: list[str] = []
-        kind: str | None = None
-        targets: tuple[str, ...] = ()
-        if desired and desired != active:
-            try:
-                staged = await self._verified(plugin, desired)
-                kind, targets = staged.kind, staged.targets
-            except (ValueError, OptionalBusinessError):
-                pass
-        if active:
-            try:
-                live = await self._verified(plugin, active)
-                if desired == active:
-                    kind, targets = live.kind, live.targets
-                renderer = renderer_projection(live)
-                commands = [
-                    c.command_id
-                    for c in live.contribution.commands
-                    if c.permissions <= live.approved_permissions
-                ]
-            except (ValueError, OptionalBusinessError) as error:
-                active = None
-                view.actual_digest = None
-                view.runtime_phase = "unavailable"
-                view.sync = "degraded"
-                view.failure = str(error)
-        return {
-            **asdict(view),
-            "kind": kind,
-            "targets": list(targets),
-            "installed_version": desired,
-            "running_version": active,
-            "commands": commands,
-            **renderer,
-        }
 
     async def _active(self, plugin: str) -> SignedPackageBytesV2:
         state = await self._state(plugin)

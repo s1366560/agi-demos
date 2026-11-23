@@ -19,14 +19,22 @@ if TYPE_CHECKING:
 
 def renderer_projection(package: "SignedPackageBytesV2 | None" = None) -> dict[str, object]:
     if package is None or "ui.slot" not in package.approved_permissions:
-        return {"pages": [], "has_desktop_ui": False, "has_web_ui": False}
+        return {
+            "pages": [],
+            "signed_slot_targets": [],
+            "has_desktop_ui": False,
+            "has_web_ui": False,
+        }
     pages = package.contribution.pages
-    targets = {target for page in pages for target in page.targets}
+    slots = [
+        target for target in ("web", "desktop-renderer") if package.page_slot(target) is not None
+    ]
+    targets = {target for page in pages for target in page.targets}.union(slots)
     return {
         "pages": [page.descriptor() for page in pages],
-        "has_web_ui": "web" in targets or package.page_slot("web") is not None,
-        "has_desktop_ui": "desktop-renderer" in targets
-        or package.page_slot("desktop-renderer") is not None,
+        "signed_slot_targets": slots,
+        "has_web_ui": "web" in targets,
+        "has_desktop_ui": "desktop-renderer" in targets,
     }
 
 
