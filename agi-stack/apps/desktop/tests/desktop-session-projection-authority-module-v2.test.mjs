@@ -645,13 +645,31 @@ test("Loader activates the exact service and disable removes it without fallback
   await manager.close();
 });
 
-test("local transport preserves exact scope, credentials, signal and unknown response", async () => {
+test("local session reads use cloud and do not fall back to the sidecar", async () => {
   const originalFetch = globalThis.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const fetches = [];
   const calls = [];
   globalThis.fetch = async (input, init) => {
-    calls.push({ input: String(input), init });
+    fetches.push({ input: String(input), init });
     return json(projection({ transport_extension: { retained: true } }));
   };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      __MEMSTACK_DESKTOP__: {
+        core: {
+          async invoke(command, args) {
+            calls.push({ command, args });
+            return {
+              status: 200,
+              body: projection({ transport_extension: { retained: true } }),
+            };
+          },
+        },
+      },
+    },
+  });
 
   try {
     const generation = await new LoaderV2(
@@ -663,19 +681,18 @@ test("local transport preserves exact scope, credentials, signal and unknown res
       { kind: "root" },
       { version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2 },
     );
-    const controller = new AbortController();
     const payload = await service
       .bindOperation(runtimeConfig())
-      .getConversationSession(conversation(), controller.signal);
+      .getConversationSession(conversation(), new AbortController().signal);
 
     assert.deepEqual(
       payload,
       projection({ transport_extension: { retained: true } }),
     );
+    assert.equal(fetches.length, 0);
     assert.equal(calls.length, 1);
-    const call = calls[0];
-    const url = new URL(call.input);
-    const headers = new Headers(call.init.headers);
+    assert.equal(calls[0].command, "cloud_request");
+    const url = new URL(calls[0].args.request.path, "https://desktop.invalid");
     assert.equal(
       url.pathname,
       "/api/v1/agent/conversations/conversation-1/session",
@@ -683,12 +700,13 @@ test("local transport preserves exact scope, credentials, signal and unknown res
     assert.equal(url.searchParams.get("tenant_id"), "tenant-1");
     assert.equal(url.searchParams.get("project_id"), "project-1");
     assert.equal(url.searchParams.get("workspace_id"), "workspace-1");
-    assert.equal(call.init.signal, controller.signal);
-    assert.equal(headers.get("Authorization"), "Bearer projection-session");
-    assert.equal(headers.get("X-Agistack-Launch"), "projection-launch");
+    assert.equal(JSON.stringify(calls).includes("projection-session"), false);
+    assert.equal(JSON.stringify(calls).includes("projection-launch"), false);
     await generation.dispose();
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else Object.defineProperty(globalThis, "window", originalWindow);
   }
 });
 
@@ -848,12 +866,29 @@ test("invalid input and scope mismatch fail before acquiring a lease", () => {
   assert.equal(acquireCount, 0);
 });
 
-test("non-2xx transport preserves the original DesktopApiError", async () => {
+test("non-2xx cloud history preserves the original DesktopApiError without sidecar fallback", async () => {
   const originalFetch = globalThis.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   const response = {
     detail: { reason_code: "session_projection_unavailable" },
   };
-  globalThis.fetch = async () => json(response, 503);
+  const fetches = [];
+  globalThis.fetch = async () => {
+    fetches.push(true);
+    return json(response, 503);
+  };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      __MEMSTACK_DESKTOP__: {
+        core: {
+          async invoke() {
+            return { status: 503, body: response };
+          },
+        },
+      },
+    },
+  });
 
   try {
     let service;
@@ -873,11 +908,14 @@ test("non-2xx transport preserves the original DesktopApiError", async () => {
         assert.equal(error instanceof DesktopApiError, true);
         assert.equal(error.status, 503);
         assert.deepEqual(error.payload, response);
+        assert.equal(fetches.length, 0);
         return true;
       },
     );
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else Object.defineProperty(globalThis, "window", originalWindow);
   }
 });
 

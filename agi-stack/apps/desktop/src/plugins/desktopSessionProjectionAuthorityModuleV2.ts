@@ -221,7 +221,7 @@ function createDesktopSessionProjectionAuthorityV2(
   config: DesktopRuntimeConfig,
 ): DesktopSessionProjectionAuthorityV2 {
   const operationConfig = cloneDesktopRuntimeConfigV2(config);
-  const transport = new DesktopApiClient(operationConfig);
+  const transport = new DesktopApiClient(operationConfig).withCloudHistoryReads();
   const runReview = createDesktopRunReviewHttpProjectionV2(operationConfig);
   return Object.freeze({
     getRunSummary(

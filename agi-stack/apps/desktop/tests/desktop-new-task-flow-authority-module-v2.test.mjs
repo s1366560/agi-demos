@@ -703,9 +703,11 @@ test('Loader activates the exact service and Profile disable removes it without 
   await manager.close();
 });
 
-test('local service owns all eight authenticated transport contracts', async () => {
+test('local execution transports stay local and message history is read from cloud', async () => {
   const originalFetch = globalThis.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const calls = [];
+  const cloudCalls = [];
   const result = responses();
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -731,6 +733,19 @@ test('local service owns all eight authenticated transport contracts', async () 
     if (url.pathname.endsWith('/plans/approve-and-start')) return json(result.approval);
     return json({ detail: `unexpected route ${url.pathname}` }, 404);
   };
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      __MEMSTACK_DESKTOP__: {
+        core: {
+          async invoke(command, args) {
+            cloudCalls.push({ command, args });
+            return { status: 200, body: result.timeline };
+          },
+        },
+      },
+    },
+  });
 
   try {
     const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
@@ -754,7 +769,8 @@ test('local service owns all eight authenticated transport contracts', async () 
     assert.deepEqual(await client.listAgentPlanTasks('conversation-1'), result.planTasks);
     assert.deepEqual(await client.switchPlanMode('conversation-1', 'build'), result.mode);
     assert.deepEqual(await client.approvePlanAndStart(approvalRequest()), result.approval);
-    assert.equal(calls.length, 8);
+    assert.equal(calls.length, 7);
+    assert.equal(cloudCalls.length, 1);
     for (const call of calls) {
       const headers = new Headers(call.init.headers);
       assert.equal(headers.get('Authorization'), 'Bearer new-task-session');
@@ -767,15 +783,23 @@ test('local service owns all eight authenticated transport contracts', async () 
         ['/api/v1/tenants/tenant-1/projects/project-1/task-sessions/capabilities', 'GET'],
         ['/api/v1/tenants/tenant-1/projects/project-1/task-sessions', 'POST'],
         ['/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/messages', 'POST'],
-        ['/api/v1/agent/conversations/conversation-1/messages', 'GET'],
         ['/api/v1/agent/plan/tasks/conversation-1', 'GET'],
         ['/api/v1/agent/plan/mode', 'POST'],
         ['/api/v1/agent/plans/approve-and-start', 'POST'],
       ],
     );
+    assert.equal(cloudCalls[0].command, 'cloud_request');
+    assert.equal(cloudCalls[0].args.request.method, 'GET');
+    assert.match(
+      cloudCalls[0].args.request.path,
+      /^\/api\/v1\/agent\/conversations\/conversation-1\/messages\?/u,
+    );
+    assert.equal(JSON.stringify(cloudCalls).includes('new-task-session'), false);
     await generation.dispose();
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else Object.defineProperty(globalThis, 'window', originalWindow);
   }
 });
 

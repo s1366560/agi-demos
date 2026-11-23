@@ -1,3 +1,8 @@
+import {
+  CloudHistoryTransportError,
+  localHistoryMustUseCloud,
+  requestCloudHistory,
+} from './cloudHistoryAuthority';
 import { createPluginInstanceClientV2, type PluginInstanceClientV2 } from './pluginInstanceClientV2';
 import { createMarketplaceClient, type MarketplaceClient } from '../../../../packages/plugin-marketplace-ui/src/client';
 import { validMessageDisplayContent } from '../features/chat/messageDisplayModel';
@@ -380,9 +385,15 @@ export function isTaskSessionIdempotencyConflictError(error: unknown): boolean {
 
 export class DesktopApiClient {
   private readonly config: DesktopRuntimeConfig;
+  private readonly cloudHistorySession: boolean;
 
-  constructor(config: DesktopRuntimeConfig) {
+  constructor(config: DesktopRuntimeConfig, cloudHistorySession = false) {
     this.config = config;
+    this.cloudHistorySession = cloudHistorySession;
+  }
+
+  withCloudHistoryReads(): DesktopApiClient {
+    return new DesktopApiClient(this.config, true);
   }
 
   async login(username: string, password: string): Promise<LoginOutcome> {
@@ -1931,6 +1942,20 @@ export class DesktopApiClient {
         : null;
     if (options.body !== undefined && !formDataBody) {
       headers.set('Content-Type', options.contentType ?? 'application/json');
+    }
+    const method = (options.method ?? 'GET').toUpperCase();
+    if (localHistoryMustUseCloud(this.config, method, path, this.cloudHistorySession)) {
+      try {
+        return await requestCloudHistory<T>(path, {
+          method: method as 'GET',
+          signal: options.signal,
+        });
+      } catch (error) {
+        if (error instanceof CloudHistoryTransportError) {
+          throw new DesktopApiError(error.message, error.status, error.payload);
+        }
+        throw error;
+      }
     }
     const credential = desktopApiCredential(this.config);
     const vaultBoundBroker =

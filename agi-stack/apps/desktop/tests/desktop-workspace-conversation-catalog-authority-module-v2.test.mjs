@@ -345,9 +345,14 @@ test('Local and Cloud transports keep scope filters exact without exposing crede
       core: {
         async invoke(command, args) {
           cloudCommands.push({ command, args });
+          const path = String(args?.request?.path ?? '');
           return {
             status: 200,
-            body: page(conversation('cloud-conversation', null)),
+            body: page(
+              path.includes('workspace_id=')
+                ? conversation('local-conversation', 'workspace / one')
+                : conversation('cloud-conversation', null),
+            ),
           };
         },
       },
@@ -397,21 +402,16 @@ test('Local and Cloud transports keep scope filters exact without exposing crede
     assert.equal(Object.isFrozen(local), true);
     assert.equal(Object.isFrozen(cloud), true);
     assert.deepEqual(Object.keys(local), ['listConversations']);
-    assert.equal(fetchCalls.length, 1);
-    const localUrl = new URL(fetchCalls[0].input);
-    assert.equal(localUrl.origin, 'http://127.0.0.1:46931');
+    assert.equal(fetchCalls.length, 0);
+    assert.equal(cloudCommands.length, 2);
+    const localUrl = new URL(cloudCommands[0].args.request.path, 'https://desktop.invalid');
     assert.equal(localUrl.pathname, '/api/v1/agent/conversations');
     assert.equal(localUrl.searchParams.get('project_id'), 'project / one');
     assert.equal(localUrl.searchParams.get('workspace_id'), 'workspace / one');
     assert.equal(localUrl.searchParams.get('unbound_only'), null);
-    assert.equal(fetchCalls[0].init.signal, controller.signal);
-    const headers = new Headers(fetchCalls[0].init.headers);
-    assert.equal(headers.get('Authorization'), 'Bearer workspace-conversation-session');
-    assert.equal(headers.get('X-Agistack-Launch'), 'workspace-conversation-launch');
-    assert.equal(cloudCommands.length, 1);
     assert.equal(cloudCommands[0].command, 'cloud_request');
     assert.equal(cloudCommands[0].args.request.method, 'GET');
-    assert.equal(cloudCommands[0].args.request.path.includes('unbound_only=true'), true);
+    assert.equal(cloudCommands[1].args.request.path.includes('unbound_only=true'), true);
     assert.equal(JSON.stringify(cloudCommands).includes('Bearer'), false);
     assert.equal(JSON.stringify(cloudCommands).includes('workspace-conversation-session'), false);
     await generation.dispose();
