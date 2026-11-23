@@ -146,13 +146,19 @@ test('missing cloud broker does not invent local history', async () => {
 test('legacy workspace import no longer reads local history tables', () => {
   assert.match(helperSource, /stage_empty_workspace_history_snapshot/u);
   assert.doesNotMatch(helperSource, /stage_legacy_workspace_snapshot/u);
-  assert.doesNotMatch(importerSource, /desktop_workspaces/u);
-  assert.doesNotMatch(importerSource, /desktop_workspace_messages/u);
-  assert.match(retirementSource, /upload_outbox/u);
-  assert.match(retirementSource, /application_vault_records/u);
-  assert.match(retirementSource, /desktop_custom_keep|PRESERVED_TABLES/u);
+  assert.doesNotMatch(helperSource, /read_legacy_workspace_rows/u);
+  const productionImporter = importerSource.split('#[cfg(test)]')[0];
+  assert.doesNotMatch(productionImporter, /read_legacy_workspace_rows|SELECT id, project_id|rusqlite/u);
+  assert.match(productionImporter, /LEGACY_WORKSPACE_HISTORY_TABLES/u);
+  assert.match(productionImporter, /desktop_workspace_messages/u);
+  assert.match(productionImporter, /desktop_workspaces/u);
   const productionRetirement = retirementSource.split('#[cfg(test)]')[0];
+  assert.doesNotMatch(productionRetirement, /desktop_workspaces/u);
+  assert.doesNotMatch(productionRetirement, /desktop_workspace_messages/u);
   assert.doesNotMatch(productionRetirement, /remove_dir_all|std::fs::remove_dir/u);
+  assert.match(productionRetirement, /upload_outbox/u);
+  assert.match(productionRetirement, /application_vault_records/u);
+  assert.match(productionRetirement, /desktop_custom_keep|PRESERVED_TABLES/u);
   assert.match(productionRetirement, /BEGIN IMMEDIATE/u);
   assert.match(productionRetirement, /ROLLBACK/u);
 });
