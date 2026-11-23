@@ -56,7 +56,9 @@ def test_kernel_bootstrap_without_any_builtin_package() -> None:
         paths = app.openapi()["paths"]
         assert "/api/v1/platform-plugins/v2/optional-business/install" in paths
         assert "/api/v1/auth/token" in paths
-        assert not any(path.startswith("/api/v1/agent/") for path in paths)
+        assert "/api/v1/agent/conversations/{conversation_id}/local-runs" in paths
+        assert "/api/v1/platform-plugins/v2/optional-business/npm/resolve" in paths
+        assert all(route.path != "/api/v1/agent/ws" for route in app.routes)
         """
     )
     subprocess.run([sys.executable, "-c", script], check=True)
