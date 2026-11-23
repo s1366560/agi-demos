@@ -1,5 +1,5 @@
 # path<TAB>upstream_sha256<TAB>local_sha256<TAB>reason
-Cargo.lock	d767c35fb59dea1ebe1fadc6117fa09a9726ab8229747e024780a749e2660536	c51cc2fa0684433174f963d06ceabd0941157281973600a37694ca921417569b	Lock patched rustix, quinn-udp and libz-sys for RustSec advisories including RUSTSEC-2026-0544
+Cargo.lock	d767c35fb59dea1ebe1fadc6117fa09a9726ab8229747e024780a749e2660536	8765d6160e4000c6f9a821b0bd824d0d9dd1165bdc51d956b4baa8579948295f	Lock patched rustix, quinn-udp, libz-sys, url 2.5.9 and form_urlencoded 1.2.3 for RustSec advisories including RUSTSEC-2026-0544 and RUSTSEC-2026-0592
 Cargo.toml	32f00e9ecbb8d9e711dbe0f01c09037184b374eba72b498b9b504ef115d857b3	2730063a675fef95dd92277fde28cb727e744bf25e01f172bb52ee3cacd0f646	Register downstream PostgreSQL plugin and Workspace Core packages
 assets/panel/package-lock.json	11bf9d334352abd227e3a78636f4a4bb7368b850c9ce7b4c2c6a0dfe5ecb6639	bdd8944523601d81e331bb1b8682312c41750f47749f66c0e3f4f5dcb378fe7f	Record the panel root Apache-2.0 license in the reviewed npm lockfile
 assets/panel/package.json	7f7e90c499becaa1ac881370a413ecc9ea6d45bb64e755c6234a3308aa40b770	1b0c7e9aec505ef8b02ae01f6da6b0042ee4266ec22b278cd7b3ea7cb0028720	Declare the panel package Apache-2.0 license for supply-chain verification
