@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import inspect
+import json
 from collections import Counter
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
@@ -12,6 +14,7 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 
 from src.configuration.workspace_core import get_workspace_core_settings
+from src.domain.model.plugins.artifact_attestation_v2 import artifact_digest_v2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.primary.web.routers.agent import (
     router as legacy_agent_router,
@@ -307,6 +310,22 @@ class _FakeContext:
             disposers = cast("tuple[Callable[[], Awaitable[None]], ...]", result)
             for dispose in reversed(disposers):
                 await dispose()
+
+
+def test_agent_route_source_digest_matches_generated_manifest() -> None:
+    root = Path(__file__).resolve().parents[6]
+    source = root / "src/infrastructure/plugins/v2/builtin_agent_http_routes.py"
+    manifest = json.loads(
+        (root / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    module = next(
+        item
+        for item in manifest["modules"]
+        if item["module_ref"] == subject.AGENT_HTTP_ROUTES_MODULE_V2
+    )
+    assert module["artifact"]["digest"] == artifact_digest_v2(source.read_bytes())
 
 
 def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:

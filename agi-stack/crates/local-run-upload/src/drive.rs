@@ -781,7 +781,7 @@ mod tests {
         let tools = Arc::new(LocalToolHost::new(&root).expect("host"));
         let report = drive_local_run(&queue, &cloud, llm, tools, request(root.clone())).await;
         assert_eq!(report.sync, "synced");
-        assert_eq!(report.executed, true);
+        assert!(report.executed);
         assert!(!queue.contains_text("Bearer secret-token").expect("scan"));
         assert!(!queue.contains_text("/Users/alice").expect("scan"));
         let hits = cloud.hits.load(AtomicOrdering::SeqCst);
@@ -790,7 +790,7 @@ mod tests {
         }]));
         let tools = Arc::new(LocalToolHost::new(&root).expect("host"));
         let second = drive_local_run(&queue, &cloud, llm, tools, request(root.clone())).await;
-        assert_eq!(second.executed, false);
+        assert!(!second.executed);
         assert_eq!(cloud.hits.load(AtomicOrdering::SeqCst), hits);
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_dir_all(root);

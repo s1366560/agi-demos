@@ -131,8 +131,7 @@ impl LocalRuntimeService {
                     }),
                     authorization: parsed.authorization,
                 })
-                .await
-                .map_err(|error| error)?;
+                .await?;
             if !(200..300).contains(&response.status) {
                 return Err("local_run_stop_rejected".to_string());
             }

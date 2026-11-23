@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:cb8618ab84511545ada065351b7feecc210b6ce50db4d12c9267f114458f65'
-    '80","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:96771c3ebc6129ae92ac5592d8334e5c5e139f130a9c5248e7f6a32e6a3554'
+    '81","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -2930,7 +2930,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     ':"src.infrastructure.plugins.v2.builtin_agent_pool_http_routes:builtin_agent_pool_http_r'
     'outes_definition_v2","module_ref":"builtin://memstack/http/agent-pool-routes","plugin_id'
     '":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_di'
-    'gest":"sha256:fc46c593b1dc5f8648321030f06f1de05a0944a60ebc091435f43b260a653ffb","artifac'
+    'gest":"sha256:1a7aee311fec44ce77d61b8b70f020ffd0bc6f6093218208dea5679b6caedf94","artifac'
     't_source":"repo+python://src/infrastructure/plugins/v2/builtin_agent_http_routes.py","co'
     'ntract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addi'
     'tionalProperties":false,"properties":{},"type":"object"},"events":{"emits":[],"handles":'
@@ -4788,7 +4788,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:cb8618ab84511545ada065351b7feecc210b6ce50db4d12c9267f114458f6580"
+    "sha256:96771c3ebc6129ae92ac5592d8334e5c5e139f130a9c5248e7f6a32e6a355481"
 )
 # fmt: on
 
