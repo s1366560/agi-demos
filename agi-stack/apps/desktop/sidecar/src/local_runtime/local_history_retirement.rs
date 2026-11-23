@@ -10,6 +10,8 @@ use std::path::Path;
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{json, Value};
 
+use crate::workspace_core_legacy_import::LEGACY_WORKSPACE_HISTORY_TABLES;
+
 const TERMINAL_RUN_STATUSES: &[&str] = &["completed", "failed", "cancelled"];
 const SETTLED_UPLOAD_STATES: &[&str] = &["acked", "failed"];
 const SETTLED_CLAIM_STATES: &[&str] = &["failed", "finished", "completed", "cancelled"];
@@ -39,8 +41,6 @@ pub(crate) const LOCAL_HISTORY_TABLES: &[&str] = &[
     "desktop_conversation_llm_routes",
     "desktop_conversation_execution_selections",
     "desktop_new_task_sessions",
-    "desktop_workspace_messages",
-    "desktop_workspaces",
     "desktop_conversations",
 ];
 
@@ -73,7 +73,9 @@ pub(crate) fn retire_local_workspace_history(
     if !data_directory.is_absolute() {
         return Err("local history retirement requires an absolute data directory".to_string());
     }
-    if let Some(reason) = upload_blocks_cleanup(&data_directory.join("local-run-upload.db"))? {
+    let queue_path = data_directory.join("local-run-upload.db");
+    let queue_guard = lock_upload_queue(&queue_path)?;
+    if let Some(reason) = queue_guard.blocked {
         return Ok(deferred(reason));
     }
     if active_execution(session)? {
@@ -86,9 +88,10 @@ pub(crate) fn retire_local_workspace_history(
     let deleted = delete_whitelisted_rows(session);
     match deleted {
         Ok(deleted_rows) => {
-            session
-                .execute_batch("COMMIT")
-                .map_err(|error| error.to_string())?;
+            if let Err(error) = session.execute_batch("COMMIT") {
+                let _ = session.execute_batch("ROLLBACK");
+                return Err(error.to_string());
+            }
             Ok(json!({
                 "status": "retired",
                 "reason": null,
@@ -102,6 +105,19 @@ pub(crate) fn retire_local_workspace_history(
     }
 }
 
+struct QueueGuard {
+    connection: Option<Connection>,
+    blocked: Option<&'static str>,
+}
+
+impl Drop for QueueGuard {
+    fn drop(&mut self) {
+        if let Some(connection) = self.connection.as_ref() {
+            let _ = connection.execute_batch("ROLLBACK");
+        }
+    }
+}
+
 fn deferred(reason: &'static str) -> Value {
     json!({
         "status": "deferred",
@@ -110,39 +126,56 @@ fn deferred(reason: &'static str) -> Value {
     })
 }
 
-fn upload_blocks_cleanup(path: &Path) -> Result<Option<&'static str>, String> {
+fn absent_queue() -> QueueGuard {
+    QueueGuard {
+        connection: None,
+        blocked: None,
+    }
+}
+
+fn blocked_queue(reason: &'static str) -> QueueGuard {
+    QueueGuard {
+        connection: None,
+        blocked: Some(reason),
+    }
+}
+
+fn lock_upload_queue(path: &Path) -> Result<QueueGuard, String> {
     if path.file_name().and_then(|name| name.to_str()) != Some("local-run-upload.db") {
         return Err("local history retirement refused an unexpected queue path".to_string());
     }
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
-            return Ok(Some("upload_queue_unreadable"));
+            return Ok(blocked_queue("upload_queue_unreadable"));
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Ok(Some("upload_queue_unreadable")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(absent_queue()),
+        Err(_) => return Ok(blocked_queue("upload_queue_unreadable")),
         Ok(_) => {}
     }
-    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|_| "upload_queue_unreadable".to_string());
-    let connection = match connection {
+    let connection = match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE) {
         Ok(connection) => connection,
-        Err(_) => return Ok(Some("upload_queue_unreadable")),
+        Err(_) => return Ok(blocked_queue("upload_queue_unreadable")),
     };
     if connection.busy_timeout(std::time::Duration::ZERO).is_err() {
-        return Ok(Some("upload_queue_unreadable"));
+        return Ok(blocked_queue("upload_queue_unreadable"));
     }
-    if unsettled_rows(&connection, "upload_outbox", "state", SETTLED_UPLOAD_STATES)? {
-        return Ok(Some("pending_upload"));
+    if connection.execute_batch("BEGIN IMMEDIATE").is_err() {
+        return Ok(blocked_queue("pending_upload"));
     }
-    if unsettled_rows(
-        &connection,
-        "execution_claims",
-        "state",
-        SETTLED_CLAIM_STATES,
-    )? {
-        return Ok(Some("pending_upload"));
+    if unsettled_rows(&connection, "upload_outbox", "state", SETTLED_UPLOAD_STATES)?
+        || unsettled_rows(
+            &connection,
+            "execution_claims",
+            "state",
+            SETTLED_CLAIM_STATES,
+        )?
+    {
+        return Ok(blocked_queue("pending_upload"));
     }
-    Ok(None)
+    Ok(QueueGuard {
+        connection: Some(connection),
+        blocked: None,
+    })
 }
 
 fn unsettled_rows(
@@ -231,6 +264,20 @@ fn active_execution(session: &Connection) -> Result<bool, String> {
 fn delete_whitelisted_rows(session: &Connection) -> Result<i64, String> {
     let mut deleted = 0_i64;
     for table in LOCAL_HISTORY_TABLES {
+        if PRESERVED_TABLES.contains(table) {
+            return Err(format!(
+                "history whitelist overlaps preserved table {table}"
+            ));
+        }
+        if !table_exists(session, table)? {
+            continue;
+        }
+        session
+            .execute(&format!("DELETE FROM {table}"), [])
+            .map_err(|error| format!("failed to retire {table}: {error}"))?;
+        deleted += i64::try_from(session.changes()).unwrap_or(i64::MAX);
+    }
+    for table in LEGACY_WORKSPACE_HISTORY_TABLES {
         if PRESERVED_TABLES.contains(table) {
             return Err(format!(
                 "history whitelist overlaps preserved table {table}"
@@ -399,9 +446,17 @@ mod tests {
         let importer = include_str!("../workspace_core_legacy_import.rs");
         assert!(!helper.contains("stage_legacy_workspace_snapshot"));
         assert!(!helper.contains("read_legacy_workspace_rows"));
-        assert!(!importer.contains("desktop_workspaces"));
-        assert!(!importer.contains("desktop_workspace_messages"));
         assert!(!importer.contains("read_legacy_workspace_rows"));
+        assert!(!importer.contains("SELECT id, project_id"));
+        let production_importer = importer.split("#[cfg(test)]").next().unwrap_or(importer);
+        assert!(production_importer.contains("desktop_workspace_messages"));
+        assert!(production_importer.contains("desktop_workspaces"));
+        let production_retirement = include_str!("local_history_retirement.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or("");
+        assert!(!production_retirement.contains("desktop_workspace_messages"));
+        assert!(!production_retirement.contains("desktop_workspaces"));
     }
 
     #[test]

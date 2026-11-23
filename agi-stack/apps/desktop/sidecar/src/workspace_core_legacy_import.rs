@@ -14,6 +14,11 @@ const SNAPSHOT_SCHEMA_VERSION: u16 = 1;
 const SNAPSHOT_FILE_PREFIX: &str = "legacy-workspace-import-v1";
 const SNAPSHOT_SOURCE: &str = "desktop-session-store";
 
+/// Tables that used to hold Desktop workspace history. Retirement deletes them.
+/// They stay named here so production runtime code does not treat them as a source.
+pub(crate) const LEGACY_WORKSPACE_HISTORY_TABLES: &[&str] =
+    &["desktop_workspace_messages", "desktop_workspaces"];
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EmptyWorkspaceSnapshot {
