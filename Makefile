@@ -66,7 +66,6 @@ RERANKER_LOG_LEVEL ?= info
 RERANKER_SHELL_CMD ?= sh docker/reranker/run-shell.sh
 WORKSPACE_CORE_PORT ?= 4319
 WORKSPACE_CORE_SERVICE ?= memstack-workspace-core
-WEB_DEV_CMD ?= node_modules/.bin/vite --config vite.config.ts --host 0.0.0.0 --port 3000
 DEV_STARTUP_TIMEOUT ?= 60
 DEV_STOP_TIMEOUT ?= 10
 DEV_PYTHON ?= .venv/bin/python
@@ -83,6 +82,7 @@ ifneq ($(MEMSTACK_DEV_PROFILE),full)
 $(error MEMSTACK_DEV_PROFILE must be standard or full)
 endif
 endif
+WEB_DEV_CMD ?= node_modules/.bin/vite --config vite.config.ts $(if $(filter full,$(MEMSTACK_DEV_PROFILE)),--mode full) --host 0.0.0.0 --port 3000
 STANDARD_DEV = STANDARD_DIRECTORY="$(STANDARD_DIRECTORY)" uv run --locked python -m scripts.dev.standard_project
 
 

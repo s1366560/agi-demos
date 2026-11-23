@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -13,6 +14,27 @@ MAKEFILE = ROOT / "Makefile"
 pytestmark = pytest.mark.unit
 
 
+def test_full_dev_app_start_selects_the_full_web_client(tmp_path: Path):
+    result = subprocess.run(
+        [
+            "make",
+            "--no-print-directory",
+            "-f",
+            str(MAKEFILE),
+            "dev-app-start",
+            "MEMSTACK_DEV_PROFILE=full",
+            "DEV_SERVICES_CMD=echo",
+        ],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    _, command = result.stdout.strip().split("--web-command ")
+    argv = shlex.split(command)
+    assert argv[argv.index("--mode") + 1] == "full"
+
+
 def _override(tmp_path: Path, stop: str | None = None) -> Path:
     log = tmp_path / "order"
     stop_command = stop or f"printf '%s\\n' stop >> {log}"
@@ -20,6 +42,7 @@ def _override(tmp_path: Path, stop: str | None = None) -> Path:
     path.write_text(
         "\n".join(
             [
+                "MEMSTACK_DEV_PROFILE := full",
                 f"include {MAKEFILE}",
                 "dev-prepare:",
                 f"\tprintf '%s\\n' prepare >> {log}; exit 9",
@@ -70,6 +93,6 @@ def test_full_start_retains_image_reuse_and_workspace_health():
     core = text.split("workspace-core-start:", 1)[1].split("\n\n", 1)[0]
     assert "workspace-core-health" in core
     assert "dev-all: dev-prepare" in text
-    restart = text.split("\nrestart:", 1)[1].split("\n\n", 1)[0]
+    restart = text.split("\nrestart-full-apps:", 1)[1].split("\n\n", 1)[0]
     assert "dev-prepare" not in restart
     assert restart.index("dev-app-stop") < restart.index("dev-app-start")

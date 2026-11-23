@@ -536,7 +536,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     _ = parser.add_argument("--service", action="append", choices=("api", "web"))
     _ = parser.add_argument(
         "--web-command",
-        default="node_modules/.bin/vite --config vite.config.ts --host 0.0.0.0 --port 3000 --strictPort",
+        default=(
+            "node_modules/.bin/vite --config vite.config.ts --mode full "
+            "--host 0.0.0.0 --port 3000 --strictPort"
+        ),
     )
     args = parser.parse_args(argv)
     timeout = (
