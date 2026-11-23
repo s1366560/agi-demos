@@ -19,15 +19,14 @@ const version = new RegExp(
   'u'
 );
 
+export function isNpmPackageName(name: unknown): boolean {
+  return typeof name === 'string' && name.length <= 214 && name.trim() === name && packageName.test(name);
+}
+
+export function isExactNpmVersion(value: unknown): boolean {
+  return typeof value === 'string' && value.length <= 128 && value.trim() === value && version.test(value);
+}
+
 export function isNpmPackageReference(name: unknown, exactVersion: unknown): boolean {
-  return (
-    typeof name === 'string' &&
-    name.length <= 214 &&
-    name.trim() === name &&
-    packageName.test(name) &&
-    typeof exactVersion === 'string' &&
-    exactVersion.length <= 128 &&
-    exactVersion.trim() === exactVersion &&
-    version.test(exactVersion)
-  );
+  return isNpmPackageName(name) && isExactNpmVersion(exactVersion);
 }

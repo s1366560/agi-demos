@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { cloudIdentity } from '@/services/client/cloudIdentity';
 import { kernelHttpClient } from '@/services/client/kernelHttpClient';
-import { createOptionalBusinessService } from '@/services/projectPackageClient';
 
 import {
   clearAuthState,
@@ -14,17 +13,14 @@ import {
   subscribeCloudIdentity,
 } from '@/utils/tokenResolver';
 
-import { OptionalBusinessPanel } from '@/components/plugins/OptionalBusinessPanel';
-
 import { RichPackagePages } from '../../../agi-stack/packages/plugin-marketplace-ui/src/RichPackagePages';
-import { readPackageCommandStream } from '../../../agi-stack/packages/plugin-slots/src/richPageBridge';
 
 import { matchingPageProjects } from './routeScope';
 import { projectSessionClient } from './sessionClient';
+import { useWebPackageSession } from './useWebPackageSession';
+import { WebProjectMarket } from './WebProjectMarket';
 
 import type { User } from '@/types/memory';
-
-import type { MarketplaceTransport } from '../../../agi-stack/packages/plugin-marketplace-ui/src/client';
 
 interface ProjectScope {
   tenant_id: string;
@@ -100,62 +96,20 @@ function ProjectPicker({ token }: { token: string }) {
   const [params] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const session = useMemo(() => {
-    async function request(
-      path: string,
-      options: { method?: string; body?: unknown; signal?: AbortSignal }
-    ) {
-      if (
-        getAuthToken() !== token ||
-        !path.startsWith('/api/v1/platform-plugins/v2/optional-business/')
-      ) {
-        throw new Error('page_scope_expired');
-      }
-      const response = await fetch(path, {
-        method: options.method ?? 'GET',
-        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-        ...(options.signal ? { signal: options.signal } : {}),
-        redirect: 'error',
-      });
-      if (getAuthToken() !== token) throw new Error('page_scope_expired');
-      if (!response.ok) {
-        if (response.status === 401) clearAuthState();
-        const failure = (await response.json().catch(() => null)) as { detail?: unknown } | null;
-        throw new Error(
-          typeof failure?.detail === 'string' ? failure.detail : 'HTTP ' + String(response.status)
-        );
-      }
-      return response;
-    }
-    const transport: MarketplaceTransport = async <T,>(
-      path: string,
-      options: Parameters<MarketplaceTransport>[1]
-    ) => (await (await request(path, options)).json()) as T;
-    return {
-      transport,
-      stream: async (
-        path: string,
-        body: Record<string, unknown>,
-        signal: AbortSignal,
-        progress: (value: unknown) => void
-      ) =>
-        readPackageCommandStream(await request(path, { method: 'POST', body, signal }), progress),
-    };
-  }, [token]);
+  const session = useWebPackageSession(token);
   const [loaded, setLoaded] = useState<{
     projects: ProjectScope[];
-    service: ReturnType<typeof createOptionalBusinessService>;
   } | null>(null);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const [catalogRevision, setCatalogRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     const client = projectSessionClient(token, controller.signal);
     void client
       .get<ProjectScope[]>('/project-packages/projects/')
       .then((projects) => {
-        setLoaded({ projects, service: createOptionalBusinessService(client) });
+        setLoaded({ projects });
         setError('');
       })
       .catch((reason: unknown) => {
@@ -183,7 +137,7 @@ function ProjectPicker({ token }: { token: string }) {
       </div>
     );
   if (!loaded) return <p role="status">{t('common.loading')}</p>;
-  const { projects, service } = loaded;
+  const { projects } = loaded;
   if (!projects.length) return <p role="status">{t('projectPackages.noAccess')}</p>;
   const matches = matchingPageProjects(projects, location.pathname, params);
   const selected = matches.length === 1 ? matches[0] : undefined;
@@ -225,6 +179,7 @@ function ProjectPicker({ token }: { token: string }) {
             key={JSON.stringify([selected.tenant_id, selected.project_id])}
             scope={{ tenantId: selected.tenant_id, projectId: selected.project_id }}
             target="web"
+            revision={catalogRevision}
             pathname={location.pathname}
             transport={session.transport}
             streamCommand={session.stream}
@@ -242,13 +197,25 @@ function ProjectPicker({ token }: { token: string }) {
               );
             }}
             management={
-              <OptionalBusinessPanel
+              <WebProjectMarket
                 key={selected.project_id}
-                service={service}
+                transport={session.transport}
+                scopeParams={{ tenant: selected.tenant_id, project: selected.project_id }}
+                onChanged={() => {
+                  setCatalogRevision((value) => value + 1);
+                }}
                 tenantId={selected.tenant_id}
                 projectId={selected.project_id}
                 canManage={selected.can_manage}
-                canExecute={selected.can_execute}
+                onOpen={(pathname) => {
+                  void navigate({
+                    pathname,
+                    search: new URLSearchParams({
+                      tenant: selected.tenant_id,
+                      project: selected.project_id,
+                    }).toString(),
+                  });
+                }}
               />
             }
           />

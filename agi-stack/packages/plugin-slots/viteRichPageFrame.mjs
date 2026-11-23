@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const framePath = "memstack-package-frame.html";
 const bootstrap = readFileSync(
@@ -21,18 +22,26 @@ const html =
   bootstrap +
   "</script></body></html>";
 
+function serveFrame(server, document) {
+  server.middlewares.use("/" + framePath, (_request, response) => {
+    response.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "X-Frame-Options": "SAMEORIGIN",
+      "Cache-Control": "no-store",
+    });
+    response.end(document);
+  });
+}
+
 export function richPageFramePlugin() {
   return {
     name: "memstack-package-frame",
     configureServer(server) {
-      server.middlewares.use("/" + framePath, (_request, response) => {
-        response.writeHead(200, {
-          "Content-Type": "text/html; charset=utf-8",
-          "X-Frame-Options": "SAMEORIGIN",
-          "Cache-Control": "no-store",
-        });
-        response.end(html);
-      });
+      serveFrame(server, html);
+    },
+    configurePreviewServer(server) {
+      const artifact = resolve(server.config.root, server.config.build.outDir, framePath);
+      serveFrame(server, readFileSync(artifact));
     },
     generateBundle() {
       this.emitFile({ type: "asset", fileName: framePath, source: html });

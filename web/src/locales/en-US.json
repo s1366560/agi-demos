@@ -902,6 +902,8 @@
       }
     },
     "pluginHub": {
+      "backToMarket": "Back to plugin marketplace",
+      "integrationSettings": "Integrations and credentials",
       "title": "Plugin Hub",
       "subtitle": "Inspect V2 marketplace bundles and configure generation-backed channel adapters",
       "missingTenantContext": "Missing tenant context",

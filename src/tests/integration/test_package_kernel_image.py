@@ -253,11 +253,10 @@ def test_web_image_installs_billing_via_the_kernel(replicas, billing):
         page.get_by_label("Email", exact=True).fill(owner[0])
         page.get_by_label("Password", exact=True).fill(owner[1])
         page.get_by_role("button", name="Sign In", exact=True).click()
-        panel = page.get_by_test_id("optional-business-panel")
-        page.get_by_test_id("optional-business-package").set_input_files(billing[1])
-        expect(panel).to_have_attribute("data-package-ready", "yes")
-        page.get_by_test_id("optional-business-install").click()
-        page.get_by_test_id("optional-business-enable").click()
+        panel = page.get_by_test_id("plugin-market")
+        expect(panel.get_by_text("More actions", exact=True)).to_be_visible()
+        panel.get_by_label("Choose signed package").set_input_files(billing[1])
+        page.get_by_role("dialog").get_by_role("button", name="Approve and enable").click()
         page.frame_locator('[data-testid="signed-business-slot"]').get_by_role(
             "button", name="Pro storage allowance"
         ).click()
@@ -330,25 +329,26 @@ def test_workspace_web_and_desktop_pages_upgrade_and_rollback(replicas, business
         web.get_by_label("Email", exact=True).fill(owner[0])
         web.get_by_label("Password", exact=True).fill(owner[1])
         web.get_by_role("button", name="Sign In", exact=True).click()
-        panel = web.get_by_test_id("optional-business-panel")
+        panel = web.get_by_test_id("plugin-market")
         for release, title, column in (
             (first, "Workspace directory", "archived"),
             (upgrade, "Workspace lifecycle directory", "lifecycle"),
             (None, "Workspace directory", "archived"),
         ):
             if release:
-                web.get_by_test_id("optional-business-package").set_input_files(
+                expect(panel.get_by_text("More actions", exact=True)).to_be_visible()
+                panel.get_by_label("Choose signed package").set_input_files(
                     {
                         "name": "workspace.mspkg",
                         "mimeType": "application/octet-stream",
                         "buffer": release,
                     }
                 )
-                expect(panel).to_have_attribute("data-package-ready", "yes")
-                web.get_by_test_id("optional-business-install").click()
-                web.get_by_test_id("optional-business-enable").click()
+                web.get_by_role("dialog").get_by_role("button", name="Approve and enable").click()
             else:
-                web.get_by_test_id("optional-business-rollback").click()
+                panel.get_by_text("More actions", exact=True).click()
+                panel.get_by_role("button", name="Roll back to").click()
+                web.get_by_role("dialog").get_by_role("button", name="Confirm").click()
             web_frame = web.frame_locator('[data-testid="signed-business-slot"]')
             expect(web_frame.get_by_role("heading", name=title, exact=True)).to_be_visible()
             renderer.goto(origin + "/renderer-harness")

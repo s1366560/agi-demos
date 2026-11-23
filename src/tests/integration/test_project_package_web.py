@@ -86,7 +86,11 @@ async def test_build_login_install_and_execute_signed_page(tmp_path, db_session,
         UserProject(id="private-owner", user_id="owner", project_id="private", role="owner")
     )
     await db_session.commit()
-    settings = SimpleNamespace(secret_key=secrets.token_urlsafe(40), api_allowed_origins=[])
+    settings = SimpleNamespace(
+        secret_key=secrets.token_urlsafe(40),
+        api_allowed_origins=[],
+        package_application_runtime_url=None,
+    )
     monkeypatch.setattr(auth, "get_settings", lambda: settings)
     monkeypatch.setattr(package_kernel, "get_settings", lambda: settings)
     signer = Ed25519PrivateKey.generate()
@@ -132,13 +136,15 @@ async def test_build_login_install_and_execute_signed_page(tmp_path, db_session,
 
                 await page.goto(origin + "/project-packages.html?tenant=company&project=shared")
                 await login("owner")
-                panel = page.get_by_test_id("optional-business-panel")
-                await expect(panel).to_have_attribute("data-project", "shared")
-                await page.get_by_test_id("optional-business-package").set_input_files(archive)
-                await expect(panel).to_have_attribute("data-package-ready", "yes")
-                await page.get_by_test_id("optional-business-install").click()
-                await expect(page.get_by_test_id("optional-business-enable")).to_be_enabled()
-                await page.get_by_test_id("optional-business-enable").click()
+                panel = page.get_by_test_id("plugin-market")
+                await expect(panel.get_by_text("More actions", exact=True)).to_be_visible()
+                await panel.get_by_label("Choose signed package").set_input_files(archive)
+                await (
+                    page.get_by_role("dialog")
+                    .get_by_role("button", name="Approve and enable")
+                    .click()
+                )
+                await expect(panel.get_by_label("Select version")).to_have_value("3.1.0")
                 await (
                     page.frame_locator('[data-testid="signed-business-slot"]')
                     .get_by_role("button", name="Pro storage allowance")
@@ -160,8 +166,8 @@ async def test_build_login_install_and_execute_signed_page(tmp_path, db_session,
                 await page.get_by_label("Current Password", exact=True).fill(password)
                 await page.get_by_label("New Password", exact=True).fill(secrets.token_urlsafe(30))
                 await page.get_by_role("button", name="Save", exact=True).click()
-                await expect(panel).to_have_attribute("data-project", "shared")
-                await expect(page.get_by_test_id("optional-business-package")).to_be_disabled()
+                await expect(panel).to_be_visible()
+                await expect(panel.get_by_text("More actions", exact=True)).to_have_count(0)
                 await page.goto(origin + "/project-packages.html?tenant=company&project=private")
                 await expect(page.get_by_role("alert")).to_contain_text("do not have access")
                 await expect(panel).to_have_count(0)

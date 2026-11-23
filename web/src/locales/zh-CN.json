@@ -1085,6 +1085,8 @@
       }
     },
     "pluginHub": {
+      "backToMarket": "返回插件市场",
+      "integrationSettings": "集成与凭据设置",
       "title": "插件中心",
       "subtitle": "查看 V2 市场 Bundle，并配置由 generation 提供的频道适配器",
       "missingTenantContext": "缺少租户上下文",

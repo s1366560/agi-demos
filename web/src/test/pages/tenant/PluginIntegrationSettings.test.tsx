@@ -7,7 +7,7 @@ import { useUser } from '@/stores/auth';
 import { channelService } from '@/services/channelService';
 import { pluginMarketplaceService } from '@/services/pluginMarketplaceService';
 
-import { PluginHub } from '../../../pages/tenant/PluginHub';
+import { PluginIntegrationSettings } from '../../../pages/tenant/PluginIntegrationSettings';
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
 const messageMock = vi.hoisted(() => ({
@@ -122,7 +122,7 @@ const channelConfig = {
   created_at: '2026-01-01T00:00:00Z',
 };
 
-describe('PluginHub', () => {
+describe('PluginIntegrationSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useTenantStore).mockImplementation((selector: any) =>
@@ -180,7 +180,9 @@ describe('PluginHub', () => {
   });
 
   it('configures feature scope separately from the marketplace project selection', async () => {
-    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+    render(<PluginIntegrationSettings />, {
+      route: '/tenant/tenant-1/plugins?projectId=project-1',
+    });
     await screen.findByText('Support Channel');
 
     expect(screen.getByTestId('instance-scope')).toHaveTextContent('tenant:true');
@@ -195,7 +197,9 @@ describe('PluginHub', () => {
   });
 
   it('loads V2 marketplace packages and generation-backed channel data', async () => {
-    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+    render(<PluginIntegrationSettings />, {
+      route: '/tenant/tenant-1/plugins?projectId=project-1',
+    });
 
     await waitFor(() => {
       expect(pluginMarketplaceService.listPackages).toHaveBeenCalledWith({
@@ -212,7 +216,9 @@ describe('PluginHub', () => {
   });
 
   it('loads a generation-owned schema when opening the channel form', async () => {
-    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+    render(<PluginIntegrationSettings />, {
+      route: '/tenant/tenant-1/plugins?projectId=project-1',
+    });
 
     const addButton = await screen.findByRole('button', {
       name: 'tenant.pluginHub.channelsList.addChannel',
@@ -233,7 +239,9 @@ describe('PluginHub', () => {
     vi.mocked(useUser).mockReturnValue({ is_superuser: false } as any);
     vi.mocked(pluginMarketplaceService.listPackages).mockResolvedValue([signedMarketplacePackage]);
 
-    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+    render(<PluginIntegrationSettings />, {
+      route: '/tenant/tenant-1/plugins?projectId=project-1',
+    });
 
     const installButton = await screen.findByRole('button', {
       name: 'tenant.pluginHub.pluginsList.install',
@@ -251,7 +259,9 @@ describe('PluginHub', () => {
       reason: 'protocol v2 Bundle verified and desired',
     });
 
-    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+    render(<PluginIntegrationSettings />, {
+      route: '/tenant/tenant-1/plugins?projectId=project-1',
+    });
 
     const installButton = await screen.findByRole('button', {
       name: 'tenant.pluginHub.pluginsList.install',
@@ -310,7 +320,9 @@ describe('PluginHub', () => {
       reason: 'protocol v2 marketplace trust store is empty',
     });
 
-    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+    render(<PluginIntegrationSettings />, {
+      route: '/tenant/tenant-1/plugins?projectId=project-1',
+    });
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'tenant.pluginHub.pluginsList.install' })
