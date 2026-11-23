@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { cronAPI } from '@/services/cronService';
-import { useCronStore } from '@/stores/cron';
+import { cronAPI } from '@business/automation/ui/web/services/cronService';
+import { useCronStore } from '@business/automation/ui/web/stores/cron';
 
 import type {
   CronJobListResponse,
   CronJobResponse,
   CronJobRunListResponse,
   CronJobRunResponse,
-} from '@/types/cron';
+} from '@business/automation/ui/web/types/cron';
 
-vi.mock('@/services/cronService', () => ({
+vi.mock('@business/automation/ui/web/services/cronService', () => ({
   cronAPI: {
     list: vi.fn(),
     create: vi.fn(),

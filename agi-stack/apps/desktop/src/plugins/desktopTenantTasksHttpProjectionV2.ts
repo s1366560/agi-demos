@@ -7,7 +7,7 @@ import type {
   TenantTasksQuery,
   TenantTasksRetryPendingResult,
   TenantTasksSnapshot,
-} from '../features/tenant/tenantTasksClient';
+} from '@business/workspace/ui/desktop/tenant/tenantTasksClient';
 
 export const DESKTOP_TENANT_TASKS_CLOUD_ACTIONS_V2 = Object.freeze([
   'view',

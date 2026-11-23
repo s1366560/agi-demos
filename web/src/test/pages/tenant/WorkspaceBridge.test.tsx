@@ -59,7 +59,7 @@ vi.mock('../../../hooks/useLocalStorage', () => ({
   }),
 }));
 
-vi.mock('../../../hooks/useConversationListAutoRefresh', () => ({
+vi.mock('@business/agent/ui/web/hooks/useConversationListAutoRefresh', () => ({
   useConversationListAutoRefresh: autoRefreshMock.useConversationListAutoRefresh,
 }));
 
@@ -77,14 +77,14 @@ vi.mock('../../../stores/project', () => ({
   useCurrentProject: () => projectState.currentProject,
 }));
 
-vi.mock('../../../stores/agentV3', () => ({
+vi.mock('@business/agent/ui/web/stores/agentV3', () => ({
   useAgentV3Store: (selector: (state: any) => unknown) =>
     selector({
       loadConversations: agentStoreMock.loadConversations,
     }),
 }));
 
-vi.mock('../../../stores/workspace', () => {
+vi.mock('@business/workspace/ui/web/stores/workspace', () => {
   const buildState = () => ({
     currentWorkspace: workspaceState.currentWorkspace,
     isLoading: workspaceState.isLoading,

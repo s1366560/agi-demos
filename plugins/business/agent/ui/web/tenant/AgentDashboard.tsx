@@ -20,7 +20,7 @@ import { TraceChainView } from '@/components/agent/multiAgent/TraceChainView';
 import { TraceTimeline } from '@/components/agent/multiAgent/TraceTimeline';
 import { TenantAgentConfigEditor } from '@/components/agent/TenantAgentConfigEditor';
 import { TenantAgentConfigView } from '@/components/agent/TenantAgentConfigView';
-import { agentConfigService } from '@/services/agentConfigService';
+import { agentConfigService } from '../services/agentConfigService';
 import { traceAPI } from '@/services/traceService';
 import { useTenantStore } from '@/stores/tenant';
 import { formatTimeOnly } from '@/utils/date';

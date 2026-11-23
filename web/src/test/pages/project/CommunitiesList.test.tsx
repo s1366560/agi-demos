@@ -3,10 +3,10 @@ import { MemoryRouter, useParams } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { CommunitiesList } from '@business/knowledge/ui/web/project/CommunitiesList';
-import { graphService } from '../../../services/graphService';
+import { graphService } from '@business/knowledge/ui/web/services/graphService';
 import { render, screen, fireEvent, waitFor } from '../../utils';
 
-vi.mock('../../../services/graphService', () => ({
+vi.mock('@business/knowledge/ui/web/services/graphService', () => ({
   graphService: {
     listCommunities: vi.fn(),
     getCommunityMembers: vi.fn(),

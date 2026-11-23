@@ -19,7 +19,7 @@ import {
   Search as SearchIcon,
 } from 'lucide-react';
 
-import { instanceChannelService } from '@/services/instanceChannelService';
+import { instanceChannelService } from '../services/instanceChannelService';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {

@@ -11,7 +11,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
-import type { LocalConversationStatusSummary } from '../project/projectOverviewLocalClient';
+import type { LocalConversationStatusSummary } from '@business/workspace/ui/desktop/project/projectOverviewLocalClient';
 import type {
   AgentConversation,
   CurrentUser,
@@ -20,7 +20,7 @@ import type {
 } from '../../types';
 import { WorkspaceDock } from '../workspace/WorkspaceDock';
 import type { ExecutionTargetFilter } from '../session/ExecutionTargetBadge';
-import type { WorkspaceTreeSelectionMode } from '../workspace/workspaceTreeModel';
+import type { WorkspaceTreeSelectionMode } from '@business/workspace/ui/desktop/workspace/workspaceTreeModel';
 import './DesktopSidebar.css';
 
 type DesktopSidebarSection = 'home' | 'my-work' | 'activity';

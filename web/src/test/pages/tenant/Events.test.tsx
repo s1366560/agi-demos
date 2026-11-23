@@ -3,10 +3,10 @@ import { Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Events } from '@business/automation/ui/web/tenant/Events';
-import { eventService } from '../../../services/eventService';
+import { eventService } from '@business/automation/ui/web/services/eventService';
 import { render, screen, waitFor } from '../../utils';
 
-vi.mock('../../../services/eventService', () => ({
+vi.mock('@business/automation/ui/web/services/eventService', () => ({
   eventService: {
     getEventTypes: vi.fn(),
     listEvents: vi.fn(),

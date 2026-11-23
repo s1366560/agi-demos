@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 import { createWebSocketUrl } from '@/services/client/urlUtils';
-import { projectSandboxService } from '@/services/projectSandboxService';
+import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
 
 import {
   getWebOperationAvailabilityV2,

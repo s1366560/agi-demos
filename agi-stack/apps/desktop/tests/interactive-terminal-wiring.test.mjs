@@ -3,27 +3,27 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const interactiveTerminalSource = readFileSync(
-  new URL('../src/features/sandbox/InteractiveTerminal.tsx', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/sandbox/InteractiveTerminal.tsx', import.meta.url),
   'utf8'
 );
 const sessionTerminalSource = readFileSync(
-  new URL('../src/features/session/SessionTerminalCanvas.tsx', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/session/SessionTerminalCanvas.tsx', import.meta.url),
   'utf8'
 );
 const sandboxFilesSource = readFileSync(
-  new URL('../src/features/sandbox/SandboxFileBrowser.tsx', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/sandbox/SandboxFileBrowser.tsx', import.meta.url),
   'utf8'
 );
 const sandboxToolsSource = readFileSync(
-  new URL('../src/features/sandbox/SessionSandboxTools.tsx', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/sandbox/SessionSandboxTools.tsx', import.meta.url),
   'utf8'
 );
 const remoteDesktopSource = readFileSync(
-  new URL('../src/features/sandbox/RemoteDesktopSurface.tsx', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/sandbox/RemoteDesktopSurface.tsx', import.meta.url),
   'utf8'
 );
 const sandboxRuntimeHookSource = readFileSync(
-  new URL('../src/features/sandbox/useSandboxRuntimeSurface.ts', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/sandbox/useSandboxRuntimeSurface.ts', import.meta.url),
   'utf8'
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');

@@ -12,7 +12,7 @@ const routeRuntimeSource = readFileSync(
   'utf8',
 );
 const unifiedClientSource = readFileSync(
-  new URL('../src/features/unified-runtimes/unifiedRuntimesClient.ts', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/unified-runtimes/unifiedRuntimesClient.ts', import.meta.url),
   'utf8',
 );
 const workbenchSource = readFileSync(

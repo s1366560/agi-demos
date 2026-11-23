@@ -6,7 +6,7 @@ import {
   terminalOutputText,
   terminalRunScopeKey,
   terminalSessionMatchesRun,
-} from '/tmp/agistack-desktop-test-dist/src/features/session/sessionTerminalModel.js';
+} from '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/session/sessionTerminalModel.js';
 
 const run = {
   id: 'run-1',

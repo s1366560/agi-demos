@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal, Form, Input, Select, Switch, message } from 'antd';
 import { Braces, FileText, Info, ShieldCheck } from 'lucide-react';
 
-import { useSkillStore, useSkillSubmitting } from '../../stores/skill';
+import { useSkillStore, useSkillSubmitting } from '@business/agent/ui/web/stores/skill';
 
 import {
   buildSkillContent,

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { ApiError, ApiErrorType } from '../../services/client/ApiError';
 import { httpClient } from '../../services/client/httpClient';
-import { sandboxService } from '../../services/sandboxService';
+import { sandboxService } from '@business/environments/ui/web/services/sandboxService';
 
 // Mock httpClient
 vi.mock('../../services/client/httpClient', () => ({

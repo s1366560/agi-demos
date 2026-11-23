@@ -9,7 +9,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createRuntimeInstancesRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/runtime-instances/runtimeInstancesRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/runtime-instances/runtimeInstancesRouteModule.js');
 
 test('Runtime Instances loader stays lazy and renders a native safe inventory', async () => {
   let bindingCalls = 0;

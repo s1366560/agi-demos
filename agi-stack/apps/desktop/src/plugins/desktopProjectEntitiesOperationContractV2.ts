@@ -4,9 +4,9 @@ import type {
   ProjectEntitiesSnapshot,
   ProjectEntity,
   ProjectEntityRelationship,
-} from '../features/project-knowledge/projectEntitiesClient';
-import { PROJECT_ENTITIES_DEGRADED_REASON } from '../features/project-knowledge/projectEntitiesClient';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectEntitiesClient';
+import { PROJECT_ENTITIES_DEGRADED_REASON } from '@business/knowledge/ui/desktop/project-knowledge/projectEntitiesClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopProjectEntitiesLoadOperationInputV2 = Readonly<{

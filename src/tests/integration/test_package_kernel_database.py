@@ -123,6 +123,11 @@ async def _check_native_identity(api, headers, scope):
             "/api/v1/projects/", headers=headers, params={"tenant_id": scope["tenant_id"]}
         )
     ).json()["total"] == 1
+    project_url = "/api/v1/projects/" + scope["project_id"]
+    assert (await api.get(project_url, headers=headers)).json()["tenant_id"] == scope["tenant_id"]
+    assert (
+        await api.get(project_url, headers=headers, params={"tenant_id": "other"})
+    ).status_code == 404
     assert (await api.get("/api/v1/plugin-marketplace/packages", headers=headers)).json() == []
 
 

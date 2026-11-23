@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Blackboard } from '@business/workspace/ui/web/project/Blackboard';
 
-import type { Workspace } from '@/types/workspace';
+import type { Workspace } from '@business/workspace/ui/web/types/workspace';
 import type { ReactNode } from 'react';
 
 import { App } from 'antd';
@@ -145,7 +145,7 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaceStore: Object.assign(
     (selector: (state: Record<string, unknown>) => unknown) => selector(storeStateRef.current),
     {
@@ -172,7 +172,7 @@ vi.mock('@/stores/auth', () => ({
     selector({ token: 'test-token' }),
 }));
 
-vi.mock('@/services/workspaceService', () => ({
+vi.mock('@business/workspace/ui/web/services/workspaceService', () => ({
   workspaceService: {
     listByProject: mockListByProject,
   },
@@ -188,7 +188,7 @@ vi.mock('@/services/unifiedEventService', () => ({
   },
 }));
 
-vi.mock('@/components/blackboard/CentralBlackboardContent', () => ({
+vi.mock('@business/workspace/ui/web/components/blackboard/CentralBlackboardContent', () => ({
   CentralBlackboardContent: (props: { activeTab: string }) => (
     <div data-testid="central-blackboard-content" data-active-tab={props.activeTab} />
   ),

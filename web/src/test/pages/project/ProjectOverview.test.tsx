@@ -16,7 +16,8 @@ import { fireEvent, screen, render, waitFor, renderHook } from '@testing-library
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { ProjectOverview } from '@business/workspace/ui/web/project/ProjectOverview';
-import { projectAPI, memoryAPI } from '../../../services/api';
+import { projectAPI } from '../../../services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 
 // Mock API services
 vi.mock('../../../services/api', () => ({
@@ -24,6 +25,9 @@ vi.mock('../../../services/api', () => ({
     getStats: vi.fn(),
     get: vi.fn(),
   },
+}));
+
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({
   memoryAPI: {
     list: vi.fn(),
   },

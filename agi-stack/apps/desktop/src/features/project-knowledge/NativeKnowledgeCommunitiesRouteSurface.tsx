@@ -6,7 +6,7 @@ import {
   type NativeMemoriesRouteBinding,
 } from './NativeMemoriesRouteContext';
 import { NativeMemoriesUnavailable } from '@business/knowledge/ui/desktop/project-knowledge/NativeMemoriesPage';
-import { createNativeKnowledgeCommunityController } from './nativeKnowledgeCommunityController';
+import { createNativeKnowledgeCommunityController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeCommunityController';
 import { NativeKnowledgeCommunitiesPage } from '@business/knowledge/ui/desktop/project-knowledge/NativeKnowledgeCommunitiesPage';
 
 export function NativeKnowledgeCommunitiesRouteSurface({ context }: DesktopRouteSurfaceProps) {

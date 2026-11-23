@@ -8,10 +8,10 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { DesktopApiError } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const { createProjectOverviewController } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewController.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/projectOverviewController.js'
 );
 const { useProjectOverviewController } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/project/useProjectOverviewController.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/useProjectOverviewController.js'
 );
 
 const cloudScope = Object.freeze({
@@ -300,7 +300,7 @@ test('React hook owns controller load, cancellation, and retry delegation', () =
     }),
   );
   const source = readFileSync(
-    new URL('../src/features/project/useProjectOverviewController.ts', import.meta.url),
+    new URL('../../../../plugins/business/workspace/ui/desktop/project/useProjectOverviewController.ts', import.meta.url),
     'utf8',
   );
 

@@ -25,8 +25,8 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning';
 import { formatTimeOnly } from '@/utils/date';
 
 import { MarkdownContent } from '@/components/agent/chat/MarkdownContent';
-import { memoryAPI } from '@/services/api';
-import { graphService } from '@/services/graphService';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
+import { graphService } from '../services/graphService';
 import { subscribeToTaskEvents } from '@/services/taskStream';
 import { confirmAction } from '@/utils/confirmAction';
 import { logger } from '@/utils/logger';

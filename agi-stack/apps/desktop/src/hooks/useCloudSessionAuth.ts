@@ -134,7 +134,6 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
       applySectionSideEffects('workspace');
       setSettingsInitialSection('workspace');
       setSettingsWindowOpen(true);
-      await retireLocalWorkspaceHistoryAfterCloudInit();
       return true;
     }
     const authoritativeContext = authoritativeContextResponse.context;
@@ -201,20 +200,8 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
       setSettingsInitialSection('workspace');
       setSettingsWindowOpen(true);
     }
-    await retireLocalWorkspaceHistoryAfterCloudInit();
     return true;
   };
-
-  async function retireLocalWorkspaceHistoryAfterCloudInit(): Promise<void> {
-    const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
-    if (!invoke) return;
-    try {
-      await invoke('retire_local_workspace_history', { cloud_history_ready: true });
-    } catch {
-      // Retirement is retried after the next successful cloud init.
-      // A deferral or failure is not a cloud sync.
-    }
-  }
 
   const clearNativeOAuthAttempt = () => {
     if (nativeOAuthExpiryTimerRef.current !== null) {
@@ -250,7 +237,6 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
       }),
     );
     applySectionSideEffects('workspace');
-    await retireLocalWorkspaceHistoryAfterCloudInit();
     return projection;
   };
 

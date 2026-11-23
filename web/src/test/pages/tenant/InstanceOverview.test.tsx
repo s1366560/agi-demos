@@ -4,10 +4,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InstanceOverview } from '@business/environments/ui/web/tenant/InstanceOverview';
-import { instanceService } from '@/services/instanceService';
-import { useInstanceStore } from '@/stores/instance';
+import { instanceService } from '@business/environments/ui/web/services/instanceService';
+import { useInstanceStore } from '@business/environments/ui/web/stores/instance';
 
-import type { InstanceMemberResponse, InstanceResponse } from '@/services/instanceService';
+import type { InstanceMemberResponse, InstanceResponse } from '@business/environments/ui/web/services/instanceService';
 
 import { App } from 'antd';
 
@@ -20,7 +20,7 @@ const lazyMessageMock = vi.hoisted(() => ({
   success: vi.fn(),
 }));
 
-vi.mock('@/services/instanceService', () => ({
+vi.mock('@business/environments/ui/web/services/instanceService', () => ({
   instanceService: {
     getById: vi.fn(),
     listMembers: vi.fn(),

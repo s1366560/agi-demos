@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Button, Theme } from '@radix-ui/themes';
 
 import { AgentTimeline } from '../features/chat/ChatTimeline';
-import { timelineItemsForDisplay } from '../features/chat/chatTimelineModel';
+import { timelineItemsForDisplay } from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import { isTimelineItemInitiallyExpanded } from '../features/chat/chatTimelinePresentation';
 import { ToastProvider } from '../features/feedback/ToastCenter';
 import { I18nProvider } from '../i18n';

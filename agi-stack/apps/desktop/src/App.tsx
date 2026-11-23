@@ -78,8 +78,8 @@ import {
 import { LoginScreen, type WorkspaceSsoPresentation } from './features/auth/LoginScreen';
 import {
   createProjectCronJobsRouteBindingProviderV2,
-} from './features/automations/projectCronJobsRouteBindingProviderV2';
-import { createAutomationConversationOpener } from './features/automations/automationConversationNavigation';
+} from '@business/automation/ui/desktop/automations/projectCronJobsRouteBindingProviderV2';
+import { createAutomationConversationOpener } from '@business/automation/ui/desktop/automations/automationConversationNavigation';
 import {
   initialDesktopRuntimeConfig,
   purgeLegacyLoginModePreference,
@@ -296,7 +296,7 @@ import {
   applyConversationTitleUpdate,
   readConversationTitleStreamEvent,
 } from './features/chat/conversationTitleEventModel';
-import { compactConversationTitle } from './features/chat/conversationTitleModel';
+import { compactConversationTitle } from '@business/agent/ui/desktop/chat/conversationTitleModel';
 import { coalesceStreamingTextEvents } from './features/chat/streamingTextEventModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
 import { localLlmUnconfiguredFromProviders } from './features/chat/localLlmReadinessModel';
@@ -391,7 +391,7 @@ import {
   terminalBindingState,
   terminalRunScopeKey,
   terminalSessionMatchesRun,
-} from './features/session/sessionTerminalModel';
+} from '@business/environments/ui/desktop/session/sessionTerminalModel';
 import {
   authoritativeRunFromSessionProjection,
   authoritativeRunsFromSocketEvents,
@@ -459,7 +459,7 @@ import {
   nextLocalConversationStatusRequest,
   type LocalConversationStatusSummary,
   type LocalConversationStatusRequest,
-} from './features/project/projectOverviewLocalClient';
+} from '@business/workspace/ui/desktop/project/projectOverviewLocalClient';
 import {
   createAgentDefinitionsRouteBindingForRuntime,
   createMcpServersRouteBindingForRuntime,
@@ -467,8 +467,8 @@ import {
   createProvidersRouteBindingForRuntime,
   createSkillsRouteBindingForRuntime,
 } from './features/settings-routes/settingsRouteRuntime';
-import { terminalInteractiveCapability as resolveTerminalInteractiveCapability } from './features/sandbox/sandboxRuntimeClient';
-import { useSandboxRuntimeSurface } from './features/sandbox/useSandboxRuntimeSurface';
+import { terminalInteractiveCapability as resolveTerminalInteractiveCapability } from '@business/environments/ui/desktop/sandbox/sandboxRuntimeClient';
+import { useSandboxRuntimeSurface } from '@business/environments/ui/desktop/sandbox/useSandboxRuntimeSurface';
 import {
   settingsSectionForEntry,
   type SettingsEntry,
@@ -516,7 +516,7 @@ import type {
 import {
   applyWorkspaceActivityStreamEvent,
   type WorkspaceLiveActivity,
-} from './features/workspace/workspaceActivityEventModel';
+} from '@business/workspace/ui/desktop/workspace/workspaceActivityEventModel';
 import {
   WorkspaceCreateScopeChangedError,
   mergeWorkspaceIntoProjectCatalog,
@@ -538,7 +538,7 @@ import {
   workspaceSettingsScopeIsCurrent,
 } from './features/workspace/workspaceSettingsModel';
 import type { WorkspaceSettingsScope } from './features/workspace/workspaceSettingsModel';
-import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
+import { beginDesktopRuntimeScopeTransition } from '@business/workspace/ui/desktop/workspace/workspaceOverviewModel';
 import {
   UNBOUND_CONVERSATIONS_KEY,
   beginWorkspaceConversationRequest,
@@ -557,7 +557,7 @@ import {
   shouldPreserveConversationSelectionDuringSidecarRecovery,
   supersedeWorkspaceConversationRequests,
   workspaceTreeRefreshFailed,
-} from './features/workspace/workspaceTreeModel';
+} from '@business/workspace/ui/desktop/workspace/workspaceTreeModel';
 import {
   selectRuntimeWorkspaceAfterCatalog,
   workspaceCatalogFailureAllowsUnboundRuntime,
@@ -567,7 +567,7 @@ import {
   writeWorkspaceSelectionPreference,
 } from './features/workspace/workspaceSelectionPreference';
 import { socketEventWindowSince, socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
-import { useTerminalProxy } from './hooks/useTerminalProxy';
+import { useTerminalProxy } from '@business/environments/ui/desktop/sandbox/useTerminalProxy';
 import { useI18n } from './i18n';
 import { useThemePreference } from './theme';
 import type {

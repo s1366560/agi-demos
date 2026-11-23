@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { instanceService } from '@/services/instanceService';
-import { useInstanceStore } from '@/stores/instance';
+import { instanceService } from '@business/environments/ui/web/services/instanceService';
+import { useInstanceStore } from '@business/environments/ui/web/stores/instance';
 
 import type {
   InstanceConfigResponse,
@@ -9,9 +9,9 @@ import type {
   InstanceMemberListResponse,
   InstanceMemberResponse,
   InstanceResponse,
-} from '@/services/instanceService';
+} from '@business/environments/ui/web/services/instanceService';
 
-vi.mock('@/services/instanceService', () => ({
+vi.mock('@business/environments/ui/web/services/instanceService', () => ({
   instanceService: {
     list: vi.fn(),
     create: vi.fn(),

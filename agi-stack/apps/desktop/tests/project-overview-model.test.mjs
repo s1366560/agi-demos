@@ -8,7 +8,7 @@ import {
   failProjectOverviewRequest,
   projectOverviewRequestIsCurrent,
   retryProjectOverviewRequest,
-} from '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewModel.js';
+} from '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/projectOverviewModel.js';
 
 const scope = {
   authority: 'cloud',

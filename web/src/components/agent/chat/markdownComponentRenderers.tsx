@@ -6,7 +6,7 @@ import {
   isSafeArtifactUrl,
   looksLikeSandboxImagePath,
   resolveSandboxArtifactUrl,
-} from '@/utils/sandboxArtifactPath';
+} from '@business/environments/ui/web/utils/sandboxArtifactPath';
 
 /**
  * Image renderer that resolves sandbox/workspace paths (e.g.

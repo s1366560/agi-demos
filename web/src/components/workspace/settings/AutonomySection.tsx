@@ -8,7 +8,7 @@ import { ShieldCheck } from 'lucide-react';
 import { VERIFICATION_GRADE_OPTIONS } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
 import { Field, SettingsSection, SwitchField } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
-import type { WorkspaceVerificationGrade } from '@/types/workspace';
+import type { WorkspaceVerificationGrade } from '@business/workspace/ui/web/types/workspace';
 
 import type { UpdateDraft } from './types';
 import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';

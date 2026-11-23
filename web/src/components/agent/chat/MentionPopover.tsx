@@ -13,11 +13,11 @@ import { useTranslation } from 'react-i18next';
 import { message } from 'antd';
 import { Hash, FileText, Loader2, Workflow, Users } from 'lucide-react';
 
-import { useSubAgentStore } from '@/stores/subagent';
+import { useSubAgentStore } from '@business/agent/ui/web/stores/subagent';
 
 import { mentionService, type MentionItem } from '@/services/mentionService';
 
-import { useConversationParticipants } from '@/hooks/useConversationParticipants';
+import { useConversationParticipants } from '@business/agent/ui/web/hooks/useConversationParticipants';
 
 type SubAgentStoreSnapshot = Partial<ReturnType<typeof useSubAgentStore.getState>>;
 

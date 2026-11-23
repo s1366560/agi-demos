@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { acpService } from '@/services/acpService';
+import { acpService } from '@business/agent/ui/web/services/acpService';
 import { httpClient } from '@/services/client/httpClient';
 
 vi.mock('@/services/client/httpClient', () => ({

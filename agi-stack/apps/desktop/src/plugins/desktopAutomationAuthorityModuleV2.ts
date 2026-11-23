@@ -10,7 +10,7 @@ import {
   createDesktopAutomationApi,
   type AutomationRunInput,
   type DesktopAutomationApi,
-} from '../features/automations/automationClient';
+} from '@business/automation/ui/desktop/automations/automationClient';
 import type {
   AutomationCreateInput,
   AutomationDeleteInput,

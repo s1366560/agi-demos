@@ -4,7 +4,7 @@ import { useI18n } from '@desktop/i18n';
 import type {
   NativeKnowledgeGraphController,
   NativeKnowledgeGraphModel,
-} from '@desktop/features/project-knowledge/nativeKnowledgeGraphController';
+} from './nativeKnowledgeGraphController';
 
 export function NativeKnowledgeGraphPage({
   model,

@@ -33,7 +33,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { agentService } from '../../../services/agentService';
-import { useConversationsStore, initialState } from '../../../stores/agent/conversationsStore';
+import { useConversationsStore, initialState } from '@business/agent/ui/web/stores/agent/conversationsStore';
 
 import type { Conversation } from '../../../types/agent';
 // Helper to create a mock conversation with all required fields

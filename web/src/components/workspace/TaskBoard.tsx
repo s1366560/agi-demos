@@ -13,9 +13,9 @@ import {
   Plus,
 } from 'lucide-react';
 
-import { useWorkspaceAgents } from '@/stores/workspace';
+import { useWorkspaceAgents } from '@business/workspace/ui/web/stores/workspace';
 
-import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
+import { workspaceAutonomyService, workspaceTaskService } from '@business/workspace/ui/web/services/workspaceService';
 
 import { getPendingLeaderAdjudicationSummary } from '@/utils/workspaceTaskProjection';
 
@@ -35,7 +35,7 @@ import type {
   WorkspaceTaskExperienceSummary,
   WorkspaceTaskPriority,
   WorkspaceTaskStatus,
-} from '@/types/workspace';
+} from '@business/workspace/ui/web/types/workspace';
 
 interface TaskBoardProps {
   workspaceId: string;

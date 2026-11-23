@@ -17,7 +17,7 @@ import {
   useStreamingAssistantContent,
   useStreamingThought,
   useIsThinkingStreaming,
-} from '../../../stores/agent/streamingStore';
+} from '@business/agent/ui/web/stores/agent/streamingStore';
 import { useMarkdownPlugins } from '../chat/markdownPlugins';
 import { safeMarkdownComponents } from '../chat/safeMarkdownComponents';
 import { ThinkingBlock } from '../chat/ThinkingBlock';

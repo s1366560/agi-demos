@@ -25,9 +25,9 @@ import { X } from 'lucide-react';
 
 import { agentService } from '../../services/agentService';
 import { mcpAPI } from '../../services/mcpService';
-import { skillAPI } from '../../services/skillService';
+import { skillAPI } from '@business/agent/ui/web/services/skillService';
 import { useModelCatalog, useProviderStore } from '../../stores/provider';
-import { useSubAgentStore, useSubAgentSubmitting } from '../../stores/subagent';
+import { useSubAgentStore, useSubAgentSubmitting } from '@business/agent/ui/web/stores/subagent';
 
 import type {
   SubAgentResponse,

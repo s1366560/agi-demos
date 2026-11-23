@@ -10,7 +10,7 @@ const {
   terminalReconnectDecision,
   terminalSessionV2SocketUrl,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/sandbox/terminalSessionV2.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/sandbox/terminalSessionV2.js'
 );
 
 const session = {

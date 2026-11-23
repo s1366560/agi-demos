@@ -10,15 +10,15 @@ import {
   workspaceService,
   workspaceTaskService,
   workspaceTopologyService,
-} from '@/services/workspaceService';
+} from '@business/workspace/ui/web/services/workspaceService';
 import {
   AUTHORITATIVE,
   HOSTED,
   NON_AUTHORITATIVE,
   OWNED,
   SENSING_CAPABLE,
-} from '@/components/blackboard/blackboardSurfaceContract';
-import { useWorkspaceReplies, useWorkspaceStore } from '@/stores/workspace';
+} from '@business/workspace/ui/web/components/blackboard/blackboardSurfaceContract';
+import { useWorkspaceReplies, useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -30,7 +30,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-vi.mock('@/services/workspaceService', () => ({
+vi.mock('@business/workspace/ui/web/services/workspaceService', () => ({
   workspaceService: {
     listByProject: vi.fn(),
     getById: vi.fn(),

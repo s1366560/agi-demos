@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const { isSafeTerminalLink } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/sandbox/terminalLinkPolicy.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/sandbox/terminalLinkPolicy.js'
 );
 
 test('terminal hyperlinks follow the Electron external-navigation allow-list', () => {

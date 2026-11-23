@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TopologyTab } from '@/components/blackboard/tabs/TopologyTab';
+import { TopologyTab } from '@business/workspace/ui/web/components/blackboard/tabs/TopologyTab';
 import { render, screen } from '@/test/utils';
 
 describe('TopologyTab', () => {

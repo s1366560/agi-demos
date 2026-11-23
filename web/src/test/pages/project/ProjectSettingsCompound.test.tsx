@@ -105,7 +105,7 @@ vi.mock('../../../services/api', () => ({
   projectAPI: mockProjectAPI,
 }));
 
-vi.mock('../../../services/projectSandboxService', () => ({
+vi.mock('@business/environments/ui/web/services/projectSandboxService', () => ({
   projectSandboxService: {
     getProjectSandbox: vi.fn(() => new Promise(() => {})),
     getStats: vi.fn(() => new Promise(() => {})),

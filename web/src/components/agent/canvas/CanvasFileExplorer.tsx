@@ -28,10 +28,10 @@ import {
 import { useCanvasActions, type CanvasContentType } from '@/stores/canvasStore';
 
 import { artifactService, fetchArtifactResource } from '@/services/artifactService';
-import { projectSandboxService } from '@/services/projectSandboxService';
+import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
 
 import { isCanvasPreviewable, isOfficeExtension, isOfficeMimeType } from '@/utils/filePreview';
-import { isSafeArtifactUrl, pathMatchesArtifact } from '@/utils/sandboxArtifactPath';
+import { isSafeArtifactUrl, pathMatchesArtifact } from '@business/environments/ui/web/utils/sandboxArtifactPath';
 
 import {
   buildArtifactFileTree,
@@ -42,7 +42,7 @@ import {
 } from './canvasFileTreeModel';
 
 import type { Artifact } from '@/types/agent';
-import type { ExecuteToolResponse } from '@/services/projectSandboxService';
+import type { ExecuteToolResponse } from '@business/environments/ui/web/services/projectSandboxService';
 
 interface CanvasFileExplorerProps {
   projectId?: string | undefined;

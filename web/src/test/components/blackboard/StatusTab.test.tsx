@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { StatusTab } from '@/components/blackboard/tabs/StatusTab';
+import { StatusTab } from '@business/workspace/ui/web/components/blackboard/tabs/StatusTab';
 import {
   workspaceAutonomyService,
   workspaceBlackboardService,
   workspacePlanService,
   workspaceTaskService,
-} from '@/services/workspaceService';
+} from '@business/workspace/ui/web/services/workspaceService';
 import { fireEvent, render, screen, waitFor } from '@/test/utils';
 
-vi.mock('@/services/workspaceService', () => ({
+vi.mock('@business/workspace/ui/web/services/workspaceService', () => ({
   workspaceBlackboardService: {
     getExecutionDiagnostics: vi.fn(),
   },

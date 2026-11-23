@@ -5,7 +5,7 @@ import {
   type PluginDefinitionV2,
 } from '@agistack/plugin-runtime';
 
-import { InstanceTemplatesUnavailableError } from '../features/instance-templates/instanceTemplatesClient';
+import { InstanceTemplatesUnavailableError } from '@business/environments/ui/desktop/instance-templates/instanceTemplatesClient';
 import type {
   InstanceTemplateCreateInput,
   InstanceTemplateItem,
@@ -15,7 +15,7 @@ import type {
   InstanceTemplatesQuery,
   InstanceTemplatesRequestOptions,
   InstanceTemplatesScope,
-} from '../features/instance-templates/instanceTemplatesTypes';
+} from '@business/environments/ui/desktop/instance-templates/instanceTemplatesTypes';
 import type { DesktopRuntimeConfig } from '../types';
 import { createDesktopInstanceTemplatesHttpProjectionV2 } from './desktopInstanceTemplatesHttpProjectionV2';
 import {

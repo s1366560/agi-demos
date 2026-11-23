@@ -12,7 +12,7 @@ import type {
   RuntimeDeploymentsPage,
   RuntimeDeploymentsQuery,
   RuntimeDeploymentsScope,
-} from '../features/runtime-deployments/runtimeDeploymentsTypes';
+} from '@business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsTypes';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 import type { DesktopRuntimeConfig } from '../types';
 import { createDesktopRuntimeDeploymentsHttpAuthorityV2 } from './desktopRuntimeDeploymentsHttpProjectionV2';

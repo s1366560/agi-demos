@@ -12,7 +12,7 @@ import { useEffect, useMemo } from 'react';
 
 import { Bot } from 'lucide-react';
 
-import { useAgentDefinitionStore } from '../../stores/agentDefinitions';
+import { useAgentDefinitionStore } from '@business/agent/ui/web/stores/agentDefinitions';
 
 import type { Conversation } from '../../types/agent';
 

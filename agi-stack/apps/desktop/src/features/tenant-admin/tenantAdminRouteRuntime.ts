@@ -3,8 +3,8 @@ import { createDesktopTenantAuditClientV2, type DesktopTenantAuditOperationsV2 }
 import { createTenantAuditController } from './tenantAuditController';
 import type { TenantAuditRouteBinding } from './tenantAuditRouteModule';
 import { createDesktopTenantBillingClientV2, type DesktopTenantBillingOperationsV2 } from '../../plugins/desktopTenantBillingAuthorityModuleV2';
-import { createTenantBillingController } from './tenantBillingController';
-import type { TenantBillingRouteBinding } from './tenantBillingRouteModule';
+import { createTenantBillingController } from '@business/billing/ui/desktop/tenant-admin/tenantBillingController';
+import type { TenantBillingRouteBinding } from '@business/billing/ui/desktop/tenant-admin/tenantBillingRouteModule';
 import { createDesktopTenantGovernanceClientV2, type DesktopTenantGovernanceOperationsV2 } from '../../plugins/desktopTenantGovernanceAuthorityModuleV2';
 import { createTenantGovernanceController } from './tenantGovernanceController';
 import type { TenantGovernanceRouteBinding } from './tenantGovernanceRouteModule';

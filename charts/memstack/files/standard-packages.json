@@ -18,7 +18,8 @@
     "permissions": [
       "tools.execute",
       "ui.slot",
-      "graph.projection.compute"
+      "graph.projection.compute",
+      "app.knowledge.memories.read"
     ]
   },
   {

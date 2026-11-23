@@ -24,15 +24,15 @@ import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
 
 import { AlertCircle, Brain, Loader2, RefreshCw } from 'lucide-react';
 
-import { useConversationsStore } from '@/stores/agent/conversationsStore';
-import { useExecutionStore } from '@/stores/agent/executionStore';
-import { useAgentHITLStore } from '@/stores/agent/hitlStore';
-import { useStreamingStore } from '@/stores/agent/streamingStore';
-import { useTimelineStore } from '@/stores/agent/timelineStore';
-import { useAgentV3Store } from '@/stores/agentV3';
+import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
+import { useExecutionStore } from '@business/agent/ui/web/stores/agent/executionStore';
+import { useAgentHITLStore } from '@business/agent/ui/web/stores/agent/hitlStore';
+import { useStreamingStore } from '@business/agent/ui/web/stores/agent/streamingStore';
+import { useTimelineStore } from '@business/agent/ui/web/stores/agent/timelineStore';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useAuthStore } from '@/stores/auth';
 import { useProjectStore } from '@/stores/project';
-import { useSandboxStore } from '@/stores/sandbox';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 import { useTenantStore } from '@/stores/tenant';
 
 import { agentService } from '@/services/agentService';

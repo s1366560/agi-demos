@@ -52,6 +52,6 @@ export const graphService = {
   ),
 };
 
-vi.mock('@/services/graphService', () => ({
+vi.mock('@business/knowledge/ui/web/services/graphService', () => ({
   graphService,
 }));

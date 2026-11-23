@@ -27,8 +27,8 @@ import { A2UISurfaceRenderer } from '@/components/agent/canvas/A2UISurfaceRender
 import {
   buildA2UIMessageStreamSnapshot,
   type A2UIMessageStreamSnapshot,
-} from '@/stores/agent/a2uiMessages';
-import { useAgentV3Store } from '@/stores/agentV3';
+} from '@business/agent/ui/web/stores/agent/a2uiMessages';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useCanvasStore } from '@/stores/canvasStore';
 import {
   getA2UIContractCase,

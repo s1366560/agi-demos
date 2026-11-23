@@ -10,7 +10,7 @@ import {
   plainSchemaObject,
   utf8Length,
 } from '../features/project-administration/nativeProjectSchemaShape';
-import { projectKnowledgeError } from '../features/project-knowledge/projectKnowledgeClient';
+import { projectKnowledgeError } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import { requireNativeKnowledgeTransportV2 } from './desktopNativeKnowledgeSyncHttpV2';
 
 type Options = Readonly<{

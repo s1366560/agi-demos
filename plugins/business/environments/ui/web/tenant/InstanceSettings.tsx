@@ -13,8 +13,8 @@ import { App, Input } from 'antd';
 import { Trash2 } from 'lucide-react';
 
 import { providerAPI } from '@/services/api';
-import { instanceService } from '@/services/instanceService';
-import type { InstanceLlmConfigUpdate } from '@/services/instanceService';
+import { instanceService } from '../services/instanceService';
+import type { InstanceLlmConfigUpdate } from '../services/instanceService';
 
 import { setUnsavedChanges } from '@/utils/unsavedChanges';
 
@@ -27,7 +27,7 @@ import {
   useInstanceSubmitting,
   useInstanceError,
   useInstanceActions,
-} from '@/stores/instance';
+} from '../stores/instance';
 
 import type { ProviderConfig } from '@/types/memory';
 

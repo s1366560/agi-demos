@@ -763,9 +763,9 @@ test('all production consumers use the V2 operations facade with no parallel cli
   const routeRegistry = source('src/features/navigation/appRouteRegistry.ts');
   const workbench = source('src/features/runtime/workbenchCapabilityClient.ts');
   const provider = source('src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts');
-  const blackboardClient = source('src/features/project-blackboard/projectBlackboardClient.ts');
+  const blackboardClient = source('../../../plugins/business/workspace/ui/desktop/project-blackboard/projectBlackboardClient.ts');
   const presentation = source(
-    'src/features/project-blackboard/projectBlackboardPresentationModel.ts',
+    '../../../plugins/business/workspace/ui/desktop/project-blackboard/projectBlackboardPresentationModel.ts',
   );
   const generation = desktopProductionRuntimeSource();
 

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mentionService } from '@/services/mentionService';
-import { skillAPI } from '@/services/skillService';
+import { skillAPI } from '@business/agent/ui/web/services/skillService';
 import { attachmentService } from '@/services/attachmentService';
 
 // eslint-disable-next-line no-restricted-imports
@@ -31,7 +31,7 @@ vi.mock('@/services/attachmentService', () => ({
   },
 }));
 
-vi.mock('@/services/skillService', () => ({
+vi.mock('@business/agent/ui/web/services/skillService', () => ({
   skillAPI: {
     list: vi.fn(),
   },

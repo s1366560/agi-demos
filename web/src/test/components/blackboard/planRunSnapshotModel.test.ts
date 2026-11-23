@@ -6,14 +6,14 @@ import {
   iterationInteractionStats,
   iterationNodeIndex,
   iterationOutputs,
-} from '@/components/blackboard/tabs/planRunSnapshotModel';
+} from '@business/workspace/ui/web/components/blackboard/tabs/planRunSnapshotModel';
 
 import type {
   WorkspacePlanEvent,
   WorkspacePlanNode,
   WorkspacePlanOutboxItem,
   WorkspacePlanSnapshot,
-} from '@/types/workspace';
+} from '@business/workspace/ui/web/types/workspace';
 
 function node(overrides: Partial<WorkspacePlanNode>): WorkspacePlanNode {
   return {

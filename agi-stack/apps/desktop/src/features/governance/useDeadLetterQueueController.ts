@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
-import type { DeadLetterQueueScope } from './deadLetterQueueClient';
-import type { DeadLetterQueueController } from './deadLetterQueueController';
+import type { DeadLetterQueueScope } from '@business/automation/ui/desktop/governance/deadLetterQueueClient';
+import type { DeadLetterQueueController } from '@business/automation/ui/desktop/governance/deadLetterQueueController';
 
 export const DEAD_LETTER_QUEUE_REFRESH_INTERVAL_MS = 30_000;
 

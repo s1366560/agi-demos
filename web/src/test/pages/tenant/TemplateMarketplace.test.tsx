@@ -3,14 +3,14 @@ import { App } from 'antd';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TemplateMarketplace } from '@business/environments/ui/web/tenant/TemplateMarketplace';
-import { subagentTemplateService } from '../../../services/subagentTemplateService';
+import { subagentTemplateService } from '@business/agent/ui/web/services/subagentTemplateService';
 
 import type {
   SubAgentTemplateListItem,
   SubAgentTemplateListResponse,
-} from '../../../services/subagentTemplateService';
+} from '@business/agent/ui/web/services/subagentTemplateService';
 
-vi.mock('../../../services/subagentTemplateService', () => ({
+vi.mock('@business/agent/ui/web/services/subagentTemplateService', () => ({
   subagentTemplateService: {
     list: vi.fn(),
     getCategories: vi.fn(),

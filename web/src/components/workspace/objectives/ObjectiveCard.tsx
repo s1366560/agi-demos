@@ -7,9 +7,9 @@ import { Circle, MoreHorizontal, Pencil, PlayCircle, Trash2 } from 'lucide-react
 
 import { toPercent } from '@/utils/objectiveProgress';
 
-import { calculateWorkspaceTaskCompletionRatio } from '@/components/blackboard/blackboardUtils';
+import { calculateWorkspaceTaskCompletionRatio } from '@business/workspace/ui/web/components/blackboard/blackboardUtils';
 
-import type { CyberObjective, WorkspaceTask } from '@/types/workspace';
+import type { CyberObjective, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 import type { MenuProps } from 'antd';
 

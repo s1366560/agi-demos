@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (_key: string, fallback: string) => fallback }),
 }));
-vi.mock('@/stores/deploy', () => ({
+vi.mock('@business/environments/ui/web/stores/deploy', () => ({
   useDeploys: () => [],
   useCurrentDeploy: () => null,
   useDeployLoading: () => false,

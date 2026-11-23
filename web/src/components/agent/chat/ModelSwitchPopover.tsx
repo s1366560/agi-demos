@@ -6,7 +6,7 @@ import { message } from 'antd';
 import { Bot, Check, ChevronDown, Loader2, Sparkles } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useAgentV3Store } from '@/stores/agentV3';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useProviderStore } from '@/stores/provider';
 
 import { agentService } from '@/services/agentService';

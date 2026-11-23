@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Select } from 'antd';
 
-import { instanceService } from '@/services/instanceService';
-import type { InstanceResponse } from '@/services/instanceService';
+import { instanceService } from '../../services/instanceService';
+import type { InstanceResponse } from '../../services/instanceService';
 
 interface InstanceSelectProps {
   value?: string | undefined;

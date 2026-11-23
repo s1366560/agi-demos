@@ -1,36 +1,32 @@
 import path from 'node:path';
 
+import { richPageFramePlugin } from '../agi-stack/packages/plugin-slots/viteRichPageFrame.mjs';
+
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
-import { defineConfig, type Plugin } from 'vite';
-
-const projectPackageTranslations: Plugin = {
-  name: 'project-package-translations',
-  enforce: 'pre',
-  transform(source: string, id: string) {
-    const locales = path.resolve(__dirname, 'src/locales');
-    if (id !== path.join(locales, 'en-US.json') && id !== path.join(locales, 'zh-CN.json')) return;
-    const { common, login, forceChangePassword, projectPackages, tenant } = JSON.parse(
-      source
-    ) as typeof import('./src/locales/en-US.json');
-    return JSON.stringify({
-      common,
-      login,
-      forceChangePassword,
-      projectPackages,
-      tenant: { pluginHub: { optionalBusiness: tenant.pluginHub.optionalBusiness } },
-    });
-  },
-};
+import { defineConfig } from 'vite';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  const packageHost = mode === 'project-packages';
+  const packageHost = mode !== 'full' && mode !== 'test';
   return {
     publicDir: packageHost ? false : 'public',
     plugins: [
-      ...(packageHost ? [projectPackageTranslations] : []),
+      richPageFramePlugin(),
+      ...(mode === 'full'
+        ? [
+            {
+              name: 'full-client-entry',
+              transformIndexHtml: {
+                order: 'pre' as const,
+                handler(html: string) {
+                  return html.replace('/src/projectPackages/main.tsx', '/src/main.tsx');
+                },
+              },
+            },
+          ]
+        : []),
       react(),
       tailwindcss(),
       // Note: Ant Design 6+ has built-in tree-shaking support and uses CSS-in-JS
@@ -48,10 +44,26 @@ export default defineConfig(({ mode }) => {
           ]),
     ],
     resolve: {
-      dedupe: ['react-router-dom', 'chart.js', 'react-chartjs-2', 'i18next', 'react-markdown', 'use-debounce', 'zustand', '@tanstack/react-query', '@tanstack/react-virtual', 'react', 'react-dom', 'react-i18next', 'antd', 'lucide-react'],
+      dedupe: ['@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm',
+        'react-router-dom',
+        'chart.js',
+        'react-chartjs-2',
+        'i18next',
+        'react-markdown',
+        'use-debounce',
+        'uuid',
+        'zustand',
+        '@tanstack/react-query',
+        '@tanstack/react-virtual',
+        'react',
+        'react-dom',
+        'react-i18next',
+        'antd',
+        'lucide-react',
+      ],
       alias: {
         '@': path.resolve(__dirname, './src'),
-        '@business': path.resolve(__dirname, '../plugins/business'),
+        ...(!packageHost ? { '@business': path.resolve(__dirname, '../plugins/business') } : {}),
         '@agistack/plugin-slots': path.resolve(
           __dirname,
           '../agi-stack/packages/plugin-slots/src/index.ts'
@@ -86,8 +98,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      outDir: packageHost ? 'dist-project-packages' : 'dist',
-      ...(packageHost
+      outDir: mode === 'project-packages' ? 'dist-project-packages' : 'dist',
+      ...(mode === 'project-packages'
         ? { rollupOptions: { input: path.resolve(__dirname, 'project-packages.html') } }
         : {}),
       // Report chunk sizes

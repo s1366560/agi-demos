@@ -16,7 +16,6 @@ COPY agi-stack/packages/plugin-runtime /app/agi-stack/packages/plugin-runtime
 COPY agi-stack/packages/plugin-slots /app/agi-stack/packages/plugin-slots
 COPY agi-stack/packages/plugin-marketplace-ui /app/agi-stack/packages/plugin-marketplace-ui
 COPY sdk/memstack-plugin-sdk/src/slotUi.ts /app/sdk/memstack-plugin-sdk/src/slotUi.ts
-COPY plugins/business /app/plugins/business
 
 # Build the application
 RUN corepack pnpm run build

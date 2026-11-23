@@ -134,7 +134,7 @@ vi.mock('../../../../services/kasmRetainedSessionV2', () => ({
     });
   },
 }));
-import { KasmVNCViewer } from '../../../../components/agent/sandbox/KasmVNCViewer';
+import { KasmVNCViewer } from '@business/environments/ui/web/components/sandbox/KasmVNCViewer';
 import { RfbInitializationError } from '../../../../vendor/kasmvnc/core/rfb.js';
 const props = {
   projectId: 'project',
@@ -314,7 +314,7 @@ it('constructor failure keeps the returned partial-resource cleanup in the attem
 
 it('RemoteDesktopViewer forwards declared project and sandbox identity', async () => {
   const { RemoteDesktopViewer } =
-    await import('../../../../components/agent/sandbox/RemoteDesktopViewer');
+    await import('@business/environments/ui/web/components/sandbox/RemoteDesktopViewer');
   render(
     <RemoteDesktopViewer
       projectId="declared-project"
@@ -332,7 +332,7 @@ it('RemoteDesktopViewer forwards declared project and sandbox identity', async (
 });
 it('missing project never opens a desktop connection', async () => {
   const { RemoteDesktopViewer } =
-    await import('../../../../components/agent/sandbox/RemoteDesktopViewer');
+    await import('@business/environments/ui/web/components/sandbox/RemoteDesktopViewer');
   render(
     <RemoteDesktopViewer
       projectId=""

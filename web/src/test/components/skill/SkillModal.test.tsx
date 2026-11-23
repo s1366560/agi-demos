@@ -11,7 +11,7 @@ const skillStore = vi.hoisted(() => ({
   isSubmitting: false,
 }));
 
-vi.mock('@/stores/skill', () => ({
+vi.mock('@business/agent/ui/web/stores/skill', () => ({
   useSkillSubmitting: () => skillStore.isSubmitting,
   useSkillStore: () => ({
     updateSkill: skillStore.updateSkill,

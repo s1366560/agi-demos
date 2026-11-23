@@ -9,8 +9,8 @@ vi.mock('../../services/agentService', () => ({
   },
 }));
 
-import { createConversationLifecycleActions } from '../../stores/agent/conversationLifecycleActions';
-import { initialState, useConversationsStore } from '../../stores/agent/conversationsStore';
+import { createConversationLifecycleActions } from '@business/agent/ui/web/stores/agent/conversationLifecycleActions';
+import { initialState, useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
 
 import type { Conversation } from '../../types/agent';
 import type { ConversationState } from '../../types/conversationState';

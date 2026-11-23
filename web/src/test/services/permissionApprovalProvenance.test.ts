@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { agentService } from '@/services/agentService';
-import { restApi } from '@/services/agent/restApi';
+import { restApi } from '@business/agent/ui/web/services/agent/restApi';
 
 const { post } = vi.hoisted(() => ({ post: vi.fn().mockResolvedValue({}) }));
 vi.mock('@/services/client/httpClient', () => ({ httpClient: { post } }));

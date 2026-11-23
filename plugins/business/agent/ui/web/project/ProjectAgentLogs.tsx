@@ -5,7 +5,7 @@ import { useParams } from 'react-router-dom';
 
 import { RefreshCw } from 'lucide-react';
 
-import { projectAgentService } from '@/services/projectAgentService';
+import { projectAgentService } from '../services/projectAgentService';
 
 import {
   ProjectAgentError,

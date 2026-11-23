@@ -9,7 +9,7 @@ import type {
   ProjectOverviewClient,
   ProjectOverviewReadResult,
   ProjectOverviewScope,
-} from '../features/project/projectOverviewClient';
+} from '@business/workspace/ui/desktop/project/projectOverviewClient';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 import type { DesktopRuntimeConfig } from '../types';
 import {

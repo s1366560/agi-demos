@@ -54,7 +54,7 @@ const sessionChangesSource = readFileSync(
   'utf8',
 );
 const sessionTerminalSource = readFileSync(
-  new URL('../src/features/session/SessionTerminalCanvas.tsx', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/session/SessionTerminalCanvas.tsx', import.meta.url),
   'utf8',
 );
 const sessionEvidenceSource = readFileSync(

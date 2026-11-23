@@ -28,7 +28,7 @@ const lazyMessageMocks = vi.hoisted(() => ({
   success: vi.fn(),
 }));
 
-vi.mock('@/services/skillService', () => ({
+vi.mock('@business/agent/ui/web/services/skillService', () => ({
   skillAPI: skillApiMocks,
 }));
 

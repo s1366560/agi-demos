@@ -7,7 +7,7 @@
 
 import { useLocation, useParams } from 'react-router-dom';
 
-import { useConversationsStore } from '@/stores/agent/conversationsStore';
+import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
 import { useProjectStore } from '@/stores/project';
 
 import {

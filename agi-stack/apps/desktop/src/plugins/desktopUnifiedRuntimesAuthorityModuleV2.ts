@@ -1,9 +1,9 @@
 import { PLUGIN_MODULE_CATALOG_V2, RuntimeV2Error, type ContextV2, type PluginDefinitionV2 } from '@agistack/plugin-runtime';
 
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
-import type { RuntimePoolClient } from '../features/runtime-pool/runtimePoolClient';
-import { createUnifiedRuntimesClient } from '../features/unified-runtimes/unifiedRuntimesClient';
-import type { UnifiedLocalSidecar, UnifiedRuntimesClient, UnifiedRuntimesRequestOptions, UnifiedRuntimesScope, UnifiedSandbox, UnifiedSandboxCapabilities, UnifiedSandboxStats } from '../features/unified-runtimes/unifiedRuntimesTypes';
+import type { RuntimePoolClient } from '@business/environments/ui/desktop/runtime-pool/runtimePoolClient';
+import { createUnifiedRuntimesClient } from '@business/environments/ui/desktop/unified-runtimes/unifiedRuntimesClient';
+import type { UnifiedLocalSidecar, UnifiedRuntimesClient, UnifiedRuntimesRequestOptions, UnifiedRuntimesScope, UnifiedSandbox, UnifiedSandboxCapabilities, UnifiedSandboxStats } from '@business/environments/ui/desktop/unified-runtimes/unifiedRuntimesTypes';
 import type { DesktopRuntimeConfig } from '../types';
 import { DESKTOP_RUNTIME_POOL_AUTHORITY_SERVICE_V2, type DesktopRuntimePoolAuthorityServiceV2 } from './desktopRuntimePoolAuthorityModuleV2';
 import { cloneDesktopUnifiedRuntimesConfigV2, prepareDesktopUnifiedRuntimesOperationV2, prepareDesktopUnifiedRuntimesProjectIdV2, type DesktopUnifiedRuntimesOperationInputV2, type PreparedDesktopUnifiedRuntimesOperationV2 } from './desktopUnifiedRuntimesOperationContractV2';

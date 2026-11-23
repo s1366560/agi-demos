@@ -1,9 +1,9 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SandboxSection } from '../../../components/agent/SandboxSection';
-import { projectSandboxService } from '../../../services/projectSandboxService';
-import { useSandboxStore } from '../../../stores/sandbox';
+import { SandboxSection } from '@business/environments/ui/web/components/SandboxSection';
+import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 
 vi.mock('../../../plugins/webOperationAdmissionV2', async (original) => {
   const availability = { owner: {}, available: true };
@@ -14,19 +14,19 @@ vi.mock('../../../plugins/webOperationAdmissionV2', async (original) => {
   };
 });
 
-vi.mock('../../../components/agent/sandbox/RemoteDesktopViewer', () => ({
+vi.mock('@business/environments/ui/web/components/sandbox/RemoteDesktopViewer', () => ({
   RemoteDesktopViewer: ({ sandboxId }: { sandboxId: string }) => (
     <div data-testid="remote-desktop">desktop {sandboxId}</div>
   ),
 }));
 
-vi.mock('../../../components/agent/sandbox/SandboxTerminal', () => ({
+vi.mock('@business/environments/ui/web/components/sandbox/SandboxTerminal', () => ({
   SandboxTerminal: ({ sandboxId }: { sandboxId: string }) => (
     <div data-testid="sandbox-terminal">terminal {sandboxId}</div>
   ),
 }));
 
-vi.mock('../../../services/projectSandboxService', () => ({
+vi.mock('@business/environments/ui/web/services/projectSandboxService', () => ({
   projectSandboxService: {
     ensureProxyAuthCookie: vi.fn(),
     ensureSandbox: vi.fn(),

@@ -17,7 +17,7 @@ import {
   useGeneMarketLoading,
   useGeneMarketError,
   useGeneMarketActions,
-} from '@/stores/geneMarket';
+} from '@business/environments/ui/web/stores/geneMarket';
 
 import { EvolutionTimeline } from '../../../../environments/ui/web/tenant/utils/EvolutionTimeline';
 import { EVENT_TYPE_OPTIONS, getEventTypeLabel } from '../../../../environments/ui/web/tenant/utils/evolutionUtils';
@@ -25,7 +25,7 @@ import { EVENT_TYPE_OPTIONS, getEventTypeLabel } from '../../../../environments/
 import type {
   EvolutionEventListParams,
   EvolutionEventType,
-} from '@/services/geneMarketService';
+} from '@business/environments/ui/web/services/geneMarketService';
 
 const { Title } = Typography;
 

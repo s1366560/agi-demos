@@ -1,8 +1,8 @@
 import {
   createProjectKnowledgeController,
   type ProjectKnowledgeController,
-} from './projectKnowledgeController';
-import type { ProjectKnowledgeAuthority, ProjectKnowledgeScope } from './projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeController';
+import type { ProjectKnowledgeAuthority, ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { ProjectTeamClient } from './projectTeamClient';
 import { buildProjectTeamPresentation } from './projectTeamPresentationModel';
 

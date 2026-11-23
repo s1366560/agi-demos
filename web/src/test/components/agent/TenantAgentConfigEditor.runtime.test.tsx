@@ -88,7 +88,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../../services/agentConfigService', () => ({
+vi.mock('@business/agent/ui/web/services/agentConfigService', () => ({
   agentConfigService: {
     getAuthorityRevision: mockGetAuthorityRevision,
     getConfig: mockGetConfig,
@@ -205,7 +205,7 @@ describe('TenantAgentConfigEditor runtime rollout', () => {
 
   it('preserves edits and dirty modal state after a revision conflict', async () => {
     const onClose = vi.fn();
-    const ConflictError = (await import('../../../services/agentConfigService'))
+    const ConflictError = (await import('@business/agent/ui/web/services/agentConfigService'))
       .TenantAgentConfigError;
     mockUpdateConfigWithRevision.mockRejectedValue(
       new ConflictError('revision conflict', 409, {

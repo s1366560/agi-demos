@@ -17,14 +17,14 @@ import { useTranslation } from 'react-i18next';
 
 import { Segmented, Select, message } from 'antd';
 
-import { restApi } from '@/services/agent/restApi';
+import { restApi } from '@business/agent/ui/web/services/agent/restApi';
 import { agentService } from '@/services/agentService';
-import { workspaceTaskService } from '@/services/workspaceService';
+import { workspaceTaskService } from '@business/workspace/ui/web/services/workspaceService';
 
-import { useConversationParticipants } from '@/hooks/useConversationParticipants';
+import { useConversationParticipants } from '@business/agent/ui/web/hooks/useConversationParticipants';
 
 import type { Conversation } from '@/types/agent/core';
-import type { WorkspaceTask } from '@/types/workspace';
+import type { WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 type Mode = 'single_agent' | 'multi_agent_shared' | 'multi_agent_isolated' | 'autonomous';
 

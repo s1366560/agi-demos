@@ -1,7 +1,7 @@
 import { useI18n } from '@desktop/i18n';
-import { NativeMemoryEditor } from '@desktop/features/project-knowledge/NativeMemoryEditor';
-import type { NativeMemoriesController, NativeMemoriesModel } from '@desktop/features/project-knowledge/nativeMemoriesController';
-import type { ProjectKnowledgeViewModel } from '@desktop/features/project-knowledge/projectKnowledgePresentationModel';
+import { NativeMemoryEditor } from './NativeMemoryEditor';
+import type { NativeMemoriesController, NativeMemoriesModel } from './nativeMemoriesController';
+import type { ProjectKnowledgeViewModel } from './projectKnowledgePresentationModel';
 
 export function NativeMemoriesUnavailable() {
   const { t } = useI18n();

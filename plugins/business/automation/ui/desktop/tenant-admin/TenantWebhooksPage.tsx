@@ -1,8 +1,8 @@
 import { useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
-import type { TenantWebhooksController } from '@desktop/features/tenant-admin/tenantWebhooksController';
-import type { TenantWebhooksViewModel } from '@desktop/features/tenant-admin/tenantWebhooksPresentationModel';
+import type { TenantWebhooksController } from './tenantWebhooksController';
+import type { TenantWebhooksViewModel } from './tenantWebhooksPresentationModel';
 import { TenantAdminDegradedNotice, TenantAdminRouteState } from '@desktop/features/tenant-admin/TenantAdminRouteState';
 
 export function TenantWebhooksPage({

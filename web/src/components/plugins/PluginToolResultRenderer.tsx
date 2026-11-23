@@ -19,7 +19,7 @@ import {
 } from '@/plugins/webOperationAdmissionV2';
 import { readConversationToolMediaV2 } from '@/services/conversationToolMediaClientV2';
 
-import { useAgentV3Store } from '@/stores/agentV3';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useProjectStore } from '@/stores/project';
 
 import {

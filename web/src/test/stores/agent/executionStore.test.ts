@@ -30,7 +30,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { useExecutionStore, initialState } from '../../../stores/agent/executionStore';
+import { useExecutionStore, initialState } from '@business/agent/ui/web/stores/agent/executionStore';
 
 import type { WorkPlan } from '../../../types/agent';
 

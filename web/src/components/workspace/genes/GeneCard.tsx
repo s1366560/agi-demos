@@ -7,7 +7,7 @@ import { MoreHorizontal, Pencil, Trash2, CheckCircle, Ban } from 'lucide-react';
 
 import { getCategoryColor } from './utils';
 
-import type { CyberGene } from '@/types/workspace';
+import type { CyberGene } from '@business/workspace/ui/web/types/workspace';
 
 import type { MenuProps } from 'antd';
 

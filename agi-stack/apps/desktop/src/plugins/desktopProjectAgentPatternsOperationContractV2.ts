@@ -1,10 +1,10 @@
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
-import type { ProjectAgentScope } from '../features/project-agent/projectAgentClient';
+import type { ProjectAgentScope } from '@business/agent/ui/desktop/project-agent/projectAgentClient';
 import type {
   ProjectAgentPattern,
   ProjectAgentPatternsSnapshot,
-} from '../features/project-agent/projectAgentPatternsClient';
+} from '@business/agent/ui/desktop/project-agent/projectAgentPatternsClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopProjectAgentPatternsOperationInputV2 = Readonly<{

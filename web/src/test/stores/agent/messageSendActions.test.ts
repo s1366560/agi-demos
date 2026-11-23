@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentService } from '../../../services/agentService';
 import { ApiError, ApiErrorType } from '../../../services/client/ApiError';
 import { runInputService } from '../../../services/runInputService';
-import * as deltaBuffers from '../../../stores/agent/deltaBuffers';
-import { createMessageSendActions } from '../../../stores/agent/messageSendActions';
+import * as deltaBuffers from '@business/agent/ui/web/stores/agent/deltaBuffers';
+import { createMessageSendActions } from '@business/agent/ui/web/stores/agent/messageSendActions';
 import { createDefaultConversationState } from '../../../types/conversationState';
 import { installResourceOperationFixtureV2 } from '../../services/webResourceOperationFixtureV2';
 

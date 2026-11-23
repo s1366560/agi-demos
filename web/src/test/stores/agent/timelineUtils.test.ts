@@ -6,7 +6,7 @@ import {
   filterAutomaticPermissionEvents,
   mergeHITLResponseEvents,
   isGrantedPermissionEvent,
-} from '../../../stores/agent/timelineUtils';
+} from '@business/agent/ui/web/stores/agent/timelineUtils';
 
 import type { TimelineEvent } from '../../../types/agent/timeline';
 

@@ -35,11 +35,11 @@ import {
   useSkillError,
   useActiveSkillsCount,
   useSkillTotal,
-} from '@/stores/skill';
+} from '../stores/skill';
 import { useTenantStore } from '@/stores/tenant';
 
-import { skillAPI } from '@/services/skillService';
-import type { SkillListParams as SkillApiListParams } from '@/services/skillService';
+import { skillAPI } from '../services/skillService';
+import type { SkillListParams as SkillApiListParams } from '../services/skillService';
 
 import {
   downloadSkillPackage,

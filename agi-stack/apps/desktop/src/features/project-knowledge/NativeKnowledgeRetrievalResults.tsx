@@ -6,7 +6,7 @@ import type {
 import type {
   NativeKnowledgeRetrievalController,
   NativeKnowledgeRetrievalModel,
-} from './nativeKnowledgeRetrievalController';
+} from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeRetrievalController';
 
 export function NativeKnowledgeRetrievalResults({
   model,

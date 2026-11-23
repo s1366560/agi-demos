@@ -3,10 +3,10 @@ import { useParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import EdgeMapList from '@business/knowledge/ui/web/project/schema/EdgeMapList';
-import { schemaAPI } from '../../../../services/api';
+import { schemaAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 import { fireEvent, render, screen } from '../../../utils';
 
-vi.mock('../../../../services/api', () => ({
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({
   schemaAPI: {
     listEdgeMaps: vi.fn(),
     listEntityTypes: vi.fn(),

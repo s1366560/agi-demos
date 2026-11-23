@@ -18,7 +18,7 @@ import {
   timelineTitle,
   timelineToolDisplay,
 } from '../chat/chatTimelinePresentation';
-import { toolCallPresentationKind } from '../chat/chatTimelineModel';
+import { toolCallPresentationKind } from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import './TimelineStepDetails.css';
 
 const tabs = ['overview', 'input', 'output', 'diagnostics'] as const;

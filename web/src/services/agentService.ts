@@ -17,10 +17,10 @@ import { logger } from '../utils/logger';
 
 import { parseLifecycleStateData, parseSandboxStateData } from './agent/messageParsers';
 import { routeToHandler, routeSubagentLifecycleMessage } from './agent/messageRouter';
-import { restApi } from './agent/restApi';
+import { restApi } from '@business/agent/ui/web/services/agent/restApi';
 import { WebSocketConnection } from './agent/wsConnection';
 
-import type { ExecutionStatusApiResponse } from './agent/restApi';
+import type { ExecutionStatusApiResponse } from '@business/agent/ui/web/services/agent/restApi';
 import type { ServerMessage, WebSocketStatus } from './agent/types';
 import type {
   AgentEventType,

@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react';
 import { DownloadIcon, MagnifyingGlassIcon, ReloadIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '@desktop/i18n';
-import type { TemplatesRouteDetail } from '@desktop/features/settings-routes/templatesRouteClient';
-import type { TemplatesRouteController } from '@desktop/features/settings-routes/templatesRouteController';
-import type { TemplatesRoutePresentationModel } from '@desktop/features/settings-routes/templatesRoutePresentationModel';
+import type { TemplatesRouteDetail } from './templatesRouteClient';
+import type { TemplatesRouteController } from './templatesRouteController';
+import type { TemplatesRoutePresentationModel } from './templatesRoutePresentationModel';
 import { useNativeRouteAction } from '@desktop/features/settings-routes/useNativeRouteAction';
 
 export function TemplatesRoutePage({

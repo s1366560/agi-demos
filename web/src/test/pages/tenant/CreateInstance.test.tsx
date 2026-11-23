@@ -74,18 +74,18 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   ),
 }));
 
-vi.mock('../../../services/instanceTemplateService', () => ({
+vi.mock('@business/environments/ui/web/services/instanceTemplateService', () => ({
   instanceTemplateService: {
     getById: vi.fn(),
   },
 }));
 
-vi.mock('../../../stores/cluster', () => ({
+vi.mock('@business/environments/ui/web/stores/cluster', () => ({
   useClusters: () => mocks.clusters,
   useClusterActions: () => ({ listClusters: mocks.listClusters }),
 }));
 
-vi.mock('../../../stores/instance', () => ({
+vi.mock('@business/environments/ui/web/stores/instance', () => ({
   useInstanceActions: () => ({ createInstance: mocks.createInstance }),
   useInstanceSubmitting: () => false,
 }));
@@ -100,7 +100,7 @@ vi.mock('../../../stores/tenant', () => ({
     selector({ currentTenant: mocks.currentTenant }),
 }));
 
-vi.mock('../../../stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaces: () => mocks.workspaces,
   useWorkspaceStore: (
     selector: (state: { loadWorkspaces: typeof mocks.loadWorkspaces }) => unknown

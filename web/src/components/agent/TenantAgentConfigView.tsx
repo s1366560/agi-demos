@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Edit, RefreshCw } from 'lucide-react';
 
-import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
+import { agentConfigService, TenantAgentConfigError } from '@business/agent/ui/web/services/agentConfigService';
 import { systemService, type SystemInfoResponse } from '@/services/systemService';
 
 import { formatDateTime } from '@/utils/date';

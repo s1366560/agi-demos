@@ -92,7 +92,7 @@ const mockEdgeTypes = [
   },
 ];
 
-vi.mock('../../../../services/api', () => ({
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({
   schemaAPI: {
     listEdgeTypes: vi.fn(() => Promise.resolve(mockEdgeTypes)),
     createEdgeType: vi.fn(() => Promise.resolve({ id: 'new-edge-type' })),
@@ -462,7 +462,7 @@ describe('EdgeTypeList Compound Component', () => {
     });
 
     it('shows in-app error feedback when saving fails', async () => {
-      const { schemaAPI } = await import('../../../../services/api');
+      const { schemaAPI } = await import('@business/knowledge/ui/web/services/knowledgeApi');
       vi.mocked(schemaAPI.createEdgeType).mockRejectedValueOnce(new Error('save failed'));
       const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
 
@@ -489,7 +489,7 @@ describe('EdgeTypeList Compound Component', () => {
     });
 
     it('blocks saving when the name is empty', async () => {
-      const { schemaAPI } = await import('../../../../services/api');
+      const { schemaAPI } = await import('@business/knowledge/ui/web/services/knowledgeApi');
 
       const { EdgeTypeList } = await import('@business/knowledge/ui/web/project/schema/EdgeTypeList');
       render(<EdgeTypeList />);
@@ -510,7 +510,7 @@ describe('EdgeTypeList Compound Component', () => {
     });
 
     it('blocks saving when the name duplicates an existing edge type', async () => {
-      const { schemaAPI } = await import('../../../../services/api');
+      const { schemaAPI } = await import('@business/knowledge/ui/web/services/knowledgeApi');
 
       const { EdgeTypeList } = await import('@business/knowledge/ui/web/project/schema/EdgeTypeList');
       render(<EdgeTypeList />);

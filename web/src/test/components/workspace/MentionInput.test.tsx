@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { MentionInput } from '@/components/workspace/chat/MentionInput';
-import type { WorkspaceAgent, WorkspaceMember } from '@/types/workspace';
+import type { WorkspaceAgent, WorkspaceMember } from '@business/workspace/ui/web/types/workspace';
 
 import { fireEvent, render, screen } from '../../utils';
 

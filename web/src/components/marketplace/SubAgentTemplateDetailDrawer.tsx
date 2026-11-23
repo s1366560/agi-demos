@@ -14,8 +14,8 @@ import { useTranslation } from 'react-i18next';
 import { Alert, Button, Descriptions, Drawer, Tag, Typography } from 'antd';
 import { Download } from 'lucide-react';
 
-import { subagentTemplateService } from '@/services/subagentTemplateService';
-import type { SubAgentTemplateDetail } from '@/services/subagentTemplateService';
+import { subagentTemplateService } from '@business/agent/ui/web/services/subagentTemplateService';
+import type { SubAgentTemplateDetail } from '@business/agent/ui/web/services/subagentTemplateService';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 

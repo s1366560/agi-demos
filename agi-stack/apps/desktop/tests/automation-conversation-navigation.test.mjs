@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createAutomationConversationOpener } from '/tmp/agistack-desktop-test-dist/src/features/automations/automationConversationNavigation.js';
+import { createAutomationConversationOpener } from '/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/automationConversationNavigation.js';
 
 function fixture() {
   const conversation = { id: 'conversation', tenant_id: 'tenant', project_id: 'project', workspace_id: 'workspace', title: 'Result' };

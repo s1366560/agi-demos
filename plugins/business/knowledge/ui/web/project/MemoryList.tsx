@@ -40,7 +40,7 @@ import { formatDateOnly } from '@/utils/date';
 import { AppModal } from '@/components/common/index';
 import { Pagination } from '@/components/shared/Pagination';
 
-import { memoryAPI } from '@/services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 import { logger } from '@/utils/logger';
 
 import type { Memory } from '@/types/memory';

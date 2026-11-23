@@ -7,7 +7,7 @@ import { Button, Empty, Skeleton, Segmented } from 'antd';
 
 import { GeneCard } from './GeneCard';
 
-import type { CyberGene } from '@/types/workspace';
+import type { CyberGene } from '@business/workspace/ui/web/types/workspace';
 
 export interface GeneListProps {
   genes: CyberGene[];

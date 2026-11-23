@@ -15,7 +15,7 @@ const acpServiceMock = vi.hoisted(() => ({
   testAgent: vi.fn(),
 }));
 
-vi.mock('@/services/acpService', () => ({
+vi.mock('@business/agent/ui/web/services/acpService', () => ({
   acpService: acpServiceMock,
 }));
 

@@ -6,7 +6,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Activity, AlertCircle, ListTree, RefreshCw, Workflow } from 'lucide-react';
 
 import { ApiError } from '@/services/client/ApiError';
-import { ProjectAgentContractError, projectAgentService } from '@/services/projectAgentService';
+import { ProjectAgentContractError, projectAgentService } from '../services/projectAgentService';
 
 import type { SubAgentRunDTO } from '@/types/multiAgent';
 

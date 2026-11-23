@@ -1,8 +1,8 @@
 import { Button } from '@radix-ui/themes';
 
 import { useI18n } from '@desktop/i18n';
-import { WorkspaceCollaborationCanvas } from '@desktop/features/workspace/WorkspaceCollaborationCanvas';
-import type { ProjectBlackboardViewModel } from '@desktop/features/project-blackboard/projectBlackboardPresentationModel';
+import { WorkspaceCollaborationCanvas } from '../workspace/WorkspaceCollaborationCanvas';
+import type { ProjectBlackboardViewModel } from './projectBlackboardPresentationModel';
 
 export function ProjectBlackboardPage({
   model,

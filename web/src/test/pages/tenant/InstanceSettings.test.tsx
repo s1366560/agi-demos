@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InstanceSettings } from '@business/environments/ui/web/tenant/InstanceSettings';
 import { providerAPI } from '@/services/api';
-import { instanceService } from '@/services/instanceService';
-import { useInstanceStore } from '@/stores/instance';
+import { instanceService } from '@business/environments/ui/web/services/instanceService';
+import { useInstanceStore } from '@business/environments/ui/web/stores/instance';
 
-import type { InstanceLlmConfigResponse, InstanceResponse } from '@/services/instanceService';
+import type { InstanceLlmConfigResponse, InstanceResponse } from '@business/environments/ui/web/services/instanceService';
 import type { ProviderConfig, ProviderType } from '@/types/memory';
 
 import { App } from 'antd';
@@ -43,7 +43,7 @@ vi.mock('@/services/api', () => ({
   },
 }));
 
-vi.mock('@/services/instanceService', () => ({
+vi.mock('@business/environments/ui/web/services/instanceService', () => ({
   instanceService: {
     getById: vi.fn(),
     update: vi.fn(),

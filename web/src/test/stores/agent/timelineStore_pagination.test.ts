@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { agentService } from '../../../services/agentService';
-import { useTimelineStore } from '../../../stores/agent/timelineStore';
+import { useTimelineStore } from '@business/agent/ui/web/stores/agent/timelineStore';
 // Mock agent service
 vi.mock('../../../services/agentService', () => ({
   agentService: {

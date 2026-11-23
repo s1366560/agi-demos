@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, act } from '@testing-library/react';
 
-import { WorkstationArrangementBoard } from '@/components/blackboard/WorkstationArrangementBoard';
+import { WorkstationArrangementBoard } from '@business/workspace/ui/web/components/blackboard/WorkstationArrangementBoard';
 import { render, screen } from '@/test/utils';
 
-import type { TopologyEdge, TopologyNode, WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
+import type { TopologyEdge, TopologyNode, WorkspaceAgent, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 import { App } from 'antd';
 
@@ -36,7 +36,7 @@ const mockActions = {
   clearSelectedHex: vi.fn(),
 };
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaceActions: () => mockActions,
 }));
 

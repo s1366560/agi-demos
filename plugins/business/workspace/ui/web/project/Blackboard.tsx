@@ -5,14 +5,14 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { useShallow } from 'zustand/react/shallow';
 
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceStore } from '../stores/workspace';
 
 import { unifiedEventService } from '@/services/unifiedEventService';
-import { workspacePlanService } from '@/services/workspaceService';
+import { workspacePlanService } from '../services/workspaceService';
 
-import { useBlackboardPageActions } from '@/hooks/useBlackboardActions';
-import { useBlackboardLifecycle } from '@/hooks/useBlackboardLifecycle';
-import { useBlackboardSSE } from '@/hooks/useBlackboardSSE';
+import { useBlackboardPageActions } from '../hooks/useBlackboardActions';
+import { useBlackboardLifecycle } from '../hooks/useBlackboardLifecycle';
+import { useBlackboardSSE } from '../hooks/useBlackboardSSE';
 
 import {
   resolveBlackboardTab,
@@ -21,12 +21,12 @@ import {
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { logger } from '@/utils/logger';
 
-import { BlackboardDashboardHeader } from '@/components/blackboard/BlackboardDashboardHeader';
-import { BlackboardErrorBoundary } from '@/components/blackboard/BlackboardErrorBoundary';
-import { NON_AUTHORITATIVE } from '@/components/blackboard/blackboardSurfaceContract';
-import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
-import { buildBlackboardStats } from '@/components/blackboard/blackboardUtils';
-import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
+import { BlackboardDashboardHeader } from '../components/blackboard/BlackboardDashboardHeader';
+import { BlackboardErrorBoundary } from '../components/blackboard/BlackboardErrorBoundary';
+import { NON_AUTHORITATIVE } from '../components/blackboard/blackboardSurfaceContract';
+import type { BlackboardTab } from '../components/blackboard/BlackboardTabBar';
+import { buildBlackboardStats } from '../components/blackboard/blackboardUtils';
+import { CentralBlackboardContent } from '../components/blackboard/CentralBlackboardContent';
 
 import type {
   Workspace,
@@ -34,7 +34,7 @@ import type {
   WorkspacePlan,
   WorkspacePlanRootGoal,
   WorkspaceUseCase,
-} from '@/types/workspace';
+} from '../types/workspace';
 
 const DEFAULT_WORKSPACE_USE_CASE: WorkspaceUseCase = 'general';
 const DEFAULT_COLLABORATION_MODE: WorkspaceCollaborationMode = 'multi_agent_shared';

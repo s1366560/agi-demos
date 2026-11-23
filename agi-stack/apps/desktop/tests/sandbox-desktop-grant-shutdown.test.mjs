@@ -131,6 +131,7 @@ async function fixture(trustedDevice) {
     },
   });
   const bindings = {
+    fullDesktop: true,
     DesktopCloudAuthenticationAuthority,
     computerUseActivity,
     computerUseInput: null,

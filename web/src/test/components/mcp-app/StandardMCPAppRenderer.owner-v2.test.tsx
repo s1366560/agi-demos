@@ -34,7 +34,7 @@ vi.mock('../../../hooks/useMCPClient', () => ({
 vi.mock('../../../stores/project', () => ({
   useProjectStore: (select: any) => select({ currentProject: { id: 'project' } }),
 }));
-vi.mock('../../../stores/agent/conversationsStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/conversationsStore', () => ({
   useConversationsStore: (select: any) =>
     select({ currentConversation: { project_id: 'project' } }),
 }));

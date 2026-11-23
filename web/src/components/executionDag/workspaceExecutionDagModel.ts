@@ -1,13 +1,13 @@
-import type { NodeFilter } from '@/components/blackboard/tabs/planRunSnapshotModel';
+import type { NodeFilter } from '@business/workspace/ui/web/components/blackboard/tabs/planRunSnapshotModel';
 import {
   iterationNodeIndex,
   matchesFilter,
   shortId,
-} from '@/components/blackboard/tabs/planRunSnapshotModel';
+} from '@business/workspace/ui/web/components/blackboard/tabs/planRunSnapshotModel';
 
 import { uniqueEdges } from './dagModelUtils';
 
-import type { WorkspaceAgent, WorkspacePlanNode, WorkspacePlanSnapshot } from '@/types/workspace';
+import type { WorkspaceAgent, WorkspacePlanNode, WorkspacePlanSnapshot } from '@business/workspace/ui/web/types/workspace';
 
 import type { ExecutionDagEdge, ExecutionDagModel, ExecutionDagNode } from './types';
 

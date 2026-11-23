@@ -54,26 +54,26 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useAgentState, usePendingToolsStack } from '@/stores/agent/executionStore';
-import { useIsStreaming } from '@/stores/agent/streamingStore';
-import { useAgentV3Store } from '@/stores/agentV3';
+import { useAgentState, usePendingToolsStack } from '@business/agent/ui/web/stores/agent/executionStore';
+import { useIsStreaming } from '@business/agent/ui/web/stores/agent/streamingStore';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 
 import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
 
 import {
   useUnifiedAgentStatus,
   type ProjectAgentLifecycleState,
-} from '../../hooks/useUnifiedAgentStatus';
+} from '@business/agent/ui/web/hooks/useUnifiedAgentStatus';
 import { agentService } from '../../services/agentService';
 import {
   poolService,
   type PoolInstance,
   type ProjectTier,
   type InstanceStatus,
-} from '../../services/poolService';
+} from '@business/environments/ui/web/services/poolService';
 
 import { ContextStatusIndicator } from './context/ContextStatusIndicator';
-import { SandboxStatusIndicator } from './sandbox/SandboxStatusIndicator';
+import { SandboxStatusIndicator } from '@business/environments/ui/web/components/sandbox/SandboxStatusIndicator';
 
 import type { LucideIcon } from 'lucide-react';
 

@@ -27,7 +27,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { useStreamingStore, initialState } from '../../../stores/agent/streamingStore';
+import { useStreamingStore, initialState } from '@business/agent/ui/web/stores/agent/streamingStore';
 
 describe('StreamingStore', () => {
   beforeEach(() => {

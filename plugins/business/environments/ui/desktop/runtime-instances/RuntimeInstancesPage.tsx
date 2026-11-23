@@ -5,8 +5,8 @@ import type {
   RuntimeInstanceSummary,
   RuntimeInstancesModel,
   RuntimeInstancesQuery,
-} from '@desktop/features/runtime-instances/runtimeInstancesTypes';
-import '@desktop/features/runtime-instances/RuntimeInstancesPage.css';
+} from './runtimeInstancesTypes';
+import './RuntimeInstancesPage.css';
 
 export function RuntimeInstancesPage({
   model,

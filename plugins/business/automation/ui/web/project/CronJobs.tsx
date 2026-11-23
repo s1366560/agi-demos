@@ -28,13 +28,13 @@ import {
   useCronTotal,
   useCronRunsTotal,
   useCronFilters,
-} from '@/stores/cron';
+} from '../stores/cron';
 
-import { useCronCapabilities } from '@/hooks/useCronCapabilities';
+import { useCronCapabilities } from '../hooks/useCronCapabilities';
 
 import { formatDateTime } from '@/utils/date';
 
-import { CronJobForm } from '@/components/cron/CronJobForm';
+import { CronJobForm } from '../components/cron/CronJobForm';
 
 import type {
   CronJobResponse,
@@ -43,7 +43,7 @@ import type {
   CronRunStatus,
   CronJobRunResponse,
   TriggerType,
-} from '@/types/cron';
+} from '../types/cron';
 
 import type { TableProps } from 'antd/es/table';
 

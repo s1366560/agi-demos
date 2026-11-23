@@ -9,7 +9,7 @@ const {
   workspaceSelectionPreferenceKey: key,
 } = require('/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceSelectionPreference.js');
 const { resolveRuntimeWorkspaceId } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js',
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/workspaceTreeModel.js',
 );
 
 const local = {

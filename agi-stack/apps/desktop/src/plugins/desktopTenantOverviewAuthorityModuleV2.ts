@@ -14,7 +14,7 @@ import { desktopApiFetch } from '../api/cloudRequestBroker';
 import type {
   TenantOverviewScope,
   TenantOverviewSnapshot,
-} from '../features/tenant/tenantOverviewClient';
+} from '@business/workspace/ui/desktop/tenant/tenantOverviewClient';
 import type { DesktopRuntimeConfig } from '../types';
 import type {
   DesktopRendererGenerationActionsV2,

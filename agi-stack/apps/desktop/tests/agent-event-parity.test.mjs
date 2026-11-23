@@ -34,8 +34,18 @@ const eventHandlingFiles = readdirSync(desktopSourceRoot, { recursive: true })
       /^features\/workspace\/.*EventModel\.ts$/.test(entry) ||
       /^features\/settings\/.*EventModel\.ts$/.test(entry),
   );
-const desktopEventHandlingSource = eventHandlingFiles
-  .map((entry) => readFileSync(new URL(entry, desktopSourceRoot), 'utf8'))
+const packagedChat = new URL('../../../../plugins/business/agent/ui/desktop/chat/', import.meta.url);
+const desktopEventHandlingSource = [
+  ...eventHandlingFiles.map((entry) => new URL(entry, desktopSourceRoot)),
+  ...readdirSync(packagedChat)
+    .filter((entry) => entry.endsWith('.ts'))
+    .map((entry) => new URL(entry, packagedChat)),
+  new URL(
+    '../../../../plugins/business/workspace/ui/desktop/workspace/workspaceActivityEventModel.ts',
+    import.meta.url,
+  ),
+]
+  .map((url) => readFileSync(url, 'utf8'))
   .join('\n');
 
 test('Desktop event handling covers every backend and Web Agent event contract', () => {

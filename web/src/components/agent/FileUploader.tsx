@@ -10,7 +10,7 @@ import { useState, useCallback, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { sandboxUploadService, type FileMetadata } from '@/services/sandboxUploadService';
+import { sandboxUploadService, type FileMetadata } from '@business/environments/ui/web/services/sandboxUploadService';
 
 import { message } from '@/components/ui/lazyAntd';
 

@@ -20,7 +20,7 @@ import {
   useConversations,
   useCurrentConversation,
   useConversationsLoading,
-} from '../../../stores/agent/conversationsStore';
+} from '@business/agent/ui/web/stores/agent/conversationsStore';
 
 // Helper to create a mock conversation
 const createMockConversation = (

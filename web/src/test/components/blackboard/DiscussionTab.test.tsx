@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { DiscussionTab } from '@/components/blackboard/tabs/DiscussionTab';
+import { DiscussionTab } from '@business/workspace/ui/web/components/blackboard/tabs/DiscussionTab';
 import { fireEvent, render, screen, waitFor } from '@/test/utils';
 
-import type { DiscussionTabProps } from '@/components/blackboard/tabs/DiscussionTab';
+import type { DiscussionTabProps } from '@business/workspace/ui/web/components/blackboard/tabs/DiscussionTab';
 
 function defaultProps(overrides: Partial<DiscussionTabProps> = {}): DiscussionTabProps {
   return {

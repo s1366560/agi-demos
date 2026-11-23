@@ -1,4 +1,4 @@
-import type { WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
+import type { WorkspaceAgent, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 export interface PendingLeaderAdjudicationProjection {
   pending: boolean;

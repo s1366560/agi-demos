@@ -15,7 +15,7 @@ import type {
   ProjectOverviewPresentationModel,
   ProjectOverviewRecentItem,
   ProjectOverviewSummaryField,
-} from '@desktop/features/project/projectOverviewPresentationModel';
+} from './projectOverviewPresentationModel';
 import './ProjectOverviewPage.css';
 
 type ProjectOverviewPageProps = Readonly<{

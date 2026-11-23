@@ -19,7 +19,7 @@ const { act } = React;
 const { createRoot } = require('react-dom/client');
 const ts = require('typescript');
 const source = readFileSync(
-  new URL('../src/features/sandbox/InteractiveTerminal.tsx', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/sandbox/InteractiveTerminal.tsx', import.meta.url),
   'utf8'
 );
 const code = ts.transpileModule(source, {

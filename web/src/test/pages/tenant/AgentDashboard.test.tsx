@@ -18,7 +18,7 @@ const {
   mockTimelineRun: { current: null as Record<string, unknown> | null },
 }));
 
-vi.mock('../../../services/agentConfigService', () => ({
+vi.mock('@business/agent/ui/web/services/agentConfigService', () => ({
   agentConfigService: {
     canModifyConfig: mockCanModifyConfig,
   },

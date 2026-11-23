@@ -20,7 +20,7 @@ import { useComputerUseDevice } from "../settings/ComputerUseDeviceProvider";
 import { useTimelineInspection } from "../session/TimelineInspectionContext";
 import { projectToolResultPresentationV2 } from "./toolResultPresentationV2";
 import { computerUsePreviewBlobV2 } from "./computerUseResultPresentationV2";
-import type { ToolCallPresentationKind } from "./chatTimelineModel";
+import type { ToolCallPresentationKind } from "@business/agent/ui/desktop/chat/chatTimelineModel";
 import {
   createDesktopToolResultRendererPayloadV2,
   DesktopToolResultRendererBridgeV2,

@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const {
   shouldPreserveConversationSelectionDuringSidecarRecovery,
 } = require(
-  "/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js",
+  "/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/workspaceTreeModel.js",
 );
 const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 

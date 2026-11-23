@@ -5,8 +5,10 @@
     "main": "index.js",
     "scripts": {
         "dev": "vite --config vite.config.ts",
-        "build": "tsc && vite build --config vite.config.ts",
+        "build": "tsc -p tsconfig.project-packages.json && vite build --config vite.config.ts",
+        "build:full": "tsc && vite build --config vite.config.ts --mode full",
         "build:project-packages": "tsc -p tsconfig.project-packages.json && vite build --mode project-packages",
+        "dev:full": "vite --mode full",
         "dev:project-packages": "vite --mode project-packages --open /project-packages.html",
         "preview": "vite preview --config vite.config.ts",
         "lint": "eslint . --report-unused-disable-directives --max-warnings 9999 --fix",

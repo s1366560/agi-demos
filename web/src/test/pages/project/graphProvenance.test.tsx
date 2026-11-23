@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphProvenancePanel } from '@business/knowledge/ui/web/project/GraphProvenancePanel';
 import { graphSourceUuids, requireGraphSource } from '@business/knowledge/ui/web/project/graphProvenance';
-import { graphService } from '../../../services/graphService';
+import { graphService } from '@business/knowledge/ui/web/services/graphService';
 import type { GraphSnapshot } from '../../../components/graph/CytoscapeGraph/types';
 import { render, screen, fireEvent, waitFor } from '../../utils';
 
-vi.mock('../../../services/graphService', () => ({ graphService: { getSubgraph: vi.fn() } }));
+vi.mock('@business/knowledge/ui/web/services/graphService', () => ({ graphService: { getSubgraph: vi.fn() } }));
 const graph: GraphSnapshot = {
   nodes: [
     { id: 'source-id', uuid: 'episode-a', name: 'Same name', type: 'Episodic' },

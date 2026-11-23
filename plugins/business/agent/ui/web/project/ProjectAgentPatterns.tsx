@@ -11,7 +11,7 @@ import {
   type WorkflowPattern as UIPattern,
 } from '@/components/agent/patterns/PatternList';
 import { ApiError } from '@/services/client/ApiError';
-import { ProjectAgentContractError, projectAgentService } from '@/services/projectAgentService';
+import { ProjectAgentContractError, projectAgentService } from '../services/projectAgentService';
 
 import type { WorkflowPattern } from '@/types/agent';
 

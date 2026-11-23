@@ -239,11 +239,11 @@ test('surface cancellation drains the late grant before parent release', async (
 });
 test('native frame name is applied to iframe identity and surface uses layout cleanup', () => {
   const surface = readFileSync(
-    new URL('../src/features/sandbox/RemoteDesktopSurface.tsx', import.meta.url),
+    new URL('../../../../plugins/business/environments/ui/desktop/sandbox/RemoteDesktopSurface.tsx', import.meta.url),
     'utf8',
   );
   const hook = readFileSync(
-    new URL('../src/features/sandbox/useSandboxRuntimeSurface.ts', import.meta.url),
+    new URL('../../../../plugins/business/environments/ui/desktop/sandbox/useSandboxRuntimeSurface.ts', import.meta.url),
     'utf8',
   );
   assert.match(surface, /name=\{session.frame_name\}/u);

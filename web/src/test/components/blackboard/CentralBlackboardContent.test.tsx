@@ -1,17 +1,17 @@
 import { fireEvent } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
+import { CentralBlackboardContent } from '@business/workspace/ui/web/components/blackboard/CentralBlackboardContent';
 import {
   AUTHORITATIVE,
   HOSTED,
   NON_AUTHORITATIVE,
   OWNED,
-} from '@/components/blackboard/blackboardSurfaceContract';
+} from '@business/workspace/ui/web/components/blackboard/blackboardSurfaceContract';
 import { render, screen, within } from '@/test/utils';
 
-import type { CentralBlackboardContentProps } from '@/components/blackboard/CentralBlackboardContent';
-import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
+import type { CentralBlackboardContentProps } from '@business/workspace/ui/web/components/blackboard/CentralBlackboardContent';
+import type { BlackboardTab } from '@business/workspace/ui/web/components/blackboard/BlackboardTabBar';
 
 import { App } from 'antd';
 
@@ -35,7 +35,7 @@ const workspaceActionsMock = {
   updateGene: vi.fn(),
 };
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaceActions: () => workspaceActionsMock,
   useWorkspaceStore: (selector: (state: any) => unknown) =>
     selector({
@@ -54,11 +54,11 @@ vi.mock('@/components/workspace/chat/ChatPanel', () => ({
   ChatPanel: () => <div>Chat panel</div>,
 }));
 
-vi.mock('@/components/blackboard/tabs/CollaborationOverviewTab', () => ({
+vi.mock('@business/workspace/ui/web/components/blackboard/tabs/CollaborationOverviewTab', () => ({
   CollaborationOverviewTab: () => <div>Collaboration overview</div>,
 }));
 
-vi.mock('@/components/blackboard/tabs/ConversationRosterSection', () => ({
+vi.mock('@business/workspace/ui/web/components/blackboard/tabs/ConversationRosterSection', () => ({
   ConversationRosterSection: () => <div>Conversation roster section</div>,
 }));
 
@@ -99,15 +99,15 @@ vi.mock('@/components/workspace/TaskBoard', () => ({
   TaskBoard: () => <div>Task board</div>,
 }));
 
-vi.mock('@/components/blackboard/tabs/SharedFileBrowser', () => ({
+vi.mock('@business/workspace/ui/web/components/blackboard/tabs/SharedFileBrowser', () => ({
   SharedFileBrowser: () => <div>Shared files browser</div>,
 }));
 
-vi.mock('@/components/blackboard/tabs/StatusTab', () => ({
+vi.mock('@business/workspace/ui/web/components/blackboard/tabs/StatusTab', () => ({
   StatusTab: () => <div>Presence bar</div>,
 }));
 
-vi.mock('@/components/blackboard/WorkstationArrangementBoard', () => ({
+vi.mock('@business/workspace/ui/web/components/blackboard/WorkstationArrangementBoard', () => ({
   WorkstationArrangementBoard: () => <div>Workstation arrangement board</div>,
 }));
 

@@ -7,7 +7,7 @@ import { App as AntApp } from 'antd';
 import { DecisionRecords } from '@/pages/tenant/DecisionRecords';
 import { TrustPolicies } from '@/pages/tenant/TrustPolicies';
 import { projectService } from '@/services/projectService';
-import { workspaceService } from '@/services/workspaceService';
+import { workspaceService } from '@business/workspace/ui/web/services/workspaceService';
 import { useTenantStore } from '@/stores/tenant';
 import { useTrustStore } from '@/stores/trust';
 
@@ -16,7 +16,7 @@ import { fireEvent, render, screen, waitFor } from '../../utils';
 import type { DecisionRecord, TrustPolicy } from '@/services/trustService';
 import type { Tenant } from '@/types/memory';
 import type { Project } from '@/types/memory';
-import type { Workspace } from '@/types/workspace';
+import type { Workspace } from '@business/workspace/ui/web/types/workspace';
 
 const trustServiceMocks = vi.hoisted(() => ({
   createPolicy: vi.fn(),
@@ -35,7 +35,7 @@ vi.mock('@/services/projectService', () => ({
   },
 }));
 
-vi.mock('@/services/workspaceService', () => ({
+vi.mock('@business/workspace/ui/web/services/workspaceService', () => ({
   workspaceService: {
     listByProject: vi.fn(),
   },

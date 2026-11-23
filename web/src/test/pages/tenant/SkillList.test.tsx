@@ -56,7 +56,7 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('@/stores/skill', () => ({
+vi.mock('@business/agent/ui/web/stores/skill', () => ({
   useSkillStore: () => skillStore,
   useSkillLoading: () => false,
   useSkillError: () => null,
@@ -64,7 +64,7 @@ vi.mock('@/stores/skill', () => ({
   useSkillTotal: () => skillStore.total,
 }));
 
-vi.mock('@/services/skillService', () => ({
+vi.mock('@business/agent/ui/web/services/skillService', () => ({
   skillAPI: skillApiMock,
 }));
 

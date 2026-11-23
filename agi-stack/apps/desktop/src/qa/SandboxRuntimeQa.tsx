@@ -2,14 +2,14 @@ import '@radix-ui/themes/styles.css';
 import { Theme } from '@radix-ui/themes';
 import { createRoot, type Root } from 'react-dom/client';
 
-import { SessionSandboxTools } from '../features/sandbox/SessionSandboxTools';
+import { SessionSandboxTools } from '@business/environments/ui/desktop/sandbox/SessionSandboxTools';
 import type {
   SandboxFileDownloadRequest,
   SandboxFileListRequest,
   SandboxFileReadRequest,
   SandboxRuntimeClient,
-} from '../features/sandbox/sandboxRuntimeClient';
-import type { SessionSandboxRuntimeSurface } from '../features/sandbox/useSandboxRuntimeSurface';
+} from '@business/environments/ui/desktop/sandbox/sandboxRuntimeClient';
+import type { SessionSandboxRuntimeSurface } from '@business/environments/ui/desktop/sandbox/useSandboxRuntimeSurface';
 import { I18nProvider } from '../i18n';
 import '../styles/global.css';
 import './parityRuntimeQa.css';

@@ -4,16 +4,16 @@ import { useTranslation } from 'react-i18next';
 
 import { Check, ChevronDown, FileEdit, ShieldQuestion, Zap } from 'lucide-react';
 
-import { useAgentHITLStore } from '@/stores/agent/hitlStore';
+import { useAgentHITLStore } from '@business/agent/ui/web/stores/agent/hitlStore';
 import {
   PERMISSION_MODES,
   shouldAutoApprovePermission,
   useAgentPermissionModeStore,
   type AgentPermissionMode,
-} from '@/stores/agent/permissionModeStore';
-import { useAgentV3Store } from '@/stores/agentV3';
+} from '@business/agent/ui/web/stores/agent/permissionModeStore';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 
-import { useConversationApprovalMode } from '@/hooks/useConversationApprovalMode';
+import { useConversationApprovalMode } from '@business/agent/ui/web/hooks/useConversationApprovalMode';
 
 export interface PermissionModeSwitcherProps {
   conversationId: string | null;

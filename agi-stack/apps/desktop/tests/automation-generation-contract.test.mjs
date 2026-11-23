@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const root = '/tmp/agistack-desktop-test-dist/src';
 const { normalizeAutomationCapabilities, normalizeAutomationCapabilityEnvelope } = require(
-  `${root}/features/automations/automationModel.js`,
+  `/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/automationModel.js`,
 );
 const {
   normalizeAutomationCapabilityContract,

@@ -62,7 +62,7 @@ function harness(client) {
     new Function('require', 'module', 'exports', code)(
       (name) => {
         if (name === 'react') return react;
-        if (name === '../../i18n')
+        if (name === '@desktop/i18n')
           return { useI18n: () => ({ t: (key, args) => `${key}:${JSON.stringify(args)}` }) };
         return load(new URL(`${name}.ts`, url));
       },
@@ -72,7 +72,7 @@ function harness(client) {
     return module.exports;
   }
   const { useSandboxRuntimeSurface } = load(
-    new URL('../src/features/sandbox/useSandboxRuntimeSurface.ts', import.meta.url),
+    new URL('../../../../plugins/business/environments/ui/desktop/sandbox/useSandboxRuntimeSurface.ts', import.meta.url),
   );
   let props = { config: { projectId: 'p1' }, enabled: true, client };
   function render(next = {}) {
@@ -364,7 +364,7 @@ for (const [mode, rootPath] of [
     const module = { exports: {} };
     const Browser = () => null;
     const source = readFileSync(
-      new URL('../src/features/sandbox/SessionSandboxTools.tsx', import.meta.url),
+      new URL('../../../../plugins/business/environments/ui/desktop/sandbox/SessionSandboxTools.tsx', import.meta.url),
       'utf8',
     );
     const code = ts.transpileModule(source, {
@@ -387,7 +387,7 @@ for (const [mode, rootPath] of [
             jsx: (type, props) => ({ type, props }),
             jsxs: (type, props) => ({ type, props }),
           };
-        if (name === '../../i18n') return { useI18n: () => ({ t: (key) => key }) };
+        if (name === '@desktop/i18n') return { useI18n: () => ({ t: (key) => key }) };
         if (name === './SandboxFileBrowser') return { SandboxFileBrowser: Browser };
         return {};
       },
@@ -469,7 +469,7 @@ test('remote component cleanup invokes the required stop callback when its pane 
   const module = { exports: {} };
   const code = ts.transpileModule(
     readFileSync(
-      new URL('../src/features/sandbox/RemoteDesktopSurface.tsx', import.meta.url),
+      new URL('../../../../plugins/business/environments/ui/desktop/sandbox/RemoteDesktopSurface.tsx', import.meta.url),
       'utf8',
     ),
     {
@@ -494,7 +494,7 @@ test('remote component cleanup invokes the required stop callback when its pane 
           jsx: (type, props) => ({ type, props }),
           jsxs: (type, props) => ({ type, props }),
         };
-      if (name === '../../i18n') return { useI18n: () => ({ t: (key) => key }) };
+      if (name === '@desktop/i18n') return { useI18n: () => ({ t: (key) => key }) };
       return {};
     },
     module,
@@ -538,7 +538,7 @@ test('SessionSandboxTools forwards stop to the desktop child and removes that ch
   const module = { exports: {} };
   const code = ts.transpileModule(
     readFileSync(
-      new URL('../src/features/sandbox/SessionSandboxTools.tsx', import.meta.url),
+      new URL('../../../../plugins/business/environments/ui/desktop/sandbox/SessionSandboxTools.tsx', import.meta.url),
       'utf8',
     ),
     {
@@ -569,7 +569,7 @@ test('SessionSandboxTools forwards stop to the desktop child and removes that ch
           jsx: (type, props) => ({ type, props }),
           jsxs: (type, props) => ({ type, props }),
         };
-      if (name === '../../i18n') return { useI18n: () => ({ t: (key) => key }) };
+      if (name === '@desktop/i18n') return { useI18n: () => ({ t: (key) => key }) };
       if (name === './RemoteDesktopSurface') return { RemoteDesktopSurface: Remote };
       if (name === './SandboxFileBrowser') return { SandboxFileBrowser: Browser };
       return {};

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { sandboxSSEService } from '../../services/sandboxSSEService';
+import { sandboxSSEService } from '@business/environments/ui/web/services/sandboxSSEService';
 import { agentService } from '../../services/agentService';
 
 import type { SandboxStateData } from '../../types/agent';

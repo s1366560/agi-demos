@@ -42,7 +42,7 @@ import {
 
 import { LazyButton, LazyProgress, LazyTag } from '@/components/ui/lazyAntd';
 
-import { useAgentV3Store } from '../../stores/agentV3';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useUnifiedHITLStore } from '../../stores/hitlStore.unified';
 
 import type {

@@ -9,8 +9,8 @@ import type {
   ProjectGraphClient,
   ProjectGraphSnapshot,
   ProjectGraphSourceQuery,
-} from '../features/project-knowledge/projectGraphClient';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectGraphClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import { createDesktopProjectGraphHttpAuthorityV2 } from './desktopProjectGraphHttpProjectionV2';
 import {

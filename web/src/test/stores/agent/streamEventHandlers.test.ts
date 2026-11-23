@@ -1,8 +1,8 @@
 import { useBackgroundStore } from '../../../stores/backgroundStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { createStreamEventHandlers } from '../../../stores/agent/streamEventHandlers';
-import { useAgentPermissionModeStore } from '../../../stores/agent/permissionModeStore';
+import { createStreamEventHandlers } from '@business/agent/ui/web/stores/agent/streamEventHandlers';
+import { useAgentPermissionModeStore } from '@business/agent/ui/web/stores/agent/permissionModeStore';
 import { useCanvasStore } from '../../../stores/canvasStore';
 import { useLayoutModeStore } from '../../../stores/layoutMode';
 import { useUnifiedHITLStore } from '../../../stores/hitlStore.unified';
@@ -16,7 +16,7 @@ import { appendSSEEventToTimeline } from '../../../utils/sseEventAdapter';
 import type {
   DeltaBufferState,
   StreamHandlerDeps,
-} from '../../../stores/agent/streamEventHandlers';
+} from '@business/agent/ui/web/stores/agent/streamEventHandlers';
 import type {
   AgentEvent,
   ThoughtEventData,

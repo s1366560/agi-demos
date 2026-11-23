@@ -11,7 +11,7 @@ const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createProjectSupportRouteModuleLoader,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/project-support/projectSupportRouteModule.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project-support/projectSupportRouteModule.js'
 );
 
 test('Project Support loader stays lazy and renders native ticket authority', async () => {

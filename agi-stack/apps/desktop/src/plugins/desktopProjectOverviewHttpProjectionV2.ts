@@ -1,10 +1,10 @@
 import type {
   ProjectOverviewReadResult,
   ProjectOverviewScope,
-} from '../features/project/projectOverviewClient';
-import { readCloudProjectOverview } from '../features/project/projectOverviewClient';
-import { createCloudProjectOverviewClient } from '../features/project/projectOverviewCloudClient';
-import { createLocalProjectOverviewClient } from '../features/project/projectOverviewLocalClient';
+} from '@business/workspace/ui/desktop/project/projectOverviewClient';
+import { readCloudProjectOverview } from '@business/workspace/ui/desktop/project/projectOverviewClient';
+import { createCloudProjectOverviewClient } from '@business/workspace/ui/desktop/project/projectOverviewCloudClient';
+import { createLocalProjectOverviewClient } from '@business/workspace/ui/desktop/project/projectOverviewLocalClient';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 import type { DesktopRuntimeConfig } from '../types';
 

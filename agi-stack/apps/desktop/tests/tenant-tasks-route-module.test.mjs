@@ -10,7 +10,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createTenantTasksRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/tenant/tenantTasksRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/tenant/tenantTasksRouteModule.js');
 const {
   TENANT_TASKS_REFRESH_INTERVAL_MS,
   tenantTasksAutoRefreshAllowed,

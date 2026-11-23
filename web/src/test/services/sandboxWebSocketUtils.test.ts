@@ -6,7 +6,7 @@ import {
   buildDesktopWebSocketProtocols,
   buildDesktopWebSocketUrl,
   getApiHost,
-} from '../../services/sandboxWebSocketUtils';
+} from '@business/environments/ui/web/services/sandboxWebSocketUtils';
 
 describe('sandboxWebSocketUtils', () => {
   afterEach(() => {

@@ -26,6 +26,7 @@ from sqlalchemy import text
 import docker
 from plugins.business.automation.workflow.tasks import TaskManager
 from plugins.business.knowledge.backend import graph_workflows as workflow
+from plugins.business.knowledge.backend.project_memory_operation import list_project_memories
 from src.application.services import graph_projection_jobs as jobs
 from src.configuration.config import get_settings
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
@@ -254,6 +255,7 @@ async def pipeline(pg_sync, graph, releases, monkeypatch):
                 )
             )
     app = FastAPI()
+    app.state.package_operations_v1 = {"app.knowledge.memories.read": list_project_memories}
     app.include_router(memories.router)
     app.include_router(projects.router)
     app.include_router(episodes.router)
@@ -322,6 +324,26 @@ async def _recover_admitted_projection(sessions, first):
     assert (await jobs.deliver(sessions, first))["projection_state"] == "complete"
 
 
+async def verify_memory_page(http, base, binding, digest):
+    page = await http.get(
+        f"{base}/{PLUGIN}/ui",
+        params={**binding, "page_id": "memories", "target": "web", "expected_digest": digest},
+    )
+    assert page.is_success, page.text
+    assert page.json()["commands"] == ["list-memories"]
+    read = await http.post(
+        f"{base}/{PLUGIN}/commands",
+        json={
+            **binding,
+            "command_id": "list-memories",
+            "expected_digest": digest,
+            "payload": {"search": "enrolled"},
+        },
+    )
+    assert read.is_success, read.text
+    assert {row["id"] for row in read.json()["items"]} == {"first", "second", "third", "fourth"}
+
+
 async def test_episode_projection_runs_once_across_worker_loss_upgrade_and_withdrawal(
     pipeline, monkeypatch
 ):
@@ -330,13 +352,20 @@ async def test_episode_projection_runs_once_across_worker_loss_upgrade_and_withd
     base = "/api/v1/platform-plugins/v2/optional-business"
 
     async def install(archive):
-        raw = {**binding, "archive_base64": archive}
         res = await http.post(
-            base + "/install", json={**raw, "approved_permissions": sorted(jobs.GRANT | {"ui.slot"})}
+            base + "/install",
+            json={
+                **binding,
+                "archive_base64": archive,
+                "approved_permissions": sorted(
+                    jobs.GRANT | {"ui.slot", "app.knowledge.memories.read"}
+                ),
+            },
         )
         assert res.status_code == 200, res.text
         enabled = await http.post(f"{base}/{PLUGIN}/enable", json=binding)
         assert enabled.status_code == 200, enabled.text
+        await verify_memory_page(http, base, binding, res.json()["digest"])
 
     async def process(memory):
         res = await http.post(f"/api/v1/memories/{memory}/reprocess")

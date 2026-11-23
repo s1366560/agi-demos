@@ -11,7 +11,7 @@ import type {
   NativeKnowledgeIndexCoverage,
   NativeKnowledgeIndexSource,
 } from './nativeKnowledgeContracts';
-import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import * as s from './nativeKnowledgeSchema';
 import { sameJson } from './nativeKnowledgeRelationships';
 import { validCommunityResult } from './nativeKnowledgeCommunityRelationships';

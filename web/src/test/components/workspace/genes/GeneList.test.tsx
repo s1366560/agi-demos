@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { GeneList } from '@/components/workspace/genes/GeneList';
 import { fireEvent, render, screen } from '@/test/utils';
 
-import type { CyberGene } from '@/types/workspace';
+import type { CyberGene } from '@business/workspace/ui/web/types/workspace';
 
 const gene: CyberGene = {
   id: 'gene-1',

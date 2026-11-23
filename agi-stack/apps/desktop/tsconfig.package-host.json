@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/packageHost/main.tsx", "src/**/*.d.ts", "../../packages/plugin-slots/src/raw.d.ts"]
+}

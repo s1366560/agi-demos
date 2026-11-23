@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { useWorkspaceStore } from '@/stores/workspace';
-import type { Workspace } from '@/types/workspace';
+import { useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
+import type { Workspace } from '@business/workspace/ui/web/types/workspace';
 
 // Single source of truth shared with the desktop client contract test
 // (agi-stack/apps/desktop/tests/workspace-cross-platform-event-contract.test.mjs).
@@ -26,7 +26,7 @@ const contract = JSON.parse(readFileSync(FIXTURE_PATH, 'utf8')) as {
 // quoted event-type vocabulary must match the contract fixture: the zustand
 // store handlers plus the socket hook that dispatches into them.
 const CONSUMER_SOURCES = [
-  resolve(process.cwd(), 'src/stores/workspace.ts'),
+  resolve(process.cwd(), '../plugins/business/workspace/ui/web/stores/workspace.ts'),
   resolve(process.cwd(), 'src/hooks/useWorkspaceWebSocket.ts'),
 ];
 

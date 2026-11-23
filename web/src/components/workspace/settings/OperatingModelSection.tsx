@@ -11,7 +11,7 @@ import {
 } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
 import { Field, OptionLabel, SettingsSection } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
-import type { WorkspaceCollaborationMode, WorkspaceUseCase } from '@/types/workspace';
+import type { WorkspaceCollaborationMode, WorkspaceUseCase } from '@business/workspace/ui/web/types/workspace';
 
 import type { UpdateDraft } from './types';
 import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';

@@ -12,8 +12,8 @@ import { Loader2, AlertCircle } from 'lucide-react';
 
 import { useThemeStore } from '@/stores/theme';
 
-import { graphService } from '@/services/graphService';
-import type { GraphData, GraphEdge, GraphNode } from '@/services/graphService';
+import { graphService } from '@business/knowledge/ui/web/services/graphService';
+import type { GraphData, GraphEdge, GraphNode } from '@business/knowledge/ui/web/services/graphService';
 
 import { toCytoscapeLayoutOptions, generateCytoscapeStyles, THEME_COLORS } from './Config';
 

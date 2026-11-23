@@ -3,7 +3,7 @@ import { RuntimeV2Error } from '@agistack/plugin-runtime';
 import type {
   DeadLetterQueueQuery,
   DeadLetterQueueScope,
-} from '../features/governance/deadLetterQueueClient';
+} from '@business/automation/ui/desktop/governance/deadLetterQueueClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopDeadLetterQueueBaseInputV2 = Readonly<{

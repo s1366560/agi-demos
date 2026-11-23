@@ -5,7 +5,7 @@ import type {
   DiagnosticProcessingSelection,
   NativeKnowledgeDiagnosticsController,
   NativeKnowledgeDiagnosticsModel,
-} from './nativeKnowledgeDiagnosticsController';
+} from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeDiagnosticsController';
 
 async function saveDiagnosticsExport(
   controller: NativeKnowledgeDiagnosticsController,

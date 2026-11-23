@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { createInstanceTemplatesController } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/instance-templates/instanceTemplatesController.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/instance-templates/instanceTemplatesController.js'
 );
 const { DesktopApiError } = await import(
   '/tmp/agistack-desktop-test-dist/src/api/client.js'

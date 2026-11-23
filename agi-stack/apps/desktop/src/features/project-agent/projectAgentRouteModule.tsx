@@ -6,9 +6,9 @@ import type {
   DesktopRouteSurfaceProps,
 } from '../navigation/desktopRouteModule';
 import type { DesktopRouteContext } from '../navigation/desktopRouteRegistry';
-import type { ProjectAgentScope } from './projectAgentClient';
-import type { ProjectAgentController } from './projectAgentController';
-import type { ProjectAgentViewModel } from './projectAgentPresentationModel';
+import type { ProjectAgentScope } from '@business/agent/ui/desktop/project-agent/projectAgentClient';
+import type { ProjectAgentController } from '@business/agent/ui/desktop/project-agent/projectAgentController';
+import type { ProjectAgentViewModel } from '@business/agent/ui/desktop/project-agent/projectAgentPresentationModel';
 
 const noop = (): void => {};
 export type ProjectAgentRouteContext = Readonly<
@@ -36,7 +36,7 @@ export function createProjectAgentRouteModuleLoader({
   return async () => {
     const [{ ProjectAgentPage }, { useProjectAgentController }] = await Promise.all([
       import('@business/agent/ui/desktop/project-agent/ProjectAgentPage'),
-      import('./useProjectAgentController'),
+      import('@business/agent/ui/desktop/project-agent/useProjectAgentController'),
     ]);
     function ProjectAgentRouteSurface({ context }: DesktopRouteSurfaceProps) {
       const routeContext = normalizeContext(context);
@@ -84,7 +84,7 @@ function BoundRoute({
   createBinding: (context: ProjectAgentRouteContext) => ProjectAgentRouteBinding;
   bindingScopeMismatchReason: string;
   Page: typeof import('@business/agent/ui/desktop/project-agent/ProjectAgentPage').ProjectAgentPage;
-  useController: typeof import('./useProjectAgentController').useProjectAgentController;
+  useController: typeof import('@business/agent/ui/desktop/project-agent/useProjectAgentController').useProjectAgentController;
 }>) {
   const binding = useMemo(
     () => createBinding(context),

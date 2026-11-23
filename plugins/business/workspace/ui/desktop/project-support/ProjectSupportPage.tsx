@@ -13,12 +13,12 @@ import { useI18n } from '@desktop/i18n';
 import type {
   ProjectSupportController,
   ProjectSupportViewModel,
-} from '@desktop/features/project-support/projectSupportController';
+} from './projectSupportController';
 import type {
   ProjectSupportCreateInput,
   ProjectSupportPriority,
   ProjectSupportStatus,
-} from '@desktop/features/project-support/projectSupportTypes';
+} from './projectSupportTypes';
 import './ProjectSupportPage.css';
 
 export function ProjectSupportPage({

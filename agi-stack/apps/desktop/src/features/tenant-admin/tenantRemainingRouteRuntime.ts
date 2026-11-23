@@ -11,10 +11,10 @@ import {
   type DesktopTenantGenesOperationsV2,
 } from '../../plugins/desktopTenantGenesAuthorityModuleV2';
 import { createDesktopTenantPatternsClientV2, type DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
-import { createTenantEventsController } from './tenantEventsController';
-import type { TenantEventsRouteBinding } from './tenantEventsRouteModule';
-import { createTenantGenesController } from './tenantGenesController';
-import type { TenantGenesRouteBinding } from './tenantGenesRouteModule';
+import { createTenantEventsController } from '@business/automation/ui/desktop/tenant-admin/tenantEventsController';
+import type { TenantEventsRouteBinding } from '@business/automation/ui/desktop/tenant-admin/tenantEventsRouteModule';
+import { createTenantGenesController } from '@business/environments/ui/desktop/tenant-admin/tenantGenesController';
+import type { TenantGenesRouteBinding } from '@business/environments/ui/desktop/tenant-admin/tenantGenesRouteModule';
 import type { TenantManagementRouteContext } from './tenantManagementRouteModuleFactory';
 import {
   createDesktopTenantOrganizationSettingsClientV2,
@@ -30,8 +30,8 @@ import { createDesktopTenantSettingsClientV2, type DesktopTenantSettingsOperatio
 import { createTenantSettingsController } from './tenantSettingsController';
 import type { TenantSettingsRouteBinding } from './tenantSettingsRouteModule';
 import { createDesktopTenantWebhooksClientV2, type DesktopTenantWebhooksOperationsV2 } from '../../plugins/desktopTenantWebhooksAuthorityModuleV2';
-import { createTenantWebhooksController } from './tenantWebhooksController';
-import type { TenantWebhooksRouteBinding } from './tenantWebhooksRouteModule';
+import { createTenantWebhooksController } from '@business/automation/ui/desktop/tenant-admin/tenantWebhooksController';
+import type { TenantWebhooksRouteBinding } from '@business/automation/ui/desktop/tenant-admin/tenantWebhooksRouteModule';
 
 export function createTenantPatternsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,

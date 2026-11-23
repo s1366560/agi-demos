@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSearchState } from '@/hooks/useSearchState';
 
 // Mock the graphService
-vi.mock('@/services/graphService', () => ({
+vi.mock('@business/knowledge/ui/web/services/graphService', () => ({
   graphService: {
     advancedSearch: vi.fn(),
     searchByGraphTraversal: vi.fn(),

@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from 'antd';
 
-import { SharedFileBrowser } from '@/components/blackboard/tabs/SharedFileBrowser';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { SharedFileBrowser } from '@business/workspace/ui/web/components/blackboard/tabs/SharedFileBrowser';
+import { useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 import { render, screen } from '@/test/utils';
 
-import type { BlackboardFileItem } from '@/services/blackboardFileService';
+import type { BlackboardFileItem } from '@business/workspace/ui/web/services/blackboardFileService';
 import type { ReactNode } from 'react';
 
 const {
@@ -34,7 +34,7 @@ const {
   messageErrorMock: vi.fn(),
 }));
 
-vi.mock('@/services/blackboardFileService', () => ({
+vi.mock('@business/workspace/ui/web/services/blackboardFileService', () => ({
   blackboardFileService: {
     listFiles: (...args: unknown[]) => listFilesMock(...args),
     createDirectory: (...args: unknown[]) => createDirectoryMock(...args),

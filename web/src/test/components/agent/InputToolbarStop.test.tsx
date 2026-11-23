@@ -6,9 +6,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { InputToolbar } from '@/components/agent/InputToolbar';
 import { ApiError, ApiErrorType } from '@/services/client/ApiError';
 import { httpClient } from '@/services/client/httpClient';
-import * as agentPersistence from '@/stores/agent/persistence';
-import { useStreamingStore } from '@/stores/agent/streamingStore';
-import { useAgentV3Store } from '@/stores/agentV3';
+import * as agentPersistence from '@business/agent/ui/web/stores/agent/persistence';
+import { useStreamingStore } from '@business/agent/ui/web/stores/agent/streamingStore';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { createDefaultConversationState } from '@/types/conversationState';
 
 import { installResourceOperationFixtureV2 } from '../../services/webResourceOperationFixtureV2';

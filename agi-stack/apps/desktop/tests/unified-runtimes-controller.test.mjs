@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { createUnifiedRuntimesController } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/unified-runtimes/unifiedRuntimesController.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/unified-runtimes/unifiedRuntimesController.js'
 );
 
 const cloudScope = Object.freeze({

@@ -34,14 +34,14 @@ import {
   workspaceKnowledgeIsAvailable,
   workspaceSandboxStatusPresentation,
   type WorkspaceSessionSummary,
-} from '@desktop/features/workspace/workspaceOverviewModel';
+} from './workspaceOverviewModel';
 import {
   conversationTreeStatusPresentation,
   type WorkspaceTreeStatusTone,
-} from '@desktop/features/workspace/workspaceTreeModel';
-import type { WorkspaceLiveActivity } from '@desktop/features/workspace/workspaceActivityEventModel';
-import { WorkspaceAutonomyAttentionCard } from '@desktop/features/workspace/WorkspaceAutonomyAttentionCard';
-import { WorkspaceContextState } from '@desktop/features/workspace/WorkspaceContextState';
+} from './workspaceTreeModel';
+import type { WorkspaceLiveActivity } from './workspaceActivityEventModel';
+import { WorkspaceAutonomyAttentionCard } from './WorkspaceAutonomyAttentionCard';
+import { WorkspaceContextState } from './WorkspaceContextState';
 import '@desktop/features/workspace/WorkspaceOverview.css';
 
 const UNAVAILABLE_AUTONOMY_ATTENTIONS: WorkspaceAuthorityCollection<WorkspaceAutonomyAttention> = {

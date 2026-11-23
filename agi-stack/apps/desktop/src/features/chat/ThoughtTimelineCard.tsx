@@ -10,7 +10,7 @@ import type { AgentTimelineItem } from '../../types';
 import {
   formatToolCallDuration,
   thoughtTimelineDurationMs,
-} from './chatTimelineModel';
+} from '@business/agent/ui/desktop/chat/chatTimelineModel';
 
 /* Web conversation parity 2026-12 (ThinkingBlock): the thought card uses the
    web's Brain glyph. @radix-ui/react-icons ships no brain/lightbulb icon, so

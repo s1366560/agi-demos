@@ -14,8 +14,8 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import { geneMarketService } from '@/services/geneMarketService';
-import type { GeneResponse, InstanceGeneResponse } from '@/services/geneMarketService';
+import { geneMarketService } from '../services/geneMarketService';
+import type { GeneResponse, InstanceGeneResponse } from '../services/geneMarketService';
 
 import { useDebounce } from '@/hooks/useDebounce';
 

@@ -15,15 +15,15 @@ import {
   desktopCloudSocketTransport,
 } from '../api/cloudSocketBridge';
 import type { DesktopRuntimeConfig, TerminalServiceResponse } from '../types';
-import type { SandboxRuntimeCapabilities } from '../features/sandbox/sandboxRuntimeClient';
+import type { SandboxRuntimeCapabilities } from '@business/environments/ui/desktop/sandbox/sandboxRuntimeClient';
 import {
   createCloudTerminalSession,
   resumeCloudTerminalSession,
-} from '../features/sandbox/terminalSessionV2Client';
+} from '@business/environments/ui/desktop/sandbox/terminalSessionV2Client';
 import {
   terminalSessionV2SocketUrl,
   type TerminalSessionV2,
-} from '../features/sandbox/terminalSessionV2';
+} from '@business/environments/ui/desktop/sandbox/terminalSessionV2';
 import type {
   DesktopRendererGenerationActionsV2,
   DesktopRendererServiceOperationLeaseAdmissionV2,

@@ -30,7 +30,7 @@ import {
   useListDefinitionsPage,
   useSetDefinitionFilters,
   useToggleDefinitionEnabled,
-} from '@/stores/agentDefinitions';
+} from '../stores/agentDefinitions';
 import { useUser } from '@/stores/auth';
 import { useProjectStore } from '@/stores/project';
 import { useCurrentTenant } from '@/stores/tenant';

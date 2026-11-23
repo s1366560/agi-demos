@@ -16,7 +16,7 @@ import {
   useDeployError,
   useDeployTotal,
   useDeployActions,
-} from '@/stores/deploy';
+} from '../stores/deploy';
 
 import { streamDeployProgress } from './deployProgressStream';
 import { getStatusColor, formatDate } from './utils/instanceUtils';

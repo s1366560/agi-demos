@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, ApiErrorType } from '@/services/client/ApiError';
-import { poolService, type PoolStatus, type PoolAuthorityScope } from '@/services/poolService';
-import { usePoolStore } from '@/stores/pool';
+import { poolService, type PoolStatus, type PoolAuthorityScope } from '@business/environments/ui/web/services/poolService';
+import { usePoolStore } from '@business/environments/ui/web/stores/pool';
 import { logger } from '@/utils/logger';
 
 vi.mock('@/utils/logger', () => ({
@@ -14,8 +14,8 @@ vi.mock('@/utils/logger', () => ({
   },
 }));
 
-vi.mock('@/services/poolService', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/services/poolService')>();
+vi.mock('@business/environments/ui/web/services/poolService', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@business/environments/ui/web/services/poolService')>();
   return {
     ...original,
     poolService: {

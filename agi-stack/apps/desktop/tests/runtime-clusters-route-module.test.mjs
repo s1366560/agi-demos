@@ -9,7 +9,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createRuntimeClustersRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/runtime-clusters/runtimeClustersRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/runtime-clusters/runtimeClustersRouteModule.js');
 
 test('Runtime Clusters loader stays lazy and renders a native safe inventory', async () => {
   let bindingCalls = 0;

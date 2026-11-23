@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 
-import type { TenantOverviewScope } from './tenantOverviewClient';
-import type { TenantOverviewController } from './tenantOverviewController';
+import type { TenantOverviewScope } from '@business/workspace/ui/desktop/tenant/tenantOverviewClient';
+import type { TenantOverviewController } from '@business/workspace/ui/desktop/tenant/tenantOverviewController';
 
 export function useTenantOverviewController(
   controller: TenantOverviewController,

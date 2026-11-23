@@ -70,7 +70,7 @@ vi.mock('@/routes/v2/webNavigationAuthorityStateV2', async () => {
   };
 });
 
-vi.mock('@/stores/agent/conversationsStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/conversationsStore', () => ({
   useConversationsStore: (selector: (state: typeof conversationsState) => unknown) =>
     selector(conversationsState),
 }));

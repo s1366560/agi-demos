@@ -1,7 +1,7 @@
 import { validCloudMemoryCapabilitySnapshot } from './cloudMemoryCapabilities';
 import type { CloudMemoryCapabilities } from './cloudMemoryCapabilities';
-import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
-import type { ProjectMemoriesSnapshot, ProjectMemory } from './projectMemoriesClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+import type { ProjectMemoriesSnapshot, ProjectMemory } from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
 
 export type CloudMemoryUiAuthority = Readonly<{
   scope: ProjectKnowledgeScope;

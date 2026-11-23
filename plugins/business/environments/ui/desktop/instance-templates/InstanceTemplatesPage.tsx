@@ -6,8 +6,8 @@ import type {
   InstanceTemplateSummary,
   InstanceTemplatesModel,
   InstanceTemplatesQuery,
-} from '@desktop/features/instance-templates/instanceTemplatesTypes';
-import '@desktop/features/instance-templates/InstanceTemplatesPage.css';
+} from './instanceTemplatesTypes';
+import './InstanceTemplatesPage.css';
 
 export function InstanceTemplatesPage({
   model,

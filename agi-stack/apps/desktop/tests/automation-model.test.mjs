@@ -18,7 +18,7 @@ import {
   automationTrigger,
   automationTriggerKind,
   normalizeAutomationCapabilityEnvelope,
-} from '/tmp/agistack-desktop-test-dist/src/features/automations/automationModel.js';
+} from '/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/automationModel.js';
 
 const job = {
   id: 'automation-1',

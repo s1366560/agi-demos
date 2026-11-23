@@ -11,12 +11,12 @@ const mocks = vi.hoisted(() => ({
   definitions: [] as AgentDefinition[],
 }));
 
-vi.mock('@/stores/agentBindings', () => ({
+vi.mock('@business/agent/ui/web/stores/agentBindings', () => ({
   useCreateBinding: () => mocks.createBinding,
   useBindingSubmitting: () => false,
 }));
 
-vi.mock('@/stores/agentDefinitions', () => ({
+vi.mock('@business/agent/ui/web/stores/agentDefinitions', () => ({
   useDefinitions: () => mocks.definitions,
   useListDefinitions: () => mocks.listDefinitions,
 }));

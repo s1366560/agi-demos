@@ -37,7 +37,7 @@ vi.mock('@/stores/auth', () => ({
     selector({ token: authState.token }),
 }));
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaceStore: {
     getState: () => handlers,
   },
@@ -49,8 +49,8 @@ vi.mock('@/services/unifiedEventService', () => ({
   },
 }));
 
-import { useBlackboardSSE } from '@/hooks/useBlackboardSSE';
-import { classifyWorkspaceEventType } from '@/components/blackboard/blackboardSurfaceContract';
+import { useBlackboardSSE } from '@business/workspace/ui/web/hooks/useBlackboardSSE';
+import { classifyWorkspaceEventType } from '@business/workspace/ui/web/components/blackboard/blackboardSurfaceContract';
 
 function HookHarness({
   workspaceId,

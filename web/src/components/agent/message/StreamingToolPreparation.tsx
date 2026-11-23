@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Loader2 } from 'lucide-react';
 
-import { useAgentState, useActiveToolCalls } from '../../../stores/agent/executionStore';
+import { useAgentState, useActiveToolCalls } from '@business/agent/ui/web/stores/agent/executionStore';
 
 export const StreamingToolPreparation: React.FC = memo(() => {
   const agentState = useAgentState();

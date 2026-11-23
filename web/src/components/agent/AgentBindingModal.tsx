@@ -6,8 +6,8 @@ import { Modal, Form, Input, InputNumber, Progress, Select, Tag, message } from 
 
 import { useThemeColors } from '@/hooks/useThemeColor';
 
-import { useCreateBinding, useBindingSubmitting } from '../../stores/agentBindings';
-import { useDefinitions, useListDefinitions } from '../../stores/agentDefinitions';
+import { useCreateBinding, useBindingSubmitting } from '@business/agent/ui/web/stores/agentBindings';
+import { useDefinitions, useListDefinitions } from '@business/agent/ui/web/stores/agentDefinitions';
 
 import type { CreateBindingRequest } from '../../types/multiAgent';
 

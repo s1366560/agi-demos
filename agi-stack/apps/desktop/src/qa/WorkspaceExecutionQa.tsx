@@ -8,7 +8,7 @@ import { WorkspaceOverview } from '@business/workspace/ui/desktop/workspace/Work
 import {
   applyWorkspaceActivityStreamEvent,
   type WorkspaceLiveActivity,
-} from '../features/workspace/workspaceActivityEventModel';
+} from '@business/workspace/ui/desktop/workspace/workspaceActivityEventModel';
 import { I18nProvider } from '../i18n';
 import type {
   AgentConversation,

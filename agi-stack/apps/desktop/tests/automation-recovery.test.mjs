@@ -6,8 +6,8 @@ const require = createRequire(import.meta.url);
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
-const { AutomationRecoveryNotice } = require('/tmp/agistack-desktop-test-dist/src/features/automations/AutomationRecoveryNotice.js');
-const { automationLocalRecovery } = require('/tmp/agistack-desktop-test-dist/src/features/automations/automationModel.js');
+const { AutomationRecoveryNotice } = require('/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/AutomationRecoveryNotice.js');
+const { automationLocalRecovery } = require('/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/automationModel.js');
 
 function markup(state, props = {}) {
   return renderToStaticMarkup(React.createElement(I18nProvider, null,

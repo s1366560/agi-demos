@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
-import type { UnifiedRuntimesModel } from '@desktop/features/unified-runtimes/unifiedRuntimesTypes';
-import '@desktop/features/unified-runtimes/UnifiedRuntimesPage.css';
+import type { UnifiedRuntimesModel } from './unifiedRuntimesTypes';
+import './UnifiedRuntimesPage.css';
 
 export function UnifiedRuntimesPage({
   model,

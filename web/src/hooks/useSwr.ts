@@ -25,7 +25,7 @@
 
 import useSWR, { mutate as globalMutate } from 'swr';
 
-import { schemaAPI } from '@/services/api';
+import { schemaAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 import { httpClient } from '@/services/client/httpClient';
 
 import type {

@@ -30,12 +30,12 @@ import {
   type PoolAuthorityScope,
   type PoolInstance,
   type PoolStatus,
-} from '@/services/poolService';
+} from '../services/poolService';
 import {
   projectSandboxService,
   type ProjectSandbox,
   type SandboxStats,
-} from '@/services/projectSandboxService';
+} from '../services/projectSandboxService';
 
 import { formatDateTime } from '@/utils/date';
 

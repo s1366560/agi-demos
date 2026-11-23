@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { GeneConfigForm } from '@/components/workspace/genes/GeneConfigForm';
-import type { GeneConfigDraft } from '@/types/geneConfig';
+import type { GeneConfigDraft } from '@business/environments/ui/web/types/geneConfig';
 
 import { render, screen } from '../../utils';
 

@@ -11,8 +11,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Brain, CheckCircle2, Eye, Loader2, MessageCircle, RotateCcw, Zap } from 'lucide-react';
 
-import { useAgentState, usePendingToolsStack } from '@/stores/agent/executionStore';
-import { useIsStreaming } from '@/stores/agent/streamingStore';
+import { useAgentState, usePendingToolsStack } from '@business/agent/ui/web/stores/agent/executionStore';
+import { useIsStreaming } from '@business/agent/ui/web/stores/agent/streamingStore';
 
 type AgentState =
   | 'idle'

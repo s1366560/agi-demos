@@ -6,7 +6,7 @@ import { AlertTriangle, Loader2, Save, X } from 'lucide-react';
 
 import { AppModal } from '@/components/common';
 
-import { memoryAPI } from '../../services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 
 import { parseMemoryMetadata } from './memoryMetadata';
 

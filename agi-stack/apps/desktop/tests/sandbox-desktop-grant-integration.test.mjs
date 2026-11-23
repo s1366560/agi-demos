@@ -48,6 +48,7 @@ function fn(ast, name) {
   return nodes(ast, (node) => ts.isFunctionDeclaration(node) && node.name?.text === name)[0];
 }
 function compileFunction(source, bindings, name) {
+  bindings = { fullDesktop: true, ...bindings };
   if (bindings.sandboxDesktopGrants) {
     bindings = {
       ...bindings,

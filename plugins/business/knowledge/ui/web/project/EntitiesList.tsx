@@ -53,7 +53,7 @@ import { formatDateOnly, formatDateTime } from '@/utils/date';
 import { VirtualGrid } from '@/components/common/index';
 import { getEntityTypeColor } from '@/components/graph/index';
 import { Pagination } from '@/components/shared/Pagination';
-import { graphService } from '@/services/graphService';
+import { graphService } from '../services/graphService';
 import { logger } from '@/utils/logger';
 
 import type {

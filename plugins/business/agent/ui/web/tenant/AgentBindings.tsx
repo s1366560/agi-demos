@@ -20,7 +20,7 @@ import { Link, Plus, RefreshCw, Route, Search } from 'lucide-react';
 
 import { AgentBindingModal } from '@/components/agent/AgentBindingModal';
 import { Spinner } from '@/components/common/Spinner';
-import { bindingsService } from '@/services/agent/bindingsService';
+import { bindingsService } from '../services/agent/bindingsService';
 import {
   useBindingError,
   useBindingLoading,
@@ -29,8 +29,8 @@ import {
   useDeleteBinding,
   useListBindings,
   useToggleBinding,
-} from '@/stores/agentBindings';
-import { useDefinitions, useListDefinitions } from '@/stores/agentDefinitions';
+} from '../stores/agentBindings';
+import { useDefinitions, useListDefinitions } from '../stores/agentDefinitions';
 import { useUser } from '@/stores/auth';
 import { useCurrentTenant } from '@/stores/tenant';
 import { formatDateTime } from '@/utils/date';

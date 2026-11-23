@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { memoryAPI } from '../../../services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 import { render, screen, fireEvent, waitFor } from '../../utils';
 
 import { App } from 'antd';
@@ -103,7 +103,7 @@ const mockMemories = [
   },
 ];
 
-vi.mock('../../../services/api', () => ({
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({
   memoryAPI: {
     list: vi.fn(),
     delete: vi.fn(() => Promise.resolve()),

@@ -58,7 +58,7 @@ let mockRoster: {
   focused_agent_id: null,
 };
 
-vi.mock('@/hooks/useConversationParticipants', () => ({
+vi.mock('@business/agent/ui/web/hooks/useConversationParticipants', () => ({
   useConversationParticipants: () => ({
     roster: mockRoster,
     loading: false,
@@ -83,13 +83,13 @@ vi.mock('@/services/agentService', () => ({
   },
 }));
 
-vi.mock('@/services/agent/restApi', () => ({
+vi.mock('@business/agent/ui/web/services/agent/restApi', () => ({
   restApi: {
     getConversation: (...args: unknown[]) => getConversation(...args),
   },
 }));
 
-vi.mock('@/services/workspaceService', () => ({
+vi.mock('@business/workspace/ui/web/services/workspaceService', () => ({
   workspaceTaskService: {
     list: (...args: unknown[]) => listTasks(...args),
   },

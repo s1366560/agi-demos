@@ -9,7 +9,7 @@ const {
   '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTasksAuthorityModuleV2.js'
 );
 const { loadTenantTasksCapability } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantTasksCapability.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/tenant/tenantTasksCapability.js'
 );
 
 const originalFetch = globalThis.fetch;

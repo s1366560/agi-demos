@@ -9,7 +9,7 @@ import type {
   RuntimePoolScope,
   RuntimePoolStatus,
   RuntimePoolTier,
-} from '../features/runtime-pool/runtimePoolClient';
+} from '@business/environments/ui/desktop/runtime-pool/runtimePoolClient';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 
 export const DESKTOP_RUNTIME_POOL_CLOUD_ACTIONS_V2 = Object.freeze([

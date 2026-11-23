@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { createProjectWorkspacesV2Client } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/project-workspaces/projectWorkspacesV2Client.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project-workspaces/projectWorkspacesV2Client.js'
 );
 
 test('Project Workspaces maps list and create through project-scoped V2 operations', async () => {

@@ -11,10 +11,10 @@ const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const { DesktopApiError } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const {
   createProjectWorkspacesController,
-} = require('/tmp/agistack-desktop-test-dist/src/features/project-workspaces/projectWorkspacesController.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project-workspaces/projectWorkspacesController.js');
 const {
   createProjectWorkspacesRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/project-workspaces/projectWorkspacesRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project-workspaces/projectWorkspacesRouteModule.js');
 
 const cloudScope = Object.freeze({
   authority: 'cloud',

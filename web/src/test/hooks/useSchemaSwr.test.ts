@@ -8,12 +8,12 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
-import { schemaAPI } from '@/services/api';
+import { schemaAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 
 import { useEntityTypes, useEdgeTypes, useEdgeMaps, useSchemaData } from '@/hooks/useSwr';
 
 // Mock the API service
-vi.mock('@/services/api', () => ({
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({
   schemaAPI: {
     listEntityTypes: vi.fn(),
     listEdgeTypes: vi.fn(),

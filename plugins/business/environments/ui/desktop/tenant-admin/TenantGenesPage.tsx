@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 
 import { useI18n } from '@desktop/i18n';
-import type { TenantGenesController } from '@desktop/features/tenant-admin/tenantGenesController';
-import type { TenantGenesViewModel } from '@desktop/features/tenant-admin/tenantGenesPresentationModel';
+import type { TenantGenesController } from './tenantGenesController';
+import type { TenantGenesViewModel } from './tenantGenesPresentationModel';
 import { TenantAdminDegradedNotice, TenantAdminRouteState } from '@desktop/features/tenant-admin/TenantAdminRouteState';
 
 export function TenantGenesPage({

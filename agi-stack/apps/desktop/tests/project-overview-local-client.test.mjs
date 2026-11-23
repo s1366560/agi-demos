@@ -7,7 +7,7 @@ import {
   isCurrentLocalConversationStatusRequest,
   nextLocalConversationStatusRequest,
   parseLocalProjectOverviewPayload,
-} from '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewLocalClient.js';
+} from '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/projectOverviewLocalClient.js';
 
 const scope = {
   authority: 'local',

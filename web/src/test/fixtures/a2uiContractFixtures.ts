@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { A2UIMessageStreamSnapshot } from '@/stores/agent/a2uiMessages';
+import type { A2UIMessageStreamSnapshot } from '@business/agent/ui/web/stores/agent/a2uiMessages';
 
 type ContractTier = 'tier1' | 'tier2' | 'tier3';
 type ContractTarget = 'backend' | 'frontend' | 'prompt';

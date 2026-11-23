@@ -9,10 +9,10 @@ const {
   createSandboxRuntimeClient,
   parseKasmProxySession,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/sandbox/sandboxRuntimeClient.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/sandbox/sandboxRuntimeClient.js'
 );
 const { createCloudTerminalSession, resumeCloudTerminalSession } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/sandbox/terminalSessionV2Client.js',
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/sandbox/terminalSessionV2Client.js',
 );
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 

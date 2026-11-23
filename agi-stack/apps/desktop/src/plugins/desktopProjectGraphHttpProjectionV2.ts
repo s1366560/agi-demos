@@ -1,7 +1,7 @@
 import {
   readGraphNodeProvenance,
   readGraphEdgeProvenance,
-} from '../features/project-knowledge/projectGraphProvenance';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectGraphProvenance';
 import {
   PROJECT_GRAPH_DEGRADED_REASON,
   PROJECT_GRAPH_LOCAL_REASON,
@@ -9,7 +9,7 @@ import {
   type ProjectGraphNode,
   type ProjectGraphSnapshot,
   type ProjectGraphSourceQuery,
-} from '../features/project-knowledge/projectGraphClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectGraphClient';
 import {
   isRecord,
   observeProjectKnowledgeScope,
@@ -21,7 +21,7 @@ import {
   requireProjectKnowledgeScope,
   requireText,
   type ProjectKnowledgeScope,
-} from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import {
   cloneDesktopProjectGraphRuntimeConfigV2,

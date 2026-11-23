@@ -44,7 +44,7 @@ const {
   workspaceTreeSessionAvailability,
   workspaceTreeAvailability,
   workspaceTreeStatusIsLiveRun,
-} = require('/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/workspaceTreeModel.js');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 const workspaceDockSource = readFileSync(

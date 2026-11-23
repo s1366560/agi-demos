@@ -13,7 +13,7 @@ import {
 import {
   removeConversationFromWorkspaceRows,
   replaceConversationInWorkspaceRows,
-} from '../features/workspace/workspaceTreeModel';
+} from '@business/workspace/ui/desktop/workspace/workspaceTreeModel';
 import { I18nProvider } from '../i18n';
 import type {
   AgentCapabilityMode,

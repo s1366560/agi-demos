@@ -7,7 +7,7 @@ const { DesktopApiError } = await import(
 const {
   createTenantOverviewController,
 } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantOverviewController.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/tenant/tenantOverviewController.js'
 );
 
 test('controller loads, retries and hides stale tenant results after a scope switch', async () => {

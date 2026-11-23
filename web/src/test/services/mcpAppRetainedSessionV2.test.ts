@@ -13,7 +13,7 @@ import {
   MCPAppRetainedSessionV2,
   type MCPAppSessionSnapshotV2,
 } from '@/services/mcp/MCPAppRetainedSessionV2';
-import { projectSandboxService } from '@/services/projectSandboxService';
+import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
 import { renderHook, act, cleanup } from '@testing-library/react';
 import { useMCPClient } from '@/hooks/useMCPClient';
 function deferred<T>() {

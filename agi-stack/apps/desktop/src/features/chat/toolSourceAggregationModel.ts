@@ -3,7 +3,7 @@ import {
   pairToolCallItems,
   toolCallPresentationKind,
   type ToolCallPair,
-} from './chatTimelineModel';
+} from '@business/agent/ui/desktop/chat/chatTimelineModel';
 
 export type AggregatedToolSource = {
   id: string;

@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   listAcpAgents: vi.fn(),
 }));
 
-vi.mock('@/stores/agentDefinitions', () => ({
+vi.mock('@business/agent/ui/web/stores/agentDefinitions', () => ({
   useCreateDefinition: () => mocks.createDefinition,
   useUpdateDefinition: () => mocks.updateDefinition,
   useDefinitionSubmitting: () => false,
@@ -32,13 +32,13 @@ vi.mock('@/services/agentService', () => ({
   },
 }));
 
-vi.mock('@/services/skillService', () => ({
+vi.mock('@business/agent/ui/web/services/skillService', () => ({
   skillAPI: {
     list: mocks.listSkills,
   },
 }));
 
-vi.mock('@/services/acpService', () => ({
+vi.mock('@business/agent/ui/web/services/acpService', () => ({
   acpService: { listAgents: mocks.listAcpAgents },
 }));
 

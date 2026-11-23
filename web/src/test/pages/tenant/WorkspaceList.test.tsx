@@ -5,7 +5,7 @@ import { act, render, screen, waitFor } from '../../utils';
 
 import { WorkspaceList } from '@business/workspace/ui/web/tenant/WorkspaceList';
 // eslint-disable-next-line no-restricted-imports
-import { workspacePlanService, workspaceTaskService } from '../../../services/workspaceService';
+import { workspacePlanService, workspaceTaskService } from '@business/workspace/ui/web/services/workspaceService';
 
 let projectState: any;
 let tenantState: any;
@@ -24,14 +24,14 @@ vi.mock('../../../stores/project', () => ({
     }),
 }));
 
-vi.mock('../../../stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaces: () => workspaceState.workspaces,
   useWorkspaceLoading: () => workspaceState.isLoading,
   useWorkspaceError: () => workspaceState.error ?? null,
   useWorkspaceActions: () => workspaceState.actions,
 }));
 
-vi.mock('../../../services/workspaceService', () => ({
+vi.mock('@business/workspace/ui/web/services/workspaceService', () => ({
   workspaceObjectiveService: {
     list: vi.fn().mockResolvedValue([]),
   },

@@ -4,7 +4,7 @@
 
 import { memo } from 'react';
 
-import { useConversationsStore } from '../../../stores/agent/conversationsStore';
+import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
 import { ConversationSummaryCard } from '../chat/ConversationSummaryCard';
 
 export const ConversationSummaryCardWrapper: React.FC<{

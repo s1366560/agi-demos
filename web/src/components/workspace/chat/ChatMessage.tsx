@@ -7,7 +7,7 @@ import { Bot, User } from 'lucide-react';
 
 import { useLocaleDateFormat } from '@/i18n/formatters';
 
-import type { WorkspaceMessage } from '@/types/workspace';
+import type { WorkspaceMessage } from '@business/workspace/ui/web/types/workspace';
 
 const { Text } = Typography;
 

@@ -93,7 +93,7 @@ vi.mock('@/stores/tenant', () => ({
   useTenantStore: (selector: (state: typeof tenantState) => unknown) => selector(tenantState),
 }));
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useCurrentWorkspace: () => ({ id: 'ws-current', tenant_id: 'tenant-1', project_id: 'project-1' }),
   useWorkspaces: () => [{ id: 'ws-current', tenant_id: 'tenant-1', project_id: 'project-1' }],
 }));

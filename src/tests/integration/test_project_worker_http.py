@@ -48,7 +48,14 @@ async def test_closed_worker_release_through_project_http(
             {"schema": "memstack.mcp-oci-worker/1", "image": image, "entrypoint": "/app/worker"}
         )
     )
-    (tmp_path / "contribution.json").write_text(json.dumps(DOC))
+    signed_command = {
+        "id": "probe-action",
+        "tool": "probe",
+        "payload": {},
+        "accepts_input": True,
+        "permissions": ["tools.execute"],
+    }
+    (tmp_path / "contribution.json").write_text(json.dumps({**DOC, "commands": [signed_command]}))
     cfg = tmp_path / "package.json"
     cfg.write_text(
         json.dumps(
@@ -102,15 +109,41 @@ async def test_closed_worker_release_through_project_http(
         all=True, filters={"label": f"memstack.release={admitted['digest']}"}
     )
 
+    command = await client.post(
+        root + "/commands?stream=true",
+        json={**scope, "command_id": "probe-action", "expected_digest": admitted["digest"]},
+        headers=headers,
+    )
+    assert command.is_success and command.headers["content-type"] == "application/x-ndjson"
+    messages = [json.loads(line) for line in command.text.splitlines()]
+    assert [msg for msg in messages if msg["type"] != "keepalive"] == events
+
     # ASGITransport buffers the response. Use TCP for the client-disconnect contract.
     await _disconnect_after_progress(
-        client._transport.app, root, scope, headers, admitted["digest"], docker
+        client._transport.app,
+        root + "/invoke-stream",
+        {"tool_name": "probe"},
+        scope,
+        headers,
+        admitted["digest"],
+        docker,
+    )
+    await _disconnect_after_progress(
+        client._transport.app,
+        root + "/commands?stream=true",
+        {"command_id": "probe-action"},
+        scope,
+        headers,
+        admitted["digest"],
+        docker,
     )
     receipts = [
         json.loads(record.getMessage())
         for record in caplog.records
         if record.name == "plugin_audit.project_package"
     ]
+    command_calls = [event for event in receipts if event["operation"] == "command"]
+    assert [event["outcome"] for event in command_calls] == ["ok", "cancelled"]
     calls = [event for event in receipts if event["operation"] == "tool"]
     assert [(e["executor"], e["outcome"]) for e in calls] == [("oci", "ok"), ("oci", "cancelled")]
     assert all(e["actor_id"] == "owner" and e["digest"] == admitted["digest"] for e in calls)
@@ -143,7 +176,7 @@ async def _check_replica_execution_backend(app, db_session, image, monkeypatch):
     assert await project_packages_ready(request, db_session)
 
 
-async def _disconnect_after_progress(app, root, scope, headers, digest, engine):
+async def _disconnect_after_progress(app, path, operation, scope, headers, digest, engine):
     options = uvicorn.Config(app, lifespan="off", log_level="error", access_log=False)
     server = uvicorn.Server(options)
     with socket.socket() as listener:
@@ -161,11 +194,11 @@ async def _disconnect_after_progress(app, root, scope, headers, digest, engine):
                 ) as tcp,
                 tcp.stream(
                     "POST",
-                    root + "/invoke-stream",
+                    path,
                     json={
                         **scope,
                         "expected_digest": digest,
-                        "tool_name": "probe",
+                        **operation,
                         "payload": {"wait": True},
                     },
                     headers=headers,

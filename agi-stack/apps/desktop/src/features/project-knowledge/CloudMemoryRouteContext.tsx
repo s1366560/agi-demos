@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
-import type { CloudMemoryClient } from './cloudMemoryClient';
+import type { CloudMemoryClient } from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryClient';
 import type { CloudMemoryUiAuthority } from './cloudMemoryUiAuthority';
-import type { ProjectMemoriesClient } from './projectMemoriesClient';
+import type { ProjectMemoriesClient } from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
 
 export type CloudMemoryRouteBinding = Readonly<{
   authority: CloudMemoryUiAuthority;

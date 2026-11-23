@@ -13,8 +13,8 @@ import type {
   NativeKnowledgeSyncTargetRequest,
 } from './nativeKnowledgeRpcGenerated';
 import type { NativeKnowledgeScope } from './nativeKnowledgeContracts';
-import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
-import { projectKnowledgeError } from './projectKnowledgeClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+import { projectKnowledgeError } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import { definitions } from './nativeKnowledgeConnectionSchemaGenerated';
 import { requireNativeKnowledgeScope } from './nativeKnowledgeValidation';
 import { sameJson } from './nativeKnowledgeRelationships';

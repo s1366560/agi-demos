@@ -9,7 +9,7 @@ import {
   type TenantEventFilters,
   type TenantEventsClient,
   type TenantEventsSnapshot,
-} from '../features/tenant-admin/tenantEventsClient';
+} from '@business/automation/ui/desktop/tenant-admin/tenantEventsClient';
 import type {
   TenantManagementRequestOptions,
   TenantManagementScope,

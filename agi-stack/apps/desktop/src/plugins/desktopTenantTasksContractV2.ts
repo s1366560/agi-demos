@@ -6,7 +6,7 @@ import type {
   TenantTasksRetryPendingResult,
   TenantTasksScope,
   TenantTasksSnapshot,
-} from '../features/tenant/tenantTasksClient';
+} from '@business/workspace/ui/desktop/tenant/tenantTasksClient';
 
 const SNAPSHOT_KEYS_V2 = new Set([
   'scope',

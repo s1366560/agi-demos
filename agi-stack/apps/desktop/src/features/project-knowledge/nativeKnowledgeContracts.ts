@@ -1,4 +1,4 @@
-import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type {
   NativeKnowledgeScope,
   NativeKnowledgeRequestMap,

@@ -23,7 +23,7 @@
 
 import { useEffect, useMemo } from 'react';
 
-import { useAgentHITLStore } from '../stores/agent/hitlStore';
+import { useAgentHITLStore } from '@business/agent/ui/web/stores/agent/hitlStore';
 import { useUnifiedHITLStore, usePendingRequests } from '../stores/hitlStore.unified';
 
 import type {

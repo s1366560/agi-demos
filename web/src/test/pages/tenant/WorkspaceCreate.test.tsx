@@ -23,7 +23,7 @@ vi.mock('../../../stores/project', () => ({
     }),
 }));
 
-vi.mock('../../../stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaceActions: () => workspaceState.actions,
 }));
 

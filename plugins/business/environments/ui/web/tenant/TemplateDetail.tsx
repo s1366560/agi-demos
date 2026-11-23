@@ -21,14 +21,14 @@ import { formatDateTime } from '@/utils/date';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 
-import { instanceTemplateService } from '@/services/instanceTemplateService';
-import { useGeneMarketActions, useGenes } from '@/stores/geneMarket';
+import { instanceTemplateService } from '../services/instanceTemplateService';
+import { useGeneMarketActions, useGenes } from '../stores/geneMarket';
 import { useCurrentTenant } from '@/stores/tenant';
 
 import type {
   InstanceTemplateResponse,
   TemplateItemResponse,
-} from '@/services/instanceTemplateService';
+} from '../services/instanceTemplateService';
 
 const { Title, Text, Paragraph } = Typography;
 

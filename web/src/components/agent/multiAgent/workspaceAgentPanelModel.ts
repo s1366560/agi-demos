@@ -6,7 +6,7 @@ import {
 } from '@/utils/workspaceTaskProjection';
 
 import type { AgentNode } from '@/types/multiAgent';
-import type { WorkspaceAgent, WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
+import type { WorkspaceAgent, WorkspacePlanSnapshot, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 
 function now(): number {

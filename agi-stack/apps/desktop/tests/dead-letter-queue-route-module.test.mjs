@@ -10,7 +10,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createDeadLetterQueueRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/governance/deadLetterQueueRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/governance/deadLetterQueueRouteModule.js');
 const {
   DEAD_LETTER_QUEUE_REFRESH_INTERVAL_MS,
   deadLetterQueueAutoRefreshAllowed,

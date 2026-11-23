@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { clusterService } from '@/services/clusterService';
-import { useClusterStore } from '@/stores/cluster';
+import { clusterService } from '@business/environments/ui/web/services/clusterService';
+import { useClusterStore } from '@business/environments/ui/web/stores/cluster';
 
-import type { ClusterHealthResponse, ClusterResponse } from '@/services/clusterService';
+import type { ClusterHealthResponse, ClusterResponse } from '@business/environments/ui/web/services/clusterService';
 
-vi.mock('@/services/clusterService', () => ({
+vi.mock('@business/environments/ui/web/services/clusterService', () => ({
   clusterService: {
     list: vi.fn(),
     getById: vi.fn(),

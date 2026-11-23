@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import type { WorkspaceMember, WorkspaceAgent } from '@/types/workspace';
+import type { WorkspaceMember, WorkspaceAgent } from '@business/workspace/ui/web/types/workspace';
 
 export interface MentionInputProps {
   /** Returns true when the message was accepted/sent; the draft is kept on failure. */

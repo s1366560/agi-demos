@@ -1,5 +1,5 @@
-import type { ProjectKnowledgePresentationInput } from './projectKnowledgePresentationModel';
-import { buildProjectKnowledgePresentation } from './projectKnowledgePresentationModel';
+import type { ProjectKnowledgePresentationInput } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgePresentationModel';
+import { buildProjectKnowledgePresentation } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgePresentationModel';
 import { PROJECT_TEAM_ROUTE_ID, type ProjectTeamSnapshot } from './projectTeamClient';
 
 export function buildProjectTeamPresentation(

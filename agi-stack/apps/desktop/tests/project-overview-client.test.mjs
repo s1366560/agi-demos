@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   CLOUD_PROJECT_OVERVIEW_LATEST_MEMORIES_QUERY,
   readCloudProjectOverview,
-} from '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewClient.js';
+} from '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/projectOverviewClient.js';
 
 test('Cloud project overview reads detail, stats, and latest-memory authority', async () => {
   const scope = {

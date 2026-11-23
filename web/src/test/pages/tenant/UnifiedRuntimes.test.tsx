@@ -3,15 +3,15 @@ import { Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { UnifiedRuntimes } from '@business/environments/ui/web/tenant/UnifiedRuntimes';
-import { poolService } from '../../../services/poolService';
-import { projectSandboxService } from '../../../services/projectSandboxService';
+import { poolService } from '@business/environments/ui/web/services/poolService';
+import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
 import { render, screen, waitFor } from '../../utils';
 
-import type { PoolInstance, PoolStatus } from '../../../services/poolService';
-import type { ProjectSandbox, SandboxStats } from '../../../services/projectSandboxService';
+import type { PoolInstance, PoolStatus } from '@business/environments/ui/web/services/poolService';
+import type { ProjectSandbox, SandboxStats } from '@business/environments/ui/web/services/projectSandboxService';
 
-vi.mock('../../../services/poolService', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../../services/poolService')>();
+vi.mock('@business/environments/ui/web/services/poolService', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@business/environments/ui/web/services/poolService')>();
   return {
     ...original,
     poolService: {
@@ -21,7 +21,7 @@ vi.mock('../../../services/poolService', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../services/projectSandboxService', () => ({
+vi.mock('@business/environments/ui/web/services/projectSandboxService', () => ({
   projectSandboxService: {
     getStats: vi.fn(),
     listProjectSandboxes: vi.fn(),

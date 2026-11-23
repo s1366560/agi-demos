@@ -1,6 +1,6 @@
 {
   "plugin_id": "memstack-knowledge",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "target": "python",
   "tool_name": "project_graph",
   "worker": "worker.json",

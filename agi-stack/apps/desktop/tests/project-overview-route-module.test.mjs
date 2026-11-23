@@ -25,7 +25,7 @@ const {
 const {
   buildProjectOverviewPresentation,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewPresentationModel.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/projectOverviewPresentationModel.js'
 );
 const {
   createDesktopProductionRouteRegistry,
@@ -57,12 +57,12 @@ const {
 const {
   createProjectOverviewRouteModuleLoader,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewRouteModule.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/projectOverviewRouteModule.js'
 );
 
 const factorySource = readFileSync(
   new URL(
-    '../src/features/project/projectOverviewRouteModule.tsx',
+    '../../../../plugins/business/workspace/ui/desktop/project/projectOverviewRouteModule.tsx',
     import.meta.url,
   ),
   'utf8',
@@ -297,7 +297,7 @@ test('binding scope drift fails closed before the controller hook is mounted', a
 });
 
 test('page and hook code load behind the route loader boundary', () => {
-  assert.match(factorySource, /import\('@business\/workspace\/ui\/desktop\/project\/ProjectOverviewPage'\)/u);
+  assert.match(factorySource, /import\('\.\/ProjectOverviewPage'\)/u);
   assert.match(factorySource, /import\('\.\/useProjectOverviewController'\)/u);
   assert.doesNotMatch(
     factorySource,

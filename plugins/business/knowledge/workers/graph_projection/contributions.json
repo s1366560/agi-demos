@@ -183,6 +183,15 @@
         "graph.projection.compute"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "list-memories",
+      "host_operation": "app.knowledge.memories.read",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.memories.read"
+      ],
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -213,13 +222,33 @@
       ],
       "entry": {
         "path": "ui/knowledge.js",
-        "digest": "sha256:57005f6aaec4a3bf10d8b2779179fbc4da156173c4f7a7c6715bf4d433e965f4"
+        "digest": "sha256:17afa30f93eb6a5fd43565c452edb5adf4b7586484bf20422ab7ff8f47955857"
       },
       "commands": [
         "project-graph"
       ],
       "device_tools": [
         "search_documents"
+      ]
+    },
+    {
+      "id": "memories",
+      "title": "Project memories",
+      "routes": [
+        "/memories",
+        "/project/:projectId/memories",
+        "/tenant/:tenantId/project/:projectId/memories"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/memories.js",
+        "digest": "sha256:b2b655a01353017665ec3d8f31dac4732b0eb9b241680976628ece49b7c43876"
+      },
+      "commands": [
+        "list-memories"
       ]
     }
   ]

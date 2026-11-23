@@ -20,15 +20,15 @@ import { App } from 'antd';
 import { Plus, MessageSquare, Trash2, Edit3, Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useConversationsStore } from '@/stores/agent/conversationsStore';
-import { useAgentV3Store } from '@/stores/agentV3';
+import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useProjectStore } from '@/stores/project';
 import {
   useCurrentWorkspace,
   useWorkspaceActions,
   useWorkspaceTasks,
   useWorkspaces,
-} from '@/stores/workspace';
+} from '@business/workspace/ui/web/stores/workspace';
 
 import { projectAPI } from '@/services/api';
 

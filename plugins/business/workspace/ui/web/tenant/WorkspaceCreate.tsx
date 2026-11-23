@@ -26,7 +26,7 @@ import {
 
 import { useCurrentProject, useProjectStore } from '@/stores/project';
 import { useCurrentTenant } from '@/stores/tenant';
-import { useWorkspaceActions } from '@/stores/workspace';
+import { useWorkspaceActions } from '../stores/workspace';
 
 import { ApiError } from '@/services/client/ApiError';
 
@@ -42,7 +42,7 @@ import {
 
 import { EmptyStateSimple } from '@/components/shared/ui/EmptyStateVariant';
 
-import type { WorkspaceCollaborationMode, WorkspaceUseCase } from '@/types/workspace';
+import type { WorkspaceCollaborationMode, WorkspaceUseCase } from '../types/workspace';
 
 interface CreationOption<T extends string> {
   label: string;

@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SandboxTerminal } from '../../../components/agent/sandbox/SandboxTerminal';
-import { SandboxSection } from '../../../components/agent/SandboxSection';
-import { useSandboxStore } from '../../../stores/sandbox';
+import { SandboxTerminal } from '@business/environments/ui/web/components/sandbox/SandboxTerminal';
+import { SandboxSection } from '@business/environments/ui/web/components/SandboxSection';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 
 const state = vi.hoisted(() => ({
   availability: { owner: {}, available: true },
@@ -23,7 +23,7 @@ vi.mock('../../../plugins/webOperationAdmissionV2', async (original) => ({
     };
   },
 }));
-vi.mock('../../../components/agent/sandbox/TerminalImpl', () => ({
+vi.mock('@business/environments/ui/web/components/sandbox/TerminalImpl', () => ({
   default: (props: {
     sessionId?: string;
     onConnect(id: string): void;
@@ -33,7 +33,7 @@ vi.mock('../../../components/agent/sandbox/TerminalImpl', () => ({
     return <div data-testid="terminal-session">{props.sessionId ?? 'fresh'}</div>;
   },
 }));
-vi.mock('../../../components/agent/sandbox/RemoteDesktopViewer', () => ({
+vi.mock('@business/environments/ui/web/components/sandbox/RemoteDesktopViewer', () => ({
   RemoteDesktopViewer: () => null,
 }));
 function owner(available = true) {

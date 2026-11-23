@@ -6,7 +6,7 @@ import {
   workspaceDagDimmedNodeIds,
 } from '@/components/executionDag/workspaceExecutionDagModel';
 
-import type { WorkspaceAgent, WorkspacePlanNode, WorkspacePlanSnapshot } from '@/types/workspace';
+import type { WorkspaceAgent, WorkspacePlanNode, WorkspacePlanSnapshot } from '@business/workspace/ui/web/types/workspace';
 
 function node(overrides: Partial<WorkspacePlanNode>): WorkspacePlanNode {
   return {

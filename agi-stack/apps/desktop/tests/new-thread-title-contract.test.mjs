@@ -23,6 +23,7 @@ function loadConversationThreads() {
       if (name === '../appShellTypes') {
         return { agentConversationScopeKeyFor: (...parts) => parts.join('\u0000') };
       }
+      if (name.startsWith('@business/')) return require(name);
       const path = new URL(name + '.js', source).pathname.split('/src/')[1];
       return require(`${compiled}/${path}`);
     },

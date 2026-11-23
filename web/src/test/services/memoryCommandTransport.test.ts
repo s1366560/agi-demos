@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { memoryCommandTransport } from '../../services/memoryCommandTransport';
+import { memoryCommandTransport } from '@business/knowledge/ui/web/services/memoryCommandTransport';
 import { httpClient } from '../../services/client/httpClient';
 import { ApiError, ApiErrorType } from '../../services/client/ApiError';
 import { installHttpAdmissionFixtureV2 } from './webHttpAdmissionFixtureV2';

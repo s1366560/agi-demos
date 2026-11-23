@@ -1,4 +1,4 @@
-import type { WorkspaceDeliveryServiceConfig } from '@/types/workspace';
+import type { WorkspaceDeliveryServiceConfig } from '@business/workspace/ui/web/types/workspace';
 
 import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
 

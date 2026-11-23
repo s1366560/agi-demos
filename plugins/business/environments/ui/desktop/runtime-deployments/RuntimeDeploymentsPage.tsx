@@ -3,8 +3,8 @@ import type {
   RuntimeDeployment,
   RuntimeDeploymentsModel,
   RuntimeDeploymentsQuery,
-} from '@desktop/features/runtime-deployments/runtimeDeploymentsTypes';
-import '@desktop/features/runtime-deployments/RuntimeDeploymentsPage.css';
+} from './runtimeDeploymentsTypes';
+import './RuntimeDeploymentsPage.css';
 
 export function RuntimeDeploymentsPage({
   model,

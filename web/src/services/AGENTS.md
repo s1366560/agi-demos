@@ -1,9 +1,6 @@
 # web/src/services/
 
-Frontend service layer. Current top-level service files: 59, plus `client/`, `agent/`, and
-`mcp/` subdirectories.
-
-Last checked against code: 2026-05-18.
+Shared HTTP and WebSocket transports live here. Each business package owns its operation-specific clients in `plugins/business/<package>/ui/web/services`.
 
 ## HTTP Client
 
@@ -32,7 +29,7 @@ Preserve trailing slashes for collection endpoints that FastAPI defines with tra
 | ----------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------- |
 | `agentService.ts`                                                       | Agent WebSocket connection, conversation metadata, event routing. | WebSocket + REST |
 | `projectService.ts`, `tenantService` equivalents                        | Project/tenant CRUD and stats.                                    | REST             |
-| `memoryService.ts`, `clusterService.ts`, `graphService.ts`              | Memory, communities, graph/search APIs.                           | REST             |
+| `@business/knowledge/ui/web/services/{memoryService,graphService,knowledgeApi}.ts`              | Memory, communities, graph/search APIs.                           | REST             |
 | `sandboxService.ts`, `projectSandboxService.ts`, `sandboxSSEService.ts` | Sandbox lifecycle, project sandbox, service events.               | REST + SSE/WS    |
 | `mcpService.ts`, `mcpAppService.ts`                                     | MCP servers, tools, apps.                                         | REST             |
 | `hitlService.unified.ts`                                                | HITL pending/respond/cancel REST paths.                           | REST             |
@@ -47,7 +44,7 @@ WS /api/v1/agent/ws
   -> agentService.ts
   -> services/agent/messageRouter.ts
   -> utils/sseEventAdapter.ts (normalization)
-  -> stores/agent/* and stores/agentV3.ts
+  -> @business/agent/ui/web/stores/{agent/*,agentV3.ts}
   -> components/agent/*
 ```
 

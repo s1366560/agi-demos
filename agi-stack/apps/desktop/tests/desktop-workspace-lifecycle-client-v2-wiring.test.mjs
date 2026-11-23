@@ -11,7 +11,7 @@ const app = source('src/App.tsx');
 const authorityModule = source(
   'src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.ts',
 );
-const tenantClient = source('src/features/tenant/tenantWorkspacesV2Client.ts');
+const tenantClient = source('../../../plugins/business/workspace/ui/desktop/tenant/tenantWorkspacesV2Client.ts');
 const routeRuntime = source('src/features/navigation/desktopProductionRouteRuntime.ts');
 const routeRegistry = source('src/features/navigation/appRouteRegistry.ts');
 const testTypeScriptConfig = source('tsconfig.test.json');

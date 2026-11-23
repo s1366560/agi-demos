@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Alert, Button, Empty, Input, Modal, Pagination, Tag, Typography } from 'antd';
 import { Search } from 'lucide-react';
 
-import { geneMarketService, type GeneResponse } from '@/services/geneMarketService';
+import { geneMarketService, type GeneResponse } from '@business/environments/ui/web/services/geneMarketService';
 
 import { Spinner } from '@/components/common/Spinner';
 

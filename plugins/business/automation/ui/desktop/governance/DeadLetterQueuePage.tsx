@@ -3,12 +3,12 @@ import { Button, TextField } from '@radix-ui/themes';
 import { useRef, useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
-import type { DeadLetterQueueMessage } from '@desktop/features/governance/deadLetterQueueClient';
+import type { DeadLetterQueueMessage } from './deadLetterQueueClient';
 import type {
   DeadLetterQueueController,
   DeadLetterQueueResourceState,
   DeadLetterQueueViewModel,
-} from '@desktop/features/governance/deadLetterQueueController';
+} from './deadLetterQueueController';
 import '@desktop/features/governance/DeadLetterQueuePage.css';
 
 export function DeadLetterQueuePage({

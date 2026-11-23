@@ -7,7 +7,7 @@ import { Plus, Target } from 'lucide-react';
 
 import { ObjectiveCard } from './ObjectiveCard';
 
-import type { CyberObjective, WorkspaceTask } from '@/types/workspace';
+import type { CyberObjective, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 export interface ObjectiveListProps {
   objectives: CyberObjective[];

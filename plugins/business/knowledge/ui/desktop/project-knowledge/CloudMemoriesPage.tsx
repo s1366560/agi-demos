@@ -1,6 +1,6 @@
 import { useI18n } from '@desktop/i18n';
-import { CloudMemoryEditor } from '@desktop/features/project-knowledge/CloudMemoryEditor';
-import type { CloudMemoriesController, CloudMemoriesModel } from '@desktop/features/project-knowledge/cloudMemoriesController';
+import { CloudMemoryEditor } from './CloudMemoryEditor';
+import type { CloudMemoriesController, CloudMemoriesModel } from './cloudMemoriesController';
 
 export function CloudMemoriesUnavailable() {
   const { t } = useI18n();

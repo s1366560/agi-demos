@@ -48,7 +48,7 @@ import {
   useEvolutionEvents,
   useGeneMarketLoading,
   useGeneMarketActions,
-} from '@/stores/geneMarket';
+} from '../stores/geneMarket';
 import { useCurrentTenant } from '@/stores/tenant';
 
 import { visibilityLabel, visibilityTagColor } from './geneVisibility';
@@ -61,7 +61,7 @@ import {
   splitCsv,
 } from './utils/geneFormUtils';
 
-import type { ContentVisibilityValue, GeneUpdate } from '@/services/geneMarketService';
+import type { ContentVisibilityValue, GeneUpdate } from '../services/geneMarketService';
 
 const { Title, Text, Paragraph } = Typography;
 

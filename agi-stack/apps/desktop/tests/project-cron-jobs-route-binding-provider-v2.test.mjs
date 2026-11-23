@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import {
   createProjectCronJobsRouteBindingProviderV2,
   ProjectCronJobsRouteBindingProviderErrorV2,
-} from '/tmp/agistack-desktop-test-dist/src/features/automations/projectCronJobsRouteBindingProviderV2.js';
+} from '/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/projectCronJobsRouteBindingProviderV2.js';
 
 const tenantId = 'tenant-1';
 const projectId = 'project-1';

@@ -12,7 +12,7 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { A2UIMessageStreamSnapshot } from './agent/a2uiMessages';
+import type { A2UIMessageStreamSnapshot } from '@business/agent/ui/web/stores/agent/a2uiMessages';
 
 export type CanvasContentType =
   | 'code'

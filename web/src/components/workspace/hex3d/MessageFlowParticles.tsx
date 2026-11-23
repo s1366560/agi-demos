@@ -6,7 +6,7 @@ import { Vector3, Group, Mesh, MeshStandardMaterial } from 'three';
 
 import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
 
-import type { WorkspaceAgent } from '@/types/workspace';
+import type { WorkspaceAgent } from '@business/workspace/ui/web/types/workspace';
 
 export interface MessageFlowParticlesProps {
   agents: WorkspaceAgent[];

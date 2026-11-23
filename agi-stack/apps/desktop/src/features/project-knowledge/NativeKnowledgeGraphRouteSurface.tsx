@@ -5,7 +5,7 @@ import {
   type NativeMemoriesRouteBinding,
 } from './NativeMemoriesRouteContext';
 import { NativeMemoriesUnavailable } from '@business/knowledge/ui/desktop/project-knowledge/NativeMemoriesPage';
-import { createNativeKnowledgeGraphController } from './nativeKnowledgeGraphController';
+import { createNativeKnowledgeGraphController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeGraphController';
 import { NativeKnowledgeGraphPage } from '@business/knowledge/ui/desktop/project-knowledge/NativeKnowledgeGraphPage';
 
 export function NativeKnowledgeGraphRouteSurface({ context }: DesktopRouteSurfaceProps) {

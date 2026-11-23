@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { WorkspaceTaskPlanPanel } from '@/components/agent/workspace/WorkspaceTaskPlanPanel';
 
-import type { WorkspacePlanSnapshot } from '@/types/workspace';
+import type { WorkspacePlanSnapshot } from '@business/workspace/ui/web/types/workspace';
 import type { WorkspaceTaskPlanRow } from '@/components/agent/workspace/WorkspaceTaskPlanPanelModel';
 
 function row(overrides: Partial<WorkspaceTaskPlanRow>): WorkspaceTaskPlanRow {

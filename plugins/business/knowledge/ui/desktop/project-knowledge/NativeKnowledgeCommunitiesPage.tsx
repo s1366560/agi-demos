@@ -1,11 +1,11 @@
 import { useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
-import { NativeKnowledgeCommunityHistory } from '@desktop/features/project-knowledge/NativeKnowledgeCommunityHistory';
+import { NativeKnowledgeCommunityHistory } from './NativeKnowledgeCommunityHistory';
 import type {
   NativeKnowledgeCommunityModel,
   NativeKnowledgeCommunityController,
-} from '@desktop/features/project-knowledge/nativeKnowledgeCommunityController';
+} from './nativeKnowledgeCommunityController';
 
 export function NativeKnowledgeCommunitiesPage({
   model,

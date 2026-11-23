@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Modal, Form, Input, Select, message } from 'antd';
 
-import { useDefinitions, useListDefinitions } from '@/stores/agentDefinitions';
+import { useDefinitions, useListDefinitions } from '@business/agent/ui/web/stores/agentDefinitions';
 
 export interface AddAgentModalProps {
   open: boolean;

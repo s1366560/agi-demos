@@ -5,7 +5,7 @@ const { createDesktopInstanceTemplatesHttpProjectionV2 } = await import(
   '/tmp/agistack-desktop-test-dist/src/plugins/desktopInstanceTemplatesHttpProjectionV2.js'
 );
 const { InstanceTemplatesUnavailableError } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/instance-templates/instanceTemplatesClient.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/instance-templates/instanceTemplatesClient.js'
 );
 
 function runtimeConfig(mode, overrides = {}) {

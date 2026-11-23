@@ -12,12 +12,12 @@ const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createProjectCronJobsRouteModuleLoader,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/automations/projectCronJobsRouteModule.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/projectCronJobsRouteModule.js'
 );
 
 const factorySource = readFileSync(
   new URL(
-    '../src/features/automations/projectCronJobsRouteModule.tsx',
+    '../../../../plugins/business/automation/ui/desktop/automations/projectCronJobsRouteModule.tsx',
     import.meta.url,
   ),
   'utf8',

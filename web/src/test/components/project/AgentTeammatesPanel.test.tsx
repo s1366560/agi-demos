@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentTeammatesPanel } from '@/components/project/AgentTeammatesPanel';
-import { definitionsService } from '@/services/agent/definitionsService';
+import { definitionsService } from '@business/agent/ui/web/services/agent/definitionsService';
 import { agentService } from '@/services/agentService';
 import { useTenantStore } from '@/stores/tenant';
 
@@ -20,7 +20,7 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('@/services/agent/definitionsService', () => ({
+vi.mock('@business/agent/ui/web/services/agent/definitionsService', () => ({
   definitionsService: {
     list: vi.fn(),
   },

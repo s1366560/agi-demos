@@ -8,8 +8,8 @@ import {
 import type {
   ProjectAgentDashboardClient,
   ProjectAgentDashboardSnapshot,
-} from '../features/project-agent/projectAgentDashboardClient';
-import type { ProjectAgentScope } from '../features/project-agent/projectAgentClient';
+} from '@business/agent/ui/desktop/project-agent/projectAgentDashboardClient';
+import type { ProjectAgentScope } from '@business/agent/ui/desktop/project-agent/projectAgentClient';
 import type { DesktopRuntimeConfig } from '../types';
 import { createDesktopProjectAgentDashboardHttpAuthorityV2 } from './desktopProjectAgentDashboardHttpProjectionV2';
 import {

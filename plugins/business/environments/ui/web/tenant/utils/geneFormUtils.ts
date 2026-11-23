@@ -1,6 +1,6 @@
 import { message } from 'antd';
 
-import { useGeneMarketStore } from '@/stores/geneMarket';
+import { useGeneMarketStore } from '../../stores/geneMarket';
 
 /** Trim free text; map empty/whitespace to null (for nullable payload fields). */
 export const normalizeNullableText = (value: string | undefined): string | null => {

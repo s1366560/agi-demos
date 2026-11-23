@@ -6,9 +6,9 @@ import { useTranslation } from 'react-i18next';
 import { App, Button } from 'antd';
 import { Plus, Trash2 } from 'lucide-react';
 
-import { useWorkspaceAgents, useWorkspaceMembers, useWorkspaceActions } from '@/stores/workspace';
+import { useWorkspaceAgents, useWorkspaceMembers, useWorkspaceActions } from '@business/workspace/ui/web/stores/workspace';
 
-import { HostedProjectionBadge } from '@/components/blackboard/HostedProjectionBadge';
+import { HostedProjectionBadge } from '@business/workspace/ui/web/components/blackboard/HostedProjectionBadge';
 import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 import { AddAgentModal } from './AddAgentModal';

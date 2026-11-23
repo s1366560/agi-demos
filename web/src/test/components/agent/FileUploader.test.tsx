@@ -1,13 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { sandboxUploadService } from '@/services/sandboxUploadService';
+import { sandboxUploadService } from '@business/environments/ui/web/services/sandboxUploadService';
 
 import { message } from '@/components/ui/lazyAntd';
 
 import { useFileUpload } from '@/components/agent/FileUploader';
 
-vi.mock('@/services/sandboxUploadService', () => ({
+vi.mock('@business/environments/ui/web/services/sandboxUploadService', () => ({
   sandboxUploadService: {
     upload: vi.fn(),
   },

@@ -15,7 +15,7 @@ import {
   message,
 } from 'antd';
 
-import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
+import { agentConfigService, TenantAgentConfigError } from '@business/agent/ui/web/services/agentConfigService';
 import { systemService, type SystemInfoResponse } from '@/services/systemService';
 
 import { LoadingOverlay } from '@/components/common/Spinner';

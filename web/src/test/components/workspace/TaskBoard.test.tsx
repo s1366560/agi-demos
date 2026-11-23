@@ -6,10 +6,10 @@ import { App } from 'antd';
 
 import { TaskBoard } from '@/components/workspace/TaskBoard';
 import { buildTaskCreatePayload } from '@/components/workspace/taskBoardCreateModel';
-import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
+import { workspaceAutonomyService, workspaceTaskService } from '@business/workspace/ui/web/services/workspaceService';
 import { render, screen, fireEvent } from '@/test/utils';
 
-import type { WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
+import type { WorkspaceAgent, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 vi.spyOn(App, 'useApp').mockReturnValue({
   message: {
@@ -21,11 +21,11 @@ vi.spyOn(App, 'useApp').mockReturnValue({
   },
 } as unknown as ReturnType<typeof App.useApp>);
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaceAgents: vi.fn(),
 }));
 
-vi.mock('@/services/workspaceService', () => ({
+vi.mock('@business/workspace/ui/web/services/workspaceService', () => ({
   workspaceAutonomyService: {
     tick: vi.fn(),
   },
@@ -65,7 +65,7 @@ function renderTaskBoard({
 describe('TaskBoard', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { useWorkspaceAgents } = await import('@/stores/workspace');
+    const { useWorkspaceAgents } = await import('@business/workspace/ui/web/stores/workspace');
     vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
   });
 
@@ -158,7 +158,7 @@ describe('TaskBoard', () => {
   });
 
   it('renders pending leader adjudication details for worker-reported tasks', async () => {
-    const { useWorkspaceAgents } = await import('@/stores/workspace');
+    const { useWorkspaceAgents } = await import('@business/workspace/ui/web/stores/workspace');
     vi.mocked(useWorkspaceAgents).mockReturnValue([
       {
         id: 'binding-1',
@@ -300,7 +300,7 @@ describe('TaskBoard', () => {
   });
 
   it('uses workspace binding ids for assigned agent selection state', async () => {
-    const { useWorkspaceAgents } = await import('@/stores/workspace');
+    const { useWorkspaceAgents } = await import('@business/workspace/ui/web/stores/workspace');
     vi.mocked(useWorkspaceAgents).mockReturnValue([
       {
         id: 'binding-1',

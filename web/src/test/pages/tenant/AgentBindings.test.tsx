@@ -3,10 +3,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentBindings } from '@business/agent/ui/web/tenant/AgentBindings';
-import { bindingsService } from '../../../services/agent/bindingsService';
-import { definitionsService } from '../../../services/agent/definitionsService';
-import { useAgentBindingStore } from '../../../stores/agentBindings';
-import { useAgentDefinitionStore } from '../../../stores/agentDefinitions';
+import { bindingsService } from '@business/agent/ui/web/services/agent/bindingsService';
+import { definitionsService } from '@business/agent/ui/web/services/agent/definitionsService';
+import { useAgentBindingStore } from '@business/agent/ui/web/stores/agentBindings';
+import { useAgentDefinitionStore } from '@business/agent/ui/web/stores/agentDefinitions';
 import { useAuthStore } from '../../../stores/auth';
 import { useTenantStore } from '../../../stores/tenant';
 
@@ -26,7 +26,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../../services/agent/bindingsService', () => ({
+vi.mock('@business/agent/ui/web/services/agent/bindingsService', () => ({
   bindingsService: {
     list: vi.fn(),
     create: vi.fn(),
@@ -36,7 +36,7 @@ vi.mock('../../../services/agent/bindingsService', () => ({
   },
 }));
 
-vi.mock('../../../services/agent/definitionsService', () => ({
+vi.mock('@business/agent/ui/web/services/agent/definitionsService', () => ({
   definitionsService: {
     list: vi.fn(),
   },

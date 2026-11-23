@@ -31,7 +31,7 @@ import type {
   WorkspaceSourceControlProvider,
   WorkspaceUseCase,
   WorkspaceVerificationGrade,
-} from '@/types/workspace';
+} from '../types/workspace';
 
 export const ROLE_OPTIONS: Array<{ value: WorkspaceMemberRole; labelKey: string }> = [
   { value: 'owner', labelKey: 'workspaceSettings.members.owner' },

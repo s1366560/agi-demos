@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import { graphService } from '@/services/graphService';
-import type { GraphNode } from '@/services/graphService';
+import { graphService } from '../services/graphService';
+import type { GraphNode } from '../services/graphService';
 
 import type { GraphSnapshot, NodeData, EdgeData } from '@/components/graph/CytoscapeGraph/types';
 

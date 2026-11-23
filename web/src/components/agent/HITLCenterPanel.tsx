@@ -19,8 +19,8 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { restApi } from '../../services/agent/restApi';
-import { useAgentV3Store } from '../../stores/agentV3';
+import { restApi } from '@business/agent/ui/web/services/agent/restApi';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { formatDateTime } from '../../utils/date';
 
 import type { DecisionOption, HITLRequestFromApi } from '../../types/hitl.unified';

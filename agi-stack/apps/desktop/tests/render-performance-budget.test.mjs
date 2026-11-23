@@ -24,7 +24,7 @@ const ZERO_TIMER_FILES = [
   'src/features/session/SessionChangesCanvas.tsx',
   'src/features/session/sessionChangesModel.ts',
   'src/features/session/sessionChangesReviewModel.ts',
-  'src/features/session/SessionTerminalCanvas.tsx',
+  '../../../plugins/business/environments/ui/desktop/session/SessionTerminalCanvas.tsx',
   'src/features/chat/LiveArtifactCanvas.tsx',
 ];
 
@@ -64,7 +64,7 @@ const INTERVAL_WHITELIST = [
     // uses one-shot rAF only.
   },
   {
-    file: 'src/features/sandbox/InteractiveTerminal.tsx',
+    file: '../../../plugins/business/environments/ui/desktop/sandbox/InteractiveTerminal.tsx',
     count: 0,
     // xterm internals are exempt by design; the wrapper itself must stay
     // timer-free (single mount-time fit rAF is one-shot).
@@ -76,7 +76,7 @@ const INTERVAL_WHITELIST = [
     // structural fact that does not drive rendering; cleared on close.
   },
   {
-    file: 'src/hooks/useTerminalProxy.ts',
+    file: '../../../plugins/business/environments/ui/desktop/sandbox/useTerminalProxy.ts',
     count: 0,
     // Terminal proxy batches output with one-shot rAF/timeout flush only.
   },
@@ -110,7 +110,8 @@ test('recurring timers outside the zero-timer set match the explicit whitelist',
   // Guard the inverse direction: no whitelisted file may silently drop its
   // timer (dead whitelist entries hide regressions in the gating logic).
   for (const file of whitelistedFiles) {
-    assert.ok(file.startsWith('src/'), `${file} must be a src-relative path`);
+    assert.ok(file.startsWith('src/') || file.startsWith('../../../plugins/business/'),
+      `${file} must identify a desktop or business package source`);
   }
 });
 

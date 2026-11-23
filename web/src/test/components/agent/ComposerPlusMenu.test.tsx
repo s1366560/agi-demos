@@ -47,11 +47,11 @@ vi.mock('@/services/commandService', () => ({
   commandAPI: { list: commandListMock },
 }));
 
-vi.mock('@/services/skillService', () => ({
+vi.mock('@business/agent/ui/web/services/skillService', () => ({
   skillAPI: { list: skillListMock },
 }));
 
-vi.mock('@/stores/agentDefinitions', () => ({
+vi.mock('@business/agent/ui/web/stores/agentDefinitions', () => ({
   useDefinitions: () => [
     {
       id: 'agent-1',

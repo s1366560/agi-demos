@@ -10,7 +10,7 @@ const {
   createDesktopAutomationApi,
   settleAutomationRunAttempt,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/automations/automationClient.js',
+  '/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/automationClient.js',
 );
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
@@ -19,7 +19,7 @@ const automationsPageSource = readFileSync(
   'utf8',
 );
 const automationDetailSource = readFileSync(
-  new URL('../src/features/automations/AutomationDetail.tsx', import.meta.url),
+  new URL('../../../../plugins/business/automation/ui/desktop/automations/AutomationDetail.tsx', import.meta.url),
   'utf8',
 );
 const sidebarSource = readFileSync(

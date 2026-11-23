@@ -8,7 +8,7 @@ import {
   calculateWorkspacePlanCompletionRatio,
   calculateWorkspaceTaskCompletionRatio,
   groupTasksByStatus,
-} from '@/components/blackboard/blackboardUtils';
+} from '@business/workspace/ui/web/components/blackboard/blackboardUtils';
 
 import type {
   BlackboardPost,
@@ -19,7 +19,7 @@ import type {
   WorkspacePlan,
   WorkspacePlanRootGoal,
   WorkspaceTask,
-} from '@/types/workspace';
+} from '@business/workspace/ui/web/types/workspace';
 
 const BASE_POST: BlackboardPost = {
   id: 'post-1',

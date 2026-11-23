@@ -2,7 +2,7 @@ import { useI18n } from '../../i18n';
 import type {
   NativeKnowledgeProcessingRetryController,
   NativeKnowledgeProcessingRetryModel,
-} from './nativeKnowledgeProcessingRetryController';
+} from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeProcessingRetryController';
 
 export function NativeKnowledgeProcessingRetryPanel({
   model,

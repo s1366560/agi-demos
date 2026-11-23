@@ -5,11 +5,11 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const { appendTerminalLinesBounded, openTerminalSocket, terminalFrame } = require(
-  '/tmp/agistack-desktop-test-dist/src/hooks/useTerminalProxy.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/sandbox/useTerminalProxy.js'
 );
 
 test('terminal transport is delegated to the generation-pinned lifecycle authority', () => {
-  const source = readFileSync(new URL('../src/hooks/useTerminalProxy.ts', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../../../../plugins/business/environments/ui/desktop/sandbox/useTerminalProxy.ts', import.meta.url), 'utf8');
   assert.match(source, /DesktopTerminalLifecycleAuthorityV2/u);
   assert.match(source, /lifecycle\.openSocket/u);
   assert.match(source, /lifecycle\.release/u);

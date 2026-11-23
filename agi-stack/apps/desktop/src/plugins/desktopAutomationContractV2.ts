@@ -14,7 +14,7 @@ import type {
 import type {
   AutomationRunInput,
   AutomationRunReceipt,
-} from '../features/automations/automationClient';
+} from '@business/automation/ui/desktop/automations/automationClient';
 
 const ACTION_KEYS_V2 = ['create', 'delete', 'edit', 'run_now', 'toggle'] as const;
 const RUN_STATUSES_V2 = new Set([

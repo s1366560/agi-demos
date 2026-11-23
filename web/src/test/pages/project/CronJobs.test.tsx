@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CronJobs } from '@business/automation/ui/web/project/CronJobs';
-import { cronAPI } from '../../../services/cronService';
-import type { CronJobResponse, CronJobRunResponse } from '../../../types/cron';
+import { cronAPI } from '@business/automation/ui/web/services/cronService';
+import type { CronJobResponse, CronJobRunResponse } from '@business/automation/ui/web/types/cron';
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
-vi.mock('../../../services/cronService');
+vi.mock('@business/automation/ui/web/services/cronService');
 vi.mock('react-router-dom', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-router-dom')>()),
   useParams: () => ({ projectId: 'project-1' }),
@@ -45,7 +45,7 @@ const cronState = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../../../stores/cron', () => ({
+vi.mock('@business/automation/ui/web/stores/cron', () => ({
   useCronJobs: () => cronState.jobs,
   useCronJobRuns: () => cronState.runs,
   useCronTotal: () => cronState.total,
@@ -56,7 +56,7 @@ vi.mock('../../../stores/cron', () => ({
   useCronActions: () => cronState.actions,
 }));
 
-vi.mock('../../../components/cron/CronJobForm', () => ({
+vi.mock('@business/automation/ui/web/components/cron/CronJobForm', () => ({
   CronJobForm: () => null,
 }));
 

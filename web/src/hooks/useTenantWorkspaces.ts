@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { projectService } from '@/services/projectService';
-import { workspaceService } from '@/services/workspaceService';
+import { workspaceService } from '@business/workspace/ui/web/services/workspaceService';
 
-import type { Workspace } from '@/types/workspace';
+import type { Workspace } from '@business/workspace/ui/web/types/workspace';
 
 /**
  * Lists every workspace a tenant admin can see, across all of the tenant's

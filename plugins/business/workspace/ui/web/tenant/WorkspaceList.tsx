@@ -13,13 +13,13 @@ import {
   useWorkspaceError,
   useWorkspaceLoading,
   useWorkspaces,
-} from '@/stores/workspace';
+} from '../stores/workspace';
 
 import {
   workspaceObjectiveService,
   workspacePlanService,
   workspaceTaskService,
-} from '@/services/workspaceService';
+} from '../services/workspaceService';
 
 import { tokens } from '@/theme/tokens';
 import { formatDistanceToNow } from '@/utils/date';
@@ -33,7 +33,7 @@ import {
 import {
   calculateWorkspacePlanCompletionRatio,
   getWorkspacePlanCompletionCounts,
-} from '@/components/blackboard/blackboardUtils';
+} from '../components/blackboard/blackboardUtils';
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { EmptyStateSimple } from '@/components/shared/ui/EmptyStateVariant';
 
@@ -43,7 +43,7 @@ import type {
   WorkspacePlanSnapshot,
   WorkspaceTask,
   WorkspaceUseCase,
-} from '@/types/workspace';
+} from '../types/workspace';
 
 type SummarySource = 'objectives' | 'plan' | 'tasks' | 'empty';
 

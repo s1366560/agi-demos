@@ -66,7 +66,7 @@ import {
   isSafeArtifactUrl,
   looksLikeSandboxImagePath,
   resolveSandboxArtifactUrl,
-} from '@/utils/sandboxArtifactPath';
+} from '@business/environments/ui/web/utils/sandboxArtifactPath';
 import { sanitizeHtml } from '@/utils/sanitize';
 
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';

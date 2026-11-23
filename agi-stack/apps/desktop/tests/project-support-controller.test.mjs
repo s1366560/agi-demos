@@ -7,7 +7,7 @@ const { DesktopApiError } = await import(
 const {
   createProjectSupportController,
 } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/project-support/projectSupportController.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project-support/projectSupportController.js'
 );
 
 test('Project Support suppresses stale completion after a project scope switch', async () => {

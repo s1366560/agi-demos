@@ -1,7 +1,9 @@
+import { taskAPI } from '@business/workspace/ui/web/services/taskService';
 import { installHttpAdmissionFixtureV2 } from './services/webHttpAdmissionFixtureV2';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { authAPI, tenantAPI, projectAPI, memoryAPI, taskAPI, providerAPI } from '../services/api';
+import { authAPI, tenantAPI, projectAPI, providerAPI } from '../services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 
 import type { MemoryCreate, MemoryUpdate, Entity, Relationship } from '../types/memory';
 

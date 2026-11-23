@@ -10,7 +10,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createTenantWorkspacesRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/tenant/tenantWorkspacesRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/tenant/tenantWorkspacesRouteModule.js');
 
 test('Tenant Workspaces loader stays lazy and renders a native list/create surface', async () => {
   let bindingCalls = 0;

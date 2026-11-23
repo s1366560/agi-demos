@@ -12,8 +12,8 @@ import {
   PlusIcon,
 } from '@radix-ui/react-icons';
 
-import { SessionTerminalCanvas } from '../features/session/SessionTerminalCanvas';
-import type { TerminalBindingState } from '../features/session/sessionTerminalModel';
+import { SessionTerminalCanvas } from '@business/environments/ui/desktop/session/SessionTerminalCanvas';
+import type { TerminalBindingState } from '@business/environments/ui/desktop/session/sessionTerminalModel';
 import { I18nProvider } from '../i18n';
 import type { DesktopRun, TerminalServiceResponse } from '../types';
 import '../styles/global.css';

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const { applyWorkspaceActivityStreamEvent } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceActivityEventModel.js',
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/workspaceActivityEventModel.js',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const overviewSource = readFileSync(

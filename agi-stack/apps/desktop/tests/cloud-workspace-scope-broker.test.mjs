@@ -70,3 +70,31 @@ test('cross-project workspace path is rejected before probing', async () => {
   }, deps), /project scope mismatch/);
   assert.deepEqual(deps.paths, ['/api/v1/workspace-context']);
 });
+
+test('a signed-in account selects its first project or another tenant through its membership catalog', async () => {
+  for (const observed of [null, context]) {
+    for (const visible of [false, true]) {
+      const switched = [];
+      const deps = {
+        loadTrustedSession: async () => session,
+        async fetch(url) {
+          const path = new URL(url).pathname;
+          if (path === '/api/v1/workspace-context')
+            return observed ? response({ context: observed }) :
+              response({ detail: { code: 'workspace_context_unavailable' } }, 404);
+          if (path === '/api/v1/project-packages/projects/')
+            return response(visible ? [{ tenant_id: 'tenant-2', project_id: 'project-2' }] : []);
+          switched.push(path);
+          return response({ changed: true });
+        },
+      };
+      const path = '/api/v1/workspace-context/switch';
+      const change = executeVaultBoundCloudRequest({method:'POST',path,body:{
+        tenant_id:'tenant-2', project_id:'project-2', expected_revision:0,idempotency_key:'reviewed-switch',
+      }}, deps);
+      if (visible) assert.equal((await change).status, 200);
+      else await assert.rejects(change,/scope mismatch/);
+      assert.deepEqual(switched, visible ? [path] : []);
+    }
+  }
+});

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dialogSource = readFileSync(
-  resolve(here, '../src/features/automations/AutomationEditorDialog.tsx'),
+  resolve(here, '../../../../plugins/business/automation/ui/desktop/automations/AutomationEditorDialog.tsx'),
   'utf8',
 );
 

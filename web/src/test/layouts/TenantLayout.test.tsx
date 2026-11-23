@@ -168,7 +168,7 @@ vi.mock('../../stores/tenant', () => ({
   useTenantStore: createMockStore(),
 }));
 
-vi.mock('@/stores/agent/conversationsStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/conversationsStore', () => ({
   useConversationsStore: Object.assign(
     (
       selector?: (state: {
@@ -187,7 +187,7 @@ vi.mock('@/stores/agent/conversationsStore', () => ({
   ),
 }));
 
-vi.mock('@/stores/agent/executionStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/executionStore', () => ({
   useExecutionStore: {
     getState: () => ({
       reset: mockExecutionReset,
@@ -195,7 +195,7 @@ vi.mock('@/stores/agent/executionStore', () => ({
   },
 }));
 
-vi.mock('@/stores/agent/hitlStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/hitlStore', () => ({
   useAgentHITLStore: {
     getState: () => ({
       syncFromConversation: mockHITLSyncFromConversation,
@@ -203,7 +203,7 @@ vi.mock('@/stores/agent/hitlStore', () => ({
   },
 }));
 
-vi.mock('@/stores/agent/streamingStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/streamingStore', () => ({
   useStreamingStore: {
     getState: () => ({
       reset: mockStreamingReset,
@@ -211,7 +211,7 @@ vi.mock('@/stores/agent/streamingStore', () => ({
   },
 }));
 
-vi.mock('@/stores/agent/timelineStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/timelineStore', () => ({
   useTimelineStore: {
     getState: () => ({
       reset: mockTimelineReset,
@@ -219,13 +219,13 @@ vi.mock('@/stores/agent/timelineStore', () => ({
   },
 }));
 
-vi.mock('@/stores/agentV3', () => ({
+vi.mock('@business/agent/ui/web/stores/agentV3', () => ({
   useAgentV3Store: {
     setState: mockAgentV3SetState,
   },
 }));
 
-vi.mock('@/stores/sandbox', () => ({
+vi.mock('@business/environments/ui/web/stores/sandbox', () => ({
   useSandboxStore: {
     getState: () => ({
       unsubscribeSSE: mockSandboxUnsubscribeSSE,

@@ -3,7 +3,7 @@ import type {
   WorkspacePlanSnapshot,
   WorkspaceTask,
   WorkspaceTaskStatus,
-} from '@/types/workspace';
+} from '@business/workspace/ui/web/types/workspace';
 
 export type WorkspaceTaskPanelView = 'flat' | 'lanes';
 type WorkspacePanelRowSource = 'task' | 'plan';

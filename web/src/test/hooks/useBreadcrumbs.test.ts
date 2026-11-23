@@ -41,7 +41,7 @@ vi.mock('@/stores/project', () => ({
 
 const mockCurrentConversation = { id: 'conv-123', title: 'Test Conversation' };
 
-vi.mock('@/stores/agent/conversationsStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/conversationsStore', () => ({
   useConversationsStore: (
     selector?: (state: { currentConversation: typeof mockCurrentConversation }) => unknown
   ) => {

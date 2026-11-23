@@ -50,7 +50,7 @@ vi.mock('@/stores/project', () => ({
   },
 }));
 
-vi.mock('@/stores/agent/conversationsStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/conversationsStore', () => ({
   useConversationsStore: {
     getState: () => ({
       currentConversation: { project_id: mockState.conversationProjectId },

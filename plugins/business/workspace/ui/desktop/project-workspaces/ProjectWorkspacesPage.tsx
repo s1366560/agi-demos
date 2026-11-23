@@ -3,10 +3,10 @@ import { Button, TextArea, TextField } from '@radix-ui/themes';
 import { useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
-import type { ProjectWorkspaceCreateInput } from '@desktop/features/project-workspaces/projectWorkspacesClient';
-import type { ProjectWorkspacesController } from '@desktop/features/project-workspaces/projectWorkspacesController';
-import type { ProjectWorkspacesViewModel } from '@desktop/features/project-workspaces/projectWorkspacesPresentationModel';
-import '@desktop/features/tenant/TenantWorkspacesPage.css';
+import type { ProjectWorkspaceCreateInput } from './projectWorkspacesClient';
+import type { ProjectWorkspacesController } from './projectWorkspacesController';
+import type { ProjectWorkspacesViewModel } from './projectWorkspacesPresentationModel';
+import '../tenant/TenantWorkspacesPage.css';
 
 export function ProjectWorkspacesPage({
   model,

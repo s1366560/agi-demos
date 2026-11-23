@@ -7,6 +7,7 @@ web/*
 !web/pnpm-workspace.yaml
 !web/index.html
 !web/nginx.conf
+!web/tsconfig.project-packages.json
 !web/tsconfig.json
 !web/tsconfig.node.json
 !web/vite.config.ts
@@ -19,15 +20,6 @@ agi-stack/packages/*
 !agi-stack/packages/plugin-marketplace-ui/
 !agi-stack/packages/plugin-runtime/
 !agi-stack/packages/plugin-slots/
-!plugins/
-plugins/*
-!plugins/business/
-plugins/business/*
-!plugins/business/*/
-plugins/business/*/*
-!plugins/business/*/ui/
-plugins/business/*/ui/*
-!plugins/business/*/ui/web/
 **/node_modules
 !sdk/
 sdk/*

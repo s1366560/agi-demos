@@ -17,7 +17,7 @@ const projectDirectory = dirname(
 const {
   buildProjectOverviewPresentation,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewPresentationModel.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/projectOverviewPresentationModel.js'
 );
 
 mkdirSync(compiledProjectDirectory, { recursive: true });
@@ -48,7 +48,7 @@ const i18nSource = readFileSync(
 );
 const messagesSource = readFileSync(
   new URL(
-    '../src/features/project/locales/projectOverviewMessages.ts',
+    '../../../../plugins/business/workspace/ui/desktop/project/locales/projectOverviewMessages.ts',
     import.meta.url,
   ),
   'utf8',

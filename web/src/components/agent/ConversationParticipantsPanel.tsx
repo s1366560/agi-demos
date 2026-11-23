@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import { message, Popconfirm } from 'antd';
 
-import { useConversationParticipants } from '../../hooks/useConversationParticipants';
+import { useConversationParticipants } from '@business/agent/ui/web/hooks/useConversationParticipants';
 import { useMentionCandidates } from '../../hooks/useMentionCandidates';
 
 export interface ConversationParticipantsPanelProps {

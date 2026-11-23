@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { createRuntimePoolHttpClient } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/runtime-pool/runtimePoolClient.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/runtime-pool/runtimePoolClient.js'
 );
 
 const originalFetch = globalThis.fetch;

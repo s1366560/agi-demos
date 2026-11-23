@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { Alert, Button } from 'antd';
 import { RefreshCw } from 'lucide-react';
 
-import { useConversationsStore } from '@/stores/agent/conversationsStore';
+import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
 import { useProjectStore } from '@/stores/project';
 import { useThemeStore } from '@/stores/theme';
 

@@ -36,7 +36,7 @@ import { AlertCircle, Maximize, Network } from 'lucide-react';
 
 import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph/index';
 
-import { graphService } from '@/services/graphService';
+import { graphService } from '../services/graphService';
 import { useProjectStore } from '@/stores/project';
 import { downloadJson } from '@/utils/downloadJson';
 import { logger } from '@/utils/logger';

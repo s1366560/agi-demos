@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildWorkspaceAgentNodes } from '@/components/agent/multiAgent/workspaceAgentPanelModel';
 
-import type { WorkspaceAgent, WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
+import type { WorkspaceAgent, WorkspacePlanSnapshot, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 function workspaceAgent(overrides: Partial<WorkspaceAgent>): WorkspaceAgent {
   return {

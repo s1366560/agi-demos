@@ -1,6 +1,6 @@
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopProjectPlaybooksEventsOperationInputV2 = Readonly<{

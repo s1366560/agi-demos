@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { httpClient } from '../../services/client/httpClient';
-import { eventService } from '../../services/eventService';
+import { eventService } from '@business/automation/ui/web/services/eventService';
 
 vi.mock('../../services/client/httpClient', () => ({
   httpClient: {

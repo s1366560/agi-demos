@@ -15,12 +15,12 @@ import {
   TENANT_EVENTS_LOCAL_REASON,
   TENANT_EVENTS_ROUTE_ID,
   type TenantEventsClient,
-} from './tenantEventsClient';
+} from '@business/automation/ui/desktop/tenant-admin/tenantEventsClient';
 import {
   TENANT_GENES_LOCAL_REASON,
   TENANT_GENES_ROUTE_ID,
   type TenantGenesClient,
-} from './tenantGenesClient';
+} from '@business/environments/ui/desktop/tenant-admin/tenantGenesClient';
 import {
   TENANT_ORGANIZATION_SETTINGS_LOCAL_REASON,
   TENANT_ORGANIZATION_SETTINGS_ROUTE_ID,
@@ -40,7 +40,7 @@ import {
   TENANT_WEBHOOKS_LOCAL_REASON,
   TENANT_WEBHOOKS_ROUTE_ID,
   type TenantWebhooksClient,
-} from './tenantWebhooksClient';
+} from '@business/automation/ui/desktop/tenant-admin/tenantWebhooksClient';
 
 const SERVICE_VERSION = '0.1.0' as const;
 const CONTRACT_VERSION = '4.0.0' as const;

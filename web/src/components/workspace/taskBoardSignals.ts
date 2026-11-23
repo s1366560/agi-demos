@@ -1,6 +1,6 @@
 import { formatTaskProjectionLabel } from '@/utils/workspaceTaskProjection';
 
-import type { WorkspaceTask } from '@/types/workspace';
+import type { WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 export interface RootGoalDisplayState {
   isRootGoal: boolean;

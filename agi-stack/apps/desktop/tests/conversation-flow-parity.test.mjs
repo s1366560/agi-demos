@@ -22,7 +22,10 @@ const readSource = (path) =>
 const chatTimelineSource = readSource('features/chat/ChatTimeline.tsx');
 const chatTimelineCss = readSource('features/chat/ChatTimeline.css');
 const highlightedCodeSource = readSource('features/chat/HighlightedCode.tsx');
-const chatTimelineModelSource = readSource('features/chat/chatTimelineModel.ts');
+const chatTimelineModelSource = readFileSync(
+  new URL('../../../../plugins/business/agent/ui/desktop/chat/chatTimelineModel.ts', import.meta.url),
+  'utf8',
+);
 const i18nSource = readSource('i18n.tsx');
 
 function withStoredLocale(locale, render) {

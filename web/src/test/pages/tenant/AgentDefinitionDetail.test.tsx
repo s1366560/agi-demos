@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentDefinitionDetail } from '@business/agent/ui/web/tenant/AgentDefinitionDetail';
 import { AgentDefinitions } from '@business/agent/ui/web/tenant/AgentDefinitions';
-import { definitionsService } from '../../../services/agent/definitionsService';
+import { definitionsService } from '@business/agent/ui/web/services/agent/definitionsService';
 import { useAuthStore } from '../../../stores/auth';
 import { useProjectStore } from '../../../stores/project';
 import { useTenantStore } from '../../../stores/tenant';
@@ -12,7 +12,7 @@ import { useTenantStore } from '../../../stores/tenant';
 import type { AgentDefinition } from '../../../types/multiAgent';
 import type { Project } from '../../../types/memory';
 
-vi.mock('../../../services/agent/definitionsService', () => ({
+vi.mock('@business/agent/ui/web/services/agent/definitionsService', () => ({
   definitionsService: {
     list: vi.fn(),
     listPage: vi.fn(),

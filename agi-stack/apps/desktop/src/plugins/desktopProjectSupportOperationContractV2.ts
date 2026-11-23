@@ -5,7 +5,7 @@ import type {
   ProjectSupportCreateInput,
   ProjectSupportListQuery,
   ProjectSupportScope,
-} from '../features/project-support/projectSupportTypes';
+} from '@business/workspace/ui/desktop/project-support/projectSupportTypes';
 
 export type DesktopProjectSupportOperationInputV2 = Readonly<{
   config: DesktopRuntimeConfig;

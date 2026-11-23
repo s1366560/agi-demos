@@ -10,39 +10,39 @@
 import { renderHook, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-import { useAgentLifecycleState } from '../../hooks/useAgentLifecycleState';
+import { useAgentLifecycleState } from '@business/agent/ui/web/hooks/useAgentLifecycleState';
 // eslint-disable-next-line import/order
 import {
   useUnifiedAgentStatus,
   type ProjectAgentLifecycleState,
-} from '../../hooks/useUnifiedAgentStatus';
+} from '@business/agent/ui/web/hooks/useUnifiedAgentStatus';
 
 // Mock the specific selector hooks that useUnifiedAgentStatus actually imports
-vi.mock('../../stores/agent/executionStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/executionStore', () => ({
   useAgentState: vi.fn(),
   useActiveToolCalls: vi.fn(),
 }));
 
-vi.mock('../../stores/agent/streamingStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/streamingStore', () => ({
   useIsStreaming: vi.fn(),
 }));
 
-vi.mock('../../stores/agent/timelineStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/timelineStore', () => ({
   useTimelineCount: vi.fn(),
 }));
 
-vi.mock('../../stores/sandbox', () => ({
+vi.mock('@business/environments/ui/web/stores/sandbox', () => ({
   useSandboxStore: vi.fn(),
 }));
 
-vi.mock('../../hooks/useAgentLifecycleState', () => ({
+vi.mock('@business/agent/ui/web/hooks/useAgentLifecycleState', () => ({
   useAgentLifecycleState: vi.fn(),
 }));
 
-import { useAgentState, useActiveToolCalls } from '../../stores/agent/executionStore';
-import { useIsStreaming } from '../../stores/agent/streamingStore';
-import { useTimelineCount } from '../../stores/agent/timelineStore';
-import { useSandboxStore } from '../../stores/sandbox';
+import { useAgentState, useActiveToolCalls } from '@business/agent/ui/web/stores/agent/executionStore';
+import { useIsStreaming } from '@business/agent/ui/web/stores/agent/streamingStore';
+import { useTimelineCount } from '@business/agent/ui/web/stores/agent/timelineStore';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 
 import type { LifecycleStateData } from '../../types/agent';
 

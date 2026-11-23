@@ -22,11 +22,11 @@ import {
   useInstanceSubmitting,
   useInstanceError,
   useInstanceActions,
-} from '@/stores/instance';
+} from '../stores/instance';
 
 import { formatDate } from './utils/instanceUtils';
 
-import type { InstanceMemberResponse, UserSearchResult } from '@/services/instanceService';
+import type { InstanceMemberResponse, UserSearchResult } from '../services/instanceService';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Search } = Input;

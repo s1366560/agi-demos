@@ -8,7 +8,7 @@
 import { act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { useAgentV3Store as useAgentStore } from '../../stores/agentV3';
+import { useAgentV3Store as useAgentStore } from '@business/agent/ui/web/stores/agentV3';
 
 import type { Conversation, TimelineEvent } from '../../types/agent';
 

@@ -36,8 +36,8 @@ import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 import { VirtualGrid } from '@/components/common/index';
 import { Pagination as SharedPagination } from '@/components/shared/Pagination';
-import { TaskList } from '@/components/tasks/TaskList';
-import { graphService } from '@/services/graphService';
+import { TaskList } from '@business/workspace/ui/web/components/tasks/TaskList';
+import { graphService } from '../../services/graphService';
 import { subscribeToTaskEvents } from '@/services/taskStream';
 import { confirmAction } from '@/utils/confirmAction';
 import { logger } from '@/utils/logger';

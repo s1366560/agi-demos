@@ -172,18 +172,18 @@ import {
 import {
   latestAgentSuggestions,
   timelineItemsForDisplay,
-} from './chatTimelineModel';
+} from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import { TaskChecklist } from './TaskChecklist';
 import { todoChecklistFromTimeline } from './todoChecklistModel';
-import { isConversationExportItem } from './conversationExportModel';
+import { isConversationExportItem } from '@business/agent/ui/desktop/chat/conversationExportModel';
 import {
   conversationComparisonAvailable,
   conversationComparisonScope,
-} from './conversationComparisonModel';
+} from '@business/agent/ui/desktop/chat/conversationComparisonModel';
 import {
   computeTimelineTurns,
   timelineTurnForMember,
-} from './timelineTurnCollapseModel';
+} from '@business/agent/ui/desktop/chat/timelineTurnCollapseModel';
 import { useComposerFileDrop } from './useComposerFileDrop';
 import { useComposerFileUpload } from './useComposerFileUpload';
 import { useTimelineTurnCollapse } from './useTimelineTurnCollapse';

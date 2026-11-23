@@ -7,7 +7,7 @@ import {
   type ToolCallPair,
   type ToolCallPairStatus,
   type ToolCallPresentationKind,
-} from '../chat/chatTimelineModel';
+} from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import { groupSubAgentTimelineItems } from '../chat/subagentTimelineGroupModel';
 import type { SubAgentTimelineGroup } from '../chat/subagentTimelineGroupModel';
 import type { SessionActivityPresence } from './sessionNarrativeModel';

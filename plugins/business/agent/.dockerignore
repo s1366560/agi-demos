@@ -14,6 +14,8 @@
 !ui/
 ui/**
 !ui/settings.json
+!ui/skill.js
+!ui/chat.js
 !engine/
 !engine/__init__.py
 !engine/processor/

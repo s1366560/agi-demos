@@ -33,7 +33,7 @@ import { formatDateTime } from '@/utils/date';
 
 import { AppModal } from '@/components/common/index';
 
-import { schemaAPI } from '@/services/api';
+import { schemaAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 import { confirmAction } from '@/utils/confirmAction';
 import { logger } from '@/utils/logger';
 

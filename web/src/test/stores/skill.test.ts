@@ -1,10 +1,10 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { skillAPI, tenantSkillConfigAPI } from '@/services/skillService';
-import { useFilteredSkills, useSkillStore } from '@/stores/skill';
+import { skillAPI, tenantSkillConfigAPI } from '@business/agent/ui/web/services/skillService';
+import { useFilteredSkills, useSkillStore } from '@business/agent/ui/web/stores/skill';
 
-vi.mock('@/services/skillService', () => ({
+vi.mock('@business/agent/ui/web/services/skillService', () => ({
   skillAPI: {
     list: vi.fn(),
     listSystemSkills: vi.fn(),

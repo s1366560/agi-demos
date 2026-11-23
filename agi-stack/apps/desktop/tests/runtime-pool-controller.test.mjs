@@ -5,7 +5,7 @@ const { DesktopApiError } = await import(
   '/tmp/agistack-desktop-test-dist/src/api/client.js'
 );
 const { createRuntimePoolController } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/runtime-pool/runtimePoolController.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/runtime-pool/runtimePoolController.js'
 );
 
 test('Runtime Pool controller settles resources independently and retains verified stale data', async () => {

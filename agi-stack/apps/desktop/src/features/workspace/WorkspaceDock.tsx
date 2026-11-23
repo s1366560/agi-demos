@@ -31,7 +31,7 @@ import {
   type ConversationRecencyGroup,
   type WorkspaceTreeSelectionMode,
   type WorkspaceTreeStatusPresentation,
-} from './workspaceTreeModel';
+} from '@business/workspace/ui/desktop/workspace/workspaceTreeModel';
 import {
   ConversationLifecycleDialogs,
   type ConversationLifecycleMode,

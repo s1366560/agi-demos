@@ -1,5 +1,5 @@
 import { useI18n } from '@desktop/i18n';
-import type { ProjectPlaybooksViewModel } from '@desktop/features/project-playbooks/projectPlaybooksController';
+import type { ProjectPlaybooksViewModel } from './projectPlaybooksController';
 
 export function ProjectPlaybooksPage({
   model,

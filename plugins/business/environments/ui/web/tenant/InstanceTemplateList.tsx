@@ -26,7 +26,7 @@ import {
   useTemplateError,
   useTemplateActions,
   useTemplatePagination,
-} from '@/stores/instanceTemplate';
+} from '../stores/instanceTemplate';
 
 const { Title, Text, Paragraph } = Typography;
 

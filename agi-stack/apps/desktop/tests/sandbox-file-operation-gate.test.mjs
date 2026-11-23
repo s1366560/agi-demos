@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { createSandboxFileOperationGate } = await import(
-  'file:///tmp/agistack-desktop-test-dist/src/features/sandbox/sandboxFileOperationGate.js'
+  'file:///tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/sandbox/sandboxFileOperationGate.js'
 );
 
 test('sandbox file operation gate aborts and invalidates old-scope reads and downloads', () => {

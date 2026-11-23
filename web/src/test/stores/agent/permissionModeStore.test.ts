@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   shouldAutoApprovePermission,
   useAgentPermissionModeStore,
-} from '../../../stores/agent/permissionModeStore';
+} from '@business/agent/ui/web/stores/agent/permissionModeStore';
 
 describe('permissionModeStore', () => {
   beforeEach(() => {

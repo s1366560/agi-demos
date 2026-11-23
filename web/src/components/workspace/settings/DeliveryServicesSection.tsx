@@ -9,7 +9,7 @@ import { Field, SwitchField } from '@business/workspace/ui/web/tenant/WorkspaceS
 
 import { DraftNumberInput } from './DraftNumberInput';
 
-import type { WorkspaceDeliveryServiceConfig } from '@/types/workspace';
+import type { WorkspaceDeliveryServiceConfig } from '@business/workspace/ui/web/types/workspace';
 
 import type { UpdateDeliveryService } from './types';
 

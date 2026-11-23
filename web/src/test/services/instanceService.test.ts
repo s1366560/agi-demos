@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { httpClient } from '../../services/client/httpClient';
-import { instanceService } from '../../services/instanceService';
+import { instanceService } from '@business/environments/ui/web/services/instanceService';
 
 vi.mock('../../services/client/httpClient', () => ({
   httpClient: {

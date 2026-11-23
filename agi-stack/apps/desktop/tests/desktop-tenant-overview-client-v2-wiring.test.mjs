@@ -10,7 +10,7 @@ function source(relativePath) {
 const app = source('src/App.tsx');
 const routeRegistry = source('src/features/navigation/appRouteRegistry.ts');
 const routeRuntime = source('src/features/navigation/desktopProductionRouteRuntime.ts');
-const capability = source('src/features/tenant/tenantOverviewCapability.ts');
+const capability = source('../../../plugins/business/workspace/ui/desktop/tenant/tenantOverviewCapability.ts');
 const workbench = source('src/features/runtime/workbenchCapabilityClient.ts');
 const provider = source('src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts');
 const dependencies = source('src/features/runtime/desktopWorkbenchSnapshotDependenciesV2.ts');

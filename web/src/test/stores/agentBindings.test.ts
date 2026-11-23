@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { bindingsService } from '@/services/agent/bindingsService';
-import { useAgentBindingStore } from '@/stores/agentBindings';
+import { bindingsService } from '@business/agent/ui/web/services/agent/bindingsService';
+import { useAgentBindingStore } from '@business/agent/ui/web/stores/agentBindings';
 
 import type { AgentBinding } from '@/types/multiAgent';
 
-vi.mock('@/services/agent/bindingsService', () => ({
+vi.mock('@business/agent/ui/web/services/agent/bindingsService', () => ({
   bindingsService: {
     list: vi.fn(),
     create: vi.fn(),

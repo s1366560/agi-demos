@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Form, Input, Modal, Select, Slider } from 'antd';
 
-import type { CyberObjective } from '@/types/workspace';
+import type { CyberObjective } from '@business/workspace/ui/web/types/workspace';
 
 export interface ObjectiveFormValues {
   title: string;

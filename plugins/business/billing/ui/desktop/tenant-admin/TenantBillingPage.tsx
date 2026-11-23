@@ -1,8 +1,10 @@
 import { useI18n } from '@desktop/i18n';
-import type { TenantBillingController } from '@desktop/features/tenant-admin/tenantBillingController';
-import type { TenantBillingPlan } from '@desktop/features/tenant-admin/tenantBillingClient';
-import type { TenantBillingViewModel } from '@desktop/features/tenant-admin/tenantBillingPresentationModel';
+import type { TenantBillingController } from './tenantBillingController';
+import type { TenantBillingPlan } from './tenantBillingClient';
+import type { TenantBillingViewModel } from './tenantBillingPresentationModel';
 import { TenantAdminDegradedNotice, TenantAdminRouteState } from '@desktop/features/tenant-admin/TenantAdminRouteState';
+
+import { InvoiceTable } from '../../shared/InvoiceTable';
 
 const PLANS: readonly TenantBillingPlan[] = ['free', 'pro', 'enterprise'];
 
@@ -75,21 +77,7 @@ export function TenantBillingPage({
       ) : null}
       <section>
         <h2>{t('tenantAdmin.billing.invoices')}</h2>
-        <table>
-          <tbody>
-            {model.invoices.map((invoice) => (
-              <tr key={invoice.id}>
-                <td>
-                  <code>{invoice.id}</code>
-                </td>
-                <td>
-                  {invoice.currency} {invoice.amount}
-                </td>
-                <td>{invoice.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <InvoiceTable invoices={model.invoices} />
       </section>
     </section>
   );

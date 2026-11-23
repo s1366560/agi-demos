@@ -131,7 +131,8 @@ def test_independent_official_page_upgrade_and_rollback(tmp_path):
             response.raise_for_status()
             return response.json()
 
-        archives = sorted((state / "archives").glob("*.mspkg"))
+        archive_dir = Path(os.environ.get("MEMSTACK_QA_PACKAGE_ARCHIVES", state / "archives"))
+        archives = sorted(archive_dir.glob("*.mspkg"))
         official = {archive.stem for archive in archives}
 
         def active():

@@ -58,7 +58,7 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteHostModel.js');
 const {
   buildProjectBlackboardCanonicalPath,
-} = require('/tmp/agistack-desktop-test-dist/src/features/project-blackboard/projectBlackboardRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project-blackboard/projectBlackboardRouteModule.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const registrySource = readFileSync(

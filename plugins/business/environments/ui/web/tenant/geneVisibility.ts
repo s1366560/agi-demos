@@ -1,4 +1,4 @@
-import type { ContentVisibilityValue } from '@/services/geneMarketService';
+import type { ContentVisibilityValue } from '../services/geneMarketService';
 import type { TFunction } from 'i18next';
 
 export const visibilityOptions = (

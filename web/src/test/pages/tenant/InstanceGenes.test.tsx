@@ -4,14 +4,14 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InstanceGenes } from '@business/environments/ui/web/tenant/InstanceGenes';
-import { geneMarketService } from '@/services/geneMarketService';
+import { geneMarketService } from '@business/environments/ui/web/services/geneMarketService';
 
 import type {
   GeneListResponse,
   GeneResponse,
   InstanceGeneListResponse,
   InstanceGeneResponse,
-} from '@/services/geneMarketService';
+} from '@business/environments/ui/web/services/geneMarketService';
 
 import { App } from 'antd';
 
@@ -38,7 +38,7 @@ vi.mock('@/hooks/useDebounce', () => ({
   useDebounce: (value: unknown) => value,
 }));
 
-vi.mock('@/services/geneMarketService', () => ({
+vi.mock('@business/environments/ui/web/services/geneMarketService', () => ({
   geneMarketService: {
     installGene: vi.fn(),
     listGenes: vi.fn(),

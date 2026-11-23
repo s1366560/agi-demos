@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { createTenantWorkspacesV2Client } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantWorkspacesV2Client.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/tenant/tenantWorkspacesV2Client.js'
 );
 
 function operationsFixture(received, overrides = {}) {

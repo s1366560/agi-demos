@@ -37,7 +37,7 @@ import { useBackgroundStore, useRunningCount } from '@/stores/backgroundStore';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 import { useThemeStore } from '@/stores/theme';
-import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
+import { useCurrentWorkspace, useWorkspaces } from '@business/workspace/ui/web/stores/workspace';
 
 import { authAPI } from '@/services/api';
 

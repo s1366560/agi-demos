@@ -5,7 +5,7 @@ import {
   clearAllTimelineBuffers,
   flushTimelineBufferSync,
   queueTimelineEvent,
-} from '../../../stores/agent/deltaBuffers';
+} from '@business/agent/ui/web/stores/agent/deltaBuffers';
 import { createDefaultConversationState } from '../../../types/conversationState';
 
 import type { AgentEvent } from '../../../types/agent';

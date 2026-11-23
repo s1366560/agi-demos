@@ -6,8 +6,8 @@ import type {
   BackendStore,
   BackendStorePlane,
   BackendStoreTestResult,
-} from '@desktop/features/backend-stores/backendStoresClient';
-import type { BackendStoresController, BackendStoresViewModel } from '@desktop/features/backend-stores/backendStoresController';
+} from './backendStoresClient';
+import type { BackendStoresController, BackendStoresViewModel } from './backendStoresController';
 
 type StoreForm = Readonly<{
   name: string;

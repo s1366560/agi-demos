@@ -72,7 +72,7 @@ const mockEntityTypes = [
   },
 ];
 
-vi.mock('../../../../services/api', () => ({
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({
   schemaAPI: {
     listEntityTypes: vi.fn(() => Promise.resolve(mockEntityTypes)),
     createEntityType: vi.fn(() => Promise.resolve({ id: 'new-entity-type' })),
@@ -436,7 +436,7 @@ describe('EntityTypeList Compound Component', () => {
 
     it('should save edits made inside the modal form', async () => {
       const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
-      const { schemaAPI } = await import('../../../../services/api');
+      const { schemaAPI } = await import('@business/knowledge/ui/web/services/knowledgeApi');
       render(<EntityTypeList />);
 
       await waitFor(() => {

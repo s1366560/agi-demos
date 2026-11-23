@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Users, MessageSquare, ChevronDown, Check, Hash } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 
 import { ChatPanel } from './ChatPanel';
 

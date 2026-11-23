@@ -10,7 +10,7 @@ const {
   parseSandboxRuntimeCapabilitySnapshot,
   remoteDesktopReconnectDelay,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/sandbox/sandboxRuntimeSurfaceClient.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/sandbox/sandboxRuntimeSurfaceClient.js'
 );
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 

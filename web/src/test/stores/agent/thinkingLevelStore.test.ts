@@ -11,7 +11,7 @@ import {
   isAgentThinkingLevel,
   thinkingLevelToEffort,
   useAgentThinkingLevelStore,
-} from '../../../stores/agent/thinkingLevelStore';
+} from '@business/agent/ui/web/stores/agent/thinkingLevelStore';
 
 describe('thinkingLevelStore', () => {
   beforeEach(() => {

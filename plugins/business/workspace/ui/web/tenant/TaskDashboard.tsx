@@ -9,8 +9,8 @@ import { AlertCircle, Gauge, Hourglass, ListTodo, Loader2, Play, RefreshCw } fro
 import { formatTimeOnly } from '@/utils/date';
 import { logger } from '@/utils/logger';
 
-import { TaskList } from '@/components/tasks/TaskList';
-import { taskAPI } from '@/services/api';
+import { TaskList } from '../components/tasks/TaskList';
+import { taskAPI } from '../services/taskService';
 import { useTenantStore } from '@/stores/tenant';
 
 import { projectQueueDepth } from './taskDashboardQueueDepth';

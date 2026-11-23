@@ -10,11 +10,11 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createUnifiedRuntimesRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/unified-runtimes/unifiedRuntimesRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/unified-runtimes/unifiedRuntimesRouteModule.js');
 const {
   UNIFIED_RUNTIMES_REFRESH_INTERVAL_MS,
   unifiedRuntimesAutoRefreshAllowed,
-} = require('/tmp/agistack-desktop-test-dist/src/features/unified-runtimes/useUnifiedRuntimesController.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/unified-runtimes/useUnifiedRuntimesController.js');
 
 test('Unified Runtimes refreshes only while the native route is visible', () => {
   assert.equal(UNIFIED_RUNTIMES_REFRESH_INTERVAL_MS, 15_000);

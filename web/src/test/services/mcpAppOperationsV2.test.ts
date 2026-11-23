@@ -7,7 +7,7 @@ import {
   type WebOperationContextV2,
 } from '@/plugins/webOperationAdmissionV2';
 import { mcpAppAPI } from '@/services/mcpAppService';
-import { projectSandboxService } from '@/services/projectSandboxService';
+import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
 
 const transport = vi.hoisted(() => ({
   calls: [] as Array<{ url: string; signal?: AbortSignal }>,

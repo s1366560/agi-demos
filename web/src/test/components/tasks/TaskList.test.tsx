@@ -25,7 +25,7 @@ vi.mock('date-fns', () => ({
   format: vi.fn((_date: Date) => 'Jan 1, 12:00:00'),
 }));
 
-import { taskAPI } from '../../../services/api';
+import { taskAPI } from '@business/workspace/ui/web/services/taskService';
 
 const mockTasks = [
   {
@@ -85,7 +85,7 @@ describe('TaskList (Compound Components)', () => {
     it('should render empty state when no tasks', async () => {
       vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValueOnce(taskResponse([]));
 
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -94,7 +94,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should render table with tasks when data is loaded', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -105,7 +105,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should render in embedded mode without header', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       const { container } = render(<TaskList embedded={true} />);
 
       await waitFor(() => {
@@ -115,7 +115,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should scope embedded task requests by entity id and type', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList entityId="community-123" entityType="community" embedded={true} />);
 
       await waitFor(() => {
@@ -131,7 +131,7 @@ describe('TaskList (Compound Components)', () => {
 
   describe('TaskList.Header', () => {
     it('should render search input', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -140,7 +140,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should render status filter dropdown', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -149,7 +149,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should render refresh button', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -161,7 +161,7 @@ describe('TaskList (Compound Components)', () => {
 
   describe('TaskList.Item', () => {
     it('should render task status with correct color', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -174,7 +174,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should render task type name', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -183,7 +183,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should render task duration or dash placeholder', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -192,7 +192,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should render action buttons for tasks', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -205,7 +205,7 @@ describe('TaskList (Compound Components)', () => {
       vi.spyOn(taskAPI, 'retryTask').mockRejectedValueOnce(new Error('retry failed'));
       const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
 
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -234,7 +234,7 @@ describe('TaskList (Compound Components)', () => {
         ])
       );
 
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -251,7 +251,7 @@ describe('TaskList (Compound Components)', () => {
       vi.spyOn(taskAPI, 'stopTask').mockRejectedValueOnce(new Error('stop failed'));
       const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
 
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -267,7 +267,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should render entity info for tasks without entityId prop', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -278,7 +278,7 @@ describe('TaskList (Compound Components)', () => {
 
   describe('TaskList.Pagination', () => {
     it('should render pagination controls', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -289,7 +289,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should disable previous button on first page', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -303,7 +303,7 @@ describe('TaskList (Compound Components)', () => {
         .mockResolvedValueOnce(taskResponse(mockTasks, { total: 4, has_more: true }))
         .mockResolvedValueOnce(taskResponse([mockTasks[0]!], { total: 4, offset: 50 }));
 
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -323,7 +323,7 @@ describe('TaskList (Compound Components)', () => {
     it('should render empty state with search icon', async () => {
       vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValueOnce(taskResponse([]));
 
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -334,7 +334,7 @@ describe('TaskList (Compound Components)', () => {
 
   describe('Accessibility', () => {
     it('should have proper table structure', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {
@@ -343,7 +343,7 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('should have proper column headers', async () => {
-      const { TaskList } = await import('../../../components/tasks/TaskList');
+      const { TaskList } = await import('@business/workspace/ui/web/components/tasks/TaskList');
       render(<TaskList />);
 
       await waitFor(() => {

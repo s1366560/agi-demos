@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { CommunitiesList } from '@business/knowledge/ui/web/project/communities/index';
-import { graphService } from '../../../services/graphService';
+import { graphService } from '@business/knowledge/ui/web/services/graphService';
 import { render, screen, fireEvent, waitFor } from '../../utils';
 
 import type { Community } from '@business/knowledge/ui/web/project/communities/types';
@@ -20,7 +20,7 @@ global.EventSource = vi.fn(() => ({
 })) as any;
 
 // Mock the dependencies
-vi.mock('../../../services/graphService', () => ({
+vi.mock('@business/knowledge/ui/web/services/graphService', () => ({
   graphService: {
     listCommunities: vi.fn(),
     getCommunityMembers: vi.fn(),
@@ -37,7 +37,7 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('../../../components/tasks/TaskList', () => ({
+vi.mock('@business/workspace/ui/web/components/tasks/TaskList', () => ({
   TaskList: ({ entityId, entityType }: any) => (
     <div data-testid="task-list" data-entity-id={entityId} data-entity-type={entityType}>
       Tasks

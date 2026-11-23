@@ -16,11 +16,11 @@ import {
   useInstanceError,
   useInstanceTotal,
   useInstanceActions,
-} from '@/stores/instance';
+} from '../stores/instance';
 
 import { getStatusColor, formatDate } from './utils/instanceUtils';
 
-import type { InstanceResponse } from '@/services/instanceService';
+import type { InstanceResponse } from '../services/instanceService';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Search } = Input;

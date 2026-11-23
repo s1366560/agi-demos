@@ -21,11 +21,11 @@ import {
 import {
   projectOverviewEnUS,
   projectOverviewZhCN,
-} from './features/project/locales/projectOverviewMessages';
+} from '@business/workspace/ui/desktop/project/locales/projectOverviewMessages';
 import {
   projectSupportEnUS,
   projectSupportZhCN,
-} from './features/project-support/locales/projectSupportMessages';
+} from '@business/workspace/ui/desktop/project-support/locales/projectSupportMessages';
 import {
   deadLetterQueueEnUS,
   deadLetterQueueZhCN,
@@ -45,27 +45,27 @@ import {
 import {
   instanceTemplatesEnUS,
   instanceTemplatesZhCN,
-} from './features/instance-templates/locales/instanceTemplatesMessages';
+} from '@business/environments/ui/desktop/instance-templates/locales/instanceTemplatesMessages';
 import {
   runtimePoolEnUS,
   runtimePoolZhCN,
-} from './features/runtime-pool/locales/runtimePoolMessages';
+} from '@business/environments/ui/desktop/runtime-pool/locales/runtimePoolMessages';
 import {
   runtimeInstancesEnUS,
   runtimeInstancesZhCN,
-} from './features/runtime-instances/locales/runtimeInstancesMessages';
+} from '@business/environments/ui/desktop/runtime-instances/locales/runtimeInstancesMessages';
 import {
   runtimeClustersEnUS,
   runtimeClustersZhCN,
-} from './features/runtime-clusters/locales/runtimeClustersMessages';
+} from '@business/environments/ui/desktop/runtime-clusters/locales/runtimeClustersMessages';
 import {
   runtimeDeploymentsEnUS,
   runtimeDeploymentsZhCN,
-} from './features/runtime-deployments/locales/runtimeDeploymentsMessages';
+} from '@business/environments/ui/desktop/runtime-deployments/locales/runtimeDeploymentsMessages';
 import {
   unifiedRuntimesEnUS,
   unifiedRuntimesZhCN,
-} from './features/unified-runtimes/locales/unifiedRuntimesMessages';
+} from '@business/environments/ui/desktop/unified-runtimes/locales/unifiedRuntimesMessages';
 import {
   nativeUnavailableRouteEnUS,
   nativeUnavailableRouteZhCN,

@@ -2,7 +2,7 @@ import '@radix-ui/themes/styles.css';
 import { Theme } from '@radix-ui/themes';
 import { createRoot, type Root } from 'react-dom/client';
 
-import { WorkspaceCollaborationCanvas } from '../features/workspace/WorkspaceCollaborationCanvas';
+import { WorkspaceCollaborationCanvas } from '@business/workspace/ui/desktop/workspace/WorkspaceCollaborationCanvas';
 import type {
   WorkspaceCollaborationClient,
   WorkspaceCollaborationSurface,

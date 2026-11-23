@@ -37,7 +37,7 @@ import {
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
-import { skillAPI } from '@/services/skillService';
+import { skillAPI } from '../services/skillService';
 
 import { formatDateTime } from '@/utils/date';
 import {

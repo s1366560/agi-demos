@@ -8,8 +8,8 @@ import type {
   NativeKnowledgeProcessingClient,
   NativeKnowledgeProcessingCommandClient,
 } from './nativeKnowledgeContracts';
-import type { NativeMemoriesAuthority } from './nativeMemoriesController';
-import type { ProjectMemoriesClient } from './projectMemoriesClient';
+import type { NativeMemoriesAuthority } from '@business/knowledge/ui/desktop/project-knowledge/nativeMemoriesController';
+import type { ProjectMemoriesClient } from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
 
 export type NativeMemoriesRouteBinding = Readonly<{
   authority: NativeMemoriesAuthority;

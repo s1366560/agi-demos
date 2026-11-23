@@ -5,8 +5,8 @@ import type {
   RuntimeClusterSummary,
   RuntimeClustersModel,
   RuntimeClustersQuery,
-} from '@desktop/features/runtime-clusters/runtimeClustersTypes';
-import '@desktop/features/runtime-clusters/RuntimeClustersPage.css';
+} from './runtimeClustersTypes';
+import './RuntimeClustersPage.css';
 
 export function RuntimeClustersPage({
   model,

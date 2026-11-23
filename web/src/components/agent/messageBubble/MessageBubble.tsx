@@ -42,7 +42,7 @@ import {
 
 import { useCanvasStore, type CanvasContentType } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
-import { useSandboxStore } from '@/stores/sandbox';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 import { useTemplateActions } from '@/stores/templateStore';
 import { useCurrentTenant } from '@/stores/tenant';
 
@@ -58,7 +58,7 @@ import {
   isSafeArtifactUrl,
   normalizeSandboxPath,
   resolveSandboxArtifactUrl,
-} from '@/utils/sandboxArtifactPath';
+} from '@business/environments/ui/web/utils/sandboxArtifactPath';
 
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
 import { useMarkdownPlugins } from '../chat/markdownPlugins';

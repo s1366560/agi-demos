@@ -7,7 +7,7 @@ vi.mock('@/services/client/httpClient', () => ({
 }));
 
 import { httpClient } from '@/services/client/httpClient';
-import { ProjectAgentContractError, projectAgentService } from '@/services/projectAgentService';
+import { ProjectAgentContractError, projectAgentService } from '@business/agent/ui/web/services/projectAgentService';
 
 describe('projectAgentService', () => {
   beforeEach(() => {

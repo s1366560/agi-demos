@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { CollaborationOverviewTab } from '@/components/blackboard/tabs/CollaborationOverviewTab';
+import { CollaborationOverviewTab } from '@business/workspace/ui/web/components/blackboard/tabs/CollaborationOverviewTab';
 import { render, screen } from '@/test/utils';
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaceStore: (selector: (state: unknown) => unknown) =>
     selector({
       chatMessages: [],

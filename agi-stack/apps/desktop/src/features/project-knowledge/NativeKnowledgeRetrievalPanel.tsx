@@ -4,7 +4,7 @@ import type {
   NativeKnowledgeRetrievalController,
   NativeKnowledgeRetrievalMode,
   NativeKnowledgeRetrievalModel,
-} from './nativeKnowledgeRetrievalController';
+} from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeRetrievalController';
 
 export function NativeKnowledgeRetrievalUnavailable() {
   const { t } = useI18n();

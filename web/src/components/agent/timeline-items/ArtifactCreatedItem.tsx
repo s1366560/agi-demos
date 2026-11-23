@@ -23,7 +23,7 @@ import {
 import { fetchArtifactResource } from '../../../services/artifactService';
 import { type CanvasContentType, useCanvasStore } from '../../../stores/canvasStore';
 import { useLayoutModeStore } from '../../../stores/layoutMode';
-import { useSandboxStore } from '../../../stores/sandbox';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 import { isOfficeMimeType, isOfficeExtension } from '../../../utils/filePreview';
 
 import { TimeBadge } from './shared';

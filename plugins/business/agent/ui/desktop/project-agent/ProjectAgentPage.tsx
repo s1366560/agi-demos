@@ -1,5 +1,5 @@
 import { useI18n } from '@desktop/i18n';
-import type { ProjectAgentViewModel } from '@desktop/features/project-agent/projectAgentPresentationModel';
+import type { ProjectAgentViewModel } from './projectAgentPresentationModel';
 
 export function ProjectAgentPage({
   model,

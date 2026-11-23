@@ -8,10 +8,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { EntitiesList } from '@business/knowledge/ui/web/project/EntitiesList';
-import { graphService } from '../../../services/graphService';
+import { graphService } from '@business/knowledge/ui/web/services/graphService';
 
 // Mock the dependencies
-vi.mock('../../../services/graphService', () => ({
+vi.mock('@business/knowledge/ui/web/services/graphService', () => ({
   graphService: {
     getEntityTypes: vi.fn().mockResolvedValue({
       entity_types: [
@@ -277,7 +277,7 @@ describe('EntitiesList Compound Component', () => {
 
   describe('Pagination Sub-Component', () => {
     it('should render pagination controls', async () => {
-      const { graphService } = await import('../../../services/graphService');
+      const { graphService } = await import('@business/knowledge/ui/web/services/graphService');
       vi.mocked(graphService.getEntityTypes).mockResolvedValue({
         entity_types: [
           { entity_type: 'Person', count: 10 },

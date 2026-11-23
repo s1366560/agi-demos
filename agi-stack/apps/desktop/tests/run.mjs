@@ -46,9 +46,9 @@ for (const folder of ['apps', 'packages']) {
 const compiledDesktopRoot = join(compiledRoot, 'agi-stack', 'apps', 'desktop');
 for (const entry of readdirSync(compiledDesktopRoot)) {
   if (entry === 'src') continue;
-  cpSync(join(compiledDesktopRoot, entry), join(compiledRoot, entry), {
-    recursive: true,
-  });
+  // Preserve package-relative imports from Main and preload in the legacy test fixture paths.
+  symlinkSync(join(compiledDesktopRoot, entry), join(compiledRoot, entry),
+    statSync(join(compiledDesktopRoot, entry)).isDirectory() ? 'dir' : 'file');
 }
 
 const testNodeModules = join(compiledRoot, 'test-node-modules');

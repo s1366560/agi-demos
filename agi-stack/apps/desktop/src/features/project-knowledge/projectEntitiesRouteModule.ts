@@ -4,7 +4,7 @@ import {
   type ProjectKnowledgeRouteBinding,
   type ProjectKnowledgeRouteContext,
 } from './projectKnowledgeRouteModule';
-import { PROJECT_ENTITIES_ROUTE_ID } from './projectEntitiesClient';
+import { PROJECT_ENTITIES_ROUTE_ID } from '@business/knowledge/ui/desktop/project-knowledge/projectEntitiesClient';
 
 export type ProjectEntitiesRouteContext = ProjectKnowledgeRouteContext;
 export type ProjectEntitiesRouteBinding = ProjectKnowledgeRouteBinding;

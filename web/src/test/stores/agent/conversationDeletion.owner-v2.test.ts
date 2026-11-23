@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { agentService } from '@/services/agentService';
-import { useAgentV3Store } from '@/stores/agentV3';
-import { useConversationsStore } from '@/stores/agent/conversationsStore';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
+import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
 import { createDefaultConversationState } from '@/types/conversationState';
 const scope = vi.hoisted(() => ({ owner: {} }));
 vi.mock('@/plugins/webOperationAdmissionV2', () => ({

@@ -1,5 +1,5 @@
 import type { DesktopNativeKnowledgeProcessingHttpV2 } from './desktopNativeKnowledgeProcessingHttpV2';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type {
   NativeKnowledgeProcessingQuery,
   NativeKnowledgeProcessingCommand,
@@ -16,7 +16,7 @@ import {
   requireNativeKnowledgeProcessingCommandResponse,
 } from '../features/project-knowledge/nativeKnowledgeProcessingValidation';
 import { requireNativeKnowledgeScope } from '../features/project-knowledge/nativeKnowledgeValidation';
-import { isRecord } from '../features/project-knowledge/projectKnowledgeClient';
+import { isRecord } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopProjectMemoriesOperationsV2 } from './desktopProjectMemoriesAuthorityModuleV2';
 import type { DesktopRuntimeConfig } from '../types';
 

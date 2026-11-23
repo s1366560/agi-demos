@@ -4,7 +4,7 @@ vi.mock('@/plugins/webOperationAdmissionV2', () => ({
 }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useAgentHITLStore } from '../../../stores/agent/hitlStore';
+import { useAgentHITLStore } from '@business/agent/ui/web/stores/agent/hitlStore';
 
 vi.mock('../../../services/agentService', () => ({
   agentService: {

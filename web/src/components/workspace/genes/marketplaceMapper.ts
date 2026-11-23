@@ -1,6 +1,6 @@
-import type { GeneResponse } from '@/services/geneMarketService';
+import type { GeneResponse } from '@business/environments/ui/web/services/geneMarketService';
 
-import type { CyberGeneCategory } from '@/types/workspace';
+import type { CyberGeneCategory } from '@business/workspace/ui/web/types/workspace';
 
 import type { GenePayload } from './GeneEditorModal';
 

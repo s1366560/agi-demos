@@ -2,7 +2,7 @@ import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { agentService } from '../../services/agentService';
-import { useAgentV3Store } from '../../stores/agentV3';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { useLayoutModeStore } from '../../stores/layoutMode';
 import { createDefaultConversationState } from '../../types/conversationState';

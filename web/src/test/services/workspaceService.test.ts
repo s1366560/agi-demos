@@ -6,7 +6,7 @@ import {
   workspaceService,
   workspaceTaskService,
   workspaceTopologyService,
-} from '@/services/workspaceService';
+} from '@business/workspace/ui/web/services/workspaceService';
 
 vi.mock('@/i18n/config', () => ({
   default: {

@@ -10,13 +10,13 @@ import {
   RUNTIME_INSTANCES_LOCAL_ACTIONS,
   RUNTIME_INSTANCES_LOCAL_REASON,
   RuntimeInstancesUnavailableError,
-} from '../features/runtime-instances/runtimeInstancesContract';
+} from '@business/environments/ui/desktop/runtime-instances/runtimeInstancesContract';
 import type {
   RuntimeInstanceSummary,
   RuntimeInstancesPage,
   RuntimeInstancesQuery,
   RuntimeInstancesScope,
-} from '../features/runtime-instances/runtimeInstancesTypes';
+} from '@business/environments/ui/desktop/runtime-instances/runtimeInstancesTypes';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 import type { DesktopRuntimeConfig } from '../types';
 import {

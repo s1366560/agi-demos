@@ -1,5 +1,5 @@
 import type { DesktopRouteModuleLoader } from '../navigation/desktopRouteModule';
-import { PROJECT_AGENT_PATTERNS_ROUTE_ID } from './projectAgentPatternsClient';
+import { PROJECT_AGENT_PATTERNS_ROUTE_ID } from '@business/agent/ui/desktop/project-agent/projectAgentPatternsClient';
 import {
   createProjectAgentRouteModuleLoader,
   type ProjectAgentRouteBinding,

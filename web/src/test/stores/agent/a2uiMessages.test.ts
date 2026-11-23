@@ -5,7 +5,7 @@ import {
   extractA2UISurfaceId,
   mergeA2UIMessageStream,
   mergeA2UIMessageStreamWithSnapshot,
-} from '../../../stores/agent/a2uiMessages';
+} from '@business/agent/ui/web/stores/agent/a2uiMessages';
 import { getA2UIContractCase, getA2UIContractMessages } from '../../fixtures/a2uiContractFixtures';
 
 describe('mergeA2UIMessageStream', () => {

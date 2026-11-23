@@ -17,16 +17,16 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createProjectBlackboardV2Client,
-} = require('/tmp/agistack-desktop-test-dist/src/features/project-blackboard/projectBlackboardClient.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project-blackboard/projectBlackboardClient.js');
 const {
   createDesktopProjectBlackboardAuthorityV2,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectBlackboardTransportV2.js');
 const {
   createProjectBlackboardController,
-} = require('/tmp/agistack-desktop-test-dist/src/features/project-blackboard/projectBlackboardController.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project-blackboard/projectBlackboardController.js');
 const {
   createProjectBlackboardRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/project-blackboard/projectBlackboardRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project-blackboard/projectBlackboardRouteModule.js');
 
 const cloudScope = Object.freeze({
   authority: 'cloud',

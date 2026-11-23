@@ -1,4 +1,4 @@
-import { BLACKBOARD_TABS, type BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
+import { BLACKBOARD_TABS, type BlackboardTab } from '../components/blackboard/BlackboardTabBar';
 
 export const DEFAULT_BLACKBOARD_TAB: BlackboardTab = 'goals';
 

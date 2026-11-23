@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { InputNumber, Popover, Slider } from 'antd';
 import { ChevronRight, Settings2 } from 'lucide-react';
 
-import { useAgentV3Store } from '@/stores/agentV3';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 
 import type { ActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
 

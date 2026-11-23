@@ -1,4 +1,4 @@
-import type { EvolutionEventType } from '@/services/geneMarketService';
+import type { EvolutionEventType } from '../../services/geneMarketService';
 
 import type { TFunction } from 'i18next';
 

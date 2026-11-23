@@ -26,10 +26,10 @@ import {
   useClusterLoading,
   useClusterError,
   useClusterActions,
-} from '@/stores/cluster';
+} from '../../stores/cluster';
 import { useTenantStore } from '@/stores/tenant';
 
-import type { ClusterResponse } from '@/services/clusterService';
+import type { ClusterResponse } from '../../services/clusterService';
 
 const getStatusConfig = (status: string): { color: string; bgColor: string; labelKey: string } => {
   switch (status) {

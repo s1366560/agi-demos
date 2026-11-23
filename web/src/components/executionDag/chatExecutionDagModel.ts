@@ -1,6 +1,6 @@
-import type { GraphNodeState, GraphRunState } from '@/stores/graphStore';
+import type { GraphNodeState, GraphRunState } from '@business/knowledge/ui/web/stores/graphStore';
 
-import type { AgentGraphApiResponse } from '@/services/agent/graph/agentGraphApi';
+import type { AgentGraphApiResponse } from '@business/agent/ui/web/services/agent/graph/agentGraphApi';
 
 import { uniqueEdges } from './dagModelUtils';
 

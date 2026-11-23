@@ -9,7 +9,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createInstanceTemplatesRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/instance-templates/instanceTemplatesRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/instance-templates/instanceTemplatesRouteModule.js');
 
 test('Instance Templates loader stays lazy and renders the native lifecycle surface', async () => {
   let bindingCalls = 0;

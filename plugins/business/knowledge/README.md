@@ -4,6 +4,10 @@
 
 图谱持久化任务位于 [backend/graph_workflows.py](backend/graph_workflows.py)。完整服务向 Automation 运行时注册事件处理、增量刷新与社区重建任务，各任务在执行和恢复时重新取得作用域授权。
 
+签名[项目记忆页面](workers/graph_projection/ui/memories.js)通过 `app.knowledge.memories.read` 按项目搜索持久化的标题与正文，分页显示标题和摘要。正式 Web 与桌面共用这份资源。
+
+完整 Web 客户端的记忆与图谱请求在 [ui/web/services](ui/web/services/)，视图状态在 [ui/web/stores](ui/web/stores/)。桌面知识目录、冲突处理与编辑器由 [ui/desktop/project-knowledge](ui/desktop/project-knowledge/) 维护。
+
 从仓库根目录构建两个目标。发布者提供受信的签名密钥文件和已推送的 OCI 镜像不可变引用。镜像构建步骤见[图投影说明](workers/graph_projection/README.md)。
 
 ```sh

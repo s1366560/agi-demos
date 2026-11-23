@@ -9,7 +9,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createRuntimeDeploymentsRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/runtime-deployments/runtimeDeploymentsRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsRouteModule.js');
 
 test('Runtime Deployments loader stays lazy and renders a native read-only history', async () => {
   let bindingCalls = 0;

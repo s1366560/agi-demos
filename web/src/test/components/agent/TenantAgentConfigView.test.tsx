@@ -29,7 +29,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../../services/agentConfigService', () => ({
+vi.mock('@business/agent/ui/web/services/agentConfigService', () => ({
   agentConfigService: {
     getConfig: mockGetConfig,
   },

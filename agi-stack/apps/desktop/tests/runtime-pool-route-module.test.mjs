@@ -10,11 +10,11 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createRuntimePoolRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/runtime-pool/runtimePoolRouteModule.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/runtime-pool/runtimePoolRouteModule.js');
 const {
   RUNTIME_POOL_REFRESH_INTERVAL_MS,
   runtimePoolAutoRefreshAllowed,
-} = require('/tmp/agistack-desktop-test-dist/src/features/runtime-pool/useRuntimePoolController.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/runtime-pool/useRuntimePoolController.js');
 
 test('Runtime Pool refreshes only while visible and no mutation is active', () => {
   assert.equal(RUNTIME_POOL_REFRESH_INTERVAL_MS, 15_000);

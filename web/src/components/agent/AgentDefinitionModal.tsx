@@ -11,15 +11,15 @@ import { useTranslation } from 'react-i18next';
 
 import { Modal, Form, Input, Select, Tabs, InputNumber, Switch, Tag, message, Slider } from 'antd';
 
-import { acpService } from '../../services/acpService';
+import { acpService } from '@business/agent/ui/web/services/acpService';
 import { agentService } from '../../services/agentService';
 import { mcpAPI } from '../../services/mcpService';
-import { skillAPI } from '../../services/skillService';
+import { skillAPI } from '@business/agent/ui/web/services/skillService';
 import {
   useCreateDefinition,
   useUpdateDefinition,
   useDefinitionSubmitting,
-} from '../../stores/agentDefinitions';
+} from '@business/agent/ui/web/stores/agentDefinitions';
 import { StateDisplay } from '../shared/ui/StateDisplay';
 
 import {

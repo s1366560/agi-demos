@@ -1,8 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useConversationApprovalMode } from '@/hooks/useConversationApprovalMode';
-import { useAgentPermissionModeStore } from '@/stores/agent/permissionModeStore';
+import { useConversationApprovalMode } from '@business/agent/ui/web/hooks/useConversationApprovalMode';
+import { useAgentPermissionModeStore } from '@business/agent/ui/web/stores/agent/permissionModeStore';
 
 const { getConversation, updateConversationConfig, authority } = vi.hoisted(() => ({
   authority: { snapshot: { owner: {}, available: true } },

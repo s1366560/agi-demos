@@ -55,7 +55,7 @@ const organizationSettingsTypesSource = readFileSync(
   'utf8',
 );
 const genesTypesSource = readFileSync(
-  new URL('../src/features/tenant-admin/tenantGenesClient.ts', import.meta.url),
+  new URL('../../../../plugins/business/environments/ui/desktop/tenant-admin/tenantGenesClient.ts', import.meta.url),
   'utf8',
 );
 const workbenchSource = readFileSync(

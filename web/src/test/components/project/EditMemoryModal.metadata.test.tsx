@@ -2,11 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EditMemoryModal } from '@/components/project/EditMemoryModal';
-import { memoryAPI } from '@/services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 
 import type { Memory } from '@/types/memory';
 
-vi.mock('@/services/api', () => ({ memoryAPI: { update: vi.fn() } }));
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({ memoryAPI: { update: vi.fn() } }));
 
 const memory: Memory = {
   id: 'memory-1',

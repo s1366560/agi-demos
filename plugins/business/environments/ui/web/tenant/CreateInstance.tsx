@@ -8,18 +8,18 @@ import { App, Alert, Steps, Form, Input, InputNumber, Space, Descriptions } from
 import { LazyButton, LazySelect } from '@/components/ui/lazyAntd';
 
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning';
-import { instanceTemplateService } from '@/services/instanceTemplateService';
-import { useClusters, useClusterActions } from '@/stores/cluster';
-import { useInstanceActions, useInstanceSubmitting } from '@/stores/instance';
+import { instanceTemplateService } from '../services/instanceTemplateService';
+import { useClusters, useClusterActions } from '../stores/cluster';
+import { useInstanceActions, useInstanceSubmitting } from '../stores/instance';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
-import { useWorkspaces, useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaces, useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 import { confirmAction } from '@/utils/confirmAction';
 
 import { parseInstanceJsonObject } from './utils/createInstanceUtils';
 
-import type { InstanceCreate } from '@/services/instanceService';
-import type { InstanceTemplateResponse } from '@/services/instanceTemplateService';
+import type { InstanceCreate } from '../services/instanceService';
+import type { InstanceTemplateResponse } from '../services/instanceTemplateService';
 
 type InstanceFormValues = Partial<
   Omit<InstanceCreate, 'advanced_config' | 'env_vars' | 'llm_providers'>

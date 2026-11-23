@@ -6,9 +6,9 @@ import { useNavigate } from 'react-router-dom';
 
 import { App } from 'antd';
 
-import { useCurrentWorkspace, useWorkspaceActions, useWorkspaceMembers } from '@/stores/workspace';
+import { useCurrentWorkspace, useWorkspaceActions, useWorkspaceMembers } from '../stores/workspace';
 
-import { workspaceService } from '@/services/workspaceService';
+import { workspaceService } from '../services/workspaceService';
 
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning';
 
@@ -46,7 +46,7 @@ import {
 import type {
   WorkspaceDeliveryServiceConfig,
   WorkspaceSourceControlProvider,
-} from '@/types/workspace';
+} from '../types/workspace';
 
 export const WorkspaceSettingsPanel: React.FC<{
   tenantId: string;

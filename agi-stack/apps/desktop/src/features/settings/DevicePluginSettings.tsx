@@ -2,37 +2,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { LocalPluginReference } from '../../api/localPluginClient';
 import { pluginArchiveBase64 } from '../../api/localPluginClient';
-import { useI18n } from '../../i18n';
+import { localPluginEnUS, localPluginZhCN } from './localPluginMessages';
 import { openFilesWithDesktopDialog } from '../runtime/nativeFileBridge';
 
-type Installed = {
-  reference: LocalPluginReference;
-  tools: string[];
-  grant_id: string;
-  grant_status: string;
-  last_invoked_at: string | null;
-  last_error: string | null;
-  generation_id: string;
-};
-type Catalog = {
-  context_token: string;
-  machine_id: string;
-  device_fingerprint: string;
-  generation_id: string;
-  trust_configured: boolean;
-  can_manage: boolean;
-  installations: Installed[];
-};
+import { deviceRequest, type Catalog } from '../../packageHost/device';
 type Preview = { reference: LocalPluginReference; declared_permissions: string[]; tools: string[] };
 
 export function DevicePluginSettings({
   tenant,
   project,
+  pluginId,
 }: {
   tenant: string;
   project: string;
+  pluginId?: string;
 }) {
-  const { t } = useI18n();
+  const messages = document.documentElement.lang.startsWith('zh') ? localPluginZhCN : localPluginEnUS;
+  const t = (key: keyof typeof messages) => messages[key];
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [preview, setPreview] = useState<(Preview & { archive: string }) | null>(null);
   const manager=catalog?.can_manage === true;
@@ -45,20 +31,9 @@ export function DevicePluginSettings({
   const mounted = useRef(false);
   const inFlight = useRef(false);
   const invoke = useCallback(
-    async <T,>(operation: Record<string, unknown>, token?: string): Promise<T> => {
-      const bridge = window.__MEMSTACK_DESKTOP__;
-      if (bridge?.runtime !== 'electron' || !bridge.core?.invoke)
-        throw new Error('device_plugin_native_required');
-      return (await bridge.core.invoke('device_plugin_manage_v2', {
-        input: {
-          tenant_id: tenant,
-          project_id: project,
-          context_token: token,
-          operation,
-        },
-      })) as T;
-    },
-    [tenant, project],
+    <T,>(operation: Record<string, unknown>, token?: string): Promise<T> =>
+      deviceRequest<T>(tenant, project, pluginId, operation, token),
+    [tenant, project, pluginId],
   );
 
   const refresh = useCallback(async () => {

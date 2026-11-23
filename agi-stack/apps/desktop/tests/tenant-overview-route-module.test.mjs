@@ -44,7 +44,7 @@ const {
 const {
   createTenantOverviewRouteModuleLoader,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantOverviewRouteModule.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/tenant/tenantOverviewRouteModule.js'
 );
 
 test('Tenant Overview loader stays lazy and renders the exact tenant binding', async () => {

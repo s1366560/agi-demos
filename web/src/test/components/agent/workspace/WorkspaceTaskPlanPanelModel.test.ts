@@ -5,7 +5,7 @@ import {
   buildWorkspaceTaskPlanRows,
 } from '@/components/agent/workspace/WorkspaceTaskPlanPanelModel';
 
-import type { WorkspacePlanNode, WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
+import type { WorkspacePlanNode, WorkspacePlanSnapshot, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 function planNode(overrides: Partial<WorkspacePlanNode>): WorkspacePlanNode {
   return {

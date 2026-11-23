@@ -32,7 +32,7 @@ vi.mock('@/services/unifiedEventService', () => ({
   },
 }));
 
-vi.mock('@/stores/agentV3', () => ({
+vi.mock('@business/agent/ui/web/stores/agentV3', () => ({
   useAgentV3Store: {
     getState: () => ({
       loadConversations: mocks.loadConversations,
@@ -40,7 +40,7 @@ vi.mock('@/stores/agentV3', () => ({
   },
 }));
 
-vi.mock('@/stores/agent/conversationsStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/conversationsStore', () => ({
   useConversationsStore: {
     getState: () => ({
       conversations: mocks.conversations,
@@ -54,7 +54,7 @@ vi.mock('@/utils/logger', () => ({
   },
 }));
 
-import { useConversationListAutoRefresh } from '@/hooks/useConversationListAutoRefresh';
+import { useConversationListAutoRefresh } from '@business/agent/ui/web/hooks/useConversationListAutoRefresh';
 
 function projectHandler(): (event: Record<string, unknown>) => void {
   return mocks.subscribeProject.mock.calls[0]?.[1] as (event: Record<string, unknown>) => void;

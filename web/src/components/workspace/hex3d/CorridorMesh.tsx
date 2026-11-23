@@ -2,7 +2,7 @@ import { Line } from '@react-three/drei';
 
 import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
 
-import type { TopologyEdge } from '@/types/workspace';
+import type { TopologyEdge } from '@business/workspace/ui/web/types/workspace';
 
 interface CorridorMeshProps {
   edge: TopologyEdge;

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, ApiErrorType } from '../../services/client/ApiError';
 import { httpClient } from '../../services/client/httpClient';
-import { isPoolForbiddenError, poolService } from '../../services/poolService';
+import { isPoolForbiddenError, poolService } from '@business/environments/ui/web/services/poolService';
 import { logger } from '../../utils/logger';
 
 vi.mock('../../services/client/httpClient', () => ({

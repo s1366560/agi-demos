@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { ApiError, ApiErrorType } from '../../services/client/ApiError';
-import { memoryService } from '../../services/memoryService';
+import { memoryService } from '@business/knowledge/ui/web/services/memoryService';
 
 // Mock apiFetch
 vi.mock('../../services/client/urlUtils', () => ({

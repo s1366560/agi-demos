@@ -4,7 +4,7 @@ import type {
   TenantWebhook,
   TenantWebhookInput,
   TenantWebhooksSnapshot,
-} from '../features/tenant-admin/tenantWebhooksClient';
+} from '@business/automation/ui/desktop/tenant-admin/tenantWebhooksClient';
 import type { TenantManagementScope } from '../features/tenant-admin/tenantManagementHttp';
 import type { DesktopRuntimeConfig } from '../types';
 

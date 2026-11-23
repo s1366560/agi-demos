@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { geneMarketService } from '@/services/geneMarketService';
-import { useGeneMarketStore } from '@/stores/geneMarket';
+import { geneMarketService } from '@business/environments/ui/web/services/geneMarketService';
+import { useGeneMarketStore } from '@business/environments/ui/web/stores/geneMarket';
 
 import type {
   GeneListResponse,
@@ -10,9 +10,9 @@ import type {
   GenomeInstallResponse,
   GenomeListResponse,
   GenomeResponse,
-} from '@/services/geneMarketService';
+} from '@business/environments/ui/web/services/geneMarketService';
 
-vi.mock('@/services/geneMarketService', () => ({
+vi.mock('@business/environments/ui/web/services/geneMarketService', () => ({
   geneMarketService: {
     createGene: vi.fn(),
     createGenome: vi.fn(),

@@ -39,7 +39,7 @@ vi.mock('../../services/agentService', () => ({
 }));
 
 // Import after mock declaration
-import { useAgentLifecycleState } from '../../hooks/useAgentLifecycleState';
+import { useAgentLifecycleState } from '@business/agent/ui/web/hooks/useAgentLifecycleState';
 import { agentService } from '../../services/agentService';
 
 describe('useAgentLifecycleState', () => {

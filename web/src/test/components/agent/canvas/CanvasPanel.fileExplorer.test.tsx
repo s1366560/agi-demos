@@ -5,7 +5,7 @@ import { CanvasPanel } from '@/components/agent/canvas/CanvasPanel';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 import { artifactService, fetchArtifactResource } from '@/services/artifactService';
-import { projectSandboxService } from '@/services/projectSandboxService';
+import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
 
 import type { Artifact } from '@/types/agent';
 
@@ -29,7 +29,7 @@ vi.mock('@/components/agent/canvas/useSyntaxHighlighter', () => ({
   useSyntaxHighlighter: () => null,
 }));
 
-vi.mock('@/services/projectSandboxService', () => ({
+vi.mock('@business/environments/ui/web/services/projectSandboxService', () => ({
   projectSandboxService: {
     executeTool: executeToolMock,
   },

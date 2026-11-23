@@ -16,7 +16,7 @@ const respondToDecision = vi.fn().mockResolvedValue(undefined);
 const respondToEnvVar = vi.fn().mockResolvedValue(undefined);
 const respondToPermission = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('@/stores/agentV3', () => ({
+vi.mock('@business/agent/ui/web/stores/agentV3', () => ({
   useAgentV3Store: (selector: (state: unknown) => unknown) =>
     selector({
       respondToClarification,

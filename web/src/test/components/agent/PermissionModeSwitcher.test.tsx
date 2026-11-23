@@ -1,7 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useAgentPermissionModeStore } from '@/stores/agent/permissionModeStore';
+import { useAgentPermissionModeStore } from '@business/agent/ui/web/stores/agent/permissionModeStore';
 import { PermissionModeSwitcher } from '@/components/agent/PermissionModeSwitcher';
 
 const mocks = vi.hoisted(() => ({
@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   },
   respond: vi.fn(),
 }));
-vi.mock('@/hooks/useConversationApprovalMode', () => ({
+vi.mock('@business/agent/ui/web/hooks/useConversationApprovalMode', () => ({
   useConversationApprovalMode: () => ({
     mode: mocks.mode,
     saving: false,
@@ -22,11 +22,11 @@ vi.mock('@/hooks/useConversationApprovalMode', () => ({
     save: vi.fn(),
   }),
 }));
-vi.mock('@/stores/agent/hitlStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/hitlStore', () => ({
   useAgentHITLStore: (selector: (state: unknown) => unknown) =>
     selector({ pendingPermission: mocks.pending }),
 }));
-vi.mock('@/stores/agentV3', () => ({
+vi.mock('@business/agent/ui/web/stores/agentV3', () => ({
   useAgentV3Store: {
     getState: () => ({ activeConversationId: 'conversation', respondToPermission: mocks.respond }),
   },

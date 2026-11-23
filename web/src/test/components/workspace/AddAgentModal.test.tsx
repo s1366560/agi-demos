@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { AddAgentModal } from '@/components/workspace/AddAgentModal';
-import { useDefinitions, useListDefinitions } from '@/stores/agentDefinitions';
+import { useDefinitions, useListDefinitions } from '@business/agent/ui/web/stores/agentDefinitions';
 import type { AgentDefinition } from '@/types/multiAgent';
 
 import { fireEvent, render, screen, waitFor } from '../../utils';
@@ -45,7 +45,7 @@ const makeDefinition = (overrides: Partial<AgentDefinition> = {}): AgentDefiniti
   ...overrides,
 });
 
-vi.mock('@/stores/agentDefinitions', () => ({
+vi.mock('@business/agent/ui/web/stores/agentDefinitions', () => ({
   useDefinitions: vi.fn(),
   useListDefinitions: vi.fn(),
 }));

@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 
-import { WorkspaceCollaborationCanvas } from '../features/workspace/WorkspaceCollaborationCanvas';
+import { WorkspaceCollaborationCanvas } from '@business/workspace/ui/desktop/workspace/WorkspaceCollaborationCanvas';
 
 export type DesktopWorkspaceCollaborationInputV2 = Readonly<
   ComponentProps<typeof WorkspaceCollaborationCanvas>

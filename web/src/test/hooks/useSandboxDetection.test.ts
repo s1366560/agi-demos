@@ -1,8 +1,8 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { useSandboxDetection } from '@/hooks/useSandboxDetection';
-import { useSandboxStore } from '@/stores/sandbox';
+import { useSandboxDetection } from '@business/environments/ui/web/hooks/useSandboxDetection';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 
 describe('useSandboxDetection', () => {
   beforeEach(() => {

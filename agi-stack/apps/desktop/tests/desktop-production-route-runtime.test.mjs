@@ -26,7 +26,7 @@ const {
 );
 const {
   RuntimePoolUnavailableError,
-} = require('/tmp/agistack-desktop-test-dist/src/features/runtime-pool/runtimePoolClient.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/runtime-pool/runtimePoolClient.js');
 
 const tenantId = 'tenant-1';
 const projectId = 'project-1';

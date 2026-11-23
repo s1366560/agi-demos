@@ -24,7 +24,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { MessageSquarePlus, Moon, Sun, Languages, ArrowRight, type LucideIcon } from 'lucide-react';
 
-import { useConversationsStore } from '@/stores/agent/conversationsStore';
+import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
 import { useThemeStore } from '@/stores/theme';
 
 import {

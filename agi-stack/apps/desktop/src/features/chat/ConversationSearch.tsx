@@ -13,7 +13,7 @@ import {
   moveConversationSearchIndex,
   resolveConversationSearchIndex,
   type ConversationSearchDirection,
-} from './conversationSearchModel';
+} from '@business/agent/ui/desktop/chat/conversationSearchModel';
 
 type ConversationSearchProps = {
   items: readonly AgentTimelineItem[];

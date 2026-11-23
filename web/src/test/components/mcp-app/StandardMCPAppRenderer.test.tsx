@@ -50,7 +50,7 @@ vi.mock('../../../stores/project', () => ({
 }));
 
 // Mock the conversations store
-vi.mock('../../../stores/agent/conversationsStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/conversationsStore', () => ({
   useConversationsStore: vi.fn((selector?: (state: typeof storeMocks.conversations) => unknown) =>
     typeof selector === 'function' ? selector(storeMocks.conversations) : storeMocks.conversations
   ),

@@ -7,7 +7,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { useStreamingStore } from '../../../stores/agent/streamingStore';
+import { useStreamingStore } from '@business/agent/ui/web/stores/agent/streamingStore';
 
 import { MessageArea } from '../../../components/agent/MessageArea';
 

@@ -14,7 +14,7 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceCollaborationModel.js',
 );
 const canvasSource = readFileSync(
-  new URL('../src/features/workspace/WorkspaceCollaborationCanvas.tsx', import.meta.url),
+  new URL('../../../../plugins/business/workspace/ui/desktop/workspace/WorkspaceCollaborationCanvas.tsx', import.meta.url),
   'utf8',
 );
 const primitiveSource = readFileSync(

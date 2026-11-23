@@ -20,7 +20,7 @@ import { Bot, MessageSquarePlus } from 'lucide-react';
 
 import { useCurrentTenant } from '@/stores/tenant';
 
-import { definitionsService } from '@/services/agent/definitionsService';
+import { definitionsService } from '@business/agent/ui/web/services/agent/definitionsService';
 import { agentService } from '@/services/agentService';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';

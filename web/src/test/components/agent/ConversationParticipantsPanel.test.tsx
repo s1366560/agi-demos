@@ -34,7 +34,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@/hooks/useConversationParticipants', () => ({
+vi.mock('@business/agent/ui/web/hooks/useConversationParticipants', () => ({
   useConversationParticipants: () => ({
     roster: rosterState,
     loading: false,

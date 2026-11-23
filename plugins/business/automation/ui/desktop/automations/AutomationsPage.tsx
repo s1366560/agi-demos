@@ -16,13 +16,13 @@ import type {
   AutomationRun,
 } from '@desktop/types';
 import type { DesktopCapabilityView } from '@desktop/features/runtime/capabilitySnapshot';
-import { AutomationEditorDialog } from '@desktop/features/automations/AutomationEditorDialog';
-import { AutomationDetail } from '@desktop/features/automations/AutomationDetail';
+import { AutomationEditorDialog } from './AutomationEditorDialog';
+import { AutomationDetail } from './AutomationDetail';
 import {
   automationRunAttemptKey,
   settleAutomationRunAttempt,
   type DesktopAutomationApi,
-} from '@desktop/features/automations/automationClient';
+} from './automationClient';
 import {
   automationActionAvailability,
   automationCapabilityReasonCode,
@@ -30,12 +30,12 @@ import {
   automationMutationKey,
   automationScheduleValue,
   automationTriggerKind,
-} from '@desktop/features/automations/automationModel';
+} from './automationModel';
 import {
   EMPTY_AUTOMATION_CONVERSATIONS,
   type AutomationConversationChoice,
-} from '@desktop/features/automations/automationConversationModel';
-import '@desktop/features/automations/AutomationsPage.css';
+} from './automationConversationModel';
+import './AutomationsPage.css';
 
 type AutomationsPageProps = {
   api: DesktopAutomationApi;

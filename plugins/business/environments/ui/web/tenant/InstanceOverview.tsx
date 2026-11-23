@@ -22,11 +22,11 @@ import {
   useInstanceMembers,
   useInstanceConfig,
   useInstanceStore,
-} from '@/stores/instance';
+} from '../stores/instance';
 
 import { formatDate, getStatusColor } from './utils/instanceUtils';
 
-import type { InstanceMemberResponse } from '@/services/instanceService';
+import type { InstanceMemberResponse } from '../services/instanceService';
 import type { ColumnsType } from 'antd/es/table';
 
 interface HealthConfig {

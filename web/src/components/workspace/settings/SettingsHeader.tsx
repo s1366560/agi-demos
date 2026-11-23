@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Check, Loader2, RotateCcw } from 'lucide-react';
 
-import { HostedProjectionBadge } from '@/components/blackboard/HostedProjectionBadge';
+import { HostedProjectionBadge } from '@business/workspace/ui/web/components/blackboard/HostedProjectionBadge';
 
 export interface SettingsHeaderProps {
   isDirty: boolean;

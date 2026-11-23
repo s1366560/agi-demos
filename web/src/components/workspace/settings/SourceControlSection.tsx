@@ -8,7 +8,7 @@ import { GitBranch } from 'lucide-react';
 import { SOURCE_CONTROL_PROVIDER_OPTIONS } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
 import { Field, SettingsSection } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
-import type { WorkspaceSourceControlProvider } from '@/types/workspace';
+import type { WorkspaceSourceControlProvider } from '@business/workspace/ui/web/types/workspace';
 
 import type { UpdateDraft } from './types';
 import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';

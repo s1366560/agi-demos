@@ -40,7 +40,7 @@ vi.mock('@xterm/addon-fit', () => ({
 }));
 vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: class {} }));
 vi.mock('../../../../hooks/useThemeColor', () => ({ useThemeColors: () => ({}) }));
-vi.mock('../../../../services/terminalRetainedSessionV2', () => ({
+vi.mock('@business/environments/ui/web/services/terminalRetainedSessionV2', () => ({
   TerminalRetainedSessionV2: class {
     options: any;
     controller = new AbortController();
@@ -77,7 +77,7 @@ vi.mock('../../../../services/terminalRetainedSessionV2', () => ({
     });
   },
 }));
-import { TerminalImpl } from '../../../../components/agent/sandbox/TerminalImpl';
+import { TerminalImpl } from '@business/environments/ui/web/components/sandbox/TerminalImpl';
 beforeEach(() => {
   state.sessions = [];
   state.terminals = [];

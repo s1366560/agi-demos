@@ -1,5 +1,5 @@
 import type { NativeKnowledgeScope } from './nativeKnowledgeContracts';
-import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 
 export type NativeKnowledgeEmbeddingChoice = Readonly<{
   providerId: string;

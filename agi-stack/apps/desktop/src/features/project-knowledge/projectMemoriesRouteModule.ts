@@ -7,7 +7,7 @@ import {
   type ProjectKnowledgeRouteBinding,
   type ProjectKnowledgeRouteContext,
 } from './projectKnowledgeRouteModule';
-import { PROJECT_MEMORIES_ROUTE_ID } from './projectMemoriesClient';
+import { PROJECT_MEMORIES_ROUTE_ID } from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
 import { useNativeMemoriesRouteBinding } from './NativeMemoriesRouteContext';
 import type { DesktopRouteSurfaceProps } from '../navigation/desktopRouteModule';
 

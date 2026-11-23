@@ -4,7 +4,7 @@ import {
   type ProjectEntitiesSnapshot,
   type ProjectEntity,
   type ProjectEntityRelationship,
-} from '../features/project-knowledge/projectEntitiesClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectEntitiesClient';
 import {
   isRecord,
   observeProjectKnowledgeScope,
@@ -16,7 +16,7 @@ import {
   requireProjectKnowledgeScope,
   requireText,
   type ProjectKnowledgeScope,
-} from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import {
   cloneDesktopProjectEntitiesRuntimeConfigV2,

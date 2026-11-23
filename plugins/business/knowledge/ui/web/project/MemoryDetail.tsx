@@ -28,9 +28,9 @@ import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { EditMemoryModal } from '@/components/project/EditMemoryModal';
 import { DeleteConfirmationModal } from '@/components/shared/modals/DeleteConfirmationModal';
 
-import { TaskList } from '@/components/tasks/TaskList';
+import { TaskList } from '@business/workspace/ui/web/components/tasks/TaskList';
 import { subscribeToTask, TaskStatus } from '@/hooks/useTaskSSE';
-import { memoryAPI } from '@/services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 import { Memory } from '@/types/memory';
 import { logger } from '@/utils/logger';
 

@@ -15,9 +15,9 @@ import { Spinner } from '@/components/common/Spinner';
 import { SubAgentTemplateDetailDrawer } from '@/components/marketplace/SubAgentTemplateDetailDrawer';
 
 import { useDebounce } from '@/hooks/useDebounce';
-import { subagentTemplateService } from '@/services/subagentTemplateService';
+import { subagentTemplateService } from '@business/agent/ui/web/services/subagentTemplateService';
 
-import type { SubAgentTemplateListItem } from '@/services/subagentTemplateService';
+import type { SubAgentTemplateListItem } from '@business/agent/ui/web/services/subagentTemplateService';
 
 const PAGE_SIZE = 12;
 

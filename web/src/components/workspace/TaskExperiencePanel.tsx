@@ -30,7 +30,7 @@ import type {
   WorkspaceTask,
   WorkspaceTaskExperienceSummary,
   WorkspaceTaskTransitionGate,
-} from '@/types/workspace';
+} from '@business/workspace/ui/web/types/workspace';
 
 import type { TFunction } from 'i18next';
 

@@ -40,7 +40,7 @@ import {
 } from '../features/task/newTaskSessionModel';
 import {
   UNBOUND_CONVERSATIONS_KEY,
-} from '../features/workspace/workspaceTreeModel';
+} from '@business/workspace/ui/desktop/workspace/workspaceTreeModel';
 import {
   AgentConversation,
   DesktopRuntimeConfig,

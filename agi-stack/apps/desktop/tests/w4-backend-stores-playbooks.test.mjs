@@ -31,19 +31,19 @@ const { createBackendStoresRouteModuleLoader } = require(
   `${compiledRoot}/features/backend-stores/backendStoresRouteModule.js`,
 );
 const { PROJECT_PLAYBOOKS_ROUTE_ID } = require(
-  `${compiledRoot}/features/project-playbooks/projectPlaybooksClient.js`,
+  `/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/project-playbooks/projectPlaybooksClient.js`,
 );
 const { createDesktopProjectPlaybooksReadHttpAuthorityV2 } = require(
   `${compiledRoot}/plugins/desktopProjectPlaybooksReadHttpProjectionV2.js`,
 );
 const { createProjectPlaybooksController } = require(
-  `${compiledRoot}/features/project-playbooks/projectPlaybooksController.js`,
+  `/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/project-playbooks/projectPlaybooksController.js`,
 );
 const { createProjectPlaybooksEventSource } = require(
-  `${compiledRoot}/features/project-playbooks/projectPlaybooksEventSource.js`,
+  `/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/project-playbooks/projectPlaybooksEventSource.js`,
 );
 const { createProjectPlaybooksRouteModuleLoader } = require(
-  `${compiledRoot}/features/project-playbooks/projectPlaybooksRouteModule.js`,
+  `/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/project-playbooks/projectPlaybooksRouteModule.js`,
 );
 const { DESKTOP_PRODUCTION_ROUTE_IDS, createDesktopProductionRouteRegistry } = require(
   `${compiledRoot}/features/navigation/desktopProductionRouteRegistry.js`,
@@ -73,7 +73,7 @@ const cloudConfig = Object.freeze({
   workspaceRoot: '',
 });
 const playbooksRouteSource = readFileSync(
-  new URL('../src/features/project-playbooks/projectPlaybooksRouteModule.tsx', import.meta.url),
+  new URL('../../../../plugins/business/automation/ui/desktop/project-playbooks/projectPlaybooksRouteModule.tsx', import.meta.url),
   'utf8',
 );
 const appRouteRegistrySource = readFileSync(

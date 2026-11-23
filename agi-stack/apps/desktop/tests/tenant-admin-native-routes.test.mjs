@@ -21,14 +21,14 @@ const {
 const { createTenantGovernanceController } = require(
   `${featureRoot}/tenantGovernanceController.js`
 );
-const { createTenantBillingController } = require(`${featureRoot}/tenantBillingController.js`);
+const { createTenantBillingController } = require(`/tmp/agistack-desktop-test-dist/plugins/business/billing/ui/desktop/tenant-admin/tenantBillingController.js`);
 const { createTenantAuditController } = require(`${featureRoot}/tenantAuditController.js`);
 const { createTenantTrustController } = require(`${featureRoot}/tenantTrustController.js`);
 const { createTenantGovernanceRouteModuleLoader } = require(
   `${featureRoot}/tenantGovernanceRouteModule.js`
 );
 const { createTenantBillingRouteModuleLoader } = require(
-  `${featureRoot}/tenantBillingRouteModule.js`
+  `/tmp/agistack-desktop-test-dist/plugins/business/billing/ui/desktop/tenant-admin/tenantBillingRouteModule.js`
 );
 const { createTenantAuditRouteModuleLoader } = require(`${featureRoot}/tenantAuditRouteModule.js`);
 const { createTenantTrustRouteModuleLoader } = require(`${featureRoot}/tenantTrustRouteModule.js`);

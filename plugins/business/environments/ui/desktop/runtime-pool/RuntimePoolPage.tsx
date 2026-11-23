@@ -5,13 +5,13 @@ import type {
   RuntimePoolInstance,
   RuntimePoolInstanceStatus,
   RuntimePoolTier,
-} from '@desktop/features/runtime-pool/runtimePoolClient';
+} from './runtimePoolClient';
 import type {
   RuntimePoolController,
   RuntimePoolResourceState,
   RuntimePoolViewModel,
-} from '@desktop/features/runtime-pool/runtimePoolController';
-import '@desktop/features/runtime-pool/RuntimePoolPage.css';
+} from './runtimePoolController';
+import './RuntimePoolPage.css';
 
 const INSTANCE_STATUSES: readonly RuntimePoolInstanceStatus[] = [
   'created',

@@ -1,11 +1,11 @@
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { isIdentityAuthenticated } from '../auth/authContextModel';
-import type { ProjectOverviewClient } from '../project/projectOverviewClient';
+import type { ProjectOverviewClient } from '@business/workspace/ui/desktop/project/projectOverviewClient';
 import {
   createProjectOverviewController,
   type ProjectOverviewController,
   type ProjectOverviewControllerOptions,
-} from '../project/projectOverviewController';
+} from '@business/workspace/ui/desktop/project/projectOverviewController';
 import {
   createDesktopProjectOverviewClientV2,
   type DesktopProjectOverviewOperationsV2,
@@ -29,29 +29,29 @@ import {
 import type {
   ProjectOverviewRouteBinding,
   ProjectOverviewRouteContext,
-} from '../project/projectOverviewRouteModule';
-import type { DeadLetterQueueRouteBinding } from '../governance/deadLetterQueueRouteModule';
-import { createDeadLetterQueueController } from '../governance/deadLetterQueueController';
+} from '@business/workspace/ui/desktop/project/projectOverviewRouteModule';
+import type { DeadLetterQueueRouteBinding } from '@business/automation/ui/desktop/governance/deadLetterQueueRouteModule';
+import { createDeadLetterQueueController } from '@business/automation/ui/desktop/governance/deadLetterQueueController';
 import {
   createDesktopDeadLetterQueueClientV2,
   type DesktopDeadLetterQueueOperationsV2,
 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
-import type { RuntimePoolRouteBinding } from '../runtime-pool/runtimePoolRouteModule';
-import { createRuntimePoolController } from '../runtime-pool/runtimePoolController';
-import type { RuntimeInstancesRouteBinding } from '../runtime-instances/runtimeInstancesRouteModule';
-import { createRuntimeInstancesController } from '../runtime-instances/runtimeInstancesController';
-import type { RuntimeClustersRouteBinding } from '../runtime-clusters/runtimeClustersRouteModule';
-import { createRuntimeClustersController } from '../runtime-clusters/runtimeClustersController';
-import type { RuntimeDeploymentsRouteBinding } from '../runtime-deployments/runtimeDeploymentsRouteModule';
-import { createRuntimeDeploymentsController } from '../runtime-deployments/runtimeDeploymentsController';
-import type { InstanceTemplatesRouteBinding } from '../instance-templates/instanceTemplatesRouteModule';
-import { createInstanceTemplatesController } from '../instance-templates/instanceTemplatesController';
+import type { RuntimePoolRouteBinding } from '@business/environments/ui/desktop/runtime-pool/runtimePoolRouteModule';
+import { createRuntimePoolController } from '@business/environments/ui/desktop/runtime-pool/runtimePoolController';
+import type { RuntimeInstancesRouteBinding } from '@business/environments/ui/desktop/runtime-instances/runtimeInstancesRouteModule';
+import { createRuntimeInstancesController } from '@business/environments/ui/desktop/runtime-instances/runtimeInstancesController';
+import type { RuntimeClustersRouteBinding } from '@business/environments/ui/desktop/runtime-clusters/runtimeClustersRouteModule';
+import { createRuntimeClustersController } from '@business/environments/ui/desktop/runtime-clusters/runtimeClustersController';
+import type { RuntimeDeploymentsRouteBinding } from '@business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsRouteModule';
+import { createRuntimeDeploymentsController } from '@business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsController';
+import type { InstanceTemplatesRouteBinding } from '@business/environments/ui/desktop/instance-templates/instanceTemplatesRouteModule';
+import { createInstanceTemplatesController } from '@business/environments/ui/desktop/instance-templates/instanceTemplatesController';
 import {
   createDesktopInstanceTemplatesClientV2,
   type DesktopInstanceTemplatesOperationsV2,
 } from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
-import type { UnifiedRuntimesRouteBinding } from '../unified-runtimes/unifiedRuntimesRouteModule';
-import { createUnifiedRuntimesController } from '../unified-runtimes/unifiedRuntimesController';
+import type { UnifiedRuntimesRouteBinding } from '@business/environments/ui/desktop/unified-runtimes/unifiedRuntimesRouteModule';
+import { createUnifiedRuntimesController } from '@business/environments/ui/desktop/unified-runtimes/unifiedRuntimesController';
 import {
   createDesktopUnifiedRuntimesClientV2,
   type DesktopUnifiedRuntimesOperationsV2,
@@ -60,9 +60,9 @@ import type {
   DesktopCapabilityAvailability,
   DesktopCapabilitySnapshot,
 } from '../runtime/capabilitySnapshot';
-import type { TenantOverviewRouteBinding } from '../tenant/tenantOverviewRouteModule';
-import { createTenantOverviewController } from '../tenant/tenantOverviewController';
-import type { TenantOverviewClient } from '../tenant/tenantOverviewClient';
+import type { TenantOverviewRouteBinding } from '@business/workspace/ui/desktop/tenant/tenantOverviewRouteModule';
+import { createTenantOverviewController } from '@business/workspace/ui/desktop/tenant/tenantOverviewController';
+import type { TenantOverviewClient } from '@business/workspace/ui/desktop/tenant/tenantOverviewClient';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { TenantAnalyticsRouteBinding } from '../tenant/tenantAnalyticsRouteModule';
 import { createTenantAnalyticsController } from '../tenant/tenantAnalyticsController';
@@ -84,18 +84,18 @@ import {
   createDesktopTenantProjectsClientV2,
   type DesktopTenantProjectsOperationsV2,
 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
-import type { TenantTasksRouteBinding } from '../tenant/tenantTasksRouteModule';
-import { createTenantTasksController } from '../tenant/tenantTasksController';
+import type { TenantTasksRouteBinding } from '@business/workspace/ui/desktop/tenant/tenantTasksRouteModule';
+import { createTenantTasksController } from '@business/workspace/ui/desktop/tenant/tenantTasksController';
 import {
   createDesktopTenantTasksClientV2,
   type DesktopTenantTasksOperationsV2,
 } from '../../plugins/desktopTenantTasksAuthorityModuleV2';
-import type { TenantWorkspacesRouteBinding } from '../tenant/tenantWorkspacesRouteModule';
-import { createTenantWorkspacesController } from '../tenant/tenantWorkspacesController';
+import type { TenantWorkspacesRouteBinding } from '@business/workspace/ui/desktop/tenant/tenantWorkspacesRouteModule';
+import { createTenantWorkspacesController } from '@business/workspace/ui/desktop/tenant/tenantWorkspacesController';
 import {
   createTenantWorkspacesV2Client,
   type TenantWorkspacesV2ClientDependencies,
-} from '../tenant/tenantWorkspacesV2Client';
+} from '@business/workspace/ui/desktop/tenant/tenantWorkspacesV2Client';
 import type { DesktopRouteContext } from './desktopRouteRegistry';
 
 export type ProjectOverviewRouteRuntimeDependencies = Readonly<{

@@ -19,7 +19,7 @@ import { sameJson } from '../features/project-knowledge/nativeKnowledgeRelations
 import {
   projectKnowledgeError,
   type ProjectKnowledgeScope,
-} from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import { requireNativeKnowledgeScope } from '../features/project-knowledge/nativeKnowledgeValidation';
 import { requireNativeKnowledgeTransportV2 } from './desktopNativeKnowledgeSyncHttpV2';
 import { requestNativeProjectSchemaJsonV2 } from './desktopNativeProjectSchemaTransportV2';

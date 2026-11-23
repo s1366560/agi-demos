@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   TOKEN_BATCH_INTERVAL_MS,
   THOUGHT_BATCH_INTERVAL_MS,
-} from '../../stores/agent/deltaBuffers';
+} from '@business/agent/ui/web/stores/agent/deltaBuffers';
 
 describe('Text Delta Performance', () => {
   describe('Buffer Configuration', () => {

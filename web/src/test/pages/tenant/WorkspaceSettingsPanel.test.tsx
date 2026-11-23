@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkspaceSettingsPanel } from '@business/workspace/ui/web/tenant/WorkspaceSettings';
 import { fireEvent, render, screen, waitFor } from '@/test/utils';
-import type { Workspace, WorkspaceMember } from '@/types/workspace';
+import type { Workspace, WorkspaceMember } from '@business/workspace/ui/web/types/workspace';
 
 import { App } from 'antd';
 
@@ -63,7 +63,7 @@ const buildWorkspace = (): Workspace => ({
   updated_at: '2026-04-02T00:00:00Z',
 });
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useCurrentWorkspace: () => mockState.workspace,
   useWorkspaceMembers: () => mockState.members,
   useWorkspaceActions: () => ({
@@ -72,7 +72,7 @@ vi.mock('@/stores/workspace', () => ({
   }),
 }));
 
-vi.mock('@/services/workspaceService', () => ({
+vi.mock('@business/workspace/ui/web/services/workspaceService', () => ({
   workspaceService: {
     update: mockState.updateWorkspace,
     remove: mockState.removeWorkspace,

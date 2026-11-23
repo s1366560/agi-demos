@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@/test/utils';
 
-import { KeyboardShortcutsPopover } from '@/components/blackboard/KeyboardShortcutsPopover';
+import { KeyboardShortcutsPopover } from '@business/workspace/ui/web/components/blackboard/KeyboardShortcutsPopover';
 
 describe('KeyboardShortcutsPopover', () => {
   it('exposes the shortcut trigger and dialog with accessible names', () => {

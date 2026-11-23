@@ -27,7 +27,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { agentService } from '../../../services/agentService';
-import { useTimelineStore, initialState } from '../../../stores/agent/timelineStore';
+import { useTimelineStore, initialState } from '@business/agent/ui/web/stores/agent/timelineStore';
 // Helper to create mock timeline response matching the full type
 const createMockResponse = (
   timeline: any[],

@@ -1,7 +1,6 @@
 /// <reference types="vite/client" />
+import { cloudIdentity, type BackendUserResponse } from './client/cloudIdentity';
 import { httpClient } from './client/httpClient';
-import { kernelHttpClient } from './client/kernelHttpClient';
-import { memoryCommandTransport } from './memoryCommandTransport';
 
 import type {
   ProjectCreate,
@@ -12,7 +11,6 @@ import type {
   BackendStoreTestResponse,
   BackendStoreTypeInfo,
   BackendStoreUpdate,
-  MemoryQuery,
   TenantCreate,
   TenantUpdate,
   ProviderCreate,
@@ -24,26 +22,12 @@ import type {
   Tenant,
   TenantListResponse,
   UserTenant,
-  Memory,
-  MemoryListResponse,
-  MemorySearchResponse,
-  GraphData,
-  Entity,
-  Relationship,
-  UserProfile,
-  TaskStats,
-  QueueDepth,
   ProviderConfig,
   ProviderHealth,
   ProviderTypeDescriptor,
   DetectedEnvironmentProvider,
   ProviderAutoConfig,
   ProviderType,
-  RecentTask,
-  StatusBreakdown,
-  SchemaEntityType,
-  SchemaEdgeType,
-  EdgeMapping,
   SystemResilienceStatus,
   ProviderUsageStats,
   ModelCatalogEntry,
@@ -54,87 +38,6 @@ import type {
 const api = httpClient;
 
 type TenantMembersApiResponse = UserTenant[] | { members?: UserTenant[] };
-type RecentTasksApiResponse =
-  | RecentTask[]
-  | {
-      tasks?: RecentTask[] | undefined;
-      items?: RecentTask[] | undefined;
-      results?: RecentTask[] | undefined;
-      total?: number | undefined;
-      limit?: number | undefined;
-      offset?: number | undefined;
-      has_more?: boolean | undefined;
-    };
-
-export interface RecentTasksResult {
-  tasks: RecentTask[];
-  total: number;
-  limit: number;
-  offset: number;
-  has_more: boolean;
-}
-
-const normalizeRecentTasksResponse = (
-  response: RecentTasksApiResponse,
-  params: { limit?: number | undefined; offset?: number | undefined } = {}
-): RecentTasksResult => {
-  if (Array.isArray(response)) {
-    const limit = params.limit ?? response.length;
-    const offset = params.offset ?? 0;
-    return {
-      tasks: response,
-      total: response.length,
-      limit,
-      offset,
-      has_more: limit > 0 && response.length >= limit,
-    };
-  }
-  const tasks = response.tasks ?? response.items ?? response.results ?? [];
-  const total = response.total ?? tasks.length;
-  const limit = response.limit ?? params.limit ?? tasks.length;
-  const offset = response.offset ?? params.offset ?? 0;
-  return {
-    tasks,
-    total,
-    limit,
-    offset,
-    has_more: response.has_more ?? offset + tasks.length < total,
-  };
-};
-
-// Token response from auth endpoint
-interface TokenResponse {
-  access_token: string;
-  token_type: string;
-  must_change_password?: boolean;
-}
-
-// Auth API types
-interface LoginResponse {
-  token: string;
-  user: User;
-  must_change_password: boolean;
-}
-
-// Backend user response (uses user_id instead of id)
-interface BackendUserResponse {
-  user_id: string;
-  email: string;
-  name: string;
-  roles: string[];
-  is_active: boolean;
-  is_superuser?: boolean;
-  must_change_password?: boolean;
-  created_at: string;
-  profile?: UserProfile;
-  preferred_language?: 'en-US' | 'zh-CN' | null;
-}
-
-// Share response types
-interface ShareListResponse {
-  shares: unknown[];
-}
-
 // Tenant provider assignment response
 interface TenantProviderAssignment {
   id: string;
@@ -225,58 +128,7 @@ const createBackendStoreAPI = (baseUrl: '/graph-stores' | '/retrieval-stores') =
 });
 
 export const authAPI = {
-  login: async (email: string, password: string): Promise<LoginResponse> => {
-    const formData = new FormData();
-    formData.append('username', email);
-    formData.append('password', password);
-    const tokenResponse = await kernelHttpClient.post<TokenResponse>('/auth/token', formData, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    });
-    // Backend returns { access_token, token_type, must_change_password } - user is fetched separately
-    const token = tokenResponse.access_token;
-    const must_change_password = tokenResponse.must_change_password;
-
-    // Fetch user details
-    const userResponse = await kernelHttpClient.get<BackendUserResponse>('/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    // Map backend response (user_id) to frontend format (id)
-    const user: User = {
-      id: userResponse.user_id,
-      email: userResponse.email,
-      name: userResponse.name,
-      roles: userResponse.roles,
-      is_active: userResponse.is_active,
-      is_superuser: userResponse.is_superuser,
-      created_at: userResponse.created_at,
-      profile: userResponse.profile,
-      must_change_password,
-      preferred_language: userResponse.preferred_language ?? undefined,
-    };
-
-    return { token, user, must_change_password: must_change_password ?? false };
-  },
-  verifyToken: async (token: string): Promise<User> => {
-    const userResponse = await kernelHttpClient.get<BackendUserResponse>('/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    // Map backend response (user_id) to frontend format (id)
-    return {
-      id: userResponse.user_id,
-      must_change_password: userResponse.must_change_password,
-      email: userResponse.email,
-      name: userResponse.name,
-      roles: userResponse.roles,
-      is_active: userResponse.is_active,
-      is_superuser: userResponse.is_superuser,
-      created_at: userResponse.created_at,
-      profile: userResponse.profile,
-      preferred_language: userResponse.preferred_language ?? undefined,
-    };
-  },
+  ...cloudIdentity,
   updateProfile: async (data: Partial<UserUpdate>): Promise<User> => {
     const userResponse = await api.put<BackendUserResponse>('/users/me', data);
     return {
@@ -306,15 +158,6 @@ export const authAPI = {
       profile: userResponse.profile,
       preferred_language: userResponse.preferred_language ?? undefined,
     };
-  },
-  changePassword: async (
-    oldPassword: string,
-    newPassword: string
-  ): Promise<{ success: boolean; message: string }> => {
-    return await kernelHttpClient.post('/auth/force-change-password', {
-      old_password: oldPassword,
-      new_password: newPassword,
-    });
   },
 };
 
@@ -376,137 +219,7 @@ export const projectAPI = {
   },
 };
 
-export const memoryAPI = {
-  list: async (projectId: string, params = {}): Promise<MemoryListResponse> => {
-    return await api.get('/memories/', { params: { ...params, project_id: projectId } });
-  },
-  create: memoryCommandTransport.create,
-  update: memoryCommandTransport.update,
-  delete: memoryCommandTransport.delete,
-  search: async (projectId: string, query: MemoryQuery): Promise<MemorySearchResponse> => {
-    return await api.post('/memory/search', { ...query, project_id: projectId });
-  },
-  get: async (_projectId: string, memoryId: string): Promise<Memory> => {
-    return await api.get(`/memories/${memoryId}`);
-  },
-  getGraphData: async (projectId: string, options = {}): Promise<GraphData> => {
-    return await api.get('/graph/memory/graph', { params: { ...options, project_id: projectId } });
-  },
-  extractEntities: async (projectId: string, text: string): Promise<Entity[]> => {
-    return await api.post('/memories/extract-entities', { text, project_id: projectId });
-  },
-  extractRelationships: async (projectId: string, text: string): Promise<Relationship[]> => {
-    return await api.post('/memories/extract-relationships', { text, project_id: projectId });
-  },
-  listShares: async (memoryId: string): Promise<unknown[]> => {
-    const response = await api.get<ShareListResponse>(`/memories/${memoryId}/shares`);
-    return response.shares;
-  },
-  createShare: async (
-    memoryId: string,
-    permissions: { view: boolean; edit: boolean },
-    expiresAt?: string
-  ): Promise<unknown> => {
-    return await api.post(`/memories/${memoryId}/shares`, {
-      permissions,
-      expires_at: expiresAt,
-    });
-  },
-  deleteShare: async (memoryId: string, shareId: string): Promise<void> => {
-    await api.delete(`/memories/${memoryId}/shares/${shareId}`);
-  },
-  reprocess: async (_projectId: string, memoryId: string): Promise<Memory> => {
-    return await api.post(`/memories/${memoryId}/reprocess`);
-  },
-};
 
-export const schemaAPI = {
-  // Entity Types
-  listEntityTypes: async (projectId: string): Promise<SchemaEntityType[]> => {
-    return await api.get(`/projects/${projectId}/schema/entities`);
-  },
-  createEntityType: async (projectId: string, data: unknown): Promise<unknown> => {
-    return await api.post(`/projects/${projectId}/schema/entities`, data);
-  },
-  updateEntityType: async (
-    projectId: string,
-    entityId: string,
-    data: unknown
-  ): Promise<unknown> => {
-    return await api.put(`/projects/${projectId}/schema/entities/${entityId}`, data);
-  },
-  deleteEntityType: async (projectId: string, entityId: string): Promise<void> => {
-    await api.delete(`/projects/${projectId}/schema/entities/${entityId}`);
-  },
-
-  // Edge Types
-  listEdgeTypes: async (projectId: string): Promise<SchemaEdgeType[]> => {
-    return await api.get(`/projects/${projectId}/schema/edges`);
-  },
-  createEdgeType: async (projectId: string, data: unknown): Promise<unknown> => {
-    return await api.post(`/projects/${projectId}/schema/edges`, data);
-  },
-  updateEdgeType: async (projectId: string, edgeId: string, data: unknown): Promise<unknown> => {
-    return await api.put(`/projects/${projectId}/schema/edges/${edgeId}`, data);
-  },
-  deleteEdgeType: async (projectId: string, edgeId: string): Promise<void> => {
-    await api.delete(`/projects/${projectId}/schema/edges/${edgeId}`);
-  },
-
-  // Edge Mappings
-  listEdgeMaps: async (projectId: string): Promise<EdgeMapping[]> => {
-    return await api.get(`/projects/${projectId}/schema/mappings`);
-  },
-  createEdgeMap: async (projectId: string, data: unknown): Promise<unknown> => {
-    return await api.post(`/projects/${projectId}/schema/mappings`, data);
-  },
-  deleteEdgeMap: async (projectId: string, mapId: string): Promise<void> => {
-    await api.delete(`/projects/${projectId}/schema/mappings/${mapId}`);
-  },
-};
-
-export const taskAPI = {
-  getStats: async (): Promise<TaskStats> => {
-    return await api.get('/tasks/stats');
-  },
-  getQueueDepth: async (): Promise<QueueDepth[]> => {
-    return await api.get('/tasks/queue-depth');
-  },
-  getRecentTasks: async (
-    params: {
-      limit?: number | undefined;
-      offset?: number | undefined;
-      status?: string | undefined;
-      task_type?: string | undefined;
-      entity_id?: string | undefined;
-      entity_type?: string | undefined;
-      search?: string | undefined;
-    } = {}
-  ): Promise<RecentTasksResult> => {
-    const response = await api.get<RecentTasksApiResponse>('/tasks/recent', { params });
-    return normalizeRecentTasksResponse(response, params);
-  },
-  getStatusBreakdown: async (): Promise<StatusBreakdown> => {
-    return await api.get('/tasks/status-breakdown');
-  },
-  retryTask: async (taskId: string): Promise<unknown> => {
-    return await api.post(`/tasks/${taskId}/retry`);
-  },
-  retryPendingTasks: async (
-    params: {
-      limit?: number | undefined;
-      task_type?: string | undefined;
-      include_failed?: boolean | undefined;
-      include_stale_processing?: boolean | undefined;
-      stale_after_minutes?: number | undefined;
-    } = {}
-  ): Promise<{ submitted: number; skipped: number; limit: number; task_ids: string[] }> => {
-    return await api.post('/tasks/retry-pending', undefined, { params });
-  },
-  stopTask: async (taskId: string): Promise<unknown> => {
-    return await api.post(`/tasks/${taskId}/stop`);
-  },
-};
 
 export const providerAPI = {
   list: async (

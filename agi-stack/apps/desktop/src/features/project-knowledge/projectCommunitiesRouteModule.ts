@@ -9,7 +9,7 @@ import {
   type ProjectKnowledgeRouteBinding,
   type ProjectKnowledgeRouteContext,
 } from './projectKnowledgeRouteModule';
-import { PROJECT_COMMUNITIES_ROUTE_ID } from './projectCommunitiesClient';
+import { PROJECT_COMMUNITIES_ROUTE_ID } from '@business/knowledge/ui/desktop/project-knowledge/projectCommunitiesClient';
 
 export type ProjectCommunitiesRouteContext = ProjectKnowledgeRouteContext;
 export type ProjectCommunitiesRouteBinding = ProjectKnowledgeRouteBinding;

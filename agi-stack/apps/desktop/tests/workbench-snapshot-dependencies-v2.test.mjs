@@ -46,7 +46,7 @@ function factoryHarness(snapshot) {
           return { loadSnapshot: (signal) => snapshot(captured, signal) };
         },
       };
-    if (name === '../project-workspaces/projectWorkspacesV2Client')
+    if (name === '@business/workspace/ui/desktop/project-workspaces/projectWorkspacesV2Client')
       return { createProjectWorkspacesV2Client: (config, operations) => ({ config, operations }) };
     return new Proxy(
       {},

@@ -43,7 +43,7 @@ vi.mock('@/components/agent/HITLCenterPanel', () => ({
   ),
 }));
 
-import { ConversationRosterSection } from '@/components/blackboard/tabs/ConversationRosterSection';
+import { ConversationRosterSection } from '@business/workspace/ui/web/components/blackboard/tabs/ConversationRosterSection';
 
 const renderAt = (search = '') =>
   render(

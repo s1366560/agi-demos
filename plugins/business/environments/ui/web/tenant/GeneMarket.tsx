@@ -24,7 +24,7 @@ import { Download, Search as SearchIcon } from 'lucide-react';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 
-import { geneMarketService } from '@/services/geneMarketService';
+import { geneMarketService } from '../services/geneMarketService';
 import {
   useGenes,
   useGenomes,
@@ -34,7 +34,7 @@ import {
   useGenomeTotal,
   useActiveTab,
   useGeneMarketActions,
-} from '@/stores/geneMarket';
+} from '../stores/geneMarket';
 import { useCurrentTenant } from '@/stores/tenant';
 
 import { visibilityLabel, visibilityOptions, visibilityTagColor } from './geneVisibility';
@@ -49,7 +49,7 @@ import type {
   GenomeCreate,
   GenomeListParams,
   GenomeResponse,
-} from '@/services/geneMarketService';
+} from '../services/geneMarketService';
 
 const { Search } = Input;
 const { Option } = Select;

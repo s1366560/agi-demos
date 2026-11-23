@@ -1,4 +1,4 @@
-import type { GraphData, GraphNode } from '@/services/graphService';
+import type { GraphData, GraphNode } from '../services/graphService';
 
 import type { EdgeData, GraphSnapshot, NodeData } from '@/components/graph/CytoscapeGraph/types';
 

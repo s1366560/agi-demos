@@ -34,13 +34,13 @@ import {
   useClusterPage,
   useClusterPageSize,
   useClusterActions,
-} from '@/stores/cluster';
+} from '../stores/cluster';
 
 import { ClusterFormFields } from './utils/ClusterFormFields';
 import { parseProviderConfig } from './utils/clusterFormUtils';
 import { formatDate, getStatusColor } from './utils/instanceUtils';
 
-import type { ClusterResponse } from '@/services/clusterService';
+import type { ClusterResponse } from '../services/clusterService';
 
 interface FormValues {
   name: string;

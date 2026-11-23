@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 
-import { useConversationsStore } from '@/stores/agent/conversationsStore';
+import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useMCPAppStore } from '@/stores/mcpAppStore';

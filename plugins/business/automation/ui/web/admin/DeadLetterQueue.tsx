@@ -47,8 +47,8 @@ import {
   Eraser,
 } from 'lucide-react';
 
-import { dlqService } from '@/services/dlqService';
-import type { DLQMessage, DLQMessageStatus, DLQStats } from '@/services/dlqService';
+import { dlqService } from '../services/dlqService';
+import type { DLQMessage, DLQMessageStatus, DLQStats } from '../services/dlqService';
 
 import { useThemeColor } from '@/hooks/useThemeColor';
 

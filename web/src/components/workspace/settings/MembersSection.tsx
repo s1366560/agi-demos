@@ -6,16 +6,16 @@ import { useTranslation } from 'react-i18next';
 import { App, Input, Select } from 'antd';
 import { Loader2, UserMinus, Users } from 'lucide-react';
 
-import { useWorkspaceActions, useWorkspaceMembers } from '@/stores/workspace';
+import { useWorkspaceActions, useWorkspaceMembers } from '@business/workspace/ui/web/stores/workspace';
 
-import { workspaceService } from '@/services/workspaceService';
+import { workspaceService } from '@business/workspace/ui/web/services/workspaceService';
 
 import { ROLE_OPTIONS } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
 import { SettingsSection } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
 import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 
-import type { WorkspaceMember, WorkspaceMemberRole } from '@/types/workspace';
+import type { WorkspaceMember, WorkspaceMemberRole } from '@business/workspace/ui/web/types/workspace';
 
 export interface MembersSectionProps {
   tenantId: string;

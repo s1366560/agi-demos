@@ -1,7 +1,7 @@
-import type { ProjectOverviewClient } from '../src/features/project/projectOverviewClient';
+import type { ProjectOverviewClient } from '@business/workspace/ui/desktop/project/projectOverviewClient';
 import type {
   ProjectOverviewControllerOptions,
-} from '../src/features/project/projectOverviewController';
+} from '@business/workspace/ui/desktop/project/projectOverviewController';
 
 declare const client: ProjectOverviewClient;
 

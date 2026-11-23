@@ -4,7 +4,7 @@ import {
   useCloudMemoryRouteBinding,
   type CloudMemoryRouteBinding,
 } from './CloudMemoryRouteContext';
-import { createCloudMemoriesController } from './cloudMemoriesController';
+import { createCloudMemoriesController } from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoriesController';
 import { CloudMemoriesPage, CloudMemoriesUnavailable } from '@business/knowledge/ui/desktop/project-knowledge/CloudMemoriesPage';
 import './CloudMemoriesPage.css';
 

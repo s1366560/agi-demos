@@ -4,7 +4,7 @@ import { test } from 'node:test';
 const { DesktopApiError } =
   await import('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const { createTenantTasksController } =
-  await import('/tmp/agistack-desktop-test-dist/src/features/tenant/tenantTasksController.js');
+  await import('/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/tenant/tenantTasksController.js');
 
 test('Tenant Tasks suppresses stale completion after a Local project scope switch', async () => {
   const pending = new Map();

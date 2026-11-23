@@ -31,7 +31,7 @@ import {
   type Playbook,
   type ReflectionVerdict,
   playbookService,
-} from '@/services/playbookService';
+} from '../services/playbookService';
 
 const LIMIT = 200;
 const POLL_INTERVAL_MS = 30_000;

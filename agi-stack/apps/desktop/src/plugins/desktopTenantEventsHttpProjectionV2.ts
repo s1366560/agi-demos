@@ -20,7 +20,7 @@ import {
   type TenantEvent,
   type TenantEventFilters,
   type TenantEventsClient,
-} from '../features/tenant-admin/tenantEventsClient';
+} from '@business/automation/ui/desktop/tenant-admin/tenantEventsClient';
 
 const ACTIONS = Object.freeze(['view', 'list', 'filter', 'paginate']);
 

@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
-import { subagentAPI } from '../services/subagentService';
+import { subagentAPI } from '@business/agent/ui/web/services/subagentService';
 
 export interface BackgroundSubAgent {
   executionId: string;

@@ -23,7 +23,7 @@ import {
   type BackendStoreTestResult,
   type BackendStoreType,
   type BackendStoreUpdateInput,
-} from '../features/backend-stores/backendStoresClient';
+} from '@business/knowledge/ui/desktop/backend-stores/backendStoresClient';
 import {
   requireIdentifier,
   tenantAdminError,

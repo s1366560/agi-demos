@@ -4,11 +4,11 @@ import { screen, render, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { MemoryList } from '@business/knowledge/ui/web/project/MemoryList';
-import { memoryAPI } from '../../../services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 import { Memory } from '../../../types/memory';
 
 // Mock memoryAPI directly (similar to SpaceDashboard approach)
-vi.mock('../../../services/api', () => ({
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({
   memoryAPI: {
     list: vi.fn(),
     create: vi.fn(),

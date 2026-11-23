@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, override
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, HttpUrl, SecretStr, field_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 from sqlalchemy.engine import make_url
@@ -592,6 +592,10 @@ class Settings(BaseSettings):
     service_name: str = Field(default="memstack", alias="SERVICE_NAME")
     environment: str = Field(default="development", alias="ENVIRONMENT")
     billing_policy_archive_directory: Path | None = Field(default=None, alias="BILLING_POLICY_ARCHIVE_DIRECTORY")
+    project_sandbox_authority_url: HttpUrl | None = Field(
+        default=None, alias="PROJECT_SANDBOX_AUTHORITY_URL"
+    )
+    package_application_runtime_url: str | None = Field(default=None, alias="PACKAGE_APPLICATION_RUNTIME_URL")
     package_kernel_database_mode: Literal["shared", "standalone"] = Field(
         default="shared", alias="PACKAGE_KERNEL_DATABASE_MODE"
     )

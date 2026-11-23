@@ -1,5 +1,5 @@
 import type { DesktopRuntimeConfig } from '../../types';
-import type { KasmProxySession } from './sandboxRuntimeClient';
+import type { KasmProxySession } from '@business/environments/ui/desktop/sandbox/sandboxRuntimeClient';
 
 export type NativeSandboxDesktopGrantV2 = Readonly<{
   grantId: string;

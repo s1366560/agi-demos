@@ -1,4 +1,4 @@
-import type { NativeMemoriesAuthority } from './nativeMemoriesController';
+import type { NativeMemoriesAuthority } from '@business/knowledge/ui/desktop/project-knowledge/nativeMemoriesController';
 import type {
   NativeKnowledgeClient,
   NativeKnowledgeCommand,

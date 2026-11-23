@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { replayCanvasEventsFromTimeline } from '../../../stores/agent/canvasReplay';
+import { replayCanvasEventsFromTimeline } from '@business/agent/ui/web/stores/agent/canvasReplay';
 import { useCanvasStore } from '../../../stores/canvasStore';
 import { useLayoutModeStore } from '../../../stores/layoutMode';
 import {

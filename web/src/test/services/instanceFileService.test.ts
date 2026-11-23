@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { instanceFileService } from '@/services/instanceFileService';
+import { instanceFileService } from '@business/environments/ui/web/services/instanceFileService';
 
 const { httpGetMock, httpDeleteMock } = vi.hoisted(() => ({
   httpGetMock: vi.fn(),

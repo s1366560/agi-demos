@@ -1,8 +1,8 @@
 import { useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
-import type { TenantEventsController } from '@desktop/features/tenant-admin/tenantEventsController';
-import type { TenantEventsViewModel } from '@desktop/features/tenant-admin/tenantEventsPresentationModel';
+import type { TenantEventsController } from './tenantEventsController';
+import type { TenantEventsViewModel } from './tenantEventsPresentationModel';
 import { TenantAdminDegradedNotice, TenantAdminRouteState } from '@desktop/features/tenant-admin/TenantAdminRouteState';
 
 export function TenantEventsPage({

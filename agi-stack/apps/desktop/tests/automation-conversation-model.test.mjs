@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   automationConversationChoices,
   automationConversationBinding,
-} from '/tmp/agistack-desktop-test-dist/src/features/automations/automationConversationModel.js';
+} from '/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/automationConversationModel.js';
 
 const scope = { tenantId: 'tenant', projectId: 'project' };
 const conversation = {

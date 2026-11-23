@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { NotesTab } from '@/components/blackboard/tabs/NotesTab';
+import { NotesTab } from '@business/workspace/ui/web/components/blackboard/tabs/NotesTab';
 import { render, screen } from '@/test/utils';
 
 describe('NotesTab', () => {

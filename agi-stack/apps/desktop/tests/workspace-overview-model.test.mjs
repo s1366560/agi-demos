@@ -10,7 +10,7 @@ const {
   workspaceKnowledgeIsAvailable,
   workspaceSandboxStatusPresentation,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceOverviewModel.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/workspaceOverviewModel.js'
 );
 
 function conversation(id, title, runStatus, participantAgents = []) {

@@ -12,9 +12,9 @@ import { useTranslation } from 'react-i18next';
 import {
   normalizeA2UIEnvelopeRecords,
   normalizeA2UIJsonLikeString,
-} from '@/stores/agent/a2uiEnvelopeContract';
-import type { A2UIMessageStreamSnapshot } from '@/stores/agent/a2uiMessages';
-import { useAgentV3Store } from '@/stores/agentV3';
+} from '@business/agent/ui/web/stores/agent/a2uiEnvelopeContract';
+import type { A2UIMessageStreamSnapshot } from '@business/agent/ui/web/stores/agent/a2uiMessages';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 import { agentService } from '@/services/agentService';

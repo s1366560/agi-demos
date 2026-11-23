@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { agentService } from '../../../services/agentService';
-import { createHITLActions } from '../../../stores/agent/hitlActions';
-import { useStreamingStore } from '../../../stores/agent/streamingStore';
+import { createHITLActions } from '@business/agent/ui/web/stores/agent/hitlActions';
+import { useStreamingStore } from '@business/agent/ui/web/stores/agent/streamingStore';
 import { createDefaultConversationState } from '../../../types/conversationState';
 import { installResourceOperationFixtureV2 } from '../../services/webResourceOperationFixtureV2';
 

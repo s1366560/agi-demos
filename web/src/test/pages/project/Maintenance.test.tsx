@@ -4,11 +4,11 @@ import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Maintenance } from '@business/knowledge/ui/web/project/Maintenance';
-import { graphService } from '../../../services/graphService';
+import { graphService } from '@business/knowledge/ui/web/services/graphService';
 
 const confirmActionMock = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../services/graphService', () => ({
+vi.mock('@business/knowledge/ui/web/services/graphService', () => ({
   graphService: {
     getGraphStats: vi.fn().mockResolvedValue({
       entity_count: 100,

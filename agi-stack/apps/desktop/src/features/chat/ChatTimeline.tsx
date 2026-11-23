@@ -61,12 +61,12 @@ import {
   toolCallPairStatus,
   toolCallPresentationKind,
   toolCallStreamingArguments,
-} from './chatTimelineModel';
+} from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import type {
   ToolCallPair,
   ToolCallPairStatus,
   ToolCallPresentationKind,
-} from './chatTimelineModel';
+} from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import {
   formatTodoToolCallSummary,
   todoToolCallSummary,
@@ -120,7 +120,7 @@ import { SkillTimelineCard } from './SkillTimelineCard';
 import { groupSkillTimelineItems } from './skillTimelineGroupModel';
 import type { SkillTimelineGroup } from './skillTimelineGroupModel';
 import { ThoughtTimelineCard } from './ThoughtTimelineCard';
-import type { TimelineTurn } from './timelineTurnCollapseModel';
+import type { TimelineTurn } from '@business/agent/ui/desktop/chat/timelineTurnCollapseModel';
 import { WorkPlanTimelineCard } from './WorkPlanTimelineCard';
 import { SubAgentControlPanel } from './SubAgentControlPanel';
 import {

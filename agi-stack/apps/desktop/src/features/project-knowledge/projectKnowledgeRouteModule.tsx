@@ -6,9 +6,9 @@ import type {
   DesktopRouteSurfaceProps,
 } from '../navigation/desktopRouteModule';
 import type { DesktopRouteContext } from '../navigation/desktopRouteRegistry';
-import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
-import type { ProjectKnowledgeController } from './projectKnowledgeController';
-import type { ProjectKnowledgeViewModel } from './projectKnowledgePresentationModel';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+import type { ProjectKnowledgeController } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeController';
+import type { ProjectKnowledgeViewModel } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgePresentationModel';
 
 const noop = (): void => {};
 export type ProjectKnowledgeRouteContext = Readonly<
@@ -36,7 +36,7 @@ export function createProjectKnowledgeRouteModuleLoader({
   return async () => {
     const [{ ProjectKnowledgePage }, { useProjectKnowledgeController }] = await Promise.all([
       import('@business/knowledge/ui/desktop/project-knowledge/ProjectKnowledgePage'),
-      import('./useProjectKnowledgeController'),
+      import('@business/knowledge/ui/desktop/project-knowledge/useProjectKnowledgeController'),
     ]);
     function ProjectKnowledgeRouteSurface({ context }: DesktopRouteSurfaceProps) {
       const routeContext = normalizeContext(context);
@@ -84,7 +84,7 @@ function BoundRoute({
   createBinding: (context: ProjectKnowledgeRouteContext) => ProjectKnowledgeRouteBinding;
   bindingScopeMismatchReason: string;
   Page: typeof import('@business/knowledge/ui/desktop/project-knowledge/ProjectKnowledgePage').ProjectKnowledgePage;
-  useController: typeof import('./useProjectKnowledgeController').useProjectKnowledgeController;
+  useController: typeof import('@business/knowledge/ui/desktop/project-knowledge/useProjectKnowledgeController').useProjectKnowledgeController;
 }>) {
   const binding = useMemo(
     () => createBinding(context),

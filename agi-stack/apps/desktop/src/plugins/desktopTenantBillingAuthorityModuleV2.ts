@@ -9,7 +9,7 @@ import type {
   TenantBillingClient,
   TenantBillingSnapshot,
   TenantBillingTenant,
-} from '../features/tenant-admin/tenantBillingClient';
+} from '@business/billing/ui/desktop/tenant-admin/tenantBillingClient';
 import type {
   TenantAdminRequestOptions,
   TenantAdminScope,

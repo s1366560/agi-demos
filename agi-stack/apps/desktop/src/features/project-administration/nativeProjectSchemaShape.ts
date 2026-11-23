@@ -1,5 +1,5 @@
 import { NATIVE_PROJECT_SCHEMA_DEFINITIONS } from './nativeProjectSchemaSchemaGenerated';
-import { projectKnowledgeError } from '../project-knowledge/projectKnowledgeClient';
+import { projectKnowledgeError } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 
 type Schema = Readonly<Record<string, unknown>>;
 const definitions: Readonly<Record<string, Schema>> = NATIVE_PROJECT_SCHEMA_DEFINITIONS;

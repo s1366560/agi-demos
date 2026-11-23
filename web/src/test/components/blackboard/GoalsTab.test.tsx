@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { GoalsTab } from '@/components/blackboard/tabs/GoalsTab';
+import { GoalsTab } from '@business/workspace/ui/web/components/blackboard/tabs/GoalsTab';
 import { render, screen } from '@/test/utils';
 
 vi.mock('@/components/workspace/objectives/ObjectiveList', () => ({

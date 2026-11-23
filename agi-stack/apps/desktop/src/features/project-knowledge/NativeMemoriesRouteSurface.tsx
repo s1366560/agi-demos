@@ -11,7 +11,7 @@ import {
   type NativeMemoriesRouteBinding,
 } from './NativeMemoriesRouteContext';
 import { NativeKnowledgeSyncPanel } from './NativeKnowledgeSyncPanel';
-import { NativeKnowledgeConflictEditor } from './NativeKnowledgeConflictEditor';
+import { NativeKnowledgeConflictEditor } from '@business/knowledge/ui/desktop/project-knowledge/NativeKnowledgeConflictEditor';
 import { NativeKnowledgeConfigurationPanel } from './NativeKnowledgeConfigurationPanel';
 import { NativeKnowledgeProcessingPanel } from './NativeKnowledgeProcessingPanel';
 import {

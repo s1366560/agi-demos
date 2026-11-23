@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 import { AgentDefinitionModal } from '@/components/agent/AgentDefinitionModal';
-import { definitionsService } from '@/services/agent/definitionsService';
+import { definitionsService } from '../services/agent/definitionsService';
 import { useUser } from '@/stores/auth';
 import { useCurrentTenant } from '@/stores/tenant';
 import { getDefinitionListPath } from '@/utils/agentDefinitionPath';

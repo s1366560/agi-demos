@@ -9,8 +9,8 @@ import {
   buildBackendStoresPresentation,
   type BackendStoresController,
   type BackendStoresViewModel,
-} from './backendStoresController';
-import { BACKEND_STORES_ROUTE_ID } from './backendStoresClient';
+} from '@business/knowledge/ui/desktop/backend-stores/backendStoresController';
+import { BACKEND_STORES_ROUTE_ID } from '@business/knowledge/ui/desktop/backend-stores/backendStoresClient';
 
 export type BackendStoresRouteBinding = TenantManagementRouteBinding<
   TenantManagementScope,

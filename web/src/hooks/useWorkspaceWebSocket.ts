@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import { useAuthStore } from '@/stores/auth';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 
-import type { PresenceUser } from '@/types/workspace';
+import type { PresenceUser } from '@business/workspace/ui/web/types/workspace';
 
 interface UseWorkspaceWebSocketOptions {
   workspaceId: string | null;

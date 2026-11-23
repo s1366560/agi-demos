@@ -18,6 +18,10 @@ const repoRequire = Module.createRequire(
 const ts = repoRequire("typescript");
 const resolve = Module._resolveFilename;
 Module._resolveFilename = function (request, parent, ...rest) {
+  if (request.startsWith("@desktop/"))
+    return resolve.call(this, path.join(repo, "agi-stack/apps/desktop/src", request.slice(9)), parent, ...rest);
+  if (request.startsWith("@business/"))
+    return resolve.call(this, path.join(repo, "plugins/business", request.slice(10)), parent, ...rest);
   if (request === "@agistack/plugin-slots")
     return path.join(base, "agi-stack/packages/plugin-slots/src/index.ts");
   try {
@@ -60,7 +64,7 @@ const { projectToolOutputPresentationV2: project } = require(
 const { toolCallPresentationKind } = require(
   path.join(
     base,
-    "agi-stack/apps/desktop/src/features/chat/chatTimelineModel.ts",
+    "plugins/business/agent/ui/desktop/chat/chatTimelineModel.ts",
   ),
 );
 const guestSource = fs.readFileSync(

@@ -4,18 +4,18 @@ import { useTranslation } from 'react-i18next';
 
 import { AlertCircle, GitBranch, Loader2, Network } from 'lucide-react';
 
-import { useActiveGraphRunForConversation } from '@/stores/graphStore';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useActiveGraphRunForConversation } from '@business/knowledge/ui/web/stores/graphStore';
+import { useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 
-import { agentGraphApi } from '@/services/agent/graph/agentGraphApi';
-import type { AgentGraphApiResponse } from '@/services/agent/graph/agentGraphApi';
-import { workspacePlanService } from '@/services/workspaceService';
+import { agentGraphApi } from '@business/agent/ui/web/services/agent/graph/agentGraphApi';
+import type { AgentGraphApiResponse } from '@business/agent/ui/web/services/agent/graph/agentGraphApi';
+import { workspacePlanService } from '@business/workspace/ui/web/services/workspaceService';
 
 import { buildChatExecutionDag } from '@/components/executionDag/chatExecutionDagModel';
 import { ExecutionDagGraph } from '@/components/executionDag/ExecutionDagGraph';
 import { buildWorkspaceExecutionDag } from '@/components/executionDag/workspaceExecutionDagModel';
 
-import type { WorkspacePlanSnapshot } from '@/types/workspace';
+import type { WorkspacePlanSnapshot } from '@business/workspace/ui/web/types/workspace';
 
 export interface AgentGraphViewProps {
   conversationId?: string | null | undefined;

@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { Zap, Terminal } from 'lucide-react';
 
 import { commandAPI } from '@/services/commandService';
-import { skillAPI } from '@/services/skillService';
+import { skillAPI } from '@business/agent/ui/web/services/skillService';
 
 import type { CommandInfo, SkillResponse, SlashItem } from '@/types/agent';
 

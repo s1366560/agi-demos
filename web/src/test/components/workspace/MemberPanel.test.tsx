@@ -7,7 +7,7 @@ import { App } from 'antd';
 import { MemberPanel } from '@/components/workspace/MemberPanel';
 import { render, screen } from '@/test/utils';
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaceMembers: () => [],
   useWorkspaceAgents: () => [],
   useWorkspaceActions: () => ({

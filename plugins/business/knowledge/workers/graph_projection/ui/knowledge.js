@@ -6,7 +6,16 @@
   const label = (en, cn) => zh ? cn : en;
   const title = document.createElement('h1');
   title.textContent = label('Knowledge', '知识库');
-  root.append(title);
+  const memories = document.createElement('button');
+  memories.type = 'button';
+  memories.textContent = label('Project memories', '项目记忆');
+  const navigationStatus = document.createElement('span');
+  navigationStatus.setAttribute('role', 'status');
+  memories.onclick = () => {
+    const project = '/tenant/' + encodeURIComponent(context.tenantId) + '/project/' + encodeURIComponent(context.projectId);
+    host.navigate(project + '/memories').catch(error => navigationStatus.textContent = String(error));
+  };
+  root.append(title, memories, navigationStatus);
   function section(name, fields, submit) {
     const form = document.createElement('form');
     const heading = document.createElement('h2');

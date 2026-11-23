@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Space, Typography } from 'antd';
 
-import { useOnlineAgents, useOnlineUsers } from '@/stores/workspace';
+import { useOnlineAgents, useOnlineUsers } from '@business/workspace/ui/web/stores/workspace';
 
 import { PresenceAvatar } from '@/components/workspace/presence/PresenceAvatar';
 

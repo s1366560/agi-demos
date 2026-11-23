@@ -41,33 +41,33 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useConversationsStore } from '@/stores/agent/conversationsStore';
-import { useIsPlanMode, useExecutionStore } from '@/stores/agent/executionStore';
-import { useAgentHITLStore, useDoomLoopDetected, useSuggestions } from '@/stores/agent/hitlStore';
-import { useIsStreaming, useAgentError, useStreamingStore } from '@/stores/agent/streamingStore';
+import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
+import { useIsPlanMode, useExecutionStore } from '@business/agent/ui/web/stores/agent/executionStore';
+import { useAgentHITLStore, useDoomLoopDetected, useSuggestions } from '@business/agent/ui/web/stores/agent/hitlStore';
+import { useIsStreaming, useAgentError, useStreamingStore } from '@business/agent/ui/web/stores/agent/streamingStore';
 import {
   useTimeline,
   useIsLoadingHistory,
   useIsLoadingEarlier,
   useHasEarlier,
   useTimelineStore,
-} from '@/stores/agent/timelineStore';
-import { useDefinitions } from '@/stores/agentDefinitions';
-import { useAgentV3Store } from '@/stores/agentV3';
+} from '@business/agent/ui/web/stores/agent/timelineStore';
+import { useDefinitions } from '@business/agent/ui/web/stores/agentDefinitions';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useProjectStore } from '@/stores/project';
-import { useSandboxStore } from '@/stores/sandbox';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 import { useTenantStore } from '@/stores/tenant';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 
 import { agentService } from '@/services/agentService';
 import type { RunInputDelivery } from '@/services/runInputService';
-import type { FileMetadata } from '@/services/sandboxUploadService';
+import type { FileMetadata } from '@business/environments/ui/web/services/sandboxUploadService';
 
 import { openCommandPaletteV2 } from '@/hooks/useCommandPaletteOpen';
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 import { useRunInputAuthority } from '@/hooks/useRunInputAuthority';
-import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
+import { useSandboxAgentHandlers } from '@business/environments/ui/web/hooks/useSandboxDetection';
 
 import { DEFAULT_GENERAL_AGENT_ID } from '@/constants/agent';
 
@@ -188,7 +188,7 @@ const RightPanel = lazy(() =>
   import('./RightPanel').then((module) => ({ default: module.RightPanel }))
 );
 const SandboxSection = lazy(() =>
-  import('./SandboxSection').then((module) => ({ default: module.SandboxSection }))
+  import('@business/environments/ui/web/components/SandboxSection').then((module) => ({ default: module.SandboxSection }))
 );
 const WorkspaceGroupChatPanel = lazy(() =>
   import('../workspace/chat/WorkspaceGroupChatPanel').then((module) => ({

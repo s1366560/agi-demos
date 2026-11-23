@@ -1,6 +1,6 @@
 import type { CloudMemoryRouteBinding } from './CloudMemoryRouteContext';
-import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
-import type { ProjectMemory } from './projectMemoriesClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+import type { ProjectMemory } from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
 import { validCloudMemoryUiAuthority } from './cloudMemoryUiAuthority';
 
 export function createProjectGraphMemoryReader(

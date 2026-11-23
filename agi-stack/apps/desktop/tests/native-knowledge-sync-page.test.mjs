@@ -11,7 +11,7 @@ const { NativeKnowledgeSyncPanel } = require(
   `${root}/features/project-knowledge/NativeKnowledgeSyncPanel.js`,
 );
 const { NativeKnowledgeConflictEditor } = require(
-  `${root}/features/project-knowledge/NativeKnowledgeConflictEditor.js`,
+  '@business/knowledge/ui/desktop/project-knowledge/NativeKnowledgeConflictEditor.js',
 );
 const h = React.createElement;
 const render = (element) => renderToStaticMarkup(h(I18nProvider, null, element));

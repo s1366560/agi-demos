@@ -1,19 +1,30 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { useAuthStore } from '@/stores/auth';
-
-import { authAPI } from '@/services/api';
+import { cloudIdentity } from '@/services/client/cloudIdentity';
 import { kernelHttpClient } from '@/services/client/kernelHttpClient';
 import { createOptionalBusinessService } from '@/services/projectPackageClient';
 
-import { clearAuthState, getAuthToken } from '@/utils/tokenResolver';
+import {
+  clearAuthState,
+  getAuthToken,
+  persistCloudIdentity,
+  subscribeCloudIdentity,
+} from '@/utils/tokenResolver';
 
 import { OptionalBusinessPanel } from '@/components/plugins/OptionalBusinessPanel';
 
+import { RichPackagePages } from '../../../agi-stack/packages/plugin-marketplace-ui/src/RichPackagePages';
+import { readPackageCommandStream } from '../../../agi-stack/packages/plugin-slots/src/richPageBridge';
+
+import { matchingPageProjects } from './routeScope';
 import { projectSessionClient } from './sessionClient';
+
+import type { User } from '@/types/memory';
+
+import type { MarketplaceTransport } from '../../../agi-stack/packages/plugin-marketplace-ui/src/client';
 
 interface ProjectScope {
   tenant_id: string;
@@ -24,7 +35,7 @@ interface ProjectScope {
   can_manage: boolean;
 }
 
-function Credentials({ change }: { change: boolean }) {
+function Credentials({ change, refresh }: { change: boolean; refresh: () => void }) {
   const { t } = useTranslation();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -40,10 +51,11 @@ function Credentials({ change }: { change: boolean }) {
     setError('');
     try {
       if (change) {
-        await authAPI.changePassword(password, field('newPassword'));
-        await useAuthStore.getState().checkAuth('project-packages');
+        await cloudIdentity.changePassword(password, field('newPassword'));
+        refresh();
       } else {
-        await useAuthStore.getState().login(field('email'), password, 'project-packages');
+        const { token, user } = await cloudIdentity.login(field('email'), password);
+        persistCloudIdentity(token, user);
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('common.error'));
@@ -85,7 +97,52 @@ function Credentials({ change }: { change: boolean }) {
 
 function ProjectPicker({ token }: { token: string }) {
   const { t } = useTranslation();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const session = useMemo(() => {
+    async function request(
+      path: string,
+      options: { method?: string; body?: unknown; signal?: AbortSignal }
+    ) {
+      if (
+        getAuthToken() !== token ||
+        !path.startsWith('/api/v1/platform-plugins/v2/optional-business/')
+      ) {
+        throw new Error('page_scope_expired');
+      }
+      const response = await fetch(path, {
+        method: options.method ?? 'GET',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+        ...(options.signal ? { signal: options.signal } : {}),
+        redirect: 'error',
+      });
+      if (getAuthToken() !== token) throw new Error('page_scope_expired');
+      if (!response.ok) {
+        if (response.status === 401) clearAuthState();
+        const failure = (await response.json().catch(() => null)) as { detail?: unknown } | null;
+        throw new Error(
+          typeof failure?.detail === 'string' ? failure.detail : 'HTTP ' + String(response.status)
+        );
+      }
+      return response;
+    }
+    const transport: MarketplaceTransport = async <T,>(
+      path: string,
+      options: Parameters<MarketplaceTransport>[1]
+    ) => (await (await request(path, options)).json()) as T;
+    return {
+      transport,
+      stream: async (
+        path: string,
+        body: Record<string, unknown>,
+        signal: AbortSignal,
+        progress: (value: unknown) => void
+      ) =>
+        readPackageCommandStream(await request(path, { method: 'POST', body, signal }), progress),
+    };
+  }, [token]);
   const [loaded, setLoaded] = useState<{
     projects: ProjectScope[];
     service: ReturnType<typeof createOptionalBusinessService>;
@@ -128,12 +185,8 @@ function ProjectPicker({ token }: { token: string }) {
   if (!loaded) return <p role="status">{t('common.loading')}</p>;
   const { projects, service } = loaded;
   if (!projects.length) return <p role="status">{t('projectPackages.noAccess')}</p>;
-  const tenant = params.get('tenant');
-  const project = params.get('project');
-  const selected =
-    tenant || project
-      ? projects.find((item) => item.tenant_id === tenant && item.project_id === project)
-      : projects[0];
+  const matches = matchingPageProjects(projects, location.pathname, params);
+  const selected = matches.length === 1 ? matches[0] : undefined;
   return (
     <>
       <label className="package-project">
@@ -142,7 +195,17 @@ function ProjectPicker({ token }: { token: string }) {
           value={selected?.project_id ?? ''}
           onChange={(event) => {
             const next = projects.find((item) => item.project_id === event.target.value);
-            if (next) setParams({ tenant: next.tenant_id, project: next.project_id });
+            if (next)
+              void navigate({
+                pathname:
+                  !selected && matches.length > 1 && matches.includes(next)
+                    ? location.pathname
+                    : '/',
+                search: new URLSearchParams({
+                  tenant: next.tenant_id,
+                  project: next.project_id,
+                }).toString(),
+              });
           }}
         >
           {!selected && <option value="">{t('projectPackages.select')}</option>}
@@ -158,6 +221,23 @@ function ProjectPicker({ token }: { token: string }) {
           {!selected.can_manage && (
             <p>{t(selected.can_execute ? 'projectPackages.member' : 'projectPackages.viewer')}</p>
           )}
+          <RichPackagePages
+            key={JSON.stringify([selected.tenant_id, selected.project_id])}
+            scope={{ tenantId: selected.tenant_id, projectId: selected.project_id }}
+            target="web"
+            pathname={location.pathname}
+            transport={session.transport}
+            streamCommand={session.stream}
+            navigate={(path) => {
+              void navigate({
+                pathname: path,
+                search: new URLSearchParams({
+                  tenant: selected.tenant_id,
+                  project: selected.project_id,
+                }).toString(),
+              });
+            }}
+          />
           <OptionalBusinessPanel
             key={selected.project_id}
             service={service}
@@ -167,6 +247,8 @@ function ProjectPicker({ token }: { token: string }) {
             canExecute={selected.can_execute}
           />
         </>
+      ) : matches.length > 1 ? (
+        <p role="status">{t('projectPackages.select')}</p>
       ) : (
         <p role="alert">{t('projectPackages.noAccess')}</p>
       )}
@@ -175,36 +257,39 @@ function ProjectPicker({ token }: { token: string }) {
 }
 
 export function ProjectPackagesApp() {
-  const { t } = useTranslation();
-  const token = useAuthStore((state) => state.token);
-  const user = useAuthStore((state) => state.user);
-  const [verified, setVerified] = useState<string | null>(null);
-  useEffect(() => {
-    function onStorage(event: StorageEvent) {
-      if (event.key !== null && event.key !== 'memstack-auth-storage') return;
-      if (getAuthToken() === useAuthStore.getState().token) return;
-      setVerified(null);
-      if (getAuthToken()) void useAuthStore.persist.rehydrate();
-      else clearAuthState();
-    }
-    window.addEventListener('storage', onStorage);
-    return () => {
-      window.removeEventListener('storage', onStorage);
-    };
-  }, []);
+  const { t, i18n } = useTranslation();
+  const token = useSyncExternalStore(subscribeCloudIdentity, getAuthToken);
+  const [identity, setIdentity] = useState<{ token: string; user: User } | null>(null);
+  const user = identity?.token === token ? identity.user : null;
+  const [checkError, setCheckError] = useState<{ token: string; message: string } | null>(null);
+  const [attempt, retry] = useState(0);
   useEffect(() => {
     let active = true;
     if (token)
-      void useAuthStore
-        .getState()
-        .checkAuth('project-packages')
-        .then(() => {
-          if (active && token === getAuthToken()) setVerified(token);
+      void cloudIdentity
+        .verifyToken(token)
+        .then((verified) => {
+          if (active && token === getAuthToken()) {
+            setIdentity({ token, user: verified });
+            if (verified.preferred_language && verified.preferred_language !== i18n.language)
+              void i18n.changeLanguage(verified.preferred_language);
+            setCheckError(null);
+          }
+        })
+        .catch((reason: unknown) => {
+          if (active)
+            setCheckError({
+              token,
+              message: reason instanceof Error ? reason.message : t('common.error'),
+            });
         });
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [token, attempt, t, i18n]);
+  function refreshIdentity() {
+    retry((value) => value + 1);
+  }
   function logout() {
     if (token)
       void kernelHttpClient
@@ -216,7 +301,7 @@ export function ProjectPackagesApp() {
     <main className="package-shell">
       <header>
         <h1>{t('projectPackages.title')}</h1>
-        {token && verified === token && user && (
+        {token && user && (
           <div>
             <span>{user.email}</span>
             <button type="button" onClick={logout}>
@@ -226,11 +311,23 @@ export function ProjectPackagesApp() {
         )}
       </header>
       {!token ? (
-        <Credentials change={false} />
-      ) : !user || verified !== token ? (
+        <Credentials change={false} refresh={refreshIdentity} />
+      ) : checkError?.token === token ? (
+        <div role="alert">
+          {checkError.message}{' '}
+          <button
+            onClick={() => {
+              setCheckError(null);
+              retry((value) => value + 1);
+            }}
+          >
+            {t('common.retry')}
+          </button>
+        </div>
+      ) : !user ? (
         <p role="status">{t('common.loading')}</p>
       ) : user.must_change_password ? (
-        <Credentials change />
+        <Credentials change refresh={refreshIdentity} />
       ) : (
         <ProjectPicker key={token} token={token} />
       )}

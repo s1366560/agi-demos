@@ -79,7 +79,7 @@ import {
 } from '../../components/agent';
 import { MarkdownContent } from '../../components/agent/chat';
 import { PatternStats, PatternList, PatternInspector } from '../../components/agent/patterns';
-import { SandboxTerminal, SandboxOutputViewer } from '../../components/agent/sandbox';
+import { SandboxTerminal, SandboxOutputViewer } from '@business/environments/ui/web/components/sandbox';
 import { ErrorBoundary, SkeletonLoader } from '../../components/common';
 
 describe('Barrel Exports', () => {

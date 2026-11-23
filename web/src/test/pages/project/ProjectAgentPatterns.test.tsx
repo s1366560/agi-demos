@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectAgentPatterns } from '@business/agent/ui/web/project/ProjectAgentPatterns';
 import { ApiError, ApiErrorType } from '@/services/client/ApiError';
-import { ProjectAgentContractError } from '@/services/projectAgentService';
+import { ProjectAgentContractError } from '@business/agent/ui/web/services/projectAgentService';
 
 const { listSharedPatterns } = vi.hoisted(() => ({
   listSharedPatterns: vi.fn(),
@@ -21,8 +21,8 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@/services/projectAgentService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/services/projectAgentService')>();
+vi.mock('@business/agent/ui/web/services/projectAgentService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@business/agent/ui/web/services/projectAgentService')>();
   return {
     ...actual,
     projectAgentService: {

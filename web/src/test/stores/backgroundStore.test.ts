@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useBackgroundStore } from '../../stores/backgroundStore';
-import { subagentAPI } from '../../services/subagentService';
-vi.mock('../../services/subagentService', () => ({ subagentAPI: { cancelExecution: vi.fn() } }));
+import { subagentAPI } from '@business/agent/ui/web/services/subagentService';
+vi.mock('@business/agent/ui/web/services/subagentService', () => ({ subagentAPI: { cancelExecution: vi.fn() } }));
 
 beforeEach(() => {
   useBackgroundStore.getState().clearAll();

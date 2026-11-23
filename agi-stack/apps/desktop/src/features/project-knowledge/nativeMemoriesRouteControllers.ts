@@ -1,13 +1,13 @@
-import { createNativeKnowledgeProcessingRetryController } from './nativeKnowledgeProcessingRetryController';
+import { createNativeKnowledgeProcessingRetryController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeProcessingRetryController';
 import type { NativeMemoriesRouteBinding } from './NativeMemoriesRouteContext';
-import { createNativeMemoriesController } from './nativeMemoriesController';
-import { createProjectMemoriesController } from './projectMemoriesController';
-import { createNativeKnowledgeCloudConnectionController } from './nativeKnowledgeCloudConnectionController';
-import { createNativeKnowledgeSyncController } from './nativeKnowledgeSyncController';
-import { createNativeKnowledgeConflictController } from './nativeKnowledgeConflictController';
-import { createNativeKnowledgeRetrievalController } from './nativeKnowledgeRetrievalController';
-import { createNativeKnowledgeProcessingController } from './nativeKnowledgeProcessingController';
-import { createNativeKnowledgeDiagnosticsController } from './nativeKnowledgeDiagnosticsController';
+import { createNativeMemoriesController } from '@business/knowledge/ui/desktop/project-knowledge/nativeMemoriesController';
+import { createProjectMemoriesController } from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesController';
+import { createNativeKnowledgeCloudConnectionController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeCloudConnectionController';
+import { createNativeKnowledgeSyncController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeSyncController';
+import { createNativeKnowledgeConflictController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeConflictController';
+import { createNativeKnowledgeRetrievalController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeRetrievalController';
+import { createNativeKnowledgeProcessingController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeProcessingController';
+import { createNativeKnowledgeDiagnosticsController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeDiagnosticsController';
 
 /** Every controller shares the admitted binding; callbacks refresh reads without replaying writes. */
 export function createNativeMemoriesRouteControllers(binding: NativeMemoriesRouteBinding) {

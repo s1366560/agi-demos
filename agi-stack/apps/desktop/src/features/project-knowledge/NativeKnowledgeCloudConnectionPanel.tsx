@@ -4,7 +4,7 @@ import { LOCAL_DEV_SERVER_PRESETS } from '../../types';
 import type {
   NativeKnowledgeCloudConnectionController,
   NativeKnowledgeCloudConnectionModel,
-} from './nativeKnowledgeCloudConnectionController';
+} from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeCloudConnectionController';
 import './NativeKnowledgeCloudConnectionPanel.css';
 
 export function NativeKnowledgeCloudConnectionPanel({

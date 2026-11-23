@@ -8,7 +8,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { EnhancedSearch } from '@business/knowledge/ui/web/project/EnhancedSearch';
-import { graphService } from '../../../services/graphService';
+import { graphService } from '@business/knowledge/ui/web/services/graphService';
 
 const { mockUseParams, mockUseProjectStore, mockUseSearchParams } = vi.hoisted(() => ({
   mockUseParams: vi.fn(() => ({ tenantId: 'tenant-1', projectId: 'test-project-1' })),
@@ -19,7 +19,7 @@ const { mockUseParams, mockUseProjectStore, mockUseSearchParams } = vi.hoisted((
 }));
 
 // Mock the dependencies
-vi.mock('../../../services/graphService', () => ({
+vi.mock('@business/knowledge/ui/web/services/graphService', () => ({
   graphService: {
     advancedSearch: vi.fn().mockResolvedValue({ results: [] }),
     searchByGraphTraversal: vi.fn().mockResolvedValue({ results: [] }),

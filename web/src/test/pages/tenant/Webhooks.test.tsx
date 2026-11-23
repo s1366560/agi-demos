@@ -3,17 +3,17 @@ import { Link, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WebhookCreatedSecretModal, Webhooks } from '@business/automation/ui/web/tenant/Webhooks';
-import { eventService } from '../../../services/eventService';
-import { webhookService, type Webhook } from '../../../services/webhookService';
+import { eventService } from '@business/automation/ui/web/services/eventService';
+import { webhookService, type Webhook } from '@business/automation/ui/web/services/webhookService';
 import { act, fireEvent, render, screen, waitFor } from '../../utils';
 
-vi.mock('../../../services/eventService', () => ({
+vi.mock('@business/automation/ui/web/services/eventService', () => ({
   eventService: {
     getEventTypes: vi.fn(),
   },
 }));
 
-vi.mock('../../../services/webhookService', () => ({
+vi.mock('@business/automation/ui/web/services/webhookService', () => ({
   webhookService: {
     listWebhooks: vi.fn(),
     createWebhook: vi.fn(),

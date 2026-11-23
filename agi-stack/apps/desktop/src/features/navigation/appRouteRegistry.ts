@@ -10,7 +10,7 @@ import {
   AGENT_WORKSPACE_ROUTE_ID,
   createAgentWorkspaceRouteModuleLoader,
 } from '../agent-workspace/agentWorkspaceRouteModule';
-import { createBackendStoresController } from '../backend-stores/backendStoresController';
+import { createBackendStoresController } from '@business/knowledge/ui/desktop/backend-stores/backendStoresController';
 import { createBackendStoresRouteModuleLoader } from '../backend-stores/backendStoresRouteModule';
 import { isIdentityAuthenticated } from '../auth/authContextModel';
 import { createDeviceApprovalClient } from '../device-approval/deviceApprovalClient';
@@ -26,8 +26,8 @@ import { readInvitationTokenFromHash } from '../invitation-acceptance/invitation
 import { createInvitationAcceptanceRouteModuleLoader } from '../invitation-acceptance/invitationAcceptanceRouteModule';
 import type {
   ProjectCronJobsRouteBindingProviderV2,
-} from '../automations/projectCronJobsRouteBindingProviderV2';
-import { createProjectCronJobsRouteModuleLoader } from '../automations/projectCronJobsRouteModule';
+} from '@business/automation/ui/desktop/automations/projectCronJobsRouteBindingProviderV2';
+import { createProjectCronJobsRouteModuleLoader } from '@business/automation/ui/desktop/automations/projectCronJobsRouteModule';
 import {
   createDesktopProductionRouteRegistry,
   registerDesktopProductionRouteLoaders,
@@ -88,8 +88,8 @@ import {
   TENANT_BILLING_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
 } from './desktopProductionRouteRegistry';
-import { createProjectPlaybooksController } from '../project-playbooks/projectPlaybooksController';
-import { createProjectPlaybooksRouteModuleLoader } from '../project-playbooks/projectPlaybooksRouteModule';
+import { createProjectPlaybooksController } from '@business/automation/ui/desktop/project-playbooks/projectPlaybooksController';
+import { createProjectPlaybooksRouteModuleLoader } from '@business/automation/ui/desktop/project-playbooks/projectPlaybooksRouteModule';
 import {
   createDeadLetterQueueRouteBindingForRuntime,
   createProjectOverviewRouteBindingForRuntime,
@@ -107,12 +107,12 @@ import {
   createTenantTasksRouteBindingForRuntime,
   createTenantWorkspacesRouteBindingForRuntime,
 } from './desktopProductionRouteRuntime';
-import { createProjectOverviewRouteModuleLoader } from '../project/projectOverviewRouteModule';
-import { createProjectAgentDashboardController } from '../project-agent/projectAgentDashboardController';
+import { createProjectOverviewRouteModuleLoader } from '@business/workspace/ui/desktop/project/projectOverviewRouteModule';
+import { createProjectAgentDashboardController } from '@business/agent/ui/desktop/project-agent/projectAgentDashboardController';
 import { createProjectAgentDashboardRouteModuleLoader } from '../project-agent/projectAgentDashboardRouteModule';
-import { createProjectAgentLogsController } from '../project-agent/projectAgentLogsController';
+import { createProjectAgentLogsController } from '@business/agent/ui/desktop/project-agent/projectAgentLogsController';
 import { createProjectAgentLogsRouteModuleLoader } from '../project-agent/projectAgentLogsRouteModule';
-import { createProjectAgentPatternsController } from '../project-agent/projectAgentPatternsController';
+import { createProjectAgentPatternsController } from '@business/agent/ui/desktop/project-agent/projectAgentPatternsController';
 import { createProjectAgentPatternsRouteModuleLoader } from '../project-agent/projectAgentPatternsRouteModule';
 import { createProjectMaintenanceController } from '../project-administration/projectMaintenanceController';
 import { createProjectMaintenanceRouteModuleLoader } from '../project-administration/projectMaintenanceRouteModule';
@@ -123,51 +123,51 @@ import { createProjectSettingsRouteModuleLoader } from '../project-administratio
 import {
   buildProjectBlackboardCanonicalPath,
   createProjectBlackboardRouteModuleLoader,
-} from '../project-blackboard/projectBlackboardRouteModule';
-import { createProjectBlackboardV2Client } from '../project-blackboard/projectBlackboardClient';
-import { createProjectBlackboardController } from '../project-blackboard/projectBlackboardController';
-import { createProjectCommunitiesController } from '../project-knowledge/projectCommunitiesController';
+} from '@business/workspace/ui/desktop/project-blackboard/projectBlackboardRouteModule';
+import { createProjectBlackboardV2Client } from '@business/workspace/ui/desktop/project-blackboard/projectBlackboardClient';
+import { createProjectBlackboardController } from '@business/workspace/ui/desktop/project-blackboard/projectBlackboardController';
+import { createProjectCommunitiesController } from '@business/knowledge/ui/desktop/project-knowledge/projectCommunitiesController';
 import { createProjectCommunitiesRouteModuleLoader } from '../project-knowledge/projectCommunitiesRouteModule';
-import { createProjectEntitiesController } from '../project-knowledge/projectEntitiesController';
+import { createProjectEntitiesController } from '@business/knowledge/ui/desktop/project-knowledge/projectEntitiesController';
 import { createProjectEntitiesRouteModuleLoader } from '../project-knowledge/projectEntitiesRouteModule';
-import { createProjectGraphController } from '../project-knowledge/projectGraphController';
+import { createProjectGraphController } from '@business/knowledge/ui/desktop/project-knowledge/projectGraphController';
 import { createProjectGraphRouteModuleLoader } from '../project-knowledge/projectGraphRouteModule';
-import { createProjectMemoriesController } from '../project-knowledge/projectMemoriesController';
+import { createProjectMemoriesController } from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesController';
 import { createProjectMemoriesRouteModuleLoader } from '../project-knowledge/projectMemoriesRouteModule';
 import { createProjectTeamController } from '../project-knowledge/projectTeamController';
 import { createProjectTeamRouteModuleLoader } from '../project-knowledge/projectTeamRouteModule';
-import { createProjectWorkspacesController } from '../project-workspaces/projectWorkspacesController';
-import { createProjectWorkspacesV2Client } from '../project-workspaces/projectWorkspacesV2Client';
-import { createProjectWorkspacesRouteModuleLoader } from '../project-workspaces/projectWorkspacesRouteModule';
-import { createProjectSupportRouteModuleLoader } from '../project-support/projectSupportRouteModule';
-import { createProjectSupportController } from '../project-support/projectSupportController';
-import { createDeadLetterQueueRouteModuleLoader } from '../governance/deadLetterQueueRouteModule';
-import { createInstanceTemplatesRouteModuleLoader } from '../instance-templates/instanceTemplatesRouteModule';
-import { createRuntimeClustersRouteModuleLoader } from '../runtime-clusters/runtimeClustersRouteModule';
-import { createRuntimeDeploymentsRouteModuleLoader } from '../runtime-deployments/runtimeDeploymentsRouteModule';
-import { createRuntimeInstancesRouteModuleLoader } from '../runtime-instances/runtimeInstancesRouteModule';
-import { createRuntimePoolRouteModuleLoader } from '../runtime-pool/runtimePoolRouteModule';
-import { createUnifiedRuntimesRouteModuleLoader } from '../unified-runtimes/unifiedRuntimesRouteModule';
-import { createTenantOverviewRouteModuleLoader } from '../tenant/tenantOverviewRouteModule';
+import { createProjectWorkspacesController } from '@business/workspace/ui/desktop/project-workspaces/projectWorkspacesController';
+import { createProjectWorkspacesV2Client } from '@business/workspace/ui/desktop/project-workspaces/projectWorkspacesV2Client';
+import { createProjectWorkspacesRouteModuleLoader } from '@business/workspace/ui/desktop/project-workspaces/projectWorkspacesRouteModule';
+import { createProjectSupportRouteModuleLoader } from '@business/workspace/ui/desktop/project-support/projectSupportRouteModule';
+import { createProjectSupportController } from '@business/workspace/ui/desktop/project-support/projectSupportController';
+import { createDeadLetterQueueRouteModuleLoader } from '@business/automation/ui/desktop/governance/deadLetterQueueRouteModule';
+import { createInstanceTemplatesRouteModuleLoader } from '@business/environments/ui/desktop/instance-templates/instanceTemplatesRouteModule';
+import { createRuntimeClustersRouteModuleLoader } from '@business/environments/ui/desktop/runtime-clusters/runtimeClustersRouteModule';
+import { createRuntimeDeploymentsRouteModuleLoader } from '@business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsRouteModule';
+import { createRuntimeInstancesRouteModuleLoader } from '@business/environments/ui/desktop/runtime-instances/runtimeInstancesRouteModule';
+import { createRuntimePoolRouteModuleLoader } from '@business/environments/ui/desktop/runtime-pool/runtimePoolRouteModule';
+import { createUnifiedRuntimesRouteModuleLoader } from '@business/environments/ui/desktop/unified-runtimes/unifiedRuntimesRouteModule';
+import { createTenantOverviewRouteModuleLoader } from '@business/workspace/ui/desktop/tenant/tenantOverviewRouteModule';
 import { createTenantAnalyticsRouteModuleLoader } from '../tenant/tenantAnalyticsRouteModule';
 import { createTenantAgentDashboardRouteModuleLoader } from '../tenant/tenantAgentDashboardRouteModule';
 import { createTenantAgentBindingsRouteModuleLoader } from '../tenant/tenantAgentBindingsRouteModule';
 import { createTenantProjectsRouteModuleLoader } from '../tenant/tenantProjectsRouteModule';
-import { createTenantTasksRouteModuleLoader } from '../tenant/tenantTasksRouteModule';
-import { createTenantWorkspacesRouteModuleLoader } from '../tenant/tenantWorkspacesRouteModule';
+import { createTenantTasksRouteModuleLoader } from '@business/workspace/ui/desktop/tenant/tenantTasksRouteModule';
+import { createTenantWorkspacesRouteModuleLoader } from '@business/workspace/ui/desktop/tenant/tenantWorkspacesRouteModule';
 import { createTenantGovernanceRouteModuleLoader } from '../tenant-admin/tenantGovernanceRouteModule';
-import { createTenantBillingRouteModuleLoader } from '../tenant-admin/tenantBillingRouteModule';
+import { createTenantBillingRouteModuleLoader } from '@business/billing/ui/desktop/tenant-admin/tenantBillingRouteModule';
 import { createTenantAuditRouteModuleLoader } from '../tenant-admin/tenantAuditRouteModule';
 import { createTenantTrustRouteModuleLoader } from '../tenant-admin/tenantTrustRouteModule';
 import { createTenantAcpRouteModuleLoader } from '../tenant-admin/tenantAcpRouteModule';
 import { createTenantDecisionRecordsRouteModuleLoader } from '../tenant-admin/tenantDecisionRecordsRouteModule';
 import { readTenantDecisionRecordsRouteQuery } from '../tenant-admin/tenantDecisionRecordsRouteQuery';
-import { createTenantEventsRouteModuleLoader } from '../tenant-admin/tenantEventsRouteModule';
-import { createTenantGenesRouteModuleLoader } from '../tenant-admin/tenantGenesRouteModule';
+import { createTenantEventsRouteModuleLoader } from '@business/automation/ui/desktop/tenant-admin/tenantEventsRouteModule';
+import { createTenantGenesRouteModuleLoader } from '@business/environments/ui/desktop/tenant-admin/tenantGenesRouteModule';
 import { createTenantOrganizationSettingsRouteModuleLoader } from '../tenant-admin/tenantOrganizationSettingsRouteModule';
 import { createTenantPatternsRouteModuleLoader } from '../tenant-admin/tenantPatternsRouteModule';
 import { createTenantSettingsRouteModuleLoader } from '../tenant-admin/tenantSettingsRouteModule';
-import { createTenantWebhooksRouteModuleLoader } from '../tenant-admin/tenantWebhooksRouteModule';
+import { createTenantWebhooksRouteModuleLoader } from '@business/automation/ui/desktop/tenant-admin/tenantWebhooksRouteModule';
 import {
   createTenantAuditRouteBindingForRuntime,
   createTenantBillingRouteBindingForRuntime,
@@ -214,7 +214,7 @@ import {
   createSkillsRouteBindingForRuntime,
 } from '../settings-routes/settingsRouteRuntime';
 import { createSkillsRouteModuleLoader } from '../settings-routes/skillsRouteModule';
-import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRouteModule';
+import { createTemplatesRouteModuleLoader } from '@business/environments/ui/desktop/settings-routes/templatesRouteModule';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
 import {

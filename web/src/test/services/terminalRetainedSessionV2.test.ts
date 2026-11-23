@@ -9,7 +9,7 @@ import {
 import {
   TerminalRetainedSessionV2,
   type TerminalRetainedSessionOptionsV2,
-} from '@/services/terminalRetainedSessionV2';
+} from '@business/environments/ui/web/services/terminalRetainedSessionV2';
 class Socket {
   static CONNECTING = 0;
   static OPEN = 1;

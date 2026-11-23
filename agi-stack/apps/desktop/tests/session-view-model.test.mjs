@@ -20,10 +20,10 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/session/sessionViewModel.js'
 );
 const { buildWorkspaceOverviewModel } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceOverviewModel.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/workspaceOverviewModel.js'
 );
 const { conversationTreeStatusValue, conversationTreeStatusPresentation } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/workspaceTreeModel.js'
 );
 
 function conversation(overrides = {}) {

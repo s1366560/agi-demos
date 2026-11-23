@@ -41,7 +41,7 @@ vi.mock('antd', () => ({
   Spin: () => <div data-testid="spin">Loading...</div>,
 }));
 
-vi.mock('@/stores/sandbox', () => ({
+vi.mock('@business/environments/ui/web/stores/sandbox', () => ({
   useSandboxStore: vi.fn(() => ({
     activeSandboxId: null,
     toolExecutions: [],
@@ -49,14 +49,14 @@ vi.mock('@/stores/sandbox', () => ({
   })),
 }));
 
-vi.mock('@/services/agent/graph/agentGraphApi', () => ({
+vi.mock('@business/agent/ui/web/services/agent/graph/agentGraphApi', () => ({
   agentGraphApi: {
     getGraph: vi.fn(),
   },
 }));
 
-vi.mock('@/services/workspaceService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/services/workspaceService')>();
+vi.mock('@business/workspace/ui/web/services/workspaceService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@business/workspace/ui/web/services/workspaceService')>();
   return {
     ...actual,
     workspaceTaskService: {
@@ -71,7 +71,7 @@ vi.mock('@/services/workspaceService', async (importOriginal) => {
 });
 
 // Mock SandboxSection to avoid complex dependencies
-vi.mock('@/components/agent/SandboxSection', () => ({
+vi.mock('@business/environments/ui/web/components/SandboxSection', () => ({
   SandboxSection: ({ sandboxId, toolExecutions, currentTool }: any) => (
     <div data-testid="sandbox-section" data-sandbox-id={sandboxId || ''}>
       <div data-testid="tool-executions-count">{toolExecutions?.length || 0}</div>
@@ -83,13 +83,13 @@ vi.mock('@/components/agent/SandboxSection', () => ({
 
 // Import components after mocking
 // eslint-disable-next-line no-restricted-imports
-import { agentGraphApi } from '@/services/agent/graph/agentGraphApi';
+import { agentGraphApi } from '@business/agent/ui/web/services/agent/graph/agentGraphApi';
 // eslint-disable-next-line no-restricted-imports
-import { workspacePlanService, workspaceTaskService } from '@/services/workspaceService';
+import { workspacePlanService, workspaceTaskService } from '@business/workspace/ui/web/services/workspaceService';
 // eslint-disable-next-line no-restricted-imports
-import { useGraphStore } from '@/stores/graphStore';
+import { useGraphStore } from '@business/knowledge/ui/web/stores/graphStore';
 // eslint-disable-next-line no-restricted-imports
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 // eslint-disable-next-line no-restricted-imports
 import { RightPanel } from '@/components/agent/RightPanel';
 

@@ -1,5 +1,5 @@
 import type { RuntimeDataset, WorkspaceSummary } from '../../types';
-import { isWorkspaceDefaultSelectionEligible } from '../workspace/workspaceTreeModel';
+import { isWorkspaceDefaultSelectionEligible } from '@business/workspace/ui/desktop/workspace/workspaceTreeModel';
 
 export type WorkspaceLifecycleScope = {
   tenantId: string;

@@ -22,9 +22,9 @@ import {
   nextDesktopSearchLimit,
   searchResponseMayCommit,
   toggleSelectedSearchResult,
-} from '@desktop/features/search/desktopSearchModel';
-import { SearchResultCard, SearchState } from '@desktop/features/search/DesktopSearchResult';
-import '@desktop/features/search/DesktopSearch.css';
+} from './desktopSearchModel';
+import { SearchResultCard, SearchState } from './DesktopSearchResult';
+import './DesktopSearch.css';
 
 type DesktopSearchProps = {
   api: Pick<DesktopApiClient, 'searchProject'>;

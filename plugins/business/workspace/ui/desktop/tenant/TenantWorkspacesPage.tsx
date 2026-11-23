@@ -8,12 +8,12 @@ import { Button, TextArea, TextField } from '@radix-ui/themes';
 import { useRef, useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
-import type { TenantWorkspaceCreateInput } from '@desktop/features/tenant/tenantWorkspacesClient';
+import type { TenantWorkspaceCreateInput } from './tenantWorkspacesClient';
 import type {
   TenantWorkspacesController,
   TenantWorkspacesViewModel,
-} from '@desktop/features/tenant/tenantWorkspacesController';
-import '@desktop/features/tenant/TenantWorkspacesPage.css';
+} from './tenantWorkspacesController';
+import './TenantWorkspacesPage.css';
 
 export function TenantWorkspacesPage({
   model,

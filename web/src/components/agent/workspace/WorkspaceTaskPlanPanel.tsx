@@ -7,7 +7,7 @@ import { AlertCircle, CheckCircle2, ChevronRight, Circle, GitBranch, Loader2 } f
 import {
   calculateWorkspacePlanCompletionRatio,
   getWorkspacePlanCompletionCounts,
-} from '@/components/blackboard/blackboardUtils';
+} from '@business/workspace/ui/web/components/blackboard/blackboardUtils';
 
 import {
   buildWorkspaceTaskPlanIterationGroups,
@@ -15,7 +15,7 @@ import {
   type WorkspaceTaskPlanRow,
 } from './WorkspaceTaskPlanPanelModel';
 
-import type { WorkspacePlanSnapshot, WorkspaceTaskStatus } from '@/types/workspace';
+import type { WorkspacePlanSnapshot, WorkspaceTaskStatus } from '@business/workspace/ui/web/types/workspace';
 
 import type { TFunction } from 'i18next';
 

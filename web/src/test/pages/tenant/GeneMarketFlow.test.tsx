@@ -8,15 +8,15 @@ import { GeneDetail } from '@business/environments/ui/web/tenant/GeneDetail';
 import { GeneMarket } from '@business/environments/ui/web/tenant/GeneMarket';
 import { GenomeDetail } from '@business/environments/ui/web/tenant/GenomeDetail';
 
-import { instanceService } from '@/services/instanceService';
+import { instanceService } from '@business/environments/ui/web/services/instanceService';
 
 import type {
   EvolutionEventResponse,
   GeneResponse,
   GeneReview,
   GenomeResponse,
-} from '@/services/geneMarketService';
-import type { InstanceResponse } from '@/services/instanceService';
+} from '@business/environments/ui/web/services/geneMarketService';
+import type { InstanceResponse } from '@business/environments/ui/web/services/instanceService';
 
 const navigateMock = vi.hoisted(() => vi.fn());
 const paramsMock = vi.hoisted(() => ({
@@ -92,13 +92,13 @@ vi.mock('@/stores/auth', () => ({
     selector({ user: { id: 'user-1' } }),
 }));
 
-vi.mock('@/services/geneMarketService', () => ({
+vi.mock('@business/environments/ui/web/services/geneMarketService', () => ({
   geneMarketService: {
     listGenes: vi.fn().mockResolvedValue({ genes: [], total: 0, page: 1, page_size: 100 }),
   },
 }));
 
-vi.mock('@/services/instanceService', () => ({
+vi.mock('@business/environments/ui/web/services/instanceService', () => ({
   instanceService: {
     list: vi.fn(),
   },
@@ -155,7 +155,7 @@ const pickInstanceInInstallModal = async (label: string): Promise<void> => {
   fireEvent.click(await screen.findByText('Instance One (instance-one)'));
 };
 
-vi.mock('@/stores/geneMarket', () => ({
+vi.mock('@business/environments/ui/web/stores/geneMarket', () => ({
   useActiveTab: () => stateMock.activeTab,
   useCurrentGene: () => stateMock.currentGene,
   useCurrentGenome: () => stateMock.currentGenome,

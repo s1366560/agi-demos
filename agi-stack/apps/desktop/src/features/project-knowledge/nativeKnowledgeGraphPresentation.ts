@@ -1,4 +1,4 @@
-import type { NativeKnowledgeGraphModel } from './nativeKnowledgeGraphController';
+import type { NativeKnowledgeGraphModel } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeGraphController';
 
 /** Exact literal and positional filtering; no semantic matching or identity merging. */
 export function nativeKnowledgeGraphPresentation(

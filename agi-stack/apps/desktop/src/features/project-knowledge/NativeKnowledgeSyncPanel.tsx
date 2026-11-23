@@ -1,11 +1,11 @@
 import { useState } from 'react';
 
 import { useI18n } from '../../i18n';
-import type { NativeKnowledgeConflictController } from './nativeKnowledgeConflictController';
+import type { NativeKnowledgeConflictController } from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeConflictController';
 import type {
   NativeKnowledgeSyncController,
   NativeKnowledgeSyncModel,
-} from './nativeKnowledgeSyncController';
+} from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeSyncController';
 
 export function NativeKnowledgeSyncPanel({
   model,

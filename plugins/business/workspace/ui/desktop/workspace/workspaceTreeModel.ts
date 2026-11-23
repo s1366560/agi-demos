@@ -1,0 +1,676 @@
+import type {
+  AgentConversation,
+  RuntimeNodeLoadState,
+  RuntimeNodeState,
+  WorkspaceSummary,
+} from '@desktop/types';
+
+export type WorkspaceTreeNode = {
+  workspace: WorkspaceSummary;
+  conversations: AgentConversation[];
+};
+
+export type WorkspaceTreeSelectionMode = 'overview' | 'conversation' | 'my-work' | 'none';
+
+export type WorkspaceTreeAvailability =
+  | 'unavailable'
+  | 'loading'
+  | 'refreshing'
+  | 'error'
+  | 'stale-error'
+  | 'empty'
+  | 'ready';
+
+export type WorkspaceTreeSessionAvailability =
+  | 'deferred'
+  | 'loading'
+  | 'refreshing'
+  | 'error'
+  | 'stale-error'
+  | 'empty'
+  | 'ready';
+
+export type WorkspaceConversationSelection = {
+  scopeKey: string;
+  conversationId: string;
+};
+
+export type ConversationRecencyGroup = 'today' | 'yesterday' | 'week' | 'older';
+
+const RECENCY_GROUP_ORDER: readonly ConversationRecencyGroup[] = [
+  'today',
+  'yesterday',
+  'week',
+  'older',
+];
+
+export type WorkspaceTreeStatusTone =
+  | 'active'
+  | 'idle'
+  | 'queued'
+  | 'paused'
+  | 'attention'
+  | 'ready'
+  | 'completed'
+  | 'danger'
+  | 'offline'
+  | 'unknown';
+
+export type WorkspaceTreeStatusPresentation = {
+  tone: WorkspaceTreeStatusTone;
+  labelKey: string;
+  /**
+   * True when the dot shows a last-known non-terminal run state while the
+   * agent socket is disconnected: the value is not live and must be rendered
+   * with the degraded (dimmed/hollow) treatment plus the stale tooltip.
+   */
+  stale?: boolean;
+};
+
+// Run states that imply live progress; while the socket is down these become
+// last-known values and must not masquerade as live. Terminal and record
+// states (completed/failed/cancelled/ready_review/disconnected/interrupted/
+// archived/active/...) stay truthful without fresh events, so they never
+// degrade. Mirrors LIVE_RUN_GROUP_STATUSES in my-work/myWorkModel.ts.
+const LIVE_RUN_STATUSES: ReadonlySet<string> = new Set([
+  'queued',
+  'running',
+  'paused',
+  'needs_input',
+  'needs_approval',
+]);
+
+export function workspaceTreeStatusIsLiveRun(status: string | null | undefined): boolean {
+  return LIVE_RUN_STATUSES.has(status?.trim().toLowerCase() ?? '');
+}
+
+export const UNBOUND_CONVERSATIONS_KEY = '';
+
+export function isWorkspaceDefaultSelectionEligible(
+  workspace: Pick<WorkspaceSummary, 'is_archived' | 'status'>,
+): boolean {
+  return workspace.is_archived !== true && workspace.status?.trim().toLowerCase() !== 'archived';
+}
+
+export function resolveRuntimeWorkspaceId(
+  requestedWorkspaceId: string,
+  projectId: string,
+  workspaces: readonly Pick<WorkspaceSummary, 'id' | 'is_archived' | 'status'>[],
+  activeConversation: Pick<AgentConversation, 'project_id' | 'workspace_id'> | null,
+  preferredWorkspaceId: string | null = null,
+): string {
+  const requested = requestedWorkspaceId.trim();
+  if (requested && workspaces.some((workspace) => workspace.id === requested)) return requested;
+  const preservesUnboundSession =
+    !requested &&
+    activeConversation?.project_id.trim() === projectId.trim() &&
+    activeConversation.workspace_id === null;
+  if (preservesUnboundSession) return UNBOUND_CONVERSATIONS_KEY;
+  if (!requested && preferredWorkspaceId !== null) {
+    const preferred = preferredWorkspaceId.trim();
+    if (!preferred) return UNBOUND_CONVERSATIONS_KEY;
+    if (
+      workspaces.some(
+        (workspace) => workspace.id === preferred && isWorkspaceDefaultSelectionEligible(workspace),
+      )
+    ) {
+      return preferred;
+    }
+  }
+  return workspaces.find(isWorkspaceDefaultSelectionEligible)?.id ?? '';
+}
+
+const CONVERSATION_STATUS_PRESENTATIONS: Readonly<
+  Record<string, WorkspaceTreeStatusPresentation>
+> = {
+  active: { tone: 'idle', labelKey: 'overview.idle' },
+  running: { tone: 'active', labelKey: 'workspaceTree.running' },
+  queued: { tone: 'queued', labelKey: 'workspaceTree.queued' },
+  paused: { tone: 'paused', labelKey: 'workspaceTree.paused' },
+  needs_input: { tone: 'attention', labelKey: 'workspaceTree.needsInput' },
+  needs_approval: { tone: 'attention', labelKey: 'workspaceTree.needsApproval' },
+  ready_review: { tone: 'ready', labelKey: 'workspaceTree.readyReview' },
+  completed: { tone: 'completed', labelKey: 'workspaceTree.completed' },
+  failed: { tone: 'danger', labelKey: 'workspaceTree.failed' },
+  disconnected: { tone: 'danger', labelKey: 'workspaceTree.disconnected' },
+  interrupted: { tone: 'danger', labelKey: 'workspaceTree.interrupted' },
+  cancelled: { tone: 'offline', labelKey: 'workspaceTree.cancelled' },
+  archived: { tone: 'offline', labelKey: 'workspaceTree.archived' },
+  // An inactive workspace simply has no live runtime session right now; it is
+  // not a connectivity failure, so it gets its own label instead of "离线".
+  inactive: { tone: 'offline', labelKey: 'workspaceTree.inactive' },
+  offline: { tone: 'offline', labelKey: 'workspaceTree.offline' },
+};
+
+const ROOT_STATUS_PRIORITY: Readonly<Record<WorkspaceTreeStatusTone, number>> = {
+  attention: 9,
+  danger: 8,
+  active: 7,
+  queued: 6,
+  paused: 5,
+  ready: 4,
+  completed: 3,
+  idle: 2,
+  offline: 2,
+  unknown: 1,
+};
+
+const ROOT_AGGREGATE_PRESENTATIONS: Readonly<
+  Partial<Record<WorkspaceTreeStatusTone, WorkspaceTreeStatusPresentation>>
+> = {
+  attention: { tone: 'attention', labelKey: 'workspaceTree.needsAttention' },
+  danger: { tone: 'danger', labelKey: 'workspaceTree.issue' },
+};
+
+export function isWorkspaceOverviewSelected(
+  currentWorkspaceId: string,
+  workspaceId: string,
+  selectionMode: WorkspaceTreeSelectionMode,
+): boolean {
+  return selectionMode === 'overview' && currentWorkspaceId === workspaceId;
+}
+
+export function isWorkspaceConversationSelected(
+  currentConversationId: string | null,
+  conversationId: string,
+  selectionMode: WorkspaceTreeSelectionMode,
+): boolean {
+  return (
+    (selectionMode === 'conversation' || selectionMode === 'my-work') &&
+    currentConversationId === conversationId
+  );
+}
+
+export function reconcileExpandedWorkspaceIds(
+  current: ReadonlySet<string>,
+  workspaceIds: readonly string[],
+  selectedWorkspaceId: string,
+  expandSelectedWorkspace: boolean,
+): Set<string> {
+  const validWorkspaceIds = new Set(workspaceIds);
+  const next = new Set([...current].filter((workspaceId) => validWorkspaceIds.has(workspaceId)));
+  if (
+    expandSelectedWorkspace &&
+    selectedWorkspaceId &&
+    validWorkspaceIds.has(selectedWorkspaceId)
+  ) {
+    next.add(selectedWorkspaceId);
+  }
+  return next;
+}
+
+export function workspaceTreeRefreshFailed(
+  nodeState: RuntimeNodeLoadState,
+  projectId: string,
+  error: string,
+): RuntimeNodeLoadState {
+  if (!projectId) return nodeState;
+  return {
+    projects: {
+      ...nodeState.projects,
+      [projectId]: { loading: false, error },
+    },
+    workspaces: nodeState.workspaces,
+  };
+}
+
+export function workspaceTreeAvailability(
+  projectState: RuntimeNodeState | undefined,
+  workspaceCount: number,
+): WorkspaceTreeAvailability {
+  if (!projectState) return 'unavailable';
+  if (workspaceCount > 0 && projectState?.loading) return 'refreshing';
+  if (workspaceCount > 0 && projectState?.error) return 'stale-error';
+  if (workspaceCount > 0) return 'ready';
+  if (projectState?.loading) return 'loading';
+  if (projectState?.error) return 'error';
+  return 'empty';
+}
+
+export function workspaceConversationLoadTargets(
+  workspaces: WorkspaceSummary[],
+  selectedWorkspaceId: string,
+  expandedWorkspaceIds: ReadonlySet<string>,
+): string[] {
+  const requestedWorkspaceIds = new Set(expandedWorkspaceIds);
+  if (selectedWorkspaceId) requestedWorkspaceIds.add(selectedWorkspaceId);
+  return workspaces
+    .map((workspace) => workspace.id)
+    .filter((workspaceId) => requestedWorkspaceIds.has(workspaceId));
+}
+
+export function projectConversationLoadTargets(
+  workspaces: WorkspaceSummary[],
+  selectedWorkspaceId: string,
+  expandedWorkspaceIds: ReadonlySet<string>,
+): string[] {
+  return [
+    UNBOUND_CONVERSATIONS_KEY,
+    ...workspaceConversationLoadTargets(
+      workspaces,
+      selectedWorkspaceId,
+      expandedWorkspaceIds,
+    ),
+  ];
+}
+
+export function shouldLoadWorkspaceConversations(
+  state: RuntimeNodeState | undefined,
+): boolean {
+  return !state || (!state.loading && Boolean(state.error));
+}
+
+export function clearWorkspaceConversationCache<T extends {
+  conversationsByWorkspace: Record<string, unknown>;
+  nodeState: { workspaces: Record<string, unknown> };
+}>(dataset: T): T {
+  return {
+    ...dataset,
+    conversationsByWorkspace: {},
+    nodeState: {
+      ...dataset.nodeState,
+      workspaces: {},
+    },
+  };
+}
+
+export function beginWorkspaceConversationRequest(
+  generations: Map<string, number>,
+  workspaceId: string,
+): number {
+  const generation = (generations.get(workspaceId) ?? 0) + 1;
+  generations.set(workspaceId, generation);
+  return generation;
+}
+
+export function isCurrentWorkspaceConversationRequest(
+  generations: ReadonlyMap<string, number>,
+  workspaceId: string,
+  generation: number,
+): boolean {
+  return generations.get(workspaceId) === generation;
+}
+
+export function supersedeWorkspaceConversationRequests(
+  generations: Map<string, number>,
+  activeRequests: ReadonlyMap<string, number>,
+): Map<string, number> {
+  const nextRequests = new Map<string, number>();
+  for (const [workspaceId, generation] of activeRequests) {
+    if (!isCurrentWorkspaceConversationRequest(generations, workspaceId, generation)) continue;
+    nextRequests.set(
+      workspaceId,
+      beginWorkspaceConversationRequest(generations, workspaceId),
+    );
+  }
+  return nextRequests;
+}
+
+export function workspaceTreeSessionAvailability(
+  workspaceState: RuntimeNodeState | undefined,
+  conversationCount: number,
+): WorkspaceTreeSessionAvailability {
+  if (conversationCount > 0 && workspaceState?.loading) return 'refreshing';
+  if (conversationCount > 0 && workspaceState?.error) return 'stale-error';
+  if (conversationCount > 0) return 'ready';
+  if (!workspaceState) return 'deferred';
+  if (workspaceState.loading) return 'loading';
+  if (workspaceState.error) return 'error';
+  return 'empty';
+}
+
+export function reconcileWorkspaceConversationRowsAfterRefresh(
+  currentRows: AgentConversation[],
+  refreshedRows: AgentConversation[],
+  refreshError: string | null,
+): AgentConversation[] {
+  return refreshError === null ? refreshedRows : currentRows;
+}
+
+export function shouldClearConversationSelectionAfterRefresh(
+  selectionAtRequest: WorkspaceConversationSelection | null,
+  currentSelection: WorkspaceConversationSelection | null,
+  refreshedScopeKey: string,
+  conversations: readonly AgentConversation[],
+): boolean {
+  if (!selectionAtRequest || !currentSelection) return false;
+  if (
+    selectionAtRequest.scopeKey !== currentSelection.scopeKey ||
+    selectionAtRequest.conversationId !== currentSelection.conversationId ||
+    currentSelection.scopeKey !== refreshedScopeKey
+  ) {
+    return false;
+  }
+  return !conversations.some(
+    (conversation) => conversation.id === currentSelection.conversationId,
+  );
+}
+
+export function shouldPreserveConversationSelectionDuringSidecarRecovery(
+  recoveryRefreshGeneration: number | null,
+  activeRefreshGeneration: number,
+): boolean {
+  return (
+    Number.isSafeInteger(recoveryRefreshGeneration) &&
+    recoveryRefreshGeneration !== null &&
+    recoveryRefreshGeneration > 0 &&
+    recoveryRefreshGeneration === activeRefreshGeneration
+  );
+}
+
+export function conversationTreeStatusValue(conversation: AgentConversation): string {
+  return conversationTreeRunStatusValue(conversation) ?? conversation.status.trim().toLowerCase();
+}
+
+/**
+ * Bucket a conversation timestamp into Codex-style recency groups using local
+ * day boundaries. Date arithmetic goes through the Date constructor so DST
+ * transitions cannot shift a boundary by an hour. Future timestamps clamp to
+ * 'today'; missing or invalid timestamps fall back to 'older'.
+ */
+export function conversationRecencyGroup(
+  value: string | null | undefined,
+  now: Date,
+): ConversationRecencyGroup {
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  if (!Number.isFinite(parsed)) return 'older';
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+  const startWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).getTime();
+  if (parsed >= startToday) return 'today';
+  if (parsed >= startYesterday) return 'yesterday';
+  if (parsed >= startWeek) return 'week';
+  return 'older';
+}
+
+export function groupConversationsByRecency(
+  conversations: readonly AgentConversation[],
+  now: Date,
+): Array<{ id: ConversationRecencyGroup; conversations: AgentConversation[] }> {
+  const sorted = [...conversations].sort(
+    (left, right) =>
+      timestamp(right.updated_at ?? right.created_at) -
+      timestamp(left.updated_at ?? left.created_at),
+  );
+  const buckets = new Map<ConversationRecencyGroup, AgentConversation[]>();
+  for (const conversation of sorted) {
+    const group = conversationRecencyGroup(
+      conversation.updated_at ?? conversation.created_at,
+      now,
+    );
+    const bucket = buckets.get(group) ?? [];
+    bucket.push(conversation);
+    buckets.set(group, bucket);
+  }
+  return RECENCY_GROUP_ORDER.filter((id) => buckets.has(id)).map((id) => ({
+    id,
+    conversations: buckets.get(id) ?? [],
+  }));
+}
+
+export function conversationTreeMetadataSummary(
+  conversation: AgentConversation,
+): string | null {
+  const metadata = recordValue(conversation.metadata);
+  if (!metadata) return null;
+
+  const run = recordValue(metadata.run);
+  const displaySummary =
+    displayMetadataText(metadata.display) ?? displayMetadataText(run?.display);
+  if (displaySummary) return displaySummary;
+
+  const environmentSummary =
+    stringValue(run?.environment_label) ??
+    environmentMetadataText(run?.environment) ??
+    stringValue(metadata.environment_label) ??
+    environmentMetadataText(metadata.environment);
+  const progressSummary =
+    progressMetadataText(run?.progress) ?? progressMetadataText(metadata.progress);
+  const summaryParts = [environmentSummary, progressSummary].filter(
+    (value): value is string => Boolean(value),
+  );
+  return summaryParts.length > 0 ? summaryParts.join(' · ') : null;
+}
+
+function conversationTreeRunStatusValue(conversation: AgentConversation): string | null {
+  const run = conversation.metadata?.run;
+  if (run && typeof run === 'object' && !Array.isArray(run)) {
+    const status = (run as Record<string, unknown>).status;
+    if (typeof status === 'string' && status.trim()) return status.trim().toLowerCase();
+  }
+  return null;
+}
+
+function displayMetadataText(value: unknown): string | null {
+  const directValue = stringValue(value);
+  if (directValue) return directValue;
+  const display = recordValue(value);
+  return (
+    stringValue(display?.subtitle) ??
+    stringValue(display?.secondary_text) ??
+    stringValue(display?.secondaryText) ??
+    stringValue(display?.summary) ??
+    stringValue(display?.label)
+  );
+}
+
+function environmentMetadataText(value: unknown): string | null {
+  const directValue = stringValue(value);
+  if (directValue) return directValue;
+  const environment = recordValue(value);
+  return (
+    stringValue(environment?.label) ??
+    stringValue(environment?.display_name) ??
+    stringValue(environment?.displayName) ??
+    stringValue(environment?.name)
+  );
+}
+
+function progressMetadataText(value: unknown): string | null {
+  const directValue = stringValue(value);
+  if (directValue) return directValue;
+  const progress = recordValue(value);
+  if (!progress) return null;
+  const explicitValue =
+    stringValue(progress.label) ??
+    stringValue(progress.summary) ??
+    displayMetadataText(progress.display);
+  if (explicitValue) return explicitValue;
+  const percent = progress.percent;
+  return typeof percent === 'number' && Number.isFinite(percent) && percent >= 0 && percent <= 100
+    ? `${percent}%`
+    : null;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+export function conversationTreeStatusPresentation(
+  status: string | null | undefined,
+): WorkspaceTreeStatusPresentation {
+  const normalizedStatus = status?.trim().toLowerCase() ?? '';
+  return (
+    CONVERSATION_STATUS_PRESENTATIONS[normalizedStatus] ?? {
+      tone: 'unknown',
+      labelKey: 'workspaceTree.unknown',
+    }
+  );
+}
+
+/**
+ * Connection-aware presentation for a conversation status dot. While the
+ * agent socket is disconnected, non-terminal run states are last-known values
+ * whose freshness cannot be trusted, so they are flagged `stale` for the
+ * degraded rendering; terminal states and any status shown while connected
+ * are returned unchanged.
+ */
+export function conversationTreeStatusPresentationForConnection(
+  status: string | null | undefined,
+  socketConnected: boolean,
+): WorkspaceTreeStatusPresentation {
+  const presentation = conversationTreeStatusPresentation(status);
+  if (socketConnected || !workspaceTreeStatusIsLiveRun(status)) return presentation;
+  return { ...presentation, stale: true };
+}
+
+const LIVE_AGGREGATE_TONES: ReadonlySet<WorkspaceTreeStatusTone> = new Set([
+  'active',
+  'queued',
+  'paused',
+  'attention',
+]);
+
+export function workspaceTreeRootStatusPresentation(
+  officeStatus: string | null | undefined,
+  conversations: AgentConversation[],
+  socketConnected = true,
+): WorkspaceTreeStatusPresentation {
+  const rawOfficePresentation =
+    officeStatus?.trim().toLowerCase() === 'online'
+      ? { tone: 'active' as const, labelKey: 'workspaceTree.online' }
+      : conversationTreeStatusPresentation(officeStatus);
+  const officePresentation = rootAggregatePresentation(rawOfficePresentation);
+  const aggregate = conversations.reduce((current, conversation) => {
+    const runStatus = conversationTreeRunStatusValue(conversation);
+    if (!runStatus) return current;
+    const candidate = rootAggregatePresentation(conversationTreeStatusPresentation(runStatus));
+    return ROOT_STATUS_PRIORITY[candidate.tone] > ROOT_STATUS_PRIORITY[current.tone]
+      ? candidate
+      : current;
+  }, officePresentation);
+  if (socketConnected) return aggregate;
+  // The aggregate dot only claims live activity when a child run is in a
+  // non-terminal state; while disconnected that claim is last-known, so the
+  // aggregate degrades too. Tones that terminal states produce (danger,
+  // completed, ready, offline) stay truthful and are left untouched.
+  const claimsLiveActivity = conversations.some((conversation) =>
+    workspaceTreeStatusIsLiveRun(conversationTreeRunStatusValue(conversation)),
+  );
+  if (!claimsLiveActivity) return aggregate;
+  if (!LIVE_AGGREGATE_TONES.has(aggregate.tone)) return aggregate;
+  return { ...aggregate, stale: true };
+}
+
+function rootAggregatePresentation(
+  presentation: WorkspaceTreeStatusPresentation,
+): WorkspaceTreeStatusPresentation {
+  return ROOT_AGGREGATE_PRESENTATIONS[presentation.tone] ?? presentation;
+}
+
+export function buildWorkspaceTree(
+  workspaces: WorkspaceSummary[],
+  conversationsByWorkspace: Record<string, AgentConversation[]>,
+  groupMode: 'project' | 'recent',
+): WorkspaceTreeNode[] {
+  if (groupMode === 'recent') {
+    return [...workspaces]
+      .sort(
+        (left, right) =>
+          latestWorkspaceTimestamp(right, conversationsByWorkspace) -
+          latestWorkspaceTimestamp(left, conversationsByWorkspace),
+      )
+      .map((workspace) => ({
+        workspace,
+        conversations: [...(conversationsByWorkspace[workspace.id] ?? [])].sort(
+          (left, right) => timestamp(right.updated_at) - timestamp(left.updated_at),
+        ),
+      }));
+  }
+
+  return workspaces.map((workspace) => ({
+    workspace,
+    conversations: conversationsByWorkspace[workspace.id] ?? [],
+  }));
+}
+
+export function filterUnboundConversations(
+  conversations: readonly AgentConversation[],
+): AgentConversation[] {
+  return conversations.filter((conversation) => !conversation.workspace_id?.trim());
+}
+
+/** Title/summary responses omit the separately projected run authority. */
+export function preserveConversationRunMetadata(
+  current: AgentConversation,
+  replacement: AgentConversation,
+): AgentConversation {
+  if (
+    current.id !== replacement.id ||
+    current.project_id !== replacement.project_id ||
+    current.tenant_id !== replacement.tenant_id ||
+    !Object.hasOwn(current.metadata ?? {}, 'run') ||
+    Object.hasOwn(replacement.metadata ?? {}, 'run')
+  ) return replacement;
+  return {
+    ...replacement,
+    metadata: { ...replacement.metadata, run: current.metadata?.run },
+  };
+}
+
+export function replaceConversationInWorkspaceRows(
+  current: Record<string, AgentConversation[]>,
+  replacement: AgentConversation,
+): Record<string, AgentConversation[]> {
+  let changed = false;
+  const next = Object.fromEntries(
+    Object.entries(current).map(([workspaceId, conversations]) => {
+      const index = conversations.findIndex(
+        (conversation) =>
+          conversation.id === replacement.id &&
+          conversation.project_id === replacement.project_id &&
+          conversation.tenant_id === replacement.tenant_id,
+      );
+      if (index === -1 || conversations[index] === replacement) {
+        return [workspaceId, conversations];
+      }
+      changed = true;
+      const updated = [...conversations];
+      updated[index] = preserveConversationRunMetadata(conversations[index], replacement);
+      return [workspaceId, updated];
+    }),
+  );
+  return changed ? next : current;
+}
+
+export function removeConversationFromWorkspaceRows(
+  current: Record<string, AgentConversation[]>,
+  conversationId: string,
+): Record<string, AgentConversation[]> {
+  let changed = false;
+  const next = Object.fromEntries(
+    Object.entries(current).map(([workspaceId, conversations]) => {
+      const filtered = conversations.filter(
+        (conversation) => conversation.id !== conversationId,
+      );
+      if (filtered.length === conversations.length) return [workspaceId, conversations];
+      changed = true;
+      return [workspaceId, filtered];
+    }),
+  );
+  return changed ? next : current;
+}
+
+function latestWorkspaceTimestamp(
+  workspace: WorkspaceSummary,
+  conversationsByWorkspace: Record<string, AgentConversation[]>,
+): number {
+  return Math.max(
+    timestamp(workspace.updated_at),
+    timestamp(workspace.created_at),
+    0,
+    ...(conversationsByWorkspace[workspace.id] ?? []).map((conversation) =>
+      timestamp(conversation.updated_at ?? conversation.created_at),
+    ),
+  );
+}
+
+function timestamp(value: string | null | undefined): number {
+  return value ? Date.parse(value) || 0 : 0;
+}

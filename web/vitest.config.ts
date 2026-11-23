@@ -19,10 +19,11 @@ function katexCssPlugin() {
 export default defineConfig({
   plugins: [katexCssPlugin(), react()],
   resolve: {
-    dedupe: ['react-router-dom', 'chart.js', 'react-chartjs-2', 'i18next', 'react-markdown', 'use-debounce', 'zustand', '@tanstack/react-query', '@tanstack/react-virtual', 'react-i18next', 'antd', 'lucide-react', 'vitest'],
+    dedupe: ['@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm', 'react-router-dom', 'chart.js', 'react-chartjs-2', 'i18next', 'react-markdown', 'use-debounce', 'uuid', 'zustand', '@tanstack/react-query', '@tanstack/react-virtual', 'react-i18next', 'antd', 'lucide-react', 'vitest'],
     alias: {
       '@': path.resolve(__dirname, './src'),
-        '@business': path.resolve(__dirname, '../plugins/business'),
+      '@desktop': path.resolve(__dirname, '../agi-stack/apps/desktop/src'),
+      '@business': path.resolve(__dirname, '../plugins/business'),
       react: path.resolve(__dirname, './node_modules/react'),
       'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime'),
       'react/jsx-dev-runtime': path.resolve(__dirname, './node_modules/react/jsx-dev-runtime'),

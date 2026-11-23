@@ -19,7 +19,8 @@ import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
 import { formatDateOnly } from '@/utils/date';
 
-import { projectAPI, memoryAPI } from '@/services/api';
+import { projectAPI } from '@/services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 import { logger } from '@/utils/logger';
 
 import type { Project, Memory } from '@/types/memory';

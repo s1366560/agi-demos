@@ -46,9 +46,9 @@ import { useTranslation } from 'react-i18next';
 import { useVirtualizer, type VirtualItem, type Virtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronUp, Loader2, Pin, PinOff } from 'lucide-react';
 
-import { usePinnedEventIds, useAgentHITLStore } from '../../stores/agent/hitlStore';
-import { useAgentPermissionModeStore } from '../../stores/agent/permissionModeStore';
-import { filterAutomaticPermissionEvents } from '../../stores/agent/timelineUtils';
+import { usePinnedEventIds, useAgentHITLStore } from '@business/agent/ui/web/stores/agent/hitlStore';
+import { useAgentPermissionModeStore } from '@business/agent/ui/web/stores/agent/permissionModeStore';
+import { filterAutomaticPermissionEvents } from '@business/agent/ui/web/stores/agent/timelineUtils';
 
 import { SuggestionChips } from './chat/SuggestionChips';
 import { ConversationSummaryCardWrapper } from './message/ConversationSummaryCardWrapper';

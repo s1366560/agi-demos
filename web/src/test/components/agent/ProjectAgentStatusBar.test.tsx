@@ -1,9 +1,9 @@
 import { render, act, cleanup, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useUnifiedAgentStatus } from '../../../hooks/useUnifiedAgentStatus';
-import { poolService, type ProjectPoolInstanceResponse } from '../../../services/poolService';
-import { useAgentV3Store } from '../../../stores/agentV3';
+import { useUnifiedAgentStatus } from '@business/agent/ui/web/hooks/useUnifiedAgentStatus';
+import { poolService, type ProjectPoolInstanceResponse } from '@business/environments/ui/web/services/poolService';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { ProjectAgentStatusBar } from '../../../components/agent/ProjectAgentStatusBar';
 
 vi.mock('react-i18next', () => ({
@@ -23,15 +23,15 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../../hooks/useUnifiedAgentStatus', () => ({
+vi.mock('@business/agent/ui/web/hooks/useUnifiedAgentStatus', () => ({
   useUnifiedAgentStatus: vi.fn(),
 }));
 
-vi.mock('../../../stores/agentV3', () => ({
+vi.mock('@business/agent/ui/web/stores/agentV3', () => ({
   useAgentV3Store: vi.fn(),
 }));
 
-vi.mock('../../../services/poolService', () => ({
+vi.mock('@business/environments/ui/web/services/poolService', () => ({
   poolService: {
     getProjectInstance: vi.fn(),
     terminateProjectInstance: vi.fn(),
@@ -47,7 +47,7 @@ vi.mock('../../../services/agentService', () => ({
   },
 }));
 
-vi.mock('../../../components/agent/sandbox/SandboxStatusIndicator', () => ({
+vi.mock('@business/environments/ui/web/components/sandbox/SandboxStatusIndicator', () => ({
   SandboxStatusIndicator: () => <div data-testid="sandbox-indicator">sandbox</div>,
 }));
 

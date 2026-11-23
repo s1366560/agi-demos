@@ -17,8 +17,8 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 import { LazyEmpty, LazyButton } from '@/components/ui/lazyAntd';
 
 import { ProjectActivityInbox } from '@/components/agent/activity/ProjectActivityInbox';
-import { useBlackboardSSE } from '@/hooks/useBlackboardSSE';
-import { useConversationListAutoRefresh } from '@/hooks/useConversationListAutoRefresh';
+import { useBlackboardSSE } from '@business/workspace/ui/web/hooks/useBlackboardSSE';
+import { useConversationListAutoRefresh } from '../hooks/useConversationListAutoRefresh';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useAuthStore } from '@/stores/auth';
 import { useProjectStore } from '@/stores/project';

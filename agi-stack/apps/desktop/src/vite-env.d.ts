@@ -198,6 +198,7 @@ interface Window {
       onMcpAppGuest?: (listener: (payload: import('./features/chat/mcpAppGuestProtocol').McpAppGuestHostEvent) => void) => () => void;
       onSidecarRecovered?: (listener: () => void) => () => void;
       onOAuthSessionChanged?: (listener: (payload: unknown) => void) => () => void;
+      onPackageProgress?: (listener: (payload: unknown) => void) => () => void;
       onCloudSessionInvalidated?: (listener: (payload: unknown) => void) => () => void;
       onComputerUseActivity?: (listener: (payload: unknown) => void) => () => void;
       onComputerUseInput?: (

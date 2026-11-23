@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MemoryDetail } from '@business/knowledge/ui/web/project/MemoryDetail';
-import { memoryAPI } from '../../../services/api';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
 
 import type { Memory } from '../../../types/memory';
 
@@ -18,7 +18,7 @@ const messageMocks = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
-vi.mock('../../../services/api', () => ({
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({
   memoryAPI: {
     get: vi.fn(),
     delete: vi.fn(),

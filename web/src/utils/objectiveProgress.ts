@@ -1,4 +1,4 @@
-import type { CyberObjective, WorkspaceTask } from '@/types/workspace';
+import type { CyberObjective, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 /**
  * Normalise a CyberObjective.progress value to a 0-100 percent.

@@ -5,7 +5,7 @@ import type {
   RuntimePoolScope,
   RuntimePoolInstanceStatus,
   RuntimePoolTier,
-} from '../features/runtime-pool/runtimePoolClient';
+} from '@business/environments/ui/desktop/runtime-pool/runtimePoolClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopRuntimePoolOperationInputV2 = Readonly<{

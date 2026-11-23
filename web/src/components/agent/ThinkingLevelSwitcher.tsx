@@ -9,8 +9,8 @@ import {
   thinkingLevelToEffort,
   useAgentThinkingLevelStore,
   type AgentThinkingLevel,
-} from '@/stores/agent/thinkingLevelStore';
-import { useAgentV3Store } from '@/stores/agentV3';
+} from '@business/agent/ui/web/stores/agent/thinkingLevelStore';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 
 import { agentService } from '@/services/agentService';
 

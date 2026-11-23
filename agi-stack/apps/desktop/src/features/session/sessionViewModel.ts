@@ -10,7 +10,7 @@ import type {
   ConversationSessionProjection,
   SessionRunAction,
 } from './sessionProjectionTypes';
-import { pairToolCallItems, toolCallPairStatus } from '../chat/chatTimelineModel';
+import { pairToolCallItems, toolCallPairStatus } from '@business/agent/ui/desktop/chat/chatTimelineModel';
 
 export type { SessionRunAction } from './sessionProjectionTypes';
 

@@ -79,11 +79,11 @@ vi.mock('@/routes/v2/webNavigationAuthorityStateV2', async () => {
   };
 });
 
-vi.mock('@/stores/agentV3', () => ({
+vi.mock('@business/agent/ui/web/stores/agentV3', () => ({
   useAgentV3Store: (selector: (state: typeof agentState) => unknown) => selector(agentState),
 }));
 
-vi.mock('@/stores/agent/conversationsStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/conversationsStore', () => ({
   useConversationsStore: (selector: (state: typeof conversationsState) => unknown) =>
     selector(conversationsState),
 }));
@@ -99,7 +99,7 @@ vi.mock('@/services/api', () => ({
   },
 }));
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useCurrentWorkspace: () => ({ id: 'ws-current', name: 'Workspace Alpha' }),
   useWorkspaceActions: () => ({
     loadWorkspaceSurface: loadWorkspaceSurfaceMock,

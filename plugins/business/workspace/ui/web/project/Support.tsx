@@ -18,7 +18,7 @@ import {
 
 import { formatDateTime } from '@/utils/date';
 
-import api from '@/services/api';
+import { httpClient as api } from '@/services/client/httpClient';
 import { useTenantStore } from '@/stores/tenant';
 import { confirmAction } from '@/utils/confirmAction';
 import { logger } from '@/utils/logger';
@@ -35,20 +35,8 @@ interface SupportTicket {
   resolved_at: string | null;
 }
 
-interface SupportTicketResponse {
-  id: string;
-  tenant_id: string | null;
-  subject: string;
-  message: string;
-  priority: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  resolved_at: string | null;
-}
-
 interface SupportTicketsResponse {
-  tickets: SupportTicketResponse[];
+  tickets: SupportTicket[];
   total: number;
   limit: number;
   offset: number;
@@ -94,7 +82,7 @@ export const Support: React.FC = () => {
             offset: pageToLoad * TICKETS_PAGE_SIZE,
           },
         });
-        setTickets(data.tickets as SupportTicket[]);
+        setTickets(data.tickets);
         setTotalTickets(data.total);
         setHasMoreTickets(data.has_more);
       } catch (error) {

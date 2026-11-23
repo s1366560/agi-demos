@@ -7,7 +7,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { useArtifacts, useArtifactsByToolExecution, useSandboxStore } from '../../stores/sandbox';
+import { useArtifacts, useArtifactsByToolExecution, useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 
 import type { DesktopStatus, TerminalStatus } from '../../types/agent';
 

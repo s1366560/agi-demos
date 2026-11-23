@@ -31,14 +31,14 @@ import {
 import { Copy, Server, Network, HardDrive } from 'lucide-react';
 
 import { Spinner } from '@/components/common/Spinner';
-import { clusterService } from '@/services/clusterService';
+import { clusterService } from '../services/clusterService';
 import {
   useCurrentCluster,
   useClusterHealth,
   useClusterLoading,
   useClusterSubmitting,
   useClusterActions,
-} from '@/stores/cluster';
+} from '../stores/cluster';
 
 import { ClusterFormFields } from './utils/ClusterFormFields';
 import { parseProviderConfig } from './utils/clusterFormUtils';
@@ -46,7 +46,7 @@ import { formatDate, getStatusColor } from './utils/instanceUtils';
 
 import type { ACPRunnerPool, ACPRunnerTokenResponse } from '@/types/acp';
 
-import type { ClusterUpdate } from '@/services/clusterService';
+import type { ClusterUpdate } from '../services/clusterService';
 
 const { Title, Text } = Typography;
 

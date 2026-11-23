@@ -26,7 +26,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-import { instanceFileService } from '@/services/instanceFileService';
+import { instanceFileService } from '../services/instanceFileService';
 
 import { Spinner } from '@/components/common/Spinner';
 import { LazyAlert, LazyEmpty, LazyModal, LazyButton } from '@/components/ui/lazyAntd';

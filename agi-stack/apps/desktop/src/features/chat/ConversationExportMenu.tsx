@@ -8,8 +8,8 @@ import {
   conversationExportFilename,
   conversationExportToHtml,
   conversationExportToMarkdown,
-} from './conversationExportModel';
-import type { ConversationExportSnapshot } from './conversationExportModel';
+} from '@business/agent/ui/desktop/chat/conversationExportModel';
+import type { ConversationExportSnapshot } from '@business/agent/ui/desktop/chat/conversationExportModel';
 
 type Html2PdfOptions = {
   margin?: number | [number, number] | [number, number, number, number];

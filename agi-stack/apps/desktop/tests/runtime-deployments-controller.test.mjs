@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { createRuntimeDeploymentsController } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/runtime-deployments/runtimeDeploymentsController.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsController.js'
 );
 const { DesktopApiError } = await import(
   '/tmp/agistack-desktop-test-dist/src/api/client.js'

@@ -5,14 +5,14 @@ import {
   WebOperationAdmissionV2,
   installWebOperationAdmissionV2,
 } from '@/plugins/webOperationAdmissionV2';
-import { useSandboxStore } from '@/stores/sandbox';
-import { projectSandboxService } from '@/services/projectSandboxService';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
+import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
 import type { TerminalStatus } from '@/types/agent';
 
-vi.mock('@/services/projectSandboxService', () => ({
+vi.mock('@business/environments/ui/web/services/projectSandboxService', () => ({
   projectSandboxService: { startTerminal: vi.fn(), stopTerminal: vi.fn() },
 }));
-vi.mock('@/services/sandboxSSEService', () => ({ sandboxSSEService: {} }));
+vi.mock('@business/environments/ui/web/services/sandboxSSEService', () => ({ sandboxSSEService: {} }));
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;

@@ -7,7 +7,7 @@ import type {
   NativeKnowledgeInputDirectory,
   NativeKnowledgeWorkspaceChoice,
 } from '../features/project-knowledge/nativeKnowledgeProcessingInputs';
-import { projectKnowledgeError } from '../features/project-knowledge/projectKnowledgeClient';
+import { projectKnowledgeError } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import { requireNativeKnowledgeScope } from '../features/project-knowledge/nativeKnowledgeValidation';
 import { sameJson } from '../features/project-knowledge/nativeKnowledgeRelationships';
 import type { DesktopTenantProvidersClientV2 } from './desktopTenantProvidersAuthorityModuleV2';

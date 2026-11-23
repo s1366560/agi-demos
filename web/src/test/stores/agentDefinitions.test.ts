@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { definitionsService } from '@/services/agent/definitionsService';
-import { useAgentDefinitionStore } from '@/stores/agentDefinitions';
+import { definitionsService } from '@business/agent/ui/web/services/agent/definitionsService';
+import { useAgentDefinitionStore } from '@business/agent/ui/web/stores/agentDefinitions';
 
 import type { AgentDefinition } from '@/types/multiAgent';
 
-vi.mock('@/services/agent/definitionsService', () => ({
+vi.mock('@business/agent/ui/web/services/agent/definitionsService', () => ({
   definitionsService: {
     list: vi.fn(),
     listPage: vi.fn(),

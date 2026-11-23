@@ -22,8 +22,8 @@ import { Copy } from 'lucide-react';
 
 import { useCurrentTenant } from '@/stores/tenant';
 
-import { eventService } from '@/services/eventService';
-import { webhookService, type Webhook } from '@/services/webhookService';
+import { eventService } from '../services/eventService';
+import { webhookService, type Webhook } from '../services/webhookService';
 
 import { logger } from '@/utils/logger';
 

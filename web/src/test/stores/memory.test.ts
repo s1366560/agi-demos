@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { memoryAPI } from '../../services/api';
-import { useMemoryStore } from '../../stores/memory';
+import { memoryAPI } from '@business/knowledge/ui/web/services/knowledgeApi';
+import { useMemoryStore } from '@business/knowledge/ui/web/stores/memory';
 
-vi.mock('../../services/api', () => ({
+vi.mock('@business/knowledge/ui/web/services/knowledgeApi', () => ({
   memoryAPI: {
     list: vi.fn(),
     create: vi.fn(),

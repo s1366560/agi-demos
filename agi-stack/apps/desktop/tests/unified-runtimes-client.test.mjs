@@ -5,7 +5,7 @@ const {
   createUnifiedRuntimesClient,
   UnifiedRuntimesUnavailableError,
 } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/unified-runtimes/unifiedRuntimesClient.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/unified-runtimes/unifiedRuntimesClient.js'
 );
 
 function runtimeConfig(mode, overrides = {}) {

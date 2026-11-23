@@ -4,7 +4,7 @@ import test from 'node:test';
 import { DesktopApiError } from '/tmp/agistack-desktop-test-dist/src/api/client.js';
 import {
   createCloudProjectOverviewClient,
-} from '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewCloudClient.js';
+} from '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/projectOverviewCloudClient.js';
 
 const scope = {
   authority: 'cloud',

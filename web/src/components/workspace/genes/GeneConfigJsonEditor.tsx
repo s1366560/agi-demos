@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Alert, Input } from 'antd';
 
-import { parseRawConfigJson } from '@/types/geneConfig';
+import { parseRawConfigJson } from '@business/environments/ui/web/types/geneConfig';
 
 export interface GeneConfigJsonEditorProps {
   value: string;

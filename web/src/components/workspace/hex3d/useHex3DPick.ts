@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-import type { WorkspaceAgent } from '@/types/workspace';
+import type { WorkspaceAgent } from '@business/workspace/ui/web/types/workspace';
 
 export interface HexCoordinates {
   q: number;

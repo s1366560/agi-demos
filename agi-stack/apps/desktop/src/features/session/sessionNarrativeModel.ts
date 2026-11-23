@@ -1,7 +1,7 @@
 import { timelineToolResultFailed } from '../chat/toolResultStatus';
 import type { AgentTimelineItem, DesktopRunStatus, ToolDisplayData } from '../../types';
 import { exactToolResults, timelineExecutionScope } from '../chat/timelineExecutionIdentity';
-import { pairToolCallItems, toolCallPairStatus } from '../chat/chatTimelineModel';
+import { pairToolCallItems, toolCallPairStatus } from '@business/agent/ui/desktop/chat/chatTimelineModel';
 
 export type SessionToolGroupStatus = 'running' | 'complete' | 'failed' | 'paused' | 'stopped';
 

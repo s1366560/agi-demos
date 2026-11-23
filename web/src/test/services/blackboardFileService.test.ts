@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { blackboardFileService } from '@/services/blackboardFileService';
+import { blackboardFileService } from '@business/workspace/ui/web/services/blackboardFileService';
 
 const { httpGetMock, httpPostMock, httpPatchMock, httpDeleteMock } = vi.hoisted(() => ({
   httpGetMock: vi.fn(),

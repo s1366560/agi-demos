@@ -48,9 +48,9 @@ import { formatDateTime } from '@/utils/date';
 
 import { StatusTag } from '@/components/common/StatusTag';
 
-import { usePoolStore } from '@/stores/pool';
+import { usePoolStore } from '../stores/pool';
 
-import type { PoolInstance, ProjectTier } from '@/services/poolService';
+import type { PoolInstance, ProjectTier } from '../services/poolService';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;

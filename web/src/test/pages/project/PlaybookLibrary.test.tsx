@@ -13,7 +13,7 @@ vi.mock('@/plugins/webOperationAdmissionV2', () => ({
 }));
 
 import { PlaybookLibrary } from '@business/automation/ui/web/project/PlaybookLibrary';
-import type { Playbook, ReflectionVerdict } from '../../../services/playbookService';
+import type { Playbook, ReflectionVerdict } from '@business/automation/ui/web/services/playbookService';
 import { act, render, screen, waitFor } from '../../utils';
 
 const routeState = vi.hoisted(() => ({
@@ -82,7 +82,7 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('../../../services/playbookService', () => ({
+vi.mock('@business/automation/ui/web/services/playbookService', () => ({
   playbookService: {
     listPlaybooks: serviceMocks.listPlaybooks,
     listReflectionVerdicts: serviceMocks.listReflectionVerdicts,

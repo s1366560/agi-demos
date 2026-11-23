@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Badge, Tag, Timeline, Typography } from 'antd';
 
-import type { EvolutionEventResponse } from '@/services/geneMarketService';
+import type { EvolutionEventResponse } from '../../services/geneMarketService';
 
 import { formatDateTime } from '@/utils/date';
 

@@ -11,8 +11,8 @@ import {
   type GeneConfigFieldDef,
   type GeneConfigFieldValue,
   type GeneConfigValidationError,
-} from '@/types/geneConfig';
-import type { CyberGeneCategory } from '@/types/workspace';
+} from '@business/environments/ui/web/types/geneConfig';
+import type { CyberGeneCategory } from '@business/workspace/ui/web/types/workspace';
 
 export interface GeneConfigFormProps {
   category: CyberGeneCategory;

@@ -6,9 +6,9 @@ import type {
   DesktopImplementedRouteModule,
 } from '../navigation/desktopRouteModule';
 import type { ProjectKnowledgeRouteContext } from './projectKnowledgeRouteModule';
-import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
-import type { ProjectGraphController } from './projectGraphController';
-import { PROJECT_GRAPH_ROUTE_ID } from './projectGraphClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+import type { ProjectGraphController } from '@business/knowledge/ui/desktop/project-knowledge/projectGraphController';
+import { PROJECT_GRAPH_ROUTE_ID } from '@business/knowledge/ui/desktop/project-knowledge/projectGraphClient';
 
 export type ProjectGraphRouteContext = ProjectKnowledgeRouteContext;
 export type ProjectGraphRouteBinding = Readonly<{

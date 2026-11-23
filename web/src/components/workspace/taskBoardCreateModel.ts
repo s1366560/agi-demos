@@ -1,4 +1,4 @@
-import type { WorkspaceTaskPriority } from '@/types/workspace';
+import type { WorkspaceTaskPriority } from '@business/workspace/ui/web/types/workspace';
 
 export function buildTaskCreatePayload({
   title,

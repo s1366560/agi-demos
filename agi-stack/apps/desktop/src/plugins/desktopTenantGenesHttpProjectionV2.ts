@@ -4,10 +4,10 @@ import type {
   TenantGeneInput,
   TenantGeneReview,
   TenantGenesClient,
-} from '../features/tenant-admin/tenantGenesClient';
+} from '@business/environments/ui/desktop/tenant-admin/tenantGenesClient';
 import {
   TENANT_GENES_LOCAL_REASON,
-} from '../features/tenant-admin/tenantGenesClient';
+} from '@business/environments/ui/desktop/tenant-admin/tenantGenesClient';
 import {
   optionalText,
   requireFiniteNumber,

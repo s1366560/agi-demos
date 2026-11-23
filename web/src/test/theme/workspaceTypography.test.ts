@@ -25,7 +25,7 @@ const ROOTS = [
   'components/layout/TenantChatSidebar.tsx',
   'components/layout/TenantHeader.tsx',
   'components/layout/NotificationDropdown.tsx',
-  'pages/tenant/AgentWorkspace.tsx',
+  '../../plugins/business/agent/ui/web/tenant/AgentWorkspace.tsx',
 ];
 
 function collect(dir: string): string[] {

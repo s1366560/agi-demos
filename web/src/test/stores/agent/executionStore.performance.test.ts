@@ -23,7 +23,7 @@ import {
   useCurrentWorkPlan,
   useCurrentStepNumber,
   useCurrentStepStatus,
-} from '../../../stores/agent/executionStore';
+} from '@business/agent/ui/web/stores/agent/executionStore';
 
 import type { WorkPlan } from '../../../types/agent';
 

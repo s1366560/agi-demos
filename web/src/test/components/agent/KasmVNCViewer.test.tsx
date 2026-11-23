@@ -10,7 +10,7 @@ import {
   installWebOperationAdmissionV2,
 } from '@/plugins/webOperationAdmissionV2';
 
-import { KasmVNCViewer } from '../../../components/agent/sandbox/KasmVNCViewer';
+import { KasmVNCViewer } from '@business/environments/ui/web/components/sandbox/KasmVNCViewer';
 
 const rfbMocks = vi.hoisted(() => ({
   close: vi.fn(),

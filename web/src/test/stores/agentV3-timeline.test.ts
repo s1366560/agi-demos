@@ -21,10 +21,10 @@ vi.mock('@/plugins/webOperationAdmissionV2', () => ({
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { useAgentV3Store } from '../../stores/agentV3';
-import { useTimelineStore } from '../../stores/agent/timelineStore';
-import { useStreamingStore } from '../../stores/agent/streamingStore';
-import { useExecutionStore } from '../../stores/agent/executionStore';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
+import { useTimelineStore } from '@business/agent/ui/web/stores/agent/timelineStore';
+import { useStreamingStore } from '@business/agent/ui/web/stores/agent/streamingStore';
+import { useExecutionStore } from '@business/agent/ui/web/stores/agent/executionStore';
 import { createDefaultConversationState } from '../../types/conversationState';
 
 import type { TimelineEvent } from '../../types/agent';

@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 
 import { Alert, Button, DatePicker, Select, Space, Table, Tag, Typography } from 'antd';
 
-import { eventService, EventLog } from '@/services/eventService';
+import { eventService, EventLog } from '../services/eventService';
 
 import { formatDateTime } from '@/utils/date';
 import { logger } from '@/utils/logger';

@@ -6,7 +6,7 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 
 import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
 
-import type { WorkspaceAgent, TopologyNode } from '@/types/workspace';
+import type { WorkspaceAgent, TopologyNode } from '@business/workspace/ui/web/types/workspace';
 
 import type { HexCoordinates } from './useHex3DPick';
 import type { ThreeEvent } from '@react-three/fiber';

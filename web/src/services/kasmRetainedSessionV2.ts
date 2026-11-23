@@ -6,7 +6,7 @@ import {
 } from '@/plugins/webOperationAdmissionV2';
 import { getAuthToken } from '@/utils/tokenResolver';
 
-import { buildDesktopWebSocketProtocols } from './sandboxWebSocketUtils';
+import { buildDesktopWebSocketProtocols } from '@business/environments/ui/web/services/sandboxWebSocketUtils';
 
 export interface KasmAttemptContextV2 {
   readonly signal: AbortSignal;

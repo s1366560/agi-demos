@@ -4,7 +4,7 @@ import { test } from 'node:test';
 const {
   buildTenantOverviewPresentation,
 } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantOverviewPresentationModel.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/tenant/tenantOverviewPresentationModel.js'
 );
 
 const scope = Object.freeze({

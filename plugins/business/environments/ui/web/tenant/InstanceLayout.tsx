@@ -11,7 +11,7 @@ import { hasUnsavedChanges } from '@/utils/unsavedChanges';
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { LazyModal, LazyButton, LazyPopconfirm } from '@/components/ui/lazyAntd';
 
-import { useCurrentInstance, useInstanceLoading, useInstanceActions } from '@/stores/instance';
+import { useCurrentInstance, useInstanceLoading, useInstanceActions } from '../stores/instance';
 
 import { getStatusColor } from './utils/instanceUtils';
 

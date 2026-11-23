@@ -3,7 +3,7 @@ import { useI18n } from '../../i18n';
 import type {
   NativeKnowledgeProcessingController,
   NativeKnowledgeProcessingModel,
-} from './nativeKnowledgeProcessingController';
+} from '@business/knowledge/ui/desktop/project-knowledge/nativeKnowledgeProcessingController';
 
 export function NativeKnowledgeProcessingPanel({
   model,

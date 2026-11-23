@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiFetch } from '../../services/client/urlUtils';
-import { subagentTemplateService } from '../../services/subagentTemplateService';
+import { subagentTemplateService } from '@business/agent/ui/web/services/subagentTemplateService';
 
 vi.mock('../../services/client/urlUtils', () => ({
   apiFetch: {

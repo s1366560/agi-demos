@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-import { createSettingsActions } from '../../../stores/agent/settingsActions';
+import { createSettingsActions } from '@business/agent/ui/web/stores/agent/settingsActions';
 
 import type { ConversationState } from '../../../types/conversationState';
 

@@ -6,19 +6,19 @@ vi.mock('@/plugins/webOperationAdmissionV2', () => ({
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { SandboxStatusIndicator } from '../../../../components/agent/sandbox/SandboxStatusIndicator';
+import { SandboxStatusIndicator } from '@business/environments/ui/web/components/sandbox/SandboxStatusIndicator';
 import {
   projectSandboxService,
   type ProjectSandbox,
-} from '../../../../services/projectSandboxService';
+} from '@business/environments/ui/web/services/projectSandboxService';
 import {
   sandboxSSEService,
   type BaseSandboxSSEEvent,
   type SandboxEventHandler,
-} from '../../../../services/sandboxSSEService';
+} from '@business/environments/ui/web/services/sandboxSSEService';
 import type { SandboxStateData } from '../../../../types/agent';
 
-vi.mock('../../../../services/projectSandboxService', () => ({
+vi.mock('@business/environments/ui/web/services/projectSandboxService', () => ({
   projectSandboxService: {
     getProjectSandbox: vi.fn(),
     getStats: vi.fn(),
@@ -28,7 +28,7 @@ vi.mock('../../../../services/projectSandboxService', () => ({
   },
 }));
 
-vi.mock('../../../../services/sandboxSSEService', () => ({
+vi.mock('@business/environments/ui/web/services/sandboxSSEService', () => ({
   sandboxSSEService: {
     subscribe: vi.fn(),
   },

@@ -23,11 +23,11 @@ import {
   createDesktopTenantTemplatesClientV2,
   type DesktopTenantTemplatesOperationsV2,
 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
-import { createTemplatesRouteController } from './templatesRouteController';
+import { createTemplatesRouteController } from '@business/environments/ui/desktop/settings-routes/templatesRouteController';
 import type {
   TemplatesRouteBinding,
   TemplatesRouteContext,
-} from './templatesRouteModule';
+} from '@business/environments/ui/desktop/settings-routes/templatesRouteModule';
 import {
   createDesktopUserProfileClientV2,
   type DesktopUserProfileOperationsV2,

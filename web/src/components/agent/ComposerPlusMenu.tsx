@@ -27,13 +27,13 @@ import {
   Zap,
 } from 'lucide-react';
 
-import { useDefinitions, useListDefinitions } from '@/stores/agentDefinitions';
+import { useDefinitions, useListDefinitions } from '@business/agent/ui/web/stores/agentDefinitions';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 
 import { commandAPI } from '@/services/commandService';
-import { skillAPI } from '@/services/skillService';
+import { skillAPI } from '@business/agent/ui/web/services/skillService';
 
 import type { ActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
 

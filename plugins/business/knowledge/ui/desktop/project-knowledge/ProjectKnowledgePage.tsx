@@ -1,5 +1,5 @@
 import { useI18n } from '@desktop/i18n';
-import type { ProjectKnowledgeViewModel } from '@desktop/features/project-knowledge/projectKnowledgePresentationModel';
+import type { ProjectKnowledgeViewModel } from './projectKnowledgePresentationModel';
 
 export function ProjectKnowledgePage({
   model,

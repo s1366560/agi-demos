@@ -20,7 +20,7 @@ import {
   mergeThoughtStreamChunk,
   mergeToolStreamItem,
   shouldSkipLiveTimelineEvent,
-} from './chatTimelineModel';
+} from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import { readConversationTitleStreamEvent } from './conversationTitleEventModel';
 import { isModelUnconfiguredError } from './localLlmReadinessModel';
 import { applyHitlResponseStreamEvent } from './hitlResponseEventModel';

@@ -10,12 +10,12 @@ import { Button, TextField } from '@radix-ui/themes';
 import { useRef, useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
-import type { TenantTaskRecord } from '@desktop/features/tenant/tenantTasksClient';
+import type { TenantTaskRecord } from './tenantTasksClient';
 import type {
   TenantTasksController,
   TenantTasksViewModel,
-} from '@desktop/features/tenant/tenantTasksController';
-import '@desktop/features/tenant/TenantTasksPage.css';
+} from './tenantTasksController';
+import './TenantTasksPage.css';
 
 const DISPLAY_STATES = new Set([
   'ready',

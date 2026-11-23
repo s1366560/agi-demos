@@ -9,7 +9,7 @@ export { MessageArea } from './MessageArea';
 export { MessageBubble } from './MessageBubble';
 export { InputBar } from './InputBar';
 export { RightPanel } from './RightPanel';
-export { SandboxSection } from './SandboxSection';
+export { SandboxSection } from '@business/environments/ui/web/components/SandboxSection';
 
 // ProjectReActAgent Lifecycle Status Bar
 export { ProjectAgentStatusBar } from './ProjectAgentStatusBar';

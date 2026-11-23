@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useI18n } from '@desktop/i18n';
-import type { ProjectGraphController } from '@desktop/features/project-knowledge/projectGraphController';
-import type { ProjectGraphViewModel } from '@desktop/features/project-knowledge/projectGraphPresentationModel';
-import { projectGraphAdjacentEdges, projectGraphSourceUuids } from '@desktop/features/project-knowledge/projectGraphNavigation';
-import { ProjectGraphMemoryPreview } from '@desktop/features/project-knowledge/ProjectGraphMemoryPreview';
-import type { ProjectGraphNode } from '@desktop/features/project-knowledge/projectGraphClient';
+import type { ProjectGraphController } from './projectGraphController';
+import type { ProjectGraphViewModel } from './projectGraphPresentationModel';
+import { projectGraphAdjacentEdges, projectGraphSourceUuids } from './projectGraphNavigation';
+import { ProjectGraphMemoryPreview } from './ProjectGraphMemoryPreview';
+import type { ProjectGraphNode } from './projectGraphClient';
 
 export function ProjectGraphPage({
   model,

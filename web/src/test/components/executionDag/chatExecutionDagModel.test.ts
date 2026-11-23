@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { buildChatExecutionDag } from '@/components/executionDag/chatExecutionDagModel';
 
-import type { AgentGraphApiResponse } from '@/services/agent/graph/agentGraphApi';
-import type { GraphRunState } from '@/stores/graphStore';
+import type { AgentGraphApiResponse } from '@business/agent/ui/web/services/agent/graph/agentGraphApi';
+import type { GraphRunState } from '@business/knowledge/ui/web/stores/graphStore';
 
 function run(overrides: Partial<GraphRunState> = {}): GraphRunState {
   return {

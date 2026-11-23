@@ -1,5 +1,5 @@
 import type { DesktopRouteModuleLoader } from '../navigation/desktopRouteModule';
-import { PROJECT_AGENT_LOGS_ROUTE_ID } from './projectAgentLogsClient';
+import { PROJECT_AGENT_LOGS_ROUTE_ID } from '@business/agent/ui/desktop/project-agent/projectAgentLogsClient';
 import {
   createProjectAgentRouteModuleLoader,
   type ProjectAgentRouteBinding,

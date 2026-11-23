@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { instanceTemplateService } from '@/services/instanceTemplateService';
-import { useInstanceTemplateStore } from '@/stores/instanceTemplate';
+import { instanceTemplateService } from '@business/environments/ui/web/services/instanceTemplateService';
+import { useInstanceTemplateStore } from '@business/environments/ui/web/stores/instanceTemplate';
 
 import type {
   InstanceTemplateResponse,
   TemplateItemResponse,
-} from '@/services/instanceTemplateService';
+} from '@business/environments/ui/web/services/instanceTemplateService';
 
-vi.mock('@/services/instanceTemplateService', () => ({
+vi.mock('@business/environments/ui/web/services/instanceTemplateService', () => ({
   instanceTemplateService: {
     list: vi.fn(),
     getById: vi.fn(),

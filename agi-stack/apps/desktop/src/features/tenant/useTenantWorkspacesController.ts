@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
-import type { TenantWorkspacesScope } from './tenantWorkspacesClient';
-import type { TenantWorkspacesController } from './tenantWorkspacesController';
+import type { TenantWorkspacesScope } from '@business/workspace/ui/desktop/tenant/tenantWorkspacesClient';
+import type { TenantWorkspacesController } from '@business/workspace/ui/desktop/tenant/tenantWorkspacesController';
 
 export function useTenantWorkspacesController(
   controller: TenantWorkspacesController,

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Bot, ChevronDown, Check, Loader2 } from 'lucide-react';
 
-import { useDefinitions, useListDefinitions } from '@/stores/agentDefinitions';
+import { useDefinitions, useListDefinitions } from '@business/agent/ui/web/stores/agentDefinitions';
 
 export interface AgentSwitcherProps {
   activeAgentId?: string | undefined;

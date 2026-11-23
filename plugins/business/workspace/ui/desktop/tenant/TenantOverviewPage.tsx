@@ -7,7 +7,7 @@ import {
 import { Button } from '@radix-ui/themes';
 
 import { useI18n } from '@desktop/i18n';
-import type { TenantOverviewPresentationModel } from '@desktop/features/tenant/tenantOverviewPresentationModel';
+import type { TenantOverviewPresentationModel } from './tenantOverviewPresentationModel';
 import './TenantOverviewPage.css';
 
 export function TenantOverviewPage({

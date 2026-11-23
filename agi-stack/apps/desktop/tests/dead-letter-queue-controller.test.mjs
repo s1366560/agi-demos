@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 const { DesktopApiError } = await import('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const { createDeadLetterQueueController } =
-  await import('/tmp/agistack-desktop-test-dist/src/features/governance/deadLetterQueueController.js');
+  await import('/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/governance/deadLetterQueueController.js');
 
 test('DLQ controller keeps message and stats loading/error states independent', async () => {
   const controller = createDeadLetterQueueController({

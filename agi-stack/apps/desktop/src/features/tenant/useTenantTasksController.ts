@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
-import type { TenantTasksScope } from './tenantTasksClient';
+import type { TenantTasksScope } from '@business/workspace/ui/desktop/tenant/tenantTasksClient';
 import type {
   TenantTasksController,
   TenantTasksViewState,
-} from './tenantTasksController';
+} from '@business/workspace/ui/desktop/tenant/tenantTasksController';
 
 export const TENANT_TASKS_REFRESH_INTERVAL_MS = 5_000;
 

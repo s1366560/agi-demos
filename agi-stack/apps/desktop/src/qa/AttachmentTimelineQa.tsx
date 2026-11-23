@@ -7,7 +7,7 @@ import { AgentTimeline } from '../features/chat/ChatTimeline';
 import {
   mergeAgentSendAcknowledgement,
   mergeConversationTimelineItems,
-} from '../features/chat/chatTimelineModel';
+} from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import { timelineMessageAttachments } from '../features/chat/messageAttachmentModel';
 import { ToastProvider } from '../features/feedback/ToastCenter';
 import { I18nProvider } from '../i18n';

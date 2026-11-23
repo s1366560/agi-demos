@@ -6,9 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageArea } from '@/components/agent/MessageArea';
 import { AgentSwitcher } from '@/components/agent/AgentSwitcher';
 import { InputToolbar } from '@/components/agent/InputToolbar';
-import { useAgentV3Store } from '@/stores/agentV3';
-import { useStreamingStore } from '@/stores/agent/streamingStore';
-import { useAgentDefinitionStore } from '@/stores/agentDefinitions';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
+import { useStreamingStore } from '@business/agent/ui/web/stores/agent/streamingStore';
+import { useAgentDefinitionStore } from '@business/agent/ui/web/stores/agentDefinitions';
 import { createDefaultConversationState } from '@/types/conversationState';
 
 import type { TimelineEvent } from '@/types/agent';

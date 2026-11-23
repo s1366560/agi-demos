@@ -7,12 +7,12 @@ import { useParams } from 'react-router-dom';
 import { AlertTriangle, Info, Lightbulb, Wrench } from 'lucide-react';
 
 import { MaintenanceOperation } from '@/components/maintenance/MaintenanceOperation';
-import { graphService } from '@/services/graphService';
+import { graphService } from '../services/graphService';
 import { confirmAction } from '@/utils/confirmAction';
 import { downloadJson } from '@/utils/downloadJson';
 import { logger } from '@/utils/logger';
 
-import type { EmbeddingStatus, GraphStats, MaintenanceStatus } from '@/services/graphService';
+import type { EmbeddingStatus, GraphStats, MaintenanceStatus } from '../services/graphService';
 
 const formatStat = (value: number | undefined): string =>
   value === undefined ? '-' : value.toLocaleString();

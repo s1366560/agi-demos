@@ -20,7 +20,7 @@ import {
   isTimelineItemInitiallyExpanded,
   timelineKind,
 } from '../features/chat/chatTimelinePresentation';
-import { computeTimelineTurns } from '../features/chat/timelineTurnCollapseModel';
+import { computeTimelineTurns } from '@business/agent/ui/desktop/chat/timelineTurnCollapseModel';
 import { useTimelineTurnCollapse } from '../features/chat/useTimelineTurnCollapse';
 import { I18nProvider } from '../i18n';
 import type { AgentTimelineItem, ConversationTimelineState } from '../types';

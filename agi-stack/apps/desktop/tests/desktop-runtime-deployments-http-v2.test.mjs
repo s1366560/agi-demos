@@ -8,7 +8,7 @@ const { createDesktopRuntimeDeploymentsHttpAuthorityV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopRuntimeDeploymentsHttpProjectionV2.js',
 );
 const { RuntimeDeploymentsUnavailableError } = require(
-  COMPILED_ROOT + '/src/features/runtime-deployments/runtimeDeploymentsContract.js',
+  COMPILED_ROOT + '/plugins/business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsContract.js',
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 

@@ -6,7 +6,7 @@ import { App, Empty } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAuthStore } from '@/stores/auth';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 
 import { Spinner } from '@/components/common/Spinner';
 

@@ -13,8 +13,8 @@ const bridgeSource = readSource('src/features/runtime/nativeFileBridge.ts');
 const conversationSource = readSource('src/features/chat/ConversationExportMenu.tsx');
 const canvasSource = readSource('src/features/chat/LiveArtifactCanvas.tsx');
 const previewSource = readSource('src/features/chat/ArtifactPreviewSurface.tsx');
-const sandboxSource = readSource('src/features/sandbox/SessionSandboxTools.tsx');
-const sandboxBrowserSource = readSource('src/features/sandbox/SandboxFileBrowser.tsx');
+const sandboxSource = readSource('../../../plugins/business/environments/ui/desktop/sandbox/SessionSandboxTools.tsx');
+const sandboxBrowserSource = readSource('../../../plugins/business/environments/ui/desktop/sandbox/SandboxFileBrowser.tsx');
 
 function sliceBetween(source, start, end) {
   const startIndex = source.indexOf(start);
@@ -71,7 +71,7 @@ test('preload validates and compact-copies the named file bridge without arbitra
   assert.equal(preloadSource.includes('save: saveNativeFile'), true);
   assert.equal(preloadSource.includes('open: openNativeFile'), true);
   assert.equal(preloadSource.includes('ingest: ingestNativeFile'), true);
-  assert.equal(preloadSource.includes('files: fileBridge'), true);
+  assert.equal(preloadSource.includes('files: fullDesktop ? fileBridge : Object.freeze({ open: openNativeFile })'), true);
   const saveSource = sliceBetween(preloadSource, 'function saveNativeFile(', 'function openNativeFile(');
   assert.equal(saveSource.includes('compactNativeFileSaveRequest(request)'), true);
   assert.equal(saveSource.includes('validateNativeFileSaveResult(result)'), true);

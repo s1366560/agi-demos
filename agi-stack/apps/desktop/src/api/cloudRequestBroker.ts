@@ -2,7 +2,7 @@ import {
   isCloudSandboxDownloadPath,
   requireCloudSandboxFileAuthority,
 } from './cloudSandboxDownloadAuthority';
-import { DesktopApiError } from './client';
+import { DesktopApiError } from './desktopApiError';
 import {
   cloudMemoryMutationFromHeaders,
   type CloudMemoryMutation,
@@ -50,6 +50,7 @@ export type VaultBoundCloudRequest = Readonly<{
   response?: VaultBoundCloudResponsePolicy;
   signal?: AbortSignal;
   memory_scope?: CloudMemoryRequestScope;
+  onPackageProgress?: (event: unknown) => void;
 }>;
 
 export type DesktopApiFetchOptions = Readonly<{
@@ -74,10 +75,14 @@ export function desktopVaultBoundCloudRequestBroker(): VaultBoundCloudRequestBro
   ): Promise<Readonly<{ status: number; body: unknown }>> => {
     if (input.signal?.aborted) throw abortError();
     const requestId = globalThis.crypto.randomUUID();
+    const off = input.onPackageProgress && window.__MEMSTACK_DESKTOP__?.events?.onPackageProgress?.(value => {
+      if (!input.signal?.aborted && value && typeof value === 'object' && 'requestId' in value &&
+          value.requestId === requestId && 'data' in value) input.onPackageProgress?.(value.data);
+    });
     const invokeRequest = invoke('cloud_request', {
       requestId,
       request: compactRequest(input),
-    });
+    }).finally(() => off?.());
     const result = input.signal
       ? await waitForCloudRequest(invoke, requestId, invokeRequest, input.signal)
       : await invokeRequest;

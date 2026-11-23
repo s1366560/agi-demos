@@ -7,7 +7,7 @@ import type {
   NativeKnowledgeSyncOptions,
   NativeKnowledgeMutationMemory,
 } from '../src/features/project-knowledge/nativeKnowledgeContracts';
-import type { ProjectKnowledgeScope } from '../src/features/project-knowledge/projectKnowledgeClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 
 declare const client: NativeKnowledgeClient;
 declare const scope: ProjectKnowledgeScope;

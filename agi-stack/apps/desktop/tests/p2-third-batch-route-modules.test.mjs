@@ -22,8 +22,8 @@ const { createChannelsRouteModuleLoader } = require(`${root}/channelsRouteModule
 const { createDesktopTenantTemplatesHttpProjectionV2 } = require(
   '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTemplatesHttpProjectionV2.js',
 );
-const { createTemplatesRouteController } = require(`${root}/templatesRouteController.js`);
-const { createTemplatesRouteModuleLoader } = require(`${root}/templatesRouteModule.js`);
+const { createTemplatesRouteController } = require(`/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/settings-routes/templatesRouteController.js`);
+const { createTemplatesRouteModuleLoader } = require(`/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/settings-routes/templatesRouteModule.js`);
 const { createDesktopUserProfileHttpProjectionV2 } = require(
   '/tmp/agistack-desktop-test-dist/src/plugins/desktopUserProfileHttpProjectionV2.js',
 );

@@ -25,7 +25,7 @@ import { HexScene } from './HexScene';
 import { MessageFlowParticles, type MessageFlowParticlesRef } from './MessageFlowParticles';
 import { useHex3DPick } from './useHex3DPick';
 
-import type { WorkspaceAgent, TopologyNode, TopologyEdge, CyberObjective } from '@/types/workspace';
+import type { WorkspaceAgent, TopologyNode, TopologyEdge, CyberObjective } from '@business/workspace/ui/web/types/workspace';
 
 export interface HexCanvas3DProps {
   agents: WorkspaceAgent[];

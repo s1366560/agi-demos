@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { subagentAPI } from '@/services/subagentService';
-import { useSubAgentStore } from '@/stores/subagent';
+import { subagentAPI } from '@business/agent/ui/web/services/subagentService';
+import { useSubAgentStore } from '@business/agent/ui/web/stores/subagent';
 
 import type { SubAgentResponse } from '@/types/agent';
 
-vi.mock('@/services/subagentService', () => ({
+vi.mock('@business/agent/ui/web/services/subagentService', () => ({
   subagentAPI: {
     list: vi.fn(),
     get: vi.fn(),

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { deployService } from '@/services/deployService';
-import { useDeployStore } from '@/stores/deploy';
+import { deployService } from '@business/environments/ui/web/services/deployService';
+import { useDeployStore } from '@business/environments/ui/web/stores/deploy';
 
-import type { DeployResponse } from '@/services/deployService';
+import type { DeployResponse } from '@business/environments/ui/web/services/deployService';
 
-vi.mock('@/services/deployService', () => ({
+vi.mock('@business/environments/ui/web/services/deployService', () => ({
   deployService: {
     list: vi.fn(),
     getById: vi.fn(),

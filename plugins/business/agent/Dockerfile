@@ -1,7 +1,7 @@
 FROM python:3.12.13-slim
 WORKDIR /publisher
 COPY pyproject.toml __init__.py worker.py react_loop.py turn.py release.py package.json contributions.json ./
-COPY ui/settings.json ./ui/settings.json
+COPY ui/settings.json ui/skill.js ui/chat.js ./ui/
 COPY engine ./engine
 COPY backend ./backend
 COPY skill_validation ./skill_validation

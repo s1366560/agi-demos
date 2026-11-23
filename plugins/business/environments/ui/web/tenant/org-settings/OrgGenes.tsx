@@ -7,8 +7,8 @@ import { Dna, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
 
-import { genePolicyService } from '@/services/genePolicyService';
-import type { GenePolicyResponse, GenePolicyRequest } from '@/services/genePolicyService';
+import { genePolicyService } from '../../services/genePolicyService';
+import type { GenePolicyResponse, GenePolicyRequest } from '../../services/genePolicyService';
 
 import { formatDateTime } from '@/utils/date';
 

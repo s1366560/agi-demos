@@ -29,7 +29,7 @@ import { Pencil, PlayCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
 
-import { acpService } from '@/services/acpService';
+import { acpService } from '../services/acpService';
 
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateTime } from '@/utils/date';

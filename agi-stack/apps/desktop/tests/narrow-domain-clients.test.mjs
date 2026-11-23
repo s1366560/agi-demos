@@ -23,7 +23,7 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/chat/desktopArtifactClient.js');
 const {
   createAutomationClient,
-} = require('/tmp/agistack-desktop-test-dist/src/features/automations/automationClientPort.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/automations/automationClientPort.js');
 
 test('narrow domain clients expose only their contract and preserve authority calls', async () => {
   const calls = [];

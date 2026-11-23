@@ -16,7 +16,7 @@ import {
   Workflow,
 } from 'lucide-react';
 
-import { useAgentV3Store } from '@/stores/agentV3';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 import { useVoiceCallStore } from '@/stores/voiceCallStore';
 
 import { attachmentService, type AttachmentResponse } from '@/services/attachmentService';
@@ -25,11 +25,11 @@ import type {
   RunInputContextItem,
   RunInputDelivery,
 } from '@/services/runInputService';
-import type { FileMetadata } from '@/services/sandboxUploadService';
+import type { FileMetadata } from '@business/environments/ui/web/services/sandboxUploadService';
 
 import { useFrameCapture } from '@/hooks/rtc/useFrameCapture';
 import { useActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
-import { useConversationParticipants } from '@/hooks/useConversationParticipants';
+import { useConversationParticipants } from '@business/agent/ui/web/hooks/useConversationParticipants';
 import { useVoiceTranscribe } from '@/hooks/useVoiceTranscribe';
 
 import { formatFileSize } from '@/utils/format';

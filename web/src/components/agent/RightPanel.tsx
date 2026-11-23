@@ -14,16 +14,16 @@ import { useTranslation } from 'react-i18next';
 
 import { Bot, Filter, GitBranch, ListTodo, Route, X } from 'lucide-react';
 
-import { useActiveGraphRunForConversation } from '@/stores/graphStore';
+import { useActiveGraphRunForConversation } from '@business/knowledge/ui/web/stores/graphStore';
 import { useTenantStore } from '@/stores/tenant';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceStore } from '@business/workspace/ui/web/stores/workspace';
 
 import { agentService } from '@/services/agentService';
 import {
   workspacePlanService,
   workspaceService,
   workspaceTaskService,
-} from '@/services/workspaceService';
+} from '@business/workspace/ui/web/services/workspaceService';
 
 import { LazyButton } from '@/components/ui/lazyAntd';
 
@@ -39,7 +39,7 @@ import { TaskLanePanel } from './tasks/TaskLanePanel';
 import { WorkspaceTaskPlanPanel } from './workspace/WorkspaceTaskPlanPanel';
 import { buildWorkspaceTaskPlanRows } from './workspace/WorkspaceTaskPlanPanelModel';
 
-import type { WorkspaceAgent, WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
+import type { WorkspaceAgent, WorkspacePlanSnapshot, WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 import type {
   AgentTask,

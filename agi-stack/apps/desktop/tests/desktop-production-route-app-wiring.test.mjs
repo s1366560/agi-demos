@@ -16,7 +16,7 @@ const projectSearchBindingProviderSource = readFileSync(
 );
 const projectCronJobsBindingProviderSource = readFileSync(
   new URL(
-    '../src/features/automations/projectCronJobsRouteBindingProviderV2.ts',
+    '../../../../plugins/business/automation/ui/desktop/automations/projectCronJobsRouteBindingProviderV2.ts',
     import.meta.url,
   ),
   'utf8',

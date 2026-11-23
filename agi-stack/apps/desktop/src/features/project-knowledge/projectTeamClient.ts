@@ -1,7 +1,7 @@
 import {
   type ProjectKnowledgeClient,
   type ProjectKnowledgeSnapshotBase,
-} from './projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 
 export const PROJECT_TEAM_ROUTE_ID = 'project-project-team' as const;
 export const PROJECT_TEAM_LOCAL_REASON = 'local_project_team_authority_unavailable' as const;

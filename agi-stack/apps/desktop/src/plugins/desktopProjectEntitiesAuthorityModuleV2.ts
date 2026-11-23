@@ -9,8 +9,8 @@ import type {
   ProjectEntitiesClient,
   ProjectEntitiesSnapshot,
   ProjectEntityRelationship,
-} from '../features/project-knowledge/projectEntitiesClient';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectEntitiesClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import { createDesktopProjectEntitiesHttpAuthorityV2 } from './desktopProjectEntitiesHttpProjectionV2';
 import {

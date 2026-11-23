@@ -48,7 +48,7 @@ import { formatDateTime } from '@/utils/date';
 
 import { PluginSlotOutlet } from '../../components/plugins/PluginSlotOutlet';
 import { projectAPI } from '../../services/api';
-import { projectSandboxService } from '../../services/projectSandboxService';
+import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
 import { useProjectStore } from '../../stores/project';
 import { confirmAction } from '../../utils/confirmAction';
 import { logger } from '../../utils/logger';
@@ -64,7 +64,7 @@ import type {
   ProjectSettingsNoProjectProps,
   ProjectSettingsProps,
 } from './settings/types';
-import type { ProjectSandbox } from '../../types/sandbox';
+import type { ProjectSandbox } from '@business/environments/ui/web/types/sandbox';
 
 interface ProjectSettingsError {
   response?: { data?: { detail?: string | undefined } | undefined } | undefined;

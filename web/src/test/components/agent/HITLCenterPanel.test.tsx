@@ -17,14 +17,14 @@ const respondToDecision = vi.fn().mockResolvedValue(undefined);
 const respondToClarification = vi.fn().mockResolvedValue(undefined);
 const respondToPermission = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('../../../stores/agentV3', () => ({
+vi.mock('@business/agent/ui/web/stores/agentV3', () => ({
   useAgentV3Store: (selector: (state: unknown) => unknown) =>
     selector({ respondToDecision, respondToClarification, respondToPermission }),
 }));
 
 const getPendingHITLRequests = vi.fn();
 
-vi.mock('../../../services/agent/restApi', () => ({
+vi.mock('@business/agent/ui/web/services/agent/restApi', () => ({
   restApi: {
     getPendingHITLRequests: (...args: unknown[]) => getPendingHITLRequests(...args),
   },

@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 
 import { App } from 'antd';
 
-import { skillAPI } from '@/services/skillService';
+import { skillAPI } from '@business/agent/ui/web/services/skillService';
 
 import type { SkillResponse } from '@/types/agent';
 

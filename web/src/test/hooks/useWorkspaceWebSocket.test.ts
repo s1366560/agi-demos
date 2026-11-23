@@ -15,7 +15,7 @@ const workspaceHandlers = {
   setOnlineUsers: vi.fn(),
 };
 
-vi.mock('@/stores/workspace', () => ({
+vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
   useWorkspaceStore: {
     getState: () => workspaceHandlers,
   },

@@ -4,7 +4,7 @@ vi.mock('@/services/artifactService', () => ({
   artifactService: { list: vi.fn() },
 }));
 
-vi.mock('@/stores/sandbox', () => ({
+vi.mock('@business/environments/ui/web/stores/sandbox', () => ({
   useSandboxStore: { getState: vi.fn() },
 }));
 
@@ -12,14 +12,14 @@ vi.mock('@/stores/project', () => ({
   useProjectStore: { getState: vi.fn(() => ({ currentProject: null })) },
 }));
 
-vi.mock('@/stores/agent/timelineStore', () => ({
+vi.mock('@business/agent/ui/web/stores/agent/timelineStore', () => ({
   useTimelineStore: { getState: vi.fn(() => ({ timeline: [], agentTimeline: [] })) },
 }));
 
 import { artifactService } from '@/services/artifactService';
-import { useSandboxStore } from '@/stores/sandbox';
+import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
 import { useProjectStore } from '@/stores/project';
-import { useTimelineStore } from '@/stores/agent/timelineStore';
+import { useTimelineStore } from '@business/agent/ui/web/stores/agent/timelineStore';
 import type { Artifact } from '@/types/agent';
 
 import {
@@ -28,7 +28,7 @@ import {
   normalizeSandboxPath,
   pathMatchesArtifact,
   resolveSandboxArtifactUrl,
-} from '@/utils/sandboxArtifactPath';
+} from '@business/environments/ui/web/utils/sandboxArtifactPath';
 
 const makeArtifact = (overrides: Partial<Artifact>): Artifact => ({
   id: 'a1',

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { httpClient } from '../../services/client/httpClient';
-import { graphService, type GraphData } from '../../services/graphService';
+import { graphService, type GraphData } from '@business/knowledge/ui/web/services/graphService';
 
 vi.mock('../../services/client/httpClient', () => ({
   httpClient: {

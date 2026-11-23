@@ -39,11 +39,11 @@ const { createTenantPatternsRouteModuleLoader } = require(
 );
 const { createTenantAcpRouteModuleLoader } = require(`${featureRoot}/tenantAcpRouteModule.js`);
 const { createTenantWebhooksRouteModuleLoader } = require(
-  `${featureRoot}/tenantWebhooksRouteModule.js`
+  `/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/tenant-admin/tenantWebhooksRouteModule.js`
 );
-const { createTenantGenesRouteModuleLoader } = require(`${featureRoot}/tenantGenesRouteModule.js`);
+const { createTenantGenesRouteModuleLoader } = require(`/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/tenant-admin/tenantGenesRouteModule.js`);
 const { createTenantEventsRouteModuleLoader } = require(
-  `${featureRoot}/tenantEventsRouteModule.js`
+  `/tmp/agistack-desktop-test-dist/plugins/business/automation/ui/desktop/tenant-admin/tenantEventsRouteModule.js`
 );
 const { createTenantDecisionRecordsRouteModuleLoader } = require(
   `${featureRoot}/tenantDecisionRecordsRouteModule.js`

@@ -12,6 +12,8 @@ The signed [chat page](ui/chat.js) runs on Web and desktop. It uses five named c
 
 Run `uv run pytest src/tests/integration/test_package_chat_runtime.py` to exercise signed command admission, WebSocket events, cancellation and persisted replay using a deterministic model-stream fixture.
 
+The full Web client keeps conversation state and history actions in [ui/web/stores/agent](ui/web/stores/agent/). The desktop conversation timeline, search and export models live in [ui/desktop/chat](ui/desktop/chat/). Transport and credentials belong to each client runtime.
+
 ## Publish and install
 
 From this directory, build an OCI image and sign the immutable digest with an Ed25519 publisher key. The SDK and the wheel can also be installed in a separate publisher environment.

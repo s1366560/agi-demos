@@ -1,7 +1,7 @@
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { useAgentV3Store } from '../../stores/agentV3';
+import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 
 describe('AgentV3 store - model override', () => {
   beforeEach(() => {

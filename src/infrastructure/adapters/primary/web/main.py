@@ -417,6 +417,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     from plugins.business.automation.backend.playbook_operation import read_playbooks
     from plugins.business.environments.backend.package_sandbox_operations import SANDBOX_OPERATIONS
+    from plugins.business.knowledge.backend.project_memory_operation import list_project_memories
     from plugins.business.workspace.backend.workspace_directory_export import (
         read_directory_operation,
         read_workspace_operation,
@@ -429,6 +430,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
         "app.automation.playbooks.read": read_playbooks,
         **AGENT_OPERATIONS,
         **SANDBOX_OPERATIONS,
+        "app.knowledge.memories.read": list_project_memories,
         "app.workspace.directory.read": read_directory_operation,
         "app.workspace.detail.read": read_workspace_operation,
     }

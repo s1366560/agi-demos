@@ -16,8 +16,8 @@ import {
   validateGeneConfig,
   type GeneConfigDraft,
   type GeneConfigValidationError,
-} from '@/types/geneConfig';
-import type { CyberGene, CyberGeneCategory } from '@/types/workspace';
+} from '@business/environments/ui/web/types/geneConfig';
+import type { CyberGene, CyberGeneCategory } from '@business/workspace/ui/web/types/workspace';
 
 export interface GenePayload {
   name: string;
