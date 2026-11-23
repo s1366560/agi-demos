@@ -45,7 +45,7 @@ export function createProjectBlackboardRouteModuleLoader({
   }
   return async () => {
     const [{ ProjectBlackboardPage }, { useProjectBlackboardController }] = await Promise.all([
-      import('./ProjectBlackboardPage'),
+      import('@business/workspace/ui/desktop/project-blackboard/ProjectBlackboardPage'),
       import('./useProjectBlackboardController'),
     ]);
     function ProjectBlackboardRouteSurface({ context }: DesktopRouteSurfaceProps) {
@@ -85,7 +85,7 @@ export function createProjectBlackboardRouteModuleLoader({
 function BoundRoute({ context, createBinding, Page, useController }: Readonly<{
   context: ProjectBlackboardRouteContext;
   createBinding: (context: ProjectBlackboardRouteContext) => ProjectBlackboardRouteBinding;
-  Page: typeof import('./ProjectBlackboardPage').ProjectBlackboardPage;
+  Page: typeof import('@business/workspace/ui/desktop/project-blackboard/ProjectBlackboardPage').ProjectBlackboardPage;
   useController: typeof import('./useProjectBlackboardController').useProjectBlackboardController;
 }>) {
   const binding = useMemo(

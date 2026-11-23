@@ -1,0 +1,97 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "export_csv",
+      "abi": "invoke",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "boolean"
+          },
+          "rows": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 255
+                },
+                "office_status": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "is_archived": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "office_status",
+                "is_archived"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "header",
+          "rows"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "csv": {
+            "type": "string",
+            "maxLength": 65536
+          }
+        },
+        "required": [
+          "csv"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "export-csv",
+      "tool": "export_csv",
+      "payload": {
+        "header": true,
+        "rows": []
+      },
+      "permissions": [
+        "tools.execute"
+      ],
+      "accepts_input": true
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:a62f5e554a80c0bfca7880caa5edbb4cc6c4728b0f3b6ea475e6c142f0fecc47",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ]
+}

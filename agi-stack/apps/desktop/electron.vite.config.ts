@@ -57,7 +57,10 @@ export default defineConfig(({ command }) => ({
     base: './',
     plugins: [rendererRootHotReload(desktopRoot), react()],
     resolve: {
+      dedupe: ['react', 'react-dom', '@radix-ui/themes', '@radix-ui/react-icons'],
       alias: {
+        '@desktop': resolve(desktopRoot, 'src'),
+        '@business': resolve(desktopRoot, '../../../plugins/business'),
         '@agistack/plugin-runtime': resolve(
           desktopRoot,
           '../../packages/plugin-runtime/src/index.ts',
@@ -70,6 +73,7 @@ export default defineConfig(({ command }) => ({
     },
     server: {
       host: '127.0.0.1',
+      fs: { allow: [resolve(desktopRoot, '../../..')] },
       watch: {
         ignored: generatedOutputWatchIgnores,
       },

@@ -1155,11 +1155,11 @@ class AgentRuntimeBootstrapper:
         abort_signal: asyncio.Event | None = None,
     ) -> None:
         """Run agent chat locally in-process when Ray is unavailable."""
-        from src.infrastructure.agent.actor.execution import execute_project_chat
-        from src.infrastructure.agent.core.project_react_agent import (
+        from plugins.business.agent.engine.react.project_react_agent import (
             ProjectAgentConfig,
             ProjectReActAgent,
         )
+        from src.infrastructure.agent.actor.execution import execute_project_chat
 
         execution_started = False
         try:

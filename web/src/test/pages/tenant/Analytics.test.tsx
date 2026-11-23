@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-import { Analytics } from '../../../pages/tenant/Analytics';
+import { Analytics } from '@business/agent/ui/web/tenant/Analytics';
 import { analyticsService } from '../../../services/analyticsService';
 import { useTenantStore } from '../../../stores/tenant';
 
@@ -38,7 +38,7 @@ vi.mock('../../../stores/tenant', () => ({
   })),
 }));
 
-vi.mock('../../../pages/tenant/ChartComponents', () => ({
+vi.mock('@business/agent/ui/web/tenant/ChartComponents', () => ({
   __esModule: true,
   default: vi.fn(({ memoryGrowthData, _projectStorageData, projectsLength }) => (
     <div data-testid="chart-components">
@@ -149,7 +149,7 @@ describe('Analytics', () => {
   describe('Performance', () => {
     it('should lazy load chart components', async () => {
       // Verify ChartComponents is imported lazily
-      const AnalyticsModule = await import('../../../pages/tenant/Analytics');
+      const AnalyticsModule = await import('@business/agent/ui/web/tenant/Analytics');
       // ChartComponents should be imported with lazy()
       expect(AnalyticsModule).toBeDefined();
     });
@@ -160,7 +160,7 @@ describe('Analytics', () => {
       });
 
       // Mock ChartComponents to delay loading
-      vi.doMock('../../../pages/tenant/ChartComponents', () => ({
+      vi.doMock('@business/agent/ui/web/tenant/ChartComponents', () => ({
         __esModule: true,
         default: vi.fn(
           () =>
@@ -180,7 +180,7 @@ describe('Analytics', () => {
 
   describe('Component Structure', () => {
     it('should use lazy import for ChartComponents', async () => {
-      const AnalyticsModule = await import('../../../pages/tenant/Analytics');
+      const AnalyticsModule = await import('@business/agent/ui/web/tenant/Analytics');
       expect(AnalyticsModule.Analytics).toBeDefined();
     });
   });

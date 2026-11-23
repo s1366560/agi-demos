@@ -10,9 +10,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.factory import _default_runtime_dispatcher
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.agent.processor.factory import _default_runtime_dispatcher
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
     AgentRuntimeDispatcherProtocolV2,

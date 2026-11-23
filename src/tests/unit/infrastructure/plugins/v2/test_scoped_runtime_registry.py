@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.primary.web.startup.scoped_profile_runtime_v2 import (
+    publish_scoped_generation_routes_v2,
+)
+from src.infrastructure.plugins.v2.http_routes import (
+    RouteDefinitionV2,
+    RouteTableBuilderV2,
+    RouteTableRegistryV2,
+)
 from src.infrastructure.plugins.v2.protocol import control_envelope_v2
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.scoped_runtime_registry import ScopedRuntimeRegistryV2
+from src.infrastructure.plugins.v2.service_closure import project_service_closure_v2
 from src.tests.unit.infrastructure.plugins.v2.runtime_test_support import (
     RuntimeTestArtifactResolverV2,
 )
@@ -96,8 +108,196 @@ async def test_foreign_scope_rejected_before_real_apply(foreign):
         await registry.close()
 
 
+async def test_scoped_route_closure_publishes_distinct_leased_tables_for_same_snapshot():
+    project = ScopeV2(kind=ScopeKindV2.PROJECT, tenant_id="a", project_id="p")
+    entries = (
+        _entry("builder", "test://builder", scope=project),
+        _entry(
+            "api", "test://api", inject={"routes": ROUTE_TABLE_BUILDER_SERVICE_V2}, scope=project
+        ),
+    )
+    original = _snapshot(1, entries, provides={"test://builder": (ROUTE_TABLE_BUILDER_SERVICE_V2,)})
+    assert project_service_closure_v2(original, scope=project, required_services=()).entries == ()
+    snapshot = project_service_closure_v2(
+        original, scope=project, required_services=(), include_scoped_http=True
+    )
+    assert snapshot.entries == entries
+    app = FastAPI()
+    routes = app.state.platform_plugin_route_registry_v2 = RouteTableRegistryV2()
+    sessions = (_scope(session="first"), _scope(session="second"))
+
+    def definitions(scope):
+        def builder(context, _config):
+            context.provide(ROUTE_TABLE_BUILDER_SERVICE_V2, RouteTableBuilderV2())
+
+        def contribute(context, _config):
+            return context.require("routes").contribute(
+                RouteDefinitionV2(
+                    name="read",
+                    path="/read",
+                    methods=("GET",),
+                    owner_entry_id="api",
+                    summary=scope.session_id,
+                    endpoint=lambda: scope.session_id,
+                )
+            )
+
+        return (
+            _definition(snapshot, "test://builder", builder),
+            _definition(snapshot, "test://api", contribute),
+        )
+
+    registry = ScopedRuntimeRegistryV2(
+        definitions_factory=definitions,
+        target_catalog=_catalog(snapshot),
+        artifact_resolver=RuntimeTestArtifactResolverV2(),
+        route_publisher=partial(publish_scoped_generation_routes_v2, app),
+    )
+    generations = []
+    for scope in sessions:
+        published = await registry.publish(
+            scope, snapshot, control_envelope_v2(snapshot, version=1)
+        )
+        assert published.accepted, published.receipt
+        async with await registry.acquire(scope) as generation:
+            generations.append(generation)
+            assert (
+                routes.resolve_generation(generation).openapi.schema["paths"]["/read"]["get"][
+                    "summary"
+                ]
+                == scope.session_id
+            )
+    assert routes.current is None
+    assert generations[0].descriptor == generations[1].descriptor
+    await registry.close_scope(sessions[0])
+    with pytest.raises(RuntimeV2Error, match="unavailable"):
+        routes.resolve_generation(generations[0])
+    assert routes.resolve_generation(generations[1]).table.definitions[0].summary == "second"
+    await registry.close()
+
+
+@pytest.mark.parametrize("failure", ["empty", "conflict", "missing_registry", "invalid_builder"])
+async def test_declared_scoped_http_failure_nacks_and_retains_last_good(failure):
+    scope = _scope()
+    provider = _entry("builder", "test://builder", scope=scope)
+    contributor = _entry(
+        "api", "test://api", scope=scope, inject={"routes": ROUTE_TABLE_BUILDER_SERVICE_V2}
+    )
+    provides = {provider.module_ref: (ROUTE_TABLE_BUILDER_SERVICE_V2,)}
+    first = _snapshot(1, (provider, contributor), provides=provides)
+    second = _snapshot(2, (provider, contributor), provides=provides)
+    app = FastAPI()
+    routes = app.state.platform_plugin_route_registry_v2 = RouteTableRegistryV2()
+    broken = False
+
+    def builder(context, _config):
+        context.provide(
+            ROUTE_TABLE_BUILDER_SERVICE_V2,
+            object() if broken and failure == "invalid_builder" else RouteTableBuilderV2(),
+        )
+
+    def contribute(context, _config):
+        if broken and failure in {"empty", "invalid_builder"}:
+            return None
+        table = context.require("routes")
+        route = RouteDefinitionV2(
+            owner_entry_id="api",
+            name="route",
+            path="/private",
+            methods=("GET",),
+            endpoint=lambda: True,
+        )
+        dispose = table.contribute(route)
+        if broken and failure == "conflict":
+            table.contribute(route)
+        return dispose
+
+    registry = ScopedRuntimeRegistryV2(
+        (
+            _definition(first, provider.module_ref, builder),
+            _definition(first, contributor.module_ref, contribute),
+        ),
+        target_catalog=_catalog(first),
+        artifact_resolver=RuntimeTestArtifactResolverV2(),
+        route_publisher=partial(publish_scoped_generation_routes_v2, app),
+    )
+    try:
+        assert (
+            await registry.publish(scope, first, control_envelope_v2(first, version=1))
+        ).accepted
+        broken = True
+        if failure == "missing_registry":
+            del app.state.platform_plugin_route_registry_v2
+        rejected = await registry.publish(scope, second, control_envelope_v2(second, version=2))
+        assert not rejected.accepted
+        expected = {
+            "empty": "did not contribute",
+            "conflict": "duplicate v2 route",
+            "missing_registry": "requires a route registry",
+            "invalid_builder": "invalid route builder",
+        }
+        assert expected[failure] in rejected.receipt.error_message
+        async with await registry.acquire(scope) as generation:
+            assert generation.generation == 1
+            assert "/private" in routes.resolve_generation(generation).openapi.schema["paths"]
+    finally:
+        await registry.close()
+
+
+async def test_system_api_operation_stays_bound_to_the_calling_generation():
+    from src.infrastructure.agent.tools.system_api import make_system_api_tool
+    from src.infrastructure.plugins.v2.boundary import (
+        PluginGenerationMiddlewareV2,
+        pin_generation_v2,
+    )
+    from src.infrastructure.plugins.v2.builtin_modules import (
+        RUNTIME_BOUNDARY_SERVICE_V2,
+        RuntimeBoundaryServiceV2,
+    )
+    from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+    from src.tests.unit.infrastructure.agent.tools.test_system_api_tool import _make_ctx
+    from src.tests.unit.infrastructure.plugins.v2.test_runtime import _loader
+
+    root = ScopeV2(kind=ScopeKindV2.ROOT)
+    first = _profile(root, service=RUNTIME_BOUNDARY_SERVICE_V2)
+    second = _profile(root, generation=2, service=RUNTIME_BOUNDARY_SERVICE_V2)
+
+    def apply(context, _config):
+        context.provide(
+            RUNTIME_BOUNDARY_SERVICE_V2,
+            RuntimeBoundaryServiceV2(protocol_version=2, owner_entry_id=context.entry_id),
+        )
+
+    host = PlatformPluginRuntimeHostV2(loader=_loader(first, (_definition(first, _MODULE, apply),)))
+    assert (await host.apply(first, control_envelope_v2(first, version=1))).accepted
+    writes = []
+    remote = FastAPI()
+    remote.add_middleware(PluginGenerationMiddlewareV2, host_provider=lambda _: host)
+
+    @remote.post("/api/v1/record", operation_id="record")
+    async def record():
+        writes.append("saved")
+        return True
+
+    tool = make_system_api_tool(
+        openapi_schema_provider=remote.openapi,
+        base_url="http://replica",
+        client_factory=lambda **kw: httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=remote), **kw
+        ),
+    )
+    async with pin_generation_v2(host):
+        ctx = _make_ctx(api_auth_token="fixture")
+        assert not (await tool.execute(ctx, action="request", operation_id="record")).is_error
+        assert (await host.apply(second, control_envelope_v2(second, version=2))).accepted
+        stale = await tool.execute(ctx, action="request", operation_id="record")
+        assert stale.is_error and "route_generation_mismatch" in stale.output
+        assert writes == ["saved"]
+    await host.close()
+
+
 async def test_declared_global_route_service_is_rejected_before_apply():
-    snapshot = _profile(_scope(), service=ROUTE_TABLE_BUILDER_SERVICE_V2)
+    snapshot = _profile(ScopeV2(kind=ScopeKindV2.ROOT), service=ROUTE_TABLE_BUILDER_SERVICE_V2)
     calls = []
     registry = _registry(snapshot, lambda *_args: calls.append(True))
     try:

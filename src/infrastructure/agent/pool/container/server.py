@@ -279,8 +279,8 @@ class AgentContainerServer:
     async def _initialize_agent(self) -> None:
         """Initialize the agent."""
         try:
+            from plugins.business.agent.engine.react.project_react_agent import ProjectAgentConfig
             from src.infrastructure.agent.core import ProjectReActAgent
-            from src.infrastructure.agent.core.project_react_agent import ProjectAgentConfig
 
             # Create agent instance
             agent_config = ProjectAgentConfig(

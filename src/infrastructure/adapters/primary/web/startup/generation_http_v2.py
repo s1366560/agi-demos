@@ -43,7 +43,7 @@ class ApplicationGenerationRouteDispatcherV2(BaseRoute):
 
         registry = self._registry()
         try:
-            descriptor = current_generation_v2().descriptor
+            generation = current_generation_v2()
         except RuntimeV2Error as error:
             if error.code != "generation_not_pinned":
                 raise
@@ -51,7 +51,7 @@ class ApplicationGenerationRouteDispatcherV2(BaseRoute):
             if publication is None:
                 raise RuntimeError("plugin route registry v2 has no current publication") from error
         else:
-            publication = registry.resolve(descriptor)
+            publication = registry.resolve_generation(generation)
         match = publication.table.match(scope)
         return match, {"endpoint": self} if match is not Match.NONE else {}
 
@@ -73,19 +73,23 @@ def mount_generation_http_dispatcher_v2(app: FastAPI) -> None:
 
     def generation_openapi() -> dict[str, Any]:
         registry = getattr(app.state, "platform_plugin_route_registry_v2", None)
-        if isinstance(registry, RouteTableRegistryV2) and registry.current is not None:
-            from src.infrastructure.plugins.v2.boundary import current_generation_v2
+        from src.infrastructure.plugins.v2.boundary import current_generation_v2
 
-            try:
-                descriptor = current_generation_v2().descriptor
-            except RuntimeV2Error as error:
-                if error.code != "generation_not_pinned":
-                    raise
-                publication = registry.current
-            else:
-                publication = registry.resolve(descriptor)
-            return dict(publication.openapi.schema)
-        return original_openapi()
+        try:
+            generation = current_generation_v2()
+        except RuntimeV2Error as error:
+            if error.code != "generation_not_pinned":
+                raise
+            if not isinstance(registry, RouteTableRegistryV2) or registry.current is None:
+                return original_openapi()
+            publication = registry.current
+        else:
+            if not isinstance(registry, RouteTableRegistryV2):
+                raise RuntimeV2Error(
+                    "route_generation_unavailable", "pinned generation has no HTTP registry"
+                )
+            publication = registry.resolve_generation(generation)
+        return dict(publication.openapi.schema)
 
     cast(Any, app).openapi = generation_openapi
     app.router.routes.append(ApplicationGenerationRouteDispatcherV2(app))

@@ -12,7 +12,7 @@ from src.configuration.workspace_core import get_workspace_core_settings
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
 )
-from src.infrastructure.plugins.v2.builtin_http_routes import REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
+from src.infrastructure.plugins.v2.builtin_http_routes import KERNEL_ROUTE_GROUPS_V2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 
 _ROOT = Path(__file__).resolve().parents[6]
@@ -117,8 +117,7 @@ async def test_v2_http_graph_owns_every_required_row_without_static_inventory() 
     graph = app.state.platform_plugin_route_graph_v2
 
     assert graph.static_mounted_row_ids == ()
-    assert set(graph.mounted_row_ids) == REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
-    assert set(graph.v2_owned_row_ids) == REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
+    assert KERNEL_ROUTE_GROUPS_V2.issubset(graph.mounted_row_ids)
     assert graph.mounted_row_ids == graph.v2_owned_row_ids
 
     await host.close()

@@ -9,20 +9,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from plugins.business.agent.engine.processor.factory import ProcessorFactory
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
+from plugins.business.agent.engine.react.project_react_agent import ProjectReActAgent
+from plugins.business.agent.engine.react.react_agent_stream_mixin import StreamMixin
 from src.domain.events.agent_events import (
     AgentCompleteEvent,
     AgentErrorEvent,
     AgentObserveEvent,
 )
 from src.infrastructure.agent.core.llm_stream import StreamEventType
-from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
-from src.infrastructure.agent.core.react_agent_stream_mixin import StreamMixin
-from src.infrastructure.agent.processor.factory import ProcessorFactory
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    SessionProcessor,
-    ToolDefinition,
-)
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry
 from src.infrastructure.agent.tools.pipeline import ToolPipeline
 from src.infrastructure.agent.tools.result import ToolResult
@@ -63,7 +63,7 @@ def _processor(
 
 def _install_model(monkeypatch: pytest.MonkeyPatch, generate: Any) -> None:
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream.generate",
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate",
         generate,
     )
 

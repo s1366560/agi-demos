@@ -10,6 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.agent.engine.react.react_agent_tool_policy import (
+    filter_non_workspace_conversation_tools,
+)
 from src.application.services.cicd_pipeline_service import (
     CicdPipelineError,
     CicdPipelineRunRequest,
@@ -23,9 +26,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.adapters.secondary.persistence.sql_cicd_pipeline import (
     SqlCicdPipelineRepository,
-)
-from src.infrastructure.agent.core.react_agent_tool_policy import (
-    filter_non_workspace_conversation_tools,
 )
 from src.infrastructure.agent.workspace_plan.pipeline import (
     PipelineRunResult,

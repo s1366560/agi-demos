@@ -19,8 +19,10 @@ function katexCssPlugin() {
 export default defineConfig({
   plugins: [katexCssPlugin(), react()],
   resolve: {
+    dedupe: ['react-router-dom', 'chart.js', 'react-chartjs-2', 'i18next', 'react-markdown', 'use-debounce', 'zustand', '@tanstack/react-query', '@tanstack/react-virtual', 'react-i18next', 'antd', 'lucide-react', 'vitest'],
     alias: {
       '@': path.resolve(__dirname, './src'),
+        '@business': path.resolve(__dirname, '../plugins/business'),
       react: path.resolve(__dirname, './node_modules/react'),
       'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime'),
       'react/jsx-dev-runtime': path.resolve(__dirname, './node_modules/react/jsx-dev-runtime'),
@@ -35,6 +37,7 @@ export default defineConfig({
       ),
     },
   },
+  server: { fs: { allow: [path.resolve(__dirname, '..')] } },
   test: {
     globals: true,
     testTimeout: 20000,
@@ -46,7 +49,7 @@ export default defineConfig({
       },
     },
     setupFiles: ['./src/test/setup-macrotask.ts', './src/test/setup.ts'],
-    include: ['src/test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: ['src/test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', '../plugins/business/*/tests/**/*.test.tsx'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', '**/.{idea,git,cache,output,temp}/**'],
     coverage: {
       provider: 'v8',

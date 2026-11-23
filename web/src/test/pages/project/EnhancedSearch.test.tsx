@@ -7,7 +7,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { EnhancedSearch } from '../../../pages/project/EnhancedSearch';
+import { EnhancedSearch } from '@business/knowledge/ui/web/project/EnhancedSearch';
 import { graphService } from '../../../services/graphService';
 
 const { mockUseParams, mockUseProjectStore, mockUseSearchParams } = vi.hoisted(() => ({
@@ -65,7 +65,7 @@ vi.mock('@/components/graph/CytoscapeGraph', () => ({
   ),
 }));
 
-vi.mock('../../../pages/project/search', () => ({
+vi.mock('@business/knowledge/ui/web/project/search/index', () => ({
   SearchForm: ({ onSearch, isConfigOpen, onCommunityUuidChange }: any) => (
     <div data-testid="search-form">
       <button

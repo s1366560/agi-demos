@@ -7,7 +7,7 @@ import {
   resolveRequestedWorkspaceSelection,
   syncBlackboardTabSearchParam,
   syncBlackboardWorkspaceSearchParams,
-} from '@/pages/project/blackboardRouteUtils';
+} from '@business/workspace/ui/web/project/blackboardRouteUtils';
 
 describe('blackboardRouteUtils', () => {
   it('keeps the requested workspace query while the workspace list is still loading', () => {

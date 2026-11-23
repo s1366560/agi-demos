@@ -1,7 +1,7 @@
 import { act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
-import { NewMemory } from '../../../pages/project/NewMemory';
+import { NewMemory } from '@business/knowledge/ui/web/project/NewMemory';
 import { fireEvent, screen, render } from '../../utils';
 
 vi.mock('../../../services/api', () => ({

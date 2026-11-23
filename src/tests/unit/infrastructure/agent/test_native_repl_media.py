@@ -11,12 +11,12 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.domain.events.agent_events import AgentObserveEvent
 from src.domain.model.artifact.artifact import ArtifactStatus
 from src.infrastructure.adapters.primary.web.routers.agent import computer_use_media as api
 from src.infrastructure.agent.core.llm_stream import StreamEventType
 from src.infrastructure.agent.core.tool_converter import convert_tools
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.result import ToolAttachment, ToolEvent, ToolResult
 from src.tests.unit.infrastructure.agent.test_native_computer_use import Artifacts, image_bytes
@@ -108,7 +108,7 @@ async def test_observe_has_durable_binding_exactly_once_before_publish(
         )
         yield SimpleNamespace(type=StreamEventType.FINISH, data={"reason": "tool_calls"})
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream.generate", generate)
+    monkeypatch.setattr("plugins.business.agent.engine.processor.processor.LLMStream.generate", generate)
     info = ToolInfo(
         name="unrelated_name",
         description="fixture",

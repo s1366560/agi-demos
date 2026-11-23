@@ -36,7 +36,7 @@ export function createTenantTasksRouteModuleLoader({
   return async () => {
     const [{ TenantTasksPage }, { useTenantTasksController }] =
       await Promise.all([
-        import('./TenantTasksPage'),
+        import('@business/workspace/ui/desktop/tenant/TenantTasksPage'),
         import('./useTenantTasksController'),
       ]);
 
@@ -82,7 +82,7 @@ function BoundTenantTasksRoute({
 }: Readonly<{
   context: TenantTasksRouteContext;
   createBinding: (context: TenantTasksRouteContext) => TenantTasksRouteBinding;
-  Page: typeof import('./TenantTasksPage').TenantTasksPage;
+  Page: typeof import('@business/workspace/ui/desktop/tenant/TenantTasksPage').TenantTasksPage;
   useController: typeof import('./useTenantTasksController').useTenantTasksController;
 }>) {
   const binding = useMemo(

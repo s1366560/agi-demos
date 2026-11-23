@@ -6,6 +6,8 @@
     "scripts": {
         "dev": "vite --config vite.config.ts",
         "build": "tsc && vite build --config vite.config.ts",
+        "build:project-packages": "tsc -p tsconfig.project-packages.json && vite build --mode project-packages",
+        "dev:project-packages": "vite --mode project-packages --open /project-packages.html",
         "preview": "vite preview --config vite.config.ts",
         "lint": "eslint . --report-unused-disable-directives --max-warnings 9999 --fix",
         "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",

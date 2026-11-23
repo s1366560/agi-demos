@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
+from plugins.business.environments.backend.sandbox.sandbox_http_service_registry import (
+    SandboxHttpServiceRegistryProtocolV2,
+)
 from src.infrastructure.adapters.primary.web.routers.project_sandbox import (
     CleanupStaleResponse,
     ExecuteToolResponse,
@@ -65,7 +68,6 @@ from .runtime import (
     RuntimeV2Error,
     generated_contract_digest_v2,
 )
-from .sandbox_http_service_registry import SandboxHttpServiceRegistryProtocolV2
 
 PROJECT_SANDBOX_HTTP_ROUTES_ENTRY_V2 = "builtin-project-sandbox-http-routes"
 PROJECT_SANDBOX_HTTP_ROUTES_MODULE_V2 = "builtin://memstack/http/project-sandbox-routes"

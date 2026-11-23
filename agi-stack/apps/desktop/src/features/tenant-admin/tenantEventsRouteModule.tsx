@@ -27,7 +27,7 @@ export function createTenantEventsRouteModuleLoader({
     routeId: TENANT_EVENTS_ROUTE_ID,
     localPolicy: 'native_equivalent',
     createBinding,
-    loadPage: async () => (await import('./TenantEventsPage')).TenantEventsPage,
+    loadPage: async () => (await import('@business/automation/ui/desktop/tenant-admin/TenantEventsPage')).TenantEventsPage,
     fallbackScope: (context) =>
       Object.freeze({ authority: 'cloud', tenantId: context.tenantId ?? 'unavailable' }),
     buildTerminalModel: (scope, reasonCode) =>

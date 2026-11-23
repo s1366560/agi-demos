@@ -15,13 +15,13 @@ from sqlalchemy import and_, case, desc, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from plugins.business.automation.workflow.contract import WorkflowEnginePort
 from src.application.services.auth_service_v2 import AuthService
 from src.application.use_cases.task import (
     GetTaskQuery,
     UpdateTaskCommand,
 )
 from src.domain.model.task.task_log import TaskLog, TaskLogStatus
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )

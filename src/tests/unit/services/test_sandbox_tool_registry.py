@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.application.services.sandbox_tool_registry import (
+from plugins.business.environments.backend.sandbox.sandbox_tool_registry import (
     SandboxToolRegistration,
     SandboxToolRegistry,
 )
@@ -135,7 +135,7 @@ class TestSandboxToolRegistry:
         self, registry, mock_adapter, caplog
     ):
         """Test successful registration logs do not expose sandbox or project IDs."""
-        caplog.set_level(logging.INFO, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.INFO, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
         mock_adapter.list_tools.return_value = [
             {"name": "secret-tool-name", "description": "Execute bash"},
         ]
@@ -152,7 +152,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "Registering tools" in message
         assert "Fetched tools" in message
@@ -167,7 +167,7 @@ class TestSandboxToolRegistry:
     @pytest.mark.asyncio
     async def test_register_sandbox_tools_adapter_error(self, registry, mock_adapter, caplog):
         """Test handling adapter error gracefully."""
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
         mock_adapter.list_tools.side_effect = Exception("secret connection token")
 
         tools = await registry.register_sandbox_tools(
@@ -184,7 +184,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "Failed to fetch tools" in message
         assert "secret-sandbox-id" not in message
@@ -195,7 +195,7 @@ class TestSandboxToolRegistry:
     @pytest.mark.asyncio
     async def test_register_sandbox_tools_no_tools_log_omits_sandbox_id(self, registry, caplog):
         """Test no-tools warning does not expose sandbox identifiers."""
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
 
         tools = await registry.register_sandbox_tools(
             sandbox_id="secret-sandbox-id",
@@ -210,7 +210,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "No tools to register" in message
         assert "secret-sandbox-id" not in message
@@ -242,7 +242,7 @@ class TestSandboxToolRegistry:
             tenant_id="tenant-1",
             tools=["bash"],
         )
-        caplog.set_level(logging.INFO, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.INFO, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
         caplog.clear()
 
         result = await registry.unregister_sandbox_tools("secret-sandbox-id")
@@ -252,7 +252,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "Unregistered tools" in message
         assert "secret-sandbox-id" not in message
@@ -263,7 +263,7 @@ class TestSandboxToolRegistry:
     @pytest.mark.asyncio
     async def test_unregister_sandbox_tools_not_found(self, registry, caplog):
         """Test unregistering non-existent sandbox."""
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
 
         result = await registry.unregister_sandbox_tools("secret-missing-sandbox")
 
@@ -272,7 +272,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "not found in registry" in message
         assert "secret-missing-sandbox" not in message
@@ -403,7 +403,7 @@ class TestSandboxToolRegistry:
         self, registry, mock_redis, caplog
     ):
         """Test Redis save failures do not log sensitive registration details."""
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
         mock_redis.set.side_effect = RuntimeError(
             "redis save failed secret-sandbox-id secret-project-id secret-tool-name"
         )
@@ -420,7 +420,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "Failed to save to Redis" in message
         assert "secret-sandbox-id" not in message
@@ -460,7 +460,7 @@ class TestSandboxToolRegistry:
             tenant_id="tenant-1",
             tools=["bash"],
         )
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
         caplog.clear()
         mock_redis.delete.side_effect = RuntimeError(
             "redis clear failed secret-sandbox-id secret-project-id"
@@ -473,7 +473,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "Failed to clear from Redis" in message
         assert "secret-sandbox-id" not in message
@@ -539,7 +539,7 @@ class TestSandboxToolRegistry:
             "registered_at": datetime.now().isoformat(),
         }
         mock_redis.get = AsyncMock(return_value=json.dumps(registration_data))
-        caplog.set_level(logging.INFO, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.INFO, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
 
         result = await registry.restore_from_redis("secret-sandbox-id")
 
@@ -548,7 +548,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "Restored registration" in message
         assert "secret-sandbox-id" not in message
@@ -570,7 +570,7 @@ class TestSandboxToolRegistry:
     @pytest.mark.asyncio
     async def test_load_from_redis_failure_log_omits_identifier(self, registry, mock_redis, caplog):
         """Test Redis load failures do not log sandbox IDs or exception text."""
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
         mock_redis.get.side_effect = RuntimeError("redis load failed secret-sandbox-id")
 
         registration = await registry.load_from_redis("secret-sandbox-id")
@@ -580,7 +580,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "Failed to load from Redis" in message
         assert "secret-sandbox-id" not in message
@@ -639,7 +639,7 @@ class TestSandboxToolRegistry:
         self, registry, mock_redis, caplog
     ):
         """Test Redis refresh failures log only structural error details."""
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_tool_registry")
         mock_redis.smembers.side_effect = RuntimeError("redis refresh failed secret-tracking-key")
 
         count = await registry.refresh_all_from_redis()
@@ -649,7 +649,7 @@ class TestSandboxToolRegistry:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_tool_registry"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_tool_registry"
         )
         assert "Failed to refresh from Redis" in message
         assert "secret-tracking-key" not in message

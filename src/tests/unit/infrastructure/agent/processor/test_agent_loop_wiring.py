@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.domain.events.agent_events import AgentStartEvent
-from src.infrastructure.agent.processor.factory import ProcessorFactory, _default_loop_resolver
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.factory import ProcessorFactory, _default_loop_resolver
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
 )
+from src.domain.events.agent_events import AgentStartEvent
 from src.infrastructure.plugins.v2.agent_loop import (
     AgentLoopSelectionV2,
     BuiltinAgentLoopResolverV2,

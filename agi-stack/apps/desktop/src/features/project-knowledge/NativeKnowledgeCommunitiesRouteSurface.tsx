@@ -5,9 +5,9 @@ import {
   useNativeMemoriesRouteBinding,
   type NativeMemoriesRouteBinding,
 } from './NativeMemoriesRouteContext';
-import { NativeMemoriesUnavailable } from './NativeMemoriesPage';
+import { NativeMemoriesUnavailable } from '@business/knowledge/ui/desktop/project-knowledge/NativeMemoriesPage';
 import { createNativeKnowledgeCommunityController } from './nativeKnowledgeCommunityController';
-import { NativeKnowledgeCommunitiesPage } from './NativeKnowledgeCommunitiesPage';
+import { NativeKnowledgeCommunitiesPage } from '@business/knowledge/ui/desktop/project-knowledge/NativeKnowledgeCommunitiesPage';
 
 export function NativeKnowledgeCommunitiesRouteSurface({ context }: DesktopRouteSurfaceProps) {
   const binding = useNativeMemoriesRouteBinding();

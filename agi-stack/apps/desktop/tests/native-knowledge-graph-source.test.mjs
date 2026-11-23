@@ -168,7 +168,7 @@ test('graph page presents exact source completeness, separate node indexes and s
   const { renderToStaticMarkup } = require('react-dom/server');
   const { I18nProvider } = require(`${dist}/src/i18n.js`);
   const { NativeKnowledgeGraphPage } = require(
-    `${dist}/src/features/project-knowledge/NativeKnowledgeGraphPage.js`,
+    `${dist}/plugins/business/knowledge/ui/desktop/project-knowledge/NativeKnowledgeGraphPage.js`,
   );
   const { controller } = fixture();
   await controller.refresh();

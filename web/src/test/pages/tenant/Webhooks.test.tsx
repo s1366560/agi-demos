@@ -2,7 +2,7 @@ import { Link, Route, Routes } from 'react-router-dom';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { WebhookCreatedSecretModal, Webhooks } from '../../../pages/tenant/Webhooks';
+import { WebhookCreatedSecretModal, Webhooks } from '@business/automation/ui/web/tenant/Webhooks';
 import { eventService } from '../../../services/eventService';
 import { webhookService, type Webhook } from '../../../services/webhookService';
 import { act, fireEvent, render, screen, waitFor } from '../../utils';

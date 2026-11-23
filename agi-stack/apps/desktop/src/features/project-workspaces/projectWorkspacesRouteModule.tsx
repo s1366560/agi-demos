@@ -33,7 +33,7 @@ export function createProjectWorkspacesRouteModuleLoader({
   }
   return async () => {
     const [{ ProjectWorkspacesPage }, { useProjectWorkspacesController }] = await Promise.all([
-      import('./ProjectWorkspacesPage'),
+      import('@business/workspace/ui/desktop/project-workspaces/ProjectWorkspacesPage'),
       import('./useProjectWorkspacesController'),
     ]);
     function ProjectWorkspacesRouteSurface({ context }: DesktopRouteSurfaceProps) {
@@ -72,7 +72,7 @@ export function createProjectWorkspacesRouteModuleLoader({
 function BoundRoute({ context, createBinding, Page, useController }: Readonly<{
   context: ProjectWorkspacesRouteContext;
   createBinding: (context: ProjectWorkspacesRouteContext) => ProjectWorkspacesRouteBinding;
-  Page: typeof import('./ProjectWorkspacesPage').ProjectWorkspacesPage;
+  Page: typeof import('@business/workspace/ui/desktop/project-workspaces/ProjectWorkspacesPage').ProjectWorkspacesPage;
   useController: typeof import('./useProjectWorkspacesController').useProjectWorkspacesController;
 }>) {
   const binding = useMemo(

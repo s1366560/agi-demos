@@ -5,10 +5,10 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const compiledProjectDirectory =
-  '/tmp/agistack-desktop-test-dist/src/features/project';
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project';
 mkdirSync(compiledProjectDirectory, { recursive: true });
 copyFileSync(
-  new URL('../src/features/project/ProjectOverviewPage.css', import.meta.url),
+  new URL('../../../../plugins/business/workspace/ui/desktop/project/ProjectOverviewPage.css', import.meta.url),
   `${compiledProjectDirectory}/ProjectOverviewPage.css`,
 );
 require.extensions['.css'] = () => {};
@@ -297,7 +297,7 @@ test('binding scope drift fails closed before the controller hook is mounted', a
 });
 
 test('page and hook code load behind the route loader boundary', () => {
-  assert.match(factorySource, /import\('\.\/ProjectOverviewPage'\)/u);
+  assert.match(factorySource, /import\('@business\/workspace\/ui\/desktop\/project\/ProjectOverviewPage'\)/u);
   assert.match(factorySource, /import\('\.\/useProjectOverviewController'\)/u);
   assert.doesNotMatch(
     factorySource,

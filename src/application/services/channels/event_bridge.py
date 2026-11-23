@@ -14,6 +14,7 @@ import json
 import logging
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, cast
+from weakref import WeakValueDictionary
 
 from src.application.services.channels._session import with_session
 from src.configuration.config import get_settings
@@ -75,6 +76,7 @@ class ChannelEventBridge:
         subagent_focus_ttl_seconds: float | None = None,
     ) -> None:
         self._channel_manager = channel_manager
+        self._delivery_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         self._handlers: dict[str, EventHandler] = {
             "clarification_asked": self._handle_hitl_event,
             "decision_asked": self._handle_hitl_event,
@@ -126,6 +128,19 @@ class ChannelEventBridge:
         if not event_type or event_type not in self._FORWARDED_EVENTS:
             return
 
+        # Serialize before the first asynchronous lookup, including HITL and card patches.
+        # The weak entry disappears when the last caller has finished this conversation.
+        async with self._delivery_locks.setdefault(conversation_id, asyncio.Lock()):
+            await self._forward_event(conversation_id, event_type, event, tenant_id, project_id)
+
+    async def _forward_event(
+        self,
+        conversation_id: str,
+        event_type: str,
+        event: dict[str, Any],
+        tenant_id: str | None,
+        project_id: str | None,
+    ) -> None:
         logger.info(
             "[EventBridge] Received forwarded event: event_type=%s has_conversation_id=%s",
             event_type,
@@ -167,6 +182,11 @@ class ChannelEventBridge:
                     "_tenant_id": tenant_id,
                     "_project_id": project_id,
                     "_thread_id": getattr(binding, "thread_id", None),
+                    "_feishu_timeline_config_id": (
+                        binding.channel_config_id
+                        if getattr(binding, "channel_type", None) == "feishu"
+                        else None
+                    ),
                 }
             await handler(adapter, chat_id, event_data)
         except Exception as e:
@@ -513,35 +533,12 @@ class ChannelEventBridge:
         event_data: dict[str, Any],
     ) -> None:
         """Forward task_start/task_complete timeline events as status messages."""
-        event_type = event_data.get("_event_type", "")
-        _task_id = event_data.get("task_id", "")
-        content = event_data.get("content", "")
-        status = event_data.get("status", "")
+        from src.application.services.channels.timeline_renderer import timeline_prefix
 
+        content = event_data.get("content", "")
         if not content:
             return
-
-        icon = {
-            "task_start": "🔄",
-            "task_complete": "✅" if status == "completed" else "❌",
-        }.get(event_type, "•")
-
-        order_index = event_data.get("order_index", 0)
-        total_tasks = event_data.get("total_tasks", 1)
-
-        progress = f"({order_index + 1}/{total_tasks})"
-
-        if event_type == "task_start":
-            text = f"{icon} {progress} **Starting:** {content}"
-        elif event_type == "task_complete":
-            if status == "completed":
-                text = f"{icon} {progress} **Completed:** {content}"
-            elif status == "failed":
-                text = f"{icon} {progress} **Failed:** {content}"
-            else:
-                text = f"{icon} {progress} **{status.capitalize()}:** {content}"
-        else:
-            text = f"{icon} {content}"
+        text = (await timeline_prefix(event_data, chat_id)) + content
 
         try:
             await adapter.send_markdown_card(chat_id, text)

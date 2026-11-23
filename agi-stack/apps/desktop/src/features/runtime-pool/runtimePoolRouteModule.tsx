@@ -31,7 +31,7 @@ export function createRuntimePoolRouteModuleLoader({
   return async () => {
     const [{ RuntimePoolPage }, { useRuntimePoolController }] =
       await Promise.all([
-        import('./RuntimePoolPage'),
+        import('@business/environments/ui/desktop/runtime-pool/RuntimePoolPage'),
         import('./useRuntimePoolController'),
       ]);
 
@@ -83,7 +83,7 @@ function BoundRuntimePoolRoute({
 }: Readonly<{
   context: RuntimePoolRouteContext;
   createBinding: (context: RuntimePoolRouteContext) => RuntimePoolRouteBinding;
-  Page: typeof import('./RuntimePoolPage').RuntimePoolPage;
+  Page: typeof import('@business/environments/ui/desktop/runtime-pool/RuntimePoolPage').RuntimePoolPage;
   useController: typeof import('./useRuntimePoolController').useRuntimePoolController;
 }>) {
   const binding = useMemo(

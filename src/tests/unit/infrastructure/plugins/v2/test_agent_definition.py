@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from plugins.business.agent.engine.react.react_agent import ReActAgent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.agent.core.react_agent import ReActAgent
 from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_ALL_ACCESS_ID
 from src.infrastructure.plugins.v2.agent_definition import (
     AGENT_DEFINITION_CONTRIBUTION_MODULE_V2,
@@ -37,8 +37,8 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
-_STREAM_MIXIN_PATH = _ROOT / "src/infrastructure/agent/core/react_agent_stream_mixin.py"
-_PROMPT_MIXIN_PATH = _ROOT / "src/infrastructure/agent/core/react_agent_prompt_mixin.py"
+_STREAM_MIXIN_PATH = _ROOT / "plugins/business/agent/engine/react/react_agent_stream_mixin.py"
+_PROMPT_MIXIN_PATH = _ROOT / "plugins/business/agent/engine/react/react_agent_prompt_mixin.py"
 
 
 class _AlternativeAgentDefinitionResolver:
@@ -244,14 +244,14 @@ async def test_stream_rejects_explicit_missing_definition_without_builtin_fallba
     )
     monkeypatch.setattr(agent, "_load_filesystem_skills", AsyncMock())
     monkeypatch.setattr(
-        "src.infrastructure.agent.core.react_agent_stream_mixin."
+        "plugins.business.agent.engine.react.react_agent_stream_mixin."
         "_resolve_agent_capabilities_from_runtime_v2",
         AsyncMock(return_value=SimpleNamespace(skills=(), subagents=())),
     )
     monkeypatch.setattr(agent, "_load_selected_agent", AsyncMock(return_value=None))
 
     with patch(
-        "src.infrastructure.agent.core.react_agent_stream_mixin.build_builtin_all_access_agent",
+        "plugins.business.agent.engine.react.react_agent_stream_mixin.build_builtin_all_access_agent",
         side_effect=AssertionError("builtin fallback must not be called"),
         create=True,
     ) as builtin_fallback:

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const taskFlowSource = readFileSync(
-  new URL('../src/features/task/NewTaskFlow.tsx', import.meta.url),
+  new URL('../../../../plugins/business/agent/ui/desktop/task/NewTaskFlow.tsx', import.meta.url),
   'utf8',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');

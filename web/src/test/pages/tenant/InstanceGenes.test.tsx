@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { InstanceGenes } from '@/pages/tenant/InstanceGenes';
+import { InstanceGenes } from '@business/environments/ui/web/tenant/InstanceGenes';
 import { geneMarketService } from '@/services/geneMarketService';
 
 import type {

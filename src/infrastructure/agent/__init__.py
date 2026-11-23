@@ -8,7 +8,7 @@ entire ReAct dependency graph.
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.infrastructure.agent.core.react_agent import ReActAgent
+    from plugins.business.agent.engine.react.react_agent import ReActAgent
     from src.infrastructure.agent.tools.base import AgentTool
 
 __all__ = [
@@ -20,7 +20,7 @@ __all__ = [
 def __getattr__(name: str) -> object:
     """Resolve the historical package exports without eager imports."""
     if name == "ReActAgent":
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         return ReActAgent
     if name == "AgentTool":

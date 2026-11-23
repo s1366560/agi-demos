@@ -10,7 +10,7 @@ from typing import Any, Protocol, runtime_checkable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.secondary.background_tasks import BackgroundTask, TaskManager
+from plugins.business.automation.workflow.tasks import BackgroundTask, TaskManager
 from src.infrastructure.adapters.secondary.common.base_repository import (
     refresh_select_statement,
 )

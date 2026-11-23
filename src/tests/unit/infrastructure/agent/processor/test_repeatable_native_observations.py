@@ -5,13 +5,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.domain.events.agent_events import AgentDoomLoopDetectedEvent, AgentObserveEvent
 from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
 from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.native_computer_use.contracts import READ_TOOL_NAMES, TOOL_NAMES
 from src.infrastructure.agent.permission.manager import PermissionManager
 from src.infrastructure.agent.permission.rules import PermissionAction, PermissionRule
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.tools import native_computer_use as native
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry

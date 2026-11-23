@@ -1,10 +1,8 @@
 # MemStack CLI
 
 `memstack` is the command-line client in `sdk/memstack_cli`. It currently covers
-authentication, project/conversation listing, persisted event inspection, and artifact
-download.
-
-Last checked against code: 2026-06-23.
+authentication, project/conversation listing, persisted event inspection, artifact
+download and execution of independently signed project packages.
 
 ## Install
 
@@ -52,6 +50,27 @@ memstack conversations --project <project_id> --limit 20
 memstack logs <conversation_id> [--limit N] [--from-sequence N] [--type event_type]
 memstack artifacts list --project <project_id> [--category image]
 memstack artifacts pull <artifact_id> [--output ./file.zip]
+```
+
+## Signed project packages
+
+Use the tenant and project returned by the cloud account. A project administrator can inspect and
+install an archive, grant its declared permissions, and restore a previous running version.
+Each archive supplied to `install` commits separately; an error includes the names already enabled.
+
+```bash
+memstack --json packages --tenant "$TENANT_ID" --project "$PROJECT_ID" inspect billing.zip
+memstack packages --tenant "$TENANT_ID" --project "$PROJECT_ID" install --approve tools.execute --approve ui.slot billing.zip
+memstack --json packages --tenant "$TENANT_ID" --project "$PROJECT_ID" list
+memstack packages --tenant "$TENANT_ID" --project "$PROJECT_ID" rollback memstack-billing
+```
+
+Use `memstack plugin` to discover the commands exposed by a running release. Executing a command
+binds its invocation to the digest returned by discovery.
+
+```bash
+memstack plugin memstack-billing --tenant "$TENANT_ID" --project "$PROJECT_ID"
+memstack plugin memstack-billing quote-pro --tenant "$TENANT_ID" --project "$PROJECT_ID"
 ```
 
 ## Current Chat Status

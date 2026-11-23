@@ -7,7 +7,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { EntitiesList } from '../../../pages/project/EntitiesList';
+import { EntitiesList } from '@business/knowledge/ui/web/project/EntitiesList';
 import { graphService } from '../../../services/graphService';
 
 // Mock the dependencies

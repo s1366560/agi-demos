@@ -129,12 +129,12 @@ fn create_verified_wasm_definition_v2(
     entries: Vec<&ProfileEntryV2>,
 ) -> Result<PluginDefinitionV2, RuntimeV2Error> {
     let contract = &artifact.module().contract;
-    if artifact.module().entrypoint != "score"
-        || !artifact
-            .manifest()
-            .permissions
-            .iter()
-            .any(|p| p == "tools.execute")
+    let abi = host::ToolAbi::from_entrypoint(&artifact.module().entrypoint)?;
+    if !artifact
+        .manifest()
+        .permissions
+        .iter()
+        .any(|p| p == "tools.execute")
         || !contract.services.requires.is_empty()
         || contract.services.provides.len() != 1
         || contract.services.provides[0].service != WASM_TOOL_SET_SERVICE_V2
@@ -145,6 +145,7 @@ fn create_verified_wasm_definition_v2(
         return Err(failure("unsupported native WASM ToolSet contract"));
     }
     let module = WasmModule {
+        abi,
         bytes: artifact.bytes().to_vec(),
         manifest: artifact.manifest().clone(),
         reference: artifact.reference().clone(),
@@ -167,6 +168,7 @@ fn create_verified_wasm_definition_v2(
 }
 
 struct WasmModule {
+    abi: host::ToolAbi,
     bytes: Vec<u8>,
     manifest: super::PluginManifestV2,
     reference: super::BundleReferenceV2,
@@ -207,7 +209,8 @@ impl PluginModuleRuntimeV2 for WasmModule {
             return Err(failure("entry must explicitly request tools.execute"));
         }
         let bytes = self.bytes.clone();
-        let host = host::blocking(move || host::ScoreHost::compile(&bytes, limits)).await?;
+        let abi = self.abi;
+        let host = host::blocking(move || host::WasmHost::compile(&bytes, limits, abi)).await?;
         let host = Arc::new(host);
         let active = Arc::new(AtomicBool::new(true));
         let set = WasmToolSetV2::new(

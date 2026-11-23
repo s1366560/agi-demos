@@ -7,7 +7,7 @@ import { workspaceService } from '@/services/workspaceService';
 import {
   resolveRequestedWorkspaceSelection,
   syncBlackboardWorkspaceSearchParams,
-} from '@/pages/project/blackboardRouteUtils';
+} from '@business/workspace/ui/web/project/blackboardRouteUtils';
 
 import type { Workspace } from '@/types/workspace';
 

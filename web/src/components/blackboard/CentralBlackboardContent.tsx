@@ -8,7 +8,7 @@ import { DownloadCloud, Plus } from 'lucide-react';
 
 import { useWorkspaceActions } from '@/stores/workspace';
 
-import { WorkspaceSettingsPanel } from '@/pages/tenant/WorkspaceSettings';
+import { WorkspaceSettingsPanel } from '@business/workspace/ui/web/tenant/WorkspaceSettings';
 
 import { GeneEditorModal, type GenePayload } from '@/components/workspace/genes/GeneEditorModal';
 import { GeneImportModal } from '@/components/workspace/genes/GeneImportModal';

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import runpy
 import tarfile
 from pathlib import Path
 
+import pytest
 from docker.utils.build import PatternMatcher, tar
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -40,9 +43,10 @@ def test_docker_sdk_context_keeps_runtime_sources_and_excludes_generated_or_priv
         "docker/ray/start-runtime.py",
         "docker/ray/check-actor-ready.py",
         "docker/ray-runtime.env",
-        "scripts/example.py",
+        "sdk/memstack-plugin-sdk/src/memstack_plugin_sdk/__init__.py",
+        "plugins/business/billing/backend/policy.py",
         ".env.example",
-        "component/.env.example",
+        "agi-stack/apps/desktop/src/example.ts",
     ]
     excluded = [
         "agi-stack/target/debug/sidecar",
@@ -59,6 +63,13 @@ def test_docker_sdk_context_keeps_runtime_sources_and_excludes_generated_or_priv
         "artifacts/desktop-functional-example/recording.mp4",
         ".ua/tmp/output",
         ".tmp/desktop-final-walkthrough/screenshot.png",
+        "third_party/avernet-bcs/src/main.rs",
+        "web/src/components/Chat.tsx",
+        "sandbox-mcp-server/src/server/main.py",
+        "plugins/business/environments/sandbox-mcp-server/src/server/main.py",
+        "artifacts/secret-run-2028/state.json",
+        "local-user-checkout/wip.py",
+        "component/.env.example",
         "docs/development/example.md",
         "src/tests/unit/example.py",
         "tests/example.py",
@@ -108,7 +119,7 @@ def test_docker_sdk_context_keeps_runtime_sources_and_excludes_generated_or_priv
         tarfile.open(fileobj=stream) as archive,
     ):
         names = set(archive.getnames())
-    assert set(included).issubset(names)
+    assert set(included).issubset(names), set(included) - names
     assert set(excluded).isdisjoint(names), set(excluded).intersection(names)
 
 
@@ -123,3 +134,36 @@ def test_ray_context_preserves_all_declared_production_module_sources() -> None:
                 sources.add(source.split("://", 1)[1])
     assert sources
     assert not {source for source in sources if matcher.matches(source)}
+
+
+def test_ray_packages_only_declared_external_module_bytes(tmp_path: Path) -> None:
+    copy_artifacts = runpy.run_path(str(ROOT / "docker/ray/copy-module-artifacts.py"))[
+        "copy_module_artifacts"
+    ]
+    context, application = tmp_path / "context", tmp_path / "application"
+    source = Path("new-package/ui.ts")
+    (context / source.parent).mkdir(parents=True)
+    (context / source).write_bytes(b"export const release = 1")
+    (context / "unrelated.md").write_text("private checkout file")
+    digest = hashlib.sha256((context / source).read_bytes()).hexdigest()
+    catalog = application / "shared/catalogs/plugin-module-catalog.v2.json"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text(
+        json.dumps(
+            {
+                "modules": [
+                    {
+                        "module_ref": "test-ui",
+                        "artifact_source": f"repo+typescript://{source}",
+                        "artifact_digest": f"sha256:{digest}",
+                    }
+                ]
+            }
+        )
+    )
+    copy_artifacts(context, application)
+    assert (application / source).read_bytes() == (context / source).read_bytes()
+    assert not (application / "unrelated.md").exists()
+    (application / source).write_bytes(b"mismatch")
+    with pytest.raises(ValueError, match="digest mismatch"):
+        copy_artifacts(context, application)

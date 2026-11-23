@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-import { ProviderList } from '@/pages/tenant/ProviderList';
+import { ProviderList } from '@business/agent/ui/web/tenant/ProviderList';
 import { providerAPI } from '@/services/api';
 
 import type { ProviderConfig, ProviderHealth, SystemResilienceStatus } from '@/types/memory';

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.infrastructure.agent.processor.message_utils import sanitize_tool_call_messages
+from plugins.business.agent.engine.processor.message_utils import sanitize_tool_call_messages
 
 
 @pytest.mark.unit

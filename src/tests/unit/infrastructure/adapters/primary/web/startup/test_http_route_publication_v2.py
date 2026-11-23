@@ -16,6 +16,7 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
 )
 from src.infrastructure.plugins.v2.composer import ProfileDocumentV2, compose_profile_v2
 from src.infrastructure.plugins.v2.protocol import control_envelope_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 
 class FakeFallback:
@@ -26,8 +27,7 @@ class FakeFallback:
         self.disposals += 1
 
 
-async def _coordinator(
-) -> tuple[FastAPI, HttpRoutePublicationCoordinatorV2]:
+async def _coordinator() -> tuple[FastAPI, HttpRoutePublicationCoordinatorV2]:
     app = FastAPI()
     app.state.workspace_core_settings = get_workspace_core_settings()
     await initialize_plugin_runtime_v2(app)
@@ -35,9 +35,9 @@ async def _coordinator(
     assert isinstance(coordinator, HttpRoutePublicationCoordinatorV2)
     return app, coordinator
 
+
 @pytest.mark.unit
-async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
-) -> None:
+async def test_publish_snapshot_uses_same_atomic_route_graph_transaction() -> None:
     app, coordinator = await _coordinator()
     host = app.state.platform_plugin_runtime_v2
     registry = app.state.platform_plugin_route_registry_v2
@@ -70,41 +70,16 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    ("entry_id", "row_id"),
+    ("entry_id", "row_id", "required"),
     (
-        ("builtin-billing-http-routes", "billing"),
-        (
-            "builtin-workspace-core-static-http-routes",
-            "workspace-core-static",
-        ),
-        ("builtin-workspace-core-http-routes", "workspace-core"),
-        (
-            "builtin-enhanced-search-http-routes",
-            "enhanced-search, enhanced-search-memory",
-        ),
-        ("builtin-data-export-http-routes", "data-export"),
-        ("builtin-episodes-http-routes", "episodes"),
-        ("builtin-graph-http-routes", "graph"),
-        ("builtin-graph-stores-http-routes", "graph-stores"),
-        ("builtin-memories-http-routes", "memories"),
-        ("builtin-project-my-work-http-routes", "project-my-work"),
-        ("builtin-projects-http-routes", "projects"),
-        ("builtin-recall-http-routes", "recall"),
-        ("builtin-reflection-http-routes", "reflection"),
-        ("builtin-schema-http-routes", "schema"),
-        ("builtin-retrieval-stores-http-routes", "retrieval-stores"),
-        ("builtin-system-http-routes", "system"),
-        ("builtin-tenants-http-routes", "tenants"),
-        ("builtin-tenant-webhooks-http-routes", "tenant-webhooks"),
-        ("builtin-invitations-http-routes", "invitations"),
-        ("builtin-invitations-public-http-routes", "invitations-public"),
-        ("builtin-smtp-config-http-routes", "smtp-config"),
-        ("builtin-trust-workspace-http-routes", "trust-workspace"),
+        ("builtin-billing-http-routes", "billing", False),
+        ("builtin-platform-plugins-http-routes", "platform-plugins", True),
     ),
 )
-async def test_disabling_migrated_builtin_row_nacks_and_keeps_last_good(
+async def test_removing_route_group_respects_kernel_boundary(
     entry_id: str,
     row_id: str,
+    required: bool,
 ) -> None:
     app, coordinator = await _coordinator()
     host = app.state.platform_plugin_runtime_v2
@@ -117,24 +92,30 @@ async def test_disabling_migrated_builtin_row_nacks_and_keeps_last_good(
         for entry in current.snapshot.entries
     )
     snapshot = compose_profile_v2(
-        ProfileDocumentV2(
-            profile_id=current.snapshot.profile_id,
-            entries=entries,
-        ),
+        ProfileDocumentV2(profile_id=current.snapshot.profile_id, entries=entries),
         {manifest.plugin_id: manifest for manifest in current.snapshot.manifests},
         generation=current.snapshot.generation + 1,
     )
 
-    result = await coordinator.publish_snapshot(
-        snapshot,
-        control_envelope_v2(snapshot, version=current.envelope.version + 1),
-    )
-
-    assert result.plugin_publication.accepted is False
-    assert result.plugin_publication.receipt.error_code == "publication_staging_failed"
-    assert f"required V2 route contributions are missing: {row_id}" in (
-        result.plugin_publication.receipt.error_message or ""
-    )
-    assert host.current_distribution is current
-    assert registry.current is current_routes
-    await host.close()
+    lease = await host.acquire()
+    try:
+        result = await coordinator.publish_snapshot(
+            snapshot, control_envelope_v2(snapshot, version=current.envelope.version + 1)
+        )
+        assert result.plugin_publication.accepted is not required
+        assert registry.resolve(current_routes.descriptor) is current_routes
+        if required:
+            assert result.plugin_publication.receipt.error_code == "publication_staging_failed"
+            assert row_id in result.plugin_publication.receipt.error_message
+            assert host.current_distribution is current
+            assert registry.current is current_routes
+        else:
+            assert row_id not in result.graph.mounted_row_ids
+            assert "platform-plugins" in result.graph.mounted_row_ids
+            assert registry.current is result.route_publication
+    finally:
+        await lease.release()
+        await host.close()
+    if not required:
+        with pytest.raises(RuntimeV2Error, match="unavailable"):
+            registry.resolve(current_routes.descriptor)

@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MemoryDetail } from '../../../pages/project/MemoryDetail';
+import { MemoryDetail } from '@business/knowledge/ui/web/project/MemoryDetail';
 import { memoryAPI } from '../../../services/api';
 
 import type { Memory } from '../../../types/memory';

@@ -1,0 +1,91 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "quote",
+      "abi": "invoke",
+      "permissions": [
+        "tools.execute"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "enum": [
+              "free",
+              "pro",
+              "enterprise"
+            ]
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string"
+          },
+          "storage_limit": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "plan",
+          "storage_limit"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "commands": [
+    {
+      "id": "quote-free",
+      "tool": "quote",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "plan": "free"
+      }
+    },
+    {
+      "id": "quote-pro",
+      "tool": "quote",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "plan": "pro"
+      }
+    },
+    {
+      "id": "quote-enterprise",
+      "tool": "quote",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "plan": "enterprise"
+      }
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:bf79751e68f0c6d93e16839436b9450c7276690ae4cd7e3e4679136b11268521",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ]
+}

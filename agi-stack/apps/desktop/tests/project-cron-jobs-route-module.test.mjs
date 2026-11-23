@@ -28,7 +28,7 @@ const appSource = readFileSync(
 );
 const automationsPageSource = readFileSync(
   new URL(
-    '../src/features/automations/AutomationsPage.tsx',
+    '../../../../plugins/business/automation/ui/desktop/automations/AutomationsPage.tsx',
     import.meta.url,
   ),
   'utf8',
@@ -87,7 +87,7 @@ test('surface reuses AutomationsPage and binds only exact tenant and project con
   assert.deepEqual(receivedContexts, [routeContext]);
   assert.match(markup, /class="automations-page"/u);
   assert.match(markup, /Project One/u);
-  assert.match(factorySource, /import\('\.\/AutomationsPage'\)/u);
+  assert.match(factorySource, /import\('[^']*\/AutomationsPage'\)/u);
   assert.match(factorySource, /<AutomationsPage/u);
   assert.doesNotMatch(
     factorySource,
@@ -148,7 +148,7 @@ test('binding scope drift fails closed before exposing automation authority', as
 });
 
 test('AutomationsPage code loads only behind the production route loader boundary', () => {
-  assert.match(factorySource, /import\('\.\/AutomationsPage'\)/u);
+  assert.match(factorySource, /import\('[^']*\/AutomationsPage'\)/u);
   assert.match(
     factorySource,
     /key=\{`\$\{context\.tenantId\}:\$\{context\.projectId\}`\}/u,

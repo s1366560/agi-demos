@@ -10,8 +10,11 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.automation.workflow.contract import (
+    UnsupportedWorkflowError,
+    WorkflowEnginePort,
+)
 from src.domain.model.memory.episode import Episode, SourceType
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -229,7 +232,9 @@ async def create_episode(
             from src.infrastructure.adapters.secondary.persistence.models import TaskLog
 
             # Create task payload
+            task_id = str(uuid4())
             task_payload = {
+                "task_id": task_id,
                 "uuid": episode_uuid,
                 "group_id": group_id,
                 "project_id": resolved_project_id,
@@ -240,9 +245,17 @@ async def create_episode(
                 "source_description": episode.source_description,
                 "episode_type": episode.episode_type,
             }
+            try:
+                workflow_engine.require_workflow("episode_processing", task_payload)
+            except UnsupportedWorkflowError as error:
+                raise HTTPException(
+                    501,
+                    _(
+                        "Background processing for standalone episodes is unavailable in this workflow engine"
+                    ),
+                ) from error
 
             # Create TaskLog record
-            task_id = str(uuid4())
             async with async_session_factory() as session, session.begin():
                 task_log = TaskLog(
                     id=task_id,
@@ -256,10 +269,6 @@ async def create_episode(
                 )
                 session.add(task_log)
 
-            # Add task_id to payload for progress tracking
-            task_payload["task_id"] = task_id
-
-            # Start Temporal workflow
             workflow_id = f"episode-{episode_uuid}"
 
             await workflow_engine.start_workflow(
@@ -274,8 +283,7 @@ async def create_episode(
                 f"workflow_id={workflow_id}"
             )
 
-            # Build status message
-            message = "Episode queued for background processing via Temporal"
+            message = "Episode queued for background processing"
 
             return EpisodeResponse(
                 id=episode_uuid,

@@ -55,6 +55,37 @@ class PlatformPluginRecoveryRepositoryV2:
         super().__init__()
         self._session = session
 
+    async def requested_generation(
+        self, scope: ScopeV2
+    ) -> tuple[PluginGenerationDescriptorV2, str] | None:
+        """Read the target from the primary ledger without loading the distribution or taking a lock."""
+        binding = ScopeLedgerBindingV2(scope, PlatformPluginRecoveryV2Error)
+        publication = PlatformPluginV2PublicationModel
+        row = (
+            await self._session.execute(
+                select(
+                    publication.profile_id,
+                    publication.generation,
+                    publication.snapshot_digest,
+                    publication.nonce,
+                )
+                .where(publication.scope_key == binding.key)
+                .order_by(
+                    publication.requested_version.desc(),
+                    publication.created_at.desc(),
+                    publication.id.desc(),
+                )
+                .limit(1)
+                .execution_options(populate_existing=True)
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        profile_id, generation, digest, nonce = row
+        return PluginGenerationDescriptorV2(
+            profile_id=profile_id, generation=generation, digest=digest
+        ), nonce
+
     async def read(self, scope: ScopeV2, data_plane_id: str) -> ScopedRecoveryStateV2:
         if not isinstance(cast(object, data_plane_id), str) or not data_plane_id.strip():
             raise PlatformPluginRecoveryV2Error(

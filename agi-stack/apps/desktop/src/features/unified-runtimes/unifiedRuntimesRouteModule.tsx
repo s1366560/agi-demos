@@ -33,7 +33,7 @@ export function createUnifiedRuntimesRouteModuleLoader({
   return async () => {
     const [{ UnifiedRuntimesPage }, { useUnifiedRuntimesController }] =
       await Promise.all([
-        import('./UnifiedRuntimesPage'),
+        import('@business/environments/ui/desktop/unified-runtimes/UnifiedRuntimesPage'),
         import('./useUnifiedRuntimesController'),
       ]);
 
@@ -88,7 +88,7 @@ function BoundUnifiedRuntimesRoute({
   createBinding: (
     context: UnifiedRuntimesRouteContext,
   ) => UnifiedRuntimesRouteBinding;
-  Page: typeof import('./UnifiedRuntimesPage').UnifiedRuntimesPage;
+  Page: typeof import('@business/environments/ui/desktop/unified-runtimes/UnifiedRuntimesPage').UnifiedRuntimesPage;
   useController: typeof import('./useUnifiedRuntimesController').useUnifiedRuntimesController;
 }>) {
   const binding = useMemo(

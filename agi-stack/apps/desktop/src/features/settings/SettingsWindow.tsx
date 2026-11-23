@@ -4,6 +4,7 @@ import { PluginInstancesV2 } from './PluginInstancesV2';
 import { ComputerUseSettingsPage } from './ComputerUseSettingsPage';
 import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { PluginMarketplaceV3 } from './PluginMarketplaceV3';
+import { DevicePluginSettings } from './DevicePluginSettings';
 import { LocalPluginSettings } from './LocalPluginSettings';
 import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
 import {
@@ -902,6 +903,13 @@ export function SettingsWindow({
                     />
                   ) : null}
                   <div id={section === 'plugins' ? 'signed-plugin-marketplace' : undefined} tabIndex={-1}>
+                  {section === 'plugins' && config.mode === 'cloud' && config.tenantId && config.projectId ? (
+                    <DevicePluginSettings
+                      key={JSON.stringify([config.apiBaseUrl, auth.user?.user_id, config.tenantId, config.projectId])}
+                      tenant={config.tenantId}
+                      project={config.projectId}
+                    />
+                  ) : null}
                   {section === 'plugins' && !pluginMarketplaceSettingsAvailable(config.mode) ? (
                     <LocalPluginSettings config={config} operations={pluginMarketplaceOperationsV2} canManage={canManagePluginControlPlane} />
                   ) : (

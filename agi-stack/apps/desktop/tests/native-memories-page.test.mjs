@@ -9,7 +9,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const root = '/tmp/agistack-desktop-test-dist/src';
 const { I18nProvider } = require(`${root}/i18n.js`);
-const { NativeMemoriesPage } = require(`${root}/features/project-knowledge/NativeMemoriesPage.js`);
+const { NativeMemoriesPage } = require(`/tmp/agistack-desktop-test-dist/plugins/business/knowledge/ui/desktop/project-knowledge/NativeMemoriesPage.js`);
 const { createProjectMemoriesRouteModuleLoader } = require(
   `${root}/features/project-knowledge/projectMemoriesRouteModule.js`,
 );

@@ -7,7 +7,7 @@ message is injected only at step > 1.
 
 import pytest
 
-from src.infrastructure.agent.processor import ProcessorConfig, SessionProcessor
+from plugins.business.agent.engine.processor import ProcessorConfig, SessionProcessor
 
 
 @pytest.mark.unit

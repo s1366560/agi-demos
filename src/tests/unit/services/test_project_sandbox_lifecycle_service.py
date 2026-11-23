@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.application.services.project_sandbox_lifecycle_service import (
+from plugins.business.environments.backend.sandbox.project_sandbox_lifecycle_service import (
     ProjectSandboxLifecycleService,
     SandboxInfo,
 )

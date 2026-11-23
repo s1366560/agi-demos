@@ -31,7 +31,7 @@ function snapshot(scope, page, total = 101) {
 }
 function pageComponent() {
   const source = readFileSync(
-    new URL('../src/features/project-knowledge/ProjectKnowledgePage.tsx', import.meta.url),
+    new URL('../../../../plugins/business/knowledge/ui/desktop/project-knowledge/ProjectKnowledgePage.tsx', import.meta.url),
     'utf8',
   );
   const module = { exports: {} };
@@ -47,7 +47,7 @@ function pageComponent() {
       },
     }).outputText,
   )(
-    (name) => (name === '../../i18n' ? { useI18n: () => ({ t: (key) => key }) } : require(name)),
+    (name) => (name.endsWith('/i18n') ? { useI18n: () => ({ t: (key) => key }) } : require(name)),
     module,
     module.exports,
   );

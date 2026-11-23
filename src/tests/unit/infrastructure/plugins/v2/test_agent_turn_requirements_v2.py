@@ -58,6 +58,9 @@ def test_all_explicit_agent_service_versions_match_actual_production_contracts()
 
 
 async def test_actual_scoped_loader_builds_prompt_and_tool_resolvers_without_external_resources():
+    from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+        SANDBOX_RUNTIME_SERVICE_V2,
+    )
     from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
     from src.infrastructure.plugins.v2.graph_runtime import (
         GRAPH_RUNTIME_MODULE_V2,
@@ -66,7 +69,6 @@ async def test_actual_scoped_loader_builds_prompt_and_tool_resolvers_without_ext
     from src.infrastructure.plugins.v2.protocol import control_envelope_v2
     from src.infrastructure.plugins.v2.runtime import LoaderV2
     from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-    from src.infrastructure.plugins.v2.sandbox_runtime import SANDBOX_RUNTIME_SERVICE_V2
     from src.infrastructure.plugins.v2.scoped_builtin_runtime import (
         scoped_builtin_runtime_definitions_v2,
     )

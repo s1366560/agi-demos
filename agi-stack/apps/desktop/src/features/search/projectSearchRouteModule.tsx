@@ -45,7 +45,7 @@ export type ProjectSearchRouteModuleOptions = Readonly<{
 }>;
 
 type DesktopSearchComponent =
-  typeof import('./DesktopSearch').DesktopSearch;
+  typeof import('@business/knowledge/ui/desktop/search/DesktopSearch').DesktopSearch;
 
 export function createProjectSearchRouteModuleLoader({
   createBinding,
@@ -59,7 +59,7 @@ export function createProjectSearchRouteModuleLoader({
   }
 
   return async () => {
-    const { DesktopSearch } = await import('./DesktopSearch');
+    const { DesktopSearch } = await import('@business/knowledge/ui/desktop/search/DesktopSearch');
 
     function ProjectSearchRouteSurface({
       context,

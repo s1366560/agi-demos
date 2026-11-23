@@ -7,7 +7,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const root = `${process.env.COMMUNITY_UI_DIST ?? '/tmp/agistack-desktop-test-dist'}/src`;
 const { I18nProvider } = require(`${root}/i18n.js`);
 const { NativeKnowledgeCommunitiesPage } = require(
-  `${root}/features/project-knowledge/NativeKnowledgeCommunitiesPage.js`,
+  `/tmp/agistack-desktop-test-dist/plugins/business/knowledge/ui/desktop/project-knowledge/NativeKnowledgeCommunitiesPage.js`,
 );
 const { NativeKnowledgeCommunitiesRouteSurface } = require(
   `${root}/features/project-knowledge/NativeKnowledgeCommunitiesRouteSurface.js`,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from src.infrastructure.adapters.primary.web.routers.billing import (
+from plugins.business.billing.backend.http import (
     get_billing_info,
     list_invoices,
     upgrade_plan,

@@ -13,12 +13,13 @@ Usage:
     ranked_passages = await reranker.rank(query, passages)
 """
 
-import asyncio
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from src.configuration.config import get_settings
 from src.domain.llm_providers.base import BaseReranker
 from src.domain.llm_providers.llm_types import RateLimitError
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
@@ -203,39 +204,46 @@ class LiteLLMReranker(BaseReranker):
         Returns:
             Ranked results with scores
         """
-        import litellm
-
         try:
-            # Build kwargs for rerank call
-            rerank_kwargs: dict[str, Any] = {
-                "model": f"cohere/{self._model}",
-                "query": query,
-                "documents": passages,
-                "top_n": top_n,
-            }
-            if self._api_key:
-                rerank_kwargs["api_key"] = self._api_key
-            if self._base_url:
-                rerank_kwargs["api_base"] = self._base_url
-
-            # Use LiteLLM's rerank function (wraps Cohere API)
-            response = await asyncio.to_thread(litellm.rerank, **rerank_kwargs)
-
-            results = []
-            for item in response.results:
-                idx = item.index
-                score = item.relevance_score
-                if 0 <= idx < len(passages):
-                    results.append((passages[idx], float(score)))
-
-            logger.debug(f"Cohere rerank: {len(passages)} passages -> {len(results)} results")
-            return results
-
+            scores = await self.native_cohere_scores(query, passages, top_n)
+            return [
+                (passages[index], score) for index, score in scores if 0 <= index < len(passages)
+            ]
         except Exception as e:
             error_msg = str(e).lower()
             if any(kw in error_msg for kw in ["rate limit", "quota", "429"]):
                 raise RateLimitError(f"Cohere rerank rate limit: {e}") from e
             raise
+
+    async def native_cohere_scores(
+        self, query: str, passages: list[str], top_n: int, *, max_chunks_per_doc: int | None = None
+    ) -> list[tuple[int, float]]:
+        """Call the configured Cohere transport, retaining only positions and scores."""
+        import litellm
+
+        if not self._use_native_rerank:
+            raise ValueError("native Cohere rerank requires a Cohere provider")
+        options: dict[str, Any] = {
+            "model": f"cohere/{self._model}",
+            "query": query,
+            "documents": passages,
+            "top_n": top_n,
+        }
+        if self._api_key:
+            options["api_key"] = self._api_key
+        if self._base_url:
+            options["api_base"] = self._base_url
+        if max_chunks_per_doc is not None:
+            options["max_chunks_per_doc"] = max_chunks_per_doc
+            options["return_documents"] = False
+        response = await litellm.arerank(**options, timeout=get_settings().llm_timeout)
+        scores = []
+        for item in response.results:
+            if isinstance(item, Mapping):
+                scores.append((item["index"], float(item["relevance_score"])))
+            else:
+                scores.append((item.index, float(item.relevance_score)))
+        return scores
 
     async def _llm_rerank(
         self,

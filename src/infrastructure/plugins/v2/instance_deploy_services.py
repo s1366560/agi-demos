@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.deploy_service import DeployService
-from src.application.services.instance_service import InstanceService
+from plugins.business.environments.backend.deploy_service import DeployService
+from plugins.business.environments.backend.instance_service import InstanceService
 from src.domain.model.deploy.deploy_record import DeployRecord
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -164,7 +164,7 @@ async def _close_redis_pubsub(pubsub: object) -> None:
     """Close a Redis pubsub whose stubs leave ``aclose`` untyped."""
     close = getattr(pubsub, "aclose", None)
     if callable(close):
-        await close()
+        await cast("Awaitable[None]", close())
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -7,7 +7,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const root = '/tmp/agistack-desktop-test-dist/src';
 const { I18nProvider } = require(root + '/i18n.js');
-const { ProjectGraphPage } = require(root + '/features/project-knowledge/ProjectGraphPage.js');
+const { ProjectGraphPage } = require('/tmp/agistack-desktop-test-dist/plugins/business/knowledge/ui/desktop/project-knowledge/ProjectGraphPage.js');
 const { buildProjectGraphPresentation } = require(
   root + '/features/project-knowledge/projectGraphPresentationModel.js',
 );

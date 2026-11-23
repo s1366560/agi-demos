@@ -16,6 +16,9 @@ from contextlib import aclosing
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from plugins.business.environments.backend.sandbox.sandbox_projection import (
+    current_sandbox_application_services_v2,
+)
 from src.application.services.channels._session import with_session
 from src.domain.model.channels.message import ChannelAdapter, ChatType, Message, MessageType
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
@@ -33,9 +36,6 @@ from src.infrastructure.plugins.v2.boundary import (
     pin_agent_turn_operation_v2,
     pin_generation_v2,
     pin_operation_context_v2,
-)
-from src.infrastructure.plugins.v2.sandbox_projection import (
-    current_sandbox_application_services_v2,
 )
 
 if TYPE_CHECKING:

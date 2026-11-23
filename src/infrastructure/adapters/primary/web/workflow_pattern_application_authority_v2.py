@@ -10,6 +10,11 @@ from uuid import uuid4
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.automation.backend.workflow_pattern_services import (
+    WORKFLOW_PATTERN_APPLICATION_SERVICE_V2,
+    WorkflowPatternApplicationResolverProtocolV2,
+    WorkflowPatternApplicationServicesV2,
+)
 from src.domain.model.auth.user import User
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -21,11 +26,6 @@ from src.infrastructure.plugins.v2.boundary import (
     current_generation_v2,
 )
 from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.workflow_pattern_services import (
-    WORKFLOW_PATTERN_APPLICATION_SERVICE_V2,
-    WorkflowPatternApplicationResolverProtocolV2,
-    WorkflowPatternApplicationServicesV2,
-)
 
 
 @dataclass(frozen=True, kw_only=True)

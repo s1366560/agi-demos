@@ -1,6 +1,23 @@
 use super::*;
 
 #[test]
+fn device_package_admission_uses_the_authenticated_cloud_service() {
+    for (method, path) in [
+        (Method::POST, "/api/v1/projects/p/device-plugin-grants/"),
+        (
+            Method::POST,
+            "/api/v1/projects/p/device-plugin-grants/check",
+        ),
+        (
+            Method::DELETE,
+            "/api/v1/projects/p/device-plugin-grants/grant-id",
+        ),
+    ] {
+        assert!(!is_strangled_request(&method, path));
+    }
+}
+
+#[test]
 fn computer_use_routes_follow_the_rust_websocket_broker() {
     for (method, path) in [
         (Method::GET, "/api/v1/agent/device/status"),
@@ -295,9 +312,9 @@ fn strangled_prefixes_route_to_rust() {
     assert!(is_strangled_request(&get, "/api/v1/genes/gene-1"));
     assert!(is_strangled_request(&get, "/api/v1/genes/genomes"));
     assert!(is_strangled_request(&get, "/api/v1/genes/genomes/genome-1"));
-    assert!(is_strangled_request(&get, "/api/v1/tenants/acme/billing"));
-    assert!(is_strangled_request(&get, "/api/v1/tenants/acme/invoices"));
-    assert!(is_strangled_request(
+    assert!(!is_strangled_request(&get, "/api/v1/tenants/acme/billing"));
+    assert!(!is_strangled_request(&get, "/api/v1/tenants/acme/invoices"));
+    assert!(!is_strangled_request(
         &Method::POST,
         "/api/v1/tenants/acme/upgrade"
     ));
@@ -1514,7 +1531,6 @@ fn p4_graph_search_rules_are_exact() {
         (Method::POST, "/api/v1/graph/import"),
         (Method::GET, "/api/v1/graph/memory/graph"),
         (Method::POST, "/api/v1/graph/memory/graph/subgraph"),
-        (Method::POST, "/api/v1/search-enhanced/advanced"),
         (Method::POST, "/api/v1/search-enhanced/graph-traversal"),
         (Method::POST, "/api/v1/search-enhanced/community"),
         (Method::POST, "/api/v1/search-enhanced/temporal"),
@@ -1558,6 +1574,7 @@ fn p4_graph_search_rules_are_exact() {
         (Method::GET, "/api/v1/graph/import"),
         (Method::GET, "/api/v1/graph/export/extra"),
         (Method::POST, "/api/v1/graph/import/extra"),
+        (Method::POST, "/api/v1/search-enhanced/advanced"),
         (Method::GET, "/api/v1/search-enhanced/advanced"),
         (Method::POST, "/api/v1/search-enhanced/capabilities"),
         (Method::GET, "/api/v1/memory/search"),

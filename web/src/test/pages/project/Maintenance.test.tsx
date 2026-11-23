@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Maintenance } from '../../../pages/project/Maintenance';
+import { Maintenance } from '@business/knowledge/ui/web/project/Maintenance';
 import { graphService } from '../../../services/graphService';
 
 const confirmActionMock = vi.hoisted(() => vi.fn());

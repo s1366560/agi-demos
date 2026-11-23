@@ -3,7 +3,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { screen, render, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { MemoryList } from '../../../pages/project/MemoryList';
+import { MemoryList } from '@business/knowledge/ui/web/project/MemoryList';
 import { memoryAPI } from '../../../services/api';
 import { Memory } from '../../../types/memory';
 

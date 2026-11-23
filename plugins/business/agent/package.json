@@ -1,0 +1,10 @@
+{
+  "plugin_id": "memstack-agent",
+  "version": "1.0.0",
+  "target": "python",
+  "tool_name": "validate_skill",
+  "worker": "worker.json",
+  "contribution": "contributions.json",
+  "provenance": "repo://memstack/plugins/business/agent",
+  "kind": "business"
+}

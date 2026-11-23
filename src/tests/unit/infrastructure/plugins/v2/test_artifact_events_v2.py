@@ -11,6 +11,11 @@ from unittest.mock import AsyncMock, call
 
 import pytest
 
+from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+    SANDBOX_APPLICATION_MODULE_V2,
+    SANDBOX_APPLICATION_SERVICE_V2,
+    SandboxApplicationServicesV2,
+)
 from src.domain.events.agent_events import (
     AgentArtifactCreatedEvent,
     AgentArtifactErrorEvent,
@@ -41,11 +46,6 @@ from src.infrastructure.plugins.v2.runtime import (
     PluginDefinitionV2,
     RuntimeGenerationV2,
     RuntimeV2Error,
-)
-from src.infrastructure.plugins.v2.sandbox_runtime import (
-    SANDBOX_APPLICATION_MODULE_V2,
-    SANDBOX_APPLICATION_SERVICE_V2,
-    SandboxApplicationServicesV2,
 )
 
 pytestmark = pytest.mark.unit

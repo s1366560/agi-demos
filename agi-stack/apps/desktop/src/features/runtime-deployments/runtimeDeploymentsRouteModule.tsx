@@ -36,7 +36,7 @@ export function createRuntimeDeploymentsRouteModuleLoader({
   return async () => {
     const [{ RuntimeDeploymentsPage }, { useRuntimeDeploymentsController }] =
       await Promise.all([
-        import('./RuntimeDeploymentsPage'),
+        import('@business/environments/ui/desktop/runtime-deployments/RuntimeDeploymentsPage'),
         import('./useRuntimeDeploymentsController'),
       ]);
 
@@ -98,7 +98,7 @@ function BoundRuntimeDeploymentsRoute({
   createBinding(
     context: RuntimeDeploymentsRouteContext,
   ): RuntimeDeploymentsRouteBinding;
-  Page: typeof import('./RuntimeDeploymentsPage').RuntimeDeploymentsPage;
+  Page: typeof import('@business/environments/ui/desktop/runtime-deployments/RuntimeDeploymentsPage').RuntimeDeploymentsPage;
   useController: typeof import('./useRuntimeDeploymentsController').useRuntimeDeploymentsController;
 }>) {
   const binding = useMemo(

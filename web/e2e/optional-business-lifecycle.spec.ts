@@ -35,6 +35,7 @@ test('plugin hub installs, enables, rolls back, and uninstalls a signed package'
     '1.1.0': updated,
   };
   let recorded = false;
+  let revision = 0;
   let installed = '1.0.0';
   let applied: string | null = null;
   const history: string[] = [];
@@ -44,12 +45,39 @@ test('plugin hub installs, enables, rolls back, and uninstalls a signed package'
     const url = new URL(route.request().url());
     const method = route.request().method();
     const path = url.pathname;
+    if (method === 'GET' && path.endsWith('/optional-business/')) {
+      await route.fulfill({ json: { items: recorded ? [{ plugin_id: 'sample.notes' }] : [] } });
+      return;
+    }
+    if (method === 'POST' && path.endsWith('/inspect')) {
+      const version = Buffer.from(
+        route.request().postDataJSON().archive_base64,
+        'base64'
+      ).toString();
+      await route.fulfill({
+        json: {
+          plugin_id: 'sample.notes',
+          version,
+          digest: documents[version]!.digest,
+          permissions: ['tools.execute', 'ui.slot'],
+        },
+      });
+      return;
+    }
     if (method === 'POST' && path.endsWith('/install')) {
+      revision++;
       recorded = true;
-      installed = String(route.request().postDataJSON().version);
+      installed = Buffer.from(route.request().postDataJSON().archive_base64, 'base64').toString();
       await new Promise((resolve) => setTimeout(resolve, 200));
       await route.fulfill({ json: { status: 'recorded', plugin_id: 'sample.notes' } });
       return;
+    }
+    if (
+      method === 'POST' &&
+      ['enable', 'rollback', 'disable', 'uninstall'].includes(path.split('/').pop() ?? '')
+    ) {
+      expect(route.request().postDataJSON().expected_revision).toBe(revision);
+      revision++;
     }
     if (method === 'POST' && path.endsWith('/enable')) {
       if (applied !== installed) {
@@ -113,6 +141,11 @@ test('plugin hub installs, enables, rolls back, and uninstalls a signed package'
         plugin_id: 'sample.notes',
         version: applied ?? installed,
         package_recorded: true,
+        has_web_ui: true,
+        installed_version: installed,
+        desired_revision: revision,
+        running_version: applied,
+        commands: [],
         desired_enabled: phase === 'active',
         runtime_phase: phase,
         actual_digest: document?.digest ?? null,
@@ -140,19 +173,9 @@ test('plugin hub installs, enables, rolls back, and uninstalls a signed package'
   await page.goto(`/tenant/${project.tenantId}/plugins?projectId=${project.id}`);
   await expect(page.getByRole('heading', { name: 'Plugin Hub' })).toBeVisible({ timeout: 45_000 });
   await page.getByTestId('optional-business-package').setInputFiles({
-    name: 'notes-1.0.0.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(
-      JSON.stringify({
-        plugin_id: 'sample.notes',
-        version: '1.0.0',
-        digest: notes.digest,
-        wasm_base64: Buffer.from('wasm').toString('base64'),
-        contribution: {},
-        ui_files: {},
-        approved_permissions: ['tools.execute', 'ui.slot'],
-      })
-    ),
+    name: 'notes-1.0.0.mspkg',
+    mimeType: 'application/zip',
+    buffer: Buffer.from('1.0.0'),
   });
   await expect(page.getByTestId('optional-business-panel')).toHaveAttribute(
     'data-package-ready',
@@ -171,19 +194,9 @@ test('plugin hub installs, enables, rolls back, and uninstalls a signed package'
   await expect(frame).toHaveAttribute('srcdoc', /<h1>Notes</);
 
   await page.getByTestId('optional-business-package').setInputFiles({
-    name: 'notes-1.1.0.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(
-      JSON.stringify({
-        plugin_id: 'sample.notes',
-        version: '1.1.0',
-        digest: updated.digest,
-        wasm_base64: Buffer.from('wasm').toString('base64'),
-        contribution: {},
-        ui_files: {},
-        approved_permissions: ['tools.execute', 'ui.slot'],
-      })
-    ),
+    name: 'notes-1.1.0.mspkg',
+    mimeType: 'application/zip',
+    buffer: Buffer.from('1.1.0'),
   });
   await expect(page.getByTestId('optional-business-panel')).toHaveAttribute(
     'data-package-ready',

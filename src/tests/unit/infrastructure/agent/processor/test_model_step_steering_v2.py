@@ -7,6 +7,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from plugins.business.agent.engine.processor.model_step_control_v2 import model_stream_control_v2
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    ProcessorResult,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.domain.events.agent_events import (
     AgentCostUpdateEvent,
     AgentErrorEvent,
@@ -15,13 +22,6 @@ from src.domain.events.agent_events import (
 from src.domain.model.agent.tool_policy import ControlMessageType
 from src.domain.ports.agent.control_channel_port import ControlMessage
 from src.infrastructure.agent.core.llm_stream import StreamEventType
-from src.infrastructure.agent.processor.model_step_control_v2 import model_stream_control_v2
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    ProcessorResult,
-    SessionProcessor,
-    ToolDefinition,
-)
 
 
 def event(kind, **data):
@@ -103,7 +103,9 @@ async def test_steer_cancels_old_model_before_commit_or_tools(monkeypatch, long_
             yield event(StreamEventType.TEXT_END, full_text="new final")
             yield event(StreamEventType.FINISH, reason="stop")
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream.generate", generate)
+    monkeypatch.setattr(
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate", generate
+    )
     messages = [{"role": "user", "content": "original"}]
 
     async def collect():
@@ -143,7 +145,9 @@ async def test_control_at_model_end_discards_old_final(monkeypatch):
             yield event(StreamEventType.TEXT_END, full_text="new final")
         yield event(StreamEventType.FINISH, reason="stop")
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream.generate", generate)
+    monkeypatch.setattr(
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate", generate
+    )
     events = [e async for e in processor._run_native_loop("conversation", [])]
     assert len(requests) == 2
     assert all(getattr(e, "full_text", None) != "old final" for e in events)
@@ -229,7 +233,9 @@ async def test_steer_interrupts_goal_judge_wait_and_redecides(monkeypatch):
                 closed.set()
         return ProcessorResult.COMPLETE, []
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream.generate", generate)
+    monkeypatch.setattr(
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate", generate
+    )
     monkeypatch.setattr(processor, "_evaluate_goal_progress", judge)
 
     async def collect():
@@ -285,7 +291,9 @@ async def test_interrupted_known_usage_is_accounted_once(monkeypatch, usage_deli
             yield event(StreamEventType.TEXT_END, full_text="new final")
             yield event(StreamEventType.FINISH, reason="stop")
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream.generate", generate)
+    monkeypatch.setattr(
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate", generate
+    )
     events = await asyncio.wait_for(_collect_native(processor), 1)
     usage = processor.cost_tracker.total_tokens
     assert (usage.input, usage.output) == ((123, 17) if usage_known else (0, 0))
@@ -314,7 +322,9 @@ async def test_owner_cancellation_retains_reported_usage_and_still_propagates(mo
         entered.set()
         await asyncio.Event().wait()
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream.generate", generate)
+    monkeypatch.setattr(
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate", generate
+    )
 
     async def collect():
         async for emitted in processor._run_native_loop("conversation", []):
@@ -328,3 +338,24 @@ async def test_owner_cancellation_retains_reported_usage_and_still_propagates(mo
     usage = processor.cost_tracker.total_tokens
     assert (usage.input, usage.output) == (123, 17)
     assert sum(isinstance(emitted, AgentCostUpdateEvent) for emitted in events) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("instruction", "expected_code"),
+    [("finish", "ValueError"), ("observe", "ValueError"), ("stop", "AGENT_LOOP_STOPPED")],
+)
+async def test_worker_cannot_skip_model_and_goal_checks(monkeypatch, instruction, expected_code):
+    from plugins.business.agent.turn import run_turn
+
+    processor, _, tool = setup_processor(monkeypatch)
+    events = [
+        event
+        async for event in run_turn(
+            processor, "conversation", [], AsyncMock(return_value=instruction)
+        )
+    ]
+
+    assert [event.code for event in events if isinstance(event, AgentErrorEvent)] == [expected_code]
+    processor._evaluate_goal_progress.assert_not_awaited()
+    tool.assert_not_awaited()

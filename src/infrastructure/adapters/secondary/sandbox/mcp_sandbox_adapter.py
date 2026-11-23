@@ -654,6 +654,7 @@ class MCPSandboxAdapter(SandboxPort):
     def _enforce_mcp_auth_environment(
         environment: dict[str, str],
         auth_token: str,
+        project_id: str | None,
     ) -> None:
         """Apply adapter-owned authentication settings after caller overrides."""
         environment.update(
@@ -661,8 +662,18 @@ class MCPSandboxAdapter(SandboxPort):
                 "MCP_AUTH_ENABLED": "true",
                 "MCP_ALLOW_LOCALHOST": "false",
                 "MCP_STATIC_TOKEN": auth_token,
+                "MCP_PROJECT_ID": project_id or "",
             }
         )
+        settings = get_settings()
+        for key, value in (
+            ("MEMSTACK_PLATFORM_URL", settings.sandbox_platform_url),
+            ("MEMSTACK_PLATFORM_SERVICE_TOKEN", settings.sandbox_service_token),
+        ):
+            if value:
+                environment[key] = value
+            else:
+                environment.pop(key, None)
 
     @staticmethod
     def _chromium_volume_name(tenant_id: str, project_id: str) -> str:
@@ -1392,14 +1403,8 @@ class MCPSandboxAdapter(SandboxPort):
             }
             sandbox_env["DESKTOP_ENABLED"] = str(config.desktop_enabled).lower()
             sandbox_env["TERMINAL_ENABLED"] = str(config.terminal_enabled).lower()
-            self._enforce_mcp_auth_environment(sandbox_env, mcp_auth_token)
+            self._enforce_mcp_auth_environment(sandbox_env, mcp_auth_token, project_id)
             settings = get_settings()
-            if settings.sandbox_platform_url:
-                sandbox_env.setdefault("MEMSTACK_PLATFORM_URL", settings.sandbox_platform_url)
-            if settings.sandbox_service_token:
-                sandbox_env.setdefault(
-                    "MEMSTACK_PLATFORM_SERVICE_TOKEN", settings.sandbox_service_token
-                )
             # Expose host source mount point so agents know where to find it
             for container_path in config.volumes.values():
                 if container_path:
@@ -3478,17 +3483,12 @@ class MCPSandboxAdapter(SandboxPort):
         self._enforce_mcp_auth_environment(
             cast("dict[str, str]", container_config["environment"]),
             auth_token,
+            labels.get("memstack.project_id") or labels.get("memstack.project.id"),
         )
         settings = get_settings()
         environment = cast("dict[str, str]", container_config["environment"])
         environment["DESKTOP_ENABLED"] = str(config.desktop_enabled).lower()
         environment["TERMINAL_ENABLED"] = str(config.terminal_enabled).lower()
-        if settings.sandbox_platform_url:
-            environment.setdefault("MEMSTACK_PLATFORM_URL", settings.sandbox_platform_url)
-        if settings.sandbox_service_token:
-            environment.setdefault(
-                "MEMSTACK_PLATFORM_SERVICE_TOKEN", settings.sandbox_service_token
-            )
         container_config["shm_size"] = settings.sandbox_shm_size
         volumes = self._build_volume_bindings(project_path, config, labels)
         # Pip cache volume (shared across containers)
@@ -3722,7 +3722,7 @@ class MCPSandboxAdapter(SandboxPort):
             )
             return False
 
-        from src.application.services.sandbox_image_lifecycle import (
+        from plugins.business.environments.backend.sandbox.sandbox_image_lifecycle import (
             automatic_rebuild_allowed,
             container_marks_active_run,
             project_run_state,

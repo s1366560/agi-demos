@@ -20,6 +20,7 @@ const USER_KEYS = new Set([
   'global_roles',
   'is_active',
   'is_superuser',
+  'must_change_password',
   'created_at',
   'profile',
   'preferred_language',
@@ -231,6 +232,7 @@ function decodeIdentity(value: unknown): CloudSessionIdentityProjection | null {
     !globalRoles ||
     typeof value.is_active !== 'boolean' ||
     typeof value.is_superuser !== 'boolean' ||
+    (value.must_change_password !== undefined && value.must_change_password !== false) ||
     !createdAt ||
     !isRecord(value.profile) ||
     preferredLanguage === undefined

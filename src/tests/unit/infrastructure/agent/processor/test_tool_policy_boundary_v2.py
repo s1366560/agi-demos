@@ -8,13 +8,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.domain.events.agent_events import AgentObserveEvent
-from src.infrastructure.agent.core.message import ToolPart, ToolState
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
+from src.domain.events.agent_events import AgentObserveEvent
+from src.infrastructure.agent.core.message import ToolPart, ToolState
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import AgentRuntimeDispatchResultV2
 

@@ -6,7 +6,7 @@
  * characters and fails the build if any are found outside the i18n whitelist.
  *
  * Usage:
- *   node scripts/check-i18n-literals.mjs            # scan web/src
+ *   node scripts/check-i18n-literals.mjs            # scan Web host and business packages
  *   node scripts/check-i18n-literals.mjs path/...   # scan specific path
  *
  * Whitelist:
@@ -24,14 +24,17 @@
  *   1  violations found
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { globSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
 
-const DEFAULT_SCAN_ROOT = join(REPO_ROOT, 'web', 'src');
+const DEFAULT_SCAN_ROOTS = [
+  join(REPO_ROOT, 'web', 'src'),
+  ...globSync('plugins/business/*/ui/web', { cwd: REPO_ROOT }).map((path) => join(REPO_ROOT, path)),
+];
 const SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 
 const SCAN_IGNORE = [
@@ -98,7 +101,7 @@ function scanFile(file) {
 }
 
 const targets = process.argv.slice(2);
-const root = targets.length > 0 ? targets : [DEFAULT_SCAN_ROOT];
+const root = targets.length > 0 ? targets : DEFAULT_SCAN_ROOTS;
 
 let total = 0;
 for (const r of root) {

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { SearchForm } from '../../../../pages/project/search/components/SearchForm';
+import { SearchForm } from '@business/knowledge/ui/web/project/search/components/SearchForm';
 
 const baseProps = {
   searchMode: 'semantic' as const,

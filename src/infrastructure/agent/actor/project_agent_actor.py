@@ -13,6 +13,10 @@ from typing import Any
 
 import ray
 
+from plugins.business.agent.engine.react.project_react_agent import (
+    ProjectAgentConfig,
+    ProjectReActAgent,
+)
 from src.application.services.publication_archive_loader_v2 import load_agent_generation_archives_v2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.domain.ports.services.graph_store_port import GraphStorePort
@@ -24,10 +28,6 @@ from src.infrastructure.agent.actor.types import (
     ProjectAgentActorConfig,
     ProjectAgentStatus,
     ProjectChatRequest,
-)
-from src.infrastructure.agent.core.project_react_agent import (
-    ProjectAgentConfig,
-    ProjectReActAgent,
 )
 from src.infrastructure.llm.initializer import initialize_default_llm_providers
 from src.infrastructure.plugins.v2.agent_worker_lifecycle_transport_v2 import (
@@ -44,6 +44,7 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_METADATA_SERVICE_V2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeLeaseV2
 from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import DataPlaneGenerationAdmissionV2
 
@@ -969,7 +970,7 @@ class ProjectAgentActor:
                 e,
             )
 
-    async def _create_graph_runtime_v2(self) -> GraphStorePort:
+    async def _create_graph_runtime_v2(self) -> GraphStorePort | GraphRuntimeLeaseV2:
         """Create this actor tenant's graph resource for one candidate generation."""
         if self._config is None:
             raise RuntimeV2Error(

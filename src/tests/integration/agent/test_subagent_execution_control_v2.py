@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import pytest
 from redis.asyncio import Redis
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.configuration.config import get_settings
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.subagent.async_run_registry_v2 import (
     AsyncSubAgentRunRegistryV2,
     registry_call_v2,

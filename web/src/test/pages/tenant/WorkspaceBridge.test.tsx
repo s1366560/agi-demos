@@ -3,8 +3,8 @@ import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
-import { AgentWorkspace } from '../../../pages/tenant/AgentWorkspace';
-import { WorkspaceBlackboardRedirect } from '../../../pages/project/WorkspaceBlackboardRedirect';
+import { AgentWorkspace } from '@business/agent/ui/web/tenant/AgentWorkspace';
+import { WorkspaceBlackboardRedirect } from '@business/workspace/ui/web/project/WorkspaceBlackboardRedirect';
 import { buildAgentWorkspacePath } from '../../../utils/agentWorkspacePath';
 
 const agentChatContentProps = vi.fn();

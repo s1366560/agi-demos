@@ -12,11 +12,11 @@ import websockets
 from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 
-from src.infrastructure.adapters.primary.web.routers import project_sandbox as router_mod
-from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
-from src.infrastructure.plugins.v2.sandbox_http_service_registry import (
+from plugins.business.environments.backend.sandbox.sandbox_http_service_registry import (
     SandboxHttpServiceRegistryV2,
 )
+from src.infrastructure.adapters.primary.web.routers import project_sandbox as router_mod
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 
 @pytest.fixture(autouse=True)

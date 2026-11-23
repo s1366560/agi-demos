@@ -49,6 +49,7 @@ from src.domain.model.plugins.generated_v2 import (
     TrustKindV2,
 )
 
+IF_PLUGIN_GENERATION_HEADER_V2 = "X-MemStack-If-Generation-Digest"
 PLUGIN_PROFILE_TYPE_URL_V2 = "types.memstack.ai/plugin.profile.v2"
 JSON_SCHEMA_DIALECT_V2 = "https://json-schema.org/draft/2020-12/schema"
 type JsonValueV2 = None | bool | int | float | str | list["JsonValueV2"] | dict[str, "JsonValueV2"]
@@ -492,10 +493,6 @@ def _scope_contains(parent: Mapping[str, Any], child: Mapping[str, Any]) -> bool
 def _snapshot_canonical(payload: Mapping[str, Any]) -> bytes:
     digest_payload = {key: value for key, value in payload.items() if key != "digest"}
     return canonical_json_v2(digest_payload)
-
-
-def _snapshot_digest(payload: Mapping[str, Any]) -> str:
-    return hashlib.sha256(_snapshot_canonical(payload)).hexdigest()
 
 
 def _snapshot_from_payload(payload: Mapping[str, Any]) -> ProfileSnapshotV2:

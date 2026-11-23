@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.core.tool_converter import convert_tools
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.tools.skill_loader import (
     make_skill_loader_tool,
     skill_availability_for_tool,

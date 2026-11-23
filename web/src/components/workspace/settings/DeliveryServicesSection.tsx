@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Input } from 'antd';
 import { Plus, Trash2 } from 'lucide-react';
 
-import { Field, SwitchField } from '@/pages/tenant/WorkspaceSettingsPrimitives';
+import { Field, SwitchField } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
 import { DraftNumberInput } from './DraftNumberInput';
 

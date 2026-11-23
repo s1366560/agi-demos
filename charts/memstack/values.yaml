@@ -45,9 +45,12 @@ secrets:
 
 api:
   enabled: true
+  packageKernel: true
+  volumeMounts: []
+  volumes: []
   replicaCount: 1
   image:
-    repository: memstack-api
+    repository: memstack-kernel
     tag: latest
     pullPolicy: IfNotPresent
   command: []
@@ -70,12 +73,18 @@ api:
     maxUnavailable: ""
   extraEnv: {}
   extraEnvFrom: []
+  initialProject:
+    enabled: true
+    # Read-only volume populated by the release publisher.
+    archiveClaim: memstack-official-packages
+    # owner.json, publisher.pem and the worker registry/Docker connection environment.
+    secret: memstack-initial-project
 
 web:
   enabled: true
   replicaCount: 1
   image:
-    repository: memstack-web
+    repository: memstack-package-web
     tag: latest
     pullPolicy: IfNotPresent
   podAnnotations: {}
@@ -183,7 +192,7 @@ redis:
     port: 6379
 
 neo4j:
-  enabled: true
+  enabled: false
   official:
     clusterName: memstack-neo4j
     headlessServiceName: ""
@@ -222,7 +231,7 @@ neo4j:
     boltPort: 7687
 
 minio:
-  enabled: true
+  enabled: false
   image:
     repository: minio/minio
     tag: latest

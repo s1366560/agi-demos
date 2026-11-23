@@ -26,7 +26,7 @@ export function createTenantBillingRouteModuleLoader({
   return createTenantAdminRouteModuleLoader({
     routeId: TENANT_BILLING_ROUTE_ID,
     createBinding,
-    loadPage: async () => (await import('./TenantBillingPage')).TenantBillingPage,
+    loadPage: async () => (await import('@business/billing/ui/desktop/tenant-admin/TenantBillingPage')).TenantBillingPage,
     fallbackScope: (context) =>
       Object.freeze({
         authority: 'cloud',

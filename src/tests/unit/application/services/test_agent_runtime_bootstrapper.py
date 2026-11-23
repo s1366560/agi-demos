@@ -1323,7 +1323,7 @@ async def test_in_process_chat_acquires_enabled_workspace_runtime(bootstrapper) 
             prepare,
         ),
         patch(
-            "src.infrastructure.agent.core.project_react_agent.ProjectReActAgent",
+            "plugins.business.agent.engine.react.project_react_agent.ProjectReActAgent",
             return_value=agent,
         ),
         patch("src.infrastructure.agent.actor.execution.execute_project_chat", execute),

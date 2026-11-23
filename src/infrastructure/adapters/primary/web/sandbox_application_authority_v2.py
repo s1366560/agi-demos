@@ -11,6 +11,11 @@ from fastapi import Depends, Request, WebSocket
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.environments.backend.sandbox.sandbox_operation_services import (
+    SANDBOX_OPERATION_APPLICATION_SERVICE_V2,
+    SandboxOperationApplicationResolverProtocolV2,
+    SandboxOperationServicesV2,
+)
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
@@ -28,11 +33,6 @@ from src.infrastructure.plugins.v2.boundary import (
     current_generation_v2,
 )
 from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.sandbox_operation_services import (
-    SANDBOX_OPERATION_APPLICATION_SERVICE_V2,
-    SandboxOperationApplicationResolverProtocolV2,
-    SandboxOperationServicesV2,
-)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -22,9 +22,9 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
 
 @pytest.fixture(autouse=True)
 async def _sandbox_desktop_v2_runtime(test_app, monkeypatch):
+    from plugins.business.environments.backend.sandbox import sandbox_runtime
     from src.infrastructure.adapters.secondary.sandbox import mcp_sandbox_adapter
     from src.infrastructure.agent.plugins.skill_evolution.scheduler import EvolutionScheduler
-    from src.infrastructure.plugins.v2 import sandbox_runtime
     from src.infrastructure.plugins.v2.builtin_sandbox_http_routes import SANDBOX_HTTP_ROUTES_ROW_V2
 
     monkeypatch.setattr(EvolutionScheduler, "start", AsyncMock())
@@ -245,7 +245,7 @@ class TestSandboxDesktopEndpoints:
             for record in caplog.records
             if record.name
             in {
-                "src.application.services.sandbox_orchestrator",
+                "plugins.business.environments.backend.sandbox.sandbox_orchestrator",
                 "src.infrastructure.adapters.primary.web.routers.sandbox.services",
             }
             and record.levelno >= logging.ERROR

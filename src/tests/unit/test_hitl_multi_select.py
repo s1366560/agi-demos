@@ -33,7 +33,7 @@ class TestMultiSelectDecision:
         self,
     ) -> None:
         """No selection_mode arg defaults to 'single'."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_decision_tool,
         )
 
@@ -68,7 +68,7 @@ class TestMultiSelectDecision:
         self,
     ) -> None:
         """selection_mode='multiple' is extracted and passed."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_decision_tool,
         )
 
@@ -109,7 +109,7 @@ class TestMultiSelectDecision:
         self,
     ) -> None:
         """max_selections=3 is extracted and passed through."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_decision_tool,
         )
 
@@ -152,7 +152,7 @@ class TestMultiSelectDecision:
         self,
     ) -> None:
         """selection_mode is included in request_data dict."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_decision_tool,
         )
 

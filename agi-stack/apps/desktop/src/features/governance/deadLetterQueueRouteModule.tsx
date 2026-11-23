@@ -30,7 +30,7 @@ export function createDeadLetterQueueRouteModuleLoader({
   }
   return async () => {
     const [{ DeadLetterQueuePage }, { useDeadLetterQueueController }] = await Promise.all([
-      import('./DeadLetterQueuePage'),
+      import('@business/automation/ui/desktop/governance/DeadLetterQueuePage'),
       import('./useDeadLetterQueueController'),
     ]);
 
@@ -80,7 +80,7 @@ function BoundDeadLetterQueueRoute({
 }: Readonly<{
   context: DeadLetterQueueRouteContext;
   createBinding: (context: DeadLetterQueueRouteContext) => DeadLetterQueueRouteBinding;
-  Page: typeof import('./DeadLetterQueuePage').DeadLetterQueuePage;
+  Page: typeof import('@business/automation/ui/desktop/governance/DeadLetterQueuePage').DeadLetterQueuePage;
   useController: typeof import('./useDeadLetterQueueController').useDeadLetterQueueController;
 }>) {
   const binding = useMemo(() => createBinding(context), [context.tenantId, createBinding]);

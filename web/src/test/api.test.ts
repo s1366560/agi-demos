@@ -119,7 +119,9 @@ describe('API Services', () => {
       };
       mockApiInstance.get.mockResolvedValue({ data: mockBackendUser });
       const result = await authAPI.verifyToken('token');
-      expect(mockApiInstance.get).toHaveBeenCalledWith('/auth/me', undefined);
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/auth/me', {
+        headers: { Authorization: 'Bearer token' },
+      });
       expect(result).toEqual({
         id: '1',
         email: 'test@example.com',

@@ -3,8 +3,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectAgentDashboard } from '@/pages/project/ProjectAgentDashboard';
-import { ProjectAgentLogs } from '@/pages/project/ProjectAgentLogs';
+import { ProjectAgentDashboard } from '@business/agent/ui/web/project/ProjectAgentDashboard';
+import { ProjectAgentLogs } from '@business/agent/ui/web/project/ProjectAgentLogs';
 import { ApiError, ApiErrorType } from '@/services/client/ApiError';
 import { ProjectAgentContractError } from '@/services/projectAgentService';
 

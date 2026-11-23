@@ -12,7 +12,7 @@ use super::{
 use crate::trusted_session::TrustedSessionBroker;
 
 mod authority;
-pub(super) use authority::claim_scope;
+pub(super) use authority::{claim_scope, CloudOwner};
 #[cfg(test)]
 mod tests;
 

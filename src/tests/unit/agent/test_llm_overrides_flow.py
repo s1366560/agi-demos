@@ -21,8 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig
 from src.infrastructure.agent.actor.types import ProjectChatRequest
-from src.infrastructure.agent.processor.processor import ProcessorConfig
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -607,7 +607,7 @@ class TestProjectReActAgentForwarding:
         mock_react_agent.stream = MagicMock(side_effect=mock_stream)
 
         # Build a minimal ProjectReActAgent with mocked internals
-        from src.infrastructure.agent.core.project_react_agent import (
+        from plugins.business.agent.engine.react.project_react_agent import (
             ProjectAgentConfig,
             ProjectReActAgent,
         )
@@ -637,7 +637,7 @@ class TestProjectReActAgentForwarding:
 
         # Patch websocket notifier
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=None,
         ):
             overrides = {"temperature": 0.5, "max_tokens": 1024}
@@ -671,7 +671,7 @@ class TestProjectReActAgentForwarding:
 
         mock_react_agent.stream = MagicMock(side_effect=mock_stream)
 
-        from src.infrastructure.agent.core.project_react_agent import (
+        from plugins.business.agent.engine.react.project_react_agent import (
             ProjectAgentConfig,
             ProjectReActAgent,
         )
@@ -698,7 +698,7 @@ class TestProjectReActAgentForwarding:
         agent._finalize_chat_execution = AsyncMock()
 
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=None,
         ):
             async for _ in agent.execute_chat(
@@ -723,7 +723,7 @@ class TestProjectReActAgentForwarding:
 
         mock_react_agent.stream = MagicMock(side_effect=mock_stream)
 
-        from src.infrastructure.agent.core.project_react_agent import (
+        from plugins.business.agent.engine.react.project_react_agent import (
             ProjectAgentConfig,
             ProjectReActAgent,
         )
@@ -750,7 +750,7 @@ class TestProjectReActAgentForwarding:
         agent._finalize_chat_execution = AsyncMock()
 
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=None,
         ):
             events = []

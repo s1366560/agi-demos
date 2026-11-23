@@ -14,11 +14,11 @@ from typing import TYPE_CHECKING, Any
 from src.application.services.publication_archive_loader_v2 import load_agent_generation_archives_v2
 
 if TYPE_CHECKING:
-    from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
-    from src.infrastructure.agent.core.project_react_agent import (
+    from plugins.business.agent.engine.react.project_react_agent import (
         ProjectAgentConfig,
         ProjectReActAgent,
     )
+    from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
 
 # Detached local workspace workers are long-lived subprocesses. Avoid retaining
 # idle DB connections in every worker process.
@@ -49,11 +49,11 @@ def _shutdown_local_worker_telemetry() -> None:
 
 
 async def _run(request_file: Path) -> int:
+    from plugins.business.agent.engine.react.project_react_agent import ProjectReActAgent
     from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
     from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
     from src.infrastructure.agent.actor.execution import execute_project_chat
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
-    from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
     from src.infrastructure.plugins.v2.agent_worker_lifecycle_transport_v2 import (
         AgentWorkerLifecycleTransportV2,
     )
@@ -179,7 +179,7 @@ def _load_payload(request_file: Path) -> dict[str, Any]:
 
 
 def _agent_config_from_actor_config(config: ProjectAgentActorConfig) -> ProjectAgentConfig:
-    from src.infrastructure.agent.core.project_react_agent import ProjectAgentConfig
+    from plugins.business.agent.engine.react.project_react_agent import ProjectAgentConfig
 
     return ProjectAgentConfig(
         tenant_id=config.tenant_id,

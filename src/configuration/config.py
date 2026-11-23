@@ -591,11 +591,21 @@ class Settings(BaseSettings):
     # OpenTelemetry Settings
     service_name: str = Field(default="memstack", alias="SERVICE_NAME")
     environment: str = Field(default="development", alias="ENVIRONMENT")
+    billing_policy_archive_directory: Path | None = Field(default=None, alias="BILLING_POLICY_ARCHIVE_DIRECTORY")
+    package_kernel_database_mode: Literal["shared", "standalone"] = Field(
+        default="shared", alias="PACKAGE_KERNEL_DATABASE_MODE"
+    )
+    package_kernel_bootstrap_directory: Path | None = Field(
+        default=None, alias="PACKAGE_KERNEL_BOOTSTRAP_DIRECTORY"
+    )
     plugin_marketplace_trusted_key_files: tuple[Path, ...] = Field(
         default=(), alias="PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES"
     )
     plugin_marketplace_allowed_registries: tuple[str, ...] = Field(
         default=(), alias="PLUGIN_MARKETPLACE_ALLOWED_REGISTRIES"
+    )
+    plugin_worker_allowed_registries: tuple[str, ...] = Field(
+        default=(), alias="PLUGIN_WORKER_ALLOWED_REGISTRIES"
     )
     plugin_v2_required_data_plane_ids: str = Field(
         default="",

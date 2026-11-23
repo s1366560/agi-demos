@@ -46,9 +46,9 @@ interface AuthState {
   orgSetupComplete: boolean;
 
   // Actions
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, surface?: 'project-packages') => Promise<void>;
   logout: () => void;
-  checkAuth: () => Promise<void>;
+  checkAuth: (surface?: 'project-packages') => Promise<void>;
   clearError: () => void;
   setUser: (user: User | null) => void;
   _loadPostAuthData: () => Promise<void>;
@@ -89,7 +89,7 @@ export const useAuthStore = create<AuthState>()(
          * @example
          * await login('user@example.com', 'password123');
          */
-        login: async (email: string, password: string) => {
+        login: async (email: string, password: string, surface?: 'project-packages') => {
           set({ isLoading: true, error: null });
 
           try {
@@ -105,7 +105,7 @@ export const useAuthStore = create<AuthState>()(
               error: null,
             });
             syncLanguageFromUser(user);
-            await get()._loadPostAuthData();
+            if (surface !== 'project-packages') await get()._loadPostAuthData();
           } catch (error: unknown) {
             const apiError = error as ApiError;
             const detail = apiError.response?.data?.detail;
@@ -136,6 +136,7 @@ export const useAuthStore = create<AuthState>()(
             user: null,
             token: null,
             isAuthenticated: false,
+            isLoading: false,
             error: null,
           });
 
@@ -151,7 +152,7 @@ export const useAuthStore = create<AuthState>()(
          * @example
          * await checkAuth();
          */
-        checkAuth: async () => {
+        checkAuth: async (surface) => {
           const { token } = get();
           if (!token) {
             set({ isAuthenticated: false });
@@ -163,6 +164,7 @@ export const useAuthStore = create<AuthState>()(
 
           try {
             const verifiedUser = await authAPI.verifyToken(token);
+            if (get().token !== token) return;
             const previousUserId = get().user?.id;
             if (previousUserId && verifiedUser.id !== previousUserId) {
               clearScopedSessionState();
@@ -175,8 +177,9 @@ export const useAuthStore = create<AuthState>()(
               error: null,
             });
             syncLanguageFromUser(verifiedUser);
-            await get()._loadPostAuthData();
+            if (surface !== 'project-packages') await get()._loadPostAuthData();
           } catch (_error) {
+            if (get().token !== token) return;
             // Token is invalid, clear it
             set({
               user: null,

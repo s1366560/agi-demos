@@ -29,6 +29,7 @@ async def test_initialize_database_runs_full_migrations_without_stamping() -> No
     config, target = upgrade.call_args.args
     assert target == "head"
     assert config.attributes["configure_logger"] is False
+    assert config.attributes["database_url"] == database.engine.url
     assert config.get_main_option("script_location").endswith("/alembic")
     stamp.assert_not_called()
 

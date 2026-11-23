@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+from plugins.business.automation.workflow.contract import WorkflowEnginePort
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.graph_application_authority_v2 import (
     GraphApplicationAuthorityV2,

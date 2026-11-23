@@ -12,6 +12,8 @@ from .commands.auth_cmd import login, logout
 from .commands.chat_cmd import chat
 from .commands.info_cmd import conversations, projects, whoami
 from .commands.logs_cmd import logs
+from .commands.packages_cmd import packages
+from .commands.plugin_cmd import plugin
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -37,6 +39,8 @@ cli.add_command(projects)
 cli.add_command(conversations)
 cli.add_command(chat)
 cli.add_command(logs)
+cli.add_command(plugin)
+cli.add_command(packages)
 cli.add_command(artifacts_group)
 
 

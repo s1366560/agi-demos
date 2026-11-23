@@ -8,7 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.instance_template_service import InstanceTemplateService
+from plugins.business.environments.backend.instance_template_service import InstanceTemplateService
 from src.infrastructure.adapters.secondary.persistence.sql_instance_template_repository import (
     SqlInstanceTemplateRepository,
 )

@@ -39,12 +39,18 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.project_sandbox_lifecycle_service import (
+from plugins.business.environments.backend.sandbox.project_sandbox_lifecycle_service import (
     ProjectSandboxLifecycleService,
     SandboxInfo,
 )
-from src.application.services.sandbox_event_service import SandboxEventPublisher
-from src.application.services.sandbox_orchestrator import SandboxOrchestrator
+from plugins.business.environments.backend.sandbox.sandbox_event_service import (
+    SandboxEventPublisher,
+)
+from plugins.business.environments.backend.sandbox.sandbox_http_service_registry import (
+    SandboxHttpServiceRegistryProtocolV2,
+    current_sandbox_http_service_registry_v2,
+)
+from plugins.business.environments.backend.sandbox.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.sandbox_profile import (
     SandboxProfileType,
 )
@@ -72,10 +78,6 @@ from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
 )
 from src.infrastructure.i18n import gettext as _
-from src.infrastructure.plugins.v2.sandbox_http_service_registry import (
-    SandboxHttpServiceRegistryProtocolV2,
-    current_sandbox_http_service_registry_v2,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -501,7 +503,7 @@ def get_lifecycle_service_for_proxy(
 def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
     """Project the event publisher from this request's pinned generation."""
     _ = request
-    from src.infrastructure.plugins.v2.sandbox_projection import (
+    from plugins.business.environments.backend.sandbox.sandbox_projection import (
         current_sandbox_application_services_v2,
     )
 
@@ -511,7 +513,7 @@ def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
 def get_event_publisher_for_websocket(websocket: WebSocket) -> SandboxEventPublisher | None:
     """Project the event publisher from this connection's pinned generation."""
     _ = websocket
-    from src.infrastructure.plugins.v2.sandbox_projection import (
+    from plugins.business.environments.backend.sandbox.sandbox_projection import (
         current_sandbox_application_services_v2,
     )
 
@@ -1587,7 +1589,7 @@ async def create_project_sandbox_desktop_session(
         tenant_id=project_tenant_id,
     )
     try:
-        from src.application.services.sandbox_orchestrator import DesktopConfig
+        from plugins.business.environments.backend.sandbox.sandbox_orchestrator import DesktopConfig
 
         desktop_status = await orchestrator.start_desktop(
             info.sandbox_id,
@@ -2170,7 +2172,7 @@ async def start_project_desktop(
     )
 
     try:
-        from src.application.services.sandbox_orchestrator import DesktopConfig
+        from plugins.business.environments.backend.sandbox.sandbox_orchestrator import DesktopConfig
 
         config = DesktopConfig(resolution=resolution)
         status = await orchestrator.start_desktop(info.sandbox_id, config)
@@ -2246,7 +2248,9 @@ async def start_project_terminal(
     )
 
     try:
-        from src.application.services.sandbox_orchestrator import TerminalConfig
+        from plugins.business.environments.backend.sandbox.sandbox_orchestrator import (
+            TerminalConfig,
+        )
 
         config = TerminalConfig()
         status = await orchestrator.start_terminal(info.sandbox_id, config)

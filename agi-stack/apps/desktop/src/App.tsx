@@ -485,7 +485,7 @@ import {
   latestConversationRuntimeModelEvent,
   projectRuntimeModelOptions,
 } from './features/settings/workspaceRuntimeProviderModel';
-import type { NewTaskResumeDraft } from './features/task/NewTaskFlow';
+import type { NewTaskResumeDraft } from '@business/agent/ui/desktop/task/NewTaskFlow';
 import {
   createDesktopNewThreadComposerCatalogClientProviderV2,
 } from './features/task/desktopNewThreadComposerCatalogClientProviderV2';
@@ -5985,8 +5985,8 @@ export function App() {
             idempotency_key: localTarget.messageId,
             run_id: localTarget.runId ?? null,
             expected_revision: localTarget.revision ?? 1,
-            api_base_url: requestConfig.apiBaseUrl,
-            authorization: `Bearer ${requestConfig.apiKey}`,
+            tenant_id: requestConfig.tenantId,
+            conversation_id: localTarget.conversationId,
           });
           return true;
         },

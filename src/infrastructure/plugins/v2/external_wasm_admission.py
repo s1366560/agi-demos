@@ -94,7 +94,19 @@ def admit_external_wasm_artifacts_v2(
                 entrypoint=module.entrypoint,
                 source=module.artifact.source,
                 canonical_bytes=content,
-                load=partial(_load_wasm_definition, bundle_reference, manifest, module, content),
+                load=partial(
+                    _load_wasm_definition,
+                    bundle_reference,
+                    manifest,
+                    module,
+                    content,
+                    {
+                        entry.entry_id: entry
+                        for entry in entries
+                        if entry.plugin_ref == manifest.plugin_id
+                        and entry.module_ref == module.module_ref
+                    },
+                ),
             )
     return catalog, resolved
 
@@ -166,10 +178,15 @@ def _load_wasm_definition(
     manifest: PluginManifestV2,
     module: PluginModuleV2,
     content: bytes,
+    entries: Mapping[str, ProfileEntryV2],
 ) -> object:
     # Delayed import avoids the definition factory's runtime type dependency cycle.
     from .wasm_tool_runtime import create_verified_wasm_definition_v2
 
     return create_verified_wasm_definition_v2(
-        bundle_reference=bundle_reference, manifest=manifest, module=module, artifact_bytes=content
+        bundle_reference=bundle_reference,
+        manifest=manifest,
+        module=module,
+        artifact_bytes=content,
+        entries=entries,
     )

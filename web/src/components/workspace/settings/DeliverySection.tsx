@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Input } from 'antd';
 import { Rocket } from 'lucide-react';
 
-import { Field, SettingsSection, SwitchField } from '@/pages/tenant/WorkspaceSettingsPrimitives';
+import { Field, SettingsSection, SwitchField } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
 import { DeliveryCommandsSection } from './DeliveryCommandsSection';
 import { DeliveryDroneSection } from './DeliveryDroneSection';
@@ -13,7 +13,7 @@ import { DeliveryServicesSection } from './DeliveryServicesSection';
 import { DraftNumberInput } from './DraftNumberInput';
 
 import type { UpdateDeliveryService, UpdateDraft } from './types';
-import type { SettingsDraft } from '@/pages/tenant/workspaceSettingsModel';
+import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
 
 export interface DeliverySectionProps {
   draft: SettingsDraft;

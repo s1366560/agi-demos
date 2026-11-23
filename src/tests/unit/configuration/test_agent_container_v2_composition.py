@@ -19,7 +19,7 @@ def test_execute_step_use_case_does_not_mutate_process_tool_runtime() -> None:
 
     with (
         patch(
-            "src.infrastructure.plugins.v2.sandbox_projection."
+            "plugins.business.environments.backend.sandbox.sandbox_projection."
             "current_sandbox_application_services_v2"
         ) as sandbox_projection,
         patch.object(container, "graph_orchestrator") as graph_orchestrator,

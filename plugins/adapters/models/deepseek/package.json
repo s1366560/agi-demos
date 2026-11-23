@@ -1,0 +1,10 @@
+{
+  "plugin_id": "memstack-deepseek-chat",
+  "kind": "adapter",
+  "version": "1.0.0",
+  "target": "python",
+  "tool_name": "adapt_chat",
+  "wasm": "adapter.wasm",
+  "contribution": "contributions.json",
+  "provenance": "repo://memstack/plugins/adapters/models/deepseek"
+}

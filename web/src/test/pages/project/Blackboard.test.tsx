@@ -3,7 +3,7 @@ import { MemoryRouter, useParams, useSearchParams } from 'react-router-dom';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Blackboard } from '@/pages/project/Blackboard';
+import { Blackboard } from '@business/workspace/ui/web/project/Blackboard';
 
 import type { Workspace } from '@/types/workspace';
 import type { ReactNode } from 'react';
@@ -196,8 +196,8 @@ vi.mock('@/components/blackboard/CentralBlackboardContent', () => ({
 
 vi.mock('@/components/ui/lazyAntd', () => ({}));
 
-vi.mock('@/pages/project/blackboardRouteUtils', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/pages/project/blackboardRouteUtils')>();
+vi.mock('@business/workspace/ui/web/project/blackboardRouteUtils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@business/workspace/ui/web/project/blackboardRouteUtils')>();
   return {
     ...actual,
     clearBlackboardAutoOpenSearchParam: vi.fn().mockReturnValue(null),

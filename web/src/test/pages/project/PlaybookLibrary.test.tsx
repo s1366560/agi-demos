@@ -12,7 +12,7 @@ vi.mock('@/plugins/webOperationAdmissionV2', () => ({
   },
 }));
 
-import { PlaybookLibrary } from '../../../pages/project/PlaybookLibrary';
+import { PlaybookLibrary } from '@business/automation/ui/web/project/PlaybookLibrary';
 import type { Playbook, ReflectionVerdict } from '../../../services/playbookService';
 import { act, render, screen, waitFor } from '../../utils';
 

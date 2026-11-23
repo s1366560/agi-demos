@@ -37,7 +37,7 @@ export function createTenantAgentBindingsRouteModuleLoader({
   return async () => {
     const [{ TenantAgentBindingsPage }, { useTenantAgentBindingsController }] =
       await Promise.all([
-        import('./TenantAgentBindingsPage'),
+        import('@business/agent/ui/desktop/tenant/TenantAgentBindingsPage'),
         import('./useTenantAgentBindingsController'),
       ]);
 
@@ -91,7 +91,7 @@ function BoundTenantAgentBindingsRoute({
   createBinding: (
     context: TenantAgentBindingsRouteContext,
   ) => TenantAgentBindingsRouteBinding;
-  Page: typeof import('./TenantAgentBindingsPage').TenantAgentBindingsPage;
+  Page: typeof import('@business/agent/ui/desktop/tenant/TenantAgentBindingsPage').TenantAgentBindingsPage;
   useController: typeof import('./useTenantAgentBindingsController').useTenantAgentBindingsController;
 }>) {
   const binding = useMemo(

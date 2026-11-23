@@ -6,8 +6,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.infrastructure.agent.processor.goal_evaluator import GoalEvaluator, GoalJudgmentAuditV2
-from src.infrastructure.agent.processor.goal_judgment import GOAL_COMPLETION_JUDGE_TOOL_V2
+from plugins.business.agent.engine.processor.goal_evaluator import (
+    GoalEvaluator,
+    GoalJudgmentAuditV2,
+)
+from plugins.business.agent.engine.processor.goal_judgment import GOAL_COMPLETION_JUDGE_TOOL_V2
 from src.infrastructure.agent.tools.result import ToolControlOutcome
 
 pytestmark = pytest.mark.unit

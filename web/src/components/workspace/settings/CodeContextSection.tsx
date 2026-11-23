@@ -5,10 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { Input } from 'antd';
 import { Code2 } from 'lucide-react';
 
-import { Field, SettingsSection } from '@/pages/tenant/WorkspaceSettingsPrimitives';
+import { Field, SettingsSection } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
 import type { UpdateDraft } from './types';
-import type { SettingsDraft } from '@/pages/tenant/workspaceSettingsModel';
+import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
 
 export interface CodeContextSectionProps {
   draft: SettingsDraft;

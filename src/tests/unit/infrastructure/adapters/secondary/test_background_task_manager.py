@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 
-from src.infrastructure.adapters.secondary import background_tasks as background_task_module
-from src.infrastructure.adapters.secondary.background_tasks import TaskManager, TaskStatus
+from plugins.business.automation.workflow import tasks as background_task_module
+from plugins.business.automation.workflow.tasks import TaskManager, TaskStatus
 
 pytestmark = pytest.mark.unit
 

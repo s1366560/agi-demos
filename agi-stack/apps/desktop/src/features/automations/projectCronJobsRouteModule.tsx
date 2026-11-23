@@ -47,7 +47,7 @@ export type ProjectCronJobsRouteModuleOptions = Readonly<{
 }>;
 
 type AutomationsPageComponent =
-  typeof import('./AutomationsPage').AutomationsPage;
+  typeof import('@business/automation/ui/desktop/automations/AutomationsPage').AutomationsPage;
 
 export function createProjectCronJobsRouteModuleLoader({
   createBinding,
@@ -57,7 +57,7 @@ export function createProjectCronJobsRouteModuleLoader({
   }
 
   return async () => {
-    const { AutomationsPage } = await import('./AutomationsPage');
+    const { AutomationsPage } = await import('@business/automation/ui/desktop/automations/AutomationsPage');
 
     function ProjectCronJobsRouteSurface({
       context,

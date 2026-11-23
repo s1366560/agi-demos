@@ -7,8 +7,12 @@ from uuid import uuid4
 
 from fastapi import Depends, Request
 
+from plugins.business.automation.backend.workflow_runtime import (
+    WORKFLOW_APPLICATION_SERVICE_V2,
+    WorkflowApplicationResolverProtocolV2,
+)
+from plugins.business.automation.workflow.contract import WorkflowEnginePort
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.plugins.v2.boundary import (
@@ -17,10 +21,6 @@ from src.infrastructure.plugins.v2.boundary import (
     current_generation_v2,
 )
 from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.workflow_runtime import (
-    WORKFLOW_APPLICATION_SERVICE_V2,
-    WorkflowApplicationResolverProtocolV2,
-)
 
 
 async def workflow_engine_authority_dependency_v2(
@@ -49,7 +49,14 @@ async def workflow_engine_authority_dependency_v2(
                 "invalid_workflow_application_resolver",
                 "workflow application service has an invalid implementation",
             )
-        yield resolver.resolve(operation).engine
+        from src.infrastructure.adapters.primary.web.startup.workflow_graph_authority import (
+            bind_workflow_graph,
+        )
+
+        with bind_workflow_graph(
+            getattr(request.app.state, "scoped_profile_runtime_v2", None), scope, current_user.id
+        ):
+            yield resolver.resolve(operation).engine
 
 
 def _request_scope_v2(request: Request) -> ScopeV2:

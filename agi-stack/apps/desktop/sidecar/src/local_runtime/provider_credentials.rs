@@ -121,6 +121,27 @@ impl ProviderCredentialBroker {
         &self.installation_id
     }
 
+    /// The host keeps device possession separate from both cloud login and publication ACKs.
+    pub(super) fn plugin_device_proof(&self) -> Result<zeroize::Zeroizing<String>, String> {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+        let _guard = self.lock_operations().map_err(|e| e.to_string())?;
+        let key = format!("plugin-device-proof.v1.{}", self.installation_id);
+        if let Some(proof) = self.store.load(&key).map_err(|e| e.to_string())? {
+            if URL_SAFE_NO_PAD
+                .decode(&proof)
+                .is_ok_and(|decoded| decoded.len() == 32)
+            {
+                return Ok(zeroize::Zeroizing::new(proof));
+            }
+            return Err("plugin_device_proof_invalid".into());
+        }
+        let mut bytes = zeroize::Zeroizing::new([0_u8; 32]);
+        getrandom::getrandom(bytes.as_mut()).map_err(|_| "plugin_device_proof_unavailable")?;
+        let proof = zeroize::Zeroizing::new(URL_SAFE_NO_PAD.encode(bytes.as_ref()));
+        self.store.save(&key, &proof).map_err(|e| e.to_string())?;
+        Ok(proof)
+    }
+
     /// The site-credential broker sharing this broker's vault store and
     /// installation binding (M3 browser credential brokering: site passwords
     /// live in the same application vault, keyed under their own prefix).

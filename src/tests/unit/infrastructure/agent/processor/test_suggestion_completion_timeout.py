@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.infrastructure.agent.processor import (
+from plugins.business.agent.engine.processor import (
     ProcessorConfig,
     ProcessorResult,
     ProcessorState,
     SessionProcessor,
     goal_evaluator,
 )
-from src.infrastructure.agent.processor.goal_evaluator import GoalEvaluator
+from plugins.business.agent.engine.processor.goal_evaluator import GoalEvaluator
 from src.infrastructure.plugins.v2.agent_loop import BuiltinAgentLoopResolverV2
 
 

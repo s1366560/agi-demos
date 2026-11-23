@@ -321,7 +321,7 @@ class TestSubAgentAsToolIntegration:
 
     def test_enable_subagent_as_tool_default(self):
         """Test that enable_subagent_as_tool defaults to True."""
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         agent = ReActAgent(
             model="test-model",
@@ -332,7 +332,7 @@ class TestSubAgentAsToolIntegration:
 
     def test_disable_subagent_as_tool(self):
         """Test that enable_subagent_as_tool can be set to False."""
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         agent = ReActAgent(
             model="test-model",

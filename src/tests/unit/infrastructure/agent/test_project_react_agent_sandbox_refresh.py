@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
+from plugins.business.agent.engine.react.project_react_agent import ProjectReActAgent
 
 
 @pytest.mark.unit

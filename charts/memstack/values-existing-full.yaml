@@ -1,0 +1,12 @@
+# Select the full API for an existing full-schema deployment.
+api:
+  packageKernel: false
+  image:
+    repository: memstack-api
+web:
+  image:
+    repository: memstack-web
+neo4j:
+  enabled: true
+minio:
+  enabled: true

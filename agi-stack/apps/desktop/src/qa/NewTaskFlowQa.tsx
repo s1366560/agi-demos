@@ -6,7 +6,7 @@ import {
   NewTaskFlow,
   type NewTaskAgentTurnInput,
   type NewTaskSession,
-} from '../features/task/NewTaskFlow';
+} from '@business/agent/ui/desktop/task/NewTaskFlow';
 import { I18nProvider } from '../i18n';
 import { createDesktopNewTaskFlowQaOperationsV2 } from './desktopNewTaskFlowAuthorityQaV2';
 import type {

@@ -8,10 +8,10 @@ from contextvars import copy_context
 
 import pytest
 
+from plugins.business.agent.engine.react.react_agent import ReActAgent
 from src.infrastructure.agent.core.detached_subagent_task_supervisor import (
     DetachedSubAgentTaskSupervisor,
 )
-from src.infrastructure.agent.core.react_agent import ReActAgent
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 pytestmark = pytest.mark.unit

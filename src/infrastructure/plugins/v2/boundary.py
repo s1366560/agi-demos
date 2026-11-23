@@ -10,12 +10,15 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
+from starlette.datastructures import Headers
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
 from .builtin_modules import RUNTIME_BOUNDARY_SERVICE_V2, RuntimeBoundaryServiceV2
+from .protocol import IF_PLUGIN_GENERATION_HEADER_V2 as IF_PLUGIN_GENERATION_HEADER_V2
 from .runtime import (
     FiberPhaseV2,
     GenerationLeaseV2,
@@ -634,10 +637,25 @@ class PluginGenerationMiddlewareV2:
         self._host_provider = host_provider
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] not in {"http", "websocket"}:
+        # Kernel probes inspect admission themselves, even while publication blocks new work.
+        probe = (
+            scope["type"] == "http"
+            and scope.get("method") == "GET"
+            and scope.get("path") in {"/health", "/health/ready"}
+        )
+        if probe or scope["type"] not in {"http", "websocket"}:
             await self._app(scope, receive, send)
             return
         async with pin_generation_v2(self._host_provider(scope)) as generation:
+            if scope["type"] == "http":
+                required = Headers(raw=scope.get("headers", [])).getlist(
+                    IF_PLUGIN_GENERATION_HEADER_V2
+                )
+                if required and required != [generation.digest]:
+                    await JSONResponse({"code": "route_generation_mismatch"}, status_code=409)(
+                        scope, receive, send
+                    )
+                    return
             boundary = generation.resolve(
                 RUNTIME_BOUNDARY_SERVICE_V2,
                 ScopeV2(kind=ScopeKindV2.ROOT),

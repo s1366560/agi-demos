@@ -8,7 +8,7 @@ const readSource = (path) =>
 const appSource = readSource('App.tsx');
 const commandPaletteSource = readSource('features/navigation/CommandPalette.tsx');
 const reviewPanelSource = readSource('features/session/WorkspaceReviewPanel.tsx');
-const flowSource = readSource('features/task/NewTaskFlow.tsx');
+const flowSource = readSource('../../../../plugins/business/agent/ui/desktop/task/NewTaskFlow.tsx');
 const stagesSource = readSource('features/task/NewTaskFlowStages.tsx');
 const runtimeSource = readSource('features/runtime/RuntimeConfigPanel.tsx');
 const chatPanelCssSource = readSource('features/chat/ChatPanel.css');

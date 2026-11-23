@@ -10,8 +10,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.sandbox_event_service import SandboxEventPublisher
-from src.application.services.sandbox_orchestrator import (
+from plugins.business.environments.backend.sandbox.sandbox_event_service import (
+    SandboxEventPublisher,
+)
+from plugins.business.environments.backend.sandbox.sandbox_orchestrator import (
     DesktopConfig,
     SandboxOrchestrator,
     TerminalConfig,

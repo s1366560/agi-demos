@@ -11,7 +11,7 @@ import { apiFetch } from '@/services/client/urlUtils';
 import {
   parseDeployProgressSseEvent,
   streamDeployProgress,
-} from '../../../pages/tenant/deployProgressStream';
+} from '@business/environments/ui/web/tenant/deployProgressStream';
 
 describe('parseDeployProgressSseEvent', () => {
   beforeEach(() => {

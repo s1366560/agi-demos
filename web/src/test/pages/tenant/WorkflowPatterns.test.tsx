@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkflowPatterns } from '@/pages/tenant/WorkflowPatterns';
+import { WorkflowPatterns } from '@business/automation/ui/web/tenant/WorkflowPatterns';
 
 const { modalConfirm, listPatterns, deletePattern, successMessage, errorMessage, lazyMessage } =
   vi.hoisted(() => {

@@ -36,7 +36,7 @@ const conversationThreadsSource = readFileSync(
   'utf8',
 );
 const newTaskFlowSource = readFileSync(
-  new URL('../src/features/task/NewTaskFlow.tsx', import.meta.url),
+  new URL('../../../../plugins/business/agent/ui/desktop/task/NewTaskFlow.tsx', import.meta.url),
   'utf8',
 );
 const createComposerThreadSource =

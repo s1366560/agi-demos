@@ -123,7 +123,10 @@ def infer_provider_from_model(model: str) -> str:
 def _is_provider_context_overflow(error: Exception) -> bool:
     from litellm.exceptions import ContextWindowExceededError
 
-    return isinstance(error, ContextWindowExceededError) or getattr(error, "code", None) == "context_length_exceeded"
+    return (
+        isinstance(error, ContextWindowExceededError)
+        or getattr(error, "code", None) == "context_length_exceeded"
+    )
 
 
 class StreamEventType(str, Enum):
@@ -730,13 +733,31 @@ class LLMStream:
 
         # Import rate limiter for concurrency control
         from src.domain.llm_providers.models import ProviderType
+        from src.infrastructure.llm.project_chat_stream_adapter import (
+            any_pinned_chat_adapter,
+            selected_chat_adapter,
+        )
         from src.infrastructure.llm.resilience import (
             RateLimitExceededError,
             get_provider_rate_limiter,
         )
 
-        # Prepare kwargs
         kwargs = self.config.to_litellm_kwargs()
+        if (
+            any_pinned_chat_adapter()
+            and selected_chat_adapter(
+                litellm.get_llm_provider(
+                    model=kwargs["model"], custom_llm_provider=kwargs.get("custom_llm_provider")
+                )[1]
+            )
+            is not None
+        ):
+            from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
+
+            raise RuntimeV2Error(
+                "chat_adapter_transport",
+                "Project chat adapter requires the tenant-configured streaming client",
+            )
         from src.infrastructure.agent.native_computer_use.audio_messages import prepare_audio_input
 
         # This fallback has no persisted Provider capability declaration.

@@ -1,0 +1,49 @@
+[
+  {
+    "plugin_id": "memstack-agent",
+    "permissions": [
+      "tools.execute",
+      "ui.slot",
+      "agent.loop.drive",
+      "subagents.register"
+    ]
+  },
+  {
+    "plugin_id": "memstack-knowledge",
+    "permissions": [
+      "tools.execute",
+      "ui.slot",
+      "graph.projection.compute"
+    ]
+  },
+  {
+    "plugin_id": "memstack-workspace",
+    "permissions": [
+      "tools.execute",
+      "ui.slot"
+    ]
+  },
+  {
+    "plugin_id": "memstack-automation",
+    "permissions": [
+      "tools.execute",
+      "ui.slot"
+    ]
+  },
+  {
+    "plugin_id": "memstack-environments",
+    "permissions": [
+      "tools.execute",
+      "ui.slot"
+    ]
+  },
+  {
+    "plugin_id": "memstack-billing",
+    "permissions": [
+      "tools.execute",
+      "ui.slot",
+      "storage.read",
+      "storage.write"
+    ]
+  }
+]

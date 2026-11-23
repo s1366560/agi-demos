@@ -9,7 +9,7 @@ and generation; parent disposal does not revoke the child's independent lease.
 
 from collections.abc import Sequence
 
-from src.infrastructure.agent.processor import ToolDefinition
+from plugins.business.agent.engine.processor import ToolDefinition
 
 from . import boundary
 from .agent_operation_tool_contributions import _OperationToolAdapterV2

@@ -1,4 +1,5 @@
 import { MarketplaceOAuth } from './MarketplaceOAuth';
+import { CloudBusinessPage } from './CloudBusinessPage';
 import { MarketplaceCache } from './MarketplaceCache';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -76,16 +77,21 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
     reading.current?.abort();
     const controller = new AbortController();
     reading.current = controller;
-    const results = await Promise.all([
+    const [catalogResult, sourceResult, installationResult] = await Promise.allSettled([
       client.catalog(controller.signal),
       client.sources(controller.signal),
       client.installations(controller.signal),
     ]);
     if (token !== generation.current || controller.signal.aborted) return;
-    setCatalog(results[0].items);
-    setSourceErrors(results[0].errors ?? []);
-    setSources(results[1].items);
-    setInstalled(results[2].items);
+    if (installationResult.status === 'rejected') throw installationResult.reason;
+    setInstalled(installationResult.value.items);
+    setCatalog(catalogResult.status === 'fulfilled' ? catalogResult.value.items : []);
+    setSourceErrors(catalogResult.status === 'fulfilled' ? catalogResult.value.errors ?? [] : []);
+    setSources(sourceResult.status === 'fulfilled' ? sourceResult.value.items : []);
+    const failure = [catalogResult, sourceResult].find((item) => item.status === 'rejected');
+    if (failure?.status === 'rejected')
+      setError(failure.reason instanceof Error ? failure.reason.message : String(failure.reason));
+    else setError('');
     setLoaded(true);
   }
   useEffect(() => {
@@ -318,6 +324,18 @@ export function MarketplaceView({ client, t, scope, canManage, local, onInstallS
                   {item.name} · {item.version}
                 </h3>
                 <p role="status">{t(item.status)}</p>
+                {item.running_version !== undefined && (
+                  <p>{t('runningVersion')} · {item.running_version ?? '—'}</p>
+                )}
+                {item.has_desktop_ui && item.actual_digest && !local && (
+                  <CloudBusinessPage
+                    key={item.actual_digest}
+                    client={client}
+                    item={item}
+                    digest={item.actual_digest}
+                    label={t('openPage')}
+                  />
+                )}
                 {item.error ? <p role="alert">{item.error}</p> : null}
                 {item.install_strategy !== 'signed-v2' ? item.oauth_services?.map((service) => <MarketplaceOAuth key={service.name} client={client} installationId={item.id} service={service} canManage={canManage} t={t} />) : null}
                 <div className="marketplace-actions">

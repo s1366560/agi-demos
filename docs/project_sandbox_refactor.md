@@ -82,7 +82,7 @@ Database table `project_sandboxes`:
 SQLAlchemy-based implementation with ORM-domain conversion.
 
 ### 5. Service: `ProjectSandboxLifecycleService`
-**Location:** `src/application/services/project_sandbox_lifecycle_service.py`
+**Location:** `plugins/business/environments/backend/sandbox/project_sandbox_lifecycle_service.py`
 
 Core service providing:
 
@@ -147,7 +147,7 @@ sandbox_health_check_interval: int = Field(default=60)
 ### Python API
 
 ```python
-from src.application.services.project_sandbox_lifecycle_service import (
+from plugins.business.environments.backend.sandbox.project_sandbox_lifecycle_service import (
     ProjectSandboxLifecycleService
 )
 

@@ -6,9 +6,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from alembic.operations import Operations
-from alembic.operations.ops import CreateTableOp
-from alembic.runtime.migration import MigrationContext
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -51,14 +48,6 @@ pg_sync = _pg_sync
 async def http_memory(pg_sync, monkeypatch):
     sessions, scope = pg_sync
     async with sessions() as session:
-        connection = await session.connection()
-
-        def add_task_table(connection):
-            operations = Operations(MigrationContext.configure(connection))
-            operations.invoke(CreateTableOp.from_table(TaskLog.__table__))
-
-        await connection.run_sync(add_task_table)
-        await session.commit()
         user = await session.get(User, scope.actor_id)
     graph, workflow = AsyncMock(), AsyncMock()
 

@@ -29,7 +29,10 @@ def _raise_unpublished() -> dict[str, object]:
 
 
 @pytest.mark.unit
-async def test_system_api_reports_unpublished_generation_without_authorization_language() -> None:
+@pytest.mark.parametrize("action", ["list", "describe", "request"])
+async def test_system_api_reports_unpublished_generation_without_authorization_language(
+    action: str,
+) -> None:
     tool = make_system_api_tool(openapi_schema_provider=_raise_unpublished)
     result = await tool.execute(
         ToolContext(
@@ -42,7 +45,8 @@ async def test_system_api_reports_unpublished_generation_without_authorization_l
             tenant_id="tenant",
             user_id="user",
         ),
-        action="list",
+        action=action,
+        operation_id="unpublished",
     )
 
     assert isinstance(result, ToolResult)
@@ -53,7 +57,7 @@ async def test_system_api_reports_unpublished_generation_without_authorization_l
     assert payload["generation_status"] == "unpublished"
     assert payload["publication_required"] is True
     assert payload["substitutes_other_generation"] is False
-    assert "scoped profile publication does not" in payload["distinction"]
+    assert "in the same scope" in payload["distinction"]
     assert "does not authorize" not in result.output
 
 

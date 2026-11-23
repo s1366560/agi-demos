@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,

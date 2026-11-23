@@ -14,9 +14,13 @@ import sys
 
 sys.path.insert(0, os.getcwd())
 
+from plugins.business.agent.engine.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.domain.model.agent.hitl_types import HITLType
 from src.infrastructure.agent.hitl.ray_hitl_handler import RayHITLHandler
-from src.infrastructure.agent.processor import ProcessorConfig, SessionProcessor, ToolDefinition
 
 
 def create_mock_tool_def(name: str) -> ToolDefinition:

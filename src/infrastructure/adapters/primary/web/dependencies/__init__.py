@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, AsyncIterator
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from fastapi import Depends, Request
 from sqlalchemy import select
@@ -36,18 +36,12 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
-from src.infrastructure.graph.registry import ENV_STORE_ID_PREFIX
-from src.infrastructure.plugins.v2.backend_store_services import BackendStoreServicesV2
-from src.infrastructure.plugins.v2.boundary import current_generation_v2
-from src.infrastructure.plugins.v2.graph_runtime import (
-    GRAPH_RUNTIME_SERVICE_V2,
-    GraphRuntimeServiceV2,
-)
-from src.infrastructure.plugins.v2.retrieval_runtime import (
-    RETRIEVAL_RUNTIME_SERVICE_V2,
-    RetrievalRuntimeServiceV2,
-)
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.backend_store_services import BackendStoreServicesV2
+    from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeServiceV2
+    from src.infrastructure.plugins.v2.retrieval_runtime import RetrievalRuntimeServiceV2
 
 
 class _BackendStoreAuthorityProtocolV2(Protocol):
@@ -88,6 +82,12 @@ def get_neo4j_client(_request: Request) -> object | None:
 
 
 def _graph_runtime_v2() -> GraphRuntimeServiceV2:
+    from src.infrastructure.plugins.v2.boundary import current_generation_v2
+    from src.infrastructure.plugins.v2.graph_runtime import (
+        GRAPH_RUNTIME_SERVICE_V2,
+        GraphRuntimeServiceV2,
+    )
+
     runtime = current_generation_v2().resolve(
         GRAPH_RUNTIME_SERVICE_V2,
         ScopeV2(kind=ScopeKindV2.ROOT),
@@ -101,6 +101,12 @@ def _graph_runtime_v2() -> GraphRuntimeServiceV2:
 
 
 def _retrieval_runtime_v2() -> RetrievalRuntimeServiceV2:
+    from src.infrastructure.plugins.v2.boundary import current_generation_v2
+    from src.infrastructure.plugins.v2.retrieval_runtime import (
+        RETRIEVAL_RUNTIME_SERVICE_V2,
+        RetrievalRuntimeServiceV2,
+    )
+
     runtime = current_generation_v2().resolve(
         RETRIEVAL_RUNTIME_SERVICE_V2,
         ScopeV2(kind=ScopeKindV2.ROOT),
@@ -159,6 +165,8 @@ async def get_graph_store(
         tenant_id = str(row[0]) if row is not None else None
         store_id = str(row[1]) if row is not None and row[1] else None
         if tenant_id and store_id:
+            from src.infrastructure.graph.registry import ENV_STORE_ID_PREFIX
+
             if store_id.startswith(ENV_STORE_ID_PREFIX):
                 return get_graph_service(request)
             return await backend_store.services.graph_service.resolve_backend(

@@ -2,9 +2,31 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from plugins.adapters.channels.feishu.contribution import (
+    builtin_feishu_channel_adapter_definition_v2,
+)
+from plugins.business.automation.backend.workflow_pattern_services import (
+    workflow_pattern_service_definitions_v2,
+)
+from plugins.business.automation.backend.workflow_runtime import (
+    WorkflowRuntimeFactoryV2,
+    workflow_service_definitions_v2,
+)
+from plugins.business.automation.workflow.contract import WorkflowHandlerRegistry
+from plugins.business.environments.backend.sandbox.sandbox_http_service_registry import (
+    sandbox_http_service_registry_definition_v2,
+)
+from plugins.business.environments.backend.sandbox.sandbox_operation_services import (
+    sandbox_operation_service_definitions_v2,
+)
+from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+    SandboxRuntimeFactoryV2,
+    sandbox_service_definitions_v2,
+)
 
 from .admin_dlq_services import admin_dlq_service_definitions_v2
 from .agent_binding_services import agent_binding_definition_v2
@@ -80,10 +102,7 @@ from .audit_services import audit_service_definitions_v2
 from .backend_store_services import backend_store_service_definitions_v2
 from .background_task_services import background_task_service_definitions_v2
 from .billing_services import billing_service_definitions_v2
-from .channel_adapters import (
-    builtin_channel_adapter_catalog_definition_v2,
-    builtin_feishu_channel_adapter_definition_v2,
-)
+from .channel_adapters import builtin_channel_adapter_catalog_definition_v2
 from .channel_runtime import ChannelRuntimeManagerV2, channel_runtime_definition_v2
 from .cicd_pipeline_repository_services import cicd_pipeline_repository_definition_v2
 from .cloud_knowledge_sync_modules import cloud_knowledge_sync_definitions_v2
@@ -123,9 +142,6 @@ from .reflection_services import reflection_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
-from .sandbox_http_service_registry import sandbox_http_service_registry_definition_v2
-from .sandbox_operation_services import sandbox_operation_service_definitions_v2
-from .sandbox_runtime import SandboxRuntimeFactoryV2, sandbox_service_definitions_v2
 from .schema_services import schema_service_definitions_v2
 from .search_services import search_service_definition_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
@@ -156,8 +172,6 @@ from .tenant_skill_config_services import tenant_skill_config_service_definition
 from .tenant_webhook_services import tenant_webhook_service_definitions_v2
 from .tool_set import builtin_tool_set_definition_v2
 from .tunnel_services import tunnel_service_definitions_v2
-from .workflow_pattern_services import workflow_pattern_service_definitions_v2
-from .workflow_runtime import WorkflowRuntimeFactoryV2, workflow_service_definitions_v2
 from .workspace_context_services import workspace_context_service_definitions_v2
 from .workspace_contract_actor_services import (
     workspace_contract_actor_resolver_definition_v2,
@@ -172,6 +186,8 @@ from .workspace_runtime import workspace_runtime_definitions_v2
 from .workspace_wtp_publisher import workspace_wtp_publisher_definition_v2
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from .agent_pool_runtime import AgentPoolRuntimeFactoryV2
 
 RUNTIME_BOUNDARY_MODULE_V2 = "builtin://memstack/runtime/generation-boundary"
@@ -184,6 +200,12 @@ class RuntimeBoundaryServiceV2:
 
     protocol_version: int
     owner_entry_id: str
+
+
+def _register_graph_workflows(engine: WorkflowHandlerRegistry) -> None:
+    from plugins.business.knowledge.backend.graph_workflows import register_workflow_handlers_v2
+
+    register_workflow_handlers_v2(engine)
 
 
 def _apply_runtime_boundary(
@@ -210,6 +232,7 @@ def _apply_runtime_boundary(
 
 def builtin_runtime_definitions_v2(  # noqa: PLR0913
     *,
+    billing_schema_sessions: Callable[[], AsyncSession] | None = None,
     agent_lifecycle_connection_manager: AgentLifecycleConnectionManagerV2 | None = None,
     agent_pool_runtime_factory: AgentPoolRuntimeFactoryV2 | None = None,
     graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
@@ -379,7 +402,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *admin_dlq_service_definitions_v2(),
         *tunnel_service_definitions_v2(),
         *audit_service_definitions_v2(),
-        *billing_service_definitions_v2(),
+        *billing_service_definitions_v2(billing_schema_sessions),
         *workspace_context_service_definitions_v2(),
         *shares_service_definitions_v2(),
         *invitation_service_definitions_v2(),
@@ -421,7 +444,9 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *agent_recovery_stream_service_definitions_v2(),
         *agent_turn_service_definitions_v2(),
         *task_log_service_definitions_v2(),
-        *workflow_service_definitions_v2(workflow_runtime_factory),
+        *workflow_service_definitions_v2(
+            workflow_runtime_factory, register_handlers=_register_graph_workflows
+        ),
         retrieval_runtime_definition_v2(retrieval_runtime_factory),
         search_service_definition_v2(),
         *memory_service_definitions_v2(),

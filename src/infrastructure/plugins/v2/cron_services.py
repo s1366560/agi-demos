@@ -11,8 +11,8 @@ from typing import Any, Protocol, runtime_checkable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.automation_command_service import AutomationCommandService
-from src.application.services.cron_service import CronJobService
+from plugins.business.automation.backend.automation_command_service import AutomationCommandService
+from plugins.business.automation.backend.cron_service import CronJobService
 from src.domain.model.cron.cron_job import CronJob
 from src.infrastructure.adapters.secondary.common.base_repository import (
     refresh_select_statement,

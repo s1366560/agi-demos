@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from src.application.schemas.device_plugin_grants import DeviceAdmissionView, DeviceGrantView
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateResponseV2,
     PlatformPluginDataPlaneCredentialIssuedResponseV2,
@@ -125,6 +126,12 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
             PlatformPluginPublicationReadinessResponseV2,
         ),
         (
+            f"{v2}/optional-business/inspect",
+            ("POST",),
+            "inspect_optional_business_v2",
+            dict[str, Any],
+        ),
+        (
             f"{v2}/optional-business/install",
             ("POST",),
             "install_optional_business_v2",
@@ -197,6 +204,30 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
             dict[str, Any],
         ),
         (
+            "/api/v1/projects/{project_id}/device-plugin-grants/authority",
+            ("GET",),
+            "device_package_authority",
+            dict[str, bool],
+        ),
+        (
+            "/api/v1/projects/{project_id}/device-plugin-grants/",
+            ("POST",),
+            "approve_device_package",
+            DeviceGrantView,
+        ),
+        (
+            "/api/v1/projects/{project_id}/device-plugin-grants/check",
+            ("POST",),
+            "check_device_package",
+            DeviceAdmissionView,
+        ),
+        (
+            "/api/v1/projects/{project_id}/device-plugin-grants/{grant_id}",
+            ("DELETE",),
+            "revoke_device_package",
+            None,
+        ),
+        (
             prefix,
             ("GET", "POST", "PUT", "PATCH", "DELETE"),
             "retired_plugin_protocol_v1_root_route",
@@ -209,46 +240,24 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
             None,
         ),
     )
-    assert (
-        tuple(definition.tags for definition in definitions[:-2])
-        == (("Platform Plugins", "Platform Plugins V2"),) * (len(definitions) - 2)
-    )
+    assert tuple(definition.tags for definition in definitions[:-2]) == (
+        ("Platform Plugins", "Platform Plugins V2"),
+    ) * (len(definitions) - 2)
     assert tuple(definition.tags for definition in definitions[-2:]) == (
         ("Platform Plugins",),
         ("Platform Plugins",),
     )
     assert all(definition.include_in_schema is False for definition in definitions[-2:])
-    assert tuple(definition.status_code for definition in definitions[:-2]) == (
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        201,
-        None,
-        201,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
+    assert {
+        definition.name: definition.status_code
+        for definition in definitions
+        if definition.status_code is not None
+    } == {
+        "issue_data_plane_credential_v2": 201,
+        "rotate_data_plane_credential_v2": 201,
+        "approve_device_package": 201,
+        "revoke_device_package": 204,
+    }
     assert {definition.owner_entry_id for definition in definitions} == {
         subject.PLATFORM_PLUGINS_HTTP_ROUTES_ENTRY_V2
     }

@@ -237,6 +237,17 @@ async def search_advanced(
                     }
                 )
 
+        if project_id:
+            from src.infrastructure.llm.project_cohere_rerank import rank_project_search
+
+            try:
+                formatted_results = await rank_project_search(
+                    db, project_id, query, formatted_results, limit, actor_id=current_user.id
+                )
+            except Exception as error:
+                logger.warning("Project reranking unavailable (%s)", type(error).__name__)
+                raise HTTPException(503, detail=_("Project reranking is unavailable")) from error
+
         return {
             "results": formatted_results,
             "total": len(formatted_results),

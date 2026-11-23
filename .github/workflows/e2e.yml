@@ -183,9 +183,9 @@ jobs:
       - name: Build lightweight authenticated Sandbox fixture
         run: |
           docker build \
-            --file sandbox-mcp-server/Dockerfile.e2e \
+            --file plugins/business/environments/sandbox-mcp-server/Dockerfile.e2e \
             --tag sandbox-mcp-server:lite \
-            sandbox-mcp-server
+            plugins/business/environments/sandbox-mcp-server
           mkdir -p /tmp/memstack-e2e-meta
           chmod 0777 /tmp/memstack-e2e-meta
 

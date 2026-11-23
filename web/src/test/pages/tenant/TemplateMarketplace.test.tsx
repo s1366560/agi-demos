@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App } from 'antd';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TemplateMarketplace } from '../../../pages/tenant/TemplateMarketplace';
+import { TemplateMarketplace } from '@business/environments/ui/web/tenant/TemplateMarketplace';
 import { subagentTemplateService } from '../../../services/subagentTemplateService';
 
 import type {

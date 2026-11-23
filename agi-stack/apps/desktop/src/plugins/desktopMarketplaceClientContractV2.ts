@@ -3,7 +3,7 @@ import type { LocalPluginClient } from '../api/localPluginClient';
 
 export type DesktopMarketplaceCatalogV3 = Pick<
   MarketplaceClient,
-  'catalog' | 'sources' | 'installations' | 'oauthStatus' | 'cache'
+  'catalog' | 'businessPage' | 'sources' | 'installations' | 'oauthStatus' | 'cache'
 >;
 export type DesktopMarketplaceManagementV3 = Omit<
   MarketplaceClient,
@@ -18,6 +18,10 @@ export function guardMarketplaceCatalogV3(
   assertActive: () => void,
 ): DesktopMarketplaceCatalogV3 {
   return Object.freeze({
+    businessPage: (...args) => {
+      assertActive();
+      return client.businessPage(...args);
+    },
     catalog: (...args) => {
       assertActive();
       return client.catalog(...args);
@@ -46,6 +50,10 @@ export function guardMarketplaceManagementV3(
   assertActive: () => void,
 ): DesktopMarketplaceManagementV3 {
   return Object.freeze({
+    businessCommand: (...args) => {
+      assertActive();
+      return client.businessCommand(...args);
+    },
     addSource: (...args) => {
       assertActive();
       return client.addSource(...args);

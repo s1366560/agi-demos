@@ -1,26 +1,30 @@
-import path from 'node:path';
+import path from "node:path";
 
-import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
-import { rendererRootHotReload } from './scripts/rendererRootHotReload.mjs';
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+import { rendererRootHotReload } from "./scripts/rendererRootHotReload.mjs";
 
 export default defineConfig({
-  base: './',
+  base: "./",
   plugins: [rendererRootHotReload(__dirname), react()],
   resolve: {
+    dedupe: ["react", "react-dom", "@radix-ui/themes", "@radix-ui/react-icons"],
     alias: {
-      '@agistack/plugin-runtime': path.resolve(
+      "@desktop": path.resolve(__dirname, "src"),
+      "@business": path.resolve(__dirname, "../../../plugins/business"),
+      "@agistack/plugin-runtime": path.resolve(
         __dirname,
-        '../../packages/plugin-runtime/src/index.ts'
+        "../../packages/plugin-runtime/src/index.ts",
       ),
-      '@agistack/plugin-slots': path.resolve(
+      "@agistack/plugin-slots": path.resolve(
         __dirname,
-        '../../packages/plugin-slots/src/index.ts'
+        "../../packages/plugin-slots/src/index.ts",
       ),
     },
   },
+  server: { fs: { allow: [path.resolve(__dirname, "../../..")] } },
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     emptyOutDir: true,
   },
 });

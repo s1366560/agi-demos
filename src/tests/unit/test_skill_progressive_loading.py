@@ -28,7 +28,7 @@ class TestMarkdownParser:
 
     def test_parse_valid_skill_file(self):
         """Test parsing a valid SKILL.md file with all fields."""
-        from src.infrastructure.skill.markdown_parser import MarkdownParser
+        from plugins.business.agent.skill_validation.markdown_parser import MarkdownParser
 
         content = """---
 name: test-skill
@@ -65,7 +65,7 @@ This is the skill content.
 
     def test_parse_minimal_skill_file(self):
         """Test parsing a minimal SKILL.md with only required fields."""
-        from src.infrastructure.skill.markdown_parser import MarkdownParser
+        from plugins.business.agent.skill_validation.markdown_parser import MarkdownParser
 
         content = """---
 name: minimal-skill
@@ -86,7 +86,7 @@ Instructions here.
 
     def test_parse_comma_separated_patterns(self):
         """Test parsing comma-separated trigger patterns."""
-        from src.infrastructure.skill.markdown_parser import MarkdownParser
+        from plugins.business.agent.skill_validation.markdown_parser import MarkdownParser
 
         content = """---
 name: comma-skill
@@ -104,7 +104,10 @@ Content.
 
     def test_parse_missing_name_raises_error(self):
         """Test that missing name field raises an error."""
-        from src.infrastructure.skill.markdown_parser import MarkdownParseError, MarkdownParser
+        from plugins.business.agent.skill_validation.markdown_parser import (
+            MarkdownParseError,
+            MarkdownParser,
+        )
 
         content = """---
 description: Skill without name
@@ -119,7 +122,10 @@ Content.
 
     def test_parse_missing_description_raises_error(self):
         """Test that missing description field raises an error."""
-        from src.infrastructure.skill.markdown_parser import MarkdownParseError, MarkdownParser
+        from plugins.business.agent.skill_validation.markdown_parser import (
+            MarkdownParseError,
+            MarkdownParser,
+        )
 
         content = """---
 name: no-description
@@ -139,7 +145,10 @@ Content.
 
     def test_parse_no_frontmatter_raises_error(self):
         """Test that content without frontmatter raises an error."""
-        from src.infrastructure.skill.markdown_parser import MarkdownParseError, MarkdownParser
+        from plugins.business.agent.skill_validation.markdown_parser import (
+            MarkdownParseError,
+            MarkdownParser,
+        )
 
         content = """# Just Markdown
 
@@ -260,9 +269,9 @@ class TestFileSystemSkillLoader:
 
     def test_project_context_keeps_global_skills_tenant_scoped(self):
         """Global filesystem skills should not become project-scoped by ambient context."""
+        from plugins.business.agent.skill_validation.markdown_parser import MarkdownParser
         from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
         from src.infrastructure.skill.filesystem_scanner import SkillFileInfo
-        from src.infrastructure.skill.markdown_parser import MarkdownParser
 
         loader = FileSystemSkillLoader(
             base_path=Path("/tmp/project"),
@@ -294,9 +303,9 @@ Content.
 
     def test_project_context_scopes_project_local_skills_to_project(self):
         """Project-local filesystem skills should keep project ownership."""
+        from plugins.business.agent.skill_validation.markdown_parser import MarkdownParser
         from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
         from src.infrastructure.skill.filesystem_scanner import SkillFileInfo
-        from src.infrastructure.skill.markdown_parser import MarkdownParser
 
         loader = FileSystemSkillLoader(
             base_path=Path("/tmp/project"),

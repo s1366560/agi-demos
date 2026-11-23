@@ -9,7 +9,7 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const flow = source('src/features/task/NewTaskFlow.tsx');
+const flow = source('../../../plugins/business/agent/ui/desktop/task/NewTaskFlow.tsx');
 const authority = source('src/plugins/desktopNewTaskFlowAuthorityModuleV2.ts');
 const generation = desktopProductionRuntimeSource();
 const standaloneQa = source('src/qa/NewTaskFlowQa.tsx');

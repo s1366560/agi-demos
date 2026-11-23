@@ -94,6 +94,7 @@ mod conversation_history;
 mod conversation_llm_route;
 mod cua_repl;
 mod device_mcp;
+mod device_plugins;
 pub(crate) mod execution_authority;
 mod execution_profile;
 mod execution_selection;
@@ -343,6 +344,13 @@ impl LocalRuntimeService {
         input: Value,
     ) -> Result<Value, String> {
         computer_use_v2::native_operation(&self.state, broker, input).await
+    }
+    pub(crate) async fn device_plugin_manage_v2(
+        &self,
+        broker: &crate::trusted_session::TrustedSessionBroker,
+        input: Value,
+    ) -> Result<Value, String> {
+        device_plugins::operation(&self.state, broker, input).await
     }
     pub(crate) async fn device_mcp_manage_v2(
         &self,

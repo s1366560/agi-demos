@@ -7,7 +7,7 @@ import type {
 } from '../navigation/desktopRouteModule';
 import type { DesktopRouteContext } from '../navigation/desktopRouteRegistry';
 import type { ProjectKnowledgeScope } from '../project-knowledge/projectKnowledgeClient';
-import { ProjectPlaybooksPage } from './ProjectPlaybooksPage';
+import { ProjectPlaybooksPage } from '@business/automation/ui/desktop/project-playbooks/ProjectPlaybooksPage';
 import type {
   ProjectPlaybooksController,
   ProjectPlaybooksViewModel,

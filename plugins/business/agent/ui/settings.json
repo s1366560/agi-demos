@@ -1,0 +1,16 @@
+{
+  "schema": "memstack.slot-ui/1",
+  "title": "Skill validation",
+  "actions": [
+    {
+      "id": "validate-skill",
+      "label": "Validate Skill",
+      "input": {
+        "label": "SKILL.md document (JSON)",
+        "initial": {
+          "content": "---\nname: example\ndescription: Validate the document structure.\n---\n# Example"
+        }
+      }
+    }
+  ]
+}

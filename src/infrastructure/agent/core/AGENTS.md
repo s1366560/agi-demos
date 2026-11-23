@@ -1,15 +1,15 @@
 # agent/core/ — ReAct Engine & Agent Lifecycle
 
 ## Purpose
-- Houses the ReAct reasoning loop, project-scoped agent wrapper, and tool conversion layer
-- Entry point: `react_agent.py` (ReActAgent), wrapped by `project_react_agent.py` (ProjectReActAgent)
+- Hosts model streaming, scoped tool binding and tool conversion for the Agent package
+- The ReAct and project wrapper implementations live in `plugins/business/agent/engine/react/`; its session processor is in `plugins/business/agent/engine/processor/`.
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `react_agent.py` | ReActAgent — main reasoning loop, 8-phase `__init__`, `stream()` generator |
-| `project_react_agent.py` | ProjectReActAgent — lifecycle wrapper (initialize/execute_chat/pause/resume/stop) |
+| `plugins/business/agent/engine/react/react_agent.py` | ReActAgent — main reasoning loop, 8-phase `__init__`, `stream()` generator |
+| `plugins/business/agent/engine/react/project_react_agent.py` | ProjectReActAgent — lifecycle wrapper (initialize/execute_chat/pause/resume/stop) |
 | `tool_converter.py` | `convert_tools()` — wraps AgentToolBase and ToolInfo into ToolDefinition |
 | `tool_selector.py` | Tool selection pipeline — semantic/keyword/embedding backends, policy layers |
 | `doom_loop_detector.py` | Detects stuck loops (repeated tool calls, no progress) |

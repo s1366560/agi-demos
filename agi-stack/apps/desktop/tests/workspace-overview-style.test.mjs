@@ -9,7 +9,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const { WorkspaceOverview } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/workspace/WorkspaceOverview.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/WorkspaceOverview.js'
 );
 
 const stylesheet = readFileSync(
@@ -17,7 +17,7 @@ const stylesheet = readFileSync(
   'utf8'
 );
 const source = readFileSync(
-  new URL('../src/features/workspace/WorkspaceOverview.tsx', import.meta.url),
+  new URL('../../../../plugins/business/workspace/ui/desktop/workspace/WorkspaceOverview.tsx', import.meta.url),
   'utf8'
 );
 const prototypeStylesheet = readFileSync(

@@ -122,7 +122,7 @@ class TestReActAgentIntegration:
 
     def test_react_agent_imports(self):
         """Test ReActAgent can be imported."""
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         assert ReActAgent is not None
 
@@ -130,7 +130,7 @@ class TestReActAgentIntegration:
         """Test ReActAgent references EventConverter."""
         import inspect
 
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         init_source = inspect.getsource(ReActAgent.__init__)
 

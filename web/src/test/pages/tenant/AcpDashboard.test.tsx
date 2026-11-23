@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AcpDashboard } from '@/pages/tenant/AcpDashboard';
+import { AcpDashboard } from '@business/agent/ui/web/tenant/AcpDashboard';
 
 import { ACP_SECRET_UNCHANGED_SENTINEL } from '@/types/acp';
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 
-import { SkillEvolution } from '@/pages/tenant/SkillEvolution';
+import { SkillEvolution } from '@business/agent/ui/web/tenant/SkillEvolution';
 import { useTenantStore } from '@/stores/tenant';
 
 import { fireEvent, render, screen, waitFor } from '../../utils';

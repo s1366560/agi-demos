@@ -2,6 +2,7 @@ import {
   isCloudSandboxDownloadPath,
   requireCloudSandboxFileAuthority,
 } from '../../src/api/cloudSandboxDownloadAuthority';
+import { parseLocalRunRequest } from './localRunRequest';
 import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
 import type { CloudSessionRefreshOutcome } from './cloudAuthenticationAuthority';
 import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
@@ -267,6 +268,52 @@ export async function authorizeVaultBoundSandboxDesktopGrant(
     credential: session.credential,
     expiresAt: session.expires_at,
   });
+}
+
+/** Main-only admission material for the private Sidecar control pipe. */
+export async function authorizeDesktopLocalRun(
+  command: 'local_run_execute' | 'local_run_stop',
+  input: unknown,
+  dependencies: VaultBoundCloudRequestDependencies,
+): Promise<Record<string, unknown>> {
+  const { args, conversationId, runId } = parseLocalRunRequest(command, input);
+  const session = await adoptCloudSession(await dependencies.loadTrustedSession(), dependencies);
+  const currentBearer = () => dependencies.refreshState?.credential ?? session.credential;
+  const observe = async (path: string) => {
+    const response = await authorizedFetch(session, dependencies, { path, method: 'GET' });
+    const body = await boundedJson(response, false, currentBearer());
+    dependencies.signal?.throwIfAborted();
+    if (!response.ok) throw new Error('local run scope observation failed');
+    return body;
+  };
+  // A 401 can rotate the token once. All accepted observations must use the same credential.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const context = parseObservedContext(await observe('/api/v1/workspace-context'));
+    const bearer = currentBearer();
+    const identity = await observe('/api/v1/auth/me');
+    if (bearer !== currentBearer()) continue;
+    if (!context.projectId || context.tenantId !== args.tenant_id ||
+        !isRecord(identity) || identity.user_id !== args.user_id) {
+      throw new Error('local run identity or tenant mismatch');
+    }
+    await observeEndpointWorkspaceScope({
+      kind: 'project', tenantId: context.tenantId, projectId: context.projectId, conversationId,
+    }, context, session, dependencies);
+    if (runId !== null) {
+      const summary = await observe(`/api/v1/agent/runs/${encodeURIComponent(runId)}/summary`);
+      if (requireCloudRunSummaryScope(summary, runId, context).conversationId !== conversationId) {
+        throw new Error('local run conversation mismatch');
+      }
+    }
+    if (bearer !== currentBearer()) continue;
+    const latest = parseTrustedCloudSession(await dependencies.loadTrustedSession());
+    if (latest.api_base_url !== session.api_base_url || latest.credential !== bearer) {
+      throw new Error('local run session changed');
+    }
+    dependencies.signal?.throwIfAborted();
+    return { ...args, api_base_url: latest.api_base_url, authorization: `Bearer ${bearer}` };
+  }
+  throw new Error('local run session changed');
 }
 
 export function isIntentionalCloudCancel(error: unknown): boolean {
@@ -1070,7 +1117,9 @@ async function authorizedFetch(
   if (outcome.status !== 'refreshed' && outcome.status !== 'current') {
     throw new Error('cloud session refresh unavailable');
   }
-  refreshState.credential = outcome.record.credential;
+  const refreshed = parseTrustedCloudSession(outcome.record);
+  if (refreshed.api_base_url !== session.api_base_url) throw new Error('cloud session origin changed');
+  refreshState.credential = refreshed.credential;
   return sendAuthorizedFetch(session, dependencies, request);
 }
 

@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentDefinitionDetail } from '../../../pages/tenant/AgentDefinitionDetail';
-import { AgentDefinitions } from '../../../pages/tenant/AgentDefinitions';
+import { AgentDefinitionDetail } from '@business/agent/ui/web/tenant/AgentDefinitionDetail';
+import { AgentDefinitions } from '@business/agent/ui/web/tenant/AgentDefinitions';
 import { definitionsService } from '../../../services/agent/definitionsService';
 import { useAuthStore } from '../../../stores/auth';
 import { useProjectStore } from '../../../stores/project';

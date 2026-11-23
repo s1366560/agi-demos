@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DeployProgress } from '@/pages/tenant/DeployProgress';
+import { DeployProgress } from '@business/environments/ui/web/tenant/DeployProgress';
 
 import { App } from 'antd';
 

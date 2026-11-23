@@ -244,9 +244,11 @@ async def test_cleanup_preserves_new_scoped_installations(setup, db_session):
 
 
 async def test_maintenance_runtime_never_starts_global_application_services(db_session):
+    from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+        SANDBOX_RUNTIME_MODULE_V2,
+    )
     from src.application.services.marketplace_legacy_retirement_v2 import maintenance_scoped_runtime
     from src.infrastructure.plugins.v2.builtin_modules import RUNTIME_BOUNDARY_MODULE_V2
-    from src.infrastructure.plugins.v2.sandbox_runtime import SANDBOX_RUNTIME_MODULE_V2
 
     runtime, host = await maintenance_scoped_runtime(db_session)
     try:

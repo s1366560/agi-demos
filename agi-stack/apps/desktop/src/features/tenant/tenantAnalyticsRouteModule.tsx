@@ -36,7 +36,7 @@ export function createTenantAnalyticsRouteModuleLoader({
   return async () => {
     const [{ TenantAnalyticsPage }, { useTenantAnalyticsController }] =
       await Promise.all([
-        import('./TenantAnalyticsPage'),
+        import('@business/agent/ui/desktop/tenant/TenantAnalyticsPage'),
         import('./useTenantAnalyticsController'),
       ]);
 
@@ -96,7 +96,7 @@ function BoundTenantAnalyticsRoute({
   createBinding: (
     context: TenantAnalyticsRouteContext,
   ) => TenantAnalyticsRouteBinding;
-  Page: typeof import('./TenantAnalyticsPage').TenantAnalyticsPage;
+  Page: typeof import('@business/agent/ui/desktop/tenant/TenantAnalyticsPage').TenantAnalyticsPage;
   useController: typeof import('./useTenantAnalyticsController').useTenantAnalyticsController;
 }>) {
   const binding = useMemo(

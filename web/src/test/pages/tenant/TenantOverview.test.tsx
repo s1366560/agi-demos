@@ -3,7 +3,7 @@ import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 
-import { TenantOverview } from '../../../pages/tenant/TenantOverview';
+import { TenantOverview } from '@business/workspace/ui/web/tenant/TenantOverview';
 import { tenantAPI } from '../../../services/api';
 import { useTenantStore } from '../../../stores/tenant';
 import { screen, render, waitFor } from '../../utils';

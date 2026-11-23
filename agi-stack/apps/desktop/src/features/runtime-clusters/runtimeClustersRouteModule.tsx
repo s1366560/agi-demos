@@ -34,7 +34,7 @@ export function createRuntimeClustersRouteModuleLoader({
   return async () => {
     const [{ RuntimeClustersPage }, { useRuntimeClustersController }] =
       await Promise.all([
-        import('./RuntimeClustersPage'),
+        import('@business/environments/ui/desktop/runtime-clusters/RuntimeClustersPage'),
         import('./useRuntimeClustersController'),
       ]);
 
@@ -88,7 +88,7 @@ function BoundRuntimeClustersRoute({
 }: Readonly<{
   context: RuntimeClustersRouteContext;
   createBinding(context: RuntimeClustersRouteContext): RuntimeClustersRouteBinding;
-  Page: typeof import('./RuntimeClustersPage').RuntimeClustersPage;
+  Page: typeof import('@business/environments/ui/desktop/runtime-clusters/RuntimeClustersPage').RuntimeClustersPage;
   useController: typeof import('./useRuntimeClustersController').useRuntimeClustersController;
 }>) {
   const binding = useMemo(

@@ -21,6 +21,8 @@ export const qaMarketplaceClientsV2: Pick<
       cache: async () => ({ total_bytes: 0, reclaimable_bytes: 0, entries: 0 }),
       oauthAction: unavailable,
       cleanupCache: unavailable,
+      businessPage: unavailable,
+      businessCommand: unavailable,
       addSource: unavailable,
       removeSource: unavailable,
       preflight: unavailable,

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
-import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
+import { WorkspaceOverview } from '@business/workspace/ui/desktop/workspace/WorkspaceOverview';
 import {
   applyWorkspaceActivityStreamEvent,
   type WorkspaceLiveActivity,

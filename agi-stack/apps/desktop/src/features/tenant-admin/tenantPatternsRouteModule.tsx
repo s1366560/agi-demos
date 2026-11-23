@@ -27,7 +27,7 @@ export function createTenantPatternsRouteModuleLoader({
     routeId: TENANT_PATTERNS_ROUTE_ID,
     localPolicy: 'native_equivalent',
     createBinding,
-    loadPage: async () => (await import('./TenantPatternsPage')).TenantPatternsPage,
+    loadPage: async () => (await import('@business/agent/ui/desktop/tenant-admin/TenantPatternsPage')).TenantPatternsPage,
     fallbackScope: (context) =>
       Object.freeze({ authority: 'cloud', tenantId: context.tenantId ?? 'unavailable' }),
     buildTerminalModel: (scope, reasonCode) =>

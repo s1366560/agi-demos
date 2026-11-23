@@ -44,9 +44,11 @@ const React = require("react"),
   { createRoot } = require("react-dom/client");
 const esbuild = createRequire(require.resolve("vite"))("esbuild");
 const compiled = await esbuild.build({
+  jsx: "automatic",
+  tsconfig: "tsconfig.json",
   stdin: {
     contents:
-      "export {NewTaskFlow} from './src/features/task/NewTaskFlow'; export {I18nProvider} from './src/i18n'; export {DesktopApiError} from './src/api/client';",
+      "export {NewTaskFlow} from '../../../plugins/business/agent/ui/desktop/task/NewTaskFlow'; export {I18nProvider} from './src/i18n'; export {DesktopApiError} from './src/api/client';",
     resolveDir: new URL("..", import.meta.url).pathname,
     loader: "ts",
   },

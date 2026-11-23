@@ -92,57 +92,57 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('Component Structure', () => {
     it('should export EntityTypeList compound component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList).toBeDefined();
     });
 
     it('should export Header sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.Header).toBeDefined();
     });
 
     it('should export Toolbar sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.Toolbar).toBeDefined();
     });
 
     it('should export Table sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.Table).toBeDefined();
     });
 
     it('should export TableHeader sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.TableHeader).toBeDefined();
     });
 
     it('should export TableRow sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.TableRow).toBeDefined();
     });
 
     it('should export StatusBadge sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.StatusBadge).toBeDefined();
     });
 
     it('should export SourceBadge sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.SourceBadge).toBeDefined();
     });
 
     it('should export Empty sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.Empty).toBeDefined();
     });
 
     it('should export Loading sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.Loading).toBeDefined();
     });
 
     it('should export Modal sub-component', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       expect(EntityTypeList.Modal).toBeDefined();
     });
   });
@@ -153,7 +153,7 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('Main Component', () => {
     it('should render header with title', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList />);
       await waitFor(() => {
         expect(screen.getByText('Entity Types')).toBeInTheDocument();
@@ -161,7 +161,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should render create button', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList />);
       await waitFor(() => {
         expect(screen.getByText('Create Entity Type')).toBeInTheDocument();
@@ -169,7 +169,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should render toolbar with search', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList />);
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Search entity types…')).toBeInTheDocument();
@@ -177,7 +177,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should render entity types in table', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList />);
       await waitFor(() => {
         expect(screen.getByText('Person')).toBeInTheDocument();
@@ -186,7 +186,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should render schema attributes returned by the API', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList />);
       await waitFor(() => {
         expect(screen.getAllByText('name').length).toBeGreaterThan(0);
@@ -202,14 +202,14 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('Header Sub-Component', () => {
     it('should render title and create button', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.Header onCreate={vi.fn()} />);
       expect(screen.getByText('Entity Types')).toBeInTheDocument();
       expect(screen.getByText('Create Entity Type')).toBeInTheDocument();
     });
 
     it('should call onCreate when create button clicked', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       const onCreate = vi.fn();
       render(<EntityTypeList.Header onCreate={onCreate} />);
       fireEvent.click(screen.getByText('Create Entity Type'));
@@ -223,13 +223,13 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('Toolbar Sub-Component', () => {
     it('should render search input', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.Toolbar search="" onSearchChange={vi.fn()} />);
       expect(screen.getByPlaceholderText('Search entity types…')).toBeInTheDocument();
     });
 
     it('should call onSearchChange when typing', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       const onSearchChange = vi.fn();
       render(<EntityTypeList.Toolbar search="" onSearchChange={onSearchChange} />);
       const input = screen.getByPlaceholderText('Search entity types…');
@@ -244,13 +244,13 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('StatusBadge Sub-Component', () => {
     it('should render enabled status', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.StatusBadge status="ENABLED" />);
       expect(screen.getByText('ENABLED')).toBeInTheDocument();
     });
 
     it('should render disabled status', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.StatusBadge status="DISABLED" />);
       expect(screen.getByText('DISABLED')).toBeInTheDocument();
     });
@@ -262,13 +262,13 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('SourceBadge Sub-Component', () => {
     it('should render user source', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.SourceBadge source="user" />);
       expect(screen.getByText('user')).toBeInTheDocument();
     });
 
     it('should render generated source', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.SourceBadge source="generated" />);
       expect(screen.getByText('generated')).toBeInTheDocument();
     });
@@ -286,19 +286,19 @@ describe('EntityTypeList Compound Component', () => {
     };
 
     it('should render entity name', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.TableRow {...defaultProps} />);
       expect(screen.getByText('Person')).toBeInTheDocument();
     });
 
     it('should render entity description', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.TableRow {...defaultProps} />);
       expect(screen.getByText('A human being')).toBeInTheDocument();
     });
 
     it('should render schema attributes', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.TableRow {...defaultProps} />);
       expect(screen.getByText('name')).toBeInTheDocument();
       expect(screen.getByText('age')).toBeInTheDocument();
@@ -306,7 +306,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should call onEdit when edit button clicked', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       const onEdit = vi.fn();
       render(<EntityTypeList.TableRow {...{ ...defaultProps, onEdit }} />);
       const editButton = screen.getByTitle('Edit');
@@ -315,7 +315,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should call onDelete when delete button clicked', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       const onDelete = vi.fn();
       // Mock window.confirm
       global.confirm = vi.fn(() => true);
@@ -332,7 +332,7 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('Empty Sub-Component', () => {
     it('should render empty state message', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.Empty />);
       expect(screen.getByText(/No entity types defined yet/)).toBeInTheDocument();
     });
@@ -344,7 +344,7 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('Loading Sub-Component', () => {
     it('should render loading message', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList.Loading />);
       expect(screen.getByText('Loading…')).toBeInTheDocument();
     });
@@ -356,7 +356,7 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('Modal Sub-Component', () => {
     it('should render modal when open', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(
         <EntityTypeList.Modal
           isOpen={true}
@@ -369,7 +369,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should render edit mode when editingEntity provided', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(
         <EntityTypeList.Modal
           isOpen={true}
@@ -382,7 +382,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should call onClose when close button clicked', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       const onClose = vi.fn();
       render(
         <EntityTypeList.Modal
@@ -402,7 +402,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should call onClose when Escape is pressed', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       const onClose = vi.fn();
       render(
         <EntityTypeList.Modal
@@ -419,7 +419,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should call onSave when save button clicked', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       const onSave = vi.fn();
       render(
         <EntityTypeList.Modal
@@ -435,7 +435,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should save edits made inside the modal form', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       const { schemaAPI } = await import('../../../../services/api');
       render(<EntityTypeList />);
 
@@ -460,7 +460,7 @@ describe('EntityTypeList Compound Component', () => {
     });
 
     it('should render tab buttons', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(
         <EntityTypeList.Modal
           isOpen={true}
@@ -481,7 +481,7 @@ describe('EntityTypeList Compound Component', () => {
 
   describe('Integration', () => {
     it('should open modal when create button clicked', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { EntityTypeList } = await import('@business/knowledge/ui/web/project/schema/EntityTypeList');
       render(<EntityTypeList />);
       await waitFor(() => {
         expect(screen.getByText('Create Entity Type')).toBeInTheDocument();

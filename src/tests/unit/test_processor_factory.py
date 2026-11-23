@@ -13,11 +13,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.factory import ProcessorFactory
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, ToolDefinition
+from plugins.business.agent.engine.processor.run_context import RunContext
 from src.domain.model.agent.subagent import AgentModel, SubAgent
 from src.infrastructure.agent.model_route import ModelRouteRef
-from src.infrastructure.agent.processor.factory import ProcessorFactory
-from src.infrastructure.agent.processor.processor import ProcessorConfig, ToolDefinition
-from src.infrastructure.agent.processor.run_context import RunContext
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 # ============================================================================
@@ -153,11 +153,11 @@ class TestCreateForSubagent:
     def _pin_v2_runtime_services(self):
         with (
             patch(
-                "src.infrastructure.agent.processor.factory._default_loop_resolver",
+                "plugins.business.agent.engine.processor.factory._default_loop_resolver",
                 return_value=MagicMock(),
             ) as loop_resolver,
             patch(
-                "src.infrastructure.agent.processor.factory._default_runtime_dispatcher",
+                "plugins.business.agent.engine.processor.factory._default_runtime_dispatcher",
                 return_value=MagicMock(),
             ) as runtime_dispatcher,
         ):
@@ -347,7 +347,7 @@ class TestCreateForMain:
     @pytest.fixture(autouse=True)
     def _pin_v2_loop_resolver(self):
         with patch(
-            "src.infrastructure.agent.processor.factory._default_loop_resolver",
+            "plugins.business.agent.engine.processor.factory._default_loop_resolver",
             return_value=MagicMock(),
         ) as resolver:
             yield resolver
@@ -417,7 +417,7 @@ class TestCreateForMain:
         assert processor.config.forced_skill_tools == ["tool_a", "tool_b"]
 
     def test_react_agent_propagates_provider_to_subagent_factory(self) -> None:
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         agent = ReActAgent(
             model="test-model",

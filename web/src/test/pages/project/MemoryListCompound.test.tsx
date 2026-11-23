@@ -139,52 +139,52 @@ describe('MemoryList Compound Component', () => {
 
   describe('Component Structure', () => {
     it('should export MemoryList compound component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList).toBeDefined();
     });
 
     it('should export Header sub-component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList.Header).toBeDefined();
     });
 
     it('should export Toolbar sub-component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList.Toolbar).toBeDefined();
     });
 
     it('should export VirtualList sub-component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList.VirtualList).toBeDefined();
     });
 
     it('should export MemoryRow sub-component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList.MemoryRow).toBeDefined();
     });
 
     it('should export StatusBadge sub-component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList.StatusBadge).toBeDefined();
     });
 
     it('should export Empty sub-component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList.Empty).toBeDefined();
     });
 
     it('should export Loading sub-component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList.Loading).toBeDefined();
     });
 
     it('should export Error sub-component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList.Error).toBeDefined();
     });
 
     it('should export DeleteModal sub-component', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       expect(MemoryList.DeleteModal).toBeDefined();
     });
   });
@@ -195,7 +195,7 @@ describe('MemoryList Compound Component', () => {
 
   describe('Main Component', () => {
     it('should render header with title', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
         expect(screen.getByText('Memories')).toBeInTheDocument();
@@ -203,7 +203,7 @@ describe('MemoryList Compound Component', () => {
     });
 
     it('should render toolbar with search', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Search memories…')).toBeInTheDocument();
@@ -211,7 +211,7 @@ describe('MemoryList Compound Component', () => {
     });
 
     it('should render memory rows', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
         expect(screen.getByText('Meeting Notes')).toBeInTheDocument();
@@ -226,13 +226,13 @@ describe('MemoryList Compound Component', () => {
 
   describe('Header Sub-Component', () => {
     it('should render title', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList.Header />);
       expect(screen.getByText('Memories')).toBeInTheDocument();
     });
 
     it('should render subtitle', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList.Header />);
       expect(screen.getByText(/All stored memories/i)).toBeInTheDocument();
     });
@@ -244,13 +244,13 @@ describe('MemoryList Compound Component', () => {
 
   describe('Toolbar Sub-Component', () => {
     it('should render search input', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList.Toolbar search="" onSearchChange={vi.fn()} />);
       expect(screen.getByPlaceholderText('Search memories…')).toBeInTheDocument();
     });
 
     it('should call onSearchChange when typing', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       const onSearchChange = vi.fn();
       render(<MemoryList.Toolbar search="" onSearchChange={onSearchChange} />);
       const input = screen.getByPlaceholderText('Search memories…');
@@ -259,7 +259,7 @@ describe('MemoryList Compound Component', () => {
     });
 
     it('should call onContentTypeFilterChange when selecting a memory type', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       const onContentTypeFilterChange = vi.fn();
       render(
         <MemoryList.Toolbar
@@ -282,19 +282,19 @@ describe('MemoryList Compound Component', () => {
 
   describe('StatusBadge Sub-Component', () => {
     it('should render completed status', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList.StatusBadge status="COMPLETED" />);
       expect(screen.getByText('Completed')).toBeInTheDocument();
     });
 
     it('should render processing status', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList.StatusBadge status="PROCESSING" />);
       expect(screen.getByText('Processing')).toBeInTheDocument();
     });
 
     it('should render failed status', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList.StatusBadge status="FAILED" />);
       expect(screen.getByText('Failed')).toBeInTheDocument();
     });
@@ -312,7 +312,7 @@ describe('MemoryList Compound Component', () => {
     };
 
     const renderMemoryRow = async (props: any = defaultProps) => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       return render(
         <table>
           <tbody>
@@ -352,7 +352,7 @@ describe('MemoryList Compound Component', () => {
 
   describe('Empty Sub-Component', () => {
     it('should render empty state message', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList.Empty />);
       expect(screen.getByText(/no memories found/i)).toBeInTheDocument();
     });
@@ -364,7 +364,7 @@ describe('MemoryList Compound Component', () => {
 
   describe('Loading Sub-Component', () => {
     it('should render loading message', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList.Loading />);
       expect(screen.getByLabelText('Loading…')).toBeInTheDocument();
     });
@@ -376,13 +376,13 @@ describe('MemoryList Compound Component', () => {
 
   describe('Error Sub-Component', () => {
     it('should render error message', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList.Error error="Failed to load memories" />);
       expect(screen.getByText('Failed to load memories')).toBeInTheDocument();
     });
 
     it('should render retry button', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       const onRetry = vi.fn();
       render(<MemoryList.Error error="Error" onRetry={onRetry} />);
       const retryButton = screen.getByText('Retry');
@@ -397,7 +397,7 @@ describe('MemoryList Compound Component', () => {
 
   describe('DeleteModal Sub-Component', () => {
     it('should render modal when open', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(
         <MemoryList.DeleteModal
           isOpen={true}
@@ -413,7 +413,7 @@ describe('MemoryList Compound Component', () => {
     });
 
     it('should call onConfirm when confirm button clicked', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       const onConfirm = vi.fn();
       render(
         <MemoryList.DeleteModal
@@ -429,7 +429,7 @@ describe('MemoryList Compound Component', () => {
     });
 
     it('should call onClose when cancel button clicked', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       const onClose = vi.fn();
       render(
         <MemoryList.DeleteModal
@@ -464,7 +464,7 @@ describe('MemoryList Compound Component', () => {
           page_size: 20,
         };
       });
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
         expect(screen.getByText('Meeting Notes')).toBeInTheDocument();
@@ -496,7 +496,7 @@ describe('MemoryList Compound Component', () => {
           page_size: 20,
         };
       });
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
         expect(screen.getByText('Meeting Notes')).toBeInTheDocument();
@@ -517,7 +517,7 @@ describe('MemoryList Compound Component', () => {
     });
 
     it('should open delete modal when delete clicked', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const { MemoryList } = await import('@business/knowledge/ui/web/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
         expect(screen.getByText('Meeting Notes')).toBeInTheDocument();

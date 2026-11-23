@@ -1,0 +1,18 @@
+{
+  "schema": "memstack.slot-ui/1",
+  "title": "Cluster health",
+  "actions": [
+    {
+      "id": "cluster-health",
+      "label": "Calculate utilization",
+      "input": {
+        "label": "Cluster metrics (JSON)",
+        "initial": {
+          "total_nodes": 2,
+          "total_cpu": 4,
+          "used_cpu": 1
+        }
+      }
+    }
+  ]
+}

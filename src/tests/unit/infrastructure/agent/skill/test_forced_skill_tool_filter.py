@@ -11,7 +11,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.infrastructure.agent.processor import ToolDefinition
+from plugins.business.agent.engine.processor import ToolDefinition
 
 
 def _make_tool(name: str) -> ToolDefinition:

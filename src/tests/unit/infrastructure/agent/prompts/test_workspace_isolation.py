@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.infrastructure.agent.core.react_agent_prompt_mixin import PromptMixin
-from src.infrastructure.agent.core.react_agent_tool_policy import (
+from plugins.business.agent.engine.react.react_agent_prompt_mixin import PromptMixin
+from plugins.business.agent.engine.react.react_agent_tool_policy import (
     filter_non_workspace_conversation_tools,
 )
 from src.infrastructure.agent.prompts.manager import (
@@ -224,7 +224,7 @@ class TestPromptMixinWorkspaceContextIsolation:
     @pytest.fixture(autouse=True)
     def _use_v2_prompt_provider(self):
         with patch(
-            "src.infrastructure.agent.core.react_agent_prompt_mixin."
+            "plugins.business.agent.engine.react.react_agent_prompt_mixin."
             "_build_system_prompt_from_runtime_v2",
             new=_build_prompt_through_v2_provider,
         ):

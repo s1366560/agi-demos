@@ -91,15 +91,15 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@/pages/project/ProjectAgentDashboard', () => ({
+vi.mock('@business/agent/ui/web/project/ProjectAgentDashboard', () => ({
   default: () => <div data-testid="project-agent-route">dashboard</div>,
 }));
 
-vi.mock('@/pages/project/ProjectAgentLogs', () => ({
+vi.mock('@business/agent/ui/web/project/ProjectAgentLogs', () => ({
   default: () => <div data-testid="project-agent-route">logs</div>,
 }));
 
-vi.mock('@/pages/project/ProjectAgentPatterns', () => ({
+vi.mock('@business/agent/ui/web/project/ProjectAgentPatterns', () => ({
   default: () => <div data-testid="project-agent-route">patterns</div>,
 }));
 

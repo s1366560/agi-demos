@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs';
 import Module, { createRequire } from 'node:module';
 import { test } from 'node:test';
 
-process.env.NODE_PATH = new URL('../node_modules', import.meta.url).pathname;
+process.env.NODE_PATH = [
+  '/tmp/agistack-desktop-test-dist/test-node-modules',
+  new URL('../node_modules', import.meta.url).pathname,
+].join(process.platform === 'win32' ? ';' : ':');
 Module._initPaths();
 
 const require = createRequire(import.meta.url);
@@ -13,7 +16,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require(`${compiledRoot}/i18n.js`);
 const { BackendStoresPage } = require(
-  `${compiledRoot}/features/backend-stores/BackendStoresPage.js`,
+  `/tmp/agistack-desktop-test-dist/plugins/business/knowledge/ui/desktop/backend-stores/BackendStoresPage.js`,
 );
 const { BACKEND_STORES_ROUTE_ID } = require(
   `${compiledRoot}/features/backend-stores/backendStoresClient.js`,

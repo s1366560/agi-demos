@@ -1,0 +1,109 @@
+{
+  "files": {
+    "module": "src.tools.file_tools",
+    "factories": [
+      "create_read_tool",
+      "create_batch_read_tool",
+      "create_write_tool",
+      "create_edit_tool",
+      "create_glob_tool",
+      "create_grep_tool",
+      "create_list_tool",
+      "create_patch_tool"
+    ]
+  },
+  "workspace-files": {
+    "module": "src.tools.workspace_file_browser_tools",
+    "factories": [
+      "create_list_workspace_files_tool",
+      "create_read_workspace_file_tool",
+      "create_download_workspace_file_tool"
+    ]
+  },
+  "artifacts": {
+    "module": "src.tools.artifact_tools",
+    "factories": [
+      "create_export_artifact_tool",
+      "create_list_artifacts_tool",
+      "create_batch_export_artifacts_tool"
+    ]
+  },
+  "shell": {
+    "module": "src.tools.bash_tool",
+    "factories": [
+      "create_bash_tool"
+    ]
+  },
+  "code-index": {
+    "module": "src.tools.index_tools",
+    "factories": [
+      "create_code_index_build_tool",
+      "create_find_definition_tool",
+      "create_find_references_tool",
+      "create_call_graph_tool",
+      "create_dependency_graph_tool"
+    ]
+  },
+  "editing": {
+    "module": "src.tools.edit_tools",
+    "factories": [
+      "create_batch_edit_tool",
+      "create_preview_edit_tool"
+    ]
+  },
+  "git": {
+    "module": "src.tools.git_tools",
+    "factories": [
+      "create_git_diff_tool",
+      "create_git_log_tool",
+      "create_generate_commit_tool"
+    ]
+  },
+  "terminal": {
+    "module": "src.tools.terminal_tools",
+    "factories": [
+      "create_start_terminal_tool",
+      "create_stop_terminal_tool",
+      "create_terminal_status_tool",
+      "create_restart_terminal_tool"
+    ]
+  },
+  "desktop": {
+    "module": "src.tools.desktop_tools",
+    "factories": [
+      "create_start_desktop_tool",
+      "create_stop_desktop_tool",
+      "create_desktop_status_tool",
+      "create_change_resolution_tool",
+      "create_restart_desktop_tool"
+    ]
+  },
+  "imports": {
+    "module": "src.tools.import_tools",
+    "factories": [
+      "create_import_file_tool",
+      "create_import_files_batch_tool"
+    ]
+  },
+  "mcp-management": {
+    "module": "src.tools.mcp_management",
+    "factories": [
+      "create_mcp_server_install_tool",
+      "create_mcp_server_start_tool",
+      "create_mcp_server_stop_tool",
+      "create_mcp_server_list_tool",
+      "create_mcp_server_discover_tools_tool",
+      "create_mcp_server_call_tool_tool",
+      "create_mcp_server_list_prompts_tool",
+      "create_mcp_server_set_log_level_tool"
+    ]
+  },
+  "dependencies": {
+    "module": "src.tools.deps_tools",
+    "factories": [
+      "create_deps_install_tool",
+      "create_deps_check_tool",
+      "create_plugin_tool_exec_tool"
+    ]
+  }
+}

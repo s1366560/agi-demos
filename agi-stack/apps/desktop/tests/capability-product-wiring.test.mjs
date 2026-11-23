@@ -22,11 +22,11 @@ const projectCronJobsBindingProviderSource = readFileSync(
   'utf8',
 );
 const searchSource = readFileSync(
-  new URL('../src/features/search/DesktopSearch.tsx', import.meta.url),
+  new URL('../../../../plugins/business/knowledge/ui/desktop/search/DesktopSearch.tsx', import.meta.url),
   'utf8',
 );
 const automationsSource = readFileSync(
-  new URL('../src/features/automations/AutomationsPage.tsx', import.meta.url),
+  new URL('../../../../plugins/business/automation/ui/desktop/automations/AutomationsPage.tsx', import.meta.url),
   'utf8',
 );
 

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -361,6 +362,33 @@ class PlatformPluginGovernanceRepository:
             PlatformPluginPackageModel,
             {"plugin_id": plugin_id, "version": version},
         )
+
+    async def register_immutable_release(
+        self, candidate: PlatformPluginPackageModel
+    ) -> PlatformPluginPackageModel:
+        """Serialize concurrent publishers and re-read governance after registry I/O."""
+        lookup = (
+            select(PlatformPluginPackageModel)
+            .where(
+                PlatformPluginPackageModel.plugin_id == candidate.plugin_id,
+                PlatformPluginPackageModel.version == candidate.version,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        existing = await self._session.scalar(lookup)
+        if existing is not None:
+            return existing
+        try:
+            async with self._session.begin_nested():
+                self._session.add(candidate)
+                await self._session.flush()
+        except IntegrityError:
+            winner = await self._session.scalar(lookup)
+            if winner is None:
+                raise
+            return winner
+        return candidate
 
     async def uninstall_package(
         self, plugin_id: str, version: str

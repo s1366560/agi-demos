@@ -5,7 +5,7 @@ import { Route, Routes } from 'react-router-dom';
 
 import { App } from 'antd';
 
-import { SkillList } from '@/pages/tenant/SkillList';
+import { SkillList } from '@business/agent/ui/web/tenant/SkillList';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 

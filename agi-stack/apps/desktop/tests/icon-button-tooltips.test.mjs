@@ -32,7 +32,7 @@ const assertTitleMirrorsAriaLabel = (source, ariaExpression, label) => {
 
 const workspaceDockSource = readSource('features/workspace/WorkspaceDock.tsx');
 const chatTimelineSource = readSource('features/chat/ChatTimeline.tsx');
-const desktopSearchSource = readSource('features/search/DesktopSearch.tsx');
+const desktopSearchSource = readSource('../../../../plugins/business/knowledge/ui/desktop/search/DesktopSearch.tsx');
 const composerControlsSource = readSource('features/chat/ComposerControls.tsx');
 const toastCenterSource = readSource('features/feedback/ToastCenter.tsx');
 const keyboardShortcutsDialogSource = readSource(
@@ -45,7 +45,7 @@ const sessionExecutionGraphCanvasSource = readSource(
 const loginScreenSource = readSource('features/auth/LoginScreen.tsx');
 const promptTemplateLibrarySource = readSource('features/chat/PromptTemplateLibrary.tsx');
 const newThreadComposerSource = readSource('features/task/NewThreadComposer.tsx');
-const newTaskFlowSource = readSource('features/task/NewTaskFlow.tsx');
+const newTaskFlowSource = readSource('../../../../plugins/business/agent/ui/desktop/task/NewTaskFlow.tsx');
 const newTaskFlowStagesSource = readSource('features/task/NewTaskFlowStages.tsx');
 const settingsWindowSource = readSource('features/settings/SettingsWindow.tsx');
 const modelProviderWorkspaceSource = readSource('features/settings/ModelProviderWorkspace.tsx');

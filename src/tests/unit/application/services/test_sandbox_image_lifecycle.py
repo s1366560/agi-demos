@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.application.services.sandbox_image_lifecycle import (
+from plugins.business.environments.backend.sandbox.sandbox_image_lifecycle import (
     IMAGE_DIGEST_SCOPE,
     SOURCE_DIGEST_LABEL,
     automatic_rebuild_allowed,
@@ -64,7 +64,10 @@ def test_production_startup_and_run_lifecycle_call_the_guard() -> None:
 
 
 def test_run_lifecycle_mark_is_visible_without_a_container_label() -> None:
-    from src.application.services.sandbox_image_lifecycle import note_project_run, project_run_mark
+    from plugins.business.environments.backend.sandbox.sandbox_image_lifecycle import (
+        note_project_run,
+        project_run_mark,
+    )
 
     note_project_run("project-live", active=True)
     assert project_run_mark("project-live") is True

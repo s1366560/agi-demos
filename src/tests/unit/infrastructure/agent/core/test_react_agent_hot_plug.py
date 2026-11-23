@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-import src.infrastructure.agent.core.react_agent as react_agent_module
-from src.infrastructure.agent.core.react_agent import ReActAgent
+import plugins.business.agent.engine.react.react_agent as react_agent_module
+from plugins.business.agent.engine.react.react_agent import ReActAgent
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.tool_set import ToolSetV2
 
@@ -156,7 +156,7 @@ class TestReActAgentHotPlug:
 
     def test_cached_tools_take_precedence(self):
         """Should use cached tool definitions if provided (Session Pool)."""
-        from src.infrastructure.agent.processor.processor import ToolDefinition
+        from plugins.business.agent.engine.processor.processor import ToolDefinition
 
         cached_defs = [
             ToolDefinition(

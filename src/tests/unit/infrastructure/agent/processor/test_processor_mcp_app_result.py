@@ -4,9 +4,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from plugins.business.agent.engine.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.domain.events.agent_events import AgentMCPAppResultEvent, AgentObserveEvent
 from src.infrastructure.agent.core.message import ToolPart, ToolState
-from src.infrastructure.agent.processor import ProcessorConfig, SessionProcessor, ToolDefinition
 
 
 class MockMCPTool:

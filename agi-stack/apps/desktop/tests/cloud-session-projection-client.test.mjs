@@ -73,6 +73,19 @@ test('renderer decodes a credential-free Cloud identity and workspace projection
   assert.equal(JSON.stringify(projection).includes('oauth-subject-not-for-renderer'), false);
 });
 
+test('Python current-user projection respects the password change requirement', () => {
+  const { decodeCloudSessionProjection } = require(compiledModule);
+  const payload = projectionPayload();
+  const user = { ...payload.user, must_change_password: false };
+  assert.ok(decodeCloudSessionProjection({ ...payload, user }));
+  for (const flag of [true, null, 'false']) {
+    assert.equal(
+      decodeCloudSessionProjection({ ...payload, user: { ...user, must_change_password: flag } }),
+      null,
+    );
+  }
+});
+
 test('renderer rejects projection drift and any top-level credential field', () => {
   const { decodeCloudSessionProjection } = require(compiledModule);
 

@@ -5,7 +5,8 @@ Python/FastAPI backend, a React/TypeScript web console, a Ray-backed agent runti
 sandbox tooling, and a Neo4j/PostgreSQL/Redis data plane.
 
 This README is the short operational entry point. Deeper docs start at
-[docs/README.md](docs/README.md).
+[docs/README.md](docs/README.md). For a feature change, start with the
+[business packages and adapter guide](plugins/README.md).
 
 ## What Is Here
 
@@ -34,31 +35,19 @@ Vite 7 requires Node `^20.19.0 || >=22.12.0`; use a matching Node version for we
 
 ## Quick Start
 
+On a fresh checkout, start Docker, install the Rust Wasm target, and run:
+
 ```bash
-make init      # copy .env if needed, install backend + web deps, start infra
-make dev       # start infra, API, Ray actor worker, and web dev server
-make status    # inspect local service status
-make logs      # tail API and web logs
-make stop      # stop background services
+rustup target add wasm32-unknown-unknown
+make init
+make dev
 ```
 
-Default local URLs:
+The local publisher builds the worker images, pushes them to a checkout-local loopback registry and signs six archives. The empty API host creates a new project and installs Agent, Knowledge, Workspace, Automation, Environments and Billing. Open the Web console at `http://localhost:3000`. The initial email and generated password are in `.memstack/standard/owner.json`. API readiness is at `http://localhost:8000/health/ready`. The local development API uses the Docker daemon to prepare and launch restricted worker containers. Kubernetes deployment accepts a separately provisioned worker endpoint.
 
-| Service | URL |
-|---|---|
-| API health | http://localhost:8000/health |
-| Swagger UI | http://localhost:8000/docs |
-| Web console | http://localhost:3000 |
-| Neo4j Browser | http://localhost:7474 |
-| MinIO console | http://localhost:9001 |
-| Ray dashboard | http://localhost:8265 |
+Use `make status`, `make logs`, `make restart` and `make stop` with the same profile. An existing checkout with a full-stack `.env` keeps its current environment. Use `MEMSTACK_DEV_PROFILE=standard make dev` to select the separate standalone database. Set `STANDARD_API_PORT`, `STANDARD_WEB_PORT` and `STANDARD_REGISTRY_PORT` to run alongside an existing checkout.
 
-Default development users are created on first startup:
-
-| Role | Email | Password |
-|---|---|---|
-| Admin | `admin@memstack.ai` | `adminpassword` |
-| User | `user@memstack.ai` | `userpassword` |
+The full-stack development entry is `MEMSTACK_DEV_PROFILE=full make init dev`. Its Ray, Neo4j, Workspace Core and MinIO services continue to use the existing full-schema database. See the [business source guide](plugins/README.md) and [Helm release instructions](charts/memstack/README.md).
 
 ## Development Commands
 
@@ -67,7 +56,8 @@ Default development users are created on first startup:
 | Install all deps | `make install` |
 | Backend deps only | `make install-backend` |
 | Web deps only | `make install-web` |
-| Full dev stack | `make dev` |
+| Standard project | `make dev` |
+| Full development stack | `MEMSTACK_DEV_PROFILE=full make dev` |
 | API only, foreground | `make dev-backend` |
 | Web only, foreground | `make dev-web` |
 | Infra only | `make infra` |
@@ -95,7 +85,10 @@ cd web && corepack pnpm run test
 ## Repository Layout
 
 ```text
+plugins/business/          Agent, Knowledge, Workspace, Automation, Environments, Billing
+plugins/adapters/          Independently installed provider and channel integrations
 src/
+  host/                    Signed package installation, identity, leases, transport and readiness
   domain/                  Pure domain model, events, ports, exceptions
   application/             Services, use cases, schemas, orchestration
   infrastructure/          Web adapters, persistence, agent runtime, graph, MCP, LLM
@@ -109,7 +102,8 @@ web/
   src/stores/              Zustand stores
   src/utils/               Event adapters, projections, helpers
 
-sandbox-mcp-server/        MCP sandbox server and remote desktop/terminal support
+plugins/business/environments/sandbox-mcp-server/
+                           MCP sandbox server and remote desktop/terminal support
 sdk/python/                Python SDK package
 sdk/memstack_cli/          CLI package
 examples/plugins/          Plugin package templates and examples

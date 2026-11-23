@@ -8,7 +8,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   CloudMemoriesPage,
-} = require('/tmp/agistack-desktop-test-dist/src/features/project-knowledge/CloudMemoriesPage.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/knowledge/ui/desktop/project-knowledge/CloudMemoriesPage.js');
 const {
   CloudMemoryRouteSurface,
 } = require('/tmp/agistack-desktop-test-dist/src/features/project-knowledge/CloudMemoryRouteSurface.js');

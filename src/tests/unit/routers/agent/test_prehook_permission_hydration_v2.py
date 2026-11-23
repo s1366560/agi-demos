@@ -8,15 +8,15 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.domain.events.agent_events import AgentPermissionAskedEvent
-from src.infrastructure.adapters.secondary.persistence.models import HITLRequest
-from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
-from src.infrastructure.agent.hitl.coordinator import HITLCoordinator, ResolveResult
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
+from src.domain.events.agent_events import AgentPermissionAskedEvent
+from src.infrastructure.adapters.secondary.persistence.models import HITLRequest
+from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
+from src.infrastructure.agent.hitl.coordinator import HITLCoordinator, ResolveResult
 from src.infrastructure.agent.tools.hooks import HookDecision, HookResult, ToolHookRegistry
 from src.infrastructure.agent.tools.pipeline import ToolPipeline
 from src.infrastructure.agent.tools.truncation import OutputTruncator
@@ -55,7 +55,7 @@ async def test_injected_pre_hook_ask_emits_a_persisted_desktop_request(  # noqa:
         async_sessionmaker(test_engine, expire_on_commit=False),
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.complete_hitl_request", AsyncMock()
+        "plugins.business.agent.engine.processor.processor.complete_hitl_request", AsyncMock()
     )
     async with chat_guard_case("ask" if outcome == "ordinary_ask" else "full_access") as (
         run,

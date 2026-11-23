@@ -132,6 +132,9 @@ async def maintenance_scoped_runtime(
     from fastapi import FastAPI
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
+    from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+        SANDBOX_RUNTIME_SERVICE_V2,
+    )
     from src.domain.model.plugins.generated_v2 import ServiceRequiredV2
     from src.infrastructure.adapters.primary.web.startup.scoped_profile_runtime_v2 import (
         initialize_scoped_profile_runtime_v2,
@@ -144,7 +147,6 @@ async def maintenance_scoped_runtime(
     from src.infrastructure.plugins.v2.layer_composer import compose_profile_sources_v2
     from src.infrastructure.plugins.v2.protocol import control_envelope_v2
     from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-    from src.infrastructure.plugins.v2.sandbox_runtime import SANDBOX_RUNTIME_SERVICE_V2
     from src.infrastructure.plugins.v2.service_closure import project_service_closure_v2
 
     source = production_bundle_sources_v2()

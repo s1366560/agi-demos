@@ -2,7 +2,7 @@
  * Desktop execution placement for the composer.
  *
  * The absolute local directory stays on this computer. Cloud payloads only
- * receive a basename label, and this phase does not upload a local run.
+ * receive the basename label and the redacted run record.
  */
 
 export const EXECUTION_PLACEMENT_STORAGE_KEY = 'agistack.desktop.execution-placement.v1';

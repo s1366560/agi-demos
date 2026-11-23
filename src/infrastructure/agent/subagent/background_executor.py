@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from redis.asyncio import Redis as AsyncRedis
 
+    from plugins.business.agent.engine.processor.factory import ProcessorFactory
     from src.domain.llm_providers.llm_types import LLMClient
-    from src.infrastructure.agent.processor.factory import ProcessorFactory
 
 from src.domain.events.agent_events import (
     SubAgentKilledEvent,

@@ -37,7 +37,7 @@ export function createTenantAgentDashboardRouteModuleLoader({
   return async () => {
     const [{ TenantAgentDashboardPage }, { useTenantAgentDashboardController }] =
       await Promise.all([
-        import('./TenantAgentDashboardPage'),
+        import('@business/agent/ui/desktop/tenant/TenantAgentDashboardPage'),
         import('./useTenantAgentDashboardController'),
       ]);
 
@@ -91,7 +91,7 @@ function BoundTenantAgentDashboardRoute({
   createBinding: (
     context: TenantAgentDashboardRouteContext,
   ) => TenantAgentDashboardRouteBinding;
-  Page: typeof import('./TenantAgentDashboardPage').TenantAgentDashboardPage;
+  Page: typeof import('@business/agent/ui/desktop/tenant/TenantAgentDashboardPage').TenantAgentDashboardPage;
   useController: typeof import('./useTenantAgentDashboardController').useTenantAgentDashboardController;
 }>) {
   const binding = useMemo(

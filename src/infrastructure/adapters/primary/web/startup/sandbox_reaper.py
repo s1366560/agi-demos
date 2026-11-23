@@ -10,7 +10,7 @@ from src.configuration.config import get_settings
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
 if TYPE_CHECKING:
-    from src.application.services.sandbox_idle_reaper import SandboxIdleReaper
+    from plugins.business.environments.backend.sandbox.sandbox_idle_reaper import SandboxIdleReaper
     from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
         MCPSandboxAdapter,
     )
@@ -40,7 +40,9 @@ async def start_sandbox_idle_reaper_v2(
         return None
 
     try:
-        from src.application.services.sandbox_idle_reaper import SandboxIdleReaper
+        from plugins.business.environments.backend.sandbox.sandbox_idle_reaper import (
+            SandboxIdleReaper,
+        )
         from src.application.services.workspace_sync_service import WorkspaceSyncService
         from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
             SqlProjectSandboxRepository,

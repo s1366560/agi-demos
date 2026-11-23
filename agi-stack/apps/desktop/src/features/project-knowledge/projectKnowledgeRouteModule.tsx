@@ -35,7 +35,7 @@ export function createProjectKnowledgeRouteModuleLoader({
   }
   return async () => {
     const [{ ProjectKnowledgePage }, { useProjectKnowledgeController }] = await Promise.all([
-      import('./ProjectKnowledgePage'),
+      import('@business/knowledge/ui/desktop/project-knowledge/ProjectKnowledgePage'),
       import('./useProjectKnowledgeController'),
     ]);
     function ProjectKnowledgeRouteSurface({ context }: DesktopRouteSurfaceProps) {
@@ -83,7 +83,7 @@ function BoundRoute({
   context: ProjectKnowledgeRouteContext;
   createBinding: (context: ProjectKnowledgeRouteContext) => ProjectKnowledgeRouteBinding;
   bindingScopeMismatchReason: string;
-  Page: typeof import('./ProjectKnowledgePage').ProjectKnowledgePage;
+  Page: typeof import('@business/knowledge/ui/desktop/project-knowledge/ProjectKnowledgePage').ProjectKnowledgePage;
   useController: typeof import('./useProjectKnowledgeController').useProjectKnowledgeController;
 }>) {
   const binding = useMemo(

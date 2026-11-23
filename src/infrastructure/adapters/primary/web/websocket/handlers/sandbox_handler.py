@@ -11,7 +11,9 @@ import asyncio
 import logging
 from typing import Any
 
-from src.application.services.sandbox_event_service import SandboxEventPublisher
+from plugins.business.environments.backend.sandbox.sandbox_event_service import (
+    SandboxEventPublisher,
+)
 from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
     get_connection_manager,
 )
@@ -77,7 +79,7 @@ class SubscribeSandboxHandler(WebSocketMessageHandler):
 
     async def _start_sandbox_bridge(self, context: MessageContext, project_id: str) -> None:
         """Start background task to bridge Redis sandbox events to WebSocket."""
-        from src.infrastructure.plugins.v2.sandbox_projection import (
+        from plugins.business.environments.backend.sandbox.sandbox_projection import (
             current_sandbox_application_services_v2,
         )
 

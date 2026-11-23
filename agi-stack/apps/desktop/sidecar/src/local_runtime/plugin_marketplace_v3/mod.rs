@@ -1,6 +1,7 @@
 //! Cloud-independent, project-scoped marketplace. Persist only metadata and vault references.
 pub(in crate::local_runtime) mod cache;
 mod hook_audit;
+mod hook_deliveries;
 pub(super) mod hooks;
 mod jobs;
 pub(in crate::local_runtime) mod oauth;
@@ -57,6 +58,8 @@ struct Database {
     sources: Vec<Source>,
     #[serde(default)]
     jobs: BTreeMap<String, jobs::Job>,
+    #[serde(default)]
+    hook_deliveries: BTreeMap<String, hook_deliveries::Delivery>,
     preflights: BTreeMap<String, Preflight>,
     installations: Vec<Installation>,
     receipts: BTreeMap<String, (String, Value)>,
@@ -220,6 +223,14 @@ fn save(root: &std::path::Path, data: &Database) -> PackageResult<()> {
 }
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
+        .route(
+            "/api/v1/plugin-marketplace/v3/hook-deliveries",
+            get(hook_deliveries::list),
+        )
+        .route(
+            "/api/v1/plugin-marketplace/v3/hook-deliveries/:id/retry",
+            post(hook_deliveries::retry),
+        )
         .route(
             "/api/v1/plugin-marketplace/v3/cache",
             get(cache::stats).post(cache::cleanup),

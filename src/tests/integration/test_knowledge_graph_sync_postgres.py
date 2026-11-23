@@ -105,6 +105,7 @@ async def pg_sync() -> AsyncGenerator[
         connect_args={"server_settings": {"search_path": schema}},
     )
     async with engine.begin() as connection:
+        assert await connection.scalar(sa.text("SELECT current_database()")) == QA_DATABASE
         await connection.execute(sa.text(f'CREATE SCHEMA "{schema}"'))
         await connection.run_sync(bootstrap)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
@@ -294,8 +295,8 @@ async def test_pg_pipeline_journals_cloud_origin_record_and_pull_observes_it(
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
-    import src.infrastructure.adapters.primary.web.startup.workflow as workflow_module
-    from src.infrastructure.adapters.primary.web.startup.workflow import (
+    import plugins.business.knowledge.backend.graph_workflows as workflow_module
+    from plugins.business.knowledge.backend.graph_workflows import (
         _run_episode_processing_workflow,
     )
     from src.infrastructure.adapters.secondary.persistence.models import Memory
@@ -364,8 +365,8 @@ async def test_pg_reextraction_replaces_and_unenrolled_keeps_legacy_behavior(
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
-    import src.infrastructure.adapters.primary.web.startup.workflow as workflow_module
-    from src.infrastructure.adapters.primary.web.startup.workflow import (
+    import plugins.business.knowledge.backend.graph_workflows as workflow_module
+    from plugins.business.knowledge.backend.graph_workflows import (
         _run_episode_processing_workflow,
     )
     from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (

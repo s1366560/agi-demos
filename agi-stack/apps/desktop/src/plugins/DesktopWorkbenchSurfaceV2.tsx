@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 
-import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
+import { WorkspaceOverview } from '@business/workspace/ui/desktop/workspace/WorkspaceOverview';
 import { useI18n } from '../i18n';
 import type { DesktopActivityInboxInputV2 } from './DesktopActivityInboxSurfaceV2';
 import type { DesktopConversationInputV2 } from './DesktopConversationSurfaceV2';

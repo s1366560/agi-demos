@@ -11,7 +11,9 @@ import pytest
 from fastapi import FastAPI
 from starlette.requests import Request
 
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+from plugins.business.automation.workflow.contract import WorkflowEnginePort
+from plugins.business.automation.workflow.engine import AsyncioWorkflowEngine
+from plugins.business.automation.workflow.tasks import TaskManager
 from src.infrastructure.adapters.primary.web.routers import (
     episodes,
     graph,
@@ -22,9 +24,7 @@ from src.infrastructure.adapters.primary.web.routers import (
 from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
     workflow_engine_authority_dependency_v2,
 )
-from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
 from src.infrastructure.plugins.v2.boundary import pin_generation_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error

@@ -42,7 +42,7 @@ async def test_delete_tenant_removes_project_task_session_roots(
     monkeypatch: pytest.MonkeyPatch,
     cleanup_succeeds: bool,
 ) -> None:
-    from src.infrastructure.plugins.v2 import sandbox_projection
+    from plugins.business.environments.backend.sandbox import sandbox_projection
 
     # Keep this database deletion test independent of a running Docker adapter.
     purge = AsyncMock(side_effect=None if cleanup_succeeds else RuntimeError("cleanup failed"))

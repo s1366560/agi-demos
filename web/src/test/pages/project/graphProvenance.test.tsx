@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GraphProvenancePanel } from '../../../pages/project/GraphProvenancePanel';
-import { graphSourceUuids, requireGraphSource } from '../../../pages/project/graphProvenance';
+import { GraphProvenancePanel } from '@business/knowledge/ui/web/project/GraphProvenancePanel';
+import { graphSourceUuids, requireGraphSource } from '@business/knowledge/ui/web/project/graphProvenance';
 import { graphService } from '../../../services/graphService';
 import type { GraphSnapshot } from '../../../components/graph/CytoscapeGraph/types';
 import { render, screen, fireEvent, waitFor } from '../../utils';

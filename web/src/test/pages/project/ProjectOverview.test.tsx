@@ -15,7 +15,7 @@ import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { fireEvent, screen, render, waitFor, renderHook } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { ProjectOverview } from '../../../pages/project/ProjectOverview';
+import { ProjectOverview } from '@business/workspace/ui/web/project/ProjectOverview';
 import { projectAPI, memoryAPI } from '../../../services/api';
 
 // Mock API services

@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import NullPool
 
 from src.configuration.config import get_settings
@@ -107,7 +112,7 @@ async def get_read_db() -> AsyncGenerator[Any, None]:
         await session.close()
 
 
-async def initialize_database() -> None:
+async def initialize_database(target: AsyncEngine | None = None) -> None:
     """Apply the complete Alembic schema, including tables owned outside the ORM."""
     from alembic.config import Config
 
@@ -121,6 +126,7 @@ async def initialize_database() -> None:
     # propagate migration failures so startup cannot report an incomplete schema.
     # Embedded migrations must not disable the application's already configured loggers.
     alembic_cfg.attributes["configure_logger"] = False
+    alembic_cfg.attributes["database_url"] = (target if target is not None else engine).url
     await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
     logger.info("Database migrations completed successfully")
 

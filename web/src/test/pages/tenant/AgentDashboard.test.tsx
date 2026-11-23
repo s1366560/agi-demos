@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentDashboard } from '../../../pages/tenant/AgentDashboard';
+import { AgentDashboard } from '@business/agent/ui/web/tenant/AgentDashboard';
 
 const {
   mockCanModifyConfig,
@@ -322,7 +322,7 @@ describe('AgentDashboard', () => {
   });
 
   it('keeps the memoized component export available', async () => {
-    const module = await import('../../../pages/tenant/AgentDashboard');
+    const module = await import('@business/agent/ui/web/tenant/AgentDashboard');
     expect(module.AgentDashboard).toBeDefined();
   });
 

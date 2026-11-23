@@ -56,8 +56,8 @@ from src.infrastructure.plugins.v2.session_event_log import (
 )
 
 if TYPE_CHECKING:
+    from plugins.business.automation.backend.workflow_learner import WorkflowLearner
     from src.application.services.skill_service import SkillService
-    from src.application.services.workflow_learner import WorkflowLearner
     from src.application.use_cases.agent import (
         ExecuteStepUseCase,
         SynthesizeResultsUseCase,

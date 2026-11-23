@@ -191,7 +191,7 @@ async def test_disabling_builtin_command_contribution_removes_commands_without_f
 
 @pytest.mark.unit
 def test_production_consumers_do_not_build_static_builtin_registries() -> None:
-    react_source = (_ROOT / "src/infrastructure/agent/core/react_agent.py").read_text(
+    react_source = (_ROOT / "plugins/business/agent/engine/react/react_agent.py").read_text(
         encoding="utf-8"
     )
     route_source = (

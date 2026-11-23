@@ -1,0 +1,202 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "project_graph",
+      "abi": "mcp.stdio",
+      "permissions": [
+        "tools.execute",
+        "graph.projection.compute"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "uuid": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                }
+              },
+              "required": [
+                "uuid",
+                "name",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "fact": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 512
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "source",
+                "target",
+                "kind",
+                "fact",
+                "score"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "entities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                }
+              },
+              "required": [
+                "name",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 199
+                },
+                "target_index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 199
+                },
+                "relation_type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "fact": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "source_index",
+                "target_index",
+                "relation_type",
+                "fact",
+                "score"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "entities",
+          "relationships"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "commands": [
+    {
+      "id": "project-graph",
+      "tool": "project_graph",
+      "payload": {
+        "nodes": [],
+        "edges": []
+      },
+      "permissions": [
+        "tools.execute",
+        "graph.projection.compute"
+      ],
+      "accepts_input": true
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:3385857b96d17d39a6d45d4c0539de98f9c2c468570f39bbc27a47fff448b32a",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkspaceSettingsPanel } from '@/pages/tenant/WorkspaceSettings';
+import { WorkspaceSettingsPanel } from '@business/workspace/ui/web/tenant/WorkspaceSettings';
 import { fireEvent, render, screen, waitFor } from '@/test/utils';
 import type { Workspace, WorkspaceMember } from '@/types/workspace';
 

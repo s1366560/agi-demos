@@ -1,24 +1,18 @@
-# External WASM score ABI v1
+# External WebAssembly tool ABIs
 
-The external V2 ToolSet factory uses `memstack.wasm.score-json-utf8.v1`.
-This is distinct from the legacy `WasmtimeToolFactory` inline-WAT contract.
-The Rust signed archive verifier admits bytes and ownership metadata only;
-it does not compile a guest, register tools, or grant execution permission.
+A signed module selects one export in its entrypoint. The Python and Rust V2 tool factories support the two ABIs below. The host checks the export signature against the verified archive before exposing a tool.
 
-The v1 tool input schema is an object with exactly one `input` string, at most
-65,536 Unicode code points. The host serializes the entire object as compact
-JSON, with no whitespace outside strings and no unnecessary ASCII escaping
-of Unicode characters, then encodes UTF-8. The guest receives the number of
-bytes of that JSON document as an `i32` argument to its exported
-`score(i32) -> i32` function. Length conversion must be checked, never truncated.
+## Structured invoke
 
-Examples: `{"input":""}` supplies 12; `{"input":"中"}` supplies 15.
-Quotes, backslashes, and control characters count after JSON escaping.
-The guest does not receive string contents or access to host memory.
-Neither the character count of `text` nor a renderer-provided `len` field is
-an implementation of this ABI. The existing Python V2 factory implements
-the compact-JSON UTF-8 lowering. The optional native Rust `external-wasm-v2`
-factory implements the same lowering with Unicode/escaping regression tests.
+Export `memory` and `invoke(i32) -> i32`. The host serializes the operation's object as compact UTF-8 JSON and writes it at byte offset zero. The argument gives the input byte length, up to 65,536. The guest writes one UTF-8 JSON object at byte offset 65,536 and returns its byte length. The active quota can reduce the 65,536-byte result limit. A negative size, inaccessible memory, a malformed document or a result exceeding the limit fails the operation. Guests must reserve both buffers when laying out the stack and static data. Each invocation starts with a fresh store.
+
+The project installer validates input and output against the schemas declared by the signed contribution. Packagers can build a device guest with the official knowledge retrieval example or a cloud guest with the Billing example.
+
+## Score
+
+`memstack.wasm.score-json-utf8.v1` accepts an object with one `input` string of at most 65,536 Unicode code points. The host serializes it as compact JSON without unnecessary ASCII escaping. The guest receives the UTF-8 byte count in `score(i32) -> i32` and returns a score. For example, `{"input":""}` supplies 12 and `{"input":"中"}` supplies 15. This entrypoint receives only the count. Quotes, backslashes and control characters count after JSON escaping.
+
+## Runtime binding
 
 The Rust factory consumes only `VerifiedWasmArtifactV2` and requires a signed
 module declaring exactly `service:wasm-tool-set@1.0.0` as its provided service,
@@ -47,7 +41,4 @@ Ed25519 signatures are verified over the ASCII `sha256:...` digest string.
 The signed provenance field is a reference; verifying its inclusion does not
 assert that a referenced remote attestation has separately been evaluated.
 
-This ABI document does not enable Local marketplace installation or execution.
-The signed archive verifier and optional V2 runtime factory have library tests.
-Local governance persistence and ToolHost integration still need to be completed
-and tested together through the native client.
+The desktop device package settings use the current cloud identity, a device-bound approval and the Sidecar's verified archive loader. The renderer receives release metadata and operation-scoped results. See [the device package example](../plugins/business/knowledge/workers/device_search/README.md).

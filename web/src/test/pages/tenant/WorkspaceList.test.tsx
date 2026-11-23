@@ -3,7 +3,7 @@ import { Route, Routes } from 'react-router-dom';
 
 import { act, render, screen, waitFor } from '../../utils';
 
-import { WorkspaceList } from '../../../pages/tenant/WorkspaceList';
+import { WorkspaceList } from '@business/workspace/ui/web/tenant/WorkspaceList';
 // eslint-disable-next-line no-restricted-imports
 import { workspacePlanService, workspaceTaskService } from '../../../services/workspaceService';
 

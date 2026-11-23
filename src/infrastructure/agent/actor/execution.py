@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from src.application.services.automation_runtime_projection_service import (
+    from plugins.business.automation.backend.automation_runtime_projection_service import (
         AutomationRuntimeIdentity,
     )
     from src.domain.model.agent.hitl.hitl_types import HITLPendingException
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 import redis.asyncio as aioredis
 
+from plugins.business.agent.engine.react.project_react_agent import ProjectReActAgent
 from src.application.services.agent.run_cancellation_signal import (
     CancellationSignalStore,
     RunCancellationIdentity,
@@ -68,7 +69,6 @@ from src.infrastructure.agent.actor.state.snapshot_repo import (
     save_hitl_snapshot,
 )
 from src.infrastructure.agent.actor.types import ProjectChatRequest, ProjectChatResult
-from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
 from src.infrastructure.agent.events.converter import normalize_event_dict
 from src.infrastructure.agent.hitl.state_store import HITLAgentState, HITLStateStore
 from src.infrastructure.agent.subagent.announce_service import AnnounceService
@@ -95,7 +95,9 @@ async def _mark_root_run_authority_running(
             conversation_id=conversation_id,
         )
 
-        from src.application.services.sandbox_image_lifecycle import note_project_run
+        from plugins.business.environments.backend.sandbox.sandbox_image_lifecycle import (
+            note_project_run,
+        )
 
         if run is not None:
             note_project_run(project_id, active=True)
@@ -150,7 +152,9 @@ async def _settle_root_run_authority(
             await session.commit()
         from sqlalchemy import func, select
 
-        from src.application.services.sandbox_image_lifecycle import note_project_run
+        from plugins.business.environments.backend.sandbox.sandbox_image_lifecycle import (
+            note_project_run,
+        )
 
         remaining = await session.scalar(
             select(func.count())
@@ -692,7 +696,7 @@ def _automation_runtime_identity(
             project_id,
         )
         return None
-    from src.application.services.automation_runtime_projection_service import (
+    from plugins.business.automation.backend.automation_runtime_projection_service import (
         AutomationRuntimeIdentity,
     )
 
@@ -711,7 +715,7 @@ async def _project_automation_runtime_running(
     if identity is None:
         return
     try:
-        from src.application.services.automation_runtime_projection_service import (
+        from plugins.business.automation.backend.automation_runtime_projection_service import (
             AutomationRuntimeProjectionService,
         )
         from src.infrastructure.adapters.secondary.persistence.sql_automation_runtime_projection_repository import (
@@ -738,7 +742,7 @@ async def _project_automation_runtime_waiting_human(
     if identity is None:
         return
     try:
-        from src.application.services.automation_runtime_projection_service import (
+        from plugins.business.automation.backend.automation_runtime_projection_service import (
             AutomationRuntimeProjectionService,
         )
         from src.infrastructure.adapters.secondary.persistence.sql_automation_runtime_projection_repository import (
@@ -769,7 +773,7 @@ async def _project_automation_runtime_terminal(
     if identity is None:
         return
     try:
-        from src.application.services.automation_runtime_projection_service import (
+        from plugins.business.automation.backend.automation_runtime_projection_service import (
             AutomationRuntimeOutcome,
             AutomationRuntimeProjectionService,
             AutomationRuntimeTerminal,

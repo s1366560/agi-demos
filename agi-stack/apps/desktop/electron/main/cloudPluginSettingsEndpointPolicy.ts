@@ -27,6 +27,38 @@ export function authorizeCloudPluginSettingsEndpoint(
       return null;
     return scoped(Object.fromEntries(entries));
   };
+  const business =
+    /^\/api\/v1\/platform-plugins\/v2\/optional-business\/([a-z0-9][a-z0-9._-]{0,127})\/(ui|commands)$/u.exec(
+      path,
+    );
+  if (business) {
+    const digest = (value: unknown) =>
+      typeof value === 'string' && /^sha256:[a-f0-9]{64}$/u.test(value);
+    if (business[2] === 'ui' && read) {
+      const entries = [...target.searchParams];
+      const data = Object.fromEntries(entries);
+      if (
+        entries.length !== 4 ||
+        Object.keys(data).length !== 4 ||
+        !identifier(data.project_id) ||
+        data.target !== 'desktop-renderer' ||
+        !digest(data.expected_digest)
+      )
+        return null;
+      return scoped(data);
+    }
+    const body = request.body;
+    return business[2] === 'commands' &&
+      request.method === 'POST' &&
+      noQuery(target) &&
+      fields(body, [...SCOPE, 'command_id', 'expected_digest', 'payload']) &&
+      (body.payload === undefined || record(body.payload)) &&
+      identifier(body.project_id) &&
+      identifier(body.command_id) &&
+      digest(body.expected_digest)
+      ? scoped(body)
+      : null;
+  }
   if (path === INSTANCES && read) return queryScope();
   if (path === `${INSTANCES}/apply`) {
     const body = request.body;

@@ -10,6 +10,10 @@ from typing import Any, cast
 
 import pytest
 
+from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+    SANDBOX_APPLICATION_MODULE_V2,
+    SANDBOX_APPLICATION_SERVICE_V2,
+)
 from src.configuration.containers.agent_container import AgentContainer
 from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
@@ -51,10 +55,6 @@ from src.infrastructure.plugins.v2.runtime import (
     RuntimeV2Error,
 )
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.sandbox_runtime import (
-    SANDBOX_APPLICATION_MODULE_V2,
-    SANDBOX_APPLICATION_SERVICE_V2,
-)
 
 pytestmark = pytest.mark.unit
 

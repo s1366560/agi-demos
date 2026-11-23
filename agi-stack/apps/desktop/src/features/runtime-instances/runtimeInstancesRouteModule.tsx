@@ -36,7 +36,7 @@ export function createRuntimeInstancesRouteModuleLoader({
   return async () => {
     const [{ RuntimeInstancesPage }, { useRuntimeInstancesController }] =
       await Promise.all([
-        import('./RuntimeInstancesPage'),
+        import('@business/environments/ui/desktop/runtime-instances/RuntimeInstancesPage'),
         import('./useRuntimeInstancesController'),
       ]);
 
@@ -90,7 +90,7 @@ function BoundRuntimeInstancesRoute({
   createBinding(
     context: RuntimeInstancesRouteContext,
   ): RuntimeInstancesRouteBinding;
-  Page: typeof import('./RuntimeInstancesPage').RuntimeInstancesPage;
+  Page: typeof import('@business/environments/ui/desktop/runtime-instances/RuntimeInstancesPage').RuntimeInstancesPage;
   useController: typeof import('./useRuntimeInstancesController').useRuntimeInstancesController;
 }>) {
   const binding = useMemo(

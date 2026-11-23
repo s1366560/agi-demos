@@ -11,11 +11,11 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
-from src.domain.model.plugins.generated_v2 import ScopeKindV2
-from src.infrastructure.adapters.primary.web.billing_application_authority_v2 import (
+from plugins.business.billing.backend.authority import (
     BillingApplicationAuthorityV2,
     billing_application_authority_context_v2,
 )
+from src.domain.model.plugins.generated_v2 import ScopeKindV2
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
@@ -30,7 +30,7 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 pytestmark = pytest.mark.unit
 
 _ROOT = Path(__file__).resolve().parents[7]
-_ROUTER_PATH = _ROOT / "src/infrastructure/adapters/primary/web/routers/billing.py"
+_ROUTER_PATH = _ROOT / "plugins/business/billing/backend/http.py"
 
 
 def _request(*, path: str, route_template: str, method: str = "GET") -> Request:
@@ -116,7 +116,7 @@ async def test_authority_propagates_structured_generation_failure_without_fallba
         raise RuntimeV2Error("generation_not_pinned", "test")
 
     monkeypatch.setattr(
-        "src.infrastructure.adapters.primary.web.billing_application_authority_v2.current_generation_v2",
+        "plugins.business.billing.backend.authority.current_generation_v2",
         missing_generation,
     )
     try:

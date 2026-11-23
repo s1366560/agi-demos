@@ -1,4 +1,14 @@
 export const localPluginEnUS = {
+  'localPlugins.deviceGrantUnavailable': 'Device authorization unavailable',
+  'localPlugins.deviceLastRun': 'Last successful invocation',
+  'localPlugins.deviceTitle': 'Signed packages on this device',
+  'localPlugins.deviceId': 'Device ID',
+  'localPlugins.deviceFingerprint': 'Device credential fingerprint',
+  'localPlugins.deviceGeneration': 'Host generation',
+  'localPlugins.deviceApprove': 'Approve this account to install and run this version on this device and project for 24 hours.',
+  'localPlugins.deviceExistingGrant': 'Install using the existing device grant from a project administrator.',
+  'localPlugins.deviceArgs': 'Tool arguments (JSON object)',
+  'localPlugins.deviceRun': 'Run',
   'localPlugins.title': 'Local signed plugins',
   'localPlugins.description':
     'Install a signed package for this project. Review and approve its declared permissions before installation.',
@@ -34,6 +44,16 @@ export const localPluginEnUS = {
   'localPlugins.scope': 'Project scope',
 };
 export const localPluginZhCN: Record<keyof typeof localPluginEnUS, string> = {
+  'localPlugins.deviceGrantUnavailable': '设备授权不可用',
+  'localPlugins.deviceLastRun': '最近成功调用',
+  'localPlugins.deviceTitle': '本机签名包',
+  'localPlugins.deviceId': '设备 ID',
+  'localPlugins.deviceFingerprint': '设备凭据指纹',
+  'localPlugins.deviceGeneration': '宿主运行代',
+  'localPlugins.deviceApprove': '批准当前账号在此设备和项目安装并调用此版本，有效期 24 小时。',
+  'localPlugins.deviceExistingGrant': '使用管理员已授予的设备权限安装此版本。',
+  'localPlugins.deviceArgs': '调用参数（JSON 对象）',
+  'localPlugins.deviceRun': '调用',
   'localPlugins.title': '本地签名插件',
   'localPlugins.description': '为当前项目安装签名插件包。安装前，请检查并明确批准其声明的权限。',
   'localPlugins.choose': '选择签名插件包',

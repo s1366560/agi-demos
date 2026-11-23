@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CronJobs } from '../../../pages/project/CronJobs';
+import { CronJobs } from '@business/automation/ui/web/project/CronJobs';
 import { cronAPI } from '../../../services/cronService';
 import type { CronJobResponse, CronJobRunResponse } from '../../../types/cron';
 import { fireEvent, render, screen, waitFor } from '../../utils';

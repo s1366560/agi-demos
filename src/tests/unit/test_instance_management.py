@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.application.services.instance_service import InstanceService
+from plugins.business.environments.backend.instance_service import InstanceService
 from src.domain.model.instance.enums import InstanceStatus, ServiceType
 from src.domain.model.instance.instance import Instance
 

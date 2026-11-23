@@ -346,7 +346,7 @@ async def _purge_project_sandbox_resources(
 ) -> None:
     """Purge external sandbox resources before committing permanent deletion."""
     try:
-        from src.infrastructure.plugins.v2.sandbox_projection import (
+        from plugins.business.environments.backend.sandbox.sandbox_projection import (
             current_sandbox_application_services_v2,
         )
 

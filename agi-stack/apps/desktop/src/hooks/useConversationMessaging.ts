@@ -7,7 +7,7 @@ import {
 } from '../features/chat/chatComposerModel';
 import { resolveSessionComposerDispatch } from '../features/session/sessionComposerDispatchModel';
 import { executionPlacementMessageKey } from '../features/chat/executionPlacementModel';
-import { dispatchDesktopLocalRun } from '../features/chat/localRunDispatch';
+import { dispatchDesktopLocalRun, localRunFailureMessageKey } from '../features/chat/localRunDispatch';
 import {
   AgentConversation,
   CodeRangeReference,
@@ -295,8 +295,6 @@ export function useConversationMessaging(params: AgentConversationParams) {
             }
             const localReport = await dispatchDesktopLocalRun(
               {
-                apiBaseUrl: config.apiBaseUrl,
-                apiKey: config.apiKey,
                 userId,
                 tenantId: config.tenantId,
                 conversationId: conversation.id,
@@ -307,14 +305,16 @@ export function useConversationMessaging(params: AgentConversationParams) {
               },
               invoke,
             );
-            const failed = localReport.sync === 'failed' || localReport.sync === 'conflict';
-            if (failed) setError(localReport.detail);
+            assertOperationActive();
+            const failure = localRunFailureMessageKey(localReport);
+            const detail = failure ? t(failure) : localReport.detail;
+            if (failure) setError(detail);
             upsertAgentTaskSignal({
               id: signalId,
               conversationId: conversation.id,
               messageId,
-              status: failed ? 'failed' : 'acknowledged',
-              detail: localReport.detail,
+              status: failure ? 'failed' : 'acknowledged',
+              detail,
             });
             return;
           }

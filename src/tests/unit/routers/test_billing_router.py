@@ -8,12 +8,12 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import select
 
+from plugins.business.billing.backend.invoices import Invoice
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
     shutdown_plugin_runtime_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
-    Invoice,
     Memory,
     Project,
     Tenant,

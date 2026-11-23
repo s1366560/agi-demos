@@ -8,7 +8,7 @@ import type {
   DesktopSearchResponse,
   DesktopSearchType,
 } from '../api/searchContract';
-import { DesktopSearch } from '../features/search/DesktopSearch';
+import { DesktopSearch } from '@business/knowledge/ui/desktop/search/DesktopSearch';
 import { I18nProvider } from '../i18n';
 import '../styles/global.css';
 import './searchQa.css';

@@ -8,11 +8,11 @@ from uuid import uuid4
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.domain.llm_providers.llm_types import LLMConfig, Message
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.infrastructure.agent.core.llm_stream import LLMStream, StreamConfig, StreamEventType
 from src.infrastructure.agent.llm.invoker import InvocationConfig, InvocationContext, LLMInvoker
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.retry.policy import RetryPolicy
 from src.infrastructure.llm.failover_chain import is_failover_worthy
 from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient

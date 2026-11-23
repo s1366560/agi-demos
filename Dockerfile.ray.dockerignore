@@ -1,3 +1,38 @@
+# Only send inputs used by the Ray image. Later rules also exclude nested generated
+# files and credential material from these roots.
+*
+!Dockerfile.ray
+!pyproject.toml
+!uv.lock
+!alembic.ini
+!src/
+!src/**
+!config/
+!config/**
+!shared/
+!shared/**
+!contracts/
+!contracts/**
+!alembic/
+!alembic/**
+!assets/
+!assets/**
+!memstack_tools/
+!memstack_tools/**
+!sdk/memstack-plugin-sdk/src/**
+!plugins/business/**
+!plugins/adapters/**
+plugins/business/environments/sandbox-mcp-server/
+plugins/**/tests/
+plugins/**/target/
+!agi-stack/apps/desktop/src/**
+!agi-stack/apps/desktop/sidecar/src/**
+!agi-stack/apps/server/src/**
+!agi-stack/crates/plugin-host/src/**
+!agi-stack/packages/plugin-runtime/src/**
+!docker/ray/**
+!docker/ray-runtime.env
+
 # Ray build context. Keep the shared credential and artifact exclusions.
 # Version-control and local agent state
 .git
@@ -130,5 +165,5 @@ web/e2e
 **/*.pfx
 **/*.secret.yaml
 **/*.tfvars
-!**/.env.example
 !.env.example
+.memstack/standard

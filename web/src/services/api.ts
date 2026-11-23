@@ -124,6 +124,7 @@ interface BackendUserResponse {
   roles: string[];
   is_active: boolean;
   is_superuser?: boolean;
+  must_change_password?: boolean;
   created_at: string;
   profile?: UserProfile;
   preferred_language?: 'en-US' | 'zh-CN' | null;
@@ -258,11 +259,14 @@ export const authAPI = {
 
     return { token, user, must_change_password: must_change_password ?? false };
   },
-  verifyToken: async (_token: string): Promise<User> => {
-    const userResponse = await kernelHttpClient.get<BackendUserResponse>('/auth/me');
+  verifyToken: async (token: string): Promise<User> => {
+    const userResponse = await kernelHttpClient.get<BackendUserResponse>('/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     // Map backend response (user_id) to frontend format (id)
     return {
       id: userResponse.user_id,
+      must_change_password: userResponse.must_change_password,
       email: userResponse.email,
       name: userResponse.name,
       roles: userResponse.roles,

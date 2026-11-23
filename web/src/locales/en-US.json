@@ -1,4 +1,12 @@
 {
+  "projectPackages": {
+    "title": "Project packages",
+    "project": "Project",
+    "select": "Select an authorized project",
+    "noAccess": "You do not have access to this project.",
+    "member": "You can run this project’s installed packages.",
+    "viewer": "You can view this project’s installed packages."
+  },
   "plugins": {
     "bootstrapFailed": "Features could not be loaded",
     "bootstrapFailedDescription": "The current feature configuration could not be applied. Retry or review the configuration to recover.",
@@ -4488,7 +4496,12 @@
         "absent": "not recorded",
         "loadFailed": "Could not load the signed package",
         "actionFailed": "Signed package action failed",
-        "packageInvalid": "The package file is not valid JSON"
+        "kind": { "business": "Business plugin", "adapter": "Adapter" },
+        "requiresService": "Calls {{service}} at contract version {{version}} under the alias {{alias}}.",
+        "providesService": "Offers {{service}} at contract version {{version}} to this project.",
+        "approval": "Approve {{permissions}} for {{plugin}} {{version}} ({{digest}}).",
+        "versions": "Installed {{installed}}, running {{running}}",
+        "packageInvalid": "The signed package could not be verified"
       },
       "messages": {
         "loadProjectsFailed": "Failed to load projects",

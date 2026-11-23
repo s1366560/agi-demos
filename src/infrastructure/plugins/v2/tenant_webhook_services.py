@@ -8,7 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.webhook_service import WebhookService
+from plugins.business.automation.backend.webhook_service import WebhookService
 from src.infrastructure.adapters.secondary.persistence.sql_webhook_repository import (
     SqlWebhookRepository,
 )

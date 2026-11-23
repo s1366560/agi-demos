@@ -3,7 +3,7 @@ V2 SQLAlchemy implementation of APIKeyRepository using BaseRepository.
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -90,6 +90,9 @@ class SqlAPIKeyRepository(BaseRepository[APIKey, DBAPIKey], APIKeyRepository):
         if db_key is None:
             return None
 
+        expires_at = db_key.expires_at
+        if expires_at is not None and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
         return APIKey(
             id=db_key.id,
             user_id=db_key.user_id,
@@ -98,7 +101,7 @@ class SqlAPIKeyRepository(BaseRepository[APIKey, DBAPIKey], APIKeyRepository):
             is_active=db_key.is_active,
             permissions=db_key.permissions,
             created_at=db_key.created_at,
-            expires_at=db_key.expires_at,
+            expires_at=expires_at,
             last_used_at=db_key.last_used_at,
         )
 

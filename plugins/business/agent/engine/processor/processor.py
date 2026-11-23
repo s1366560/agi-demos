@@ -1,0 +1,5806 @@
+"""
+Session Processor - Core ReAct agent processing loop.
+
+Orchestrates the complete agent execution cycle:
+1. Receives user message
+2. Calls LLM for reasoning and action
+3. Executes tool calls
+4. Observes results
+5. Continues until task complete or blocked
+
+Integrates all core components:
+- LLMStream for streaming LLM responses
+- DoomLoopDetector for detecting repeated patterns
+- RetryPolicy for intelligent error handling
+- CostTracker for real-time cost calculation
+- PermissionManager for tool permission control
+
+Reference: OpenCode's SessionProcessor in processor.ts (406 lines)
+"""
+
+import asyncio
+import inspect
+import json
+import logging
+import re
+import time
+import uuid
+from collections.abc import AsyncIterator, Callable, Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import Enum
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol, cast, runtime_checkable
+
+from src.domain.events.agent_events import (
+    AgentActDeltaEvent,
+    AgentActEvent,
+    AgentCompactNeededEvent,
+    AgentCompleteEvent,
+    AgentContextStatusEvent,
+    AgentCostUpdateEvent,
+    AgentDomainEvent,
+    AgentDoomLoopDetectedEvent,
+    AgentErrorEvent,
+    AgentEventType,
+    AgentMCPAppResultEvent,
+    AgentMessageReceivedEvent,
+    AgentObserveEvent,
+    AgentPermissionAskedEvent,
+    AgentPermissionRepliedEvent,
+    AgentRetryEvent,
+    AgentRunInputAppliedEvent,
+    AgentStartEvent,
+    AgentStatusEvent,
+    AgentSuggestionsEvent,
+    AgentTextDeltaEvent,
+    AgentTextEndEvent,
+    AgentTextStartEvent,
+    AgentThoughtDeltaEvent,
+    AgentThoughtEvent,
+    AgentThoughtStartEvent,
+    SubAgentKilledEvent,
+    SubAgentSteeredEvent,
+)
+from src.infrastructure.agent.tools.result import ToolControlOutcome
+from src.infrastructure.plugins.marketplace_hooks import MarketplaceHookError
+from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
+
+if TYPE_CHECKING:
+    from src.application.services.artifact_service import ArtifactService
+    from src.infrastructure.agent.commands.interceptor import CommandInterceptor
+    from src.infrastructure.agent.commands.types import CommandResult
+    from src.infrastructure.agent.tools.pipeline import ToolPipeline
+    from src.infrastructure.plugins.v2.agent_loop import AgentLoopSelectionV2
+
+from plugins.business.agent.engine.processor.model_step_control_v2 import (
+    ModelStepInterruptedV2,
+    model_stream_control_v2,
+)
+from src.domain.model.agent.hitl_types import HITLType
+from src.domain.ports.agent.control_channel_port import ControlChannelPort, ControlMessage
+from src.infrastructure.agent.core.llm_stream import LLMStream, StreamConfig, StreamEventType
+from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
+from src.infrastructure.agent.cost import CostTracker, TokenUsage
+from src.infrastructure.agent.doom_loop import DoomLoopDetector
+from src.infrastructure.agent.hitl.coordinator import HITLCoordinator, complete_hitl_request
+from src.infrastructure.agent.permission import PermissionAction, PermissionManager
+from src.infrastructure.agent.retry import RetryPolicy
+from src.infrastructure.agent.subagent.owner_lease_v2 import fence_subagent_owner_v2
+from src.infrastructure.agent.tools.permission_metadata_v2 import resolve_tool_permission_v2
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_CONTRACT,
+    WORKSPACE_ROLE_WORKER,
+    WORKSPACE_SESSION_ROLE_KEY,
+    WORKSPACE_TOOL_MODE_KEY,
+    WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
+    WORKSPACE_TURN_TYPE_KEY,
+    WORKSPACE_TURN_TYPE_LEADER_REPLAN,
+)
+
+from .artifact_handler import ArtifactHandler, strip_artifact_binary_data
+from .goal_evaluator import GoalEvaluator
+from .hitl_tool_handler import (
+    handle_a2ui_action_tool,
+    handle_clarification_tool,
+    handle_decision_tool,
+    handle_env_var_tool,
+    pop_tool_part_hitl_completion_request_ids,
+    queue_tool_part_hitl_completion,
+)
+from .message_utils import (
+    classify_tool_by_description,
+    extract_user_query,
+    sanitize_tool_call_messages,
+)
+from .native_control import NativeControlWaitError
+from .run_context import RunContext, set_current_run_context
+
+logger = logging.getLogger(__name__)
+
+
+async def _iter_events(
+    events: list["ProcessorEvent"],
+) -> AsyncIterator["ProcessorEvent"]:
+    """Tiny helper to convert a list into an async iterator."""
+    for e in events:
+        yield e
+
+
+class ProcessorState(str, Enum):
+    """Session processor state."""
+
+    IDLE = "idle"
+    THINKING = "thinking"
+    ACTING = "acting"
+    OBSERVING = "observing"
+    WAITING_PERMISSION = "waiting_permission"
+    WAITING_CLARIFICATION = "waiting_clarification"  # Waiting for user clarification
+    WAITING_DECISION = "waiting_decision"  # Waiting for user decision
+    WAITING_ENV_VAR = "waiting_env_var"  # Waiting for user to provide env vars
+    WAITING_A2UI_ACTION = "waiting_a2ui_action"  # Waiting for user A2UI surface interaction
+    RETRYING = "retrying"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
+class ProcessorResult(str, Enum):
+    """Result of processor execution."""
+
+    CONTINUE = "continue"  # Continue processing (tool calls pending)
+    STOP = "stop"  # Stop processing (blocked or error)
+    COMPACT = "compact"  # Need context compaction
+    COMPLETE = "complete"  # Task completed successfully
+
+
+@dataclass
+class ProcessorConfig:
+    """Configuration for session processor."""
+
+    # Model configuration
+    model: str
+    api_key: str | None = None
+    api_auth_token: str | None = field(default=None, repr=False)
+    base_url: str | None = None
+    temperature: float = 0.0
+    max_tokens: int = 32768  # Larger budget prevents write/tool JSON truncation.
+
+    # Processing limits
+    max_steps: int = 50  # Maximum steps before forcing stop
+    max_tool_calls_per_step: int = 10  # Max tool calls per LLM response
+    # Parallel tool execution
+    enable_parallel_tool_execution: bool = False  # Execute tools concurrently
+    parallel_tool_batch_size: int = 5  # Max concurrent tool executions
+    doom_loop_threshold: int = 3  # Consecutive identical calls to trigger
+    max_no_progress_steps: int = 3  # Consecutive no-progress checks before stop
+
+    # Retry configuration
+    max_attempts: int = 5
+    initial_delay_ms: int = 2000
+
+    # Permission configuration
+    # Permission asks must outlive any reasonable user think-time: the web UI
+    # no longer shows an expiry countdown, so the wait is effectively unbounded
+    # and only capped here to keep abandoned sessions from leaking forever.
+    permission_timeout: float = 86400.0  # seconds (24h)
+    approved_run_required: bool = False
+    chat_run_required: bool = False
+    continue_on_deny: bool = False  # Continue loop if permission denied
+
+    # Cost tracking
+    context_limit: int = 200000  # Token limit before compaction warning
+    max_cost_per_request: float = 0  # Per-request cost limit (0 = unlimited)
+    max_cost_per_session: float = 0  # Per-session cost limit (0 = unlimited)
+
+    # LLM Client (optional, provides circuit breaker + rate limiter)
+    llm_client: Any | None = None
+
+    # Generation-owned plugin event dispatcher for hook notifications.
+    plugin_event_dispatcher: Any | None = None
+    runtime_context: dict[str, Any] = field(default_factory=dict)
+
+    # Tool refresh callback (optional, enables dynamic tool loading)
+    # When provided, _refresh_tools() can fetch updated tools at runtime
+    tool_provider: Callable[[], list["ToolDefinition"]] | None = None
+
+    # Forced skill context (optional, for loop reinforcement)
+    forced_skill_name: str | None = None
+    forced_skill_tools: list[str] | None = None
+    # Available skill names (for /skills command)
+    skill_names: list[str] = field(default_factory=list)
+
+    # Provider-specific options (reasoning config, etc.)
+    # Passed through to StreamConfig.provider_options -> to_litellm_kwargs()
+    provider_options: dict[str, Any] = field(default_factory=dict)
+
+    # Multi-agent: message bus for polling child agent announcements
+    message_bus: Any | None = None
+    # Multi-agent: session ID for this processor (used as stream key for announce polling)
+    session_id: str | None = None
+
+    # Multi-agent: control channel for receiving steer/kill/pause/resume from parent
+    control_channel: ControlChannelPort | None = None
+    # Multi-agent: run identifier for this SubAgent execution (used as control channel key)
+    run_id: str | None = None
+    subagent_owner_required: bool = False
+
+    # Required v2 agent-loop seam: every turn resolves by (provider, model).
+    # The native ReAct path is selected only by an explicit builtin selection.
+    provider_id: str = ""
+    loop_resolver: Any | None = None
+
+    # Hard ceilings — defensive bounds against misconfiguration / a malicious
+    # agent definition setting absurd values that would let a single ReAct
+    # session monopolize a worker indefinitely.
+    HARD_MAX_STEPS: ClassVar[int] = 50000
+    HARD_MAX_COST_PER_REQUEST: ClassVar[float] = 1000.0  # USD
+
+    def __post_init__(self) -> None:
+        """Validate runtime bounds on numeric limits.
+
+        Per the audit (P1-12): unbounded ``max_steps`` or ``max_cost_per_request``
+        let a misbehaving / hijacked agent loop forever or spend without bound.
+        ``0`` is treated as a sentinel for "use platform default" rather than
+        "unlimited"; negative values are always invalid.
+        """
+        if self.max_steps <= 0 or self.max_steps > self.HARD_MAX_STEPS:
+            raise ValueError(
+                f"ProcessorConfig.max_steps must be in [1, {self.HARD_MAX_STEPS}], "
+                f"got {self.max_steps}"
+            )
+        if self.max_tool_calls_per_step <= 0 or self.max_tool_calls_per_step > 100:
+            raise ValueError(
+                "ProcessorConfig.max_tool_calls_per_step must be in [1, 100], "
+                f"got {self.max_tool_calls_per_step}"
+            )
+        if self.max_cost_per_request < 0:
+            raise ValueError(
+                f"ProcessorConfig.max_cost_per_request must be >= 0, "
+                f"got {self.max_cost_per_request}"
+            )
+        if self.max_cost_per_request > self.HARD_MAX_COST_PER_REQUEST:
+            raise ValueError(
+                "ProcessorConfig.max_cost_per_request exceeds hard ceiling "
+                f"{self.HARD_MAX_COST_PER_REQUEST}, got {self.max_cost_per_request}"
+            )
+        if self.max_cost_per_session < 0:
+            raise ValueError(
+                f"ProcessorConfig.max_cost_per_session must be >= 0, "
+                f"got {self.max_cost_per_session}"
+            )
+
+
+@runtime_checkable
+class PendingEventEmitter(Protocol):
+    """Tools that buffer side-effect events between execute() calls.
+
+    The processor calls ``consume_pending_events`` after each tool execution
+    to drain buffered domain events (task list updates, artefact lifecycle,
+    toolset changes, etc.) into the agent stream. The contract is:
+
+    1. Each call must drain *and clear* the internal buffer.
+    2. The returned iterable yields plain ``dict`` events compatible with
+       :class:`AgentDomainEvent` deserialisation, never raw tool results.
+    3. Implementations must be safe to call when the buffer is empty.
+    """
+
+    def consume_pending_events(self) -> list[Any]: ...
+
+
+@dataclass
+class ToolDefinition:
+    """Tool definition for LLM."""
+
+    name: str
+    description: str
+    parameters: dict[str, Any]
+    execute: Callable[..., Any]  # Async callable
+    permission: str | None = None  # Permission required
+    aliases: tuple[str, ...] = ()  # Alternate names accepted by canonicalization
+    _tool_instance: Any = field(default=None, repr=False)  # Original tool object
+    permission_resolver: Callable[[dict[str, Any]], str | None] | None = None
+    repeatable_observation: bool = False  # Host-declared fresh external state sampling
+
+    def to_openai_format(self) -> dict[str, Any]:
+        """Convert to OpenAI tool format."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
+
+
+def _consume_tool_pending_events(tool_def: "ToolDefinition") -> list[Any]:
+    """Safely drain pending events from a tool's underlying instance.
+
+    Replaces the historical ``getattr(tool_def, "_tool_instance", None)`` +
+    ``hasattr(..., "consume_pending_events")`` boilerplate scattered across
+    the processor.  Returns an empty list when the tool has no instance, the
+    instance does not implement :class:`PendingEventEmitter`, or the call
+    raises (errors are logged but never propagated, so a misbehaving tool
+    can never break the ReAct loop).
+    """
+    instance = getattr(tool_def, "_tool_instance", None)
+    if instance is None or not isinstance(instance, PendingEventEmitter):
+        return []
+    try:
+        events = instance.consume_pending_events()
+    except Exception:
+        logger.exception(
+            "[Processor] consume_pending_events failed for tool %s",
+            getattr(tool_def, "name", "<unknown>"),
+        )
+        return []
+    return list(events) if events else []
+
+
+ProcessorEvent = AgentDomainEvent | dict[str, Any]
+
+
+class SessionProcessor:
+    """
+    Core ReAct agent processing loop.
+
+    Manages the complete agent execution cycle with:
+    - Streaming LLM responses
+    - Tool execution with permission control
+    - Doom loop detection
+    - Intelligent retry with backoff
+    - Real-time cost tracking
+    - SSE event emission
+    - Artifact extraction from tool outputs
+
+    Usage:
+        processor = SessionProcessor(config, tools)
+        async for event in processor.process(session_id, messages):
+            yield event.to_sse_format()
+    """
+
+    _tool_hooks_resolved: bool = False
+    _TOOL_USAGE_REMINDER = (
+        "[TOOL REMINDER] The goal is still pending. If you need more information, "
+        "verification, or project changes, call the appropriate tool instead of "
+        "producing another text-only reply."
+    )
+    _GOAL_PENDING_REASON_PREFIX = "[GOAL CHECK FEEDBACK]"
+    _WORKSPACE_DELEGATION_RECOVERY_HINT = (
+        "[RECOVERY HINT] Workspace delegation failed because workspace_task_id was missing. "
+        "Call todoread, choose the target child task's workspace_task_id, then retry "
+        "delegate_to_subagent or parallel_delegate_subagents with that workspace_task_id."
+    )
+    _WORKSPACE_REPLAN_TOOL_CALL_HINT = (
+        "[WORKSPACE REPLAN REQUIRED TOOL CALLS] This is a task-ledger-only leader replan "
+        "turn. You must call todoread, then call todowrite(add or replace) to update the "
+        "workspace task ledger. Text-only summaries do not satisfy this turn."
+    )
+    _WORKSPACE_TODOREAD_SNAPSHOT_PREFIX = "[WORKSPACE TODOREAD SNAPSHOT]"
+    _WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX = "[WORKSPACE DELEGATION RETRY]"
+    _WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT = (
+        "[WORKSPACE TERMINAL REPORT REQUIRED] This is a workspace worker session. "
+        "Do not finish with text only. Call workspace_report_complete when the task is done, "
+        "or workspace_report_blocked when the task cannot be completed."
+    )
+    _WORKSPACE_CONTRACT_TOOL_REQUIRED_HINT = (
+        "[WORKSPACE CONTRACT TOOL REQUIRED] This is a builtin workspace contract-agent "
+        "session. Do not finish with text only. Call the required workspace_submit_* "
+        "contract tool for this turn."
+    )
+    _TERMINAL_WORKSPACE_REPORT_TOOLS: ClassVar[frozenset[str]] = frozenset(
+        {"workspace_report_complete", "workspace_report_blocked"}
+    )
+    _TERMINAL_WORKSPACE_CONTRACT_TOOLS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "workspace_submit_planning_contract",
+            "workspace_submit_verification_judgment",
+            "workspace_submit_iteration_review",
+            "workspace_submit_supervisor_decision",
+            "workspace_submit_worktree_preparation",
+        }
+    )
+
+    def __init__(  # noqa: PLR0915
+        self,
+        config: ProcessorConfig,
+        tools: list[ToolDefinition],
+        permission_manager: PermissionManager | None = None,
+        artifact_service: Optional["ArtifactService"] = None,
+        command_interceptor: Optional["CommandInterceptor"] = None,
+        tool_pipeline: Optional["ToolPipeline"] = None,
+    ) -> None:
+        """
+        Initialize session processor.
+        """
+        # Args:
+        #     config: Processor configuration
+        #     tools: List of available tools
+        #     permission_manager: Optional permission manager (creates default if None)
+        #     artifact_service: Optional artifact service for handling rich outputs
+        #     command_interceptor: Optional command interceptor for slash commands
+        #     tool_pipeline: Optional unified tool pipeline for execution
+        self.config = config
+        self.tools = {t.name: t for t in tools}
+
+        # Initialize components
+        self.permission_manager = permission_manager or PermissionManager()
+        self.doom_loop_detector = DoomLoopDetector(threshold=config.doom_loop_threshold)
+        self._same_cause_stop: dict[str, Any] | None = None
+        self._stop_record: dict[str, Any] | None = None
+        self.retry_policy = RetryPolicy(
+            max_attempts=config.max_attempts,
+            initial_delay_ms=config.initial_delay_ms,
+        )
+        self.cost_tracker = CostTracker(
+            context_limit=config.context_limit,
+            max_cost_per_request=config.max_cost_per_request,
+            max_cost_per_session=config.max_cost_per_session,
+        )
+
+        # Artifact service for rich output handling
+        self._artifact_service = artifact_service
+
+        # Command interceptor for slash commands
+        self._command_interceptor = command_interceptor
+
+        # Optional unified tool execution pipeline
+        self._tool_pipeline = tool_pipeline
+        # LLM client for streaming (with circuit breaker + rate limiter)
+        self._llm_client = config.llm_client
+        # Generation-owned lifecycle dispatcher. Production factories resolve
+        # this from the operation's pinned V2 service set.
+        self._plugin_event_dispatcher = config.plugin_event_dispatcher
+
+        # Session state
+        self._state = ProcessorState.IDLE
+        self._step_count = 0
+        self._no_progress_steps = 0
+        self._loop_selection: Any | None = None
+        self._last_process_result: ProcessorResult = ProcessorResult.CONTINUE
+        self._current_message: Message | None = None
+        self._pending_tool_calls: dict[str, ToolPart] = {}
+        self._pending_tool_args: dict[str, str] = {}  # call_id -> accumulated raw args
+        self._abort_event: asyncio.Event | None = None
+        self._saw_task_events = False
+        self._pending_completion_status: str | None = None
+        self._native_control_stopped = False
+        self._artifact_count = 0
+
+        # Task tracking for timeline integration
+        self._current_task: dict[str, Any] | None = None
+
+        # Langfuse observability context
+        self._langfuse_context: dict[str, Any] | None = None
+
+        # HITL handler (created lazily when context is available)
+        self._hitl_coordinator: HITLCoordinator | None = None
+
+        # Tool provider callback for dynamic tool refresh
+        # When set, _refresh_tools() can update self.tools at runtime
+        self._tool_provider: Callable[[], list[ToolDefinition]] | None = config.tool_provider
+
+        # Runtime hook state
+        self._session_instructions: list[str] = []
+        self._response_instructions: list[str] = []
+        # Guards concurrent writes to ``_session_instructions`` (e.g. multiple
+        # callers racing to inject lane JIT guidance at session start).
+        self._session_instructions_lock = asyncio.Lock()
+        self._tool_reminder_issued_for_streak = False
+
+        # Forced skill context for loop reinforcement
+        self._forced_skill_name: str | None = config.forced_skill_name
+        self._forced_skill_tools: set[str] | None = (
+            set(config.forced_skill_tools) if config.forced_skill_tools else None
+        )
+
+        # Multi-agent announce polling state
+        self._message_bus = config.message_bus
+        self._announce_session_id: str | None = config.session_id
+        self._last_announce_id: str | None = None
+
+        # Multi-agent control channel for steer/kill/pause/resume
+        self._control_channel = config.control_channel
+        self._run_id: str | None = config.run_id
+        # STEER counter guarding the mid-run read-only stall heuristic; a fresh
+        # STEER invalidates the previous "stopped" observation.
+        self._control_steer_sequence_v2 = 0
+
+        # Helper state for _execute_tool decomposition
+        self.__resolve_errors: list[ProcessorEvent] = []
+        self.__arg_parse_errors: list[ProcessorEvent] = []
+        self._permission_asked_event: ProcessorEvent | None = None
+        self._last_sse_result: Any = None
+        self._last_raw_result: Any = None
+        self._tool_attachments: dict[str, list[Any]] = {}
+        self._last_output_str: str = ""
+
+        # Extracted subsystems
+        self._goal_evaluator = GoalEvaluator(
+            llm_client=config.llm_client,
+            tools=self.tools,
+            runtime_context=config.runtime_context,
+            generation_parameters=lambda: {
+                "model": self.config.model,
+                "temperature": self.config.temperature,
+                "provider_options": self.config.provider_options,
+            },
+        )
+        self._artifact_handler = ArtifactHandler(
+            artifact_service=artifact_service,
+            langfuse_context=None,
+        )
+
+    @property
+    def state(self) -> ProcessorState:
+        """Get current processor state."""
+        return self._state
+
+    async def _notify_plugin_hook(
+        self,
+        hook_name: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Fire a plugin hook, log diagnostics, and return the resulting payload."""
+        effective_payload = dict(payload or {})
+        if self._plugin_event_dispatcher is not None:
+            result = await self._plugin_event_dispatcher.dispatch(
+                hook_name,
+                payload=effective_payload,
+            )
+            for diagnostic in result.diagnostics:
+                diagnostic_message = getattr(diagnostic, "message", str(diagnostic))
+                diagnostic_plugin = getattr(diagnostic, "plugin_name", "unknown")
+                log_level = (
+                    logging.ERROR
+                    if getattr(diagnostic, "level", "error") == "error"
+                    else logging.WARNING
+                )
+                logger.log(
+                    log_level,
+                    "Plugin event %s diagnostic [%s]: %s",
+                    hook_name,
+                    diagnostic_plugin,
+                    diagnostic_message,
+                )
+            self._merge_hook_instructions(result.payload)
+            return cast("dict[str, Any]", result.payload)
+        return effective_payload
+
+    def _runtime_hook_context_fields(self) -> dict[str, Any]:
+        """Return shared tenant/project fields for runtime hook payloads."""
+        runtime_context = (
+            dict(self.config.runtime_context)
+            if isinstance(self.config.runtime_context, dict)
+            else {}
+        )
+        langfuse_context = (
+            dict(self._langfuse_context) if isinstance(self._langfuse_context, dict) else {}
+        )
+        tenant_id = langfuse_context.get("tenant_id") or runtime_context.get("tenant_id")
+        project_id = langfuse_context.get("project_id") or runtime_context.get("project_id")
+        conversation_id = langfuse_context.get("conversation_id") or runtime_context.get(
+            "conversation_id"
+        )
+        return {
+            "tenant_id": tenant_id,
+            "project_id": project_id,
+            "conversation_id": conversation_id,
+            "runtime_context": runtime_context,
+            "task_authority": runtime_context.get("task_authority"),
+            "workspace_id": runtime_context.get("workspace_id"),
+            "workspace_session_role": runtime_context.get("workspace_session_role"),
+        }
+
+    def _merge_hook_instructions(self, payload: Mapping[str, Any]) -> None:
+        """Merge hook-provided session/response instructions into processor state."""
+        for field_name, target in (
+            ("session_instructions", self._session_instructions),
+            ("response_instructions", self._response_instructions),
+        ):
+            raw_items = payload.get(field_name)
+            if not isinstance(raw_items, list):
+                continue
+            for raw_item in raw_items:
+                if not isinstance(raw_item, str):
+                    continue
+                item = raw_item.strip()
+                if item and item not in target:
+                    target.append(item)
+
+    async def add_runtime_guidance(self, text: str) -> bool:
+        """Append a runtime guidance block to the session-level instructions.
+
+        Public, async-safe alternative to direct ``_session_instructions``
+        mutation. The block is rendered into the ``[Runtime Guidance]``
+        system message at the start of every LLM step.
+
+        Idempotent: identical (whitespace-stripped) blocks are not appended
+        twice within the same session. Concurrent callers are serialized
+        through ``_session_instructions_lock`` so the underlying list stays
+        consistent even when multiple injection sites fire in parallel.
+
+        Returns ``True`` if the block was newly appended, ``False`` if the
+        input was empty or already present.
+        """
+        cleaned = text.strip()
+        if not cleaned:
+            return False
+        async with self._session_instructions_lock:
+            if cleaned in self._session_instructions:
+                return False
+            self._session_instructions.append(cleaned)
+            return True
+
+    def _build_runtime_guidance_message(self) -> dict[str, str] | None:
+        """Build a system message from accumulated runtime instructions."""
+        instructions = [*self._session_instructions, *self._response_instructions]
+        if not instructions:
+            return None
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+        from src.infrastructure.plugins.v2.system_prompt import (
+            SYSTEM_PROMPT_SECTIONS_SERVICE_V2,
+            SystemPromptSectionsProtocolV2,
+        )
+
+        operation = current_operation_context_v2()
+        provider = operation.require(SYSTEM_PROMPT_SECTIONS_SERVICE_V2)
+        if not isinstance(provider, SystemPromptSectionsProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_service_implementation",
+                "v2 system-prompt sections service has an invalid implementation",
+            )
+        runtime_sections = provider.sections
+        if not runtime_sections or any(not section.strip() for section in runtime_sections):
+            raise RuntimeV2Error(
+                "invalid_service_implementation",
+                "v2 system-prompt sections service returned invalid sections",
+            )
+        policy_intro = " ".join(
+            (
+                "The following items are system-level execution policy.",
+                "Follow them silently; do not quote, summarize, or format them as",
+                "user-facing content.",
+            )
+        )
+        lines = [
+            "[Runtime Guidance]",
+            policy_intro,
+        ]
+        lines.extend(section for section in runtime_sections if section not in instructions)
+        for index, item in enumerate(instructions, start=1):
+            lines.extend(
+                [
+                    f'<instruction index="{index}">',
+                    item,
+                    "</instruction>",
+                ]
+            )
+        content = "\n".join(lines)
+        return {"role": "system", "content": content}
+
+    def _queue_tool_usage_reminder(self) -> None:
+        """Inject a temporary reminder after repeated no-progress turns."""
+        if self._tool_reminder_issued_for_streak:
+            return
+        if not self.tools:
+            return
+        if self._TOOL_USAGE_REMINDER not in self._response_instructions:
+            self._response_instructions.append(self._TOOL_USAGE_REMINDER)
+        self._tool_reminder_issued_for_streak = True
+
+    def _clear_tool_usage_reminder(self) -> None:
+        """Remove the temporary no-progress reminder once progress resumes."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item for item in self._response_instructions if item != self._TOOL_USAGE_REMINDER
+        ]
+
+    def _queue_goal_pending_reason(self, reason: str) -> None:
+        """Inject the latest failed completion reason into the next model step."""
+        clean_reason = " ".join((reason or "Goal is not complete").split())
+        self._clear_goal_pending_reason()
+        self._response_instructions.append(
+            f"{self._GOAL_PENDING_REASON_PREFIX} Completion is not accepted yet: "
+            f"{clean_reason}. Fix this specific blocker before giving another final answer. "
+            "If task state is the blocker, call todoread and then todowrite update with "
+            "the exact todo_id copied from todoread; do not use list positions like 1 or 2."
+        )
+
+    def _clear_goal_pending_reason(self) -> None:
+        """Remove previously injected completion feedback."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if not item.startswith(self._GOAL_PENDING_REASON_PREFIX)
+        ]
+
+    def _queue_workspace_delegation_recovery_hint(self) -> None:
+        """Inject a temporary recovery hint after workspace delegation guardrail failures."""
+        if self._WORKSPACE_DELEGATION_RECOVERY_HINT not in self._response_instructions:
+            self._response_instructions.append(self._WORKSPACE_DELEGATION_RECOVERY_HINT)
+
+    def _clear_workspace_delegation_recovery_hint(self) -> None:
+        """Remove the workspace delegation recovery hint once corrective action starts."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if item != self._WORKSPACE_DELEGATION_RECOVERY_HINT
+        ]
+
+    def _queue_workspace_replan_tool_call_hint(self) -> None:
+        """Inject a hard reminder for task-ledger-only leader replan turns."""
+        if self._WORKSPACE_REPLAN_TOOL_CALL_HINT not in self._response_instructions:
+            self._response_instructions.append(self._WORKSPACE_REPLAN_TOOL_CALL_HINT)
+
+    def _clear_workspace_replan_tool_call_hint(self) -> None:
+        """Remove the task-ledger-only replan hint once the turn makes progress."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if item != self._WORKSPACE_REPLAN_TOOL_CALL_HINT
+        ]
+
+    def _queue_workspace_todoread_snapshot(self, snapshot: str) -> None:
+        """Inject a compact todoread snapshot to guide recovery after delegation guardrail errors."""
+        self._clear_workspace_todoread_snapshot()
+        self._response_instructions.append(f"{self._WORKSPACE_TODOREAD_SNAPSHOT_PREFIX} {snapshot}")
+
+    def _clear_workspace_todoread_snapshot(self) -> None:
+        """Remove any previously injected workspace todoread snapshot guidance."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if not item.startswith(self._WORKSPACE_TODOREAD_SNAPSHOT_PREFIX)
+        ]
+
+    def _queue_workspace_delegation_retry_action(self, action_hint: str) -> None:
+        """Inject a precise retry action hint for single-candidate workspace delegation recovery."""
+        self._clear_workspace_delegation_retry_action()
+        self._response_instructions.append(
+            f"{self._WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX} {action_hint}"
+        )
+
+    def _clear_workspace_delegation_retry_action(self) -> None:
+        """Remove any previously injected precise workspace delegation retry hint."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if not item.startswith(self._WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX)
+        ]
+
+    def _queue_workspace_terminal_report_required_hint(self) -> None:
+        self._clear_workspace_terminal_report_required_hint()
+        self._response_instructions.append(self._WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT)
+
+    def _clear_workspace_terminal_report_required_hint(self) -> None:
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if item != self._WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT
+        ]
+
+    def _queue_workspace_contract_tool_required_hint(self) -> None:
+        self._clear_workspace_contract_tool_required_hint()
+        self._response_instructions.append(self._WORKSPACE_CONTRACT_TOOL_REQUIRED_HINT)
+
+    def _clear_workspace_contract_tool_required_hint(self) -> None:
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if item != self._WORKSPACE_CONTRACT_TOOL_REQUIRED_HINT
+        ]
+
+    def _reset_tool_usage_reminder_streak(self) -> None:
+        """Reset reminder streak state after progress resumes or processing restarts."""
+        self._tool_reminder_issued_for_streak = False
+        self._clear_tool_usage_reminder()
+        self._clear_workspace_delegation_recovery_hint()
+        self._clear_workspace_replan_tool_call_hint()
+        self._clear_workspace_todoread_snapshot()
+        self._clear_workspace_delegation_retry_action()
+        self._clear_workspace_terminal_report_required_hint()
+        self._clear_workspace_contract_tool_required_hint()
+        self._clear_goal_pending_reason()
+
+    def _is_workspace_worker_turn(self) -> bool:
+        runtime_context = (
+            dict(self.config.runtime_context)
+            if isinstance(self.config.runtime_context, dict)
+            else {}
+        )
+        return runtime_context.get(WORKSPACE_SESSION_ROLE_KEY) == WORKSPACE_ROLE_WORKER
+
+    def _is_workspace_contract_turn(self) -> bool:
+        runtime_context = (
+            dict(self.config.runtime_context)
+            if isinstance(self.config.runtime_context, dict)
+            else {}
+        )
+        return runtime_context.get(WORKSPACE_SESSION_ROLE_KEY) == WORKSPACE_ROLE_CONTRACT
+
+    def _is_workspace_task_ledger_only_turn(self) -> bool:
+        """Return whether this processor turn is restricted to workspace task-ledger work."""
+        runtime_context = (
+            dict(self.config.runtime_context)
+            if isinstance(self.config.runtime_context, dict)
+            else {}
+        )
+        return (
+            runtime_context.get(WORKSPACE_TURN_TYPE_KEY) == WORKSPACE_TURN_TYPE_LEADER_REPLAN
+            or runtime_context.get(WORKSPACE_TOOL_MODE_KEY) == WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        )
+
+    def _has_seen_task_events(self) -> bool:
+        return bool(self._saw_task_events)
+
+    def _pop_permission_asked_event(self) -> ProcessorEvent | None:
+        event = self._permission_asked_event
+        self._permission_asked_event = None
+        return event
+
+    async def _evaluate_workspace_replan_no_tool_result(
+        self,
+        session_id: str,
+    ) -> list[ProcessorEvent] | None:
+        """Handle no-tool text turns for task-ledger-only leader replans."""
+        if not self._is_workspace_task_ledger_only_turn():
+            return None
+        if self._saw_task_events:
+            self._no_progress_steps = 0
+            self._reset_tool_usage_reminder_streak()
+            self._pending_completion_status = "goal_achieved:workspace_replan_dispatched"
+            self._last_process_result = ProcessorResult.COMPLETE
+            return []
+
+        self._pending_completion_status = None
+        self._no_progress_steps += 1
+        self._queue_workspace_replan_tool_call_hint()
+        events: list[ProcessorEvent] = [
+            AgentStatusEvent(status="workspace_replan_requires_todoread_todowrite")
+        ]
+        if self._no_progress_steps >= self.config.max_no_progress_steps:
+            events.append(AgentStatusEvent(status="workspace_replan_protocol_recovery"))
+            async for evt in self._run_workspace_replan_protocol_recovery(session_id):
+                events.append(evt)
+            if self._has_seen_task_events():
+                self._no_progress_steps = 0
+                self._reset_tool_usage_reminder_streak()
+                self._pending_completion_status = "goal_achieved:workspace_replan_dispatched"
+                self._last_process_result = ProcessorResult.COMPLETE
+                return events
+            events.append(
+                AgentErrorEvent(
+                    message=(
+                        "Workspace leader replan turn did not update the task ledger. "
+                        "Call todoread and then todowrite(add or replace)."
+                    ),
+                    code="GOAL_NOT_ACHIEVED",
+                )
+            )
+            self._state = ProcessorState.ERROR
+            self._last_process_result = ProcessorResult.STOP
+            return events
+        self._last_process_result = ProcessorResult.CONTINUE
+        return events
+
+    def _evaluate_workspace_worker_no_tool_result(self) -> list[ProcessorEvent] | None:
+        """Require worker sessions to finish through terminal WTP tools."""
+        if not self._is_workspace_worker_turn():
+            return None
+
+        self._pending_completion_status = None
+        self._no_progress_steps += 1
+        self._queue_workspace_terminal_report_required_hint()
+        events: list[ProcessorEvent] = [
+            AgentStatusEvent(status="workspace_worker_requires_terminal_report_tool")
+        ]
+        if self._no_progress_steps >= self.config.max_no_progress_steps:
+            events.append(
+                AgentErrorEvent(
+                    message=(
+                        "Workspace worker session ended without calling "
+                        "workspace_report_complete or workspace_report_blocked."
+                    ),
+                    code="WORKSPACE_TERMINAL_REPORT_REQUIRED",
+                )
+            )
+            self._state = ProcessorState.ERROR
+            self._last_process_result = ProcessorResult.STOP
+            return events
+        self._last_process_result = ProcessorResult.CONTINUE
+        return events
+
+    def _evaluate_workspace_contract_no_tool_result(self) -> list[ProcessorEvent] | None:
+        """Require contract agents to finish through their structured contract tools."""
+        if not self._is_workspace_contract_turn():
+            return None
+
+        self._pending_completion_status = None
+        self._no_progress_steps += 1
+        self._queue_workspace_contract_tool_required_hint()
+        events: list[ProcessorEvent] = [
+            AgentStatusEvent(status="workspace_contract_requires_submit_tool")
+        ]
+        if self._no_progress_steps >= self.config.max_no_progress_steps:
+            events.append(
+                AgentErrorEvent(
+                    message=(
+                        "Workspace contract-agent session ended without calling the "
+                        "required workspace_submit_* contract tool."
+                    ),
+                    code="WORKSPACE_CONTRACT_TOOL_REQUIRED",
+                )
+            )
+            self._state = ProcessorState.ERROR
+            self._last_process_result = ProcessorResult.STOP
+            return events
+        self._last_process_result = ProcessorResult.CONTINUE
+        return events
+
+    def _continue_pending_task_goal(self, reason: str) -> list[ProcessorEvent]:
+        """Keep task-backed goals alive while child tasks are still active."""
+        self._pending_completion_status = None
+        self._no_progress_steps = 0
+        self._queue_goal_pending_reason(reason)
+        self._queue_tool_usage_reminder()
+        self._last_process_result = ProcessorResult.CONTINUE
+        return [
+            AgentStatusEvent(status="goal_pending:tasks"),
+            AgentStatusEvent(status="task_progress_continuation"),
+        ]
+
+    def _stop_unachievable_goal(
+        self, reason: str, *, code: str = "GOAL_NOT_ACHIEVED"
+    ) -> AgentErrorEvent:
+        """Stop when the goal evaluator reports a terminal blocker."""
+        self._reset_tool_usage_reminder_streak()
+        self._pending_completion_status = None
+        self._state = ProcessorState.ERROR
+        self._last_process_result = ProcessorResult.STOP
+        return AgentErrorEvent(
+            message=reason or "Goal cannot be completed",
+            code=code,
+        )
+
+    async def _run_workspace_replan_protocol_recovery(
+        self,
+        session_id: str,
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Repair a task-ledger-only replan when the model refuses tool calls."""
+        if "todoread" not in self.tools or "todowrite" not in self.tools:
+            return
+
+        async for evt in self._execute_synthetic_tool_call(
+            session_id=session_id,
+            tool_name="todoread",
+            arguments={},
+            call_id_prefix="workspace-replan-read",
+        ):
+            yield evt
+
+        todos, action = self._build_workspace_replan_recovery_todowrite_args(self._last_output_str)
+        async for evt in self._execute_synthetic_tool_call(
+            session_id=session_id,
+            tool_name="todowrite",
+            arguments={"action": action, "todos": todos},
+            call_id_prefix="workspace-replan-write",
+        ):
+            self._record_task_event_if_present(evt)
+            yield evt
+
+    async def _execute_synthetic_tool_call(
+        self,
+        *,
+        session_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        call_id_prefix: str,
+    ) -> AsyncIterator[ProcessorEvent]:
+        call_id = f"{call_id_prefix}-{uuid.uuid4().hex[:8]}"
+        tool_part = (
+            self._current_message.add_tool_call(
+                call_id=call_id,
+                tool=tool_name,
+                input=arguments,
+            )
+            if self._current_message is not None
+            else ToolPart(
+                call_id=call_id,
+                tool=tool_name,
+                input=arguments,
+                status=ToolState.RUNNING,
+            )
+        )
+        tool_part.status = ToolState.RUNNING
+        tool_part.start_time = time.time()
+        tool_part.tool_execution_id = f"exec_{uuid.uuid4().hex[:12]}"
+        self._pending_tool_calls[call_id] = tool_part
+        yield AgentActEvent(
+            tool_name=tool_name,
+            tool_input=arguments,
+            call_id=call_id,
+            status="running",
+            tool_execution_id=tool_part.tool_execution_id,
+        )
+        async for evt in self._execute_tool(session_id, call_id, tool_name, arguments):
+            yield evt
+
+    def _record_task_event_if_present(self, event: ProcessorEvent) -> None:
+        event_type_raw = (
+            event.get("type") if isinstance(event, dict) else getattr(event, "event_type", None)
+        )
+        event_type = (
+            event_type_raw.value if isinstance(event_type_raw, AgentEventType) else event_type_raw
+        )
+        if event_type in {"task_list_updated", "task_updated"}:
+            self._saw_task_events = True
+
+    def _build_workspace_replan_recovery_todowrite_args(
+        self,
+        todoread_output: str,
+    ) -> tuple[list[dict[str, str]], str]:
+        """Build a conservative recovery task list from a workspace todoread payload."""
+        recovery_task_base = (
+            "Protocol recovery: reconcile blocked workspace tasks, verify current "
+            "implementation and architecture docs against the root goal, make only "
+            "minimal missing fixes, and report build/test evidence."
+        )
+        recovery_task = {
+            "content": recovery_task_base,
+            "status": "pending",
+            "priority": "high",
+        }
+        try:
+            payload = json.loads(todoread_output)
+        except Exception:
+            return [recovery_task], "add"
+        todos_raw = payload.get("todos") if isinstance(payload, dict) else None
+        if not isinstance(todos_raw, list):
+            return [recovery_task], "add"
+
+        retained: list[dict[str, str]] = []
+        blocked_recovery_count = 0
+        for todo in todos_raw:
+            if not isinstance(todo, dict):
+                continue
+            content = todo.get("content")
+            if not isinstance(content, str) or not content.strip():
+                continue
+            status = str(todo.get("status") or "pending")
+            if status != "completed" and content.strip().startswith("Protocol recovery"):
+                blocked_recovery_count += 1
+            if status != "completed":
+                continue
+            item = {
+                "content": content.strip(),
+                "status": "completed",
+                "priority": str(todo.get("priority") or "medium"),
+            }
+            todo_id = todo.get("id")
+            if isinstance(todo_id, str) and todo_id.strip():
+                item["id"] = todo_id.strip()
+            retained.append(item)
+
+        if blocked_recovery_count:
+            retry_index = blocked_recovery_count + 1
+            recovery_task["content"] = (
+                f"Protocol recovery retry {retry_index}: reconcile blocked workspace tasks, "
+                "verify current implementation and architecture docs against the root goal, "
+                "make only minimal missing fixes, and report build/test evidence."
+            )
+
+        return [*retained, recovery_task], "replace"
+
+    async def _attempt_workspace_todoread_snapshot(self, session_id: str) -> str | None:
+        """Best-effort direct todoread call used only for recovery guidance injection."""
+        todoread = self.tools.get("todoread")
+        if todoread is None:
+            return None
+
+        _lctx = self._langfuse_context or {}
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.define import ToolInfo
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        runtime_ctx = ToolContext(
+            session_id=session_id or "workspace-recovery",
+            message_id="workspace-recovery",
+            call_id="workspace-recovery",
+            agent_name=_lctx.get("agent_name", "main"),
+            conversation_id=_lctx.get("conversation_id") or session_id or "workspace-recovery",
+            abort_signal=self._abort_event or asyncio.Event(),
+            messages=[],
+            project_id=_lctx.get("project_id", ""),
+            tenant_id=_lctx.get("tenant_id", ""),
+            user_id=_lctx.get("user_id", ""),
+            api_auth_token=self.config.api_auth_token,
+            runtime_context=dict(self.config.runtime_context),
+        )
+
+        tool_instance = getattr(todoread, "_tool_instance", None)
+        try:
+            if isinstance(tool_instance, ToolInfo):
+                raw_result = await tool_instance.execute(runtime_ctx)
+            elif tool_instance is not None and hasattr(tool_instance, "set_runtime_context"):
+                tool_instance.set_runtime_context(runtime_ctx)
+                raw_result = await todoread.execute()
+            else:
+                raw_result = await todoread.execute()
+        except Exception:
+            logger.warning("Workspace todoread recovery snapshot failed", exc_info=True)
+            return None
+
+        if isinstance(raw_result, ToolResult):
+            if raw_result.is_error:
+                return None
+            output = raw_result.output
+        else:
+            output = str(raw_result)
+
+        structured = self._summarize_workspace_todoread_output(output)
+        if structured:
+            return structured[:500]
+        compact = " ".join(output.split())
+        if not compact:
+            return None
+        return compact[:500]
+
+    @staticmethod
+    def _summarize_workspace_todoread_output(output: str) -> str | None:
+        """Convert todoread JSON into a compact recovery-oriented summary when possible."""
+        try:
+            payload = json.loads(output)
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        todos = payload.get("todos")
+        if not isinstance(todos, list) or not todos:
+            return None
+
+        workspace_todos = [
+            todo
+            for todo in todos
+            if isinstance(todo, dict) and isinstance(todo.get("workspace_task_id"), str)
+        ]
+        if not workspace_todos:
+            return None
+
+        active = [
+            todo
+            for todo in workspace_todos
+            if str(todo.get("status", "")).lower() not in {"completed", "done"}
+        ]
+        candidate_pool = active or workspace_todos
+        suggested = candidate_pool[0] if len(candidate_pool) == 1 else None
+        summary_parts: list[str] = []
+        if suggested is not None:
+            summary_parts.append(
+                "Suggested workspace_task_id="
+                f"{suggested['workspace_task_id']} for '{suggested.get('content', '')}'"
+            )
+        preview = "; ".join(
+            f"{todo.get('workspace_task_id')}:{todo.get('content', '')}:{todo.get('status', '')}"
+            for todo in candidate_pool[:5]
+        )
+        summary_parts.append(f"Available tasks: {preview}")
+        return " | ".join(summary_parts)
+
+    @staticmethod
+    def _extract_suggested_workspace_task_id(snapshot: str | None) -> str | None:
+        if not snapshot:
+            return None
+        marker = "Suggested workspace_task_id="
+        if marker not in snapshot:
+            return None
+        trailing = snapshot.split(marker, 1)[1]
+        return trailing.split(" ", 1)[0].strip() or None
+
+    @staticmethod
+    def _build_workspace_delegation_retry_hint(
+        *,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        workspace_task_id: str,
+    ) -> str | None:
+        if tool_name == "delegate_to_subagent":
+            subagent_name = tool_input.get("subagent_name")
+            task = tool_input.get("task")
+            if isinstance(subagent_name, str) and isinstance(task, str):
+                return (
+                    f"Retry delegate_to_subagent with subagent_name={subagent_name!r}, "
+                    f"task={task!r}, workspace_task_id={workspace_task_id!r}."
+                )
+            return None
+
+        if tool_name == "parallel_delegate_subagents":
+            tasks = tool_input.get("tasks")
+            if not isinstance(tasks, list):
+                return None
+            missing_indices = [
+                idx
+                for idx, task in enumerate(tasks)
+                if isinstance(task, dict) and not task.get("workspace_task_id")
+            ]
+            if len(missing_indices) != 1:
+                return None
+            task = tasks[missing_indices[0]]
+            subagent_name = task.get("subagent_name")
+            task_text = task.get("task")
+            if isinstance(subagent_name, str) and isinstance(task_text, str):
+                return (
+                    f"Retry parallel_delegate_subagents after setting workspace_task_id="
+                    f"{workspace_task_id!r} on the task for subagent_name={subagent_name!r}, "
+                    f"task={task_text!r}."
+                )
+        return None
+
+    @staticmethod
+    def _build_workspace_delegation_retry_arguments(
+        *,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        workspace_task_id: str,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] | None = None
+        if tool_name == "parallel_delegate_subagents":
+            tasks = tool_input.get("tasks")
+            if isinstance(tasks, list):
+                missing_indices = [
+                    idx
+                    for idx, task in enumerate(tasks)
+                    if isinstance(task, dict) and not task.get("workspace_task_id")
+                ]
+                if len(missing_indices) == 1:
+                    next_tasks: list[dict[str, Any]] = []
+                    missing_index = missing_indices[0]
+                    for idx, task in enumerate(tasks):
+                        if not isinstance(task, dict):
+                            return None
+                        next_task = dict(task)
+                        if idx == missing_index:
+                            next_task["workspace_task_id"] = workspace_task_id
+                        next_tasks.append(next_task)
+                    result = {"tasks": next_tasks}
+        elif tool_name == "delegate_to_subagent":
+            subagent_name = tool_input.get("subagent_name")
+            task = tool_input.get("task")
+            if isinstance(subagent_name, str) and isinstance(task, str):
+                result = {
+                    "subagent_name": subagent_name,
+                    "task": task,
+                    "workspace_task_id": workspace_task_id,
+                }
+        return result
+
+    def _get_hitl_coordinator(self) -> HITLCoordinator:
+        """Get or create the HITL coordinator for current context."""
+        ctx = self._langfuse_context or {}
+        conversation_id = ctx.get("conversation_id", "unknown")
+        tenant_id = ctx.get("tenant_id", "unknown")
+        project_id = ctx.get("project_id", "unknown")
+        message_id = ctx.get("message_id")
+
+        if (
+            self._hitl_coordinator is None
+            or self._hitl_coordinator.conversation_id != conversation_id
+        ):
+            logger.debug(
+                f"[Processor] Creating HITL coordinator for conversation={conversation_id}"
+            )
+            self._hitl_coordinator = HITLCoordinator(
+                conversation_id=conversation_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                message_id=message_id,
+            )
+
+        return self._hitl_coordinator
+
+    def _refresh_tools(self) -> int | None:
+        """Refresh tools from the tool_provider callback.
+
+        Called after register_mcp_server succeeds to load newly registered
+        MCP tools into the current session. This enables immediate access
+        to new tools without restarting the session.
+
+        Returns:
+            Number of tools after refresh, or None if no provider set or error.
+        """
+        if self._tool_provider is None:
+            return None
+
+        try:
+            new_tools_result = cast("object", self._tool_provider())
+            if new_tools_result is None:
+                logger.warning("[Processor] tool_provider returned None, skipping refresh")
+                return None
+            new_tools = cast("list[ToolDefinition]", new_tools_result)
+
+            new_tools_map = {t.name: t for t in new_tools}
+
+            # Guard: never replace a populated tool registry with an empty set.
+            # After MCP registration the cache may be transiently empty due to
+            # invalidation; blindly assigning would wipe built-in tools and cause
+            # all subsequent tool calls to fail with "Unknown tool".
+            if not new_tools_map and self.tools:
+                logger.warning(
+                    "[Processor] tool_provider returned 0 tools but current registry "
+                    "has %d tools — keeping existing tools to avoid wipe",
+                    len(self.tools),
+                )
+                return None
+
+            # Merge: keep existing tools, overlay with refreshed ones.
+            # This ensures built-in tools survive even if the provider only
+            # returns the newly discovered MCP tools.
+            merged = {**self.tools, **new_tools_map}
+            self.tools.clear()
+            self.tools.update(merged)
+            logger.info(
+                "[Processor] Refreshed tools from provider: %d tools available "
+                "(%d new/updated, %d total)",
+                len(new_tools_map),
+                len(new_tools_map),
+                len(self.tools),
+            )
+            return len(self.tools)
+
+        except Exception as e:
+            logger.warning("[Processor] Failed to refresh tools from provider: %s", e)
+            return None
+
+    @staticmethod
+    def _extract_mcp_resource_uri(ui_metadata: dict[str, Any] | None) -> str:
+        """Extract MCP resource URI from either camelCase or snake_case metadata."""
+        if not isinstance(ui_metadata, dict):
+            return ""
+        uri = ui_metadata.get("resourceUri") or ui_metadata.get("resource_uri")
+        return str(uri) if uri else ""
+
+    async def _load_mcp_app_ui_metadata(self, app_id: str) -> dict[str, Any]:
+        """Load MCP App UI metadata from DB by app id."""
+        if not app_id or app_id.startswith("_synthetic_"):
+            return {}
+
+        try:
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+            from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+                SqlMCPAppRepository,
+            )
+
+            async with async_session_factory() as db:
+                app_repo = SqlMCPAppRepository(db)
+                app = await app_repo.find_by_id(app_id)
+
+            if not app:
+                return {}
+
+            ui_metadata = app.ui_metadata.to_dict() if app.ui_metadata else {}
+            if app.resource and app.resource.uri and "resourceUri" not in ui_metadata:
+                ui_metadata["resourceUri"] = app.resource.uri
+            return ui_metadata
+        except Exception as exc:
+            logger.debug("[MCPApp] Failed to load ui metadata for app_id=%s: %s", app_id, exc)
+            return {}
+
+    async def _hydrate_mcp_ui_metadata(
+        self, tool_instance: Any, app_id: str, tool_name: str
+    ) -> dict[str, Any]:
+        """Ensure MCP tool has usable UI metadata for app rendering."""
+        ui_metadata = getattr(tool_instance, "ui_metadata", None) or {}
+        if not isinstance(ui_metadata, dict):
+            ui_metadata = {}
+
+        resource_uri = self._extract_mcp_resource_uri(ui_metadata)
+        if not resource_uri and app_id:
+            recovered = await self._load_mcp_app_ui_metadata(app_id)
+            if recovered:
+                # Preserve runtime fields while filling missing resource metadata from DB.
+                ui_metadata = {**recovered, **ui_metadata}
+                if hasattr(tool_instance, "_ui_metadata"):
+                    tool_instance._ui_metadata = ui_metadata
+                logger.debug(
+                    "[MCPApp] Hydrated ui metadata from DB for tool=%s app_id=%s resource_uri=%s",
+                    tool_name,
+                    app_id,
+                    self._extract_mcp_resource_uri(ui_metadata),
+                )
+
+        return ui_metadata
+
+    async def process(
+        self,
+        session_id: str,
+        messages: list[dict[str, Any]],
+        abort_signal: asyncio.Event | None = None,
+        langfuse_context: dict[str, Any] | None = None,
+        *,
+        run_ctx: RunContext | None = None,
+    ) -> AsyncIterator[ProcessorEvent]:
+        """
+        Process a conversation turn.
+
+        Runs the ReAct loop:
+        1. Call LLM with messages
+        2. Process response (text, reasoning, tool calls)
+        3. Execute tool calls if any
+        4. Continue until complete or blocked
+
+        Args:
+            session_id: Session identifier
+            messages: Conversation messages in OpenAI format
+            abort_signal: Optional abort signal (legacy, prefer run_ctx)
+            langfuse_context: Optional Langfuse tracing context (legacy, prefer run_ctx)
+            run_ctx: Per-invocation RunContext bundling abort_signal, langfuse_context,
+                conversation_id, and trace_id. When provided, takes precedence over
+                the legacy abort_signal / langfuse_context parameters.
+
+        Yields:
+            AgentDomainEvent objects and dict passthrough events for real-time streaming
+        """
+        # Build effective RunContext: prefer explicit run_ctx, fall back to legacy params
+        if run_ctx is None:
+            run_ctx = RunContext(
+                abort_signal=abort_signal,
+                langfuse_context=langfuse_context,
+                conversation_id=(langfuse_context or {}).get("conversation_id"),
+            )
+
+        from src.infrastructure.plugins.v2.boundary import attach_current_generation_v2
+
+        attach_current_generation_v2(run_ctx)
+
+        effective_langfuse_context = run_ctx.langfuse_context
+        if run_ctx.conversation_id:
+            if effective_langfuse_context is None:
+                effective_langfuse_context = {"conversation_id": run_ctx.conversation_id}
+            elif not effective_langfuse_context.get("conversation_id"):
+                effective_langfuse_context = {
+                    **effective_langfuse_context,
+                    "conversation_id": run_ctx.conversation_id,
+                }
+
+        self._abort_event = run_ctx.abort_signal or asyncio.Event()
+        self._same_cause_stop = None
+        self._stop_record = None
+        self._step_count = 0
+        self._no_progress_steps = 0
+        self._goal_evaluator.set_native_control_outcome(None)
+        self._native_control_stopped = False
+        self._session_instructions = []
+        self._response_instructions = []
+        self._tool_reminder_issued_for_streak = False
+        self._langfuse_context = effective_langfuse_context
+        self._artifact_handler.set_langfuse_context(self._langfuse_context)
+
+        # Publish the active RunContext via ContextVar so cached, tool-set-keyed
+        # tool wrappers (constructed once per tools_hash by the agent session
+        # pool) can recover the per-invocation abort_signal at execute time.
+        # ContextVars are task-local: the binding is visible only inside this
+        # task and auto-cleans when the task ends, so concurrent processor
+        # runs cannot see each other's state.
+        set_current_run_context(run_ctx)
+
+        # Every selected loop, including builtin ReAct, executes through the
+        # same generation-owned implementation contract.
+        self._loop_selection = self._resolve_agent_loop()
+        terminal_failure = False
+        audio_context_token = self._artifact_handler.bind_audio_context(session_id)
+        try:
+            async for loop_event in self._dispatch_external_loop(
+                self._loop_selection,
+                session_id,
+                messages,
+                run_ctx,
+            ):
+                yield loop_event
+        except GeneratorExit:
+            raise
+        except BaseException:
+            terminal_failure = True
+            raise
+        finally:
+            from src.infrastructure.agent.native_computer_use.audio_messages import (
+                reset_audio_context,
+            )
+            from src.infrastructure.agent.tools.native_computer_use import (
+                cancel_native_computer_run,
+            )
+
+            reset_audio_context(audio_context_token)
+
+            suspended = (
+                self._state
+                in {
+                    ProcessorState.WAITING_PERMISSION,
+                    ProcessorState.WAITING_CLARIFICATION,
+                    ProcessorState.WAITING_DECISION,
+                    ProcessorState.WAITING_ENV_VAR,
+                    ProcessorState.WAITING_A2UI_ACTION,
+                }
+                and not self._abort_event.is_set()
+                and not terminal_failure
+            )
+            if not suspended:
+                cleanup = asyncio.create_task(cancel_native_computer_run(session_id))
+                try:
+                    await asyncio.wait_for(asyncio.shield(cleanup), timeout=5)
+                except (Exception, asyncio.CancelledError) as error:
+                    logger.warning("Native device run cleanup incomplete: %s", type(error).__name__)
+            self._tool_attachments.clear()
+            self._last_raw_result = None
+
+    async def _run_native_loop(
+        self, session_id: str, messages: list[dict[str, Any]]
+    ) -> AsyncIterator[ProcessorEvent]:
+        from plugins.business.agent.turn import run_turn
+        from src.infrastructure.agent.core.project_package_tools import current_loop_driver
+
+        async for event in run_turn(self, session_id, messages, current_loop_driver()):
+            yield event
+
+    async def _check_agent_announcements(
+        self, messages: list[dict[str, Any]]
+    ) -> list[ProcessorEvent]:
+        """Poll message bus for child agent announce messages, inject into context."""
+        if self._message_bus is None or self._announce_session_id is None:
+            return []
+
+        try:
+            from src.domain.model.agent.announce_payload import AnnouncePayload
+            from src.domain.ports.services.agent_message_bus_port import (
+                AgentMessageType,
+            )
+
+            raw_messages: list[Any] = await self._message_bus.receive_messages(
+                agent_id="",
+                session_id=self._announce_session_id,
+                since_id=self._last_announce_id,
+                limit=10,
+            )
+
+            events: list[ProcessorEvent] = []
+            for msg in raw_messages:
+                cursor_id = msg.stream_id or msg.message_id
+                if msg.message_type != AgentMessageType.ANNOUNCE:
+                    self._last_announce_id = cursor_id
+                    continue
+
+                try:
+                    payload = AnnouncePayload.from_dict(json.loads(msg.content))
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    logger.warning("Failed to parse announce payload from %s", msg.message_id)
+                    self._last_announce_id = cursor_id
+                    continue
+
+                status = "completed successfully" if payload.success else "failed"
+                result_summary = payload.result or "(no result)"
+                announce_text = (
+                    f"[Agent Announce] Agent '{payload.agent_id}' "
+                    f"(session {payload.session_id}) {status}: {result_summary}"
+                )
+                messages.append({"role": "system", "content": announce_text})
+                logger.info(
+                    "Injected announce from agent %s session %s (success=%s)",
+                    payload.agent_id,
+                    payload.session_id,
+                    payload.success,
+                )
+                events.append(
+                    AgentMessageReceivedEvent(
+                        agent_id=msg.to_agent_id,
+                        agent_name=msg.to_agent_id,
+                        from_agent_id=payload.agent_id,
+                        from_agent_name=payload.agent_id,
+                        message_preview=result_summary[:200],
+                    )
+                )
+                # Canonical child settlement publishes terminal observations independently.
+                # Polling a delayed announcement must not overwrite a newer child turn.
+                self._last_announce_id = cursor_id
+            return events
+        except Exception:
+            logger.warning("Error polling agent announcements", exc_info=True)
+            return []
+
+    async def _check_control_channel(self, messages: list[dict[str, Any]]) -> list[ProcessorEvent]:
+        """Poll control channel for steer/kill/pause/resume from parent agent."""
+        if self._control_channel is None or self._run_id is None:
+            return []
+
+        try:
+            from src.domain.model.agent.tool_policy import ControlMessageType
+
+            pending = await self._control_channel.consume_control(self._run_id)
+            if not pending:
+                return []
+            kills = [msg for msg in pending if msg.message_type == ControlMessageType.KILL]
+            pending = kills or pending
+
+            events: list[ProcessorEvent] = []
+            for msg in pending:
+                if msg.message_type == ControlMessageType.KILL:
+                    reason = msg.payload or "Killed by parent agent"
+                    logger.info(
+                        "Control KILL received for run %s: %s",
+                        self._run_id,
+                        reason,
+                    )
+                    if self._abort_event is not None:
+                        self._abort_event.set()
+                    if msg.target_agent_id:
+                        events.append(
+                            SubAgentKilledEvent(
+                                subagent_id=msg.target_agent_id,
+                                subagent_name=msg.target_agent_name or msg.target_agent_id,
+                                kill_reason="user_cancel",
+                            )
+                        )
+                    events.append(AgentErrorEvent(message=reason, code="KILLED"))
+                    return events
+
+                if msg.message_type == ControlMessageType.STEER:
+                    self._inject_steer_message(msg, messages, events)
+                    self._control_steer_sequence_v2 = (
+                        int(getattr(self, "_control_steer_sequence_v2", 0)) + 1
+                    )
+                    logger.info(
+                        "Control STEER injected for run %s",
+                        self._run_id,
+                    )
+                    if msg.target_agent_id or msg.conversation_id:
+                        events.append(
+                            SubAgentSteeredEvent(
+                                run_id=self._run_id,
+                                conversation_id=msg.conversation_id or None,
+                                subagent_id=msg.target_agent_id,
+                                subagent_name=msg.target_agent_name or msg.target_agent_id,
+                                instruction=msg.payload,
+                            )
+                        )
+                    if (
+                        msg.run_input_id
+                        and msg.delivery_mode == "steer_now"
+                        and msg.run_revision is not None
+                        and msg.message_id
+                        and msg.idempotency_key
+                    ):
+                        events.append(
+                            AgentRunInputAppliedEvent(
+                                run_input_id=msg.run_input_id,
+                                run_id=self._run_id,
+                                run_revision=msg.run_revision,
+                                message_id=msg.message_id,
+                                idempotency_key=msg.idempotency_key,
+                                applied_round=self._step_count,
+                                applied_at=datetime.now(UTC).isoformat(),
+                            )
+                        )
+
+                if msg.message_type == ControlMessageType.PAUSE:
+                    logger.info("Control PAUSE received for run %s", self._run_id)
+                    resumed = await self._wait_for_resume()
+                    if not resumed:
+                        events.append(
+                            AgentErrorEvent(
+                                message="Pause timed out without resume",
+                                code="PAUSE_TIMEOUT",
+                            )
+                        )
+                        return events
+
+            return events
+        except Exception:
+            logger.warning("Error polling control channel", exc_info=True)
+            return []
+
+    def _inject_steer_message(
+        self,
+        msg: ControlMessage,
+        messages: list[dict[str, Any]],
+        events: list[ProcessorEvent],
+    ) -> None:
+        """Append one STEER control payload to the model context.
+
+        A session-owner steer carrying canonical run-input fields becomes the
+        latest user guidance and emits a durable ``user_message`` event;
+        SubAgent-parent steers (no run_input_id) keep the system-role prefix.
+        """
+        owner_user_id = (self._langfuse_context or {}).get("user_id")
+        if (
+            msg.run_input_id
+            and msg.sender_id
+            and isinstance(owner_user_id, str)
+            and owner_user_id
+            and msg.sender_id == owner_user_id
+        ):
+            messages.append({"role": "user", "content": msg.payload})
+            events.append(
+                {
+                    "type": "user_message",
+                    "data": {
+                        "role": "user",
+                        "content": msg.payload,
+                        "message_id": msg.message_id,
+                        "metadata": {
+                            "injected_via": "steer",
+                            "steer_message_id": msg.message_id,
+                        },
+                        "source": "steer",
+                    },
+                }
+            )
+            return
+        steer_text = f"[Control] Parent agent instruction: {msg.payload}"
+        messages.append({"role": "system", "content": steer_text})
+
+    async def _poll_model_control_v2(self, messages: list[dict[str, Any]]) -> None:
+        """Apply accepted control before an old model decision becomes executable."""
+        previous_sequence = int(getattr(self, "_control_steer_sequence_v2", 0))
+        events = await self._check_control_channel(messages)
+        stopped = any(isinstance(event, AgentErrorEvent) for event in events)
+        if self.config.subagent_owner_required and any(
+            isinstance(event, AgentErrorEvent) and event.code == "KILLED" for event in events
+        ):
+            # Preserve the runner's owner-acknowledged cancellation path.
+            raise asyncio.CancelledError("SubAgent cancelled by control")
+        if stopped or int(getattr(self, "_control_steer_sequence_v2", 0)) != previous_sequence:
+            raise ModelStepInterruptedV2(events, restart=not stopped)
+
+    async def _wait_for_resume(self, timeout: float = 300.0) -> bool:
+        """Block until a RESUME control message arrives or timeout elapses."""
+        if self._control_channel is None or self._run_id is None:
+            return False
+
+        from src.domain.model.agent.tool_policy import ControlMessageType
+
+        poll_interval = 1.0
+        elapsed = 0.0
+        while elapsed < timeout:
+            pending = await self._control_channel.consume_control(self._run_id)
+            for msg in pending:
+                if msg.message_type == ControlMessageType.RESUME:
+                    logger.info("Control RESUME received for run %s", self._run_id)
+                    return True
+                if msg.message_type == ControlMessageType.KILL:
+                    logger.info(
+                        "Control KILL received during pause for run %s",
+                        self._run_id,
+                    )
+                    if self._abort_event is not None:
+                        self._abort_event.set()
+                    return False
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+        return False
+
+    def _check_abort_and_limits(self) -> AgentErrorEvent | None:
+        """Check abort signal and step limits. Returns error event or None."""
+        if self._abort_event.is_set():  # type: ignore[union-attr]
+            return AgentErrorEvent(message="Processing aborted", code="ABORTED")
+        self._step_count += 1
+        if self._step_count > self.config.max_steps:
+            return AgentErrorEvent(
+                message=f"Maximum steps ({self.config.max_steps}) exceeded",
+                code="MAX_STEPS_EXCEEDED",
+            )
+        return None
+
+    async def _evaluate_goal_progress(
+        self,
+        result: ProcessorResult,
+        had_tool_calls: bool,
+        session_id: str,
+        messages: list[dict[str, Any]],
+    ) -> tuple[ProcessorResult, list[ProcessorEvent]]:
+        """Evaluate progress when the step loop is still CONTINUE.
+
+        If there were tool calls, reset the no-progress counter.
+        Otherwise, run the no-tool-result evaluator to check for goal achievement.
+
+        Returns:
+            Tuple of (updated result, list of events to yield).
+        """
+        if result != ProcessorResult.CONTINUE:
+            return result, []
+
+        events: list[ProcessorEvent] = []
+        if had_tool_calls:
+            self._no_progress_steps = 0
+            self._reset_tool_usage_reminder_streak()
+            if self._is_workspace_task_ledger_only_turn() and self._saw_task_events:
+                self._pending_completion_status = "goal_achieved:workspace_replan_dispatched"
+                result = ProcessorResult.COMPLETE
+        else:
+            async for evt in self._evaluate_no_tool_result(session_id, messages):
+                events.append(evt)
+            result = self._last_process_result
+        return result, events
+
+    def _classify_step_event(
+        self,
+        event: ProcessorEvent,
+        current_result: ProcessorResult,
+        had_tool_calls: bool,
+    ) -> tuple[ProcessorResult, bool]:
+        """Classify a step event and update loop control state."""
+        event_type_raw = (
+            event.get("type") if isinstance(event, dict) else getattr(event, "event_type", None)
+        )
+        event_type = (
+            event_type_raw.value if isinstance(event_type_raw, AgentEventType) else event_type_raw
+        )
+        if event_type == AgentEventType.ERROR.value:
+            return ProcessorResult.STOP, had_tool_calls
+        if event_type == AgentEventType.ACT.value:
+            self._reset_tool_usage_reminder_streak()
+            return current_result, True
+        if event_type == AgentEventType.OBSERVE.value and self._is_terminal_workspace_report(event):
+            self._pending_completion_status = "goal_achieved:workspace_terminal_report"
+            return ProcessorResult.COMPLETE, True
+        if event_type == AgentEventType.OBSERVE.value and self._is_terminal_workspace_contract(
+            event
+        ):
+            self._pending_completion_status = "goal_achieved:workspace_contract_submitted"
+            return ProcessorResult.COMPLETE, True
+        if event_type == AgentEventType.COMPACT_NEEDED.value:
+            return ProcessorResult.COMPACT, had_tool_calls
+        if event_type in {"task_list_updated", "task_updated"}:
+            self._saw_task_events = True
+        return current_result, had_tool_calls
+
+    def _is_terminal_workspace_report(self, event: ProcessorEvent) -> bool:
+        """Return True when a workspace terminal report was durably accepted."""
+        if isinstance(event, dict):
+            tool_name = event.get("tool_name")
+            error = event.get("error")
+            result = event.get("result")
+        else:
+            tool_name = getattr(event, "tool_name", None)
+            error = getattr(event, "error", None)
+            result = getattr(event, "result", None)
+
+        if tool_name not in self._TERMINAL_WORKSPACE_REPORT_TOOLS or error:
+            return False
+
+        payload: Any
+        if isinstance(result, str):
+            try:
+                payload = json.loads(result)
+            except json.JSONDecodeError:
+                return False
+        else:
+            payload = result
+
+        if not isinstance(payload, dict) or payload.get("ok") is not True:
+            return False
+
+        applied_report = payload.get("applied_report")
+        if isinstance(applied_report, dict):
+            applied = applied_report.get("applied")
+            if applied is False:
+                return False
+            if applied is True:
+                return True
+        return not payload.get("error")
+
+    def _is_terminal_workspace_contract(self, event: ProcessorEvent) -> bool:
+        """Return True when a workspace contract submission was durably captured."""
+        if isinstance(event, dict):
+            tool_name = event.get("tool_name")
+            error = event.get("error")
+            result = event.get("result")
+        else:
+            tool_name = getattr(event, "tool_name", None)
+            error = getattr(event, "error", None)
+            result = getattr(event, "result", None)
+
+        if tool_name not in self._TERMINAL_WORKSPACE_CONTRACT_TOOLS or error:
+            return False
+
+        payload: Any
+        if isinstance(result, str):
+            try:
+                payload = json.loads(result)
+            except json.JSONDecodeError:
+                return False
+        else:
+            payload = result
+
+        if not isinstance(payload, dict):
+            return False
+        if payload.get("captured") is True:
+            return True
+        return any(
+            isinstance(payload.get(key), dict)
+            for key in (
+                "planning_contract",
+                "verification_judgment",
+                "iteration_review",
+                "supervisor_decision",
+                "worktree_preparation",
+            )
+        )
+
+    async def _evaluate_no_tool_result(  # noqa: PLR0911, PLR0912, PLR0915
+        self, session_id: str, messages: list[dict[str, Any]]
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Evaluate goal completion when no tools were called.
+
+        Sets self._last_process_result for the caller to read.
+        """
+        replan_events = await self._evaluate_workspace_replan_no_tool_result(session_id)
+        if replan_events is not None:
+            for evt in replan_events:
+                yield evt
+            return
+
+        role_events = (
+            self._evaluate_workspace_worker_no_tool_result()
+            or self._evaluate_workspace_contract_no_tool_result()
+        )
+        if role_events is not None:
+            for evt in role_events:
+                yield evt
+            return
+
+        goal_check = await self._goal_evaluator.evaluate_goal_completion(session_id, messages)
+        if getattr(goal_check, "control_handoff", False) is True:
+            self._no_progress_steps = 0
+            self._reset_tool_usage_reminder_streak()
+            self._pending_completion_status = "user_control:stopped"
+            self._last_process_result = ProcessorResult.COMPLETE
+            return
+        if goal_check.achieved:
+            self._no_progress_steps = 0
+            self._reset_tool_usage_reminder_streak()
+            self._pending_completion_status = f"goal_achieved:{goal_check.source}"
+            self._last_process_result = ProcessorResult.COMPLETE
+            return
+
+        if goal_check.should_stop:
+            yield self._stop_unachievable_goal(
+                goal_check.reason,
+                code="GOAL_JUDGE_UNAVAILABLE"
+                if goal_check.source == "agent_judge"
+                else "GOAL_NOT_ACHIEVED",
+            )
+            return
+
+        if goal_check.source == "tasks" and goal_check.pending_tasks > 0:
+            for evt in self._continue_pending_task_goal(goal_check.reason):
+                yield evt
+            return
+
+        full_text = self._current_message.get_full_text().strip() if self._current_message else ""
+        delegate_match = self._detect_delegate_or_escalate(full_text) if full_text else None
+        if delegate_match is not None:
+            action, agent_name, task_text = delegate_match
+            logger.info(f"[Processor] Detected {action}:{agent_name} in text response")
+            tool_input: dict[str, Any] = {
+                "subagent_name": agent_name,
+                "task": task_text or full_text,
+            }
+            if action == "escalate":
+                tool_input["escalate"] = True
+            self._reset_tool_usage_reminder_streak()
+            yield AgentActEvent(
+                tool_name="delegate_to_subagent",
+                tool_input=tool_input,
+                status="running",
+            )
+            self._no_progress_steps = 0
+            self._last_process_result = ProcessorResult.CONTINUE
+            return
+
+        if self._is_conversational_response():
+            # Text-only response without tool calls -- but only treat as
+            # deliberate conversational completion when the goal evaluator
+            # did NOT explicitly determine the goal is unfinished.
+            # When the LLM self-check or task evaluation says "not achieved",
+            # respect that and let the loop continue so the agent can retry
+            # with tools.
+            if goal_check.source in ("llm_self_check", "tasks"):
+                logger.debug(
+                    "[Processor] Conversational text detected but goal evaluator "
+                    "(%s) says not achieved -- continuing loop",
+                    goal_check.source,
+                )
+            else:
+                self._no_progress_steps = 0
+                self._reset_tool_usage_reminder_streak()
+                self._pending_completion_status = "goal_achieved:conversational_response"
+                self._last_process_result = ProcessorResult.COMPLETE
+                return
+
+        # No progress -- check if we should give up
+        self._pending_completion_status = None
+        self._no_progress_steps += 1
+        self._queue_goal_pending_reason(goal_check.reason)
+        yield AgentStatusEvent(status=f"goal_pending:{goal_check.source}")
+        if self._no_progress_steps > 1:
+            self._queue_tool_usage_reminder()
+            yield AgentStatusEvent(status="planning_recheck")
+        if self._no_progress_steps >= self.config.max_no_progress_steps:
+            yield AgentErrorEvent(
+                message=(
+                    "Goal not achieved after "
+                    f"{self._no_progress_steps} no-progress turns. "
+                    f"{goal_check.reason or 'Replan required.'}"
+                ),
+                code="GOAL_NOT_ACHIEVED",
+            )
+            self._state = ProcessorState.ERROR
+            self._last_process_result = ProcessorResult.STOP
+            return
+        self._last_process_result = ProcessorResult.CONTINUE
+
+    def _current_step_model_messages(self) -> list[dict[str, Any]]:
+        """Return the exact ordered messages exposed to the next model step."""
+        if not self._current_message:
+            return []
+        model_messages = [cast("dict[str, Any]", self._current_message.to_llm_format())]
+        for part in self._current_message.get_tool_parts():
+            if part.status in (ToolState.COMPLETED, ToolState.CANCELLED):
+                model_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": part.call_id,
+                        "content": part.output or "",
+                    }
+                )
+            elif part.status == ToolState.ERROR:
+                model_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": part.call_id,
+                        "content": f"Error: {part.error}",
+                    }
+                )
+        from src.infrastructure.agent.native_computer_use.image_messages import tool_image_message
+
+        for part in self._current_message.get_tool_parts():
+            references = part.metadata.get("native_artifact_images")
+            if part.status == ToolState.COMPLETED and isinstance(references, list) and references:
+                model_messages.append(tool_image_message(part.call_id, references))
+        return model_messages
+
+    @staticmethod
+    def _model_message_committed_event(model_message: Mapping[str, Any]) -> dict[str, Any]:
+        """Wrap one model-visible message in the authoritative V2 event shape."""
+        return {
+            "type": MODEL_MESSAGE_COMMITTED_EVENT_V2,
+            "data": {"model_message": dict(model_message)},
+        }
+
+    def _append_tool_results_to_messages(self, messages: list[dict[str, Any]]) -> None:
+        """Append current message and tool results to the message list."""
+        messages.extend(self._current_step_model_messages())
+
+    async def _emit_completion_events(
+        self,
+        result: ProcessorResult,
+        session_id: str,
+        messages: list[dict[str, Any]],
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Emit final completion or compact events."""
+        if result == ProcessorResult.COMPLETE:
+            control_handoff = self._pending_completion_status == "user_control:stopped"
+            replan_dispatched = (
+                self._is_workspace_task_ledger_only_turn()
+                and self._pending_completion_status == "goal_achieved:workspace_replan_dispatched"
+            )
+            task_reconciled_completion = (
+                self._pending_completion_status == "goal_achieved:llm_task_reconciliation"
+            )
+            if (
+                self._saw_task_events
+                and self.config.runtime_context.get("effective_mode") != "plan"
+                and not replan_dispatched
+                and not task_reconciled_completion
+                and not control_handoff
+                and not self._goal_evaluator.has_task_reader()
+            ):
+                self._pending_completion_status = None
+                yield AgentStatusEvent(status="goal_pending:tasks")
+                yield AgentErrorEvent(
+                    message="Unable to verify task completion state",
+                    code="GOAL_NOT_ACHIEVED",
+                )
+                self._state = ProcessorState.ERROR
+                self._last_process_result = ProcessorResult.STOP
+                return
+            if not replan_dispatched and not task_reconciled_completion and not control_handoff:
+                task_gate = await self._goal_evaluator.evaluate_task_completion_gate(
+                    session_id, messages
+                )
+                if task_gate is not None and not task_gate.achieved:
+                    self._pending_completion_status = None
+                    yield AgentStatusEvent(status=f"goal_pending:{task_gate.source}")
+                    yield AgentErrorEvent(
+                        message=task_gate.reason or "Goal not achieved",
+                        code="GOAL_JUDGE_UNAVAILABLE"
+                        if task_gate.source == "agent_judge"
+                        else "GOAL_NOT_ACHIEVED",
+                    )
+                    self._state = ProcessorState.ERROR
+                    self._last_process_result = ProcessorResult.STOP
+                    return
+            if self._pending_completion_status:
+                yield AgentStatusEvent(status=self._pending_completion_status)
+                self._pending_completion_status = None
+            _suggestions = await self._goal_evaluator.generate_suggestions(messages)
+            suggestions_event = (
+                AgentSuggestionsEvent(suggestions=_suggestions) if _suggestions else None
+            )
+            if suggestions_event:
+                yield suggestions_event
+            trace_url = self._build_trace_url(session_id)
+            execution_summary = await self._build_execution_summary(session_id)
+            if control_handoff:
+                execution_summary["completion_reason"] = "user_control_handoff"
+                execution_summary["goal_achieved"] = False
+                execution_summary["control_outcome"] = "user_stopped"
+            yield AgentCompleteEvent(
+                trace_url=trace_url,
+                execution_summary=execution_summary,
+            )
+            self._state = ProcessorState.COMPLETED
+            self._last_process_result = ProcessorResult.COMPLETE
+        elif result == ProcessorResult.COMPACT:
+            yield AgentStatusEvent(status="compact_needed")
+
+    async def _build_execution_summary(self, session_id: str) -> dict[str, Any]:
+        """Build a deterministic summary for the final completion event."""
+        session_summary = self.cost_tracker.get_session_summary()
+        summary: dict[str, Any] = {
+            "step_count": self._step_count,
+            "artifact_count": self._artifact_count,
+            "call_count": session_summary.get("call_count", 0),
+        }
+        # An untouched tracker has zero totals but no observed provider usage.
+        if session_summary.get("call_count", 0) > 0:
+            for field in ("total_cost", "total_cost_formatted", "total_tokens"):
+                if field in session_summary:
+                    summary[field] = session_summary[field]
+        task_summary = await self._goal_evaluator.summarize_tasks(session_id)
+        if task_summary is not None:
+            summary["tasks"] = task_summary
+        if self._loop_selection is not None:
+            from src.infrastructure.agent.core.project_package_tools import (
+                current_package_capabilities,
+            )
+
+            catalog = current_package_capabilities()
+            pin = catalog.loop_pin if catalog and self._loop_selection.scope == "builtin" else None
+            summary["agent_loop"] = {
+                "loop_id": self._loop_selection.loop_id,
+                "plugin_id": self._loop_selection.plugin_id,
+                "scope": self._loop_selection.scope,
+                **(
+                    {
+                        "plugin_id": pin.plugin_id,
+                        "scope": "project",
+                        "version": pin.version,
+                        "digest": pin.digest,
+                    }
+                    if pin
+                    else {}
+                ),
+            }
+        return summary
+
+    def _resolve_agent_loop(self) -> Any:
+        """Resolve the required v2 agent-loop selection for this turn."""
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        resolver = self.config.loop_resolver
+        provider_id = self.config.provider_id
+        if resolver is None:
+            raise RuntimeV2Error(
+                "agent_loop_resolver_missing",
+                "agent loop resolver is required for every processor turn",
+            )
+        resolve = getattr(resolver, "resolve", None)
+        if not callable(resolve):
+            raise RuntimeV2Error(
+                "agent_loop_resolver_invalid",
+                "agent loop resolver has no callable resolve method",
+            )
+        if not provider_id.strip():
+            raise RuntimeV2Error(
+                "agent_loop_provider_missing",
+                "agent loop provider_id is required for every processor turn",
+            )
+        if not self.config.model.strip():
+            raise RuntimeV2Error(
+                "agent_loop_model_missing",
+                "agent loop model is required for every processor turn",
+            )
+
+        try:
+            selection = cast("AgentLoopSelectionV2", resolve(provider_id, self.config.model))
+        except RuntimeV2Error:
+            raise
+        except Exception as exc:
+            raise RuntimeV2Error(
+                "agent_loop_resolution_failed",
+                f"agent loop resolution failed for {provider_id}/{self.config.model}: {exc}",
+            ) from exc
+        logger.info(
+            "agent loop resolved: scope=%s loop=%s plugin=%s provider=%s model=%s",
+            selection.scope,
+            selection.loop_id,
+            selection.plugin_id,
+            provider_id,
+            self.config.model,
+        )
+        return selection
+
+    async def _dispatch_external_loop(
+        self,
+        selection: Any,
+        session_id: str,
+        messages: list[dict[str, Any]],
+        run_ctx: RunContext,
+    ) -> AsyncIterator[Any]:
+        """Run one turn through the generation-selected agent loop implementation.
+
+        The driver contract is structural (callable ``run``); its outcome may
+        be an async iterator of events, an awaitable resolving to one, or a
+        single event/value.
+        """
+        from src.infrastructure.plugins.v2.agent_loop import (
+            AgentLoopRunContextV2,
+            validate_loop_implementation,
+        )
+
+        validate_loop_implementation(selection.implementation)
+        yield AgentStartEvent()
+        context = AgentLoopRunContextV2(
+            session_id=session_id,
+            messages=messages,
+            run_context=run_ctx,
+            config=self.config,
+            tools=MappingProxyType(dict(self.tools)),
+            run_native=lambda: self._run_native_loop(session_id, messages),
+        )
+        outcome = selection.implementation.run(context)
+        if inspect.isawaitable(outcome):
+            outcome = await outcome
+        if hasattr(outcome, "__aiter__"):
+            async for event in outcome:
+                yield event
+        elif outcome is not None:
+            yield outcome
+
+    def _build_trace_url(self, session_id: str) -> str | None:
+        """Build Langfuse trace URL if context is available."""
+        if not self._langfuse_context:
+            return None
+        from src.configuration.config import get_settings
+
+        settings = get_settings()
+        if not (settings.langfuse_enabled and settings.langfuse_host):
+            return None
+        trace_id = self._langfuse_context.get("conversation_id", session_id)
+        return f"{settings.langfuse_host}/trace/{trace_id}"
+
+    def _extract_user_query(self, messages: list[dict[str, Any]]) -> str | None:
+        """Extract the latest user query from messages."""
+        return extract_user_query(messages)
+
+    def _build_command_context(self) -> dict[str, Any]:
+        """Build context dict for command handlers."""
+        # A bound loader roster is authoritative even when it is empty: an
+        # explicit empty contribution must not fall back to stale config.
+        skills: list[str] = list(self.config.skill_names)
+        skill_loader = self.tools.get("skill_loader")
+        if skill_loader is not None:
+            from src.infrastructure.agent.tools.skill_loader import skill_availability_for_tool
+
+            availability = skill_availability_for_tool(skill_loader)
+            if availability is not None:
+                skills = list(availability.snapshot())
+        allowed_skills = self.config.runtime_context.get("allowed_skills")
+        if isinstance(allowed_skills, list) and allowed_skills:
+            normalized_allowed = {
+                str(item).strip().lower()
+                for item in allowed_skills
+                if isinstance(item, str) and item.strip()
+            }
+            skills = [skill for skill in skills if skill.strip().lower() in normalized_allowed]
+        ctx: dict[str, Any] = {
+            "model_name": self.config.model,
+            "tools": list(self.tools.keys()),
+            "skills": skills,
+            "runtime_context": dict(self.config.runtime_context),
+        }
+        workspace_id = self.config.runtime_context.get("workspace_id")
+        if isinstance(workspace_id, str) and workspace_id.strip():
+            ctx["workspace_id"] = workspace_id.strip()
+        if self._langfuse_context:
+            ctx["conversation_id"] = self._langfuse_context.get("conversation_id")
+            ctx["project_id"] = self._langfuse_context.get("project_id")
+            ctx["tenant_id"] = self._langfuse_context.get("tenant_id")
+            ctx["user_id"] = self._langfuse_context.get("user_id")
+        return ctx
+
+    async def _try_intercept_command(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> list[ProcessorEvent] | None:
+        """Attempt to intercept a slash command from the latest user message.
+
+        Returns:
+            A list of ProcessorEvent objects if a command was handled,
+            or None if the message is not a slash command (fall through to
+            the ReAct loop).
+        """
+        if self._command_interceptor is None:
+            return None
+
+        user_query = self._extract_user_query(messages)
+        if not user_query:
+            return None
+
+        if not self._command_interceptor.is_command(user_query):
+            return None
+
+        context = self._build_command_context()
+        result = await self._command_interceptor.try_intercept(user_query, context)
+        if result is None:
+            return None
+
+        # If the interceptor matched a skill (not a builtin command),
+        # inject forced_skill_name and let the ReAct loop handle it.
+        from src.infrastructure.agent.commands.types import SkillTriggerResult
+
+        if isinstance(result, SkillTriggerResult):
+            self.config.forced_skill_name = result.skill_id
+            # Rewrite user message to task text (strip /skill-name prefix)
+            if result.text_override is not None:
+                self._rewrite_last_user_message(messages, result.text_override)
+            logger.info(
+                "Skill command '/%s' routed to ReAct loop with forced_skill_name=%s",
+                result.skill_id,
+                result.skill_id,
+            )
+            return None  # Fall through to ReAct loop
+
+        # Collect all events from _emit_command_result into a list.
+        events: list[ProcessorEvent] = []
+        async for evt in self._emit_command_result(result):
+            events.append(evt)
+
+        # Append a completion event so the frontend closes the stream.
+        events.append(AgentCompleteEvent(trace_url=None))
+        self._state = ProcessorState.COMPLETED
+        return events
+
+    @staticmethod
+    def _rewrite_last_user_message(
+        messages: list[dict[str, Any]],
+        new_text: str,
+    ) -> None:
+        """Replace the content of the last user message in the list.
+
+        This is used when a skill command (e.g. ``/code-review fix the bug``)
+        is intercepted: the ``/skill-name`` prefix is stripped and the message
+        is rewritten to just the task text so the ReAct loop sees a clean prompt.
+        """
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                content = msg.get("content")
+                if isinstance(content, str):
+                    msg["content"] = new_text
+                elif isinstance(content, list):
+                    # Multi-part content: replace the first text part
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            part["text"] = new_text
+                            break
+                return
+
+    async def _emit_text_end_with_linked_artifacts(
+        self,
+        full_text: str,
+    ) -> AsyncIterator[ProcessorEvent]:
+        yield AgentTextEndEvent(full_text=full_text)
+
+        async for event in self._persist_linked_file_artifacts(full_text):
+            if getattr(event, "event_type", None) == AgentEventType.ARTIFACT_CREATED:
+                self._artifact_count += 1
+            yield event
+
+    async def _persist_linked_file_artifacts(
+        self,
+        full_text: str,
+    ) -> AsyncIterator[ProcessorEvent]:
+        if not full_text or not self._artifact_service:
+            return
+
+        async def export_file(path: str) -> Any:
+            return await self._execute_internal_tool_for_artifact(
+                "export_artifact",
+                {"file_path": path, "encoding": "auto"},
+            )
+
+        async def read_text_file(path: str) -> str | None:
+            result = await self._execute_internal_tool_for_artifact(
+                "read",
+                {"file_path": path, "offset": 0, "limit": 50000, "raw": True},
+            )
+            return result if isinstance(result, str) else None
+
+        try:
+            async for event in self._artifact_handler.process_text_file_links(
+                text=full_text,
+                export_file=export_file,
+                read_text_file=read_text_file,
+            ):
+                yield event
+        except Exception:
+            logger.exception("[Processor] Failed to persist linked file artifacts")
+
+    async def _execute_internal_tool_for_artifact(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> Any:
+        tool_def = self.tools.get(self._canonicalize_tool_name(tool_name))
+        if tool_def is None:
+            return None
+
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.define import ToolInfo
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        tool_instance = getattr(tool_def, "_tool_instance", None)
+        langfuse_context = self._langfuse_context or {}
+        runtime_context = ToolContext(
+            session_id=(
+                langfuse_context.get("conversation_id")
+                or self.config.session_id
+                or langfuse_context.get("session_id", "")
+            ),
+            message_id="linked-file-artifact",
+            call_id=f"linked-file-{uuid.uuid4().hex[:8]}",
+            agent_name=langfuse_context.get("agent_name", "main"),
+            conversation_id=langfuse_context.get("conversation_id", ""),
+            abort_signal=self._abort_event or asyncio.Event(),
+            messages=[],
+            project_id=langfuse_context.get("project_id", ""),
+            tenant_id=langfuse_context.get("tenant_id", ""),
+            user_id=langfuse_context.get("user_id", ""),
+            api_auth_token=self.config.api_auth_token,
+            runtime_context=dict(self.config.runtime_context),
+        )
+
+        result: Any = None
+        try:
+            from jsonschema import Draft202012Validator
+
+            from src.application.services.approved_run_tool_permission_v2 import (
+                require_approved_run_tool_permission_v2,
+            )
+
+            policy = await self._notify_plugin_hook(
+                "before_tool_execution",
+                {
+                    "tool_name": tool_name,
+                    "arguments": arguments,
+                    "call_id": runtime_context.call_id,
+                    "session_id": runtime_context.session_id,
+                    **self._runtime_hook_context_fields(),
+                },
+            )
+            arguments = policy.get("arguments", arguments)
+            decision = policy.get("decision", {"kind": "allow"})
+            if decision["kind"] != "allow":
+                if decision["kind"] == "cancel" and self._abort_event is not None:
+                    self._abort_event.set()
+                return None
+            Draft202012Validator(tool_def.parameters).validate(arguments)
+            await require_approved_run_tool_permission_v2(
+                resolve_tool_permission_v2(tool_def, arguments),
+                required=self.config.approved_run_required,
+                required_run_id=self.config.run_id if self.config.approved_run_required else None,
+            )
+            await self._require_run_tool_permission_v2(tool_def, tool_name, arguments)
+            if isinstance(tool_instance, ToolInfo):
+                result = await tool_instance.execute(runtime_context, **arguments)
+            elif tool_instance is not None and hasattr(tool_instance, "set_runtime_context"):
+                tool_instance.set_runtime_context(runtime_context)
+                result = await tool_def.execute(**arguments)
+            else:
+                result = await tool_def.execute(**arguments)
+        except Exception:
+            logger.debug(
+                "[Processor] Internal linked-file tool %s failed",
+                tool_name,
+                exc_info=True,
+            )
+
+        output: Any = result
+        failed = result is None
+        if isinstance(result, ToolResult):
+            output = result.metadata or result.output
+            failed = result.is_error
+        elif isinstance(result, dict):
+            failed = bool(result.get("is_error") or result.get("isError"))
+        text = output if isinstance(output, str) else json.dumps(output, default=str)
+        accepted, metadata, failed, blocked = await self._apply_tool_result_policy(
+            tool_name,
+            runtime_context.call_id,
+            runtime_context.session_id,
+            text,
+            output,
+            failed,
+        )
+        if blocked or failed:
+            return None
+        return metadata or accepted
+
+    async def _emit_command_result(
+        self,
+        result: "CommandResult",
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Convert a CommandResult into the standard SSE event stream.
+
+        For ReplyResult: emit text start/delta/end events.
+        For ToolCallResult: delegate to existing tool execution.
+        For SkillTriggerResult: emit a status event (skill routing is handled upstream).
+        """
+        from src.infrastructure.agent.commands.types import (
+            ReplyResult,
+            SkillTriggerResult,
+            ToolCallResult,
+        )
+
+        if isinstance(result, ReplyResult):
+            yield AgentTextStartEvent()
+            yield AgentTextDeltaEvent(delta=result.text)
+            async for event in self._emit_text_end_with_linked_artifacts(result.text):
+                yield event
+        elif isinstance(result, ToolCallResult):
+            tool_name = self._canonicalize_tool_name(result.tool_name)
+            tool_def = self.tools.get(tool_name)
+            if tool_def is None:
+                yield AgentTextStartEvent()
+                err_msg = f"Unknown tool: {result.tool_name}"
+                yield AgentTextDeltaEvent(delta=err_msg)
+                async for event in self._emit_text_end_with_linked_artifacts(err_msg):
+                    yield event
+            else:
+                async for event in self._execute_synthetic_tool_call(
+                    session_id=(self._langfuse_context or {}).get("conversation_id")
+                    or self.config.session_id
+                    or "",
+                    tool_name=tool_name,
+                    arguments=result.args,
+                    call_id_prefix="command",
+                ):
+                    yield event
+        elif isinstance(result, SkillTriggerResult):
+            yield AgentStatusEvent(status=f"Triggering skill: {result.skill_id}")
+
+    _PLANNING_INDICATORS_RE = re.compile(
+        r"(?i)"
+        r"(?:"
+        r"让我|我来|我需要|我将|先|首先|接下来|下一步|开始|继续"
+        r"|let me|i need to|i(?:'|')ll |i will |first|next"
+        r"|let(?:'|')s "
+        r")"
+    )
+
+    def _is_conversational_response(self) -> bool:
+        """Check if the current turn is a conversational text-only response.
+
+        When the LLM produces substantive text without requesting any tool calls
+        and without an explicit goal_achieved=false signal, it has deliberately
+        chosen to respond conversationally. This should be treated as
+        goal-achieved to avoid unnecessary no-progress loops for simple queries
+        like greetings or questions that don't require tool use.
+
+        Returns False (not conversational) when the text contains planning
+        indicators suggesting the agent intends to use tools next.
+        """
+        if not self._current_message:
+            return False
+        full_text = self._current_message.get_full_text().strip()
+        if len(full_text) < 2:
+            return False
+        # If the text contains a goal_achieved JSON signal, it's a structured
+        # goal-check response, not conversational text.
+        if "goal_achieved" in full_text:
+            return False
+        # If the text contains planning/action indicators, the agent likely
+        # intends to use tools -- not a finished conversational response.
+        return not self._PLANNING_INDICATORS_RE.search(full_text)
+
+    _DELEGATE_ESCALATE_RE = re.compile(r"(?i)\b(delegate|escalate)\s*:\s*([A-Za-z0-9_\-]+)")
+
+    def _detect_delegate_or_escalate(self, full_text: str) -> tuple[str, str, str] | None:
+        """Detect delegate:AgentName or escalate:AgentName in LLM text.
+
+        Returns (action, agent_name, remaining_text) or None if not found.
+        ``action`` is one of ``"delegate"`` or ``"escalate"``; ``agent_name``
+        is the target agent; ``remaining_text`` is everything after the match
+        (used as task context for the delegate).
+        """
+        m = self._DELEGATE_ESCALATE_RE.search(full_text)
+        if m is None:
+            return None
+        action = m.group(1).lower()
+        agent_name = m.group(2)
+        remaining = full_text[m.end() :].strip()
+        return action, agent_name, remaining
+
+    def _classify_tool_by_description(self, tool_name: str, tool_def: ToolDefinition) -> str:
+        """Classify tool into a category based on its description."""
+        return classify_tool_by_description(tool_name, tool_def.description)
+
+    async def _process_step(  # noqa: PLR0912, PLR0915
+        self,
+        session_id: str,
+        messages: list[dict[str, Any]],
+    ) -> AsyncIterator[ProcessorEvent]:
+        """
+        Process a single step in the ReAct loop.
+
+        Args:
+            session_id: Session identifier
+            messages: Current messages
+
+        Yields:
+            AgentDomainEvent objects and dict passthrough events
+        """
+        logger.debug(f"[Processor] _process_step: session={session_id}, step={self._step_count}")
+
+        base_step_messages = list(messages)
+
+        # Inject skill reminder for multi-step forced skill execution
+        if self._forced_skill_name and self._step_count > 1:
+            skill_tool_msg = (
+                f" Prefer using these tools: {', '.join(sorted(self._forced_skill_tools))}"
+                f" for skill-specific operations, but you may use any available tool"
+                f" to complete the task."
+                if self._forced_skill_tools
+                else ""
+            )
+            skill_reminder = {
+                "role": "system",
+                "content": (
+                    f"[SKILL REMINDER] You are executing forced skill "
+                    f'"/{self._forced_skill_name}". '
+                    f"Follow the skill instructions from the system prompt precisely."
+                    + skill_tool_msg
+                ),
+            }
+            base_step_messages.append(skill_reminder)
+
+        await self._notify_plugin_hook(
+            "before_response",
+            {
+                "session_id": session_id,
+                "step_count": self._step_count,
+                "message_count": len(messages),
+                **self._runtime_hook_context_fields(),
+                "session_instructions": list(self._session_instructions),
+                "response_instructions": list(self._response_instructions),
+            },
+        )
+        # Prepare tools for LLM
+        tools_for_llm = [t.to_openai_format() for t in self.tools.values()]
+
+        # Create stream config
+        stream_config = StreamConfig(
+            model=self.config.model,
+            api_key=self.config.api_key,
+            base_url=self.config.base_url,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+            tools=tools_for_llm if tools_for_llm else None,
+            provider_options=self.config.provider_options,
+        )
+
+        # Create LLM stream with optional client (provides circuit breaker + rate limiter)
+        llm_stream = LLMStream(stream_config, llm_client=self._llm_client)
+
+        # Successful-attempt state used after the retry loop.
+        text_buffer = ""
+        reasoning_buffer = ""
+        sequential_tool_calls: list[tuple[str, str, str, dict[str, Any]]] = []
+        deferred_tool_calls: list[tuple[str, str, str, dict[str, Any]]] = []
+        step_tokens = TokenUsage()
+        step_cost = 0.0
+        finish_reason = "stop"
+
+        # Process LLM stream with retry
+        attempt = 0
+        while True:
+            # An unsuccessful stream attempt is never model-visible. Rebuild all
+            # message construction state so partial text/tool calls cannot leak
+            # into a later successful attempt or be executed twice.
+            self._current_message = Message(
+                session_id=session_id,
+                role=MessageRole.ASSISTANT,
+            )
+            self._goal_evaluator.set_current_message(self._current_message)
+            self._pending_tool_calls = {}
+            self._pending_tool_args = {}
+            text_buffer = ""
+            pending_text_events: list[str] = []
+            pending_act_events: list[ProcessorEvent] = []
+            reasoning_buffer = ""
+            sequential_tool_calls = []
+            deferred_tool_calls = []
+            step_tokens = TokenUsage()
+            step_cost = 0.0
+            usage_accounted = False
+            finish_reason = "stop"
+            model_events = None
+            try:
+                step_messages = list(base_step_messages)
+                runtime_guidance = self._build_runtime_guidance_message()
+                reminder_injected = False
+                reminder_consumed = False
+                if runtime_guidance is not None:
+                    step_messages.append(runtime_guidance)
+                    reminder_injected = self._TOOL_USAGE_REMINDER in runtime_guidance["content"]
+                step_messages = sanitize_tool_call_messages(step_messages)
+                step_messages = await self._artifact_handler.hydrate_model_images(step_messages)
+
+                # Build step-specific langfuse context
+                step_langfuse_context = None
+                if self._langfuse_context:
+                    step_langfuse_context = {
+                        **self._langfuse_context,
+                        "extra": {
+                            **self._langfuse_context.get("extra", {}),
+                            "step_number": self._step_count,
+                            "model": self.config.model,
+                        },
+                    }
+
+                await fence_subagent_owner_v2(
+                    child_run_id=self._run_id if self.config.subagent_owner_required else None
+                )
+                logger.debug(f"[Processor] Calling llm_stream.generate(), step={self._step_count}")
+                from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+                    PinnedAgentRuntimeDispatcherV2,
+                )
+                from src.infrastructure.plugins.v2.model_request_log import (
+                    current_model_request_recorder_v2,
+                )
+
+                if isinstance(self._plugin_event_dispatcher, PinnedAgentRuntimeDispatcherV2):
+                    llm_stream.request_recorder = current_model_request_recorder_v2(
+                        message_id=self._current_message.id,
+                    )
+                model_events = llm_stream.generate(
+                    step_messages, langfuse_context=step_langfuse_context
+                )
+                if self._control_channel is not None and self._run_id is not None:
+                    model_events = model_stream_control_v2(
+                        model_events, lambda: self._poll_model_control_v2(messages)
+                    )
+                async for event in model_events:
+                    if (
+                        reminder_injected
+                        and not reminder_consumed
+                        and event.type
+                        in {
+                            StreamEventType.TEXT_DELTA,
+                            StreamEventType.TEXT_END,
+                            StreamEventType.REASONING_DELTA,
+                            StreamEventType.REASONING_END,
+                        }
+                    ):
+                        self._clear_tool_usage_reminder()
+                        reminder_consumed = True
+
+                    # Check abort
+                    if self._abort_event and self._abort_event.is_set():
+                        raise asyncio.CancelledError("Aborted")
+
+                    # Process stream events
+                    if event.type == StreamEventType.TEXT_START:
+                        yield AgentTextStartEvent()
+
+                    elif event.type == StreamEventType.TEXT_DELTA:
+                        delta = event.data.get("delta", "")
+                        text_buffer += delta
+                        yield AgentTextDeltaEvent(delta=delta)
+
+                    elif event.type == StreamEventType.TEXT_END:
+                        full_text = event.data.get("full_text", text_buffer)
+                        logger.debug(
+                            f"[Processor] TEXT_END: len={len(full_text) if full_text else 0}"
+                        )
+                        self._current_message.add_text(full_text)
+                        # Artifact extraction can invoke tools. Defer the generator
+                        # itself, not just its events, until the model is accepted.
+                        pending_text_events.append(full_text)
+
+                    elif event.type == StreamEventType.REASONING_START:
+                        yield AgentThoughtStartEvent()
+
+                    elif event.type == StreamEventType.REASONING_DELTA:
+                        delta = event.data.get("delta", "")
+                        reasoning_buffer += delta
+                        yield AgentThoughtDeltaEvent(delta=delta)
+
+                    elif event.type == StreamEventType.REASONING_END:
+                        full_reasoning = event.data.get("full_text", reasoning_buffer)
+                        self._current_message.add_reasoning(full_reasoning)
+                        yield AgentThoughtEvent(content=full_reasoning, thought_level="reasoning")
+
+                    elif event.type == StreamEventType.TOOL_CALL_START:
+                        call_id = event.data.get("call_id", "")
+                        tool_name = event.data.get("name", "")
+
+                        # Create tool part (don't emit act event yet - wait for complete args)
+                        tool_part = self._current_message.add_tool_call(
+                            call_id=call_id,
+                            tool=tool_name,
+                            input={},
+                        )
+                        self._pending_tool_calls[call_id] = tool_part
+                        self._pending_tool_args[call_id] = ""
+
+                        # Emit act_delta so frontend can show tool skeleton immediately
+                        pending_act_events.append(
+                            AgentActDeltaEvent(
+                                tool_name=tool_name,
+                                call_id=call_id,
+                                arguments_fragment="",
+                                accumulated_arguments="",
+                            )
+                        )
+
+                    elif event.type == StreamEventType.TOOL_CALL_DELTA:
+                        call_id = event.data.get("call_id", "")
+                        args_delta = event.data.get("arguments_delta", "")
+                        if call_id in self._pending_tool_calls and args_delta:
+                            self._pending_tool_args[call_id] = (
+                                self._pending_tool_args.get(call_id, "") + args_delta
+                            )
+                            tool_part = self._pending_tool_calls[call_id]
+                            pending_act_events.append(
+                                AgentActDeltaEvent(
+                                    tool_name=tool_part.tool or "",
+                                    call_id=call_id,
+                                    arguments_fragment=args_delta,
+                                    accumulated_arguments=self._pending_tool_args[call_id],
+                                )
+                            )
+
+                    elif event.type == StreamEventType.TOOL_CALL_END:
+                        call_id = event.data.get("call_id", "")
+                        raw_tool_name = event.data.get("name", "")
+                        tool_name = self._canonicalize_tool_name(raw_tool_name)
+                        arguments = event.data.get("arguments", {})
+                        tool_display: dict[str, Any] | None = None
+
+                        if raw_tool_name != tool_name:
+                            logger.info(
+                                "[Processor] Canonicalized tool name: %s -> %s",
+                                raw_tool_name,
+                                tool_name,
+                            )
+
+                        # === EARLY VALIDATION (P0-1) ===
+                        # Validate AgentActEvent schema BEFORE yielding to prevent
+                        # 3-minute delay on validation errors. Fast-fail here instead.
+                        try:
+                            # Validate that tool_name is a non-empty string
+                            if not isinstance(tool_name, str) or not tool_name.strip():
+                                raise ValueError(f"Invalid tool_name: {tool_name!r}")
+
+                            # Validate that arguments is a dict (Pydantic requirement)
+                            if not isinstance(arguments, dict):
+                                raise ValueError(
+                                    f"Invalid tool_input type: {type(arguments).__name__}, "
+                                    f"expected dict"
+                                )
+                            tool_arguments, tool_display = self._split_tool_call_envelope(arguments)
+
+                            # Validate call_id is a non-empty string if provided
+                            if call_id and not isinstance(call_id, str):
+                                raise ValueError(f"Invalid call_id type: {type(call_id).__name__}")
+
+                            # Try to create AgentActEvent to catch any other validation errors
+                            # This validates the entire schema before we proceed
+                            _test_event = AgentActEvent(
+                                tool_name=tool_name,
+                                tool_input=tool_arguments,
+                                call_id=call_id,
+                                status="running",
+                                display=tool_display,
+                            )
+                            # Event validated successfully, don't use _test_event
+                            del _test_event
+
+                        except (ValueError, TypeError) as ve:
+                            # Early validation failed - log and emit error immediately
+                            logger.error(
+                                f"[Processor] Early validation failed for tool call: "
+                                f"tool_name={tool_name!r}, arguments={arguments!r}, "
+                                f"error={ve}"
+                            )
+                            # Emit error event and continue with next tool call
+                            yield AgentErrorEvent(
+                                message=f"Tool call validation failed: {ve}",
+                                code="VALIDATION_ERROR",
+                            )
+                            continue
+
+                        arguments = tool_arguments
+
+                        # Update tool part
+                        if call_id in self._pending_tool_calls:
+                            tool_part = self._pending_tool_calls[call_id]
+                            tool_part.tool = tool_name
+                            tool_part.input = arguments
+                            if tool_display:
+                                tool_part.metadata["display"] = tool_display
+                            tool_part.status = ToolState.RUNNING
+                            tool_part.start_time = time.time()
+                            # Generate unique execution_id for act/observe matching
+                            tool_part.tool_execution_id = f"exec_{uuid.uuid4().hex[:12]}"
+
+                            pending_act_events.append(
+                                AgentActEvent(
+                                    tool_name=tool_name,
+                                    tool_input=arguments,
+                                    call_id=call_id,
+                                    status="running",
+                                    tool_execution_id=tool_part.tool_execution_id,
+                                    display=tool_display,
+                                )
+                            )
+
+                            # Execute tools only after the complete LLM response
+                            # has been committed. This prevents failed stream
+                            # attempts from replaying tool side effects and makes
+                            # HITL waits recoverable from the assistant tool call.
+                            _is_hitl = self._check_hitl_dispatch(tool_name)
+                            if not self.config.enable_parallel_tool_execution or _is_hitl:
+                                sequential_tool_calls.append(
+                                    (session_id, call_id, tool_name, arguments)
+                                )
+                            else:
+                                deferred_tool_calls.append(
+                                    (session_id, call_id, tool_name, arguments)
+                                )
+
+                    elif event.type == StreamEventType.USAGE:
+                        # Extract usage data
+                        step_tokens = TokenUsage(
+                            input=event.data.get("input_tokens", 0),
+                            output=event.data.get("output_tokens", 0),
+                            reasoning=event.data.get("reasoning_tokens", 0),
+                            cache_read=event.data.get("cache_read_tokens", 0),
+                            cache_write=event.data.get("cache_write_tokens", 0),
+                        )
+
+                        # Calculate cost
+                        cost_result = self.cost_tracker.calculate(
+                            usage={
+                                "input_tokens": step_tokens.input,
+                                "output_tokens": step_tokens.output,
+                                "reasoning_tokens": step_tokens.reasoning,
+                                "cache_read_tokens": step_tokens.cache_read,
+                                "cache_write_tokens": step_tokens.cache_write,
+                            },
+                            model_name=self.config.model,
+                        )
+                        step_cost = float(cost_result.cost)
+                        usage_accounted = True
+
+                        yield AgentCostUpdateEvent(
+                            cost=step_cost,
+                            tokens={
+                                "input": step_tokens.input,
+                                "output": step_tokens.output,
+                                "reasoning": step_tokens.reasoning,
+                            },
+                        )
+
+                        # Emit context status using this call's input tokens
+                        # (= actual context window size the LLM processed)
+                        context_limit = self.config.context_limit
+                        current_input = step_tokens.input
+                        occupancy = (
+                            (current_input / context_limit * 100) if context_limit > 0 else 0
+                        )
+                        yield AgentContextStatusEvent(
+                            current_tokens=current_input,
+                            token_budget=context_limit,
+                            occupancy_pct=round(occupancy, 1),
+                            compression_level="none",
+                            source="processor_usage",
+                        )
+
+                        # Check for compaction need
+                        if self.cost_tracker.needs_compaction(step_tokens):
+                            yield AgentCompactNeededEvent()
+
+                    elif event.type == StreamEventType.FINISH:
+                        finish_reason = event.data.get("reason", "stop")
+
+                    elif event.type == StreamEventType.ERROR:
+                        error_msg = event.data.get("message", "Unknown error")
+                        raise Exception(error_msg)
+
+                await self._notify_plugin_hook(
+                    "after_response",
+                    {
+                        "session_id": session_id,
+                        "step_count": self._step_count,
+                        "response_text": text_buffer,
+                        "tool_call_count": len(sequential_tool_calls) + len(deferred_tool_calls),
+                    },
+                )
+                if reminder_injected and not reminder_consumed:
+                    self._clear_tool_usage_reminder()
+                    reminder_consumed = True
+
+                # Step completed successfully
+                break
+
+            except (ModelStepInterruptedV2, asyncio.CancelledError):
+                known_usage = llm_stream.get_usage_snapshot()
+                if not usage_accounted and known_usage is not None:
+                    interrupted_cost = self.cost_tracker.calculate(
+                        usage=known_usage, model_name=self.config.model
+                    )
+                    yield AgentCostUpdateEvent(
+                        cost=float(interrupted_cost.cost),
+                        tokens={
+                            "input": interrupted_cost.tokens.input,
+                            "output": interrupted_cost.tokens.output,
+                            "reasoning": interrupted_cost.tokens.reasoning,
+                        },
+                    )
+                raise
+            except Exception as e:
+                # Check if retryable
+                if self.retry_policy.is_retryable(e) and attempt < self.config.max_attempts:
+                    attempt += 1
+                    delay_ms = self.retry_policy.calculate_delay(attempt, e)
+
+                    self._state = ProcessorState.RETRYING
+                    yield AgentRetryEvent(
+                        attempt=attempt,
+                        delay_ms=delay_ms,
+                        message=str(e),
+                    )
+
+                    # Wait before retry
+                    await asyncio.sleep(delay_ms / 1000)
+                    continue
+                else:
+                    # Not retryable or max retries exceeded
+                    raise
+            finally:
+                close_model_events = getattr(model_events, "aclose", None)
+                if close_model_events is not None:
+                    await close_model_events()
+
+        await self._poll_model_control_v2(messages)
+        for act_event in pending_act_events:
+            yield act_event
+        for full_text in pending_text_events:
+            async for text_event in self._emit_text_end_with_linked_artifacts(full_text):
+                yield text_event
+
+        # Commit the complete assistant response before any tool execution.
+        # Actor persistence treats this event as an immediate durability
+        # boundary, so an interactive wait cannot lose its tool-call context.
+        assistant_message = self._current_step_model_messages()[0]
+        yield self._model_message_committed_event(assistant_message)
+
+        for sid, cid, tool_name, arguments in sequential_tool_calls:
+            async for tool_event in self._execute_tool(
+                sid,
+                cid,
+                tool_name,
+                arguments,
+            ):
+                yield tool_event
+
+        # After stream completes, execute deferred tool calls in parallel
+        if deferred_tool_calls:
+            batch_size = self.config.parallel_tool_batch_size
+            for batch_start in range(0, len(deferred_tool_calls), batch_size):
+                batch = deferred_tool_calls[batch_start : batch_start + batch_size]
+
+                async def _run_tool(
+                    sid: str = "",
+                    cid: str = "",
+                    tname: str = "",
+                    args: dict[str, Any] | None = None,
+                ) -> tuple[str, list[ProcessorEvent], NativeControlWaitError | None]:
+                    events: list[ProcessorEvent] = []
+                    try:
+                        async for ev in self._execute_tool(sid, cid, tname, args or {}):
+                            events.append(ev)
+                    except NativeControlWaitError as exc:
+                        # Preserve both the pause and its failed wait observation
+                        # before the outer loop terminates this run.
+                        return cid, events, exc
+                    return cid, events, None
+
+                tasks = [
+                    _run_tool(
+                        sid=sid,
+                        cid=cid,
+                        tname=tname,
+                        args=args,
+                    )
+                    for sid, cid, tname, args in batch
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                control_failure = None
+                for result in results:
+                    if isinstance(result, MarketplaceHookError):
+                        raise result
+                    if isinstance(result, BaseException):
+                        logger.error(f"[Processor] Parallel tool execution failed: {result}")
+                        yield AgentErrorEvent(
+                            message=(f"Tool execution failed: {result}"),
+                            code="TOOL_EXECUTION_ERROR",
+                        )
+                        continue
+                    cid, events, control_error = result
+                    for ev in events:
+                        yield ev
+                    if control_error is not None:
+                        control_failure = control_error
+                if control_failure is not None:
+                    raise control_failure
+        for model_message in self._current_step_model_messages()[1:]:
+            yield self._model_message_committed_event(model_message)
+
+        # Update message tokens and cost
+        self._current_message.tokens = {
+            "input": step_tokens.input,
+            "output": step_tokens.output,
+            "reasoning": step_tokens.reasoning,
+        }
+        self._current_message.cost = step_cost
+        self._current_message.finish_reason = finish_reason
+        self._current_message.completed_at = time.time()
+
+        # Emit context status update after step completes.
+        # If LLM reported usage (via USAGE event), step_tokens.input is accurate.
+        # Otherwise, estimate from message content length (~4 chars/token).
+        context_limit = self.config.context_limit
+        current_input = step_tokens.input
+        if current_input == 0:
+            total_chars = sum(len(str(m.get("content", ""))) for m in messages)
+            current_input = total_chars // 4
+        occupancy = (current_input / context_limit * 100) if context_limit > 0 else 0
+        yield AgentContextStatusEvent(
+            current_tokens=current_input,
+            token_budget=context_limit,
+            occupancy_pct=round(occupancy, 1),
+            compression_level="none",
+            source="processor_usage",
+        )
+
+    # ── _execute_tool helper methods ──────────────────────────────────
+
+    @staticmethod
+    def _split_tool_call_envelope(
+        arguments: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """Return tool input and LLM-authored display data from a tool envelope.
+
+        Only the explicit ``{"input": {...}, "display": {...}}`` shape is
+        treated as an envelope. This keeps ordinary tools with an ``input`` or
+        ``display`` argument from being rewritten.
+        """
+        raw_input = arguments.get("input")
+        raw_display = arguments.get("display")
+        if isinstance(raw_input, dict) and isinstance(raw_display, dict):
+            return dict(raw_input), dict(raw_display)
+        return arguments, None
+
+    @staticmethod
+    def _tool_display_from_part(tool_part: ToolPart) -> dict[str, Any] | None:
+        host_display = tool_part.metadata.get("host_repl_display")
+        if isinstance(host_display, dict):
+            return dict(host_display)
+        display = tool_part.metadata.get("display")
+        if isinstance(display, dict) and display.get("kind") != "repl_output":
+            return dict(display)
+        return None
+
+    async def _prepare_repl_observe(
+        self, tool_def: "ToolDefinition", result: object, tool_part: ToolPart, *, allowed: bool
+    ) -> AsyncIterator[ProcessorEvent]:
+        from src.infrastructure.agent.native_computer_use.repl_output import (
+            declared_repl,
+            repl_output_display,
+            select_repl_attachments,
+        )
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        if not declared_repl(tool_def.parameters):
+            return
+        tool_part.metadata["repl_attachments_handled"] = True
+        tool_part.metadata.pop("host_repl_display", None)
+        if not allowed or not isinstance(result, ToolResult):
+            return
+        try:
+            selected, omitted = select_repl_attachments(result.output, result.attachments)
+            events, references = await self._artifact_handler.persist_tool_attachments(
+                selected,
+                tool_name=tool_def.name,
+                tool_execution_id=tool_part.tool_execution_id,
+            )
+            if references:
+                tool_part.metadata["native_artifact_images"] = references
+            display = repl_output_display(
+                tool_def.parameters, result.output, [*references, *omitted]
+            )
+            if display is not None:
+                tool_part.metadata["host_repl_display"] = display
+            for event in events:
+                self._artifact_count += 1
+                yield event
+        except Exception as error:
+            tool_part.status = ToolState.ERROR
+            tool_part.error = "computer_use_artifact_unavailable"
+            logger.error("REPL attachment persistence failed: %s", type(error).__name__)
+
+    @staticmethod
+    def _extract_file_metadata(value: Any) -> dict[str, Any] | None:
+        if not isinstance(value, Mapping):
+            return None
+        raw_metadata = value.get("fileMetadata")
+        if raw_metadata is None:
+            raw_metadata = value.get("file_metadata")
+        return dict(raw_metadata) if isinstance(raw_metadata, Mapping) else None
+
+    def _canonicalize_tool_name(self, tool_name: str) -> str:
+        """Resolve common aliases/casing variants to a registered tool name.
+
+        Single-pass traversal of the tool registry consulting:
+          1. exact match
+          2. casefold match against name
+          3. casefold match against any declared alias (ToolDefinition.aliases)
+          4. compact (alphanumeric-only) match against name or aliases
+          5. CamelCase / kebab / space normalization to snake_case fallback
+        """
+        if not tool_name:
+            return tool_name
+
+        if tool_name in self.tools:
+            return tool_name
+
+        folded = tool_name.casefold()
+        compact = re.sub(r"[^a-z0-9]", "", folded)
+
+        for tool_def in self.tools.values():
+            candidates: tuple[str, ...] = (tool_def.name, *tool_def.aliases)
+            for candidate in candidates:
+                cand_folded = candidate.casefold()
+                if cand_folded == folded:
+                    return tool_def.name
+                if re.sub(r"[^a-z0-9]", "", cand_folded) == compact:
+                    return tool_def.name
+
+        snake = re.sub(r"(?<!^)(?=[A-Z])", "_", tool_name)
+        snake = snake.replace("-", "_").replace(" ", "_").lower()
+        snake = re.sub(r"__+", "_", snake).strip("_")
+        if snake in self.tools:
+            return snake
+
+        return tool_name
+
+    def _resolve_tool_lookup(
+        self,
+        call_id: str,
+        tool_name: str,
+    ) -> tuple[ToolPart, "ToolDefinition"] | None:
+        """Look up ToolPart and ToolDefinition for a tool call.
+
+        Returns ``(tool_part, tool_def)`` on success, or ``None`` when the
+        lookup fails.  When ``None`` is returned the caller should yield the
+        events stored in ``self.__resolve_errors`` and ``return``.
+        """
+        self.__resolve_errors = []
+
+        tool_part = self._pending_tool_calls.get(call_id)
+        if not tool_part:
+            logger.error(
+                "[Processor] Tool call not found in pending: call_id=%s, tool=%s",
+                call_id,
+                tool_name,
+            )
+            self.__resolve_errors.append(
+                AgentObserveEvent(
+                    tool_name=tool_name,
+                    error=f"Tool call not found: {call_id}",
+                    call_id=call_id,
+                    tool_execution_id=None,
+                )
+            )
+            return None
+
+        tool_name = self._canonicalize_tool_name(tool_name)
+        tool_def = self.tools.get(tool_name)
+        if not tool_def:
+            tool_part.status = ToolState.ERROR
+            tool_part.error = f"Unknown tool: {tool_name}"
+            tool_part.end_time = time.time()
+            self.__resolve_errors.append(
+                AgentObserveEvent(
+                    tool_name=tool_name,
+                    error=f"Unknown tool: {tool_name}",
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+            )
+            # Feed unknown-tool errors to doom-loop error tracker
+            self.doom_loop_detector.record_error(tool_name, f"Unknown tool: {tool_name}")
+            return None
+
+        return (tool_part, tool_def)
+
+    def _apply_same_cause(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        output: str,
+        metadata: Any,
+        failed: bool,
+        raw_result: Any,
+        sse_result: Any,
+    ) -> tuple[str, Any, bool]:
+        """Count a structured unrecoverable failure and surface it as an error.
+
+        A successful call for the same tool and repository clears that cause.
+        Other tools, including repeated progress tools, are left alone.
+        """
+        from src.infrastructure.agent.doom_loop.cause import (
+            classify_unrecoverable_tool_cause,
+            not_a_git_repository_fingerprint,
+        )
+
+        facts: dict[str, Any] = dict(metadata) if isinstance(metadata, dict) else {}
+        if isinstance(raw_result, dict):
+            if raw_result.get("is_error") or raw_result.get("isError"):
+                failed = True
+            code = raw_result.get("code")
+            if isinstance(code, str):
+                facts.setdefault("code", code)
+            hint = raw_result.get("hint")
+            if isinstance(hint, str):
+                facts.setdefault("hint", hint)
+            raw_metadata = raw_result.get("metadata")
+            if isinstance(raw_metadata, dict):
+                for key, value in raw_metadata.items():
+                    facts.setdefault(key, value)
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        if isinstance(raw_result, ToolResult) and isinstance(raw_result.metadata, dict):
+            for key, value in raw_result.metadata.items():
+                facts.setdefault(key, value)
+            if raw_result.is_error:
+                failed = True
+        cause = classify_unrecoverable_tool_cause(
+            tool_name,
+            arguments,
+            output=output,
+            metadata=facts,
+            is_error=failed,
+        )
+        if cause is None:
+            if tool_name == "generate_commit":
+                self.doom_loop_detector.clear_same_cause(
+                    not_a_git_repository_fingerprint(arguments)
+                )
+            return output, sse_result, failed
+        count = self.doom_loop_detector.record_same_cause(cause.fingerprint)
+        observed = {
+            "output": cause.diagnosis,
+            "code": cause.code,
+            "hint": cause.hint,
+            "isError": True,
+            "fingerprint": cause.fingerprint,
+            "count": count,
+        }
+        if self.doom_loop_detector.should_stop_same_cause(cause.fingerprint):
+            self._same_cause_stop = {
+                "tool": tool_name,
+                "cause_code": cause.code,
+                "fingerprint": cause.fingerprint,
+                "count": count,
+                "hint": cause.hint,
+                "threshold": self.doom_loop_detector.error_threshold,
+            }
+        return cause.diagnosis, observed, True
+
+    def _same_cause_stop_events(
+        self,
+        tool_name: str,
+        call_id: str,
+        tool_part: ToolPart,
+    ) -> list[ProcessorEvent]:
+        record = self._same_cause_stop
+        if record is None:
+            return []
+        message = (
+            f"Stopped: {tool_name} repeated the same unrecoverable failure "
+            f"{record['count']} times ({record['fingerprint']}). {record['hint']} "
+            "The run is stopped so it does not continue this paid loop. "
+            "Retry only after changing working_dir or repo_path to a "
+            "workspace-relative git directory."
+        )
+        self._state = ProcessorState.ERROR
+        self._stop_record = {
+            **record,
+            "status": "stopped",
+            "code": "UNRECOVERABLE_TOOL_CAUSE",
+        }
+        return [
+            AgentStatusEvent(status="stopped:unrecoverable_tool_cause"),
+            AgentDoomLoopDetectedEvent(
+                tool=tool_name,
+                input={
+                    "reason": "same_unrecoverable_cause",
+                    "fingerprint": record["fingerprint"],
+                    "count": record["count"],
+                    "threshold": record["threshold"],
+                    "hint": record["hint"],
+                },
+            ),
+            AgentErrorEvent(message=message, code="UNRECOVERABLE_TOOL_CAUSE"),
+        ]
+
+    async def _check_doom_loop(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+        tool_def: ToolDefinition,
+    ) -> AsyncIterator[ProcessorEvent] | None:
+        """Check doom-loop detector; return error iterator or ``None`` to proceed."""
+        if tool_def.repeatable_observation is True:
+            return None
+        if not self.doom_loop_detector.should_intervene(tool_name, arguments):
+            return None
+
+        yield_events: list[ProcessorEvent] = []
+        yield_events.append(AgentDoomLoopDetectedEvent(tool=tool_name, input=arguments))
+        self._state = ProcessorState.WAITING_PERMISSION
+
+        try:
+            permission_result = await asyncio.wait_for(
+                self.permission_manager.ask(
+                    permission="doom_loop",
+                    patterns=[tool_name],
+                    session_id=session_id,
+                    metadata={"tool": tool_name, "input": arguments},
+                ),
+                timeout=self.config.permission_timeout,
+            )
+            if permission_result == "reject":
+                tool_part.status = ToolState.ERROR
+                tool_part.error = "Doom loop detected and rejected by user"
+                tool_part.end_time = time.time()
+                yield_events.append(
+                    AgentObserveEvent(
+                        tool_name=tool_name,
+                        error="Doom loop detected and rejected",
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                )
+                return _iter_events(yield_events)
+        except TimeoutError:
+            tool_part.status = ToolState.ERROR
+            tool_part.error = "Permission request timed out"
+            tool_part.end_time = time.time()
+            yield_events.append(
+                AgentObserveEvent(
+                    tool_name=tool_name,
+                    error="Permission request timed out",
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+            )
+            return _iter_events(yield_events)
+
+        # Permission granted — emit the doom-loop event only, then proceed
+        return None
+
+    def _check_hitl_dispatch(
+        self,
+        tool_name: str,
+    ) -> str | None:
+        """Return the HITL handler method name if *tool_name* is a HITL tool, else ``None``."""
+        _hitl_map: dict[str, str] = {
+            "ask_clarification": "_handle_clarification_tool",
+            "request_decision": "_handle_decision_tool",
+            "request_permission": "_handle_native_permission_tool",
+            "request_env_var": "_handle_env_var_tool",
+            "canvas_create_interactive": "_handle_a2ui_action_tool",
+        }
+        return _hitl_map.get(tool_name)
+
+    async def _check_tool_permission(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+        tool_def: "ToolDefinition",
+    ) -> AsyncIterator[ProcessorEvent] | None:
+        """Check tool permission rules.
+
+        Returns ``None`` to proceed, or an async iterator of error events to
+        yield-and-return.
+        """
+        permission = resolve_tool_permission_v2(tool_def, arguments)
+        if not permission:
+            return None
+
+        permission_rule = self.permission_manager.evaluate(
+            permission=permission,
+            pattern=tool_name,
+        )
+
+        if permission_rule.action == PermissionAction.DENY:
+            tool_part.status = ToolState.ERROR
+            tool_part.error = f"Permission denied: {permission}"
+            tool_part.end_time = time.time()
+            return _iter_events(
+                [
+                    AgentObserveEvent(
+                        tool_name=tool_name,
+                        error=f"Permission denied: {permission}",
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                ]
+            )
+
+        if permission_rule.action == PermissionAction.ASK:
+            return self._ask_tool_permission(
+                session_id,
+                call_id,
+                tool_name,
+                arguments,
+                tool_part,
+                tool_def,
+            )
+
+        return None
+
+    async def _ask_tool_permission(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+        tool_def: "ToolDefinition",
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Publish the persisted request before waiting for the human response."""
+        self._state = ProcessorState.WAITING_PERMISSION
+        permission = resolve_tool_permission_v2(tool_def, arguments) or "tool_policy"
+        error: str | None = None
+        try:
+            coordinator = self._get_hitl_coordinator()
+            request_id = await coordinator.prepare_request(
+                hitl_type=HITLType.PERMISSION,
+                request_data={
+                    "tool_name": tool_name,
+                    "action": "execute",
+                    "risk_level": "medium",
+                    "description": tool_def.description,
+                    "allow_remember": False,
+                    "details": {"tool": tool_name, "input": arguments},
+                    "permission_type": permission,
+                },
+                timeout_seconds=self.config.permission_timeout,
+            )
+            queue_tool_part_hitl_completion(tool_part, request_id)
+            yield AgentPermissionAskedEvent(
+                request_id=request_id,
+                permission=permission,
+                patterns=[tool_name],
+                metadata={"tool": tool_name, "input": arguments},
+            )
+            granted = await coordinator.wait_for_response(
+                request_id=request_id,
+                hitl_type=HITLType.PERMISSION,
+                timeout_seconds=self.config.permission_timeout,
+            )
+            provenance_reader = getattr(coordinator, "permission_response_metadata", None)
+            provenance: dict[str, Any] = (
+                cast("dict[str, Any]", provenance_reader(request_id))
+                if callable(provenance_reader) and granted
+                else {}
+            )
+            yield AgentPermissionRepliedEvent(
+                request_id=request_id, granted=bool(granted), **provenance
+            )
+            if not granted:
+                error = "Permission rejected by user"
+        except TimeoutError:
+            error = "Permission request timed out"
+        except ValueError:
+            error = "Permission request failed: no HITL context"
+        if error is not None:
+            tool_part.status = ToolState.ERROR
+            tool_part.error = error
+            tool_part.end_time = time.time()
+            yield AgentObserveEvent(
+                tool_name=tool_name,
+                error=error,
+                call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id,
+            )
+
+    async def _flush_tool_part_hitl_completions(self, tool_part: ToolPart) -> None:
+        """Persist and release any queued HITL completions for a tool part."""
+        for request_id in pop_tool_part_hitl_completion_request_ids(tool_part):
+            await complete_hitl_request(request_id)
+
+    def _parse_and_fix_arguments(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+        call_id: str,
+        session_id: str,
+    ) -> dict[str, Any] | None:
+        """Validate, fix, and return cleaned arguments.
+
+        Returns the cleaned ``dict`` on success.  Returns ``None`` on
+        failure — the caller should yield events from
+        ``self.__arg_parse_errors`` and ``return``.
+        """
+        self.__arg_parse_errors = []
+
+        # Handle truncated arguments
+        if "_error" in arguments and arguments.get("_error") == "truncated":
+            error_msg = self._build_truncation_error_message(
+                tool_name, arguments.get("_message", "")
+            )
+            logger.error("[Processor] Tool arguments truncated for %s", tool_name)
+            tool_part.status = ToolState.ERROR
+            tool_part.error = error_msg
+            tool_part.end_time = time.time()
+            self.__arg_parse_errors.append(
+                AgentObserveEvent(
+                    tool_name=tool_name,
+                    error=error_msg,
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+            )
+            return None
+
+        # Handle _raw arguments (failed JSON parsing in llm_stream)
+        if "_raw" in arguments and len(arguments) == 1:
+            parsed = self._try_parse_raw_arguments(tool_name, arguments["_raw"])
+            if parsed is None:
+                raw_preview = arguments["_raw"][:500]
+                error_msg = f"Invalid JSON in tool arguments. Raw arguments preview: {raw_preview}"
+                logger.error(
+                    "[Processor] Failed to parse _raw arguments for %s",
+                    tool_name,
+                )
+                tool_part.status = ToolState.ERROR
+                tool_part.error = error_msg
+                tool_part.end_time = time.time()
+                self.__arg_parse_errors.append(
+                    AgentObserveEvent(
+                        tool_name=tool_name,
+                        error=error_msg,
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                )
+                return None
+            arguments = parsed
+
+        # NOTE: session_id for todoread/todowrite is now provided via
+        # ToolContext.session_id rather than as a kwarg. The @tool_define
+        # functions do not accept session_id as a parameter.
+
+        return arguments
+
+    @staticmethod
+    def _build_truncation_error_message(tool_name: str, original_message: str) -> str:
+        """Build tool-specific truncation error message with recovery suggestions.
+
+        Provides actionable recovery strategies based on the tool type.
+        """
+        # Tool-specific recovery suggestions
+        tool_recovery_hints: dict[str, str] = {
+            "write": (
+                "The file content is too large to write in a single call. "
+                "RECOVERY OPTIONS: "
+                "(1) Do not retry the same payload, "
+                "(2) Write a short skeleton first, "
+                "(3) Use 'edit' or short append commands to add sections incrementally, "
+                "(4) Split the content into multiple smaller files. "
+                "The write tool hard limit is 64000 content characters per call; "
+                "if the model stream truncates JSON arguments, retry with smaller "
+                "~4000-8000 character write/append chunks. Keep bash heredocs "
+                "under 6000 characters."
+            ),
+            "edit": (
+                "The edit content is too large. "
+                "RECOVERY OPTIONS: "
+                "(1) Break the edit into smaller chunks, "
+                "(2) Use multiple edit calls with smaller old_string/new_string pairs. "
+                "Consider making edits under ~5KB each."
+            ),
+            "todowrite": (
+                "The task list is too large. "
+                "RECOVERY OPTIONS: "
+                "(1) Use 'replace' mode with fewer tasks, "
+                "(2) Split tasks into multiple todowrite calls using 'add' mode."
+            ),
+        }
+
+        # Normalize tool name (remove prefixes like mcp_, handle aliases)
+        normalized_name = tool_name.lower().replace("_", "").replace("-", "")
+
+        # Check for matching recovery hint
+        for key, hint in tool_recovery_hints.items():
+            if key in normalized_name or normalized_name in key:
+                return f"{original_message}\n\n{hint}"
+
+        # Default message for unknown tools
+        return (
+            f"{original_message}\n\n"
+            f"RECOVERY OPTIONS: "
+            f"(1) Reduce the content size, "
+            f"(2) Break the operation into smaller steps, "
+            f"(3) Request increased max_tokens from the user."
+        )
+
+    @staticmethod
+    def _try_parse_raw_arguments(
+        tool_name: str,
+        raw_args: str,
+    ) -> dict[str, Any] | None:
+        """Attempt 3-stage recovery of malformed JSON tool arguments.
+
+        Returns the parsed ``dict`` on success, or ``None``.
+        """
+
+        def _escape_control_chars(s: str) -> str:
+            s = s.replace("\n", "\\n")
+            s = s.replace("\r", "\\r")
+            s = s.replace("\t", "\\t")
+            return s
+
+        logger.warning(
+            "[Processor] Attempting to parse _raw arguments for tool %s: %s...",
+            tool_name,
+            raw_args[:200] if len(raw_args) > 200 else raw_args,
+        )
+
+        # Try 1: Direct parse
+        try:
+            result = json.loads(raw_args)
+            logger.info(
+                "[Processor] Successfully parsed _raw arguments for %s",
+                tool_name,
+            )
+            return cast("dict[str, Any]", result)
+        except json.JSONDecodeError:
+            pass
+
+        # Try 2: Escape control characters
+        try:
+            fixed = _escape_control_chars(raw_args)
+            result = json.loads(fixed)
+            logger.info(
+                "[Processor] Parsed _raw arguments after escaping control chars for %s",
+                tool_name,
+            )
+            return cast("dict[str, Any]", result)
+        except json.JSONDecodeError:
+            pass
+
+        # Try 3: Double-encoded JSON
+        try:
+            if raw_args.startswith('"') and raw_args.endswith('"'):
+                inner = raw_args[1:-1]
+                inner = inner.replace('\\"', '"').replace("\\\\", "\\")
+                result = json.loads(inner)
+                logger.info(
+                    "[Processor] Parsed double-encoded _raw arguments for %s",
+                    tool_name,
+                )
+                return cast("dict[str, Any]", result)
+        except json.JSONDecodeError:
+            pass
+
+        return None
+
+    async def _require_run_tool_permission_v2(
+        self,
+        tool_def: "ToolDefinition",
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> None:
+        """Revalidate the exact invocation after any hook or human response."""
+        from jsonschema import Draft202012Validator
+
+        from src.application.services.approved_run_tool_permission_v2 import (
+            require_approved_run_tool_permission_v2,
+        )
+        from src.application.services.chat_run_tool_permission_v2 import (
+            claim_chat_tool_invocation_v2,
+            decision_for_current_chat_tool_v2,
+        )
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        Draft202012Validator(tool_def.parameters).validate(arguments)
+        permission = resolve_tool_permission_v2(tool_def, arguments)
+        if self.config.chat_run_required and self.config.approved_run_required:
+            raise RuntimeV2Error("run_tool_authority_conflict", "Agent run authority is ambiguous")
+        if not self.config.chat_run_required:
+            await require_approved_run_tool_permission_v2(
+                permission,
+                required=self.config.approved_run_required,
+                required_run_id=self.config.run_id if self.config.approved_run_required else None,
+            )
+        if self.config.approved_run_required:
+            return
+        if (
+            await decision_for_current_chat_tool_v2(
+                permission,
+                tool_name,
+                arguments,
+                required=self.config.chat_run_required,
+            )
+            != "allow"
+        ):
+            raise RuntimeV2Error("chat_tool_permission_denied", "Chat tool approval is not valid")
+        claim_chat_tool_invocation_v2(
+            tool_name,
+            arguments,
+            permission=permission,
+        )
+
+    async def _apply_tool_result_policy(
+        self,
+        tool_name: str,
+        call_id: str,
+        session_id: str,
+        output: str,
+        metadata: Any,
+        is_error: bool,
+    ) -> tuple[str, Any, bool, bool]:
+        """Transform the canonical result before any observation is published."""
+        envelope = {
+            "output": output,
+            "metadata": metadata if isinstance(metadata, dict) else {},
+            "is_error": is_error,
+        }
+        try:
+            policy = await self._notify_plugin_hook(
+                "transform_tool_result",
+                {
+                    "tool_name": tool_name,
+                    "call_id": call_id,
+                    "session_id": session_id,
+                    "result": envelope,
+                    **self._runtime_hook_context_fields(),
+                },
+            )
+        except Exception:
+            logger.error("Tool result policy failed for %s", tool_name)
+            return "Tool result withheld because policy validation failed", {}, True, True
+        decision = policy.get("decision", {"kind": "accept"})
+        if decision["kind"] == "block":
+            return decision.get("reason") or "Tool result blocked by policy", {}, True, True
+        result = policy.get("result", envelope)
+        return result["output"], result["metadata"], result["is_error"], False
+
+    @staticmethod
+    def _native_control_outcome(result: Any) -> ToolControlOutcome | None:
+        from plugins.business.agent.engine.processor.native_control import trusted_control
+
+        return trusted_control(result)
+
+    async def _wait_native_control(self, result: Any, control: ToolControlOutcome | None) -> None:
+        from plugins.business.agent.engine.processor.native_control import await_native_control
+
+        if control is None:
+            return
+        outcome = await await_native_control(result, self._abort_event)
+        if outcome is not None:
+            self._native_control_stopped = True
+            self._goal_evaluator.set_native_control_outcome(outcome)
+            await self.add_runtime_guidance(
+                "The user explicitly stopped native Computer Use for this run. "
+                "This stops the native session only; it does not revoke the running conversation's "
+                "task-progress permissions. All normal scope and permission checks still apply. "
+                "Do not retry or route around this local stop. Other independently authorized "
+                "work may continue; report incomplete local work without claiming completion. "
+                "Use structured todoread/todowrite calls to inspect and update the task ledger: "
+                "mark remaining work that requires this stopped native session as cancelled, "
+                "not completed or failed solely because of the stop. Preserve genuine failed tasks "
+                "and continue other requested, independently authorized work. "
+                "Decide task scope from the actual task context; do not cancel unrelated work. "
+                "Use the exact task IDs returned by todoread and follow the todowrite argument "
+                "schema. Correct invalid_tool_arguments using its validation feedback; do not "
+                "treat malformed arguments as revoked authorization. Read the ledger back before "
+                "claiming that task statuses were saved."
+            )
+        elif not self._native_control_stopped:
+            await self.add_runtime_guidance(
+                "The user explicitly resumed native Computer Use. The interrupted call may have partial effects. "
+                "Call computer_list_windows again and use a current window_id from that result; "
+                "the native session may have been recreated while paused and old window IDs may be invalid. "
+                "Obtain a fresh observation of that window before choosing any new action; "
+                "never replay the old action. Resuming control does not restart audio recording."
+            )
+
+    async def _invoke_and_emit_observe(  # noqa: PLR0912, PLR0915
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+        tool_def: "ToolDefinition",
+        call_id: str,
+        session_id: str = "",
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Execute the tool and yield AgentObserveEvent + AgentMCPAppResultEvent.
+
+        After this method yields, the caller can access:
+        - ``self._last_sse_result`` — the SSE-safe result object
+        - ``self._last_raw_result`` — the raw tool result
+        - ``self._last_output_str`` — the string output stored on tool_part
+        """
+        await fence_subagent_owner_v2(
+            child_run_id=self._run_id if self.config.subagent_owner_required else None
+        )
+        from src.application.services.approved_run_tool_permission_v2 import (
+            require_approved_run_tool_permission_v2,
+        )
+
+        await require_approved_run_tool_permission_v2(
+            resolve_tool_permission_v2(tool_def, arguments),
+            required=self.config.approved_run_required,
+            required_run_id=self.config.run_id if self.config.approved_run_required else None,
+        )
+        # Inject per-request context for tools on the non-pipeline path.
+        # The pipeline path handles this via _ToolAdapter; here we handle
+        # the non-pipeline path which calls tool_def.execute() directly.
+        _tool_inst = getattr(tool_def, "_tool_instance", None)
+        _lctx = self._langfuse_context or {}
+
+        # For @tool_define tools (ToolInfo), call execute directly with a
+        # real ToolContext, bypassing the stub-context wrapper.
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.define import ToolInfo
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        _needs_direct_ctx = isinstance(_tool_inst, ToolInfo)
+        _has_runtime_ctx = hasattr(_tool_inst, "set_runtime_context") if _tool_inst else False
+
+        _runtime_ctx: ToolContext | None = None
+        if _needs_direct_ctx or _has_runtime_ctx:
+            _runtime_ctx = ToolContext(
+                session_id=session_id or call_id,
+                message_id=call_id,
+                call_id=call_id,
+                agent_name=_lctx.get("agent_name", "main"),
+                conversation_id=_lctx.get("conversation_id") or session_id or call_id,
+                abort_signal=self._abort_event or asyncio.Event(),
+                messages=[],
+                project_id=_lctx.get("project_id", ""),
+                tenant_id=_lctx.get("tenant_id", ""),
+                user_id=_lctx.get("user_id", ""),
+                api_auth_token=self.config.api_auth_token,
+                runtime_context={
+                    **self.config.runtime_context,
+                    "run_id": self._run_id,
+                    "round": max(1, self._step_count),
+                },
+            )
+
+        await self._require_run_tool_permission_v2(tool_def, tool_name, arguments)
+
+        start_time = time.time()
+        if _needs_direct_ctx:
+            # @tool_define: call execute(ctx, **args) directly with real context
+            logger.debug(
+                "[Processor] Direct ToolContext for @tool_define %s: project_id=%s, user_id=%s",
+                tool_name,
+                _lctx.get("project_id", ""),
+                _lctx.get("user_id", ""),
+            )
+            try:
+                assert _tool_inst is not None  # guaranteed by the direct context guard
+                assert _runtime_ctx is not None  # guaranteed by the if/elif above
+                result = await _tool_inst.execute(_runtime_ctx, **arguments)
+            except Exception as e:
+                result = ToolResult(output=str(e), is_error=True)
+        elif _has_runtime_ctx:
+            # Legacy class-based tool with set_runtime_context
+            assert _tool_inst is not None  # guaranteed by _has_runtime_ctx guard
+            assert _runtime_ctx is not None  # guaranteed by the if/elif above
+            _tool_inst.set_runtime_context(_runtime_ctx)
+            logger.debug(
+                "[Processor] Injected runtime context for %s: user_id=%s, project_id=%s",
+                tool_name,
+                _lctx.get("user_id", ""),
+                _lctx.get("project_id", ""),
+            )
+            try:
+                result = await tool_def.execute(**arguments)
+            except Exception as error:
+                result = ToolResult(output=str(error), is_error=True)
+        else:
+            try:
+                result = await tool_def.execute(**arguments)
+            except Exception as error:
+                result = ToolResult(output=str(error), is_error=True)
+        end_time = time.time()
+
+        # Consume pending events from ToolContext (@tool_define tools).
+        # Without this, events emitted via ctx.emit() (e.g. canvas_updated)
+        # are lost when _runtime_ctx goes out of scope.
+        # Pending context events are held until the result policy has accepted it.
+
+        # Classify result format
+        if isinstance(result, ToolResult):
+            output_str = result.output
+            sse_result: Any = result.metadata if result.metadata else output_str
+        elif isinstance(result, dict) and "artifact" in result:
+            artifact = result["artifact"]
+            output_str = result.get(
+                "output",
+                f"Exported artifact: {artifact.get('filename', 'unknown')} "
+                f"({artifact.get('mime_type', 'unknown')}, "
+                f"{artifact.get('size', 0)} bytes)",
+            )
+            sse_result = strip_artifact_binary_data(result)
+        elif isinstance(result, dict) and "results" in result:
+            # Batch export: strip binary data from each item before SSE
+            output_str = result.get("output", "")
+            stripped = {**result}
+            stripped["results"] = [
+                {k: v for k, v in item.items() if k != "data"}
+                for item in result.get("results", [])
+                if isinstance(item, dict)
+            ]
+            sse_result = stripped
+        elif isinstance(result, dict) and "output" in result:
+            output_str = result.get("output", "")
+            sse_result = result
+        elif isinstance(result, str):
+            output_str = result
+            sse_result = result
+        else:
+            output_str = json.dumps(result, default=str)
+            sse_result = result
+
+        # Execution completion does not imply a successful tool result.
+        failed = isinstance(result, ToolResult) and result.is_error
+        original_policy_result = (
+            output_str,
+            sse_result if isinstance(sse_result, dict) else {},
+            failed,
+        )
+        output_str, result_metadata, failed, blocked = await self._apply_tool_result_policy(
+            tool_name,
+            call_id,
+            session_id,
+            output_str,
+            sse_result,
+            failed,
+        )
+        result_replaced = blocked or (output_str, result_metadata, failed) != original_policy_result
+        if result_replaced:
+            result = ToolResult(output=output_str, metadata=result_metadata, is_error=failed)
+            sse_result = result_metadata or output_str
+        if _runtime_ctx is not None:
+            pending_events = _runtime_ctx.consume_pending_events()
+            if not result_replaced:
+                for pending_event in pending_events:
+                    yield pending_event
+        if result_replaced:
+            _consume_tool_pending_events(tool_def)
+        output_str, sse_result, failed = self._apply_same_cause(
+            tool_name,
+            arguments,
+            output_str,
+            result_metadata if isinstance(result_metadata, dict) else {},
+            failed,
+            result,
+            sse_result,
+        )
+        control = self._native_control_outcome(result)
+        if self._same_cause_stop is not None:
+            control = None
+        tool_part.status = (
+            ToolState.ERROR if failed else ToolState.CANCELLED if control else ToolState.COMPLETED
+        )
+        tool_part.output = self._artifact_handler.sanitize_tool_output(output_str)
+        tool_part.error = tool_part.output if failed else None
+        tool_part.end_time = end_time
+
+        # MCP App UI metadata
+        tool_instance = getattr(tool_def, "_tool_instance", None)
+        has_ui = getattr(tool_instance, "has_ui", False) if tool_instance else False
+        if not has_ui and tool_name.startswith("mcp__") and tool_instance:
+            _app_id_fb = getattr(tool_instance, "_app_id", "") or ""
+            if _app_id_fb:
+                has_ui = True
+                logger.debug(
+                    "[MCPApp] Fallback: tool %s has app_id=%s but no _ui_metadata",
+                    tool_name,
+                    _app_id_fb,
+                )
+
+        has_ui = has_ui and not result_replaced
+        _observe_ui_meta: dict[str, Any] | None = None
+        _hydrated_ui_meta: dict[str, Any] = {}
+        if tool_instance and has_ui:
+            _o_app_id = (
+                getattr(tool_instance, "_last_app_id", "")
+                or getattr(tool_instance, "_app_id", "")
+                or ""
+            )
+            _hydrated_ui_meta = await self._hydrate_mcp_ui_metadata(
+                tool_instance=tool_instance,
+                app_id=_o_app_id,
+                tool_name=tool_name,
+            )
+            _o_server = getattr(tool_instance, "_server_name", "") or ""
+            _o_project_id = (self._langfuse_context or {}).get("project_id", "")
+            _observe_ui_meta = {
+                "resource_uri": self._extract_mcp_resource_uri(_hydrated_ui_meta),
+                "server_name": _o_server,
+                "app_id": _o_app_id,
+                "title": _hydrated_ui_meta.get("title", ""),
+                "project_id": _o_project_id,
+            }
+
+        async for attachment_event in self._prepare_repl_observe(
+            tool_def, result, tool_part, allowed=not result_replaced and not failed and not control
+        ):
+            yield attachment_event
+        tool_display = self._tool_display_from_part(tool_part)
+        file_metadata = self._extract_file_metadata(sse_result)
+        if file_metadata:
+            tool_part.metadata["fileMetadata"] = file_metadata
+
+        yield AgentObserveEvent(
+            tool_name=tool_name,
+            result=sse_result,
+            duration_ms=int((end_time - start_time) * 1000),
+            error=tool_part.error,
+            status=tool_part.status.value,
+            call_id=call_id,
+            tool_execution_id=tool_part.tool_execution_id,
+            ui_metadata=_observe_ui_meta,
+            display=tool_display,
+            file_metadata=file_metadata,
+            control_outcome=control.value if control else None,
+        )
+        if self._same_cause_stop is not None:
+            for stop_event in self._same_cause_stop_events(tool_name, call_id, tool_part):
+                yield stop_event
+            return
+        await self._wait_native_control(result, control)
+
+        if tool_instance and has_ui:
+            ui_meta = _hydrated_ui_meta or getattr(tool_instance, "ui_metadata", None) or {}
+            app_id = (
+                getattr(tool_instance, "_last_app_id", "")
+                or getattr(tool_instance, "_app_id", "")
+                or ""
+            )
+            if not app_id:
+                app_id = f"_synthetic_{tool_name}"
+            resource_html = ""
+            fetch_fn = getattr(tool_instance, "fetch_resource_html", None)
+            if fetch_fn:
+                try:
+                    resource_html = await fetch_fn()
+                except Exception as fetch_err:
+                    logger.warning(
+                        "[MCPApp] fetch_resource_html failed for %s: %s",
+                        tool_name,
+                        fetch_err,
+                    )
+            if not resource_html:
+                resource_html = getattr(tool_instance, "_last_html", "") or ""
+            logger.debug(
+                "[MCPApp] Emitting event: tool=%s, app_id=%s, resource_uri=%s, html_len=%d",
+                tool_name,
+                app_id,
+                self._extract_mcp_resource_uri(ui_meta),
+                len(resource_html),
+            )
+            _server_name = getattr(tool_instance, "_server_name", "") or ""
+            _project_id = (self._langfuse_context or {}).get("project_id", "")
+            _structured_content = None
+            if isinstance(sse_result, dict):
+                _structured_content = sse_result.get("structuredContent")
+
+            yield AgentMCPAppResultEvent(
+                app_id=app_id,
+                tool_name=tool_name,
+                tool_result=sse_result,
+                tool_input=arguments if arguments else None,
+                resource_html=resource_html,
+                resource_uri=self._extract_mcp_resource_uri(ui_meta),
+                ui_metadata=ui_meta,
+                tool_execution_id=tool_part.tool_execution_id,
+                project_id=_project_id,
+                server_name=_server_name,
+                structured_content=_structured_content,
+            )
+
+        # Stash for downstream side-effect helpers.
+        # When a ToolResult carries an artifact dict in its metadata
+        # (e.g. from sandbox MCP export_artifact), pass the raw dict
+        # so artifact_handler receives a dict with the "artifact" key.
+        if (
+            isinstance(result, ToolResult)
+            and isinstance(result.metadata, dict)
+            and (result.metadata.get("artifact") or result.metadata.get("results"))
+        ):
+            raw_for_artifacts = result.metadata
+        else:
+            raw_for_artifacts = result
+        self._last_sse_result = sse_result
+        self._last_raw_result = raw_for_artifacts
+        self._tool_attachments[call_id] = (
+            result.attachments
+            if isinstance(result, ToolResult)
+            and not tool_part.metadata.get("repl_attachments_handled")
+            else []
+        )
+        self._last_output_str = output_str
+
+    async def _emit_tool_side_effects(  # noqa: PLR0912, PLR0915
+        self,
+        tool_name: str,
+        tool_def: "ToolDefinition",
+        tool_part: ToolPart,
+        session_id: str,
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Yield artifact, todowrite, plugin-refresh and pending events."""
+        result = self._last_raw_result
+        _ = self._last_sse_result  # needed by downstream; alias kept for clarity
+        output_str = self._last_output_str
+
+        attachments = self._tool_attachments.pop(tool_part.call_id, [])
+        if attachments:
+            try:
+                (
+                    attachment_events,
+                    references,
+                ) = await self._artifact_handler.persist_tool_attachments(
+                    attachments,
+                    tool_name=tool_name,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+                if references:
+                    tool_part.metadata["native_artifact_images"] = references
+                for artifact_event in attachment_events:
+                    self._artifact_count += 1
+                    yield artifact_event
+            except Exception as error:
+                tool_part.status = ToolState.ERROR
+                tool_part.error = "computer_use_artifact_unavailable"
+                logger.error("Tool attachment persistence failed: %s", type(error).__name__)
+
+        # Artifacts
+        try:
+            async for artifact_event in self._artifact_handler.process_tool_artifacts(
+                tool_name=tool_name,
+                result=result,
+                tool_execution_id=tool_part.tool_execution_id,
+            ):
+                if getattr(artifact_event, "event_type", None) == AgentEventType.ARTIFACT_CREATED:
+                    self._artifact_count += 1
+                yield artifact_event
+        except Exception as artifact_err:
+            logger.error(
+                "Artifact processing failed for tool %s: %s",
+                tool_name,
+                artifact_err,
+                exc_info=True,
+            )
+
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        if (
+            isinstance(result, ToolResult)
+            and result.is_error
+            and tool_name in {"delegate_to_subagent", "parallel_delegate_subagents"}
+            and "workspace-authority delegation requires workspace_task_id" in output_str
+        ):
+            self._queue_workspace_delegation_recovery_hint()
+            snapshot = await self._attempt_workspace_todoread_snapshot(session_id=session_id)
+            if snapshot:
+                self._queue_workspace_todoread_snapshot(snapshot)
+            suggested_task_id = self._extract_suggested_workspace_task_id(snapshot)
+            if suggested_task_id:
+                retry_hint = self._build_workspace_delegation_retry_hint(
+                    tool_name=tool_name,
+                    tool_input=tool_part.input,
+                    workspace_task_id=suggested_task_id,
+                )
+                if retry_hint:
+                    self._queue_workspace_delegation_retry_action(retry_hint)
+                retry_args = self._build_workspace_delegation_retry_arguments(
+                    tool_name=tool_name,
+                    tool_input=tool_part.input,
+                    workspace_task_id=suggested_task_id,
+                )
+                if retry_args:
+                    retry_call_id = f"{tool_part.call_id or 'retry'}-workspace-retry"
+                    if retry_call_id not in self._pending_tool_calls:
+                        retry_tool_part = ToolPart(
+                            call_id=retry_call_id,
+                            tool=tool_name,
+                            input=retry_args,
+                            status=ToolState.RUNNING,
+                            start_time=time.time(),
+                            tool_execution_id=f"exec_{uuid.uuid4().hex[:12]}",
+                        )
+                        self._pending_tool_calls[retry_call_id] = retry_tool_part
+                        yield AgentActEvent(
+                            tool_name=tool_name,
+                            tool_input=retry_args,
+                            call_id=retry_call_id,
+                            status="running",
+                            tool_execution_id=retry_tool_part.tool_execution_id,
+                        )
+                        async for retry_event in self._execute_tool(
+                            session_id,
+                            retry_call_id,
+                            tool_name,
+                            retry_args,
+                        ):
+                            yield retry_event
+        elif tool_name in {
+            "todoread",
+            "delegate_to_subagent",
+            "parallel_delegate_subagents",
+        } and not (
+            isinstance(result, ToolResult)
+            and result.is_error
+            and "workspace-authority delegation requires workspace_task_id" in output_str
+        ):
+            self._clear_workspace_delegation_recovery_hint()
+            self._clear_workspace_todoread_snapshot()
+            self._clear_workspace_delegation_retry_action()
+
+        # Todowrite pending events
+        # When ToolPipeline is active, events are bridged through ToolContext
+        # and consumed by the pipeline's _execute_and_finalize step 8.
+        # Only use legacy consume_pending_events when pipeline is NOT active.
+        if self._tool_pipeline is None:
+            tool_instance = getattr(tool_def, "_tool_instance", None)
+            if (
+                tool_name == "todowrite"
+                and tool_instance
+                and hasattr(tool_instance, "consume_pending_events")
+            ):
+                try:
+                    pending = tool_instance.consume_pending_events()
+                    logger.info(
+                        "[Processor] todowrite pending events: count=%d, conversation_id=%s",
+                        len(pending),
+                        session_id,
+                    )
+                    if not pending:
+                        logger.warning(
+                            "[Processor] todowrite produced no pending events "
+                            "- tool may have failed silently"
+                        )
+                    async for ev in self._emit_todowrite_events(pending):
+                        yield ev
+                except Exception as task_err:
+                    logger.error(
+                        "Task event emission failed: %s",
+                        task_err,
+                        exc_info=True,
+                    )
+
+        # Plugin/tool refresh + pending events
+        refresh_count: int | None = None
+        refresh_status = "not_applicable"
+        if tool_name in {"plugin_manager", "register_mcp_server"}:
+            if isinstance(output_str, str) and not output_str.startswith(
+                ("Error:", "Error executing tool")
+            ):
+                logger.info(
+                    "[Processor] %s succeeded, refreshing tools",
+                    tool_name,
+                )
+                refresh_count = self._refresh_tools()
+                if refresh_count is not None:
+                    refresh_status = "success"
+                elif self._tool_provider is None:
+                    refresh_status = "deferred"
+                else:
+                    refresh_status = "failed"
+            else:
+                logger.debug(
+                    "[Processor] %s failed or returned error, skipping tool refresh",
+                    tool_name,
+                )
+                refresh_status = "skipped"
+
+        # When ToolPipeline is active, pending events are bridged through
+        # ToolContext and consumed by the pipeline. Skip legacy path.
+        if self._tool_pipeline is None:
+            tool_instance = getattr(tool_def, "_tool_instance", None)
+            _pending_tools = {
+                "plugin_manager",
+                "register_mcp_server",
+                "skill_sync",
+                "skill_installer",
+                "delegate_to_subagent",
+                "parallel_delegate_subagents",
+                "sessions_spawn",
+                "sessions_send",
+                "subagents",
+            }
+            if (
+                tool_name in _pending_tools
+                and tool_instance
+                and hasattr(tool_instance, "consume_pending_events")
+            ):
+                try:
+                    for event in tool_instance.consume_pending_events():
+                        if (
+                            tool_name in {"plugin_manager", "register_mcp_server"}
+                            and isinstance(event, dict)
+                            and event.get("type") == "toolset_changed"
+                        ):
+                            event_data = event.get("data")
+                            if isinstance(event_data, dict):
+                                event_data.setdefault("refresh_source", "processor")
+                                event_data["refresh_status"] = refresh_status
+                                if refresh_count is not None:
+                                    event_data["refreshed_tool_count"] = refresh_count
+
+                                # Fix: If discovered_tools are present and the
+                                # refresh didn't populate them (cache race), try
+                                # a second refresh now that the lifecycle has settled.
+                                _ = event_data.get("discovered_tools")
+                                tool_names_in_event = event_data.get("tool_names", [])
+                                missing = [n for n in tool_names_in_event if n not in self.tools]
+                                if missing:
+                                    retry_count = self._refresh_tools()
+                                    if retry_count is not None:
+                                        logger.info(
+                                            "[Processor] Post-event retry refresh loaded %d tools",
+                                            retry_count,
+                                        )
+                                        event_data["refresh_status"] = "success_retry"
+                                        event_data["refreshed_tool_count"] = retry_count
+                                    else:
+                                        # Still missing — log clearly so we can diagnose
+                                        still_missing = [
+                                            n for n in tool_names_in_event if n not in self.tools
+                                        ]
+                                        if still_missing:
+                                            # Attempt direct cache injection from
+                                            # discovered_tools payload
+                                            disc = event_data.get("discovered_tools")
+                                            if disc:
+                                                from src.infrastructure.agent.state.agent_worker_state import (
+                                                    inject_discovered_mcp_tools_into_cache,
+                                                )
+
+                                                injected = (
+                                                    await inject_discovered_mcp_tools_into_cache(
+                                                        project_id=event_data.get("project_id", ""),
+                                                        server_name=event_data.get(
+                                                            "server_name", ""
+                                                        ),
+                                                        discovered_tools=disc,
+                                                    )
+                                                )
+                                                if injected > 0:
+                                                    final_count = self._refresh_tools()
+                                                    if final_count is not None:
+                                                        event_data["refresh_status"] = (
+                                                            "success_injection"
+                                                        )
+                                                        event_data["refreshed_tool_count"] = (
+                                                            final_count
+                                                        )
+                                                        logger.info(
+                                                            "[Processor] Cache injection + refresh "
+                                                            "loaded %d tools for %s",
+                                                            final_count,
+                                                            still_missing,
+                                                        )
+                                                    else:
+                                                        logger.warning(
+                                                            "[Processor] MCP tools still missing "
+                                                            "after cache injection + refresh"
+                                                        )
+                                                else:
+                                                    logger.warning(
+                                                        "[Processor] Cache injection returned 0 "
+                                                        "tools for %s",
+                                                        still_missing,
+                                                    )
+                                            else:
+                                                logger.warning(
+                                                    "[Processor] MCP tools still missing "
+                                                    "after retry refresh and no "
+                                                    "discovered_tools in event: %s "
+                                                    "(total tools: %d)",
+                                                    still_missing,
+                                                    len(self.tools),
+                                                )
+                        yield event
+                except Exception as pending_err:
+                    logger.error(
+                        "%s event emission failed: %s",
+                        tool_name,
+                        pending_err,
+                    )
+
+    async def _emit_todowrite_events(
+        self,
+        pending: list[dict[str, Any]],
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Convert raw todowrite pending events into typed domain events."""
+        from src.domain.events.agent_events import (
+            AgentTaskCompleteEvent,
+            AgentTaskListUpdatedEvent,
+            AgentTaskStartEvent,
+            AgentTaskUpdatedEvent,
+        )
+
+        for task_event in pending:
+            event_type = task_event.get("type")
+            if event_type == "task_list_updated":
+                tasks = task_event["tasks"]
+                logger.info(
+                    "[Processor] Emitting task_list_updated: %d tasks for %s",
+                    len(tasks),
+                    task_event["conversation_id"],
+                )
+                yield AgentTaskListUpdatedEvent(
+                    conversation_id=task_event["conversation_id"],
+                    tasks=tasks,
+                )
+                total = len(tasks)
+                for t in tasks:
+                    if t.get("status") == "in_progress":
+                        self._current_task = {
+                            "task_id": t["id"],
+                            "content": t["content"],
+                            "order_index": t.get("order_index", 0),
+                            "total_tasks": total,
+                        }
+                        yield AgentTaskStartEvent(
+                            task_id=t["id"],
+                            content=t["content"],
+                            order_index=t.get("order_index", 0),
+                            total_tasks=total,
+                        )
+            elif event_type == "task_updated":
+                task_status = task_event["status"]
+                yield AgentTaskUpdatedEvent(
+                    conversation_id=task_event["conversation_id"],
+                    task_id=task_event["task_id"],
+                    status=task_status,
+                    content=task_event.get("content"),
+                )
+                if task_status == "in_progress":
+                    total = self._current_task["total_tasks"] if self._current_task else 1
+                    self._current_task = {
+                        "task_id": task_event["task_id"],
+                        "content": task_event.get("content", ""),
+                        "order_index": task_event.get("order_index", 0),
+                        "total_tasks": total,
+                    }
+                    yield AgentTaskStartEvent(
+                        task_id=task_event["task_id"],
+                        content=task_event.get("content", ""),
+                        order_index=task_event.get("order_index", 0),
+                        total_tasks=total,
+                    )
+                elif task_status in (
+                    "completed",
+                    "failed",
+                    "cancelled",
+                ):
+                    ct = self._current_task
+                    if ct and ct["task_id"] == task_event["task_id"]:
+                        yield AgentTaskCompleteEvent(
+                            task_id=ct["task_id"],
+                            status=task_status,
+                            order_index=ct["order_index"],
+                            total_tasks=ct["total_tasks"],
+                        )
+                        self._current_task = None
+
+    # ── Pipeline-based tool execution ──────────────────────────────────
+
+    async def _execute_tool_via_pipeline(  # noqa: PLR0911, PLR0912, PLR0915
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+        tool_def: ToolDefinition,
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Execute a tool through the unified ToolPipeline.
+
+        Replaces phases 2 (doom loop), 4 (permission), and 6 (invocation)
+        when ``self._tool_pipeline`` is set.  The pipeline yields
+        ``ToolEvent`` instances that are converted to ``ProcessorEvent``.
+
+        After completion the caller should still run
+        ``_emit_tool_side_effects`` using the stashed ``self._last_*``
+        values populated by this method.
+        """
+        assert self._tool_pipeline is not None  # caller guarantees
+
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        # Build a ToolContext from processor state
+        ctx = ToolContext(
+            session_id=session_id,
+            message_id=call_id,
+            call_id=call_id,
+            agent_name=(self._langfuse_context or {}).get("agent_name", "main"),
+            conversation_id=(self._langfuse_context or {}).get("conversation_id") or session_id,
+            abort_signal=self._abort_event or asyncio.Event(),
+            messages=[],
+            project_id=(self._langfuse_context or {}).get("project_id", ""),
+            tenant_id=(self._langfuse_context or {}).get("tenant_id", ""),
+            user_id=(self._langfuse_context or {}).get("user_id", ""),
+            api_auth_token=self.config.api_auth_token,
+            runtime_context={
+                **self.config.runtime_context,
+                "run_id": self._run_id,
+                "round": max(1, self._step_count),
+                "tool_hooks_resolved": bool(getattr(self, "_tool_hooks_resolved", False)),
+            },
+        )
+
+        owner_run_id = self._run_id if self.config.subagent_owner_required else None
+
+        require_run_permission = self._require_run_tool_permission_v2
+
+        # Adapt ToolDefinition to ToolInfoProtocol
+        class _ToolAdapter:
+            """Thin adapter from ToolDefinition to ToolInfoProtocol.
+
+            For ToolInfo-based tools (from @tool_define), calls the
+            original execute function with the real ToolContext.
+            For legacy class-based tools, delegates to ToolDefinition
+            and bridges pending events into ToolContext.
+            """
+
+            def __init__(self, td: ToolDefinition, context: ToolContext) -> None:
+                self.name = td.name
+                self.parameters = td.parameters
+                self.permission = td.permission
+                self.permission_resolver = td.permission_resolver
+                self.repeatable_observation = td.repeatable_observation
+                self.claims_chat_invocation_v2 = True
+                self._td = td
+                self._ctx = context
+
+            async def execute(self, **kwargs: Any) -> Any:
+                """Delegate to underlying tool with appropriate context."""
+                from jsonschema import Draft202012Validator
+
+                from src.infrastructure.agent.tools.define import ToolInfo
+
+                Draft202012Validator(self._td.parameters).validate(kwargs)
+                await fence_subagent_owner_v2(child_run_id=owner_run_id)
+                await require_run_permission(self._td, self.name, kwargs)
+                tool_instance = getattr(self._td, "_tool_instance", None)
+                # ToolInfo-based tools: call with real ToolContext
+                if isinstance(tool_instance, ToolInfo):
+                    # The pipeline converts exceptions into explicit failed results.
+                    return await tool_instance.execute(self._ctx, **kwargs)
+
+                # Legacy class-based tools: inject runtime context if supported
+                if tool_instance is not None and hasattr(tool_instance, "set_runtime_context"):
+                    tool_instance.set_runtime_context(self._ctx)
+                result = await self._td.execute(**kwargs)
+                for event in _consume_tool_pending_events(self._td):
+                    await self._ctx.emit(event)
+                return result
+
+        adapter = _ToolAdapter(tool_def, ctx)
+        start_time = time.time()
+
+        pending_pipeline_events: list[Any] = []
+        async for event in self._tool_pipeline.execute(adapter, arguments, ctx):
+            if event.type == "started":
+                self._state = ProcessorState.ACTING
+
+            elif event.type == "completed":
+                end_time = time.time()
+                # Extract the full ToolResult from event data
+                tool_result: ToolResult | None = event.data.get("_result")
+                if tool_result is not None:
+                    output_str = tool_result.output
+                    sse_result: Any = tool_result.metadata if tool_result.metadata else output_str
+                    raw_result: Any = tool_result
+                else:
+                    output_str = ""
+                    sse_result = ""
+                    raw_result = ""
+
+                # A completed pipeline event can carry a failed ToolResult.
+                failed = tool_result is not None and tool_result.is_error
+                original_policy_result = (
+                    output_str,
+                    sse_result if isinstance(sse_result, dict) else {},
+                    failed,
+                )
+                output_str, result_metadata, failed, blocked = await self._apply_tool_result_policy(
+                    tool_name,
+                    call_id,
+                    session_id,
+                    output_str,
+                    sse_result,
+                    failed,
+                )
+                result_replaced = (
+                    blocked or (output_str, result_metadata, failed) != original_policy_result
+                )
+                if result_replaced:
+                    raw_result = ToolResult(
+                        output=output_str,
+                        metadata=result_metadata,
+                        is_error=failed,
+                    )
+                    sse_result = result_metadata or output_str
+                if not result_replaced:
+                    for pending_event in pending_pipeline_events:
+                        yield pending_event
+                pending_pipeline_events.clear()
+                output_str, sse_result, failed = self._apply_same_cause(
+                    tool_name,
+                    arguments,
+                    output_str,
+                    result_metadata if isinstance(result_metadata, dict) else {},
+                    failed,
+                    raw_result,
+                    sse_result,
+                )
+                control = self._native_control_outcome(raw_result)
+                if self._same_cause_stop is not None:
+                    control = None
+                tool_part.status = (
+                    ToolState.ERROR
+                    if failed
+                    else ToolState.CANCELLED
+                    if control
+                    else ToolState.COMPLETED
+                )
+                tool_part.output = self._artifact_handler.sanitize_tool_output(output_str)
+                tool_part.error = tool_part.output if failed else None
+                tool_part.end_time = end_time
+
+                # MCP App UI metadata (same logic as _invoke_and_emit_observe)
+                tool_instance = getattr(tool_def, "_tool_instance", None)
+                has_ui = getattr(tool_instance, "has_ui", False) if tool_instance else False
+                if not has_ui and tool_name.startswith("mcp__") and tool_instance:
+                    _app_id_fb = getattr(tool_instance, "_app_id", "") or ""
+                    if _app_id_fb:
+                        has_ui = True
+
+                has_ui = has_ui and not result_replaced
+                _observe_ui_meta: dict[str, Any] | None = None
+                _hydrated_ui_meta: dict[str, Any] = {}
+                if tool_instance and has_ui:
+                    _o_app_id = (
+                        getattr(tool_instance, "_last_app_id", "")
+                        or getattr(tool_instance, "_app_id", "")
+                        or ""
+                    )
+                    _hydrated_ui_meta = await self._hydrate_mcp_ui_metadata(
+                        tool_instance=tool_instance,
+                        app_id=_o_app_id,
+                        tool_name=tool_name,
+                    )
+                    _o_server = getattr(tool_instance, "_server_name", "") or ""
+                    _o_project_id = (self._langfuse_context or {}).get("project_id", "")
+                    _observe_ui_meta = {
+                        "resource_uri": self._extract_mcp_resource_uri(_hydrated_ui_meta),
+                        "server_name": _o_server,
+                        "app_id": _o_app_id,
+                        "title": _hydrated_ui_meta.get("title", ""),
+                        "project_id": _o_project_id,
+                    }
+
+                async for attachment_event in self._prepare_repl_observe(
+                    tool_def,
+                    raw_result,
+                    tool_part,
+                    allowed=not result_replaced and not failed and not control,
+                ):
+                    yield attachment_event
+                tool_display = self._tool_display_from_part(tool_part)
+                file_metadata = self._extract_file_metadata(sse_result)
+                if file_metadata:
+                    tool_part.metadata["fileMetadata"] = file_metadata
+
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    result=sse_result,
+                    error=tool_part.error,
+                    status=tool_part.status.value,
+                    duration_ms=event.data.get(
+                        "duration_ms",
+                        int((end_time - start_time) * 1000),
+                    ),
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                    ui_metadata=_observe_ui_meta,
+                    display=tool_display,
+                    file_metadata=file_metadata,
+                    control_outcome=control.value if control else None,
+                )
+                if self._same_cause_stop is not None:
+                    for stop_event in self._same_cause_stop_events(tool_name, call_id, tool_part):
+                        yield stop_event
+                    return
+                await self._wait_native_control(raw_result, control)
+
+                # Emit AgentMCPAppResultEvent if tool has UI
+                if tool_instance and has_ui:
+                    ui_meta = _hydrated_ui_meta or getattr(tool_instance, "ui_metadata", None) or {}
+                    app_id = (
+                        getattr(tool_instance, "_last_app_id", "")
+                        or getattr(tool_instance, "_app_id", "")
+                        or ""
+                    )
+                    if not app_id:
+                        app_id = f"_synthetic_{tool_name}"
+                    resource_html = ""
+                    fetch_fn = getattr(tool_instance, "fetch_resource_html", None)
+                    if fetch_fn:
+                        try:
+                            resource_html = await fetch_fn()
+                        except Exception as fetch_err:
+                            logger.warning(
+                                "[MCPApp] fetch_resource_html failed for %s: %s",
+                                tool_name,
+                                fetch_err,
+                            )
+                    if not resource_html:
+                        resource_html = getattr(tool_instance, "_last_html", "") or ""
+                    _server_name = getattr(tool_instance, "_server_name", "") or ""
+                    _project_id = (self._langfuse_context or {}).get("project_id", "")
+                    _structured_content = None
+                    if isinstance(sse_result, dict):
+                        _structured_content = sse_result.get("structuredContent")
+
+                    yield AgentMCPAppResultEvent(
+                        app_id=app_id,
+                        tool_name=tool_name,
+                        tool_result=sse_result,
+                        tool_input=arguments if arguments else None,
+                        resource_html=resource_html,
+                        resource_uri=self._extract_mcp_resource_uri(ui_meta),
+                        ui_metadata=ui_meta,
+                        tool_execution_id=(tool_part.tool_execution_id),
+                        project_id=_project_id,
+                        server_name=_server_name,
+                        structured_content=_structured_content,
+                    )
+
+                # Stash for _emit_tool_side_effects.
+                # Same artifact-in-metadata passthrough as non-pipeline path.
+                if (
+                    isinstance(raw_result, ToolResult)
+                    and isinstance(raw_result.metadata, dict)
+                    and (raw_result.metadata.get("artifact") or raw_result.metadata.get("results"))
+                ):
+                    raw_for_artifacts = raw_result.metadata
+                else:
+                    raw_for_artifacts = raw_result
+                self._last_sse_result = sse_result
+                self._last_raw_result = raw_for_artifacts
+                self._tool_attachments[call_id] = (
+                    raw_result.attachments
+                    if isinstance(raw_result, ToolResult)
+                    and not tool_part.metadata.get("repl_attachments_handled")
+                    else []
+                )
+                self._last_output_str = output_str
+
+            elif event.type == "denied":
+                tool_part.status = ToolState.ERROR
+                tool_part.error = "Permission denied"
+                tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error="Permission denied",
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                    display=self._tool_display_from_part(tool_part),
+                )
+                return
+
+            elif event.type == "doom_loop":
+                yield AgentDoomLoopDetectedEvent(tool=tool_name, input=arguments)
+                # Replicate existing doom-loop permission-ask flow
+                self._state = ProcessorState.WAITING_PERMISSION
+                try:
+                    permission_result = await asyncio.wait_for(
+                        self.permission_manager.ask(
+                            permission="doom_loop",
+                            patterns=[tool_name],
+                            session_id=session_id,
+                            metadata={
+                                "tool": tool_name,
+                                "input": arguments,
+                            },
+                        ),
+                        timeout=self.config.permission_timeout,
+                    )
+                    if permission_result == "reject":
+                        tool_part.status = ToolState.ERROR
+                        tool_part.error = "Doom loop detected and rejected by user"
+                        tool_part.end_time = time.time()
+                        yield AgentObserveEvent(
+                            tool_name=tool_name,
+                            error="Doom loop detected and rejected",
+                            call_id=call_id,
+                            tool_execution_id=(tool_part.tool_execution_id),
+                            display=self._tool_display_from_part(tool_part),
+                        )
+                        return
+                except TimeoutError:
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = "Permission request timed out"
+                    tool_part.end_time = time.time()
+                    yield AgentObserveEvent(
+                        tool_name=tool_name,
+                        error="Permission request timed out",
+                        call_id=call_id,
+                        tool_execution_id=(tool_part.tool_execution_id),
+                        display=self._tool_display_from_part(tool_part),
+                    )
+                    return
+                # Permission granted for doom loop — pipeline already returned,
+                # so we have nothing more to process from it.
+                return
+
+            elif event.type == "permission_asked":
+                response = event.data.get("_approval_response")
+                reviewed_args = event.data.get("arguments")
+                if not isinstance(response, asyncio.Future) or not isinstance(reviewed_args, dict):
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = "Tool review authority is unavailable"
+                    yield AgentObserveEvent(
+                        tool_name=tool_name,
+                        error=tool_part.error,
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                    return
+                try:
+                    async for approval_event in self._ask_tool_permission(
+                        session_id,
+                        call_id,
+                        tool_name,
+                        reviewed_args,
+                        tool_part,
+                        tool_def,
+                    ):
+                        yield approval_event
+                    if not response.done():
+                        response.set_result(tool_part.status != ToolState.ERROR)
+                finally:
+                    if not response.done():
+                        response.set_result(False)
+
+            elif event.type == "aborted":
+                tool_part.status = ToolState.ERROR
+                tool_part.error = "Tool execution aborted"
+                tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error="Tool execution aborted",
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                    display=self._tool_display_from_part(tool_part),
+                )
+                return
+
+            elif event.type == "legacy_event":
+                # Legacy tools emit raw dict events via _pending_events.
+                # Bridge them through the pipeline as domain events.
+                legacy_evt = event.data.get("event")
+                if legacy_evt is not None:
+                    if tool_name == "todowrite" and isinstance(legacy_evt, dict):
+                        # Todowrite events need conversion via
+                        # _emit_todowrite_events.
+                        async for tw_ev in self._emit_todowrite_events([legacy_evt]):
+                            pending_pipeline_events.append(tw_ev)
+                    else:
+                        # Other legacy events (subagent, plugin, etc.)
+                        # pass through as-is — they are already
+                        # ProcessorEvent-compatible.
+                        pending_pipeline_events.append(legacy_evt)
+
+    async def _pipeline_before_hooks(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> Any:
+        """Run pipeline before-hooks so the persisted review stores rewritten arguments."""
+        from src.infrastructure.agent.tools.context import ToolContext
+
+        assert self._tool_pipeline is not None
+        context = self._langfuse_context or {}
+        preview = ToolContext(
+            session_id=session_id,
+            message_id=call_id,
+            call_id=call_id,
+            agent_name=context.get("agent_name", "main"),
+            conversation_id=context.get("conversation_id") or session_id,
+            abort_signal=self._abort_event or asyncio.Event(),
+            project_id=context.get("project_id", ""),
+            tenant_id=context.get("tenant_id", ""),
+            user_id=context.get("user_id", ""),
+            api_auth_token=self.config.api_auth_token,
+            runtime_context={
+                **self.config.runtime_context,
+                "run_id": self._run_id,
+                "round": max(1, self._step_count),
+            },
+        )
+        return await self._tool_pipeline._hooks.run_before(tool_name, arguments, preview)
+
+    # ── _execute_tool orchestrator ────────────────────────────────────
+
+    async def _execute_tool(  # noqa: PLR0912, PLR0915, PLR0911
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Execute a tool call (thin orchestrator).
+
+        Delegates to helper methods for each phase:
+        1. Resolve tool lookup
+        2. Doom-loop check
+        3. HITL dispatch (clarification / decision / env_var)
+        4. Permission check
+        5. Argument parsing & fixing
+        6. Tool invocation + observe event emission
+        7. Side-effect emission (artifacts, todowrite, plugins)
+        """
+        self._tool_hooks_resolved = False
+        raw_tool_name = tool_name
+        tool_name = self._canonicalize_tool_name(tool_name)
+        if raw_tool_name != tool_name:
+            logger.info(
+                "[Processor] Canonicalized tool name in execution: %s -> %s",
+                raw_tool_name,
+                tool_name,
+            )
+
+        # 1. Resolve
+        resolved = self._resolve_tool_lookup(call_id, tool_name)
+        if resolved is None:
+            for ev in self.__resolve_errors:
+                yield ev
+            return
+
+        from src.application.services.approved_run_tool_permission_v2 import (
+            require_approved_run_tool_permission_v2,
+        )
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        tool_part, tool_def = resolved
+        cleaned = self._parse_and_fix_arguments(
+            tool_name,
+            arguments,
+            tool_part,
+            call_id,
+            session_id,
+        )
+        if cleaned is None:
+            for event in self.__arg_parse_errors:
+                yield event
+            return
+        policy = await self._notify_plugin_hook(
+            "before_tool_execution",
+            {
+                "tool_name": tool_name,
+                "arguments": cleaned,
+                "call_id": call_id,
+                "session_id": session_id,
+                **self._runtime_hook_context_fields(),
+            },
+        )
+        arguments = policy.get("arguments", cleaned)
+        decision = policy.get("decision", {"kind": "allow"})
+        policy_kind = decision["kind"]
+        try:
+            from jsonschema import Draft202012Validator
+            from jsonschema.exceptions import ValidationError
+
+            try:
+                Draft202012Validator(tool_def.parameters).validate(arguments)
+            except ValidationError as error:
+                raise RuntimeV2Error("invalid_tool_arguments", error.message) from error
+            if policy_kind in {"deny", "cancel"}:
+                if policy_kind == "cancel" and self._abort_event is not None:
+                    self._abort_event.set()
+                raise RuntimeV2Error(
+                    "tool_policy_" + policy_kind,
+                    decision.get("reason") or "Tool execution stopped by policy",
+                )
+            await require_approved_run_tool_permission_v2(
+                resolve_tool_permission_v2(tool_def, arguments),
+                required_run_id=self.config.run_id if self.config.approved_run_required else None,
+                required=self.config.approved_run_required,
+            )
+        except RuntimeV2Error as permission_error:
+            tool_part.status = ToolState.ERROR
+            tool_part.error = str(permission_error)
+            tool_part.end_time = time.time()
+            yield AgentObserveEvent(
+                tool_name=tool_name,
+                call_id=call_id,
+                error=tool_part.error,
+                status=ToolState.ERROR.value,
+                tool_execution_id=tool_part.tool_execution_id,
+            )
+            return
+
+        from contextlib import nullcontext
+
+        from src.application.services.chat_run_tool_permission_v2 import (
+            approved_chat_tool_call_v2,
+            decision_for_current_chat_tool_v2,
+        )
+
+        try:
+            chat_decision = await decision_for_current_chat_tool_v2(
+                resolve_tool_permission_v2(tool_def, arguments),
+                tool_name,
+                arguments,
+                required=self.config.chat_run_required,
+            )
+        except RuntimeV2Error:
+            chat_decision = "deny"
+        if chat_decision == "deny":
+            from src.application.services.chat_run_tool_permission_v2 import (
+                format_chat_tool_denial,
+            )
+
+            tool_part.status = ToolState.ERROR
+            tool_part.error = format_chat_tool_denial(tool_name)
+            tool_part.end_time = time.time()
+            yield AgentObserveEvent(
+                tool_name=tool_name,
+                call_id=call_id,
+                error=tool_part.error,
+                status=ToolState.ERROR.value,
+                tool_execution_id=tool_part.tool_execution_id,
+            )
+            return
+        hook_review: tuple[AsyncIterator[ProcessorEvent], AgentPermissionRepliedEvent] | None = None
+        if chat_decision == "ask" and self._tool_pipeline is not None:
+            from src.infrastructure.agent.tools.hooks import HookDecision
+
+            hook_result = await self._pipeline_before_hooks(
+                session_id, call_id, tool_name, arguments
+            )
+            if hook_result.decision == HookDecision.DENY:
+                tool_part.status = ToolState.ERROR
+                tool_part.error = hook_result.reason or "Tool execution stopped by hook"
+                tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    call_id=call_id,
+                    error=tool_part.error,
+                    status=ToolState.ERROR.value,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+                return
+            if hook_result.args is not None and hook_result.args != arguments:
+                arguments = hook_result.args
+            if hook_result.decision == HookDecision.ASK:
+                # Publish the rewritten call before the chat approval. The chat
+                # reply stays buffered so the next stream event is that approval.
+                self._tool_hooks_resolved = True
+                pending_hook_review = self._ask_tool_permission(
+                    session_id,
+                    call_id,
+                    tool_name,
+                    arguments,
+                    tool_part,
+                    tool_def,
+                )
+                yield await anext(pending_hook_review)
+                hook_reply = await anext(pending_hook_review)
+                if (
+                    not isinstance(hook_reply, AgentPermissionRepliedEvent)
+                    or not hook_reply.granted
+                ):
+                    yield hook_reply
+                    async for extra in pending_hook_review:
+                        yield extra
+                    return
+                hook_review = (pending_hook_review, hook_reply)
+        if chat_decision == "ask" or policy_kind == "ask":
+            from copy import deepcopy
+
+            reviewed_arguments = deepcopy(arguments)
+            try:
+                async for event in self._ask_tool_permission(
+                    session_id,
+                    call_id,
+                    tool_name,
+                    deepcopy(reviewed_arguments),
+                    tool_part,
+                    tool_def,
+                ):
+                    yield event
+                if tool_part.status == ToolState.ERROR:
+                    return
+                if arguments != reviewed_arguments:
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = "Tool arguments changed after human approval"
+                    yield AgentObserveEvent(
+                        tool_name=tool_name,
+                        call_id=call_id,
+                        error=tool_part.error,
+                        status=ToolState.ERROR.value,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                    return
+            finally:
+                if hook_review is not None:
+                    pending_hook_review, hook_reply = hook_review
+                    yield hook_reply
+                    async for extra in pending_hook_review:
+                        yield extra
+                await self._flush_tool_part_hitl_completions(tool_part)
+
+        approval_context = (
+            approved_chat_tool_call_v2(tool_name, arguments)
+            if chat_decision == "ask"
+            else nullcontext()
+        )
+        with approval_context:
+            # 1b. Error-based doom loop intervention (consecutive tool errors)
+            if self.doom_loop_detector.should_intervene_on_errors():
+                recent = self.doom_loop_detector.get_recent_errors(3)
+                error_summary = "; ".join(f"{e.tool}: {e.error}" for e in recent)
+                logger.warning(
+                    "[Processor] Consecutive tool errors threshold reached (%d errors). Recent: %s",
+                    self.doom_loop_detector.consecutive_error_count,
+                    error_summary,
+                )
+                yield AgentDoomLoopDetectedEvent(
+                    tool=tool_name,
+                    input={
+                        "reason": "consecutive_tool_errors",
+                        "error_count": self.doom_loop_detector.consecutive_error_count,
+                        "recent_errors": error_summary,
+                    },
+                )
+                error_tool_part = self._pending_tool_calls.get(call_id)
+                if error_tool_part:
+                    error_tool_part.status = ToolState.ERROR
+                    error_tool_part.error = (
+                        f"Stopped: {self.doom_loop_detector.consecutive_error_count}"
+                        f" consecutive tool errors detected"
+                    )
+                    error_tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error=(
+                        f"Execution halted: {self.doom_loop_detector.consecutive_error_count}"
+                        f" consecutive tool errors. Last errors: {error_summary}."
+                        f" Please verify tool names and try a different approach."
+                    ),
+                    call_id=call_id,
+                    tool_execution_id=error_tool_part.tool_execution_id
+                    if error_tool_part
+                    else None,
+                    display=self._tool_display_from_part(error_tool_part)
+                    if error_tool_part
+                    else None,
+                )
+                self._state = ProcessorState.OBSERVING
+                return
+            tool_part, tool_def = resolved
+            if arguments:
+                tool_part.input = arguments
+
+            # 2. Doom-loop
+            doom_result = await self._check_doom_loop(
+                session_id,
+                call_id,
+                tool_name,
+                arguments,
+                tool_part,
+                tool_def,
+            )
+            if doom_result is not None:
+                async for ev in doom_result:
+                    yield ev
+                return
+
+            # Record for doom-loop tracking
+            self.doom_loop_detector.record(tool_name, arguments)
+
+            # 3. HITL dispatch
+            hitl_handler = self._check_hitl_dispatch(tool_name)
+            if hitl_handler is not None:
+                handler_method = getattr(self, hitl_handler)
+                try:
+                    await self._require_run_tool_permission_v2(tool_def, tool_name, arguments)
+                    async for ev in handler_method(
+                        session_id,
+                        call_id,
+                        tool_name,
+                        arguments,
+                        tool_part,
+                    ):
+                        if isinstance(ev, AgentObserveEvent):
+                            (
+                                output,
+                                metadata,
+                                failed,
+                                blocked,
+                            ) = await self._apply_tool_result_policy(
+                                tool_name,
+                                call_id,
+                                session_id,
+                                tool_part.output or tool_part.error or "",
+                                ev.result,
+                                bool(ev.error),
+                            )
+                            tool_part.output = self._artifact_handler.sanitize_tool_output(output)
+                            tool_part.error = output if failed else None
+                            tool_part.status = ToolState.ERROR if failed else ToolState.COMPLETED
+                            ev = ev.model_copy(
+                                update={
+                                    "result": metadata or output,
+                                    "error": tool_part.error,
+                                    "status": tool_part.status.value,
+                                    "ui_metadata": None if blocked else ev.ui_metadata,
+                                }
+                            )
+                        yield ev
+                    await self._notify_plugin_hook(
+                        "after_tool_execution",
+                        {
+                            "tool_name": tool_name,
+                            "call_id": call_id,
+                            "session_id": session_id,
+                            "result": tool_part.output,
+                            "error": tool_part.error,
+                            **self._runtime_hook_context_fields(),
+                        },
+                    )
+                finally:
+                    await self._flush_tool_part_hitl_completions(tool_part)
+                return
+
+            # ── Pipeline shortcut ── (phases 2, 4, 6 handled by pipeline)
+            if self._tool_pipeline is not None:
+                # 5. Parse & fix arguments (still needed before pipeline)
+                self._state = ProcessorState.ACTING
+                cleaned = self._parse_and_fix_arguments(
+                    tool_name,
+                    arguments,
+                    tool_part,
+                    call_id,
+                    session_id,
+                )
+                if cleaned is None:
+                    for ev in self.__arg_parse_errors:
+                        yield ev
+                    return
+                arguments = cleaned
+
+                try:
+                    # 6. Pipeline execution (doom loop + permission + invoke)
+                    async for ev in self._execute_tool_via_pipeline(
+                        session_id,
+                        call_id,
+                        tool_name,
+                        arguments,
+                        tool_part,
+                        tool_def,
+                    ):
+                        yield ev
+
+                    await self._notify_plugin_hook(
+                        "after_tool_execution",
+                        {
+                            "tool_name": tool_name,
+                            "call_id": call_id,
+                            "session_id": session_id,
+                            **self._runtime_hook_context_fields(),
+                            "result_metadata": (
+                                dict(self._last_sse_result)
+                                if isinstance(self._last_sse_result, dict)
+                                else None
+                            ),
+                            "result": getattr(tool_part, "output", None),
+                            "error": getattr(tool_part, "error", None),
+                        },
+                    )
+                    # 7. Side effects (same as non-pipeline path)
+                    async for ev in self._emit_tool_side_effects(
+                        tool_name,
+                        tool_def,
+                        tool_part,
+                        session_id,
+                    ):
+                        yield ev
+                    # Reset error tracker on successful pipeline execution
+                    if tool_part.status in (ToolState.COMPLETED, ToolState.CANCELLED):
+                        self.doom_loop_detector.reset_errors()
+
+                except MarketplaceHookError:
+                    raise
+                except Exception as e:
+                    logger.error(
+                        "Tool execution error (pipeline): %s",
+                        e,
+                        exc_info=True,
+                    )
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = str(e)
+                    tool_part.end_time = time.time()
+                    yield AgentObserveEvent(
+                        tool_name=tool_name,
+                        error=str(e),
+                        status=ToolState.ERROR.value,
+                        control_outcome=(
+                            ToolControlOutcome.USER_PAUSED.value
+                            if isinstance(e, NativeControlWaitError)
+                            else None
+                        ),
+                        duration_ms=(
+                            int((time.time() - tool_part.start_time) * 1000)
+                            if tool_part.start_time
+                            else None
+                        ),
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                        display=self._tool_display_from_part(tool_part),
+                    )
+                    if isinstance(e, NativeControlWaitError):
+                        raise
+                finally:
+                    await self._flush_tool_part_hitl_completions(tool_part)
+
+                self._state = ProcessorState.OBSERVING
+                return
+            # 4. Permission check
+            self._permission_asked_event = None
+            perm_result = await self._check_tool_permission(
+                session_id,
+                call_id,
+                tool_name,
+                arguments,
+                tool_part,
+                tool_def,
+            )
+            # Yield permission-asked event if one was generated
+            permission_asked_event = self._pop_permission_asked_event()
+            if permission_asked_event is not None:
+                yield permission_asked_event
+            if perm_result is not None:
+                try:
+                    async for ev in perm_result:
+                        yield ev
+                finally:
+                    await self._flush_tool_part_hitl_completions(tool_part)
+                if tool_part.status == ToolState.ERROR:
+                    return
+
+            # 5. Parse & fix arguments
+            self._state = ProcessorState.ACTING
+            cleaned = self._parse_and_fix_arguments(
+                tool_name,
+                arguments,
+                tool_part,
+                call_id,
+                session_id,
+            )
+            if cleaned is None:
+                for ev in self.__arg_parse_errors:
+                    yield ev
+                return
+            arguments = cleaned
+
+            # 6. Invoke tool + emit observe
+            try:
+                async for ev in self._invoke_and_emit_observe(
+                    tool_name,
+                    arguments,
+                    tool_part,
+                    tool_def,
+                    call_id,
+                    session_id,
+                ):
+                    yield ev
+
+                await self._notify_plugin_hook(
+                    "after_tool_execution",
+                    {
+                        "tool_name": tool_name,
+                        "call_id": call_id,
+                        "session_id": session_id,
+                        **self._runtime_hook_context_fields(),
+                        "result_metadata": (
+                            dict(self._last_sse_result)
+                            if isinstance(self._last_sse_result, dict)
+                            else None
+                        ),
+                        "result": getattr(tool_part, "output", None),
+                        "error": getattr(tool_part, "error", None),
+                    },
+                )
+                # 7. Side effects
+                async for ev in self._emit_tool_side_effects(
+                    tool_name,
+                    tool_def,
+                    tool_part,
+                    session_id,
+                ):
+                    yield ev
+
+            except MarketplaceHookError:
+                raise
+            except Exception as e:
+                logger.error("Tool execution error: %s", e, exc_info=True)
+                tool_part.status = ToolState.ERROR
+                tool_part.error = str(e)
+                tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error=str(e),
+                    status=ToolState.ERROR.value,
+                    control_outcome=(
+                        ToolControlOutcome.USER_PAUSED.value
+                        if isinstance(e, NativeControlWaitError)
+                        else None
+                    ),
+                    duration_ms=int((time.time() - tool_part.start_time) * 1000)
+                    if tool_part.start_time
+                    else None,
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                    display=self._tool_display_from_part(tool_part),
+                )
+                if isinstance(e, NativeControlWaitError):
+                    raise
+            finally:
+                await self._flush_tool_part_hitl_completions(tool_part)
+
+            # Reset error tracker on successful non-pipeline execution
+            if tool_part.status in (ToolState.COMPLETED, ToolState.CANCELLED):
+                self.doom_loop_detector.reset_errors()
+            self._state = ProcessorState.OBSERVING
+
+    # Max bytes for tool output stored in LLM context
+    async def _handle_clarification_tool(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """Handle clarification tool — delegates to hitl_tool_handler."""
+        self._state = ProcessorState.WAITING_CLARIFICATION
+        coordinator = self._get_hitl_coordinator()
+        async for event in handle_clarification_tool(
+            coordinator=coordinator,
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            tool_part=tool_part,
+        ):
+            yield event
+        self._state = ProcessorState.OBSERVING
+
+    async def _handle_decision_tool(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """Handle decision tool — delegates to hitl_tool_handler."""
+        self._state = ProcessorState.WAITING_DECISION
+        coordinator = self._get_hitl_coordinator()
+        async for event in handle_decision_tool(
+            coordinator=coordinator,
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            tool_part=tool_part,
+        ):
+            yield event
+        self._state = ProcessorState.OBSERVING
+
+    async def _handle_native_permission_tool(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        from src.infrastructure.agent.native_computer_use.permission import handle_native_permission
+        from src.infrastructure.agent.tools.context import ToolContext
+
+        context = self._langfuse_context or {}
+        ctx = ToolContext(
+            session_id=session_id,
+            message_id=call_id,
+            call_id=call_id,
+            agent_name=context.get("agent_name", "main"),
+            conversation_id=context.get("conversation_id") or session_id,
+            user_id=context.get("user_id", ""),
+            tenant_id=context.get("tenant_id", ""),
+            project_id=context.get("project_id", ""),
+            abort_signal=self._abort_event or asyncio.Event(),
+            runtime_context={
+                **self.config.runtime_context,
+                "run_id": self._run_id,
+                "round": max(1, self._step_count),
+            },
+        )
+        self._state = ProcessorState.WAITING_PERMISSION
+        async for event in handle_native_permission(
+            self._get_hitl_coordinator(),
+            ctx,
+            arguments.get("decision"),
+            tool_part,
+        ):
+            yield event
+        self._state = ProcessorState.OBSERVING
+
+    async def _handle_env_var_tool(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """Handle env var request tool — delegates to hitl_tool_handler."""
+        self._state = ProcessorState.WAITING_ENV_VAR
+        coordinator = self._get_hitl_coordinator()
+        async for event in handle_env_var_tool(
+            coordinator=coordinator,
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            tool_part=tool_part,
+            langfuse_context=self._langfuse_context,
+        ):
+            yield event
+        self._state = ProcessorState.OBSERVING
+
+    async def _handle_a2ui_action_tool(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """Handle A2UI interactive tool -- delegates to hitl_tool_handler."""
+        self._state = ProcessorState.WAITING_A2UI_ACTION
+        coordinator = self._get_hitl_coordinator()
+        async for event in handle_a2ui_action_tool(
+            coordinator=coordinator,
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            tool_part=tool_part,
+        ):
+            yield event
+        self._state = ProcessorState.OBSERVING
+
+    def abort(self) -> None:
+        """Abort current processing."""
+        if self._abort_event:
+            self._abort_event.set()
+
+    def get_session_summary(self) -> dict[str, Any]:
+        """Get summary of session costs and tokens."""
+        return self.cost_tracker.get_session_summary()
+
+
+def create_processor(
+    model: str,
+    tools: list[ToolDefinition],
+    api_key: str | None = None,
+    base_url: str | None = None,
+    **kwargs: Any,
+) -> SessionProcessor:
+    """
+    Factory function to create session processor.
+
+    Args:
+        model: Model name
+        tools: List of tool definitions
+        api_key: Optional API key
+        base_url: Optional base URL
+        **kwargs: Additional configuration options
+
+    Returns:
+        Configured SessionProcessor instance
+    """
+    config = ProcessorConfig(
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        **kwargs,
+    )
+    return SessionProcessor(config, tools)

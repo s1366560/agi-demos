@@ -35,7 +35,7 @@ export function createProjectAgentRouteModuleLoader({
   }
   return async () => {
     const [{ ProjectAgentPage }, { useProjectAgentController }] = await Promise.all([
-      import('./ProjectAgentPage'),
+      import('@business/agent/ui/desktop/project-agent/ProjectAgentPage'),
       import('./useProjectAgentController'),
     ]);
     function ProjectAgentRouteSurface({ context }: DesktopRouteSurfaceProps) {
@@ -83,7 +83,7 @@ function BoundRoute({
   context: ProjectAgentRouteContext;
   createBinding: (context: ProjectAgentRouteContext) => ProjectAgentRouteBinding;
   bindingScopeMismatchReason: string;
-  Page: typeof import('./ProjectAgentPage').ProjectAgentPage;
+  Page: typeof import('@business/agent/ui/desktop/project-agent/ProjectAgentPage').ProjectAgentPage;
   useController: typeof import('./useProjectAgentController').useProjectAgentController;
 }>) {
   const binding = useMemo(

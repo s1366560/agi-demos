@@ -33,7 +33,7 @@ export function createTenantOverviewRouteModuleLoader({
   }
   return async () => {
     const [{ TenantOverviewPage }, { useTenantOverviewController }] = await Promise.all([
-      import('./TenantOverviewPage'),
+      import('@business/workspace/ui/desktop/tenant/TenantOverviewPage'),
       import('./useTenantOverviewController'),
     ]);
 
@@ -84,7 +84,7 @@ function BoundTenantOverviewRoute({
 }: Readonly<{
   context: TenantOverviewRouteContext;
   createBinding: (context: TenantOverviewRouteContext) => TenantOverviewRouteBinding;
-  Page: typeof import('./TenantOverviewPage').TenantOverviewPage;
+  Page: typeof import('@business/workspace/ui/desktop/tenant/TenantOverviewPage').TenantOverviewPage;
   useController: typeof import('./useTenantOverviewController').useTenantOverviewController;
 }>) {
   const binding = useMemo(() => createBinding(context), [context.tenantId, createBinding]);

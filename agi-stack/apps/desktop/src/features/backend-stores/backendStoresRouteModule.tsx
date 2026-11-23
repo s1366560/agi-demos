@@ -27,7 +27,7 @@ export function createBackendStoresRouteModuleLoader({
     routeId: BACKEND_STORES_ROUTE_ID,
     localPolicy: 'cloud_only',
     createBinding,
-    loadPage: async () => (await import('./BackendStoresPage')).BackendStoresPage,
+    loadPage: async () => (await import('@business/knowledge/ui/desktop/backend-stores/BackendStoresPage')).BackendStoresPage,
     fallbackScope: (context) =>
       Object.freeze({
         authority: 'cloud',

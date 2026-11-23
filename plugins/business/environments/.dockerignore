@@ -1,0 +1,7 @@
+*
+!worker.py
+!backend/
+backend/*
+!backend/cluster_health.py
+!contributions.json
+!sandbox-mcp-server/src/tools/text_patch.py

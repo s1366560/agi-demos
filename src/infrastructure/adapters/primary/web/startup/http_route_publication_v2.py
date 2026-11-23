@@ -14,19 +14,18 @@ from src.domain.model.plugins.generated_v2 import (
     ScopeV2,
 )
 from src.infrastructure.plugins.v2.builtin_http_routes import (
-    REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
+    KERNEL_ROUTE_GROUPS_V2,
     BuiltinRouteGraphV2,
     build_builtin_route_graph_v2,
+    generation_route_definitions_v2,
 )
 from src.infrastructure.plugins.v2.bundle_archive import VerifiedBundleArchiveV2
 from src.infrastructure.plugins.v2.http_routes import (
     RoutePublicationV2,
-    RouteTableBuilderV2,
     RouteTableRegistryV2,
 )
 from src.infrastructure.plugins.v2.lifecycle_tasks import OwnedLifecycleTaskV2
 from src.infrastructure.plugins.v2.reconciler import PreparedGenerationPublicationV2
-from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import (
     PlatformPluginPublicationV2,
@@ -251,20 +250,16 @@ class HttpRoutePublicationCoordinatorV2:
         async def stage_routes(
             generation: RuntimeGenerationV2,
         ) -> PreparedGenerationPublicationV2:
-            builder = generation.resolve(
-                ROUTE_TABLE_BUILDER_SERVICE_V2,
-                ScopeV2(kind=ScopeKindV2.ROOT),
+            contributed_routes = generation_route_definitions_v2(
+                generation, ScopeV2(kind=ScopeKindV2.ROOT)
             )
-            if not isinstance(builder, RouteTableBuilderV2):
-                raise TypeError("plugin runtime v2 staged an invalid route table builder")
-            contributed_routes = builder.seal()
             graph = build_builtin_route_graph_v2(
                 workspace_core_settings=self._workspace_core_settings,
-                route_definitions=contributed_routes,
-                required_v2_row_ids=REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
+                route_definitions=contributed_routes or (),
+                required_v2_row_ids=KERNEL_ROUTE_GROUPS_V2,
                 dependency_overrides=self._dependency_overrides,
             )
-            route_publication = self._registry.stage(generation.descriptor, graph.table)
+            route_publication = self._registry.stage_root(generation, graph.table)
 
             def commit() -> None:
                 self._registry.activate(route_publication)

@@ -1,4 +1,12 @@
 {
+  "projectPackages": {
+    "title": "项目插件包",
+    "project": "项目",
+    "select": "选择已授权的项目",
+    "noAccess": "你没有该项目的访问权限。",
+    "member": "你可以运行此项目已安装的插件包。",
+    "viewer": "你可以查看此项目已安装的插件包。"
+  },
   "plugins": {
     "bootstrapFailed": "功能加载失败",
     "bootstrapFailedDescription": "当前功能配置未能应用，可重试或检查配置后恢复。",
@@ -4674,7 +4682,12 @@
         "absent": "未登记",
         "loadFailed": "无法加载签名包",
         "actionFailed": "签名包操作失败",
-        "packageInvalid": "包文件不是有效的 JSON"
+        "kind": { "business": "业务插件", "adapter": "适配器" },
+        "requiresService": "通过 {{alias}} 调用 {{service}}（契约版本 {{version}}）。",
+        "providesService": "向同一项目提供 {{service}}（契约版本 {{version}}）。",
+        "approval": "即将授权 {{plugin}} {{version}} 使用 {{permissions}}。包摘要 {{digest}}",
+        "versions": "已安装 {{installed}}，运行中 {{running}}",
+        "packageInvalid": "无法验证此签名包"
       },
       "messages": {
         "loadProjectsFailed": "加载项目失败",

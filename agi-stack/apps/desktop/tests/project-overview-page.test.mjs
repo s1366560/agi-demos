@@ -7,10 +7,10 @@ import test from 'node:test';
 
 const require = createRequire(import.meta.url);
 const compiledProjectDirectory =
-  '/tmp/agistack-desktop-test-dist/src/features/project';
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project';
 const projectDirectory = dirname(
   fileURLToPath(
-    new URL('../src/features/project/ProjectOverviewPage.tsx', import.meta.url),
+    new URL('../../../../plugins/business/workspace/ui/desktop/project/ProjectOverviewPage.tsx', import.meta.url),
   ),
 );
 
@@ -22,7 +22,7 @@ const {
 
 mkdirSync(compiledProjectDirectory, { recursive: true });
 copyFileSync(
-  new URL('../src/features/project/ProjectOverviewPage.css', import.meta.url),
+  new URL('../../../../plugins/business/workspace/ui/desktop/project/ProjectOverviewPage.css', import.meta.url),
   `${compiledProjectDirectory}/ProjectOverviewPage.css`,
 );
 require.extensions['.css'] = () => {};
@@ -33,7 +33,7 @@ const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   ProjectOverviewPage,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/project/ProjectOverviewPage.js'
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/project/ProjectOverviewPage.js'
 );
 
 const pageSource = readFileSync(`${projectDirectory}/ProjectOverviewPage.tsx`, 'utf8');

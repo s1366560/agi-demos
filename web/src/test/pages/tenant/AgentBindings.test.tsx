@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentBindings } from '../../../pages/tenant/AgentBindings';
+import { AgentBindings } from '@business/agent/ui/web/tenant/AgentBindings';
 import { bindingsService } from '../../../services/agent/bindingsService';
 import { definitionsService } from '../../../services/agent/definitionsService';
 import { useAgentBindingStore } from '../../../stores/agentBindings';

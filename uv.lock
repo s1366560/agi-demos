@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1809,6 +1809,29 @@ dev = [
     { name = "pytest-timeout" },
     { name = "watchdog" },
 ]
+package-kernel = [
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "bcrypt" },
+    { name = "cryptography" },
+    { name = "docker" },
+    { name = "email-validator" },
+    { name = "fastapi" },
+    { name = "greenlet" },
+    { name = "httpx" },
+    { name = "jsonschema" },
+    { name = "pgvector" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-multipart" },
+    { name = "pyyaml" },
+    { name = "redis" },
+    { name = "referencing" },
+    { name = "rfc8785" },
+    { name = "sqlalchemy" },
+    { name = "uvicorn" },
+    { name = "wasmtime" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1887,6 +1910,29 @@ dev = [
     { name = "basedpyright", specifier = ">=1.38.1" },
     { name = "pytest-timeout", specifier = ">=2.3.1" },
     { name = "watchdog", specifier = ">=6.0.0" },
+]
+package-kernel = [
+    { name = "alembic", specifier = ">=1.12.0" },
+    { name = "asyncpg", specifier = ">=0.29.0" },
+    { name = "bcrypt", specifier = ">=4.0" },
+    { name = "cryptography", specifier = ">=42.0.0" },
+    { name = "docker", specifier = ">=7.1.0" },
+    { name = "email-validator", specifier = ">=2.3.0" },
+    { name = "fastapi", specifier = ">=0.104.0" },
+    { name = "greenlet", specifier = ">=3.3.0" },
+    { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "jsonschema", specifier = ">=4.22" },
+    { name = "pgvector", specifier = ">=0.3.0" },
+    { name = "pydantic", specifier = ">=2.5.0" },
+    { name = "pydantic-settings", specifier = ">=2.1.0" },
+    { name = "python-multipart", specifier = ">=0.0.6" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
+    { name = "redis", specifier = ">=5.0.0" },
+    { name = "referencing", specifier = ">=0.35" },
+    { name = "rfc8785", specifier = ">=0.1.4" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
+    { name = "uvicorn", specifier = ">=0.24.0" },
+    { name = "wasmtime", specifier = ">=47.0.1" },
 ]
 
 [[package]]

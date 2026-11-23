@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Route, Routes } from 'react-router-dom';
 
-import { CreateInstance } from '../../../pages/tenant/CreateInstance';
+import { CreateInstance } from '@business/environments/ui/web/tenant/CreateInstance';
 import { act, fireEvent, render, screen, waitFor } from '../../utils';
 
 import { App } from 'antd';

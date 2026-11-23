@@ -300,3 +300,51 @@ test('cloud plugin scope drift fails before mutations and server denial remains 
     403,
   );
 });
+
+test('signed cloud page and command are scoped to one release', async () => {
+  const base = '/api/v1/platform-plugins/v2/optional-business/memstack-billing';
+  const digest = 'sha256:' + 'a'.repeat(64);
+  const params = new URLSearchParams({
+    ...scope,
+    target: 'desktop-renderer',
+    expected_digest: digest,
+  });
+  const h = harness();
+  for (const request of [
+    { path: base + '/ui?' + params, method: 'GET' },
+    {
+      path: base + '/commands',
+      method: 'POST',
+      body: { ...scope, expected_digest: digest, command_id: 'quote-pro' },
+    },
+  ]) {
+    const result = await executeVaultBoundCloudRequest(request, h.dependencies);
+    assert.equal(result.status, 200);
+  }
+  for (const request of [
+    { path: base + '/ui?' + params + '&extra=1', method: 'GET' },
+    { path: base + '/ui?' + params + '&project_id=other', method: 'GET' },
+    {
+      path: base + '/commands',
+      method: 'POST',
+      body: { ...scope, command_id: 'quote-pro' },
+    },
+    {
+      path: base + '/commands',
+      method: 'POST',
+      body: {
+        ...scope,
+        command_id: 'quote-pro',
+        expected_digest: digest,
+        arbitrary: true,
+      },
+    },
+  ]) {
+    const denied = harness();
+    await assert.rejects(
+      executeVaultBoundCloudRequest(request, denied.dependencies),
+      /endpoint is not allowed/,
+    );
+    assert.deepEqual(denied.requests, []);
+  }
+});

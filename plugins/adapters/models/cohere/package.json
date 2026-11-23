@@ -1,0 +1,10 @@
+{
+  "plugin_id": "memstack-cohere-rerank",
+  "kind": "adapter",
+  "version": "1.0.0",
+  "target": "python",
+  "tool_name": "adapt_rerank",
+  "wasm": "adapter.wasm",
+  "contribution": "contributions.json",
+  "provenance": "repo://memstack/plugins/adapters/models/cohere"
+}

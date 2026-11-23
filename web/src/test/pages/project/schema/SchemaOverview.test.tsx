@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import SchemaOverview from '../../../../pages/project/schema/SchemaOverview';
+import SchemaOverview from '@business/knowledge/ui/web/project/schema/SchemaOverview';
 import { useSchemaData } from '../../../../hooks/useSwr';
 
 vi.mock('../../../../hooks/useSwr', () => ({

@@ -1,3 +1,4 @@
+import { invokeDevicePlugin } from './devicePluginTransfer';
 import { executeDeviceMcpManagementV2 } from './deviceMcpManagementPolicy';
 import { RendererDeliveryAdmissionV2 } from './rendererDeliveryAdmissionV2';
 import { createComputerUseCloudDeviceBridge } from './computerUseCloudDeviceBridge';
@@ -54,6 +55,7 @@ import {
   isCancelledCloudRequest,
   settleCloudRequest,
   authorizeVaultBoundSandboxDesktopGrant,
+  authorizeDesktopLocalRun,
 } from './cloudRequestPolicy';
 import {
   DesktopCloudSocketBroker,
@@ -135,8 +137,6 @@ const SIDECAR_COMMANDS = new Set([
   'legacy_local_login_purge',
   'local_runtime_status',
   'local_runtime_configure',
-  'local_run_execute',
-  'local_run_stop',
   'workspace_core_status',
   'browser_bridge_install',
   'browser_bridge_uninstall',
@@ -797,6 +797,13 @@ async function executeDesktopCommand(
         (request) => supervisor.invoke(command, request),
       );
     }
+    case 'device_plugin_manage_v2': {
+      void authorizedCloudRequestOwner(event);
+      const supervisor = sidecarSupervisor;
+      if (!supervisor) throw new Error('desktop sidecar is unavailable');
+      return invokeDevicePlugin(join(app.getPath('userData'), 'runtime'), args,
+        request => supervisor.invoke(command, request));
+    }
     case 'audio_sessions_manage_v2': {
       void authorizedCloudRequestOwner(event);
       if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
@@ -833,6 +840,20 @@ async function executeDesktopCommand(
       if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
       await sandboxDesktopGrants.close(ownerId, args);
       return undefined;
+    }
+    case 'local_run_execute':
+    case 'local_run_stop': {
+      authorizedCloudRequestOwner(event);
+      const supervisor = sidecarSupervisor;
+      if (!supervisor) throw new Error('desktop sidecar is unavailable');
+      const admitted = await authorizeDesktopLocalRun(command, args, {
+        loadTrustedSession: () => supervisor.invoke('trusted_session_load'),
+        fetch: (url, init) => net.fetch(url, init),
+        refreshTrustedSession: (reason) => cloudSessionRefresher(reason),
+        signal: AbortSignal.timeout(30_000),
+      });
+      authorizedCloudRequestOwner(event);
+      return supervisor.invoke(command, admitted);
     }
     case 'cloud_request': {
       const ownerId = authorizedCloudRequestOwner(event);

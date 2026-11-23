@@ -6,11 +6,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { CommunitiesList } from '../../../pages/project/communities';
+import { CommunitiesList } from '@business/knowledge/ui/web/project/communities/index';
 import { graphService } from '../../../services/graphService';
 import { render, screen, fireEvent, waitFor } from '../../utils';
 
-import type { Community } from '../../../pages/project/communities/types';
+import type { Community } from '@business/knowledge/ui/web/project/communities/types';
 // Mock EventSource
 global.EventSource = vi.fn(() => ({
   addEventListener: vi.fn(),

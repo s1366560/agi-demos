@@ -8,9 +8,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.factory import ProcessorFactory, _default_loop_resolver
 from src.domain.model.agent.subagent import AgentModel, SubAgent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.agent.processor.factory import ProcessorFactory, _default_loop_resolver
 from src.infrastructure.plugins.v2.agent_loop import (
     AGENT_LOOP_RESOLVER_SERVICE_V2,
     AgentLoopRunContextV2,

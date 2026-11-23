@@ -6,17 +6,17 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.application.services.approved_run_tool_permission_v2 import prepare_approved_run_guard_v2
 from src.domain.events.agent_events import AgentObserveEvent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.routers.agent import plans
 from src.infrastructure.adapters.secondary.persistence.models import AgentRunAuthorityModel
 from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    SessionProcessor,
-    ToolDefinition,
-)
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry
 from src.infrastructure.agent.tools.pipeline import ToolPipeline
 from src.infrastructure.agent.tools.truncation import OutputTruncator

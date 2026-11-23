@@ -2,10 +2,10 @@ from typing import Any
 
 import pytest
 
-from src.infrastructure.adapters.secondary.background_tasks import TaskManager
-from src.infrastructure.adapters.secondary.workflow.asyncio_workflow_engine import (
+from plugins.business.automation.workflow.engine import (
     AsyncioWorkflowEngine,
 )
+from plugins.business.automation.workflow.tasks import TaskManager
 
 
 def test_constructor_requires_explicit_task_manager() -> None:
@@ -45,3 +45,25 @@ async def test_start_workflow_tracks_owner_project_and_uses_workflow_id_key() ->
     assert task.project_id == "project-1"
     assert task.metadata["task_id"] == "task-log-1"
     assert task.result == {"task_id": "task-log-1"}
+
+
+async def test_unimplemented_workflow_rejects_dispatch_without_creating_a_successful_job():
+    from fastapi import HTTPException
+
+    from plugins.business.automation.workflow.contract import (
+        UnsupportedWorkflowError,
+        WorkflowStatus,
+    )
+    from src.infrastructure.adapters.primary.web.routers.maintenance import (
+        _require_maintenance_workflow,
+    )
+
+    manager = TaskManager()
+    engine = AsyncioWorkflowEngine(manager=manager)
+    with pytest.raises(HTTPException) as unavailable:
+        _require_maintenance_workflow(engine, "deduplicate_entities")
+    assert unavailable.value.status_code == 501
+    with pytest.raises(UnsupportedWorkflowError):
+        await engine.start_workflow("deduplicate_entities", "unsupported", {}, "default")
+    assert not manager.tasks
+    assert (await engine.get_workflow_status("unsupported")).status == WorkflowStatus.FAILED

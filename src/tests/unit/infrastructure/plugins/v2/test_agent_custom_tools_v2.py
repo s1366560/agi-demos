@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.agent.core.react_agent_stream_mixin import (
+from plugins.business.agent.engine.react.react_agent_stream_mixin import (
     _resolve_current_tools_from_runtime_v2,
 )
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
 from src.infrastructure.agent.tools.custom_tool_status import custom_tools_status

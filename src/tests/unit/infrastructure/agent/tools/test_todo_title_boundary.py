@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock
 import pytest
 from jsonschema import Draft202012Validator
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.domain.model.agent.task import AgentTask
 from src.infrastructure.agent.core.message import ToolPart, ToolState
 from src.infrastructure.agent.core.tool_converter import convert_tools
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.tools.todo_tools import make_todo_tools, todowrite_tool
 
 pytestmark = pytest.mark.unit

@@ -546,9 +546,9 @@ test('remaining Tenant clients fail closed on session and tenant mismatch', asyn
 
 test('every published mutation action is reachable from its native page', () => {
   const cases = [
-    ['TenantPatternsPage.tsx', ['controller.deletePattern']],
+    ['../../../../plugins/business/agent/ui/desktop/tenant-admin/TenantPatternsPage.tsx', ['controller.deletePattern']],
     [
-      'TenantAcpPage.tsx',
+      '../../../../plugins/business/agent/ui/desktop/tenant-admin/TenantAcpPage.tsx',
       [
         'controller.createAgent',
         'controller.updateAgent',
@@ -557,11 +557,11 @@ test('every published mutation action is reachable from its native page', () => 
       ],
     ],
     [
-      'TenantWebhooksPage.tsx',
+      '../../../../plugins/business/automation/ui/desktop/tenant-admin/TenantWebhooksPage.tsx',
       ['controller.createWebhook', 'controller.updateWebhook', 'controller.deleteWebhook'],
     ],
     [
-      'TenantGenesPage.tsx',
+      '../../../../plugins/business/environments/ui/desktop/tenant-admin/TenantGenesPage.tsx',
       [
         'controller.createGene',
         'controller.updateGene',
@@ -574,9 +574,9 @@ test('every published mutation action is reachable from its native page', () => 
         'controller.deleteReview',
       ],
     ],
-    ['TenantDecisionRecordsPage.tsx', ['controller.resolveApproval']],
+    ['../src/features/tenant-admin/TenantDecisionRecordsPage.tsx', ['controller.resolveApproval']],
     [
-      'TenantOrganizationSettingsPage.tsx',
+      '../src/features/tenant-admin/TenantOrganizationSettingsPage.tsx',
       [
         'controller.saveRegistry',
         'controller.deleteRegistry',
@@ -588,11 +588,11 @@ test('every published mutation action is reachable from its native page', () => 
         'controller.deleteGenePolicy',
       ],
     ],
-    ['TenantSettingsPage.tsx', ['controller.updateTenant', 'controller.deleteTenant']],
+    ['../src/features/tenant-admin/TenantSettingsPage.tsx', ['controller.updateTenant', 'controller.deleteTenant']],
   ];
   for (const [filename, needles] of cases) {
     const source = readFileSync(
-      new URL(`../src/features/tenant-admin/${filename}`, import.meta.url),
+      new URL(filename, import.meta.url),
       'utf8'
     );
     for (const needle of needles) assert.match(source, new RegExp(escapeRegExp(needle)));

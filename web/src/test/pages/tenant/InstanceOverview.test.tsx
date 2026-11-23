@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { InstanceOverview } from '@/pages/tenant/InstanceOverview';
+import { InstanceOverview } from '@business/environments/ui/web/tenant/InstanceOverview';
 import { instanceService } from '@/services/instanceService';
 import { useInstanceStore } from '@/stores/instance';
 

@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Theme } from '@radix-ui/themes';
 
 import { DesktopApiError } from '../api/client';
-import { AutomationsPage } from '../features/automations/AutomationsPage';
+import { AutomationsPage } from '@business/automation/ui/desktop/automations/AutomationsPage';
 import { I18nProvider } from '../i18n';
 import type {
   AutomationCapabilities,

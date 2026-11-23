@@ -9,6 +9,12 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.automation.backend.workflow_pattern_services import (
+    WORKFLOW_PATTERN_APPLICATION_MODULE_V2,
+    WORKFLOW_PATTERN_APPLICATION_SERVICE_V2,
+    WORKFLOW_PATTERN_PROVIDER_MODULE_V2,
+    WorkflowPatternApplicationResolverV2,
+)
 from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
@@ -17,12 +23,6 @@ from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_prof
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.workflow_pattern_services import (
-    WORKFLOW_PATTERN_APPLICATION_MODULE_V2,
-    WORKFLOW_PATTERN_APPLICATION_SERVICE_V2,
-    WORKFLOW_PATTERN_PROVIDER_MODULE_V2,
-    WorkflowPatternApplicationResolverV2,
-)
 
 pytestmark = pytest.mark.unit
 

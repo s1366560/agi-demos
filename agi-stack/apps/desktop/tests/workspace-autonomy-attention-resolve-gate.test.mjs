@@ -10,7 +10,7 @@ const appSource = readFileSync(
   "utf8",
 );
 const overviewSource = readFileSync(
-  new URL("../src/features/workspace/WorkspaceOverview.tsx", import.meta.url),
+  new URL("../../../../plugins/business/workspace/ui/desktop/workspace/WorkspaceOverview.tsx", import.meta.url),
   "utf8",
 );
 

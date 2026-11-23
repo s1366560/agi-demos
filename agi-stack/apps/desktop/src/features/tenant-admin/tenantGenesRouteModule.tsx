@@ -27,7 +27,7 @@ export function createTenantGenesRouteModuleLoader({
     routeId: TENANT_GENES_ROUTE_ID,
     localPolicy: 'native_equivalent',
     createBinding,
-    loadPage: async () => (await import('./TenantGenesPage')).TenantGenesPage,
+    loadPage: async () => (await import('@business/environments/ui/desktop/tenant-admin/TenantGenesPage')).TenantGenesPage,
     fallbackScope: (context) =>
       Object.freeze({ authority: 'cloud', tenantId: context.tenantId ?? 'unavailable' }),
     buildTerminalModel: (scope, reasonCode) =>

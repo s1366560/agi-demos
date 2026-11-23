@@ -24,7 +24,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.sandbox_event_service import SandboxEventPublisher
+from plugins.business.environments.backend.sandbox.sandbox_event_service import (
+    SandboxEventPublisher,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.websocket._limits import (
     InboundMessageTooLarge,
@@ -69,7 +71,7 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
 def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
     """Project the event publisher from this request's pinned generation."""
     _ = request
-    from src.infrastructure.plugins.v2.sandbox_projection import (
+    from plugins.business.environments.backend.sandbox.sandbox_projection import (
         current_sandbox_application_services_v2,
     )
 

@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import delete
 
+from plugins.business.knowledge.backend import graph_workflows as workflow
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
-from src.infrastructure.adapters.primary.web.startup import workflow
 from src.infrastructure.adapters.secondary.persistence.models import Memory, TaskLog
 from src.infrastructure.adapters.secondary.persistence.sql_knowledge_graph_sync_repository import (
     SqlKnowledgeGraphSyncRepository,

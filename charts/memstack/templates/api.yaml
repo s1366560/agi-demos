@@ -1,4 +1,9 @@
 {{- if .Values.api.enabled }}
+{{- $standard := and .Values.api.packageKernel .Values.api.initialProject.enabled }}
+{{- $writeDbConfig := true }}
+{{- range .Values.api.volumeMounts }}
+{{- if eq .mountPath "/app/.env" }}{{ $writeDbConfig = false }}{{ end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,13 +38,48 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.api.waitForDependencies }}
+      {{- if or .Values.api.waitForDependencies $writeDbConfig }}
       initContainers:
+        {{- if $writeDbConfig }}
+        - name: database-config
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          {{- with .Values.api.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command: ["python", "-c"]
+          args:
+            - |
+              import os, sys
+              from pathlib import Path
+              from sqlalchemy import URL
+
+              env = os.environ
+              url = URL.create("postgresql", username=env["POSTGRES_USER"],
+                               password=env["POSTGRES_PASSWORD"], host=env["POSTGRES_HOST"],
+                               port=int(env["POSTGRES_PORT"]), database=env["POSTGRES_DB"])
+              value = url.render_as_string(hide_password=False)
+              if any(c in value for c in "\r\n"):
+                  raise ValueError("invalid database endpoint")
+              os.umask(0o077)
+              Path(sys.argv[1]).write_text("DATABASE_URL=" + value + "\n", encoding="utf-8")
+            - /run/memstack-database/database.env
+          env:
+            {{- include "memstack.apiPostgresEnvironment" . | nindent 12 }}
+          volumeMounts:
+            - name: database-config
+              mountPath: /run/memstack-database
+        {{- end }}
+        {{- if .Values.api.waitForDependencies }}
         {{- include "memstack.waitForPort" (dict "name" "postgres" "host" (include "memstack.postgresHost" .) "port" .Values.postgres.service.port "Values" .Values) | nindent 8 }}
         {{- include "memstack.waitForPort" (dict "name" "redis" "host" (include "memstack.redisHost" .) "port" .Values.redis.service.port "Values" .Values) | nindent 8 }}
+        {{- if not .Values.api.packageKernel }}
         {{- include "memstack.waitForPort" (dict "name" "neo4j" "host" (include "memstack.neo4jHost" .) "port" .Values.neo4j.service.boltPort "Values" .Values) | nindent 8 }}
         {{- if .Values.minio.enabled }}
         {{- include "memstack.waitForPort" (dict "name" "minio" "host" (include "memstack.minioHost" .) "port" .Values.minio.service.apiPort "Values" .Values) | nindent 8 }}
+        {{- end }}
+        {{- end }}
         {{- end }}
       {{- end }}
       containers:
@@ -75,19 +115,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "memstack.secretName" . }}
                   key: llm-encryption-key
-            - name: POSTGRES_HOST
-              value: {{ include "memstack.postgresHost" . | quote }}
-            - name: POSTGRES_PORT
-              value: {{ .Values.postgres.service.port | quote }}
-            - name: POSTGRES_DB
-              value: {{ .Values.postgres.auth.database | quote }}
-            - name: POSTGRES_USER
-              value: {{ .Values.postgres.auth.username | quote }}
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "memstack.postgresPasswordSecretName" . }}
-                  key: {{ include "memstack.postgresPasswordSecretKey" . }}
+            {{- include "memstack.apiPostgresEnvironment" . | nindent 12 }}
             - name: DATABASE_URL
               value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)
             - name: REDIS_HOST
@@ -103,6 +131,7 @@ spec:
             {{- end }}
             - name: REDIS_URL
               value: {{ include "memstack.redisUrl" . | quote }}
+            {{- if not .Values.api.packageKernel }}
             - name: NEO4J_URI
               value: {{ include "memstack.neo4jUri" . | quote }}
             - name: NEO4J_USER
@@ -136,10 +165,56 @@ spec:
                   key: {{ $key }}
                   optional: true
             {{- end }}
+            {{- end }}
+            {{- if $standard }}
+            - name: PACKAGE_KERNEL_DATABASE_MODE
+              value: standalone
+            - name: PACKAGE_KERNEL_BOOTSTRAP_DIRECTORY
+              value: /run/memstack-initial
+            - name: PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES
+              value: '["/run/memstack-initial/publisher.pem"]'
+            - name: PLUGIN_WORKER_ALLOWED_REGISTRIES
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.initialProject.secret }}
+                  key: worker-registries.json
+            - name: DOCKER_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.initialProject.secret }}
+                  key: docker-host
+            {{- end }}
             {{- range $key, $value := .Values.api.extraEnv }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+          {{- if or $standard $writeDbConfig .Values.api.volumeMounts }}
+          volumeMounts:
+            {{- if $standard }}
+            - name: initial-archives
+              mountPath: /run/memstack-initial/archives
+              readOnly: true
+            - name: initial-policy
+              mountPath: /run/memstack-initial/selection.json
+              subPath: selection.json
+              readOnly: true
+            {{- range $file := list "owner.json" "publisher.pem" }}
+            - name: initial-identity
+              mountPath: /run/memstack-initial/{{ $file }}
+              subPath: {{ $file }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if $writeDbConfig }}
+            - name: database-config
+              mountPath: /app/.env
+              subPath: database.env
+              readOnly: true
+            {{- end }}
+            {{- with .Values.api.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8000
@@ -152,7 +227,7 @@ spec:
             periodSeconds: 5
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/ready
               port: http
             periodSeconds: 10
             timeoutSeconds: 3
@@ -167,6 +242,29 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      {{- if or $standard $writeDbConfig .Values.api.volumes }}
+      volumes:
+        {{- if $standard }}
+        - name: initial-archives
+          persistentVolumeClaim:
+            claimName: {{ .Values.api.initialProject.archiveClaim }}
+            readOnly: true
+        - name: initial-policy
+          configMap:
+            name: {{ include "memstack.fullname" . }}-initial-packages
+        - name: initial-identity
+          secret:
+            secretName: {{ .Values.api.initialProject.secret }}
+        {{- end }}
+        {{- if $writeDbConfig }}
+        - name: database-config
+          emptyDir:
+            medium: Memory
+        {{- end }}
+        {{- with .Values.api.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
       {{- with .Values.api.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -46,7 +46,6 @@ mod audit_api;
 mod auth;
 mod background_worker_control_v2;
 mod background_workers_v2;
-mod billing_api;
 mod channel_api;
 mod computer_use_device_v2;
 mod conversation_authority;
@@ -113,15 +112,15 @@ use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
 use agistack_adapters_postgres::{
     connect, ensure_aux_schema, PgAgentConversationRepository, PgAgentExecutionEventRepository,
     PgApiKeyStore, PgArtifactRepository, PgAttachmentRepository, PgAuditLogRepository,
-    PgBillingRepository, PgChannelRepository, PgCheckpointStore, PgCronRepository,
-    PgDataStatsRepository, PgDeployRepository, PgEventLogRepository, PgGeneRepository,
-    PgGraphStoreRepository, PgHitlRequestRepository, PgInstanceRepository, PgInvitationRepository,
-    PgLlmProviderRepository, PgMemoryRepository, PgNotificationRepository, PgPool,
-    PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
-    PgRetrievalStoreRepository, PgSchemaRepository, PgShareRepository, PgSkillEvolutionRepository,
-    PgSkillRepository, PgSubagentTemplateRepository, PgSupportRepository, PgTenantRepository,
-    PgTenantSkillConfigRepository, PgTenantWebhookRepository, PgTrustRepository, PgUserStore,
-    PgVectorIndex, PgWorkspaceContextRepository,
+    PgChannelRepository, PgCheckpointStore, PgCronRepository, PgDataStatsRepository,
+    PgDeployRepository, PgEventLogRepository, PgGeneRepository, PgGraphStoreRepository,
+    PgHitlRequestRepository, PgInstanceRepository, PgInvitationRepository, PgLlmProviderRepository,
+    PgMemoryRepository, PgNotificationRepository, PgPool, PgProjectReadRepository,
+    PgProjectSandboxRepository, PgProjectStore, PgRetrievalStoreRepository, PgSchemaRepository,
+    PgShareRepository, PgSkillEvolutionRepository, PgSkillRepository, PgSubagentTemplateRepository,
+    PgSupportRepository, PgTenantRepository, PgTenantSkillConfigRepository,
+    PgTenantWebhookRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
+    PgWorkspaceContextRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
@@ -151,7 +150,6 @@ use crate::artifacts_api::{DevArtifactService, PgArtifactService, SharedArtifact
 use crate::attachments_api::{DevAttachmentService, PgAttachmentService, SharedAttachments};
 use crate::audit_api::{DevAuditLogService, PgAuditLogService, SharedAuditLogs};
 use crate::auth::{DevApiKeyRevocations, DevAuthenticator, PgAuthenticator, SharedAuthenticator};
-use crate::billing_api::{DevBillingService, PgBillingService, SharedBilling};
 use crate::channel_api::{
     ChannelOutboxDeliveryWorker, ChannelOutboxDeliveryWorkerConfig, DevChannelService,
     FeishuWebhookDeliverer, PgChannelService, SharedChannelOutboxDeliveryWorker, SharedChannels,
@@ -280,9 +278,6 @@ pub(crate) struct AppState {
     /// P7 current-user notification API-v1 surface over Python-owned
     /// `notifications`.
     pub(crate) notifications: SharedNotifications,
-    /// P7 billing invoice read surface over Python-owned `invoices`. Billing
-    /// summaries and plan mutations remain Python-owned.
-    pub(crate) billing: SharedBilling,
     /// P7 support ticket API-v1 and legacy surfaces over Python-owned
     /// `support_tickets`.
     pub(crate) support: SharedSupport,
@@ -1022,10 +1017,6 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         ))),
         None => Arc::new(DevNotificationService::default()),
     };
-    let billing: SharedBilling = match workspace_plan_pool.clone() {
-        Some(pool) => Arc::new(PgBillingService::new(PgBillingRepository::new(pool))),
-        None => Arc::new(DevBillingService::default()),
-    };
     let support: SharedSupport = match workspace_plan_pool.clone() {
         Some(pool) => Arc::new(PgSupportService::new(PgSupportRepository::new(pool))),
         None => Arc::new(DevSupportService::default()),
@@ -1233,7 +1224,6 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         event_logs,
         audit_logs,
         notifications,
-        billing,
         support,
         artifacts,
         attachments,

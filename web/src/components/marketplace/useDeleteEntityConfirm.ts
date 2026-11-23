@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Modal, message } from 'antd';
 
-import { showGeneActionError } from '@/pages/tenant/utils/geneFormUtils';
+import { showGeneActionError } from '@business/environments/ui/web/tenant/utils/geneFormUtils';
 
 import { marketplaceEntityCopy } from './entityI18n';
 

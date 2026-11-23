@@ -6,6 +6,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    ProcessorResult,
+    SessionProcessor,
+)
 from src.domain.events.agent_events import (
     AgentActEvent,
     AgentCompleteEvent,
@@ -14,11 +19,6 @@ from src.domain.events.agent_events import (
     AgentStatusEvent,
 )
 from src.infrastructure.agent.core.llm_stream import StreamEventType
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    ProcessorResult,
-    SessionProcessor,
-)
 from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_CONTRACT,
     WORKSPACE_SESSION_ROLE_KEY,
@@ -627,7 +627,7 @@ class TestEvaluateNoToolResultDelegation:
             yield finish
 
         monkeypatch.setattr(
-            "src.infrastructure.agent.processor.processor.LLMStream.generate",
+            "plugins.business.agent.engine.processor.processor.LLMStream.generate",
             fake_generate,
         )
 
@@ -658,7 +658,7 @@ class TestEvaluateNoToolResultDelegation:
             yield
 
         monkeypatch.setattr(
-            "src.infrastructure.agent.processor.processor.LLMStream.generate",
+            "plugins.business.agent.engine.processor.processor.LLMStream.generate",
             fake_generate,
         )
 
@@ -686,7 +686,7 @@ class TestEvaluateNoToolResultDelegation:
             yield error_event
 
         monkeypatch.setattr(
-            "src.infrastructure.agent.processor.processor.LLMStream.generate",
+            "plugins.business.agent.engine.processor.processor.LLMStream.generate",
             fake_generate,
         )
 
@@ -728,7 +728,7 @@ class TestEvaluateNoToolResultDelegation:
             yield finish
 
         monkeypatch.setattr(
-            "src.infrastructure.agent.processor.processor.LLMStream.generate",
+            "plugins.business.agent.engine.processor.processor.LLMStream.generate",
             fake_generate,
         )
 

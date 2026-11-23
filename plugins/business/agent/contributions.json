@@ -1,0 +1,270 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "subagents": [
+    {
+      "id": "skill-format-reviewer",
+      "name": "Skill format reviewer",
+      "description": "Review the structure of a supplied SKILL.md document.",
+      "instructions": "Use the package validation tool on the SKILL.md text supplied by the requester. Report its structural errors and warnings with the affected fields. If the document is missing, request its contents.",
+      "tools": [
+        "validate_skill"
+      ],
+      "permissions": [
+        "subagents.register"
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "validate_skill",
+      "abi": "mcp.stdio",
+      "description": "Check one SKILL.md document and return structural validation errors and warnings.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "strict": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "is_valid": {
+            "type": "boolean"
+          },
+          "skill_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "error_count": {
+            "type": "integer"
+          },
+          "warning_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "is_valid",
+          "skill_name",
+          "errors",
+          "warnings",
+          "error_count",
+          "warning_count"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    },
+    {
+      "name": "execution_statistics",
+      "abi": "mcp.stdio",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "items": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "tool_counts": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "status_counts": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "time_buckets": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "average_duration_ms": {
+            "type": "number"
+          },
+          "completed_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "failed_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "tool_counts",
+          "status_counts",
+          "time_buckets",
+          "average_duration_ms",
+          "completed_count",
+          "failed_count"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    },
+    {
+      "name": "react_loop",
+      "abi": "mcp.stdio",
+      "description": "Select the next ReAct operation from the turn continuation.",
+      "permissions": [
+        "agent.loop.drive",
+        "tools.execute"
+      ],
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "start",
+              "stepped",
+              "judged",
+              "observed",
+              "restart"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "continue",
+              "stop",
+              "complete",
+              "compact"
+            ]
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "phase",
+          "outcome",
+          "steps"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "step",
+              "judge",
+              "observe",
+              "finish",
+              "stop"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  ],
+  "commands": [
+    {
+      "id": "validate-skill",
+      "tool": "validate_skill",
+      "payload": {
+        "content": "---\nname: example\ndescription: Validate the document structure.\n---\n# Example"
+      },
+      "permissions": [
+        "tools.execute"
+      ],
+      "accepts_input": true
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:58d59bbfdaa53b34d570201ae5ca87952af68976d2721189349de6dc44f1db6a",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ]
+}

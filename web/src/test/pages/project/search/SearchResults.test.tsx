@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { SearchResults } from '../../../../pages/project/search/components/SearchResults';
+import { SearchResults } from '@business/knowledge/ui/web/project/search/components/SearchResults';
 import { render, screen } from '../../../utils';
 
 const baseProps = {

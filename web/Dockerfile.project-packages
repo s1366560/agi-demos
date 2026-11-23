@@ -1,0 +1,5 @@
+FROM nginx:alpine
+COPY dist-project-packages/ /usr/share/nginx/html/
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN test -s /usr/share/nginx/html/project-packages.html && \
+    ln -sf project-packages.html /usr/share/nginx/html/index.html

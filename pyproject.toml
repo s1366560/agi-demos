@@ -120,13 +120,13 @@ target-version = ['py312']
 include = '\.pyi?$'
 
 [tool.coverage.run]
-source = ["src"]
-omit = ["src/tests/*"]
+source = ["src", "plugins/business", "plugins/adapters"]
+omit = ["src/tests/*", "*/tests/*", "*/target/*"]
 
 [tool.coverage.report]
 fail_under = 72.8
 precision = 2
-omit = ["src/tests/*"]
+omit = ["src/tests/*", "*/tests/*", "*/target/*"]
 
 [tool.ruff]
 line-length = 100
@@ -212,6 +212,13 @@ ignore = [
     "S105", "S106", "S107", "S108",  # hardcoded passwords/paths in test fixtures
     "PT",     # pytest style rules relaxed for existing tests
 ]
+"plugins/**/tests/**" = [
+    "ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN401",
+    "N802", "N803", "E741", "B017", "B023", "RUF043",
+    "S101",   # assert is expected in tests
+    "S105", "S106", "S107", "S108",  # hardcoded passwords/paths in test fixtures
+    "PT",     # pytest style rules relaxed for existing tests
+]
 
 # Native helper fixtures use the same test-only policy, including unittest assertions.
 # Keep production helpers and all other lint rules under the normal project checks.
@@ -239,15 +246,15 @@ ignore = [
 
 # High cyclomatic complexity files (progressively refactor)
 "src/application/services/agent_service.py" = ["C901", "S110", "PIE790", "ANN401"]
-"src/infrastructure/agent/core/react_agent.py" = ["C901", "ANN401"]
-"src/infrastructure/agent/core/react_agent_composition_mixin.py" = ["ANN401"]
-"src/infrastructure/agent/core/react_agent_hook_mixin.py" = ["ANN401"]
-"src/infrastructure/agent/core/react_agent_lifecycle_mixin.py" = ["ANN401", "PLR0913"]
-"src/infrastructure/agent/core/react_agent_prompt_mixin.py" = ["ANN401"]
-"src/infrastructure/agent/core/react_agent_routing_mixin.py" = ["ANN401"]
-"src/infrastructure/agent/core/react_agent_stream_mixin.py" = ["C901", "ANN401"]
-"src/infrastructure/agent/core/react_agent_subagent_runner_mixin.py" = ["ANN401"]
-"src/infrastructure/agent/processor/processor.py" = ["C901", "ANN401"]
+"plugins/business/agent/engine/react/react_agent.py" = ["C901", "ANN401"]
+"plugins/business/agent/engine/react/react_agent_composition_mixin.py" = ["ANN401"]
+"plugins/business/agent/engine/react/react_agent_hook_mixin.py" = ["ANN401"]
+"plugins/business/agent/engine/react/react_agent_lifecycle_mixin.py" = ["ANN401", "PLR0913"]
+"plugins/business/agent/engine/react/react_agent_prompt_mixin.py" = ["ANN401"]
+"plugins/business/agent/engine/react/react_agent_routing_mixin.py" = ["ANN401"]
+"plugins/business/agent/engine/react/react_agent_stream_mixin.py" = ["C901", "ANN401"]
+"plugins/business/agent/engine/react/react_agent_subagent_runner_mixin.py" = ["ANN401"]
+"plugins/business/agent/engine/processor/processor.py" = ["C901", "ANN401"]
 
 # Infrastructure modules that use subprocess (agent tools, MCP)
 "src/infrastructure/agent/tools/*" = ["S", "ANN401"]
@@ -265,12 +272,12 @@ ignore = [
 "src/application/services/channels/channel_message_router.py" = ["S110", "ANN401"]
 "src/application/services/channels/media_import_service.py" = ["TC002", "PIE790"]
 "src/application/services/mcp_runtime_service.py" = ["TC001", "TC002", "TC003", "S110"]
-"src/application/services/project_sandbox_lifecycle_service.py" = ["S108", "ANN401"]
-"src/application/services/sandbox_health_service.py" = ["S110"]
-"src/application/services/sandbox_mcp_server_manager.py" = ["TC001", "ANN401"]
-"src/application/services/sandbox_orchestrator.py" = ["TC001"]
+"plugins/business/environments/backend/sandbox/project_sandbox_lifecycle_service.py" = ["S108", "ANN401"]
+"plugins/business/environments/backend/sandbox/sandbox_health_service.py" = ["S110"]
+"plugins/business/environments/backend/sandbox/sandbox_mcp_server_manager.py" = ["TC001", "ANN401"]
+"plugins/business/environments/backend/sandbox/sandbox_orchestrator.py" = ["TC001"]
 "src/application/services/skill_reverse_sync.py" = ["TC001", "S110", "ANN401"]
-"src/application/services/unified_sandbox_service.py" = ["S108"]
+"plugins/business/environments/backend/sandbox/unified_sandbox_service.py" = ["S108"]
 "src/application/use_cases/agent/execute_step.py" = ["TC001", "ANN401"]
 "src/application/use_cases/memory/delete_memory.py" = ["S608"]
 "src/infrastructure/adapters/primary/web/routers/voice_websocket.py" = ["C901", "PLR0911", "PLR0912", "PLR0915", "SIM105", "ANN401"]
@@ -400,12 +407,12 @@ ignore = [
 "src/infrastructure/queue/request_queue.py" = ["ANN401"]
 
 # Infrastructure - skill and telemetry
-"src/infrastructure/skill/validator.py" = ["ANN401"]
+"plugins/business/agent/skill_validation/validator.py" = ["ANN401"]
 "src/infrastructure/telemetry/tracing.py" = ["ANN401"]
 
 # Application services (additional)
 "src/application/services/agent/tool_discovery.py" = ["ANN401"]
-"src/application/services/sandbox_status_sync_service.py" = ["ANN401"]
+"plugins/business/environments/backend/sandbox/sandbox_status_sync_service.py" = ["ANN401"]
 
 # Configuration containers (additional)
 "src/configuration/containers/infra_container.py" = ["ANN401"]
@@ -437,9 +444,9 @@ ignore = [
 "src/infrastructure/adapters/primary/web/websocket/message_context.py" = ["ANN401"]
 
 # Infrastructure - secondary adapters (additional)
-"src/infrastructure/adapters/secondary/background_tasks.py" = ["ANN401"]
-"src/infrastructure/adapters/secondary/cache/cached_workflow_pattern_repository.py" = ["ANN401"]
-"src/infrastructure/adapters/secondary/channels/feishu/adapter.py" = ["ANN401"]
+"plugins/business/automation/workflow/tasks.py" = ["ANN401"]
+"plugins/business/automation/backend/cached_workflow_pattern_repository.py" = ["ANN401"]
+"plugins/adapters/channels/feishu/backend/adapter.py" = ["ANN401"]
 "src/infrastructure/adapters/secondary/common/base_repository.py" = ["ANN401"]
 "src/infrastructure/adapters/secondary/common/cached_repository_mixin.py" = ["ANN401"]
 "src/infrastructure/adapters/secondary/common/query_builder.py" = ["ANN401"]
@@ -458,7 +465,7 @@ ignore = [
 # Infrastructure - agent core and actor (additional)
 "src/infrastructure/agent/actor/actor_manager.py" = ["ANN401"]
 "src/infrastructure/agent/core/llm_stream.py" = ["ANN401"]
-"src/infrastructure/agent/core/project_react_agent.py" = ["ANN401"]
+"plugins/business/agent/engine/react/project_react_agent.py" = ["ANN401"]
 "src/infrastructure/agent/core/tool_converter.py" = ["ANN401"]
 "src/infrastructure/agent/core/tool_selector.py" = ["ANN401"]
 "src/infrastructure/agent/core/subagent_runner.py" = ["ANN401"]
@@ -485,7 +492,7 @@ ignore = [
 "src/infrastructure/agent/output/table_formatter.py" = ["ANN401"]
 
 # Infrastructure - agent plugins and processor (additional)
-"src/infrastructure/agent/processor/hitl_tool_handler.py" = ["ANN401"]
+"plugins/business/agent/engine/processor/hitl_tool_handler.py" = ["ANN401"]
 
 # Infrastructure - agent routing
 "src/infrastructure/agent/routing/execution_router.py" = ["ANN401"]
@@ -605,6 +612,31 @@ module = [
 ]
 ignore_missing_imports = true
 [dependency-groups]
+# The signed-package API and its shared PostgreSQL identity schema.
+package-kernel = [
+    "alembic>=1.12.0",
+    "asyncpg>=0.29.0",
+    "bcrypt>=4.0",
+    "cryptography>=42.0.0",
+    "docker>=7.1.0",
+    "email-validator>=2.3.0",
+    "fastapi>=0.104.0",
+    "greenlet>=3.3.0",
+    "httpx>=0.27,<1",
+    "jsonschema>=4.22",
+    "pgvector>=0.3.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-multipart>=0.0.6",
+    "pyyaml>=6.0.1",
+    "redis>=5.0.0",
+    "referencing>=0.35",
+    "rfc8785>=0.1.4",
+    "sqlalchemy>=2.0.0",
+    "uvicorn>=0.24.0",
+    "wasmtime>=47.0.1",
+]
+
 dev = [
     "basedpyright>=1.38.1",
     "pytest-timeout>=2.3.1",

@@ -291,7 +291,12 @@ pub(crate) async fn run() -> Result<(), String> {
                                     .and_then(|args| args.get("input"))
                                     .cloned()
                                     .expect("checked cloud call input");
-                                match runtime.computer_use_cloud_v2(&broker, input).await {
+                                let result = if request.command == "device_plugin_manage_v2" {
+                                    runtime.device_plugin_manage_v2(&broker, input).await
+                                } else {
+                                    runtime.computer_use_cloud_v2(&broker, input).await
+                                };
+                                match result {
                                     Ok(result) => ControlResponse {
                                         message_type: "response",
                                         id,
@@ -351,6 +356,9 @@ pub(crate) async fn run() -> Result<(), String> {
 }
 
 fn parallel_cloud_call(request: &ControlRequest) -> bool {
+    if request.command == "device_plugin_manage_v2" {
+        return request.args.as_ref().and_then(|args| args.get("input")).is_some();
+    }
     request.command == "computer_use_cloud_v2"
         && request
             .args
@@ -473,6 +481,10 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                     .await
             }
             None => Err("cua_cloud_request_required".into()),
+        },
+        "device_plugin_manage_v2" => match request.args.as_ref().and_then(|args| args.get("input")) {
+            Some(input) => state.runtime.device_plugin_manage_v2(&state.trusted_sessions, input.clone()).await,
+            None => Err("device_plugin_request_invalid".into()),
         },
         "device_mcp_manage_v2" => match request.args.as_ref().and_then(|args| args.get("input")) {
             Some(input) => {

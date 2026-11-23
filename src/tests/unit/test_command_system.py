@@ -727,7 +727,7 @@ class TestSkillAsCommandInterception:
 
     async def test_session_processor_rewrite_string_content(self) -> None:
         """SessionProcessor._rewrite_last_user_message rewrites string content."""
-        from src.infrastructure.agent.processor.processor import SessionProcessor
+        from plugins.business.agent.engine.processor.processor import SessionProcessor
 
         messages = [
             {"role": "user", "content": "old message"},
@@ -737,7 +737,7 @@ class TestSkillAsCommandInterception:
 
     async def test_session_processor_rewrite_multipart_content(self) -> None:
         """SessionProcessor._rewrite_last_user_message rewrites first text part in multi-part content."""
-        from src.infrastructure.agent.processor.processor import SessionProcessor
+        from plugins.business.agent.engine.processor.processor import SessionProcessor
 
         messages = [
             {

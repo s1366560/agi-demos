@@ -33,6 +33,10 @@ export function createDesktopMarketplaceClientV3(
       run,
     );
   return Object.freeze({
+    businessPage: (...args) =>
+      catalog((authority) => authority.marketplaceV3.businessPage(...args)),
+    businessCommand: (...args) =>
+      management((authority) => authority.marketplaceV3.businessCommand(...args)),
     catalog: (...args) => catalog((authority) => authority.marketplaceV3.catalog(...args)),
     sources: (...args) => catalog((authority) => authority.marketplaceV3.sources(...args)),
     installations: (...args) =>

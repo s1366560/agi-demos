@@ -537,6 +537,75 @@ class TestMaintenanceRouter:
         store.create_vector_index = AsyncMock(return_value=None)
         return store
 
+    @pytest.mark.parametrize(
+        ("route", "options"),
+        [
+            ("deduplicate", {}),
+            ("optimize", {"operations": ["incremental_refresh", "deduplicate"]}),
+        ],
+    )
+    async def test_unavailable_write_returns_501_before_any_task_is_inserted(
+        self, client, mock_graphiti_client, test_project_db, monkeypatch, route, options
+    ):
+        from src.infrastructure.adapters.primary.web.dependencies import get_graph_store
+        from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
+            workflow_engine_authority_dependency_v2,
+        )
+        from src.infrastructure.adapters.secondary.persistence import database
+
+        client.app.dependency_overrides[get_graph_store] = self._store
+        monkeypatch.delitem(
+            client.app.dependency_overrides, workflow_engine_authority_dependency_v2
+        )
+
+        async def graph_factory():
+            return mock_graphiti_client
+
+        await initialize_plugin_runtime_v2(client.app, graph_runtime_factory=graph_factory)
+        try:
+
+            def unexpected_write():
+                pytest.fail("unsupported deduplication opened a task-writing session")
+
+            monkeypatch.setattr(database, "async_session_factory", unexpected_write)
+            response = client.post(
+                f"/api/v1/maintenance/{route}",
+                json={"project_id": test_project_db.id, "dry_run": False, **options},
+            )
+        finally:
+            await shutdown_plugin_runtime_v2(client.app)
+        assert response.status_code == 501
+
+    async def test_default_optimization_preview_leaves_refresh_unscheduled(
+        self, client, test_project_db, mock_workflow_engine, monkeypatch
+    ):
+        from src.infrastructure.adapters.primary.web.dependencies import get_graph_store
+        from src.infrastructure.adapters.secondary.persistence import database
+
+        client.app.dependency_overrides[get_graph_store] = self._store
+
+        async def graph_factory():
+            return self._store()
+
+        await initialize_plugin_runtime_v2(client.app, graph_runtime_factory=graph_factory)
+        try:
+            monkeypatch.setattr(
+                database, "async_session_factory", lambda: pytest.fail("preview wrote")
+            )
+            response = client.post(
+                "/api/v1/maintenance/optimize", json={"project_id": test_project_db.id}
+            )
+        finally:
+            await shutdown_plugin_runtime_v2(client.app)
+        assert response.status_code == 200, response.text
+        refresh, dedup = response.json()["operations_run"]
+        assert (
+            refresh["operation"] == "incremental_refresh"
+            and refresh["result"]["status"] == "skipped"
+        )
+        assert dedup["operation"] == "deduplicate" and dedup["result"]["dry_run"] is True
+        mock_workflow_engine.start_workflow.assert_not_awaited()
+
     @pytest.mark.asyncio
     async def test_deduplicate_entities_dry_run(self, client, mock_graphiti_client):
         """Test entity deduplication in dry run mode delegates to the store."""
@@ -934,6 +1003,7 @@ class TestTasksRouter:
     @pytest.mark.asyncio
     async def test_get_task_stats(self, client, test_db, mock_graphiti_client):
         """Test getting task statistics."""
+
         async def graph_runtime_factory() -> object:
             return mock_graphiti_client
 

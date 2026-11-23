@@ -15,8 +15,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from plugins.business.agent.engine.processor.factory import ProcessorFactory
     from src.domain.llm_providers.llm_types import LLMClient
-    from src.infrastructure.agent.processor.factory import ProcessorFactory
 
 from src.domain.events.agent_events import (
     AgentParallelCompletedEvent,

@@ -40,6 +40,7 @@ from .runtime_context import (
     _EffectStack,
     _EventBusV2,
     _ProviderStore,
+    operation_scope_chain_v2,
 )
 from .runtime_contracts import (
     ModuleCatalogEntryV2,
@@ -161,6 +162,7 @@ class RuntimeGenerationV2:
         self._providers = providers
         self._events = events
         self._event_contracts = MappingProxyType(dict(event_contracts))
+        self._retirement_callbacks: list[Callable[[], None]] = []
         self._lease_count = 0
         self._retired = False
         self._disposed = False
@@ -194,11 +196,23 @@ class RuntimeGenerationV2:
             raise RuntimeV2Error("disposed_generation", "generation is disposed")
         return self._providers.resolve(service, version, scope, isolation)
 
+    def on_dispose(self, callback: Callable[[], None]) -> None:
+        """Release a companion publication when the last lease drains."""
+        if self._retired or self._disposal.started:
+            raise RuntimeV2Error("generation_retired", "cannot attach to a retiring generation")
+        self._retirement_callbacks.append(callback)
+
     async def dispose(self) -> None:
         await self._disposal.wait()
 
     async def _dispose(self) -> None:
         errors: list[BaseException] = []
+        for callback in reversed(self._retirement_callbacks):
+            try:
+                callback()
+            except BaseException as error:
+                errors.append(error)
+        self._retirement_callbacks.clear()
         for fiber in reversed(self.fibers):
             try:
                 await fiber.dispose()
@@ -237,7 +251,7 @@ class OperationContextV2:
             privileged=True,
         )
         contexts = [root]
-        for child_scope in _operation_scope_chain(scope)[1:]:
+        for child_scope in operation_scope_chain_v2(scope)[1:]:
             contexts.append(contexts[-1].extend(scope=child_scope))
         self.contexts = tuple(contexts)
         self.context = self.contexts[-1]
@@ -739,35 +753,6 @@ class GenerationManagerV2:
                 self._owned_generations.discard(generation)
         if dispose:
             await self._retire(generation).wait()
-
-
-def _operation_scope_chain(scope: ScopeV2) -> tuple[ScopeV2, ...]:
-    root = ScopeV2(kind=ScopeKindV2.ROOT)
-    if scope.kind is ScopeKindV2.ROOT:
-        return (root,)
-    if scope.tenant_id is None:
-        raise RuntimeV2Error("invalid_operation_scope", "tenant scope identifier is required")
-    tenant = ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=scope.tenant_id)
-    if scope.kind is ScopeKindV2.TENANT:
-        return root, tenant
-    if scope.project_id is None:
-        raise RuntimeV2Error("invalid_operation_scope", "project scope identifier is required")
-    project = ScopeV2(
-        kind=ScopeKindV2.PROJECT,
-        tenant_id=scope.tenant_id,
-        project_id=scope.project_id,
-    )
-    if scope.kind is ScopeKindV2.PROJECT:
-        return root, tenant, project
-    if scope.session_id is None:
-        raise RuntimeV2Error("invalid_operation_scope", "session scope identifier is required")
-    session = ScopeV2(
-        kind=ScopeKindV2.SESSION,
-        tenant_id=scope.tenant_id,
-        project_id=scope.project_id,
-        session_id=scope.session_id,
-    )
-    return root, tenant, project, session
 
 
 class SupportsApplyV2(Protocol):

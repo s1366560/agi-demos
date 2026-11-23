@@ -10,14 +10,14 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.workspace_core import get_workspace_core_settings
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
-from src.infrastructure.adapters.primary.web.billing_application_authority_v2 import (
+from plugins.business.billing.backend import http as billing_router
+from plugins.business.billing.backend.authority import (
     BillingApplicationAuthorityV2,
     billing_application_authority_dependency_v2,
 )
-from src.infrastructure.adapters.primary.web.routers import billing as billing_router
+from src.configuration.workspace_core import get_workspace_core_settings
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )

@@ -38,7 +38,7 @@ export function createTemplatesRouteModuleLoader({
         reasonCode,
         retryable: false,
       }),
-    loadContent: async () => (await import('./TemplatesRoutePage')).TemplatesRoutePage,
+    loadContent: async () => (await import('@business/environments/ui/desktop/settings-routes/TemplatesRoutePage')).TemplatesRoutePage,
   });
 }
 

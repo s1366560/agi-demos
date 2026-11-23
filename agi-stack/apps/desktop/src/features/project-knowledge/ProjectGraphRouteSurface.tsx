@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import type { DesktopRouteSurfaceProps } from '../navigation/desktopRouteModule';
 import type { ProjectGraphRouteBinding, ProjectGraphRouteContext } from './projectGraphRouteModule';
-import { ProjectGraphPage } from './ProjectGraphPage';
+import { ProjectGraphPage } from '@business/knowledge/ui/desktop/project-knowledge/ProjectGraphPage';
 import { useI18n } from '../../i18n';
 import './ProjectGraphPage.css';
 

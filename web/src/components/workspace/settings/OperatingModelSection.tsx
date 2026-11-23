@@ -8,13 +8,13 @@ import { Users } from 'lucide-react';
 import {
   COLLABORATION_MODE_OPTIONS,
   USE_CASE_OPTIONS,
-} from '@/pages/tenant/workspaceSettingsModel';
-import { Field, OptionLabel, SettingsSection } from '@/pages/tenant/WorkspaceSettingsPrimitives';
+} from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
+import { Field, OptionLabel, SettingsSection } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
 import type { WorkspaceCollaborationMode, WorkspaceUseCase } from '@/types/workspace';
 
 import type { UpdateDraft } from './types';
-import type { SettingsDraft } from '@/pages/tenant/workspaceSettingsModel';
+import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
 
 export interface OperatingModelSectionProps {
   draft: SettingsDraft;

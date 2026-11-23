@@ -7,11 +7,13 @@ import contextlib
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
+from functools import partial
 
 from src.domain.model.plugins.generated_v2 import (
     ControlPlaneEnvelopeV2,
     DataPlaneTargetV2,
     ProfileSnapshotV2,
+    ScopeKindV2,
     ScopeV2,
 )
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
@@ -48,7 +50,9 @@ _GLOBAL_ROUTE_SERVICES = frozenset(
 class _ScopeSlot:
     host: PlatformPluginRuntimeHostV2
     verified: bool = False
-    route_publisher: Callable[[RuntimeGenerationV2], Awaitable[PreparedGenerationPublicationV2]] | None = None
+    route_publisher: (
+        Callable[[RuntimeGenerationV2], Awaitable[PreparedGenerationPublicationV2]] | None
+    ) = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     retired: bool = False
 
@@ -59,7 +63,21 @@ class _ScopeSlot:
     async def stage(self, generation: RuntimeGenerationV2) -> PreparedGenerationPublicationV2:
         self.require_active()
         if self.route_publisher is not None:
-            return await self.route_publisher(generation)
+            staged = await self.route_publisher(generation)
+
+            def commit() -> None:
+                self.require_active()
+                staged.commit()
+
+            return PreparedGenerationPublicationV2(commit=commit, rollback=staged.rollback)
+        if any(
+            item.service == ROUTE_TABLE_BUILDER_SERVICE_V2
+            for fiber in generation.fibers
+            for item in fiber.contract.services.requires
+        ):
+            raise RuntimeV2Error(
+                "route_publisher_unavailable", "scoped HTTP requires a route publisher"
+            )
 
         async def rollback() -> None:
             return None
@@ -136,7 +154,9 @@ class ScopedRuntimeRegistryV2:
         target_catalog: Mapping[str, ModuleCatalogEntryV2] | None = None,
         artifact_resolver: PluginArtifactResolverV2 | None = None,
         definitions_factory: Callable[[ScopeV2], Sequence[PluginDefinitionV2]] | None = None,
-        route_publisher: Callable[[RuntimeGenerationV2], Awaitable[PreparedGenerationPublicationV2]]
+        route_publisher: Callable[
+            [ScopeV2, RuntimeGenerationV2], Awaitable[PreparedGenerationPublicationV2]
+        ]
         | None = None,
     ) -> None:
         if definitions and definitions_factory is not None:
@@ -189,7 +209,9 @@ class ScopedRuntimeRegistryV2:
                     )
                 ),
                 verified=verified,
-                route_publisher=self._route_publisher,
+                route_publisher=(
+                    partial(self._route_publisher, canonical) if self._route_publisher else None
+                ),
             )
             self._slots[key] = slot
         async with slot.lock:
@@ -309,7 +331,7 @@ def _validate_snapshot_scope(scope: ScopeV2, snapshot: ProfileSnapshotV2) -> Non
         contracts = module.contract.services
         services = {item.service for item in contracts.provides}
         services.update(item.service for item in contracts.requires)
-        if services & _GLOBAL_ROUTE_SERVICES:
+        if ancestor.kind == ScopeKindV2.ROOT and services & _GLOBAL_ROUTE_SERVICES:
             raise RuntimeV2Error(
                 "scope_global_route_forbidden", "scoped hosts cannot contribute global HTTP routes"
             )

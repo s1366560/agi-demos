@@ -5,7 +5,7 @@ import { NativeKnowledgeCloudConnectionPanel } from './NativeKnowledgeCloudConne
 import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 
 import type { DesktopRouteSurfaceProps } from '../navigation/desktopRouteModule';
-import { NativeMemoriesPage, NativeMemoriesUnavailable } from './NativeMemoriesPage';
+import { NativeMemoriesPage, NativeMemoriesUnavailable } from '@business/knowledge/ui/desktop/project-knowledge/NativeMemoriesPage';
 import {
   useNativeMemoriesRouteBinding,
   type NativeMemoriesRouteBinding,

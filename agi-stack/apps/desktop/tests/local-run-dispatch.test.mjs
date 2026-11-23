@@ -12,8 +12,6 @@ const absoluteRoot = '/Users/alice/src/agi-demos';
 
 test('cloud fields omit the absolute directory and a failed sidecar does not look synced', async () => {
   const input = {
-    apiBaseUrl: 'https://cloud.example',
-    apiKey: 'ms_sk_not-a-real-token',
     userId: 'user-1',
     tenantId: 'tenant-1',
     conversationId: 'conv-1',
@@ -44,6 +42,8 @@ test('cloud fields omit the absolute directory and a failed sidecar does not loo
   });
   assert.equal(invoked.command, 'local_run_execute');
   assert.equal(invoked.args.local_root, absoluteRoot);
+  assert.equal(Object.hasOwn(invoked.args, 'authorization'), false);
+  assert.equal(Object.hasOwn(invoked.args, 'api_base_url'), false);
   assert.equal(JSON.stringify({ ...invoked.args, local_root: undefined }).includes(absoluteRoot), false);
   assert.equal(pending.sync, 'pending');
   assert.equal(pending.detail.includes('not synced'), true);
@@ -52,4 +52,12 @@ test('cloud fields omit the absolute directory and a failed sidecar does not loo
   });
   assert.equal(failed.sync, 'failed');
   assert.equal(failed.detail.toLowerCase().includes('synced') && !failed.detail.toLowerCase().includes('not'), false);
+});
+
+test('a failed local turn stays failed when its record successfully reached the cloud', () => {
+  const { localRunFailureMessageKey } = require('/tmp/agistack-desktop-test-dist/src/features/chat/localRunDispatch.js');
+  assert.equal(localRunFailureMessageKey({ sync: 'synced', status: 'failed' }), 'executionPlacement.localTurnFailed');
+  assert.equal(localRunFailureMessageKey({ sync: 'failed', status: 'queued' }), 'executionPlacement.localUploadFailed');
+  assert.equal(localRunFailureMessageKey({ sync: 'conflict', status: 'queued' }), 'executionPlacement.localUploadConflict');
+  assert.equal(localRunFailureMessageKey({ sync: 'synced', status: 'completed' }), null);
 });

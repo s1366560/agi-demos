@@ -17,9 +17,23 @@ class MemoryRulesConfig(BaseModel):
     refresh_interval: int = Field(default=24, ge=1, le=168, description="Refresh interval in hours")
 
 
+class GraphProjectionPackage(BaseModel):
+    """Project administrator selection for the enrolled memory processing pipeline."""
+
+    model_config = ConfigDict(extra="forbid")
+    plugin_id: str = Field(min_length=1, max_length=128)
+    tool: str = Field(min_length=1, max_length=128)
+
+
 class GraphConfig(BaseModel):
     """Graph visualization configuration."""
 
+    sync_projection: GraphProjectionPackage | None = None
+    cohere_rerank_package: str | None = Field(
+        default=None,
+        pattern=r"^[a-z0-9][a-z0-9._-]{0,127}$",
+        description="Signed adapter for the tenant-assigned Cohere reranker in project searches",
+    )
     layout_algorithm: str = Field(default="force-directed", description="Layout algorithm")
     node_size: int = Field(default=20, ge=10, le=100, description="Default node size")
     edge_width: int = Field(default=2, ge=1, le=10, description="Default edge width")

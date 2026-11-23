@@ -1,4 +1,4 @@
-"""Signed score-ABI tools; generation registration never implies operation permission.
+"""Signed Wasm tools; generation registration never implies operation permission.
 
 C must call ``prepare_wasm_operation_tools_v2(operation, authority)`` inside the
 real session operation before ToolSet resolution. The authority checks exact
@@ -7,7 +7,7 @@ it is called again for every invocation, including after a lease was acquired.
 No authority or no preparation means no visible tool. Preparation uses the
 normal operation ToolDefinition leases, so operation disposal revokes retained
 callbacks; generation disposal removes the source and closes its bounded host.
-The result is Python/Cloud execution only, with UTF-8 JSON *byte* length ABI.
+The signed entrypoint selects the score ABI or the structured JSON invoke ABI.
 """
 
 from __future__ import annotations
@@ -20,16 +20,17 @@ from dataclasses import asdict, dataclass
 from types import MappingProxyType
 from typing import Protocol
 
+from plugins.business.agent.engine.processor import ToolDefinition
 from src.domain.model.plugins.generated_v2 import (
     BundleReferenceV2,
     DataPlaneTargetV2,
     PluginManifestV2,
     PluginModuleV2,
+    ProfileEntryV2,
     RuntimeKindV2,
     ScopeKindV2,
     TrustKindV2,
 )
-from src.infrastructure.agent.processor import ToolDefinition
 from src.infrastructure.plugins.wasm_host import (
     DEFAULT_FUEL_BUDGET,
     DEFAULT_MEMORY_LIMIT_BYTES,
@@ -73,7 +74,9 @@ class _PreparedWasmToolSetsV2:
     sources: Mapping[str, ToolSetV2]
 
 
-def _input_schema() -> dict[str, object]:
+def _input_schema(abi: str) -> dict[str, object]:
+    if abi == "invoke":
+        return {"type": "object", "additionalProperties": True}
     return {
         "type": "object",
         "properties": {"input": {"type": "string", "maxLength": 65536}},
@@ -114,6 +117,36 @@ class _WasmOperationToolV2:
             )
         if not self.source.active or self.operation.phase is not FiberPhaseV2.ACTIVE:
             raise RuntimeV2Error("wasm_tool_revoked", "WASM contribution is no longer active")
+        if self.source.host.abi == "invoke":
+            try:
+                payload = json.dumps(
+                    kwargs, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+                )
+                if len(payload.encode("utf-8")) > 65536:
+                    raise RuntimeV2Error("wasm_input_invalid", "WASM input exceeds the byte budget")
+            except (TypeError, ValueError, RecursionError) as exc:
+                raise RuntimeV2Error(
+                    "wasm_input_invalid", "WASM input requires a JSON object"
+                ) from exc
+            output = await asyncio.to_thread(
+                self.source.host.invoke_json,
+                self.attribution.tool_name,
+                payload,
+                tenant_id=self.operation.context.scope.tenant_id,
+            )
+            if not self.source.active or self.operation.phase is not FiberPhaseV2.ACTIVE:
+                raise RuntimeV2Error("wasm_tool_revoked", "WASM contribution is no longer active")
+            try:
+                result = json.loads(output)
+                if not isinstance(result, dict):
+                    raise ValueError("object required")
+                return json.dumps(
+                    result, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+                )
+            except (ValueError, RecursionError) as exc:
+                raise RuntimeV2Error(
+                    "wasm_output_invalid", "WASM output requires a JSON object"
+                ) from exc
         if (
             set(kwargs) != {"input"}
             or not isinstance(kwargs["input"], str)
@@ -182,9 +215,15 @@ class _WasmContributionV2:
         tool = _WasmOperationToolV2(source=self, operation=operation, authority=authority)
         definition = ToolDefinition(
             name=self.attribution.tool_name,
-            description=f"Pure signed WASM score tool from {self.attribution.plugin_id}@{self.attribution.plugin_version}. "
-            "Receives the UTF-8 input JSON byte length as i32 and returns an i32 score.",
-            parameters=_input_schema(),
+            description=(
+                f"Pure signed WASM tool from {self.attribution.plugin_id}@{self.attribution.plugin_version}. "
+                + (
+                    "Receives and returns a JSON object."
+                    if self.host.abi == "invoke"
+                    else "Receives the UTF-8 input JSON byte length as i32 and returns an i32 score."
+                )
+            ),
+            parameters=_input_schema(self.host.abi),
             execute=tool.execute,
             permission="read",
             _tool_instance=tool,
@@ -234,6 +273,7 @@ def create_verified_wasm_definition_v2(
     manifest: PluginManifestV2,
     module: PluginModuleV2,
     artifact_bytes: bytes,
+    entries: Mapping[str, ProfileEntryV2],
 ) -> PluginDefinitionV2:
     """Bind exact archive bytes; caller must have verified their signed archive.
 
@@ -267,17 +307,34 @@ def create_verified_wasm_definition_v2(
                 "invalid_tool_catalog", "WASM requires the normal tool contribution catalog"
             )
 
+        entry = entries.get(context.entry_id)
+        if entry is None or "tools.execute" not in entry.permissions:
+            raise RuntimeV2Error("wasm_tool_permission_denied", "WASM entry requires tools.execute")
+        quotas = entry.quotas
+
         async def acquire() -> Callable[[], Awaitable[None]]:
             compilation = asyncio.create_task(
                 asyncio.to_thread(
                     WasmToolHost,
                     manifest.plugin_id,
                     raw,
-                    fuel_budget=_bounded(manifest.quotas.max_wasm_fuel, DEFAULT_FUEL_BUDGET),
-                    memory_limit_bytes=_bounded(
-                        manifest.quotas.max_wasm_memory_bytes, DEFAULT_MEMORY_LIMIT_BYTES
+                    fuel_budget=_bounded(
+                        manifest.quotas.max_wasm_fuel, quotas.max_wasm_fuel, DEFAULT_FUEL_BUDGET
                     ),
-                    wall_time_ms=_bounded(manifest.quotas.max_wall_time_ms, DEFAULT_WALL_TIME_MS),
+                    memory_limit_bytes=_bounded(
+                        manifest.quotas.max_wasm_memory_bytes,
+                        quotas.max_wasm_memory_bytes,
+                        DEFAULT_MEMORY_LIMIT_BYTES,
+                    ),
+                    wall_time_ms=_bounded(
+                        manifest.quotas.max_wall_time_ms,
+                        quotas.max_wall_time_ms,
+                        DEFAULT_WALL_TIME_MS,
+                    ),
+                    expected_abi=module.entrypoint,
+                    max_output_bytes=_bounded(
+                        manifest.quotas.max_output_bytes, quotas.max_output_bytes, 65536
+                    ),
                 )
             )
             try:
@@ -316,19 +373,18 @@ def create_verified_wasm_definition_v2(
 
             return dispose
 
-        await context.effect(acquire, label=f"wasm-score:{module.module_ref}")
+        await context.effect(acquire, label=f"wasm-{module.entrypoint}:{module.module_ref}")
 
     return PluginDefinitionV2(
         module_ref=module.module_ref, contract_digest=module.contract_digest, apply=apply
     )
 
 
-def _bounded(value: int | None, ceiling: int) -> int:
-    if value is None:
-        return ceiling
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+def _bounded(manifest_limit: int | None, entry_limit: int | None, ceiling: int) -> int:
+    limits = [limit for limit in (manifest_limit, entry_limit) if limit is not None]
+    if any(isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0 for limit in limits):
         raise RuntimeV2Error("wasm_quota_invalid", "WASM quotas must be positive integers")
-    return min(value, ceiling)
+    return min([ceiling, *limits])
 
 
 def _validate_contract(manifest: PluginManifestV2, module: PluginModuleV2, raw: bytes) -> None:
@@ -338,7 +394,7 @@ def _validate_contract(manifest: PluginManifestV2, module: PluginModuleV2, raw: 
         and manifest.trust is TrustKindV2.SIGNED
         and module in manifest.modules
         and module.targets == (DataPlaneTargetV2.PYTHON,)
-        and module.entrypoint == "score"
+        and module.entrypoint in {"score", "invoke"}
         and not module.contract.services.provides
         and len(requirements) == 1
         and requirements[0].alias == "catalog"
@@ -352,7 +408,7 @@ def _validate_contract(manifest: PluginManifestV2, module: PluginModuleV2, raw: 
     if not valid:
         raise RuntimeV2Error(
             "wasm_contract_forbidden",
-            "external WASM supports only the fixed pure score contribution",
+            "external WASM requires a pure score or structured invoke contribution",
         )
     if len(raw) > 8 * 1024 * 1024 or not raw.startswith(b"\x00asm"):
         raise RuntimeV2Error("wasm_artifact_invalid", "WASM requires bounded binary artifact bytes")

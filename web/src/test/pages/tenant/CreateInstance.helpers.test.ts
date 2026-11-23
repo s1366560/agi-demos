@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseInstanceJsonObject } from '../../../pages/tenant/utils/createInstanceUtils';
+import { parseInstanceJsonObject } from '@business/environments/ui/web/tenant/utils/createInstanceUtils';
 
 describe('CreateInstance helpers', () => {
   it('parses JSON object text fields', () => {

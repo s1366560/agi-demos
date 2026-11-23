@@ -12,10 +12,10 @@ from typing import Any
 
 import pytest
 
+from plugins.adapters.channels.feishu.contribution import FEISHU_CHANNEL_ADAPTER_MODULE_V2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.channel_adapters import (
     CHANNEL_ADAPTER_CATALOG_MODULE_V2,
-    FEISHU_CHANNEL_ADAPTER_MODULE_V2,
     ChannelAdapterBuildContextV2,
     ChannelAdapterMetadataV2,
     ChannelAdapterResolverProtocolV2,

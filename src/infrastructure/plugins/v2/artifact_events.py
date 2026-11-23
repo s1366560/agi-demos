@@ -8,6 +8,9 @@ from typing import Any, Protocol, TypeGuard, runtime_checkable
 
 from pydantic import ValidationError
 
+from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+    SandboxApplicationResolverProtocolV2,
+)
 from src.domain.events.agent_events import (
     AgentArtifactCreatedEvent,
     AgentArtifactErrorEvent,
@@ -23,7 +26,6 @@ from .runtime import (
     RuntimeV2Error,
     generated_contract_digest_v2,
 )
-from .sandbox_runtime import SandboxApplicationResolverProtocolV2
 
 ARTIFACT_EVENT_PUBLISHER_MODULE_V2 = "builtin://memstack/events/artifact-publisher"
 ARTIFACT_EVENT_PUBLISHER_SERVICE_V2 = "service:events.artifact-publisher"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { projectQueueDepth } from '@/pages/tenant/taskDashboardQueueDepth';
+import { projectQueueDepth } from '@business/workspace/ui/web/tenant/taskDashboardQueueDepth';
 
 describe('projectQueueDepth', () => {
   it('uses the newest queue-depth point for the current value and preserves history', () => {

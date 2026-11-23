@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import EdgeMapList from '../../../../pages/project/schema/EdgeMapList';
+import EdgeMapList from '@business/knowledge/ui/web/project/schema/EdgeMapList';
 import { schemaAPI } from '../../../../services/api';
 import { fireEvent, render, screen } from '../../../utils';
 

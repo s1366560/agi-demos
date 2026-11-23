@@ -9,6 +9,17 @@ from typing import Never
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from plugins.business.automation.backend.automation_command_service import (
+    AutomationActor,
+    AutomationCommandIdempotencyConflictError,
+    AutomationCommandRevisionConflictError,
+    AutomationCommandTargetNotFoundError,
+    QueueManualRunCommand,
+)
+from plugins.business.automation.backend.cron_service import (
+    CronExecutionUnavailableError,
+    CronMutationUnavailableError,
+)
 from src.application.schemas.cron import (
     AutomationRunCommandV2,
     AutomationRunReceiptResponse,
@@ -25,17 +36,6 @@ from src.application.schemas.cron import (
     delivery_config_to_domain,
     payload_config_to_domain,
     schedule_config_to_domain,
-)
-from src.application.services.automation_command_service import (
-    AutomationActor,
-    AutomationCommandIdempotencyConflictError,
-    AutomationCommandRevisionConflictError,
-    AutomationCommandTargetNotFoundError,
-    QueueManualRunCommand,
-)
-from src.application.services.cron_service import (
-    CronExecutionUnavailableError,
-    CronMutationUnavailableError,
 )
 from src.infrastructure.adapters.primary.web.cron_application_authority_v2 import (
     CronApplicationAuthorityV2,

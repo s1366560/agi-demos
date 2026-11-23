@@ -1,0 +1,37 @@
+# An independently deployable signed-package API for existing cloud identities.
+config:
+  environment: production
+secrets:
+  existingSecret: memstack-secrets
+api:
+  packageKernel: true
+  initialProject:
+    enabled: false
+  image:
+    repository: memstack-kernel
+  extraEnv:
+    # For a fresh dedicated PostgreSQL database, select standalone. Its first
+    # project owner is explicitly provisioned by python -m src.cli.package_kernel_owner.
+    PACKAGE_KERNEL_DATABASE_MODE: shared
+    PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES: '["/run/memstack/publisher.pem"]'
+  volumes:
+    - name: kernel-config
+      secret:
+        secretName: memstack-kernel-config
+  volumeMounts:
+    - name: kernel-config
+      mountPath: /app/.env
+      subPath: database.env
+      readOnly: true
+    - name: kernel-config
+      mountPath: /run/memstack/publisher.pem
+      subPath: publisher.pem
+      readOnly: true
+web:
+  enabled: true
+  image:
+    repository: memstack-package-web
+neo4j:
+  enabled: false
+minio:
+  enabled: false

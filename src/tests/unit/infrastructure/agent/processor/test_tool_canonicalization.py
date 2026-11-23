@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from src.infrastructure.agent.processor.processor import SessionProcessor, ToolDefinition
+from plugins.business.agent.engine.processor.processor import SessionProcessor, ToolDefinition
 
 
 def _make_tool(
@@ -91,6 +91,6 @@ def test_tool_definition_aliases_default_is_empty_tuple() -> None:
 @pytest.mark.unit
 def test_processor_module_no_longer_exposes_legacy_alias_table() -> None:
     """P2-19: the module-level _TOOL_NAME_ALIASES table has been retired."""
-    import src.infrastructure.agent.processor.processor as processor_mod
+    import plugins.business.agent.engine.processor.processor as processor_mod
 
     assert not hasattr(processor_mod, "_TOOL_NAME_ALIASES")

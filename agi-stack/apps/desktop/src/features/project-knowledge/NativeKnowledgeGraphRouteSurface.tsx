@@ -4,9 +4,9 @@ import {
   useNativeMemoriesRouteBinding,
   type NativeMemoriesRouteBinding,
 } from './NativeMemoriesRouteContext';
-import { NativeMemoriesUnavailable } from './NativeMemoriesPage';
+import { NativeMemoriesUnavailable } from '@business/knowledge/ui/desktop/project-knowledge/NativeMemoriesPage';
 import { createNativeKnowledgeGraphController } from './nativeKnowledgeGraphController';
-import { NativeKnowledgeGraphPage } from './NativeKnowledgeGraphPage';
+import { NativeKnowledgeGraphPage } from '@business/knowledge/ui/desktop/project-knowledge/NativeKnowledgeGraphPage';
 
 export function NativeKnowledgeGraphRouteSurface({ context }: DesktopRouteSurfaceProps) {
   const binding = useNativeMemoriesRouteBinding();

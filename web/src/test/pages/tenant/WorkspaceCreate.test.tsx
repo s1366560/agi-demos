@@ -3,7 +3,7 @@ import { Route, Routes } from 'react-router-dom';
 
 import { act, fireEvent, render, screen, waitFor } from '../../utils';
 
-import { WorkspaceCreate } from '../../../pages/tenant/WorkspaceCreate';
+import { WorkspaceCreate } from '@business/workspace/ui/web/tenant/WorkspaceCreate';
 import { ApiError, ApiErrorType } from '../../../services/client/ApiError';
 
 let projectState: any;

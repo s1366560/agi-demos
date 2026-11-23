@@ -10,8 +10,8 @@ import { useWorkspaceActions, useWorkspaceMembers } from '@/stores/workspace';
 
 import { workspaceService } from '@/services/workspaceService';
 
-import { ROLE_OPTIONS } from '@/pages/tenant/workspaceSettingsModel';
-import { SettingsSection } from '@/pages/tenant/WorkspaceSettingsPrimitives';
+import { ROLE_OPTIONS } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
+import { SettingsSection } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
 import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 

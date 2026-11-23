@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from plugins.adapters.channels.feishu.contribution import FEISHU_CHANNEL_ADAPTER_MODULE_V2
 from src.domain.model.channels.message import ChannelConfig
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
@@ -18,7 +19,6 @@ from src.infrastructure.plugins.v2.channel_adapters import (
     CHANNEL_ADAPTER_CATALOG_MODULE_V2,
     CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
     CHANNEL_RUNTIME_RELOAD_EVENT_V2,
-    FEISHU_CHANNEL_ADAPTER_MODULE_V2,
     ChannelAdapterBuildContextV2,
     ChannelAdapterCatalogV2,
     ChannelAdapterContributionV2,

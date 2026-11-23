@@ -36,7 +36,7 @@ export function createInstanceTemplatesRouteModuleLoader({
   return async () => {
     const [{ InstanceTemplatesPage }, { useInstanceTemplatesController }] =
       await Promise.all([
-        import('./InstanceTemplatesPage'),
+        import('@business/environments/ui/desktop/instance-templates/InstanceTemplatesPage'),
         import('./useInstanceTemplatesController'),
       ]);
 
@@ -96,7 +96,7 @@ function BoundInstanceTemplatesRoute({
   createBinding(
     context: InstanceTemplatesRouteContext,
   ): InstanceTemplatesRouteBinding;
-  Page: typeof import('./InstanceTemplatesPage').InstanceTemplatesPage;
+  Page: typeof import('@business/environments/ui/desktop/instance-templates/InstanceTemplatesPage').InstanceTemplatesPage;
   useController: typeof import('./useInstanceTemplatesController').useInstanceTemplatesController;
 }>) {
   const binding = useMemo(

@@ -1,0 +1,7 @@
+**
+!triggers.py
+!worker.py
+!contributions.json
+!workflow/
+!workflow/*.py
+workflow/__pycache__/

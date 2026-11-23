@@ -5,7 +5,7 @@ import {
   type CloudMemoryRouteBinding,
 } from './CloudMemoryRouteContext';
 import { createCloudMemoriesController } from './cloudMemoriesController';
-import { CloudMemoriesPage, CloudMemoriesUnavailable } from './CloudMemoriesPage';
+import { CloudMemoriesPage, CloudMemoriesUnavailable } from '@business/knowledge/ui/desktop/project-knowledge/CloudMemoriesPage';
 import './CloudMemoriesPage.css';
 
 export function CloudMemoryRouteSurface({ context }: DesktopRouteSurfaceProps) {

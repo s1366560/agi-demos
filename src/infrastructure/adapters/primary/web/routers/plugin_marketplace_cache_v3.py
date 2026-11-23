@@ -7,22 +7,20 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.environments.backend.sandbox.sandbox_operation_services import (
+    SANDBOX_OPERATION_APPLICATION_SERVICE_V2,
+    SandboxOperationApplicationResolverProtocolV2,
+)
+from src.application.schemas.plugin_marketplace import MarketplaceMutationRequest
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
     mcp_application_authority_dependency_v2,
 )
-from src.infrastructure.adapters.primary.web.routers.plugin_marketplace_v3 import (
-    MarketplaceMutationRequest,
-    authorize_scope,
-)
+from src.infrastructure.adapters.primary.web.routers.plugin_marketplace_v3 import authorize_scope
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.marketplace_snapshot_cache import MarketplaceSnapshotCache
-from src.infrastructure.plugins.v2.sandbox_operation_services import (
-    SANDBOX_OPERATION_APPLICATION_SERVICE_V2,
-    SandboxOperationApplicationResolverProtocolV2,
-)
 
 router = APIRouter()
 

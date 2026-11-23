@@ -765,23 +765,6 @@ class Notification(Base):
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
 
 
-class Invoice(Base):
-    __tablename__ = "invoices"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String, ForeignKey("tenants.id"), nullable=False)
-    amount: Mapped[int] = mapped_column(Integer, nullable=False)
-    currency: Mapped[str] = mapped_column(String, nullable=False)
-    status: Mapped[str] = mapped_column(String, nullable=False)
-    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    invoice_url: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
-
-
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
 

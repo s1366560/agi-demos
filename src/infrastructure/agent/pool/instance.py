@@ -25,7 +25,7 @@ from .types import (
 )
 
 if TYPE_CHECKING:
-    from ..core.react_agent import ReActAgent
+    from plugins.business.agent.engine.react.react_agent import ReActAgent
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ class AgentInstance:
         子类可重写此方法以自定义创建逻辑。
         """
         # 延迟导入避免循环依赖
-        from ..core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         # 这里需要从配置加载工具等
         # 实际实现会从 AgentSessionPool 获取缓存的组件

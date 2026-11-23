@@ -1,0 +1,151 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "cluster_health",
+      "abi": "mcp.stdio",
+      "description": "Project node count and CPU and memory utilization from supplied cluster statistics.",
+      "permissions": [
+        "tools.execute"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "total_nodes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "node_count": {
+            "type": "number",
+            "minimum": 0
+          },
+          "nodes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "cpu_usage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "used_cpu": {
+            "type": "number"
+          },
+          "total_cpu": {
+            "type": "number"
+          },
+          "memory_usage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "used_memory_gb": {
+            "type": "number"
+          },
+          "total_memory_gb": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "node_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cpu_usage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "memory_usage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "node_count",
+          "cpu_usage",
+          "memory_usage"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "patch_text",
+      "description": "Apply a single-file unified diff to supplied text using the sandbox patch engine.",
+      "abi": "mcp.stdio",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 8192
+          },
+          "patch": {
+            "type": "string",
+            "maxLength": 8192
+          }
+        },
+        "required": [
+          "content",
+          "patch"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "cluster-health",
+      "tool": "cluster_health",
+      "payload": {
+        "total_nodes": 2,
+        "total_cpu": 4,
+        "used_cpu": 1
+      },
+      "permissions": [
+        "tools.execute"
+      ],
+      "accepts_input": true
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:003d111eada076fdf2a0a4ca69f0fe7a6b726e24b2169e1f24d9920e31b65d23",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ]
+}

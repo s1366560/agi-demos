@@ -10,10 +10,10 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   DesktopSearch,
-} = require('/tmp/agistack-desktop-test-dist/src/features/search/DesktopSearch.js');
+} = require('/tmp/agistack-desktop-test-dist/plugins/business/knowledge/ui/desktop/search/DesktopSearch.js');
 
 const source = readFileSync(
-  new URL('../src/features/search/DesktopSearch.tsx', import.meta.url),
+  new URL('../../../../plugins/business/knowledge/ui/desktop/search/DesktopSearch.tsx', import.meta.url),
   'utf8',
 );
 

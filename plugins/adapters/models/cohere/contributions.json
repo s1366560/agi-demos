@@ -1,0 +1,102 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "adapt_rerank",
+      "abi": "invoke",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "enum": [
+              "request",
+              "response"
+            ]
+          },
+          "candidate_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "results": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 200
+                },
+                "relevance_score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "index",
+                "relevance_score"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "operation",
+          "candidate_count"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "top_n": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "max_chunks_per_doc": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "matches": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 200
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "index",
+                "score"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    }
+  ]
+}

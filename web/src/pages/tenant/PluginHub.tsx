@@ -27,6 +27,7 @@ import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { InstallPluginPackageModal } from '@/components/marketplace/InstallPluginPackageModal';
 import { PluginMarketplaceV3 } from '@/components/marketplace/v3/PluginMarketplaceV3';
 import { PluginInstancesV2 } from '@/components/plugins/PluginInstancesV2';
+import { optionalBusinessService } from '@/services/optionalBusinessService';
 import { OptionalBusinessPanel } from '@/components/plugins/OptionalBusinessPanel';
 
 import { ChannelConfigSection } from './ChannelConfigSection';
@@ -655,6 +656,8 @@ export const PluginHub: React.FC = () => {
             </select>
           </label>
           <OptionalBusinessPanel
+            service={optionalBusinessService}
+            key={JSON.stringify([tenantId, selectedProjectId ?? projectIdFromQuery])}
             tenantId={tenantId}
             projectId={selectedProjectId ?? projectIdFromQuery}
           />

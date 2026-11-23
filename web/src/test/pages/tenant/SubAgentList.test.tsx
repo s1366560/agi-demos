@@ -9,7 +9,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
-import { SubAgentList } from '../../../pages/tenant/SubAgentList';
+import { SubAgentList } from '@business/agent/ui/web/tenant/SubAgentList';
 
 const LocationProbe = () => {
   const location = useLocation();

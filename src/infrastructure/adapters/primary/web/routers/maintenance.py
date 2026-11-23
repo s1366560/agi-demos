@@ -7,9 +7,12 @@ from typing import Any, cast
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.automation.workflow.contract import (
+    UnsupportedWorkflowError,
+    WorkflowEnginePort,
+)
 from src.domain.llm_providers.models import NoActiveProviderError
 from src.domain.ports.services.graph_store_port import GraphStorePort
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -28,6 +31,16 @@ from src.infrastructure.i18n import gettext as _
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/maintenance", tags=["maintenance"])
+
+
+def _require_maintenance_workflow(engine: WorkflowEnginePort, name: str) -> None:
+    try:
+        engine.require_workflow(name)
+    except UnsupportedWorkflowError as exc:
+        raise HTTPException(
+            status_code=501,
+            detail=_("The active workflow engine does not support this maintenance operation"),
+        ) from exc
 
 
 def _requested_project_id(project_id: str | None, current_user: User) -> str | None:
@@ -114,6 +127,7 @@ async def incremental_refresh(
         target_project_id = _select_workflow_project_id(
             target_project_id, is_superuser, allowed_project_ids
         )
+        _require_maintenance_workflow(workflow_engine, "incremental_refresh")
         group_id = target_project_id or "neo4j"
         tenant_id = getattr(current_user, "tenant_id", None)
         user_id = str(current_user.id)
@@ -235,7 +249,7 @@ async def deduplicate_entities(
                 "message": f"Found {len(duplicates)} potential duplicate groups (exact name match)",
             }
         else:
-            # Create task payload
+            _require_maintenance_workflow(workflow_engine, "deduplicate_entities")
             task_payload = {
                 "group_id": group_id,
                 "similarity_threshold": similarity_threshold,
@@ -456,6 +470,7 @@ async def get_maintenance_status(
 
 
 async def _run_incremental_refresh(
+    dry_run: bool,
     group_id: str,
     tenant_id: str | None,
     project_id: str | None,
@@ -463,6 +478,12 @@ async def _run_incremental_refresh(
     workflow_engine: WorkflowEnginePort,
 ) -> dict[str, Any]:
     """Handle incremental_refresh operation for optimize_graph."""
+    if dry_run:
+        return {
+            "operation": "incremental_refresh",
+            "result": {"status": "skipped", "message": "Skipped in dry_run mode"},
+        }
+
     from uuid import uuid4
 
     from src.infrastructure.adapters.secondary.persistence.database import (
@@ -727,15 +748,25 @@ async def optimize_graph(
             project_id, current_user, db
         )
         workflow_project_id = target_project_id
+        workflow_names = {
+            "incremental_refresh": "incremental_refresh",
+            "deduplicate": "deduplicate_entities",
+            "rebuild_communities": "rebuild_communities",
+        }
+        if not dry_run and set(operations).intersection(workflow_names):
+            workflow_project_id = _select_workflow_project_id(
+                target_project_id, is_superuser, allowed_project_ids
+            )
+            for operation in operations:
+                if operation in workflow_names:
+                    _require_maintenance_workflow(workflow_engine, workflow_names[operation])
         group_id = target_project_id or "neo4j"
         tenant_id = getattr(current_user, "tenant_id", None)
         user_id = str(current_user.id)
         for operation in operations:
             if operation == "incremental_refresh":
-                workflow_project_id = _select_workflow_project_id(
-                    target_project_id, is_superuser, allowed_project_ids
-                )
                 op_result = await _run_incremental_refresh(
+                    dry_run,
                     workflow_project_id or "neo4j",
                     tenant_id,
                     workflow_project_id,
@@ -744,10 +775,6 @@ async def optimize_graph(
                 )
                 results["operations_run"].append(op_result)  # type: ignore[attr-defined]
             elif operation == "deduplicate":
-                if not dry_run:
-                    workflow_project_id = _select_workflow_project_id(
-                        target_project_id, is_superuser, allowed_project_ids
-                    )
                 op_result = await _run_deduplicate(
                     dry_run,
                     workflow_project_id or group_id,
@@ -768,10 +795,6 @@ async def optimize_graph(
                 )
                 results["operations_run"].append(op_result)  # type: ignore[attr-defined]
             elif operation == "rebuild_communities":
-                if not dry_run:
-                    workflow_project_id = _select_workflow_project_id(
-                        target_project_id, is_superuser, allowed_project_ids
-                    )
                 op_result = await _run_rebuild_communities(
                     dry_run,
                     workflow_project_id or group_id,

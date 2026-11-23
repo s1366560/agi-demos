@@ -30,7 +30,9 @@ from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 if TYPE_CHECKING:
-    from src.application.services.project_sandbox_lifecycle_service import SandboxInfo
+    from plugins.business.environments.backend.sandbox.project_sandbox_lifecycle_service import (
+        SandboxInfo,
+    )
 
 logger = logging.getLogger(__name__)
 

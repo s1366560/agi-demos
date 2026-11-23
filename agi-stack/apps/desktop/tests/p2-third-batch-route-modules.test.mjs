@@ -29,9 +29,9 @@ const { createDesktopUserProfileHttpProjectionV2 } = require(
 );
 const { createProfileRouteController } = require(`${root}/profileRouteController.js`);
 const { createProfileRouteModuleLoader } = require(`${root}/profileRouteModule.js`);
-const { EvolutionRoutePage } = require(`${root}/EvolutionRoutePage.js`);
+const { EvolutionRoutePage } = require(`/tmp/agistack-desktop-test-dist/plugins/business/agent/ui/desktop/settings-routes/EvolutionRoutePage.js`);
 const { ChannelsRoutePage } = require(`${root}/ChannelsRoutePage.js`);
-const { TemplatesRoutePage } = require(`${root}/TemplatesRoutePage.js`);
+const { TemplatesRoutePage } = require(`/tmp/agistack-desktop-test-dist/plugins/business/environments/ui/desktop/settings-routes/TemplatesRoutePage.js`);
 const { ProfileRoutePage } = require(`${root}/ProfileRoutePage.js`);
 
 const cloudConfig = Object.freeze({

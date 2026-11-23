@@ -55,7 +55,7 @@ async def test_start_sandbox_idle_reaper_starts_when_enabled() -> None:
             return_value=settings,
         ),
         patch(
-            "src.application.services.sandbox_idle_reaper.SandboxIdleReaper",
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SandboxIdleReaper",
             return_value=reaper_instance,
         ),
     ):

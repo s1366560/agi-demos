@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import Module, { createRequire } from 'node:module';
 import { test } from 'node:test';
 
-process.env.NODE_PATH = new URL('../node_modules', import.meta.url).pathname;
+process.env.NODE_PATH = [
+  '/tmp/agistack-desktop-test-dist/test-node-modules',
+  new URL('../node_modules', import.meta.url).pathname,
+].join(process.platform === 'win32' ? ';' : ':');
 Module._initPaths();
 
 const require = createRequire(import.meta.url);

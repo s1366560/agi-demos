@@ -4,12 +4,12 @@ import { useTranslation } from 'react-i18next';
 
 import { Input, Select } from 'antd';
 
-import { Field, SwitchField } from '@/pages/tenant/WorkspaceSettingsPrimitives';
+import { Field, SwitchField } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
 
 import { DraftNumberInput } from './DraftNumberInput';
 
 import type { UpdateDraft } from './types';
-import type { SettingsDraft } from '@/pages/tenant/workspaceSettingsModel';
+import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
 
 const { TextArea } = Input;
 

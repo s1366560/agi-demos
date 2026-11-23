@@ -2,7 +2,7 @@ import { Route, Routes } from 'react-router-dom';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Events } from '../../../pages/tenant/Events';
+import { Events } from '@business/automation/ui/web/tenant/Events';
 import { eventService } from '../../../services/eventService';
 import { render, screen, waitFor } from '../../utils';
 

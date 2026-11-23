@@ -9,9 +9,12 @@ from typing import Any
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from plugins.business.automation.backend.sql_workflow_pattern_repository import (
+    SqlWorkflowPatternRepository,
+)
+from plugins.business.automation.backend.workflow_learner import WorkflowLearner
 from src.application.services.agent_service import AgentService
 from src.application.services.skill_service import SkillService
-from src.application.services.workflow_learner import WorkflowLearner
 from src.application.use_cases.agent import (
     CreateConversationUseCase,
     ExecuteStepUseCase,
@@ -53,9 +56,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository i
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlToolExecutionRecordRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
-    SqlWorkflowPatternRepository,
 )
 from src.infrastructure.agent.context.window_manager import ContextWindowManager
 from src.infrastructure.agent.orchestration import AgentSessionRegistry

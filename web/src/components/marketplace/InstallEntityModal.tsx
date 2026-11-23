@@ -14,8 +14,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Form, Input, Modal, message } from 'antd';
 
-import { showGeneActionError } from '@/pages/tenant/utils/geneFormUtils';
-import { InstanceSelect } from '@/pages/tenant/utils/InstanceSelect';
+import { showGeneActionError } from '@business/environments/ui/web/tenant/utils/geneFormUtils';
+import { InstanceSelect } from '@business/environments/ui/web/tenant/utils/InstanceSelect';
 
 import { marketplaceEntityCopy } from './entityI18n';
 

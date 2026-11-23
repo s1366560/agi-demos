@@ -46,7 +46,7 @@ vi.mock('@/stores/workspace', () => ({
 
 vi.mock('@/components/ui/lazyAntd', () => ({}));
 
-vi.mock('@/pages/tenant/WorkspaceSettings', () => ({
+vi.mock('@business/workspace/ui/web/tenant/WorkspaceSettings', () => ({
   WorkspaceSettingsPanel: () => <div>Workspace settings</div>,
 }));
 

@@ -18,16 +18,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from plugins.business.agent.skill_validation.markdown_parser import MarkdownParser
 from src.domain.model.agent.skill import Skill, SkillScope
 from src.domain.model.agent.skill.skill_source import SkillSource
 from src.domain.model.agent.skill.skill_version import SkillVersion
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
 from src.domain.ports.repositories.skill_version_repository import SkillVersionRepositoryPort
-from src.infrastructure.skill.markdown_parser import MarkdownParser
 
 if TYPE_CHECKING:
+    from plugins.business.agent.skill_validation.markdown_parser import SkillMarkdown
     from src.domain.ports.services.sandbox_port import SandboxPort
-    from src.infrastructure.skill.markdown_parser import SkillMarkdown
 logger = logging.getLogger(__name__)
 
 # Default skill path inside sandbox container

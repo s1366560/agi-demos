@@ -40,7 +40,7 @@ export type ProjectOverviewRouteModuleOptions = Readonly<{
   ) => ProjectOverviewRouteBinding;
 }>;
 
-type ProjectOverviewPageComponent = typeof import('./ProjectOverviewPage').ProjectOverviewPage;
+type ProjectOverviewPageComponent = typeof import('@business/workspace/ui/desktop/project/ProjectOverviewPage').ProjectOverviewPage;
 type ProjectOverviewControllerHook =
   typeof import('./useProjectOverviewController').useProjectOverviewController;
 
@@ -56,7 +56,7 @@ export function createProjectOverviewRouteModuleLoader({
       { ProjectOverviewPage },
       { useProjectOverviewController },
     ] = await Promise.all([
-      import('./ProjectOverviewPage'),
+      import('@business/workspace/ui/desktop/project/ProjectOverviewPage'),
       import('./useProjectOverviewController'),
     ]);
 

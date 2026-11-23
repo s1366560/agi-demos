@@ -1,0 +1,17 @@
+[package]
+name = "memstack-openai-chat"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+memstack-chat-stream-sdk = { version = "1", path = "../../../../sdk/memstack-plugin-sdk/rust/chat-stream" }
+
+[profile.release]
+lto = true
+opt-level = "s"
+strip = true
+panic = "abort"

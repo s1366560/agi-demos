@@ -27,7 +27,7 @@ export function createTenantAcpRouteModuleLoader({
     routeId: TENANT_ACP_ROUTE_ID,
     localPolicy: 'cloud_only',
     createBinding,
-    loadPage: async () => (await import('./TenantAcpPage')).TenantAcpPage,
+    loadPage: async () => (await import('@business/agent/ui/desktop/tenant-admin/TenantAcpPage')).TenantAcpPage,
     fallbackScope: (context) =>
       Object.freeze({ authority: 'cloud', tenantId: context.tenantId ?? 'unavailable' }),
     buildTerminalModel: (scope, reasonCode) =>

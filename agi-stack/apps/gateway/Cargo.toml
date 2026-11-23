@@ -15,7 +15,8 @@ license.workspace = true
 [dependencies]
 axum = { version = "0.7", features = ["ws"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+serde_json.workspace = true
 bytes = "1"
 futures-util = "0.3"
 tokio-tungstenite = "0.24"

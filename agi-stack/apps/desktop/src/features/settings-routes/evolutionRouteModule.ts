@@ -38,7 +38,7 @@ export function createEvolutionRouteModuleLoader({
         reasonCode,
         retryable: false,
       }),
-    loadContent: async () => (await import('./EvolutionRoutePage')).EvolutionRoutePage,
+    loadContent: async () => (await import('@business/agent/ui/desktop/settings-routes/EvolutionRoutePage')).EvolutionRoutePage,
   });
 }
 

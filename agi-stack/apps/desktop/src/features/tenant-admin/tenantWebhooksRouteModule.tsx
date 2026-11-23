@@ -27,7 +27,7 @@ export function createTenantWebhooksRouteModuleLoader({
     routeId: TENANT_WEBHOOKS_ROUTE_ID,
     localPolicy: 'cloud_only',
     createBinding,
-    loadPage: async () => (await import('./TenantWebhooksPage')).TenantWebhooksPage,
+    loadPage: async () => (await import('@business/automation/ui/desktop/tenant-admin/TenantWebhooksPage')).TenantWebhooksPage,
     fallbackScope: (context) =>
       Object.freeze({ authority: 'cloud', tenantId: context.tenantId ?? 'unavailable' }),
     buildTerminalModel: (scope, reasonCode) =>

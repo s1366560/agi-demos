@@ -61,11 +61,11 @@ from .subagent_registry_authority import (
 from .subagent_tool_set_v2 import InheritedToolSetV2, SubAgentToolSetBindingV2
 
 if TYPE_CHECKING:
+    from plugins.business.agent.engine.processor.factory import ProcessorFactory
     from src.application.services.artifact_service import ArtifactService
     from src.domain.llm_providers.llm_types import LLMClient
 
     from ..permission import PermissionManager
-    from ..processor.factory import ProcessorFactory
 logger = logging.getLogger(__name__)
 
 
@@ -343,12 +343,15 @@ class SubAgentSessionRunner:
         Creates a SubAgentProcess with its own context window and processor,
         forwards SSE events, and yields a final complete event with the result.
         """
+        from src.infrastructure.agent.core.project_package_subagents import SignedProjectSubAgent
+
         from ..subagent.context_bridge import ContextBridge
         from ..subagent.process import SubAgentProcess
 
-        memory_context = await self.fetch_memory_context(
-            user_message,
-            project_id,
+        memory_context = (
+            ""
+            if isinstance(subagent, SignedProjectSubAgent)
+            else await self.fetch_memory_context(user_message, project_id)
         )
 
         bridge = ContextBridge()
@@ -1279,8 +1282,12 @@ class SubAgentSessionRunner:
     ) -> bool:
         """Validate spawn and emit rejection event if denied. Returns True if rejected."""
         assert self.deps.spawn_validator is not None
+        from src.infrastructure.agent.core.project_package_subagents import SignedProjectSubAgent
+
         validation = await self.deps.spawn_validator.validate_async(
-            subagent_name=subagent.display_name,
+            subagent_name=subagent.id
+            if isinstance(subagent, SignedProjectSubAgent)
+            else subagent.display_name,
             current_depth=0,
             conversation_id=conversation_id,
             requester_session_id=run_id,
@@ -1391,10 +1398,25 @@ class SubAgentSessionRunner:
         if parent_permission_guard is not None:
             await parent_permission_guard.require("delegate")
             await registry_call_v2(
-                session_registry, "bind_approved_plan_authority", conversation_id, run_id,
+                session_registry,
+                "bind_approved_plan_authority",
+                conversation_id,
+                run_id,
                 approved_run_id=parent_permission_guard.run_id,
                 ceiling=parent_permission_guard.profile,
             )
+        from src.infrastructure.agent.core.project_package_subagents import (
+            SignedProjectSubAgent,
+            authorize_signed_subagent,
+        )
+        from src.infrastructure.agent.core.project_package_tools import (
+            bind_project_packages,
+            current_package_capabilities,
+        )
+        from src.infrastructure.plugins.v2.tool_set import bind_operation_tool_set_catalog_v2
+
+        subagent = await authorize_signed_subagent(subagent, tenant_id, project_id)
+        parent_packages = current_package_capabilities()
         reservation = await self.deps.operation_reserver()
         try:
             parent_tool_set.validate_generation(reservation.descriptor)
@@ -1412,6 +1434,8 @@ class SubAgentSessionRunner:
             "inherited_tool_set_generation": parent_tool_set.generation_descriptor.to_payload(),
             "inherited_tool_set_owner_operation_id": parent_tool_set.owner_operation_id,
         }
+        if isinstance(subagent, SignedProjectSubAgent):
+            generation_metadata["signed_subagent_release"] = subagent.release_binding()
         try:
             updated_run = await registry_call_v2(
                 session_registry,
@@ -1607,6 +1631,16 @@ class SubAgentSessionRunner:
                         inherit_approved_run_guard_v2(parent_permission_guard, child_operation)
                         inherit_chat_run_guard_v2(parent_chat_guard, child_operation)
                         parent_tool_set.validate_generation(child_operation.descriptor)
+                        if parent_packages is not None and parent_packages.subagents:
+                            await bind_project_packages(
+                                child_operation,
+                                bind_operation_tool_set_catalog_v2(child_operation),
+                                parent_packages.run_id,
+                                parent_packages.sessions,
+                                trusted_keys=parent_packages.keys,
+                                detached_child=True,
+                            )
+                            await authorize_signed_subagent(subagent, tenant_id, project_id)
                         child_registry = self.deps.subagent_run_registry
                         if child_registry is not session_registry:
                             raise RuntimeV2Error(

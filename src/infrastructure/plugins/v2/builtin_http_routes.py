@@ -9,85 +9,20 @@ from typing import Any
 from fastapi import FastAPI
 from starlette.routing import BaseRoute, compile_path
 
-from .http_routes import RouteContributionV2, RouteTableV2, install_route_definitions_v2
-from .runtime import RuntimeV2Error
+from src.domain.model.plugins.generated_v2 import ScopeV2
+
+from .http_routes import (
+    RouteContributionV2,
+    RouteTableBuilderV2,
+    RouteTableV2,
+    install_route_definitions_v2,
+)
+from .route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
+from .runtime import RuntimeGenerationV2, RuntimeV2Error
 
 _ROOT_PREVIEW_CATCH_ALL = "/{path:path}"
-REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
-    {
-        "admin-dlq",
-        "acp",
-        "agent",
-        "ai-tools",
-        "artifacts",
-        "attachments-upload",
-        "audit",
-        "auth",
-        "background-tasks",
-        "billing",
-        "clusters",
-        "channels",
-        "create-pool",
-        "create-project-pool",
-        "cron",
-        "data-export",
-        "deploy",
-        "episodes",
-        "events",
-        "genes",
-        "enhanced-search",
-        "enhanced-search-memory",
-        "engines",
-        "graph",
-        "graph-stores",
-        "invitations",
-        "invitations-public",
-        "instance-channels",
-        "instance-files",
-        "instance-templates",
-        "instances",
-        "llm-providers",
-        "maintenance",
-        "memories",
-        "mcp",
-        "notifications",
-        "observability",
-        "platform-plugins",
-        "plugin-marketplace",
-        "project-my-work",
-        "project-sandbox",
-        "project-sandbox-preview",
-        "projects",
-        "recall",
-        "reflection",
-        "sandbox",
-        "schema",
-        "security-ws",
-        "shares",
-        "skills",
-        "retrieval-stores",
-        "smtp-config",
-        "subagents",
-        "system",
-        "support",
-        "support-2",
-        "task-session",
-        "tasks",
-        "terminal",
-        "tenants",
-        "tenant-skill-configs",
-        "tenant-webhooks",
-        "trust",
-        "trust-workspace",
-        "tunnel",
-        "voice-websocket",
-        "websocket",
-        "webhooks",
-        "workspace-core",
-        "workspace-core-runtime",
-        "workspace-core-static",
-    }
-)
+# Authentication and the plugin management/recovery interfaces must survive a profile change.
+KERNEL_ROUTE_GROUPS_V2 = frozenset({"auth", "platform-plugins", "plugin-marketplace"})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -99,30 +34,42 @@ class BuiltinRouteGraphV2:
     route_signatures: tuple[tuple[str, str, tuple[str, ...]], ...]
 
 
-# Identical contribution identities compile the same private graph. Rebuilding
-# FastAPI routes and OpenAPI for every generation was the multi-second cost
-# behind each startup publication test.
-_ROUTE_GRAPH_CACHE: dict[tuple[object, ...], BuiltinRouteGraphV2] = {}
-
-
-def _route_graph_cache_key(
-    route_definitions: Sequence[RouteContributionV2],
-    required_v2_row_ids: Collection[str],
-) -> tuple[object, ...]:
-    return (
-        tuple(sorted(required_v2_row_ids)),
-        tuple(
-            (
-                definition.owner_entry_id,
-                definition.path,
-                definition.methods,
-                definition.name,
-                definition.replaces_builtin_row_id,
-                f"{definition.endpoint.__module__}.{getattr(definition.endpoint, '__qualname__', '')}",
-            )
-            for definition in route_definitions
-        ),
-    )
+def generation_route_definitions_v2(
+    generation: RuntimeGenerationV2, scope: ScopeV2, *, optional: bool = False
+) -> tuple[RouteContributionV2, ...] | None:
+    """Seal the published builder and check each active entry that requested route effects."""
+    contributors = {
+        fiber.entry.entry_id
+        for fiber in generation.fibers
+        if any(
+            item.service == ROUTE_TABLE_BUILDER_SERVICE_V2
+            for item in fiber.contract.services.requires
+        )
+    }
+    if (
+        optional
+        and not contributors
+        and not any(
+            item.service == ROUTE_TABLE_BUILDER_SERVICE_V2
+            for fiber in generation.fibers
+            for item in fiber.contract.services.provides
+        )
+    ):
+        return None
+    builder = generation.resolve(ROUTE_TABLE_BUILDER_SERVICE_V2, scope)
+    if not isinstance(builder, RouteTableBuilderV2):
+        raise RuntimeV2Error(
+            "invalid_route_table_builder", "HTTP provider supplied an invalid route builder"
+        )
+    definitions = builder.seal()
+    missing = contributors.difference(route.owner_entry_id for route in definitions)
+    if missing:
+        raise RuntimeV2Error(
+            "required_route_contribution_missing",
+            "active entries did not contribute their declared HTTP routes: "
+            + ", ".join(sorted(missing)),
+        )
+    return definitions
 
 
 def build_builtin_route_graph_v2(
@@ -134,34 +81,6 @@ def build_builtin_route_graph_v2(
 ) -> BuiltinRouteGraphV2:
     """Build one private graph exclusively from the generation's V2 contributions."""
     _ = workspace_core_settings
-    cache_key = _route_graph_cache_key(route_definitions, required_v2_row_ids)
-    cached = _ROUTE_GRAPH_CACHE.get(cache_key)
-    if cached is None:
-        cached = _compile_builtin_route_graph_v2(
-            route_definitions=route_definitions,
-            required_v2_row_ids=required_v2_row_ids,
-        )
-        _ROUTE_GRAPH_CACHE[cache_key] = cached
-    if not dependency_overrides:
-        return cached
-    # Overrides are applied while the routes are registered. Rebinding a cached
-    # route leaves sibling dependencies on the original call, so requests miss
-    # the snapshot and fall through to header authentication.
-    return _compile_builtin_route_graph_v2(
-        route_definitions=route_definitions,
-        required_v2_row_ids=required_v2_row_ids,
-        dependency_overrides=dependency_overrides,
-        openapi=cached.table._openapi,
-    )
-
-
-def _compile_builtin_route_graph_v2(
-    *,
-    route_definitions: Sequence[RouteContributionV2],
-    required_v2_row_ids: Collection[str],
-    dependency_overrides: Mapping[Callable[..., Any], Callable[..., Any]] | None = None,
-    openapi: Mapping[str, Any] | None = None,
-) -> BuiltinRouteGraphV2:
     private_app = FastAPI(
         docs_url=None,
         redoc_url=None,
@@ -181,18 +100,16 @@ def _compile_builtin_route_graph_v2(
     ordered_definitions = _definitions_before_root_catch_all_v2(definitions)
     install_route_definitions_v2(private_app, ordered_definitions)
     mounted = _ordered_builtin_row_ids_v2(ordered_definitions)
-    graph = BuiltinRouteGraphV2(
+    return BuiltinRouteGraphV2(
         table=RouteTableV2.from_fastapi_graph(
             private_app,
             definitions=ordered_definitions,
-            openapi=openapi,
         ),
         mounted_row_ids=mounted,
         static_mounted_row_ids=(),
         v2_owned_row_ids=mounted,
         route_signatures=route_signatures_v2(private_app.router.routes),
     )
-    return graph
 
 
 def _builtin_row_owners_v2(
@@ -273,8 +190,9 @@ def route_signatures_v2(
 
 
 __all__ = [
-    "REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS",
+    "KERNEL_ROUTE_GROUPS_V2",
     "BuiltinRouteGraphV2",
     "build_builtin_route_graph_v2",
+    "generation_route_definitions_v2",
     "route_signatures_v2",
 ]

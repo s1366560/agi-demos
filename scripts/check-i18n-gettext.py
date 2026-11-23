@@ -28,14 +28,15 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCAN_ROOT = REPO_ROOT / "src"
+SCAN_ROOTS = (REPO_ROOT / "src", REPO_ROOT / "plugins/business", REPO_ROOT / "plugins/adapters")
 BASELINE_PATH = Path(__file__).resolve().parent / "i18n-gettext-baseline.txt"
 
-SCAN_SKIP_PARTS = {"tests", "test", "__pycache__"}
+SCAN_SKIP_PARTS = {"tests", "test", "__pycache__", ".venv", "venv", "node_modules", "target"}
 
 
 def _detail_arg(call: ast.Call) -> ast.expr | None:
@@ -78,10 +79,10 @@ def _is_httpexception_call(call: ast.Call) -> bool:
 
 def _iter_python_files() -> list[Path]:
     files: list[Path] = []
-    for path in SCAN_ROOT.rglob("*.py"):
-        if any(part in SCAN_SKIP_PARTS for part in path.relative_to(SCAN_ROOT).parts):
-            continue
-        files.append(path)
+    for root in SCAN_ROOTS:
+        for directory, children, names in os.walk(root):
+            children[:] = [name for name in children if name not in SCAN_SKIP_PARTS]
+            files.extend(Path(directory) / name for name in names if name.endswith(".py"))
     return files
 
 

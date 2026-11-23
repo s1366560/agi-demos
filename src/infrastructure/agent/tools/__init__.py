@@ -4,7 +4,10 @@ This module contains the tool definitions used by the ReAct agent
 to interact with the knowledge graph and memory systems.
 """
 
-from src.application.services.sandbox_orchestrator import DesktopStatus, TerminalStatus
+from plugins.business.environments.backend.sandbox.sandbox_orchestrator import (
+    DesktopStatus,
+    TerminalStatus,
+)
 from src.infrastructure.agent.tools.base import AgentTool
 
 __all__ = [

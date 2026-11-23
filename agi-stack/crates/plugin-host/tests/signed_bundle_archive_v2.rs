@@ -87,6 +87,13 @@ fn rejection(
 fn signed_change(
     change: impl FnOnce(&mut Value),
 ) -> (Vec<u8>, BundleReferenceV2, TrustedEd25519KeyV2) {
+    signed_change_with_artifacts(change, Vec::new())
+}
+
+fn signed_change_with_artifacts(
+    change: impl FnOnce(&mut Value),
+    added: Vec<(String, Vec<u8>)>,
+) -> (Vec<u8>, BundleReferenceV2, TrustedEd25519KeyV2) {
     let mut all = files();
     let descriptor = &mut all
         .iter_mut()
@@ -114,6 +121,7 @@ fn signed_change(
     let key = TrustedEd25519KeyV2::from_spki_pem(&pem).unwrap();
     let expected = reference(&value);
     *descriptor = serde_json::to_vec(&value).unwrap();
+    all.extend(added);
     (pack(&all), expected, key)
 }
 
@@ -310,4 +318,28 @@ fn malformed_descriptor_and_zip_traversal_are_rejected() {
         rejection(&pack(&all), &fixture_reference(), &[key()], &approved()),
         "bundle_descriptor_invalid"
     );
+}
+
+#[test]
+fn verifies_the_signed_package_host_abi_before_native_admission() {
+    for (minimum, maximum, expected) in [
+        ("2.0.0", "2.0.1", None),
+        ("1.9.0", "2.10.0", None),
+        ("2.0.1", "3.0.0", Some("incompatible_host_abi")),
+        ("1.0.0", "2.0.0", Some("incompatible_host_abi")),
+        ("2.0.0", "2.0.0", Some("invalid_host_abi")),
+        ("2.0.00", "3.0.0", Some("invalid_host_abi")),
+        ("2.0.0", "3.0.4294967296", Some("invalid_host_abi")),
+    ] {
+        let content = serde_json::to_vec(&serde_json::json!({ "schema":"memstack.host-compatibility/1", "min_inclusive": minimum, "max_exclusive": maximum })).unwrap();
+        let asset = serde_json::json!({"artifact_id":"host-abi", "path":"compatibility.json",
+            "target":"desktop-sidecar", "digest":format!("sha256:{:x}", Sha256::digest(&content)),
+            "size_bytes":content.len(),"media_type":"application/json"});
+        let (bytes, reference, key) = signed_change_with_artifacts(
+            |bundle| bundle["artifacts"].as_array_mut().unwrap().push(asset),
+            vec![("compatibility.json".to_owned(), content)],
+        );
+        let result = verify_signed_bundle_archive_v2(&bytes, &reference, &[key], &approved());
+        assert_eq!(result.err().map(|e| e.code), expected);
+    }
 }

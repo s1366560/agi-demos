@@ -6,10 +6,19 @@ from pathlib import Path
 
 import pytest
 
-from src.application.services.sandbox_event_service import SandboxEventPublisher
-from src.application.services.sandbox_orchestrator import SandboxOrchestrator
+from plugins.business.environments.backend.sandbox.sandbox_event_service import (
+    SandboxEventPublisher,
+)
+from plugins.business.environments.backend.sandbox.sandbox_orchestrator import SandboxOrchestrator
+from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+    SANDBOX_RUNTIME_MODULE_V2,
+    SANDBOX_RUNTIME_SERVICE_V2,
+    SandboxApplicationServicesV2,
+    SandboxRuntimeServiceV2,
+    sandbox_runtime_definition_v2,
+)
+from plugins.business.environments.backend.sandbox.sandbox_tool_registry import SandboxToolRegistry
 from src.application.services.sandbox_token_service import SandboxTokenService
-from src.application.services.sandbox_tool_registry import SandboxToolRegistry
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.plugins.v2.protocol import (
@@ -17,13 +26,6 @@ from src.infrastructure.plugins.v2.protocol import (
     parse_plugin_manifest_v2,
 )
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.sandbox_runtime import (
-    SANDBOX_RUNTIME_MODULE_V2,
-    SANDBOX_RUNTIME_SERVICE_V2,
-    SandboxApplicationServicesV2,
-    SandboxRuntimeServiceV2,
-    sandbox_runtime_definition_v2,
-)
 from src.tests.unit.infrastructure.plugins.v2.test_runtime import _catalog, _entry
 
 pytestmark = pytest.mark.unit

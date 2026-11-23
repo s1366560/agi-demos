@@ -12,8 +12,8 @@ import { Theme } from '@radix-ui/themes';
 
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { SettingsWindow, type SettingsSection } from '../features/settings/SettingsWindow';
-import { NewTaskFlow } from '../features/task/NewTaskFlow';
-import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
+import { NewTaskFlow } from '@business/agent/ui/desktop/task/NewTaskFlow';
+import { WorkspaceOverview } from '@business/workspace/ui/desktop/workspace/WorkspaceOverview';
 import { I18nProvider, useI18n } from '../i18n';
 import {
   DesktopPluginMarketplaceAuthorityUnavailableErrorV2,

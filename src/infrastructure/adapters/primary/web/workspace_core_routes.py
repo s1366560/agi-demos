@@ -12,6 +12,9 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
+from plugins.business.workspace.backend.workspace_directory_export import (
+    export_workspace_directory,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_actor,
     get_current_user,
@@ -241,6 +244,23 @@ async def _proxy_workspace_request(
             extra={"method": request.method, "path": request.url.path},
         )
         return _workspace_core_unavailable()
+
+    # Only the workspace directory contract declares this parameter. Core has already
+    # applied workspace membership, tenant, project, ordering and pagination.
+    export_package = endpoint_values.get("export_package")
+    if isinstance(export_package, str) and upstream.status_code == 200:
+        async with async_session_factory() as db:
+            return await export_workspace_directory(
+                upstream,
+                db=db,
+                actor=endpoint_values["current_user"],
+                tenant=endpoint_values["tenant_id"],
+                project=endpoint_values["project_id"],
+                plugin=export_package,
+                keys=tuple(
+                    getattr(request.app.state, "plugin_marketplace_trusted_public_keys_v2", ())
+                ),
+            )
 
     response_headers = {
         name: value

@@ -14,11 +14,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.infrastructure.agent.core.llm_stream import StreamEventType
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
 )
+from src.infrastructure.agent.core.llm_stream import StreamEventType
 from src.infrastructure.plugins.v2.system_prompt import SystemPromptSectionsV2
 
 
@@ -46,7 +46,7 @@ class TestModelVisibleLogged:
                 yield event
 
         monkeypatch.setattr(
-            "src.infrastructure.agent.processor.processor.LLMStream.generate",
+            "plugins.business.agent.engine.processor.processor.LLMStream.generate",
             fake_generate,
         )
 
@@ -79,7 +79,7 @@ class TestModelVisibleLogged:
                 yield event
 
         monkeypatch.setattr(
-            "src.infrastructure.agent.processor.processor.LLMStream.generate",
+            "plugins.business.agent.engine.processor.processor.LLMStream.generate",
             fake_generate,
         )
 

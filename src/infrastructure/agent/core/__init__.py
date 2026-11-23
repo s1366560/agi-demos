@@ -9,27 +9,28 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
-    from .project_react_agent import (
+    from plugins.business.agent.engine.react.project_react_agent import (
         ProjectAgentConfig,
         ProjectAgentManager,
         ProjectAgentMetrics,
         ProjectAgentStatus,
         ProjectReActAgent,
     )
-    from .react_agent import ReActAgent, create_react_agent
+    from plugins.business.agent.engine.react.react_agent import ReActAgent, create_react_agent
+
+    from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 
 _EXPORTS = {
     "ProcessorConfig": (".processor", "ProcessorConfig"),
     "SessionProcessor": (".processor", "SessionProcessor"),
     "ToolDefinition": (".processor", "ToolDefinition"),
-    "ProjectAgentConfig": (".project_react_agent", "ProjectAgentConfig"),
-    "ProjectAgentManager": (".project_react_agent", "ProjectAgentManager"),
-    "ProjectAgentMetrics": (".project_react_agent", "ProjectAgentMetrics"),
-    "ProjectAgentStatus": (".project_react_agent", "ProjectAgentStatus"),
-    "ProjectReActAgent": (".project_react_agent", "ProjectReActAgent"),
-    "ReActAgent": (".react_agent", "ReActAgent"),
-    "create_react_agent": (".react_agent", "create_react_agent"),
+    "ProjectAgentConfig": ("plugins.business.agent.engine.react.project_react_agent", "ProjectAgentConfig"),
+    "ProjectAgentManager": ("plugins.business.agent.engine.react.project_react_agent", "ProjectAgentManager"),
+    "ProjectAgentMetrics": ("plugins.business.agent.engine.react.project_react_agent", "ProjectAgentMetrics"),
+    "ProjectAgentStatus": ("plugins.business.agent.engine.react.project_react_agent", "ProjectAgentStatus"),
+    "ProjectReActAgent": ("plugins.business.agent.engine.react.project_react_agent", "ProjectReActAgent"),
+    "ReActAgent": ("plugins.business.agent.engine.react.react_agent", "ReActAgent"),
+    "create_react_agent": ("plugins.business.agent.engine.react.react_agent", "create_react_agent"),
 }
 
 __all__ = [

@@ -4,9 +4,9 @@ import { message, Modal } from 'antd';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GeneDetail } from '@/pages/tenant/GeneDetail';
-import { GeneMarket } from '@/pages/tenant/GeneMarket';
-import { GenomeDetail } from '@/pages/tenant/GenomeDetail';
+import { GeneDetail } from '@business/environments/ui/web/tenant/GeneDetail';
+import { GeneMarket } from '@business/environments/ui/web/tenant/GeneMarket';
+import { GenomeDetail } from '@business/environments/ui/web/tenant/GenomeDetail';
 
 import { instanceService } from '@/services/instanceService';
 

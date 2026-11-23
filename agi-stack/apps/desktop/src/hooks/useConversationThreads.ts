@@ -7,7 +7,7 @@ import {
   composerAgentExecutionContext,
 } from '../features/chat/chatComposerModel';
 import { executionPlacementMessageKey } from '../features/chat/executionPlacementModel';
-import { dispatchDesktopLocalRun } from '../features/chat/localRunDispatch';
+import { dispatchDesktopLocalRun, localRunFailureMessageKey } from '../features/chat/localRunDispatch';
 import {
   canonicalJsonSha256,
 } from '../features/session/canonicalJsonDigest';
@@ -15,7 +15,7 @@ import {
   type NewTaskAgentTurnInput,
   type NewTaskResumeDraft,
   type NewTaskSession,
-} from '../features/task/NewTaskFlow';
+} from '@business/agent/ui/desktop/task/NewTaskFlow';
 import {
   type NewThreadComposerInput,
 } from '../features/task/NewThreadComposer';
@@ -287,8 +287,6 @@ export function useConversationThreads(params: AgentConversationParams) {
       if (!invoke) throw new Error(t('executionPlacement.localExecutionUnavailable'));
       const localReport = await dispatchDesktopLocalRun(
         {
-          apiBaseUrl: input.config.apiBaseUrl,
-          apiKey: input.config.apiKey,
           userId: auth.user?.user_id ?? '',
           tenantId: input.config.tenantId,
           conversationId: input.conversationId,
@@ -299,9 +297,8 @@ export function useConversationThreads(params: AgentConversationParams) {
         },
         invoke,
       );
-      if (localReport.sync === 'failed' || localReport.sync === 'conflict') {
-        throw new Error(localReport.detail);
-      }
+      const failure = localRunFailureMessageKey(localReport);
+      if (failure) throw new Error(t(failure));
       return 'acknowledged';
     }
     const acknowledgment = new Promise<NewTaskAgentTurnOutcome>(

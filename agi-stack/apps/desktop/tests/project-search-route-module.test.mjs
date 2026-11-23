@@ -189,7 +189,7 @@ test('surface reuses DesktopSearch and binds only exact tenant and project conte
   assert.deepEqual(receivedContexts, [routeContext]);
   assert.match(markup, /class="desktop-search"/u);
   assert.match(markup, /Project One/u);
-  assert.match(factorySource, /import\('\.\/DesktopSearch'\)/u);
+  assert.match(factorySource, /import\('[^']*\/DesktopSearch'\)/u);
   assert.match(factorySource, /<DesktopSearch/u);
   assert.doesNotMatch(
     factorySource,
@@ -243,7 +243,7 @@ test('binding scope drift fails closed before exposing the search authority', as
 });
 
 test('DesktopSearch code loads only behind the production route loader boundary', () => {
-  assert.match(factorySource, /import\('\.\/DesktopSearch'\)/u);
+  assert.match(factorySource, /import\('[^']*\/DesktopSearch'\)/u);
   assert.doesNotMatch(
     factorySource,
     /import\s+\{\s*DesktopSearch\s*\}\s+from/u,

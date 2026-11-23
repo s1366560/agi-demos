@@ -77,6 +77,7 @@ async def install(lifecycle, request, key, archive):
         lifecycle.mutations,
         FakeArtifactClient(archive),
         trusted_public_keys=(key,),
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
     )
     decision = await service.request_install(request=request, actor_id="admin")
     assert decision.status == "approved", decision.reason

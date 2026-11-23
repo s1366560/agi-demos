@@ -19,10 +19,10 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.agent.workflow_pattern import PatternStep, WorkflowPattern
-from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
+from plugins.business.automation.backend.sql_workflow_pattern_repository import (
     SqlWorkflowPatternRepository,
 )
+from src.domain.model.agent.workflow_pattern import PatternStep, WorkflowPattern
 
 
 @pytest.fixture

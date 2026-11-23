@@ -5,6 +5,10 @@ from dataclasses import replace
 
 import pytest
 
+from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+    SANDBOX_RUNTIME_SERVICE_V2,
+    sandbox_runtime_definition_v2,
+)
 from src.infrastructure.plugins.v2 import scoped_builtin_runtime
 from src.infrastructure.plugins.v2.graph_runtime import (
     GRAPH_RUNTIME_MODULE_V2,
@@ -17,10 +21,6 @@ from src.infrastructure.plugins.v2.protocol import (
 )
 from src.infrastructure.plugins.v2.runtime import LoaderV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.sandbox_runtime import (
-    SANDBOX_RUNTIME_SERVICE_V2,
-    sandbox_runtime_definition_v2,
-)
 from src.infrastructure.plugins.v2.scoped_builtin_runtime import leased_sandbox_definition_v2
 from src.infrastructure.plugins.v2.scoped_runtime_registry import ScopedRuntimeRegistryV2
 from src.tests.unit.infrastructure.plugins.v2.test_graph_runtime import _MANIFEST_PATH

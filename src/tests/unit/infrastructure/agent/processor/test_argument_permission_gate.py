@@ -4,14 +4,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.infrastructure.agent.core.message import ToolPart, ToolState
-from src.infrastructure.agent.permission.manager import PermissionManager
-from src.infrastructure.agent.permission.rules import PermissionAction, PermissionRule
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
+from src.infrastructure.agent.core.message import ToolPart, ToolState
+from src.infrastructure.agent.permission.manager import PermissionManager
+from src.infrastructure.agent.permission.rules import PermissionAction, PermissionRule
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.executor import ExecutionContext, ToolExecutor
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry

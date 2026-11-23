@@ -29,6 +29,22 @@
         /* Path mapping */
         "baseUrl": ".",
         "paths": {
+            "react-router-dom": ["node_modules/react-router-dom"],
+            "@tanstack/react-query": ["node_modules/@tanstack/react-query"],
+            "@tanstack/react-virtual": ["node_modules/@tanstack/react-virtual"],
+            "chart.js": ["node_modules/chart.js"],
+            "react-chartjs-2": ["node_modules/react-chartjs-2"],
+            "react-markdown": ["node_modules/react-markdown"],
+            "i18next": ["node_modules/i18next"],
+            "use-debounce": ["node_modules/use-debounce"],
+            "zustand/*": ["node_modules/zustand/*"],
+            "antd/*": ["node_modules/antd/*"],
+            "@business/*": ["../plugins/business/*"],
+            "react": ["node_modules/@types/react"],
+            "react/*": ["node_modules/@types/react/*"],
+            "react-i18next": ["node_modules/react-i18next"],
+            "antd": ["node_modules/antd"],
+            "lucide-react": ["node_modules/lucide-react"],
             "@/*": [
                 "src/*"
             ],

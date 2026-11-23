@@ -7,6 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.hitl_tool_handler import (
+    handle_a2ui_action_tool,
+    handle_clarification_tool,
+    handle_decision_tool,
+    handle_env_var_tool,
+)
 from src.domain.events.agent_events import (
     AgentA2UIActionAnsweredEvent,
     AgentA2UIActionAskedEvent,
@@ -22,12 +28,6 @@ from src.domain.events.agent_events import (
 from src.domain.model.agent.hitl_types import HITLType
 from src.infrastructure.agent.canvas.manager import CanvasManager
 from src.infrastructure.agent.core.message import ToolPart, ToolState
-from src.infrastructure.agent.processor.hitl_tool_handler import (
-    handle_a2ui_action_tool,
-    handle_clarification_tool,
-    handle_decision_tool,
-    handle_env_var_tool,
-)
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.tests.unit.agent.canvas.a2ui_contract_fixtures import (
     contract_case_jsonl,
@@ -487,7 +487,7 @@ async def test_clarification_tool_normalizes_string_options() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_env_var_provided_event_uses_original_request_id(monkeypatch) -> None:
-    from src.infrastructure.agent.processor import hitl_tool_handler as handler_mod
+    from plugins.business.agent.engine.processor import hitl_tool_handler as handler_mod
 
     coordinator = MagicMock()
     coordinator.tenant_id = "tenant-1"
@@ -607,7 +607,7 @@ async def test_env_var_requested_event_uses_sanitized_metadata() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_env_var_tool_saves_using_captured_coordinator_scope(monkeypatch) -> None:
-    from src.infrastructure.agent.processor import hitl_tool_handler as handler_mod
+    from plugins.business.agent.engine.processor import hitl_tool_handler as handler_mod
 
     coordinator = MagicMock()
     coordinator.conversation_id = "conv-env-save"
@@ -752,7 +752,7 @@ async def test_env_var_tool_allows_empty_values_when_all_fields_optional() -> No
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_env_var_tool_fails_closed_when_save_errors(monkeypatch) -> None:
-    from src.infrastructure.agent.processor import hitl_tool_handler as handler_mod
+    from plugins.business.agent.engine.processor import hitl_tool_handler as handler_mod
 
     coordinator = MagicMock()
     coordinator.conversation_id = "conv-env-save-error"
@@ -1214,15 +1214,15 @@ async def test_a2ui_tool_cleans_prepared_request_when_metadata_attach_fails(monk
             return object()
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.hitl_tool_handler._attach_hitl_request_metadata",
+        "plugins.business.agent.engine.processor.hitl_tool_handler._attach_hitl_request_metadata",
         _raise_attach,
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.hitl_tool_handler.async_session_factory",
+        "plugins.business.agent.engine.processor.hitl_tool_handler.async_session_factory",
         _FakeSessionFactory,
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.hitl_tool_handler.SqlHITLRequestRepository",
+        "plugins.business.agent.engine.processor.hitl_tool_handler.SqlHITLRequestRepository",
         _FakeRepo,
     )
 

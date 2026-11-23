@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import TYPE_CHECKING, Any, override
 
 from src.domain.llm_providers.llm_types import (
@@ -201,11 +202,13 @@ class UnifiedLLMClient(LLMClient):
         **kwargs: Any,
     ) -> AsyncGenerator[Any, None]:
         """Delegate to the underlying LiteLLM client."""
-        async for chunk in self._litellm_client.generate_stream(
+        source = self._litellm_client.generate_stream(
             messages=messages,
             max_tokens=max_tokens,
             model_size=model_size,
             langfuse_context=langfuse_context,
             **kwargs,
-        ):
-            yield chunk
+        )
+        async with aclosing(source):
+            async for chunk in source:
+                yield chunk

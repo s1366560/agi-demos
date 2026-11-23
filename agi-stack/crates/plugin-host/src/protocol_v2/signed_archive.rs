@@ -4,6 +4,7 @@
 //! artifact bytes and the exact signed manifest; copying its metadata is not a verification proof.
 //! Provenance is a signature-covered reference, not a claim that its remote contents were audited.
 
+mod compatibility;
 mod validation;
 pub use validation::bundle_manifest_digest_v2;
 
@@ -112,6 +113,15 @@ impl VerifiedBundleArchiveV2 {
     }
     pub fn approved_permissions(&self) -> &BTreeSet<String> {
         &self.approved_permissions
+    }
+
+    pub fn artifact_at_path(&self, path: &str) -> Option<&[u8]> {
+        let artifact = self
+            .manifest
+            .artifacts
+            .iter()
+            .find(|asset| asset.path == path)?;
+        self.artifacts.get(&artifact.artifact_id).map(Vec::as_slice)
     }
 
     pub fn wasm_artifact(
@@ -274,6 +284,7 @@ pub fn verify_signed_bundle_archive_v2(
             "archive contains undeclared file",
         ));
     }
+    compatibility::require_compatible(files.get("compatibility.json").map(Vec::as_slice))?;
     validation::validate_admission(&manifest, approved_permissions)?;
     Ok(VerifiedBundleArchiveV2 {
         manifest: Arc::new(manifest),

@@ -15,7 +15,7 @@ const {
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const automationsPageSource = readFileSync(
-  new URL('../src/features/automations/AutomationsPage.tsx', import.meta.url),
+  new URL('../../../../plugins/business/automation/ui/desktop/automations/AutomationsPage.tsx', import.meta.url),
   'utf8',
 );
 const automationDetailSource = readFileSync(

@@ -5,12 +5,12 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy import select
 
-from src.application.services.automation_command_service import (
+from plugins.business.automation.backend.automation_command_service import (
     AutomationActor,
     AutomationCommandService,
     QueueManualRunCommand,
 )
-from src.application.services.automation_runtime_projection_service import (
+from plugins.business.automation.backend.automation_runtime_projection_service import (
     AutomationRuntimeIdentity,
     AutomationRuntimeOutcome,
     AutomationRuntimeProjectionConflictError,

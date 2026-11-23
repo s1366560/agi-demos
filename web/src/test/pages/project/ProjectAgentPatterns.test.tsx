@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectAgentPatterns } from '@/pages/project/ProjectAgentPatterns';
+import { ProjectAgentPatterns } from '@business/agent/ui/web/project/ProjectAgentPatterns';
 import { ApiError, ApiErrorType } from '@/services/client/ApiError';
 import { ProjectAgentContractError } from '@/services/projectAgentService';
 

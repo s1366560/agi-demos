@@ -7,6 +7,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.model_step_control_v2 import ModelStepInterruptedV2
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.domain.events.agent_events import (
     AgentErrorEvent,
     AgentRunInputAppliedEvent,
@@ -15,12 +21,6 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.tool_policy import ControlMessageType
 from src.domain.ports.agent.control_channel_port import ControlMessage
-from src.infrastructure.agent.processor.model_step_control_v2 import ModelStepInterruptedV2
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    SessionProcessor,
-    ToolDefinition,
-)
 
 
 def _make_processor(
@@ -460,8 +460,8 @@ class TestProcessorConfigControlFields:
 @pytest.mark.unit
 class TestProcessorFactoryControlChannel:
     def test_factory_wires_control_channel(self) -> None:
+        from plugins.business.agent.engine.processor.factory import ProcessorFactory
         from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
-        from src.infrastructure.agent.processor.factory import ProcessorFactory
 
         channel = _make_control_channel()
         factory = ProcessorFactory(
@@ -492,11 +492,11 @@ class TestProcessorFactoryControlChannel:
 
         with (
             patch(
-                "src.infrastructure.agent.processor.factory._default_loop_resolver",
+                "plugins.business.agent.engine.processor.factory._default_loop_resolver",
                 return_value=object(),
             ),
             patch(
-                "src.infrastructure.agent.processor.factory._default_runtime_dispatcher",
+                "plugins.business.agent.engine.processor.factory._default_runtime_dispatcher",
                 return_value=object(),
             ),
         ):
@@ -506,8 +506,8 @@ class TestProcessorFactoryControlChannel:
         assert processor.config.run_id == "run-42"
 
     def test_factory_defaults_no_channel(self) -> None:
+        from plugins.business.agent.engine.processor.factory import ProcessorFactory
         from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
-        from src.infrastructure.agent.processor.factory import ProcessorFactory
 
         factory = ProcessorFactory(
             base_model="test-model",
@@ -535,11 +535,11 @@ class TestProcessorFactoryControlChannel:
 
         with (
             patch(
-                "src.infrastructure.agent.processor.factory._default_loop_resolver",
+                "plugins.business.agent.engine.processor.factory._default_loop_resolver",
                 return_value=object(),
             ),
             patch(
-                "src.infrastructure.agent.processor.factory._default_runtime_dispatcher",
+                "plugins.business.agent.engine.processor.factory._default_runtime_dispatcher",
                 return_value=object(),
             ),
         ):

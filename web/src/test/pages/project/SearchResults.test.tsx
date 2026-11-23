@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { SearchResults } from '@/pages/project/search';
+import { SearchResults } from '@business/knowledge/ui/web/project/search/index';
 
 describe('SearchResults', () => {
   it.each(['grid', 'list'] as const)(

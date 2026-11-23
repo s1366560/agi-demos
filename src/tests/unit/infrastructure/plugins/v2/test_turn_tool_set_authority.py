@@ -9,19 +9,19 @@ from unittest.mock import patch
 
 import pytest
 
-from src.application.services.agent.tool_discovery import ToolDiscoveryService
-from src.domain.model.agent.skill import Skill
-from src.infrastructure.agent.core.react_agent_composition_mixin import CompositionMixin
-from src.infrastructure.agent.core.react_agent_prompt_mixin import PromptMixin
-from src.infrastructure.agent.core.react_agent_stream_mixin import (
+from plugins.business.agent.engine.processor import ProcessorConfig, ToolDefinition
+from plugins.business.agent.engine.react.react_agent_composition_mixin import CompositionMixin
+from plugins.business.agent.engine.react.react_agent_prompt_mixin import PromptMixin
+from plugins.business.agent.engine.react.react_agent_stream_mixin import (
     StreamMixin,
     _finalize_turn_tool_set_v2,
 )
+from src.application.services.agent.tool_discovery import ToolDiscoveryService
+from src.domain.model.agent.skill import Skill
 from src.infrastructure.agent.plugins.selection_pipeline import (
     ToolSelectionContext,
     ToolSelectionTraceStep,
 )
-from src.infrastructure.agent.processor import ProcessorConfig, ToolDefinition
 from src.infrastructure.agent.routing import ExecutionPath, RoutingDecision
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     PinnedAgentRuntimeDispatcherV2,

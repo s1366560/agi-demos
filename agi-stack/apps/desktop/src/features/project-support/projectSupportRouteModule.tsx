@@ -38,7 +38,7 @@ export function createProjectSupportRouteModuleLoader({
   return async () => {
     const [{ ProjectSupportPage }, { useProjectSupportController }] =
       await Promise.all([
-        import('./ProjectSupportPage'),
+        import('@business/workspace/ui/desktop/project-support/ProjectSupportPage'),
         import('./useProjectSupportController'),
       ]);
 
@@ -94,7 +94,7 @@ function BoundProjectSupportRoute({
   createBinding: (
     context: ProjectSupportRouteContext,
   ) => ProjectSupportRouteBinding;
-  Page: typeof import('./ProjectSupportPage').ProjectSupportPage;
+  Page: typeof import('@business/workspace/ui/desktop/project-support/ProjectSupportPage').ProjectSupportPage;
   useController: typeof import('./useProjectSupportController').useProjectSupportController;
 }>) {
   const binding = useMemo(
