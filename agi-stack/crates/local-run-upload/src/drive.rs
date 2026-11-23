@@ -185,6 +185,7 @@ pub async fn drive_local_run(
             &request.user_id,
             &request.device_id,
             &request.idempotency_key,
+            &request.conversation_id,
             "register",
             &register_body.to_string(),
             request.now_ms,
@@ -277,22 +278,25 @@ pub async fn drive_local_run(
             })
         })
         .collect::<Vec<_>>();
-    let batch = json!({
-        "execution_machine_id": request.device_id,
-        "events": events,
-    });
-    if queue
-        .enqueue(
-            &request.user_id,
-            &request.device_id,
-            &request.idempotency_key,
-            "events",
-            &batch.to_string(),
-            request.now_ms,
-        )
-        .is_err()
-    {
-        return failed_report("UPLOAD_QUEUE_FULL".to_string());
+    for batch_events in event_batches(events) {
+        let batch = json!({
+            "execution_machine_id": request.device_id,
+            "events": batch_events,
+        });
+        if queue
+            .enqueue(
+                &request.user_id,
+                &request.device_id,
+                &request.idempotency_key,
+                &request.conversation_id,
+                "events",
+                &batch.to_string(),
+                request.now_ms,
+            )
+            .is_err()
+        {
+            return failed_report("UPLOAD_QUEUE_FULL".to_string());
+        }
     }
     let terminal = json!({
         "expected_revision": revision,
@@ -305,6 +309,7 @@ pub async fn drive_local_run(
             &request.user_id,
             &request.device_id,
             &request.idempotency_key,
+            &request.conversation_id,
             "terminal",
             &terminal.to_string(),
             request.now_ms,
@@ -354,6 +359,7 @@ async fn finish_cancelled(
             &request.user_id,
             &request.device_id,
             &request.idempotency_key,
+            &request.conversation_id,
             "terminal",
             &terminal.to_string(),
             request.now_ms,
@@ -378,6 +384,84 @@ async fn finish_cancelled(
     }
 }
 
+const MAX_BATCH_EVENTS: usize = 32;
+const MAX_BATCH_BYTES: usize = 200 * 1024;
+
+fn event_batches(events: Vec<Value>) -> Vec<Vec<Value>> {
+    let mut batches = Vec::new();
+    let mut current = Vec::new();
+    let mut size = 96usize;
+    for event in events.into_iter().map(fit_event_wire) {
+        let length = serde_json::to_string(&event)
+            .map(|text| text.len())
+            .unwrap_or(0)
+            + 1;
+        if !current.is_empty()
+            && (current.len() >= MAX_BATCH_EVENTS || size + length > MAX_BATCH_BYTES)
+        {
+            batches.push(std::mem::take(&mut current));
+            size = 96;
+        }
+        size += length;
+        current.push(event);
+    }
+    if !current.is_empty() {
+        batches.push(current);
+    }
+    batches
+}
+
+fn fit_event_wire(mut event: Value) -> Value {
+    let length = serde_json::to_string(&event)
+        .map(|text| text.len())
+        .unwrap_or(0);
+    if length <= 180 * 1024 {
+        return event;
+    }
+    if let Some(payload) = event.get_mut("payload").and_then(Value::as_object_mut) {
+        payload.remove("content_base64");
+        payload.insert("artifact_rejected".to_string(), json!("too_large"));
+    }
+    event
+}
+
+pub async fn resume_pending_uploads(
+    queue: &UploadQueue,
+    cloud: &dyn LocalRunCloud,
+    user_id: &str,
+    device_id: &str,
+    api_base_url: &str,
+    authorization: &str,
+    now_ms: i64,
+) -> Vec<DriveReport> {
+    let keys = match queue.pending_run_keys(user_id, device_id, now_ms) {
+        Ok(keys) => keys,
+        Err(error) => return vec![failed_report(error.to_string())],
+    };
+    let mut reports = Vec::new();
+    for (run_key, conversation_id) in keys {
+        let known_run_id = queue
+            .claim(user_id, device_id, &run_key)
+            .ok()
+            .flatten()
+            .and_then(|claim| claim.run_id);
+        let request = DriveRequest {
+            user_id: user_id.to_string(),
+            device_id: device_id.to_string(),
+            conversation_id,
+            idempotency_key: run_key,
+            message: String::new(),
+            local_root: PathBuf::new(),
+            local_root_label: String::new(),
+            api_base_url: api_base_url.to_string(),
+            authorization: authorization.to_string(),
+            now_ms,
+        };
+        reports.push(drain(queue, cloud, &request, known_run_id).await);
+    }
+    reports
+}
+
 struct DrainState {
     sync: String,
     run_id: Option<String>,
@@ -400,7 +484,12 @@ async fn drain(
         detail: String::new(),
     };
     loop {
-        let due = match queue.due(&request.user_id, &request.device_id, request.now_ms) {
+        let due = match queue.due_for_run(
+            &request.user_id,
+            &request.device_id,
+            &request.idempotency_key,
+            request.now_ms,
+        ) {
             Ok(items) => items,
             Err(error) => return failed_report(error.to_string()),
         };
@@ -414,7 +503,7 @@ async fn drain(
                 path: format!(
                     "{}/api/v1/agent/conversations/{}/local-runs",
                     request.api_base_url.trim_end_matches('/'),
-                    request.conversation_id
+                    item.conversation_id
                 ),
                 body,
                 authorization: request.authorization.clone(),
@@ -755,5 +844,90 @@ mod tests {
             retention_ms: 1,
             max_attempts: 1,
         };
+    }
+
+    struct PathCloud {
+        paths: std::sync::Mutex<Vec<String>>,
+    }
+
+    #[async_trait]
+    impl LocalRunCloud for PathCloud {
+        async fn send(&self, request: CloudCall) -> Result<CloudReply, String> {
+            self.paths.lock().expect("paths").push(request.path.clone());
+            if request.path.contains("/conversations/") {
+                let conversation = request
+                    .path
+                    .split("/conversations/")
+                    .nth(1)
+                    .unwrap_or("missing")
+                    .trim_end_matches("/local-runs");
+                return Ok(CloudReply {
+                    status: 200,
+                    body: json!({
+                        "run_id": format!("run-{conversation}"),
+                        "revision": 1,
+                        "status": "queued",
+                        "permission_profile": "read_only"
+                    }),
+                });
+            }
+            Ok(CloudReply {
+                status: 200,
+                body: json!({"status": "completed", "late_terminal": false, "upload_state": "synced"}),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn resume_drains_each_run_on_its_own_conversation() {
+        let (queue, path) = queue();
+        queue
+            .enqueue(
+                "alice",
+                "machine-a1",
+                "key-a",
+                "conv-a",
+                "register",
+                r#"{"idempotency_key":"key-a","message":"a","execution_machine_id":"machine-a1","local_root_label":"demo"}"#,
+                10,
+            )
+            .expect("enqueue a");
+        queue
+            .enqueue(
+                "alice",
+                "machine-a1",
+                "key-b",
+                "conv-b",
+                "register",
+                r#"{"idempotency_key":"key-b","message":"b","execution_machine_id":"machine-a1","local_root_label":"demo"}"#,
+                10,
+            )
+            .expect("enqueue b");
+        let cloud = PathCloud {
+            paths: std::sync::Mutex::new(Vec::new()),
+        };
+        let reports = resume_pending_uploads(
+            &queue,
+            &cloud,
+            "alice",
+            "machine-a1",
+            "https://cloud.example",
+            "Bearer secret-token",
+            10,
+        )
+        .await;
+        assert_eq!(reports.len(), 2);
+        assert!(reports.iter().all(|report| report.sync == "synced"));
+        let paths = cloud.paths.lock().expect("paths").clone();
+        assert!(paths
+            .iter()
+            .any(|path| path.contains("/conversations/conv-a/")));
+        assert!(paths
+            .iter()
+            .any(|path| path.contains("/conversations/conv-b/")));
+        assert!(!paths
+            .iter()
+            .any(|path| path.contains("conv-a") && path.contains("conv-b")));
+        let _ = std::fs::remove_file(path);
     }
 }

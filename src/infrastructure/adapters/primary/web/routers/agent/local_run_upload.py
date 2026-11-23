@@ -18,7 +18,6 @@ from src.application.services.local_run_protocol import (
     settle_local_run,
     stop_local_run,
 )
-from src.domain.ports.services.storage_service_port import UploadResult
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Conversation, User
@@ -27,37 +26,6 @@ from src.infrastructure.i18n import gettext as _
 from .run_authority_common import _load_scoped_run
 
 router = APIRouter()
-
-
-class _MemoryObjectStorage:
-    """Process-local object store used when the app has not injected one.
-
-    ``ArtifactService.create_artifact`` still runs. The redacted bytes also
-    stay on the event row so a restart can replay them.
-    """
-
-    def __init__(self) -> None:
-        self.objects: dict[str, bytes] = {}
-
-    async def upload_file(
-        self,
-        file_content: bytes,
-        object_key: str,
-        content_type: str,
-        metadata: dict[str, Any] | None = None,
-    ) -> UploadResult:
-        del metadata
-        self.objects[object_key] = file_content
-        return UploadResult(
-            object_key=object_key,
-            size_bytes=len(file_content),
-            content_type=content_type,
-            etag="local-run",
-        )
-
-    async def generate_presigned_url(self, object_key: str, expiration_seconds: int) -> str:
-        del expiration_seconds
-        return f"https://local-run.invalid/{object_key}"
 
 
 class _ServiceArtifactWriter:
@@ -146,14 +114,24 @@ def _raise_protocol(error: LocalRunProtocolError) -> NoReturn:
     ) from error
 
 
-def _writer_for(request: Request) -> LocalArtifactWriter:
+def _writer_for(request: Request) -> LocalArtifactWriter | None:
+    """Use the generation-owned artifact service. Do not invent a disposable store."""
+
     injected = getattr(request.app.state, "local_run_artifact_writer", None)
     if injected is not None:
         return injected
-    service = getattr(request.app.state, "artifact_service", None)
-    if isinstance(service, ArtifactService):
-        return _ServiceArtifactWriter(service)
-    return _ServiceArtifactWriter(ArtifactService(storage_service=_MemoryObjectStorage()))
+    from src.infrastructure.plugins.v2.artifact_lifecycle_projection import (
+        current_artifact_lifecycle_application_service_v2,
+    )
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    try:
+        service = current_artifact_lifecycle_application_service_v2().artifact
+    except RuntimeV2Error:
+        return None
+    if not isinstance(service, ArtifactService):
+        return None
+    return _ServiceArtifactWriter(service)
 
 
 async def _owned_conversation(

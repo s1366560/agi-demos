@@ -18,20 +18,33 @@ pub fn redact_uploaded_json(value: &Value, local_root: &str) -> Value {
 }
 
 pub fn contains_secret_like_text(value: &str) -> bool {
-    let patterns = [
-        r"(?i)\b(?:AKIA|ASIA)[A-Z0-9]{16}\b",
-        r"(?i)\bGHP_[A-Z0-9]{20,}\b",
-        r"(?i)\bGH(?:S|U|O|P)_[A-Z0-9]{20,}\b",
-        r"(?i)\bGITHUB_PAT_[A-Z0-9_]{20,}\b",
-        r"(?i)\bBEARER\s+[A-Z0-9._-]{16,}\b",
-        r"(?i)\bSK-PROJ-[A-Z0-9_-]{16,}\b",
-        r"(?i)\bSK-[A-Z0-9]{16,}\b",
-        r"(?i)\bSK(?:_LIVE|_TEST)?_[A-Z0-9_]{16,}\b",
-        r"(?i)\bMS_SK_[A-F0-9]{16,}\b",
-        r"(?i)\bXOX[BAPRS]_[A-Z0-9_]{10,}\b",
-        r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b",
-    ];
-    patterns.iter().any(|pattern| regex_search(pattern, value))
+    secret_patterns()
+        .iter()
+        .any(|pattern| pattern.is_match(value))
+}
+
+fn secret_patterns() -> &'static [regex::Regex] {
+    use std::sync::LazyLock;
+    static PATTERNS: LazyLock<Vec<regex::Regex>> = LazyLock::new(|| {
+        [
+            r"(?i)\b(?:AKIA|ASIA)[A-Z0-9]{16}\b",
+            r"(?i)\bGHP_[A-Z0-9]{20,}\b",
+            r"(?i)\bGH(?:S|U|O|P)_[A-Z0-9]{20,}\b",
+            r"(?i)\bGITHUB_PAT_[A-Z0-9_]{20,}\b",
+            r"(?i)\bBEARER\s+[A-Z0-9._-]{16,}\b",
+            r"(?i)\bSK-PROJ-[A-Z0-9_-]{16,}\b",
+            r"(?i)\bSK-[A-Z0-9]{16,}\b",
+            r"(?i)\bSK(?:_LIVE|_TEST)?_[A-Z0-9_]{16,}\b",
+            r"(?i)\bMS_SK_[A-F0-9]{16,}\b",
+            r"(?i)\bXOX[BAPRS]-[A-Z0-9-]{10,}\b",
+            r"(?i)\bXOX[BAPRS]_[A-Z0-9_]{10,}\b",
+            r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b",
+        ]
+        .into_iter()
+        .map(|pattern| regex::Regex::new(pattern).expect("secret pattern"))
+        .collect()
+    });
+    &PATTERNS
 }
 
 fn redact_value(value: &Value, local_root: &str, depth: usize) -> Value {
@@ -159,108 +172,6 @@ fn path_basename(path: &str) -> &str {
         .unwrap_or("redacted-path")
 }
 
-fn regex_search(pattern: &str, value: &str) -> bool {
-    RegexSearch::new(pattern).is_some_and(|search| search.found(value))
-}
-
-struct RegexSearch {
-    pattern: String,
-}
-
-impl RegexSearch {
-    fn new(pattern: &str) -> Option<Self> {
-        Some(Self {
-            pattern: pattern.to_string(),
-        })
-    }
-
-    fn found(&self, value: &str) -> bool {
-        secret_patterns_match(&self.pattern, value)
-    }
-}
-
-fn secret_patterns_match(pattern: &str, value: &str) -> bool {
-    match pattern {
-        r"(?i)\bSK-[A-Z0-9]{16,}\b" => has_sk_token(value),
-        r"(?i)\bBEARER\s+[A-Z0-9._-]{16,}\b" => has_bearer(value),
-        r"(?i)\bMS_SK_[A-F0-9]{16,}\b" => has_prefixed(value, &["ms_sk_", "MS_SK_"]),
-        r"(?i)\b(?:AKIA|ASIA)[A-Z0-9]{16}\b" => has_aws(value),
-        r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b" => has_jwt(value),
-        _ => false,
-    }
-}
-
-fn has_sk_token(value: &str) -> bool {
-    value
-        .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_')
-        .any(|token| {
-            let lower = token.to_ascii_lowercase();
-            (lower.starts_with("sk-")
-                || lower.starts_with("sk_live_")
-                || lower.starts_with("sk_test_"))
-                && token
-                    .chars()
-                    .skip(lower.find('-').map(|index| index + 1).unwrap_or(3))
-                    .count()
-                    >= 16
-        })
-}
-
-fn has_bearer(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    lower
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .windows(2)
-        .any(|pair| {
-            pair[0] == "bearer"
-                && pair[1]
-                    .chars()
-                    .filter(|ch| {
-                        ch.is_ascii_alphanumeric() || *ch == '.' || *ch == '_' || *ch == '-'
-                    })
-                    .count()
-                    >= 16
-        })
-}
-
-fn has_prefixed(value: &str, prefixes: &[&str]) -> bool {
-    value
-        .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
-        .any(|token| {
-            prefixes.iter().any(|prefix| {
-                token.len() >= prefix.len() + 16
-                    && token[..prefix.len()].eq_ignore_ascii_case(prefix)
-            })
-        })
-}
-
-fn has_aws(value: &str) -> bool {
-    value
-        .split(|ch: char| !ch.is_ascii_alphanumeric())
-        .any(|token| {
-            let upper = token.to_ascii_uppercase();
-            (upper.starts_with("AKIA") || upper.starts_with("ASIA")) && upper.len() == 20
-        })
-}
-
-fn has_jwt(value: &str) -> bool {
-    value.split_whitespace().any(|token| {
-        let parts: Vec<&str> = token
-            .trim_matches(|ch: char| ch == '"' || ch == '\'' || ch == ',')
-            .split('.')
-            .collect();
-        parts.len() == 3
-            && parts[0].starts_with("eyJ")
-            && parts.iter().all(|part| {
-                part.len() >= 8
-                    && part
-                        .chars()
-                        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
-            })
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,6 +184,14 @@ mod tests {
         assert!(!redacted.contains("/Users/alice"));
         assert_eq!(
             redact_with_root("token sk-abcdefghijklmnopqrstuvwxyz", root),
+            "<redacted>"
+        );
+        assert_eq!(
+            redact_with_root("ghp_abcdefghijklmnopqrstuvwxyz123456", root),
+            "<redacted>"
+        );
+        assert_eq!(
+            redact_with_root("xoxb-1234567890-abcdefghij", root),
             "<redacted>"
         );
         let preserved = redact_uploaded_json(

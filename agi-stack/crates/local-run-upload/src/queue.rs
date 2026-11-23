@@ -37,6 +37,8 @@ impl std::fmt::Display for QueueError {
 #[derive(Clone, Debug)]
 pub struct OutboxItem {
     pub id: i64,
+    pub run_key: String,
+    pub conversation_id: String,
     pub kind: String,
     pub body: String,
     pub attempts: i64,
@@ -68,6 +70,7 @@ impl UploadQueue {
                     user_id TEXT NOT NULL,
                     device_id TEXT NOT NULL,
                     run_key TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL,
                     kind TEXT NOT NULL,
                     body TEXT NOT NULL,
                     body_bytes INTEGER NOT NULL,
@@ -105,6 +108,7 @@ impl UploadQueue {
         user_id: &str,
         device_id: &str,
         run_key: &str,
+        conversation_id: &str,
         kind: &str,
         body: &str,
         now_ms: i64,
@@ -119,38 +123,77 @@ impl UploadQueue {
         connection
             .execute(
                 "INSERT INTO upload_outbox (
-                    user_id, device_id, run_key, kind, body, body_bytes, state,
+                    user_id, device_id, run_key, conversation_id, kind, body, body_bytes, state,
                     attempts, next_attempt_ms, created_ms, updated_ms
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', 0, ?7, ?7, ?7)",
-                params![user_id, device_id, run_key, kind, body, body_bytes, now_ms],
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending', 0, ?8, ?8, ?8)",
+                params![
+                    user_id,
+                    device_id,
+                    run_key,
+                    conversation_id,
+                    kind,
+                    body,
+                    body_bytes,
+                    now_ms
+                ],
             )
             .map_err(|error| QueueError::Storage(error.to_string()))?;
         Ok(connection.last_insert_rowid())
     }
 
-    pub fn due(
+    pub fn due_for_run(
         &self,
         user_id: &str,
         device_id: &str,
+        run_key: &str,
         now_ms: i64,
     ) -> Result<Vec<OutboxItem>, QueueError> {
         let connection = self.lock()?;
         self.expire_pending(&connection, user_id, device_id, now_ms)?;
         let mut statement = connection
             .prepare(
-                "SELECT id, kind, body, attempts FROM upload_outbox
-                 WHERE user_id = ?1 AND device_id = ?2 AND state = 'pending' AND next_attempt_ms <= ?3
+                "SELECT id, run_key, conversation_id, kind, body, attempts FROM upload_outbox
+                 WHERE user_id = ?1 AND device_id = ?2 AND run_key = ?3
+                   AND state = 'pending' AND next_attempt_ms <= ?4
                  ORDER BY id ASC",
             )
             .map_err(|error| QueueError::Storage(error.to_string()))?;
         let rows = statement
-            .query_map(params![user_id, device_id, now_ms], |row| {
+            .query_map(params![user_id, device_id, run_key, now_ms], |row| {
                 Ok(OutboxItem {
                     id: row.get(0)?,
-                    kind: row.get(1)?,
-                    body: row.get(2)?,
-                    attempts: row.get(3)?,
+                    run_key: row.get(1)?,
+                    conversation_id: row.get(2)?,
+                    kind: row.get(3)?,
+                    body: row.get(4)?,
+                    attempts: row.get(5)?,
                 })
+            })
+            .map_err(|error| QueueError::Storage(error.to_string()))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| QueueError::Storage(error.to_string()))?;
+        Ok(rows)
+    }
+
+    pub fn pending_run_keys(
+        &self,
+        user_id: &str,
+        device_id: &str,
+        now_ms: i64,
+    ) -> Result<Vec<(String, String)>, QueueError> {
+        let connection = self.lock()?;
+        self.expire_pending(&connection, user_id, device_id, now_ms)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT run_key, conversation_id FROM upload_outbox
+                 WHERE user_id = ?1 AND device_id = ?2 AND state = 'pending' AND next_attempt_ms <= ?3
+                 GROUP BY run_key, conversation_id
+                 ORDER BY MIN(id) ASC",
+            )
+            .map_err(|error| QueueError::Storage(error.to_string()))?;
+        let rows = statement
+            .query_map(params![user_id, device_id, now_ms], |row| {
+                Ok((row.get(0)?, row.get(1)?))
             })
             .map_err(|error| QueueError::Storage(error.to_string()))?
             .collect::<Result<Vec<_>, _>>()
@@ -347,7 +390,15 @@ mod tests {
     fn queue_survives_reopen_and_isolates_accounts() {
         let (queue, path) = temp_queue(1024);
         queue
-            .enqueue("alice", "device-a", "run-1", "events", "{\"ok\":true}", 10)
+            .enqueue(
+                "alice",
+                "device-a",
+                "run-1",
+                "conv-1",
+                "events",
+                "{\"ok\":true}",
+                10,
+            )
             .expect("enqueue");
         drop(queue);
         let reopened = UploadQueue::open(
@@ -359,11 +410,21 @@ mod tests {
             },
         )
         .expect("reopen");
-        let alice = reopened.due("alice", "device-a", 10).expect("due");
+        let alice = reopened
+            .due_for_run("alice", "device-a", "run-1", 10)
+            .expect("due");
         assert_eq!(alice.len(), 1);
-        assert!(reopened.due("bob", "device-a", 10).expect("bob").is_empty());
+        assert_eq!(alice[0].conversation_id, "conv-1");
         assert!(reopened
-            .due("alice", "device-b", 10)
+            .due_for_run("bob", "device-a", "run-1", 10)
+            .expect("bob")
+            .is_empty());
+        assert!(reopened
+            .due_for_run("alice", "device-a", "run-2", 10)
+            .expect("other run")
+            .is_empty());
+        assert!(reopened
+            .due_for_run("alice", "device-b", "run-1", 10)
             .expect("other device")
             .is_empty());
         let _ = std::fs::remove_file(path);
@@ -373,7 +434,15 @@ mod tests {
     fn full_queue_returns_an_explicit_error() {
         let (queue, path) = temp_queue(8);
         let error = queue
-            .enqueue("alice", "device-a", "run-1", "events", "0123456789", 10)
+            .enqueue(
+                "alice",
+                "device-a",
+                "run-1",
+                "conv-1",
+                "events",
+                "0123456789",
+                10,
+            )
             .expect_err("full");
         assert!(matches!(error, QueueError::Full));
         let _ = std::fs::remove_file(path);
@@ -383,10 +452,10 @@ mod tests {
     fn expired_pending_items_are_not_retried() {
         let (queue, path) = temp_queue(1024);
         queue
-            .enqueue("alice", "device-a", "run-1", "events", "{}", 0)
+            .enqueue("alice", "device-a", "run-1", "conv-1", "events", "{}", 0)
             .expect("enqueue");
         let due = queue
-            .due("alice", "device-a", 24 * 60 * 60 * 1000)
+            .due_for_run("alice", "device-a", "run-1", 24 * 60 * 60 * 1000)
             .expect("due");
         assert!(due.is_empty());
         let _ = std::fs::remove_file(path);

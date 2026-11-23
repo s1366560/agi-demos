@@ -30,6 +30,40 @@ export type LocalRunDispatchReport = {
 
 type Invoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 
+export type ActiveDesktopLocalRun = {
+  conversationId: string;
+  idempotencyKey: string;
+  deviceId: string;
+  runId: string | null;
+  revision: number | null;
+};
+
+const activeRuns = new Map<string, ActiveDesktopLocalRun>();
+const listeners = new Set<() => void>();
+let activeEpoch = 0;
+
+export function subscribeDesktopLocalRuns(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function desktopLocalRunEpoch(): number {
+  return activeEpoch;
+}
+
+export function activeDesktopLocalRun(conversationId: string): ActiveDesktopLocalRun | null {
+  return activeRuns.get(conversationId.trim()) ?? null;
+}
+
+function publishActive(conversationId: string, run: ActiveDesktopLocalRun | null): void {
+  const key = conversationId.trim();
+  if (!key) return;
+  if (run) activeRuns.set(key, run);
+  else activeRuns.delete(key);
+  activeEpoch += 1;
+  listeners.forEach((listener) => listener());
+}
+
 const DETAILS: Record<LocalRunSync, string> = {
   synced: 'The local run record is on the cloud.',
   pending: 'This computer is executing the run. The cloud record is not synced yet.',
@@ -63,6 +97,13 @@ export async function dispatchDesktopLocalRun(
   if (JSON.stringify(cloud).includes(input.localRoot)) {
     return report('failed', null, 'failed', false, false);
   }
+  publishActive(input.conversationId, {
+    conversationId: input.conversationId.trim(),
+    idempotencyKey: input.idempotencyKey.trim(),
+    deviceId: input.wire.execution_machine_id,
+    runId: null,
+    revision: null,
+  });
   try {
     const raw = await invoke('local_run_execute', {
       ...cloud,
@@ -71,6 +112,8 @@ export async function dispatchDesktopLocalRun(
     return normalizeReport(raw);
   } catch {
     return report('failed', null, 'failed', false, false);
+  } finally {
+    publishActive(input.conversationId, null);
   }
 }
 

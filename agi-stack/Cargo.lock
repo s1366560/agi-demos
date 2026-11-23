@@ -411,6 +411,7 @@ dependencies = [
  "agistack-core",
  "async-trait",
  "base64",
+ "regex",
  "reqwest",
  "rusqlite",
  "serde_json",

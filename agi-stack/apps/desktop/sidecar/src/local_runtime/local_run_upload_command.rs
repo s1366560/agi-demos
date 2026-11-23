@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use agistack_local_run_upload::{
-    drive_local_run, production_limits, request_cancel, DriveRequest, LocalRunCloud, ReqwestCloud,
-    UploadQueue,
+    drive_local_run, production_limits, request_cancel, resume_pending_uploads, DriveRequest,
+    LocalRunCloud, ReqwestCloud, UploadQueue,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -59,8 +59,19 @@ impl LocalRuntimeService {
             .app_data_dir
             .clone()
             .ok_or_else(|| "local_run_data_directory_unavailable".to_string())?;
-        let queue = UploadQueue::open(&data_dir.join("local-run-upload.db"), production_limits())
+        let queue_path = data_dir.join("local-run-upload.db");
+        let queue = UploadQueue::open(&queue_path, production_limits())
             .map_err(|error| error.to_string())?;
+        let _ = resume_pending_uploads(
+            &queue,
+            &ReqwestCloud::new(),
+            &parsed.user_id,
+            &parsed.device_id,
+            &parsed.api_base_url,
+            &parsed.authorization,
+            now_ms(),
+        )
+        .await;
         let tools = LocalToolHost::new(&root).map_err(|error| error.to_string())?;
         let llm = llm_for_tenant(&self.state, &parsed.tenant_id);
         let report = drive_local_run(
@@ -69,19 +80,28 @@ impl LocalRuntimeService {
             llm,
             std::sync::Arc::new(tools),
             DriveRequest {
-                user_id: parsed.user_id,
-                device_id: parsed.device_id,
+                user_id: parsed.user_id.clone(),
+                device_id: parsed.device_id.clone(),
                 conversation_id: parsed.conversation_id,
                 idempotency_key: parsed.idempotency_key,
                 message: parsed.message,
                 local_root: root,
                 local_root_label: parsed.local_root_label,
-                api_base_url: parsed.api_base_url,
-                authorization: parsed.authorization,
+                api_base_url: parsed.api_base_url.clone(),
+                authorization: parsed.authorization.clone(),
                 now_ms: now_ms(),
             },
         )
         .await;
+        if report.sync == "pending" {
+            schedule_upload_resume(
+                queue_path,
+                parsed.user_id.clone(),
+                parsed.device_id.clone(),
+                parsed.api_base_url.clone(),
+                parsed.authorization.clone(),
+            );
+        }
         Ok(json!({
             "sync": report.sync,
             "run_id": report.run_id,
@@ -124,6 +144,36 @@ impl LocalRuntimeService {
             "detail": "Stop was requested. The cloud record is not synced yet.",
         }))
     }
+}
+
+fn schedule_upload_resume(
+    queue_path: PathBuf,
+    user_id: String,
+    device_id: String,
+    api_base_url: String,
+    authorization: String,
+) {
+    tokio::spawn(async move {
+        for step in 0..5 {
+            tokio::time::sleep(std::time::Duration::from_secs(1_u64 << step)).await;
+            let Ok(queue) = UploadQueue::open(&queue_path, production_limits()) else {
+                return;
+            };
+            let reports = resume_pending_uploads(
+                &queue,
+                &ReqwestCloud::new(),
+                &user_id,
+                &device_id,
+                &api_base_url,
+                &authorization,
+                now_ms(),
+            )
+            .await;
+            if reports.iter().all(|report| report.sync != "pending") {
+                return;
+            }
+        }
+    });
 }
 
 fn llm_for_tenant(

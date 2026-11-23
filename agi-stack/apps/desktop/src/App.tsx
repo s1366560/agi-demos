@@ -408,6 +408,11 @@ import {
   dispatchComposerStop,
 } from './features/chat/composerStopResponse';
 import { agentStopTargetKey, type AgentStopReceipt } from './features/chat/agentStopResponseModel';
+import {
+  activeDesktopLocalRun,
+  desktopLocalRunEpoch,
+  subscribeDesktopLocalRuns,
+} from './features/chat/localRunDispatch';
 import { sessionActivityPresence } from './features/session/sessionNarrativeModel';
 import {
   sessionSelectionRequiresRuntimeRefresh,
@@ -5935,21 +5940,26 @@ export function App() {
       t,
     ],
   );
+  const desktopLocalEpoch = useSyncExternalStore(
+    subscribeDesktopLocalRuns,
+    desktopLocalRunEpoch,
+  );
   const stopResponseTarget = useMemo(() => composerStopTarget({
     mode: config.mode,
     scopeKey: JSON.stringify([
       config.mode, config.apiBaseUrl, config.tenantId, config.projectId, config.workspaceId,
-      auth.session?.session_id, auth.context?.revision,
+      auth.session?.session_id, auth.context?.revision, desktopLocalEpoch,
     ]),
     conversationId: selectedConversation?.id ?? '',
     run: currentArtifactRun,
     messageId: composerStopMessageId(
       selectedConversation?.id ?? '', sessionTimeline.items, agentTaskSignals,
     ),
+    desktopLocal: activeDesktopLocalRun(selectedConversation?.id ?? ''),
   }), [
     config.mode, config.apiBaseUrl, config.tenantId, config.projectId, config.workspaceId,
     auth.session?.session_id, auth.context?.revision, selectedConversation?.id,
-    currentArtifactRun, sessionTimeline.items, agentTaskSignals,
+    currentArtifactRun, sessionTimeline.items, agentTaskSignals, desktopLocalEpoch,
   ]);
   const stopResponseTargetRef = useRef(stopResponseTarget);
   stopResponseTargetRef.current = stopResponseTarget;
@@ -5966,6 +5976,20 @@ export function App() {
         cancelRun: (runId, revision) => desktopSessionRunControlOperationsV2
           .bindOperation(requestConfig, target.conversationId).cancelRun(runId, revision),
         stopSession: socket.stopAgentResponse,
+        stopDesktopLocal: async (localTarget) => {
+          const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
+          if (!invoke || !localTarget.deviceId || !localTarget.messageId) return false;
+          await invoke('local_run_stop', {
+            user_id: auth.user?.user_id ?? '',
+            device_id: localTarget.deviceId,
+            idempotency_key: localTarget.messageId,
+            run_id: localTarget.runId ?? null,
+            expected_revision: localTarget.revision ?? 1,
+            api_base_url: requestConfig.apiBaseUrl,
+            authorization: `Bearer ${requestConfig.apiKey}`,
+          });
+          return true;
+        },
         onRunOutcome: (outcome) => {
           if (agentStopTargetKey(target) !== agentStopTargetKey(stopResponseTargetRef.current)) return;
           applyAuthoritativeRun(outcome.run);
@@ -5973,7 +5997,7 @@ export function App() {
         },
       });
     },
-    [stopResponseTarget, config, desktopSessionRunControlOperationsV2,
+    [stopResponseTarget, config, auth.user?.user_id, desktopSessionRunControlOperationsV2,
       socket.stopAgentResponse, applyAuthoritativeRun, invalidateSessionAuthority],
   );
   const handleArtifactAction = useCallback(
@@ -7457,7 +7481,9 @@ export function App() {
       onRegenerateConversationSummary: regenerateConversationSummary,
       onStopResponse: stopResponseTarget ? stopComposerResponse : undefined,
       stopResponseTarget,
-      stopResponseTransportConnected: stopResponseTarget?.kind === 'local_run'
+      stopResponseTransportConnected: stopResponseTarget?.kind === 'desktop_local'
+        ? true
+        : stopResponseTarget?.kind === 'local_run'
         ? connection === 'ready' : socket.connected,
       onSteerResponse: (request) =>
         socket.sendSteerMessage({

@@ -455,6 +455,8 @@ test('only exact native component actions and cloud execution extend the IPC wai
   assert.equal(sidecarRequestTimeoutMs('other_command', management('locked_use_install')), 30_000);
   assert.equal(sidecarRequestTimeoutMs('computer_use_manage_v2', { input: { action: 'locked_use_install' } }), 30_000);
   assert.equal(sidecarRequestTimeoutMs('local_runtime_status', undefined, 12), 12);
+  assert.equal(sidecarRequestTimeoutMs('local_run_execute', { message: 'run' }), 600_000);
+  assert.equal(sidecarRequestTimeoutMs('local_run_stop', undefined, 12), 600_000);
   const now = 1_000_000;
   const call = { input: { action: 'call' }, request_deadline_ms: now + 315_000 };
   assert.equal(sidecarRequestTimeoutMs('computer_use_cloud_v2', call, 30_000, now), 320_000);

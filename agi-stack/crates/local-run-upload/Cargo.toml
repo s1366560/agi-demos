@@ -11,6 +11,7 @@ agistack-adapters-mem = { path = "../adapters-mem" }
 agistack-core = { path = "../core" }
 async-trait.workspace = true
 base64 = "0.22"
+regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde_json.workspace = true

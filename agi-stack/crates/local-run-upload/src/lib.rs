@@ -10,8 +10,8 @@ mod queue;
 mod redact;
 
 pub use drive::{
-    drive_local_run, request_cancel, CloudCall, CloudReply, DriveReport, DriveRequest,
-    LocalRunCloud, ReqwestCloud,
+    drive_local_run, request_cancel, resume_pending_uploads, CloudCall, CloudReply, DriveReport,
+    DriveRequest, LocalRunCloud, ReqwestCloud,
 };
 pub use execute::execute_local_turn;
 pub use queue::{production_limits, QueueError, UploadLimits, UploadQueue};
