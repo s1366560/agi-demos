@@ -3,6 +3,7 @@ import guestSource from './richPageGuest.js?raw';
 export type PageTarget = 'web' | 'desktop-renderer';
 export type PageScope = Readonly<{ tenantId: string; projectId: string }>;
 export interface PackagePage {
+  readonly home?: boolean;
   readonly id: string;
   readonly title: string;
   readonly routes: readonly string[];

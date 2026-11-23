@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { connectPage } from '../../plugin-slots/src/richPageBridge';
 import { menuPath, routeRank, verifyPageDocument } from '../../plugin-slots/src/richPage';
@@ -23,7 +23,9 @@ export interface RichPackagePagesProps {
   target: PageTarget;
   transport: MarketplaceTransport;
   pathname: string;
-  navigate(path: string): void;
+  navigate(path: string, options?: { replace?: boolean }): void;
+  management?: ReactNode;
+  managementLabel?: string;
   invokeDevice?: DevicePageCall;
   streamCommand?: (
     path: string,
@@ -261,7 +263,10 @@ function PageDiagnostics({
 function PageRelease(props: Selected) {
   const { item } = props;
   const [active, setActive] = useState<Item | null>(null);
-  const [failure, setFailure] = useState<{ digest: string; reason: string } | null>(null);
+  const [failure, setFailure] = useState<{
+    digest: string;
+    reason: string;
+  } | null>(null);
   const preparing = active && active.digest !== item.digest;
   const [draining, setDraining] = useState<Item[]>([]);
   const pending = useRef(new Map<string, number>());
@@ -329,6 +334,7 @@ function PageRelease(props: Selected) {
 export function RichPackagePages(props: RichPackagePagesProps) {
   const { scope, target, transport, pathname, revision = 0 } = props;
   const [items, setItems] = useState<Item[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const { tenantId, projectId } = scope;
   useEffect(() => {
@@ -359,6 +365,7 @@ export function RichPackagePages(props: RichPackagePagesProps) {
               : []
           )
         );
+        setLoaded(true);
         setError('');
       } catch (cause) {
         if (live) {
@@ -393,31 +400,78 @@ export function RichPackagePages(props: RichPackagePagesProps) {
       }
     }
   }
+  const links = items.flatMap((item) => {
+    const path = item.page.routes.map((route) => menuPath(route, scope)).find(Boolean);
+    return path ? [{ item, path }] : [];
+  });
+  const home = (links.find(({ item }) => item.page.home) ?? links[0])?.path;
+  const atHome = ['/', '/index.html', ''].includes(pathname);
+  const atManagement = ['/plugins', '/plugins/', '/project-packages.html'].includes(pathname);
+  const zh = (props.locale || document.documentElement.lang || navigator.language).startsWith('zh');
+  const managementLabel = props.managementLabel ?? (zh ? '管理插件' : 'Manage plugins');
+  useEffect(() => {
+    if (atHome && home) props.navigate(home, { replace: true });
+  }, [atHome, home, props.navigate]);
+
   return (
-    <>
-      <nav>
-        {items.map((item) => {
-          const path = item.page.routes.map((route) => menuPath(route, scope)).find(Boolean);
-          return path ? (
-            <button
-              key={item.pluginId + '/' + item.page.id}
-              type="button"
-              onClick={() => props.navigate(path)}
-              aria-current={selected === item ? 'page' : undefined}
+    <div className="project-business-pages" data-testid="project-business-pages">
+      <nav
+        className="project-business-navigation"
+        aria-label={zh ? '项目导航' : 'Project navigation'}
+      >
+        {links.length > 0 && (
+          <label>
+            {zh ? '业务页面' : 'Applications'}
+            <select
+              value={links.find(({ item }) => item === selected)?.path ?? ''}
+              onChange={(event) => props.navigate(event.target.value)}
             >
-              {item.page.title}
-            </button>
-          ) : null;
-        })}
+              <option value="" disabled>
+                {selected?.page.title ?? (zh ? '选择页面' : 'Choose a page')}
+              </option>
+              {links.map(({ item, path }) => (
+                <option key={item.pluginId + '/' + item.page.id} value={path}>
+                  {item.page.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {props.management != null && (
+          <button
+            type="button"
+            aria-current={atManagement ? 'page' : undefined}
+            onClick={() => props.navigate('/plugins')}
+          >
+            {managementLabel}
+          </button>
+        )}
       </nav>
       {error && <p role="alert">{error}</p>}
-      {selected && (
+      {atManagement ? (
+        props.management
+      ) : selected ? (
         <PageRelease
           key={JSON.stringify([tenantId, projectId, selected.pluginId, selected.page.id, pathname])}
           {...props}
           item={selected}
         />
+      ) : (
+        !error &&
+        (!loaded || (atHome && home) ? (
+          <p role="status">{zh ? '正在加载…' : 'Loading…'}</p>
+        ) : (
+          <p role="status">
+            {atHome
+              ? zh
+                ? '此项目尚无可打开的业务页面。'
+                : 'This project has no available application pages.'
+              : zh
+                ? '此页面在当前项目中不可用。'
+                : 'This page is unavailable in this project.'}
+          </p>
+        ))
       )}
-    </>
+    </div>
   );
 }

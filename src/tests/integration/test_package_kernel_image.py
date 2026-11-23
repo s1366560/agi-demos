@@ -249,7 +249,7 @@ def test_web_image_installs_billing_via_the_kernel(replicas, billing):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page(locale="en-US")
-        page.goto(origin)
+        page.goto(origin + "/plugins")
         page.get_by_label("Email", exact=True).fill(owner[0])
         page.get_by_label("Password", exact=True).fill(owner[1])
         page.get_by_role("button", name="Sign In", exact=True).click()
@@ -326,7 +326,7 @@ def test_workspace_web_and_desktop_pages_upgrade_and_rollback(replicas, business
                 content_type="text/html",
             ),
         )
-        web.goto(origin)
+        web.goto(origin + "/plugins")
         web.get_by_label("Email", exact=True).fill(owner[0])
         web.get_by_label("Password", exact=True).fill(owner[1])
         web.get_by_role("button", name="Sign In", exact=True).click()

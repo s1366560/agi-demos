@@ -41,11 +41,19 @@ def page(script=b"app.mount(1)"):
         {"commands": ["undeclared"]},
         {"routes": ["/:id/:id"]},
         {"targets": []},
+        {"home": "true"},
     ],
 )
 def test_invalid_rich_declarations(modify):
     with pytest.raises(ValueError):
         parse_rich_pages([{**page(), **modify}], {"ping"})
+
+
+def test_home_is_declared_by_the_signed_page():
+    (declared,) = parse_rich_pages([{**page(), "home": True}], {"ping"})
+    (existing,) = parse_rich_pages([page()], {"ping"})
+    assert declared.descriptor()["home"] is True
+    assert "home" not in existing.descriptor()
 
 
 def test_sdk_stages_declared_assets_and_checks_digests(tmp_path):

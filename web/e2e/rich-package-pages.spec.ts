@@ -252,3 +252,100 @@ test('desktop Agent page surfaces a revoked release grant and retains the draft'
   await expect(guest.getByLabel('Message', { exact: true })).toHaveValue('retry when approved');
   await expect(page.locator('#host-log')).not.toContainText('chat-turn');
 });
+
+test('the project opens its signed home, keeps deep links, and exposes management separately', async ({
+  page,
+}) => {
+  const webTarget = ['web'];
+  const application = (id: string, route: string, home = false) => ({
+    id,
+    title: 'Screen ' + id,
+    routes: [route],
+    targets: webTarget,
+    home,
+  });
+  const detail = application('detail', '/reports/:id', true);
+  const first = application('overview', '/overview');
+  const home = application('tasks', '/tasks', true);
+  let pages = [detail, first, home];
+  const release = 'sha256:' + 'a'.repeat(64);
+  const source = Buffer.from(
+    "document.getElementById('root').textContent = 'Signed application running'"
+  );
+  const { createHash } = await import('node:crypto');
+  await page.route('**/api/v1/**', async (request) => {
+    const url = new URL(request.request().url());
+    if (url.pathname.endsWith('/auth/token'))
+      return request.fulfill({ json: { access_token: 'test-token' } });
+    if (url.pathname.endsWith('/auth/me'))
+      return request.fulfill({
+        json: { user_id: 'tester', email: 'test@example.test', preferred_language: 'en-US' },
+      });
+    if (url.pathname.endsWith('/project-packages/projects/'))
+      return request.fulfill({
+        json: [
+          {
+            tenant_id: 't',
+            project_id: 'p',
+            tenant_name: 'Tenant',
+            project_name: 'Project',
+            can_manage: true,
+            can_execute: true,
+          },
+        ],
+      });
+    if (url.pathname.endsWith('/ui')) {
+      const descriptor = pages.find((item) => item.id === url.searchParams.get('page_id'));
+      return request.fulfill({
+        json: {
+          ...descriptor,
+          schema: 'memstack.rich-page/1',
+          release_digest: release,
+          target: 'web',
+          commands: [],
+          device_tools: [],
+          entry: {
+            path: 'ui/run.js',
+            digest: 'sha256:' + createHash('sha256').update(source).digest('hex'),
+            bytes_base64: source.toString('base64'),
+          },
+        },
+      });
+    }
+    return request.fulfill({
+      json: {
+        items: pages.length
+          ? [{ plugin_id: 'example.vendor', status: 'enabled', actual_digest: release, pages }]
+          : [],
+      },
+    });
+  });
+  const guest = page.frameLocator('iframe[data-page-ready=true]').frameLocator('iframe');
+  await page.goto('/');
+  await page.getByLabel('Email', { exact: true }).fill('test@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('test-only');
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  await expect(page).toHaveURL(/\/tasks\?/);
+  await expect(guest.getByText('Signed application running')).toBeVisible();
+  await expect(page.getByTestId('optional-business-panel')).toHaveCount(0);
+  const menu = page.getByRole('combobox', { name: 'Applications' });
+  await menu.selectOption('/overview');
+  await expect(page).toHaveURL(/\/overview\?/);
+  await page.getByRole('button', { name: 'Manage plugins' }).click();
+  await expect(page.getByTestId('optional-business-panel')).toBeVisible();
+  await expect(page.locator('iframe[data-page-ready]')).toHaveCount(0);
+  await page.goBack();
+  await expect(menu).toHaveValue('/overview');
+  await page.goto('/reports/123');
+  await expect(guest.getByText('Signed application running')).toBeVisible();
+  await expect(page).toHaveURL(/\/reports\/123$/);
+  pages = [detail, first];
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/overview\?/);
+  pages = [];
+  await page.goto('/');
+  await expect(page.getByText('This project has no available application pages.')).toBeVisible();
+  await expect(page.getByTestId('optional-business-panel')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Manage plugins' }).click();
+  await expect(page.getByTestId('optional-business-panel')).toBeVisible();
+});

@@ -104,20 +104,24 @@ function ProjectHost({
             scope={{ tenantId, projectId }}
             target="desktop-renderer"
             pathname={path}
-            navigate={(next) => {
-              location.hash = next;
+            navigate={(next, options) => {
+              if (options?.replace) location.replace('#' + next);
+              else location.hash = next;
             }}
             transport={transport}
             streamCommand={streamCommand}
+            managementLabel={t.packages}
+            management={
+              <PackageManagement
+                tenant={tenantId}
+                project={projectId}
+                canManage={projects.some((item) => item.project_id === projectId && item.can_manage)}
+                revision={version}
+                refresh={() => bump((value) => value + 1)}
+              />
+            }
             invokeDevice={device}
             revision={version}
-          />
-          <PackageManagement
-            tenant={tenantId}
-            project={projectId}
-            canManage={projects.some((item) => item.project_id === projectId && item.can_manage)}
-            revision={version}
-            refresh={() => bump((value) => value + 1)}
           />
         </>
       )}

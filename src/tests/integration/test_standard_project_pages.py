@@ -26,7 +26,9 @@ def _sign_in(browser, url, owner):
     page.get_by_label("Email", exact=True).fill(owner["email"])
     page.get_by_label("Password", exact=True).fill(owner["password"])
     page.get_by_role("button", name="Sign In", exact=True).click()
-    expect(page.get_by_test_id("optional-business-panel")).to_be_visible()
+    guest = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
+    expect(guest.get_by_role("heading", name="Agent chat", exact=True)).to_be_visible(timeout=15000)
+    expect(page.get_by_test_id("optional-business-panel")).to_have_count(0)
     return page
 
 

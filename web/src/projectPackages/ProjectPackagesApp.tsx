@@ -228,23 +228,29 @@ function ProjectPicker({ token }: { token: string }) {
             pathname={location.pathname}
             transport={session.transport}
             streamCommand={session.stream}
-            navigate={(path) => {
-              void navigate({
-                pathname: path,
-                search: new URLSearchParams({
-                  tenant: selected.tenant_id,
-                  project: selected.project_id,
-                }).toString(),
-              });
+            managementLabel={t('projectPackages.manage')}
+            navigate={(path, options) => {
+              void navigate(
+                {
+                  pathname: path,
+                  search: new URLSearchParams({
+                    tenant: selected.tenant_id,
+                    project: selected.project_id,
+                  }).toString(),
+                },
+                options
+              );
             }}
-          />
-          <OptionalBusinessPanel
-            key={selected.project_id}
-            service={service}
-            tenantId={selected.tenant_id}
-            projectId={selected.project_id}
-            canManage={selected.can_manage}
-            canExecute={selected.can_execute}
+            management={
+              <OptionalBusinessPanel
+                key={selected.project_id}
+                service={service}
+                tenantId={selected.tenant_id}
+                projectId={selected.project_id}
+                canManage={selected.can_manage}
+                canExecute={selected.can_execute}
+              />
+            }
           />
         </>
       ) : matches.length > 1 ? (

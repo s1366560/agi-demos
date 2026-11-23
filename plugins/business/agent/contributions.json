@@ -334,6 +334,7 @@
     },
     {
       "id": "chat",
+      "home": true,
       "title": "Agent chat",
       "routes": [
         "/agent/chat",

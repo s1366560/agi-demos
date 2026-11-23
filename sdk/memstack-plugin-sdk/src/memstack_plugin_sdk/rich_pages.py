@@ -60,6 +60,7 @@ class RichPage:
     style: PageAsset | None
     commands: tuple[str, ...]
     device_tools: tuple[str, ...]
+    home: bool = False
 
     @property
     def assets(self) -> tuple[PageAsset, ...]:
@@ -71,6 +72,7 @@ class RichPage:
             "title": self.title,
             "routes": self.routes,
             "targets": sorted(self.targets),
+            **({"home": True} if self.home else {}),
         }
 
 
@@ -139,8 +141,12 @@ def _parse_page(value: object) -> RichPage:
         "device_tools",
         "entry",
         "style",
+        "home",
     }:
         raise ValueError("unsupported rich page declaration")
+    home = value.get("home", False)
+    if not isinstance(home, bool):
+        raise ValueError("rich page home must be a boolean")
     page_id, title = value.get("id"), value.get("title")
     if not isinstance(page_id, str) or not _IDENTIFIER.fullmatch(page_id):
         raise ValueError("invalid page identifier")
@@ -154,6 +160,7 @@ def _parse_page(value: object) -> RichPage:
         _check_route(route)
     return RichPage(
         id=page_id,
+        home=home,
         title=title,
         routes=routes,
         targets=targets,

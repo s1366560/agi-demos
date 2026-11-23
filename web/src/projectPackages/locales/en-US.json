@@ -277,7 +277,8 @@
     "subtitleVoluntary": "Choose a new password for your account."
   },
   "projectPackages": {
-    "title": "Project packages",
+    "title": "Project workspace",
+    "manage": "Manage plugins",
     "project": "Project",
     "select": "Select an authorized project",
     "noAccess": "You do not have access to this project.",

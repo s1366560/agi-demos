@@ -277,7 +277,8 @@
     "subtitleVoluntary": "为您的账户设置一个新密码。"
   },
   "projectPackages": {
-    "title": "项目插件包",
+    "title": "项目工作区",
+    "manage": "管理插件",
     "project": "项目",
     "select": "选择已授权的项目",
     "noAccess": "你没有该项目的访问权限。",
