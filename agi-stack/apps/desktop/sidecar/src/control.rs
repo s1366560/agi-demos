@@ -261,7 +261,8 @@ pub(crate) async fn run() -> Result<(), String> {
                             },
                             Err(error) => failure(id, &error),
                         };
-                        let value = serde_json::to_value(response).map_err(|error| error.to_string())?;
+                        let value =
+                            serde_json::to_value(response).map_err(|error| error.to_string())?;
                         output_tx
                             .send(value)
                             .await
@@ -509,9 +510,7 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
         "local_run_stop" => {
             let runtime = state.runtime.clone();
             let args = request.args.clone().unwrap_or(Value::Null);
-            runtime
-                .stop_uploaded_local_run(args)
-                .await
+            runtime.stop_uploaded_local_run(args).await
         }
         "local_runtime_configure" => {
             let runtime = state.runtime.clone();

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, NoReturn
+from typing import Any, Literal, NoReturn, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -117,7 +117,10 @@ def _raise_protocol(error: LocalRunProtocolError) -> NoReturn:
 def _writer_for(request: Request) -> LocalArtifactWriter | None:
     """Use the generation-owned artifact service. Do not invent a disposable store."""
 
-    injected = getattr(request.app.state, "local_run_artifact_writer", None)
+    injected = cast(
+        "LocalArtifactWriter | None",
+        getattr(request.app.state, "local_run_artifact_writer", None),
+    )
     if injected is not None:
         return injected
     from src.infrastructure.plugins.v2.artifact_lifecycle_projection import (
@@ -128,8 +131,6 @@ def _writer_for(request: Request) -> LocalArtifactWriter | None:
     try:
         service = current_artifact_lifecycle_application_service_v2().artifact
     except RuntimeV2Error:
-        return None
-    if not isinstance(service, ArtifactService):
         return None
     return _ServiceArtifactWriter(service)
 

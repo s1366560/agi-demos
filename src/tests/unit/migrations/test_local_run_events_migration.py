@@ -44,6 +44,36 @@ def test_upgrade_skips_when_the_event_table_exists() -> None:
     operation.create_table.assert_not_called()
 
 
+def test_upgrade_skips_when_the_authority_table_is_absent() -> None:
+    migration = _load_migration()
+    operation = Mock()
+    migration.op = operation
+
+    def has_table(name: str) -> bool:
+        return False
+
+    migration.sa.inspect = lambda _bind: SimpleNamespace(has_table=has_table)
+
+    migration.upgrade()
+
+    operation.create_table.assert_not_called()
+
+
+def test_upgrade_creates_the_event_table_when_the_authority_table_exists() -> None:
+    migration = _load_migration()
+    operation = Mock()
+    migration.op = operation
+
+    def has_table(name: str) -> bool:
+        return name == "agent_run_authorities"
+
+    migration.sa.inspect = lambda _bind: SimpleNamespace(has_table=has_table)
+
+    migration.upgrade()
+
+    operation.create_table.assert_called_once()
+
+
 def test_downgrade_skips_when_the_event_table_is_absent() -> None:
     migration = _load_migration()
     operation = Mock()

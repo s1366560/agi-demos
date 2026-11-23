@@ -144,7 +144,6 @@ def redact_uploaded_json(value: JsonValue, *, depth: int = 0) -> JsonValue:
             safe_key = redact_uploaded_text(str(key))
             redacted[safe_key] = redact_uploaded_json(item, depth=depth + 1)
         return redacted
-    return REDACTED_TOKEN
 
 
 def canonical_payload(value: JsonValue) -> tuple[JsonValue, str]:
@@ -645,12 +644,13 @@ async def _run_by_idempotency(
     conversation_id: str,
     key: str,
 ) -> AgentRunAuthorityModel | None:
-    return await db.scalar(
+    found: AgentRunAuthorityModel | None = await db.scalar(
         select(AgentRunAuthorityModel).where(
             AgentRunAuthorityModel.conversation_id == conversation_id,
             AgentRunAuthorityModel.idempotency_key == key,
         )
     )
+    return found
 
 
 def _prepare_event(event: Mapping[str, Any]) -> tuple[int, str, Any, str]:
@@ -729,12 +729,13 @@ async def _batch_has_conflict(
 
 
 async def _event_row(db: AsyncSession, run_id: str, seq: int) -> AgentLocalRunEventModel | None:
-    return await db.scalar(
+    found: AgentLocalRunEventModel | None = await db.scalar(
         select(AgentLocalRunEventModel).where(
             AgentLocalRunEventModel.run_id == run_id,
             AgentLocalRunEventModel.seq == seq,
         )
     )
+    return found
 
 
 async def _insert_events(

@@ -47,12 +47,12 @@ export function inheritableWebRun<T extends WebExecutionRun & { updated_at?: str
   runs: readonly T[],
 ): T | null {
   let selected: { run: T; rank: number } | null = null;
-  runs.forEach((run, index) => {
-    if (run.status === 'cancelled') return;
+  for (const [index, run] of runs.entries()) {
+    if (run.status === 'cancelled') continue;
     const parsed = Date.parse(run.updated_at || '');
     const rank = Number.isFinite(parsed) ? parsed : index;
     if (!selected || rank >= selected.rank) selected = { run, rank };
-  });
+  }
   return selected?.run ?? null;
 }
 

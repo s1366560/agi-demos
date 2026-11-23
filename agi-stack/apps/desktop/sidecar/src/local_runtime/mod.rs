@@ -102,12 +102,12 @@ mod fan_out_tool_host;
 mod hitl_model_response;
 mod knowledge_authority_v2;
 mod local_feature_authority_v2;
-mod local_run_upload_command;
 mod local_plugin_instances_v2;
 mod local_plugin_routes_v2;
 mod local_plugin_tool_host_v2;
 #[cfg(test)]
 mod local_route_parity_tests;
+mod local_run_upload_command;
 #[cfg(test)]
 mod managed_resource_tests;
 mod mcp_agent_tool_host;

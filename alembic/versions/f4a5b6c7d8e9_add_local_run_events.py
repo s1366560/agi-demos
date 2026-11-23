@@ -20,6 +20,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _TABLE = "agent_local_run_events"
+_AUTHORITY_TABLE = "agent_run_authorities"
 _KIND_CHECK = "ck_agent_local_run_events_kind"
 _SEQ_CHECK = "ck_agent_local_run_events_seq_positive"
 _KIND_SQL = (
@@ -36,7 +37,7 @@ def upgrade() -> None:
     """Create the seq log when it is not already present."""
 
     inspector = _inspector()
-    if inspector.has_table(_TABLE):
+    if inspector.has_table(_TABLE) or not inspector.has_table(_AUTHORITY_TABLE):
         return
     op.create_table(
         _TABLE,
