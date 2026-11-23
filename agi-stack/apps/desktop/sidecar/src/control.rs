@@ -51,6 +51,8 @@ type HmacSha256 = Hmac<Sha256>;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct InitializeRequest {
+    #[serde(default)]
+    runtime_profile: crate::sidecar_profile::SidecarProfile,
     #[serde(rename = "type")]
     message_type: String,
     protocol_version: u16,
@@ -115,7 +117,7 @@ struct ControlState {
     plugin_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
     plugin_renderer_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
     trusted_sessions: TrustedSessionBroker,
-    workspace_core: WorkspaceCoreSupervisor,
+    workspace_core: Option<WorkspaceCoreSupervisor>,
     plugin_control_plane_v2: PlatformPluginControlPlaneReconcilerV2,
 }
 
@@ -155,6 +157,7 @@ pub(crate) async fn run() -> Result<(), String> {
         initialize.workspace_root,
         credential_vault.clone(),
         local_knowledge_acceptance,
+        initialize.runtime_profile,
     )
     .await?;
     let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
@@ -177,20 +180,24 @@ pub(crate) async fn run() -> Result<(), String> {
         }
     };
     let status = runtime.status();
-    let workspace_core = match WorkspaceCoreSupervisor::start(
-        initialize.workspace_core_binary_path,
-        &initialize.data_directory,
-        &status.api_base_url,
-        runtime.clone(),
-    )
-    .await
-    {
-        Ok(supervisor) => supervisor,
-        Err(error) => {
-            plugin_control_plane_v2.shutdown().await;
-            runtime.shutdown().await;
-            return Err(error);
+    let workspace_core = if initialize.runtime_profile == crate::sidecar_profile::SidecarProfile::Full {
+        match WorkspaceCoreSupervisor::start(
+            initialize.workspace_core_binary_path,
+            &initialize.data_directory,
+            &status.api_base_url,
+            runtime.clone(),
+        )
+        .await
+        {
+            Ok(supervisor) => Some(supervisor),
+            Err(error) => {
+                plugin_control_plane_v2.shutdown().await;
+                runtime.shutdown().await;
+                return Err(error);
+            }
         }
+    } else {
+        None
     };
     let ready = ready_response(
         &initialize.nonce,
@@ -242,6 +249,12 @@ pub(crate) async fn run() -> Result<(), String> {
         while device_calls.try_join_next().is_some() {}
         while local_run_tasks.try_join_next().is_some() {}
         let response = match serde_json::from_str::<ControlRequest>(&line) {
+            Ok(request) if request.message_type != "request" || request.id.is_empty() || request.id.len() > 128 => {
+                failure(request.id, "sidecar control request is invalid")
+            }
+            Ok(request) if !initialize.runtime_profile.allows_command(&request.command) => {
+                failure(request.id, "desktop command is not supported")
+            }
             Ok(request) if request.command == "local_run_execute" => {
                 if local_run_tasks.len() >= 2 {
                     failure(request.id, "local_run_executor_busy")
@@ -350,7 +363,7 @@ pub(crate) async fn run() -> Result<(), String> {
     state.runtime.shutdown().await;
     local_requests.shutdown().await;
     device_calls.shutdown().await;
-    state.workspace_core.shutdown().await;
+    if let Some(core) = state.workspace_core { core.shutdown().await; }
     state.plugin_control_plane_v2.shutdown().await;
     output_failure.map_or(Ok(()), Err)
 }
@@ -458,6 +471,7 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
         return failure(id, "sidecar control request is invalid");
     }
     let result = match request.command.as_str() {
+        #[cfg(any(test, feature = "legacy-business"))]
         "browser_context" => {
             state
                 .runtime
@@ -467,12 +481,15 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 )
                 .await
         }
+        #[cfg(any(test, feature = "legacy-business"))]
         "browser_auth_pending" => state
             .runtime
             .browser_auth_pending(request.args.clone().unwrap_or(Value::Null)),
+        #[cfg(any(test, feature = "legacy-business"))]
         "browser_auth_respond" => state
             .runtime
             .browser_auth_respond(request.args.clone().unwrap_or(Value::Null)),
+        #[cfg(any(test, feature = "legacy-business"))]
         "computer_use_cloud_v2" => match request.args.as_ref().and_then(|args| args.get("input")) {
             Some(input) => {
                 state
@@ -486,6 +503,7 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
             Some(input) => state.runtime.device_plugin_manage_v2(&state.trusted_sessions, input.clone()).await,
             None => Err("device_plugin_request_invalid".into()),
         },
+        #[cfg(any(test, feature = "legacy-business"))]
         "device_mcp_manage_v2" => match request.args.as_ref().and_then(|args| args.get("input")) {
             Some(input) => {
                 state
@@ -495,6 +513,7 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
             }
             None => Err("device_mcp_request_invalid".into()),
         },
+        #[cfg(any(test, feature = "legacy-business"))]
         "audio_sessions_manage_v2" => {
             match request.args.as_ref().and_then(|args| args.get("input")) {
                 Some(input) => {
@@ -506,6 +525,7 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 None => Err("audio_session_request_invalid".into()),
             }
         }
+        #[cfg(any(test, feature = "legacy-business"))]
         "computer_use_manage_v2" => {
             match request.args.as_ref().and_then(|args| args.get("input")) {
                 Some(input) => {
@@ -517,7 +537,10 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 None => Err("computer-use command input is required".into()),
             }
         }
-        "workspace_core_status" => serde_json::to_value(state.workspace_core.status().await)
+        "workspace_core_status" => serde_json::to_value(match &state.workspace_core {
+            Some(core) => core.status().await,
+            None => crate::workspace_core_helper::WorkspaceCoreHelperStatus::not_started(),
+        })
             .map_err(|error| error.to_string()),
         "local_run_stop" => {
             let runtime = state.runtime.clone();
@@ -728,11 +751,15 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 .map_err(|error| error.to_string())
                 .map(|()| Value::Null)
         }
+        #[cfg(any(test, feature = "legacy-business"))]
         "browser_bridge_install" => task::block_in_place(native_host::install_manifests)
             .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
+        #[cfg(any(test, feature = "legacy-business"))]
         "browser_bridge_uninstall" => task::block_in_place(native_host::uninstall_manifests)
             .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
+        #[cfg(any(test, feature = "legacy-business"))]
         "browser_bridge_status" => browser_bridge_status_payload(&state.runtime),
+        #[cfg(any(test, feature = "legacy-business"))]
         "browser_bridge_dev_call" => match parse_arg::<String>(request.args.as_ref(), "method") {
             Ok(method) => {
                 let params = request
@@ -849,6 +876,7 @@ mod tests {
     #[test]
     fn initialization_rejects_relative_authority_paths() {
         let initialize = InitializeRequest {
+            runtime_profile: Default::default(),
             message_type: "initialize".to_string(),
             protocol_version: PROTOCOL_VERSION,
             nonce: "a".repeat(32),

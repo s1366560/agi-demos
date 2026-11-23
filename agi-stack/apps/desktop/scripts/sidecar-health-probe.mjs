@@ -129,7 +129,8 @@ export async function probeSidecarHealth({
   const sidecar = resolve(sidecarPath);
   const workspaceCore = resolve(workspaceCorePath);
   await access(sidecar, constants.X_OK);
-  await access(workspaceCore, constants.X_OK);
+  const runtimeProfile = process.env.AGISTACK_DESKTOP_PROFILE === 'full' ? 'full' : 'package-host';
+  if (runtimeProfile === 'full') await access(workspaceCore, constants.X_OK);
 
   const ownedRoot = rootDirectory === undefined;
   const root = rootDirectory ?? (await mkdtemp(join(tmpdir(), 'agistack-sidecar-probe-')));
@@ -174,6 +175,7 @@ export async function probeSidecarHealth({
           dataDirectory,
           workspaceRoot,
           workspaceCoreBinaryPath: workspaceCore,
+          runtimeProfile,
           legacyDataDirectories: [],
         })}\n`,
       );

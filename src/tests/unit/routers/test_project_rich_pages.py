@@ -257,6 +257,7 @@ async def test_configured_runtime_double_checks_project_and_release_over_tcp(
             async with asyncio.timeout(5):
                 while not server.started:
                     await asyncio.sleep(0.01)
+            kernel.state.package_operations_v1 = {}
             kernel.state.package_application_runtime_origin = (
                 f"http://127.0.0.1:{listener.getsockname()[1]}"
             )

@@ -6,7 +6,12 @@ import { localPluginEnUS, localPluginZhCN } from './localPluginMessages';
 import { openFilesWithDesktopDialog } from '../runtime/nativeFileBridge';
 
 import { deviceRequest, type Catalog } from '../../packageHost/device';
-type Preview = { reference: LocalPluginReference; declared_permissions: string[]; tools: string[] };
+type Preview = {
+  reference: LocalPluginReference;
+  declared_permissions: string[];
+  tools: string[];
+  workspace?: { label: string; token: string };
+};
 
 export function DevicePluginSettings({
   tenant,
@@ -17,11 +22,15 @@ export function DevicePluginSettings({
   project: string;
   pluginId?: string;
 }) {
-  const messages = document.documentElement.lang.startsWith('zh') ? localPluginZhCN : localPluginEnUS;
+  const messages = document.documentElement.lang.startsWith('zh')
+    ? localPluginZhCN
+    : localPluginEnUS;
   const t = (key: keyof typeof messages) => messages[key];
+  const [modelUrl, setModelUrl] = useState('');
+  const [modelName, setModelName] = useState('');
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [preview, setPreview] = useState<(Preview & { archive: string }) | null>(null);
-  const manager=catalog?.can_manage === true;
+  const manager = catalog?.can_manage === true;
   const [approved, setApproved] = useState(false);
   const [revoke, setRevoke] = useState<string | null>(null);
   const [args, setArgs] = useState('{}');
@@ -33,7 +42,7 @@ export function DevicePluginSettings({
   const invoke = useCallback(
     <T,>(operation: Record<string, unknown>, token?: string): Promise<T> =>
       deviceRequest<T>(tenant, project, pluginId, operation, token),
-    [tenant, project, pluginId],
+    [tenant, project, pluginId]
   );
 
   const refresh = useCallback(async () => {
@@ -92,7 +101,7 @@ export function DevicePluginSettings({
       if (!mounted.current) return;
       const data = await invoke<Preview>(
         { action: 'inspect', archive_base64: archive },
-        catalog.context_token,
+        catalog.context_token
       );
       if (mounted.current) setPreview({ ...data, archive });
     });
@@ -106,8 +115,15 @@ export function DevicePluginSettings({
           reference: preview.reference,
           approved_permissions: preview.declared_permissions,
           approve_for_day: manager,
+          ...(preview.workspace && {
+            workspace_token: preview.workspace.token,
+          }),
+          ...(preview.workspace &&
+            (modelName || modelUrl) && {
+              local_model: { base_url: modelUrl, model: modelName },
+            }),
         },
-        catalog.context_token,
+        catalog.context_token
       );
       if (mounted.current) await refresh();
     });
@@ -158,6 +174,54 @@ export function DevicePluginSettings({
               <li key={permission}>{permission}</li>
             ))}
           </ul>
+          {preview.workspace && (
+            <fieldset>
+              <legend>
+                {t('localPlugins.localWorkspace')} · {preview.workspace.label}
+              </legend>
+              <button
+                disabled={busy}
+                type="button"
+                onClick={() =>
+                  void perform(async () => {
+                    const pick = window.__MEMSTACK_DESKTOP__?.core?.invoke;
+                    if (!pick || !catalog) throw new Error('native_file_bridge_unavailable');
+                    const picked = await pick<{ status: string }>('package_workspace_choose');
+                    if (picked.status !== 'selected') return;
+                    setApproved(false);
+                    const offer = await invoke<Preview>(
+                      { action: 'inspect', archive_base64: preview.archive },
+                      catalog.context_token
+                    );
+                    if (mounted.current) setPreview({ ...offer, archive: preview.archive });
+                  })
+                }
+              >
+                {t('localPlugins.chooseDirectory')}
+              </button>
+              <p>{t('localPlugins.deviceModelDescription')}</p>
+              <label>
+                {t('localPlugins.deviceModelOrigin')}
+                <input
+                  value={modelUrl}
+                  onChange={(e) => {
+                    setApproved(false);
+                    setModelUrl(e.target.value);
+                  }}
+                />
+              </label>
+              <label>
+                {t('localPlugins.deviceModelName')}
+                <input
+                  value={modelName}
+                  onChange={(e) => {
+                    setApproved(false);
+                    setModelName(e.target.value);
+                  }}
+                />
+              </label>
+            </fieldset>
+          )}
           <label>
             <input
               type="checkbox"
@@ -203,8 +267,12 @@ export function DevicePluginSettings({
                   ? setRevoke(item.grant_id)
                   : void perform(async () => {
                       await invoke(
-                        { action: 'revoke', reference: item.reference, grant_id: item.grant_id },
-                        catalog.context_token,
+                        {
+                          action: 'revoke',
+                          reference: item.reference,
+                          grant_id: item.grant_id,
+                        },
+                        catalog.context_token
                       );
                       if (mounted.current) await refresh();
                     })
@@ -232,7 +300,7 @@ export function DevicePluginSettings({
                       tool,
                       input: JSON.parse(args),
                     },
-                    catalog.context_token,
+                    catalog.context_token
                   );
                   if (mounted.current) {
                     await refresh();

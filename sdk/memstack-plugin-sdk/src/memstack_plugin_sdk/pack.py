@@ -213,6 +213,7 @@ def _build_target(
         "provenance",
         "compatibility",
         "services",
+        "device_capability",
     }:
         raise ValueError("unknown package configuration field")
     plugin, version, target, tool = (
@@ -246,6 +247,12 @@ def _build_target(
     if device_archive is not None:
         files[device_path] = device_archive
     permissions, contribution = _collect_contributions(root, spec, files)
+    if "device_capability" in spec:
+        from .device_capability import attach_device_capability
+
+        device_tool = attach_device_capability(
+            spec["device_capability"], files, permissions, target, device_archive
+        )
     if contribution and contribution.pages:
         from .rich_pages import validate_device_tools
 

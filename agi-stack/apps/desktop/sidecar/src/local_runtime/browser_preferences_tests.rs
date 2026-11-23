@@ -80,7 +80,7 @@ async fn configured_endpoints_and_default_survive_a_fresh_application_runtime() 
         let root = PathBuf::from(root);
         let app_data = root.join("application");
         let vault = ApplicationCredentialVault::open(&app_data).unwrap();
-        let first = LocalRuntimeService::start(app_data, root.join("workspace"), vault, None)
+        let first = LocalRuntimeService::start(app_data, root.join("workspace"), vault, None, crate::sidecar_profile::SidecarProfile::Full)
             .await
             .unwrap();
         let expected = preferences();
@@ -109,7 +109,7 @@ async fn configured_endpoints_and_default_survive_a_fresh_application_runtime() 
     let second_workspace = directory.0.join("next-workspace");
     let reopened_vault = ApplicationCredentialVault::open(&app_data).unwrap();
     let second =
-        LocalRuntimeService::start(app_data, second_workspace.clone(), reopened_vault, None)
+        LocalRuntimeService::start(app_data, second_workspace.clone(), reopened_vault, None, crate::sidecar_profile::SidecarProfile::Full)
             .await
             .unwrap();
     let status = second.status();

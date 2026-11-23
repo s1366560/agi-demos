@@ -122,6 +122,11 @@ def prepare_archives(directory: Path, env: dict[str, str]) -> None:
         )
 
 
+def compose_project_name(directory: Path) -> str:
+    identity = hashlib.sha256(str(directory.resolve()).encode()).hexdigest()[:12]
+    return "memstack-standard-" + identity
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -134,12 +139,12 @@ def main() -> None:
         "STANDARD_DIRECTORY": str(directory),
         "PYTHONPATH": str(ROOT / "sdk/memstack-plugin-sdk/src"),
     }
-    identity = hashlib.sha256(str(directory).encode()).hexdigest()[:12]
+    project = compose_project_name(directory)
     compose = [
         "docker",
         "compose",
         "--project-name",
-        "memstack-standard-" + identity,
+        project,
         "-f",
         "docker-compose.standard.yml",
     ]
@@ -165,7 +170,7 @@ def main() -> None:
         # Retain publisher keys, identities and deterministic release inputs on the checkout.
         # The registry volume must survive because the installed archives pin its images.
         run([*compose, "rm", "-sf", "api", "web", "redis", "postgres"], env)
-        volume = "memstack-standard-" + identity + "_postgres"
+        volume = project + "_postgres"
         existing = subprocess.check_output(
             ["docker", "volume", "ls", "--filter", f"name=^{volume}$", "--format", "{{.Name}}"],
             env=env,

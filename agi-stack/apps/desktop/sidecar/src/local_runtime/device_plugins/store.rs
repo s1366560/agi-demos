@@ -14,6 +14,10 @@ pub(super) struct Selection {
     pub generation_id: String,
     pub approved_permissions: BTreeSet<String>,
     pub tools: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<std::path::PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_model: Option<local_chat::LocalModel>,
     #[serde(default)]
     pub last_invoked_at: Option<String>,
     #[serde(default)]
@@ -52,21 +56,23 @@ pub(super) fn record_attempt(
     selection: &Selection,
     result: &Result<Value, String>,
 ) -> Result<(), String> {
-    let mut item = selection.clone();
-    if result.is_ok() {
-        item.last_invoked_at = Some(chrono::Utc::now().to_rfc3339());
-    }
-    item.last_error = result.as_ref().err().map(|error| {
+    let invoked_at = result
+        .as_ref()
+        .ok()
+        .map(|_| chrono::Utc::now().to_rfc3339());
+    let error_code = result.as_ref().err().map(|error| {
         if error == "device_plugin_grant_denied" {
-            error.clone()
+            "device_plugin_grant_denied"
         } else {
-            "device_plugin_invocation_failed".into()
+            "device_plugin_invocation_failed"
         }
     });
-    let json = serde_json::to_string(&item).map_err(|_| "device_plugin_store_invalid")?;
     db.execute(
-        "UPDATE desktop_cloud_device_plugins_v2 SET selection=?1 WHERE owner=?2 AND bundle_id=?3",
-        params![json, owner, item.reference.bundle_id],
+        "UPDATE desktop_cloud_device_plugins_v2
+         SET selection=json_set(selection,'$.last_invoked_at',COALESCE(?1,json_extract(selection,'$.last_invoked_at')),'$.last_error',?2)
+         WHERE owner=?3 AND bundle_id=?4 AND json_extract(selection,'$.grant_id')=?5
+             AND json_extract(selection,'$.generation_id')=?6",
+        params![invoked_at,error_code,owner,selection.reference.bundle_id,selection.grant_id,selection.generation_id],
     )
     .map_err(|_| "device_plugin_store_unavailable")?;
     Ok(())
@@ -86,4 +92,13 @@ pub(super) fn load(
         return Err("device_plugin_installation_changed".into());
     }
     Ok((selection, bytes))
+}
+
+pub(super) fn projection(selection: &Selection) -> Value {
+    let mut view = json!(selection);
+    if let Some(fields) = view.as_object_mut() {
+        fields.remove("workspace");
+        fields.remove("local_model");
+    }
+    view
 }

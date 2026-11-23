@@ -27,8 +27,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentRunAuthorityModel,
     Conversation,
 )
-from src.infrastructure.agent.hitl.utils import contains_secret_like_text
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.security.secret_text import contains_secret_like_text
 
 type JsonValue = dict[str, "JsonValue"] | list["JsonValue"] | str | int | float | bool | None
 
@@ -327,7 +327,9 @@ async def append_local_run_events(
             "Event seqs must be contiguous and strictly increasing",
         )
     await db.refresh(run)
-    if run.status in _TERMINAL or run.status == "cancel_requested":
+    # The device sends its buffered WAL before the terminal receipt. A stop fences
+    # execution immediately, while its already-produced events can still drain.
+    if run.status in _TERMINAL:
         if not await _batch_is_idempotent(db, run.id, prepared):
             raise LocalRunProtocolError(
                 409,
@@ -744,6 +746,10 @@ async def _insert_events(
     prepared: Sequence[tuple[int, str, Any, str]],
     artifacts: LocalArtifactWriter | None,
 ) -> None:
+    created_at = run.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    event_time_us = int(created_at.timestamp() * 1_000_000)
     for seq, kind, payload, digest in prepared:
         artifact_id = None
         stored = payload
@@ -776,7 +782,7 @@ async def _insert_events(
                     "local_root_label": run.local_root_label,
                     "artifact_id": artifact_id,
                 },
-                event_time_us=1_700_000_000_000_000 + seq,
+                event_time_us=event_time_us,
                 event_counter=seq,
                 correlation_id=run.id,
             )
@@ -832,6 +838,15 @@ async def _confirm_cancelled(
     run: AgentRunAuthorityModel,
 ) -> LocalRunTerminalReceipt:
     """The executor observed stop and confirms cancellation without a second run."""
+
+    if run.status == "cancelled":
+        receipt = _terminal_receipt(run) or {}
+        return LocalRunTerminalReceipt(
+            status="cancelled",
+            revision=run.revision,
+            late_terminal=bool(receipt.get("late_terminal")),
+            upload_state="synced",
+        )
 
     now = datetime.now(UTC)
     snapshot = dict(run.authorization_snapshot)

@@ -6,6 +6,10 @@ version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+legacy-business = []
+
 [[bin]]
 name = "agistack-desktop-sidecar"
 path = "src/main.rs"

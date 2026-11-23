@@ -334,7 +334,7 @@
     },
     {
       "id": "chat",
-      "title": "Cloud chat",
+      "title": "Agent chat",
       "routes": [
         "/agent/chat",
         "/tenant/:tenantId/agent-workspace",
@@ -346,7 +346,7 @@
       ],
       "entry": {
         "path": "ui/chat.js",
-        "digest": "sha256:c011058c1b73d59aba5c18ed2f116ee08c081f6ba9da7452db4280ae687246a9"
+        "digest": "sha256:99d21b6e4544e56bf909464d2ee4c856d53dc2f08bd2ae44dda88cc5d9084a5e"
       },
       "commands": [
         "chat-list",
@@ -355,7 +355,9 @@
         "chat-turn",
         "chat-cancel"
       ],
-      "device_tools": []
+      "device_tools": [
+        "local_chat"
+      ]
     }
   ]
 }

@@ -30,7 +30,7 @@ The Cyber Workspace is a human-AI collaborative space where humans and AI agents
 | Frontend Routes | `/tenant/:tenantId/workspaces` and `/tenant/:tenantId/workspaces/:workspaceId` | `App.tsx` |
 | Frontend Pages | WorkspaceList.tsx (list + create), WorkspaceDetail.tsx (hex grid + tabs) | `web/src/pages/tenant/` |
 | Zustand Store | Full store with state, actions, WS event handlers | `web/src/stores/workspace.ts` |
-| Service Layer | REST client matching all backend router endpoints | `web/src/services/workspaceService.ts` |
+| Service Layer | REST client matching all backend router endpoints | `plugins/business/workspace/ui/web/services/workspaceService.ts` |
 | WebSocket Hook | Subscription/heartbeat/event routing to store | `web/src/hooks/useWorkspaceWebSocket.ts` |
 | UI Components | 24 files: HexGrid (2D SVG), HexCell, HexAgent, HexCorridor, HexHumanSeat, HexFlowAnimation, HexTooltip, HexObjective, HexMiniMap, HexContextMenu, BlackboardPanel, TaskBoard, ObjectiveList/Card/Progress/CreateModal, GeneList/Card/AssignModal, MemberPanel, PresenceBar/Avatar, TopologyBoard | `web/src/components/workspace/` |
 
@@ -298,7 +298,7 @@ src/infrastructure/adapters/primary/web/websocket/handlers/workspace_handler.py 
 
 # Frontend
 web/src/stores/workspace.ts                                  # Add chat state + actions
-web/src/services/workspaceService.ts                         # Add chat/blackboard/topology API methods
+plugins/business/workspace/ui/web/services/workspaceService.ts                         # Add chat/blackboard/topology API methods
 web/src/pages/tenant/WorkspaceDetail.tsx                     # Add chat panel, integrate 3D toggle
 web/src/types/workspace.ts                                   # Add WorkspaceMessage type
 

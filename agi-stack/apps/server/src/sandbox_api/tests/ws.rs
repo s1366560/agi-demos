@@ -155,7 +155,12 @@ async fn spawn_terminal_ws_upstream() -> (
         #[allow(clippy::result_large_err)]
         let ws =
             tokio_tungstenite::accept_hdr_async(stream, |req: &WsHandshakeRequest, response| {
-                capture_authenticated_ws_request(req, response, &request_tx)
+                let mut response = capture_authenticated_ws_request(req, response, &request_tx)?;
+                assert_eq!(req.headers()["sec-websocket-protocol"], "tty");
+                response
+                    .headers_mut()
+                    .insert("sec-websocket-protocol", HeaderValue::from_static("tty"));
+                Ok(response)
             })
             .await
             .unwrap();
@@ -545,7 +550,7 @@ async fn terminal_ws_proxy_speaks_python_envelope_over_ttyd() {
         .recv_timeout(Duration::from_secs(2))
         .expect("ttyd init frame");
     let init: Value = serde_json::from_slice(&init).unwrap();
-    assert_eq!(init["AuthToken"], "");
+    assert_eq!(init["AuthToken"], "c2FuZGJveDpwcml2YXRlLWNhcGFiaWxpdHk=");
     assert_eq!(init["columns"], 100);
     assert_eq!(init["rows"], 32);
 

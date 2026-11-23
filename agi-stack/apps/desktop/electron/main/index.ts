@@ -1,3 +1,4 @@
+import { fullDesktop, packageCommands } from '../desktopProfile';
 import { invokeDevicePlugin } from './devicePluginTransfer';
 import { executeDeviceMcpManagementV2 } from './deviceMcpManagementPolicy';
 import { RendererDeliveryAdmissionV2 } from './rendererDeliveryAdmissionV2';
@@ -135,22 +136,23 @@ const SIDECAR_COMMANDS = new Set([
   'platform_plugin_renderer_distribution_current_v2',
   'trusted_session_clear',
   'legacy_local_login_purge',
-  'retire_local_workspace_history',
   'local_runtime_status',
   'local_runtime_configure',
   'workspace_core_status',
-  'browser_bridge_install',
+  ...(fullDesktop ? [
+    'browser_bridge_install',
   'browser_bridge_uninstall',
   'browser_bridge_status',
   'browser_auth_pending',
   'browser_auth_respond',
   'computer_use_manage_v2',
   'audio_sessions_manage_v2',
+  ] : []),
 ]);
-const captureAuthorizationGate = new DisplayCaptureAuthorizationGate();
-const mcpAppFrames: McpAppFrames = new McpAppFrames(owner => mcpAppGuestHost.ownsVisibleSurface(owner));
-const mcpAppFrameHost: McpAppFrameHost = new McpAppFrameHost(
-  mcpAppFrames,
+const captureAuthorizationGate = fullDesktop ? new DisplayCaptureAuthorizationGate() : null;
+const mcpAppFrames: McpAppFrames | null = fullDesktop ? new McpAppFrames(owner => mcpAppGuestHost!.ownsVisibleSurface(owner)) : null;
+const mcpAppFrameHost: McpAppFrameHost | null = fullDesktop ? new McpAppFrameHost(
+  mcpAppFrames!,
   async (input) => {
     if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
     return sidecarSupervisor.invoke('mcp_app_operation', input);
@@ -159,8 +161,8 @@ const mcpAppFrameHost: McpAppFrameHost = new McpAppFrameHost(
     if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
     return sidecarSupervisor.invokeCancellable('mcp_app_operation', input, signal);
   },
-);
-const mcpAppGuestHost: McpAppGuestHost = new McpAppGuestHost({
+) : null;
+const mcpAppGuestHost: McpAppGuestHost | null = fullDesktop ? new McpAppGuestHost({
   getWindow: () => mainWindow,
   preload: join(currentDirectory, '../preload/mcpAppGuest.cjs'),
   entryUrl: () =>
@@ -168,18 +170,18 @@ const mcpAppGuestHost: McpAppGuestHost = new McpAppGuestHost({
   installProtocol: (guestSession) => {
     guestSession.protocol.handle(RENDERER_PROTOCOL_SCHEME, handleRendererRequest);
   },
-  retireMount: input => mcpAppFrameHost.unregister(input),
-});
+  retireMount: input => mcpAppFrameHost!.unregister(input),
+}) : null;
 const cloudRequestExecutions = new CloudRequestExecutionRegistry({ timeoutMs: 30_000 });
 const qaProfileDirectory = configureQaProfile({
   app,
   requestedPath: process.env.AGISTACK_DESKTOP_QA_PROFILE_DIR,
 });
-const webControlPlaneConfiguration = resolveWebControlPlaneConfiguration({
+const webControlPlaneConfiguration = fullDesktop ? resolveWebControlPlaneConfiguration({
   developmentOrigin: process.env.AGISTACK_WEB_CONTROL_PLANE_ORIGIN,
   isPackaged: app.isPackaged,
   signedOrigin: SIGNED_WEB_CONTROL_PLANE_ORIGIN,
-});
+}) : null;
 
 type DesktopCommandArgs = Record<string, unknown> | undefined;
 
@@ -423,6 +425,7 @@ function validateDeviceAuthorizationUrl(args: DesktopCommandArgs): string {
 }
 
 async function captureCurrentDisplay(): Promise<DesktopDisplayCapture> {
+  if (!captureAuthorizationGate) throw new Error('display capture unavailable');
   if (!mainWindow || mainWindow.isDestroyed()) {
     throw new Error('desktop window is unavailable');
   }
@@ -478,12 +481,12 @@ async function captureCurrentDisplay(): Promise<DesktopDisplayCapture> {
 
 async function openWebControlPlane(args: DesktopCommandArgs): Promise<void> {
   if (
-    webControlPlaneConfiguration.capability.availability !== 'available' ||
-    webControlPlaneConfiguration.origin === null
+    webControlPlaneConfiguration!.capability.availability !== 'available' ||
+    webControlPlaneConfiguration!.origin === null
   ) {
-    throw new Error(webControlPlaneConfiguration.capability.reasonCode);
+    throw new Error(webControlPlaneConfiguration!.capability.reasonCode);
   }
-  const target = buildWebControlPlaneUrl(webControlPlaneConfiguration.origin, args);
+  const target = buildWebControlPlaneUrl(webControlPlaneConfiguration!.origin, args);
   await shell.openExternal(target, { activate: true });
 }
 
@@ -531,7 +534,7 @@ async function workspaceCoreCapabilitySnapshot(): Promise<
 async function desktopNativeCapabilities(): Promise<DesktopNativeCapabilitySnapshot> {
   return Object.freeze({
     contractVersion: 1,
-    webControlPlane: webControlPlaneConfiguration.capability,
+    webControlPlane: webControlPlaneConfiguration!.capability,
     workspaceCore: await workspaceCoreCapabilitySnapshot(),
   });
 }
@@ -586,6 +589,10 @@ async function handleNativeFileSave(event: IpcMainInvokeEvent, request: unknown)
 }
 
 async function handleNativeFileOpen(event: IpcMainInvokeEvent, request: unknown): Promise<unknown> {
+  if (!fullDesktop && (!request || typeof request !== 'object' ||
+      !('purpose' in request) || request.purpose !== 'plugin_package')) {
+    throw new Error('native_file_purpose_invalid');
+  }
   return openNativeFileWithDialog(request, nativeFileDialogAuthority(event));
 }
 
@@ -710,7 +717,7 @@ function createIabRuntime(): void {
   iabPool = pool;
   iabBackend = new IabBackend({
     pool,
-    executeMcpApp: (input) => mcpAppFrames.execute(input),
+    executeMcpApp: (input) => mcpAppFrames!.execute(input),
     log: (message) => console.warn(`[iab] ${message}`),
   });
   iabBackend.start();
@@ -724,11 +731,23 @@ async function executeDesktopCommand(
   if (event.sender !== mainWindow?.webContents || typeof command !== 'string') {
     throw new Error('desktop command is not authorized');
   }
-  if (command.startsWith('iab_')) {
+  if (!fullDesktop) {
+    authorizedCloudRequestOwner(event);
+    if (!packageCommands.has(command)) throw new Error('desktop command is not supported');
+    if (command === 'local_runtime_configure') {
+      const config = args?.config;
+      if (!config || typeof config !== 'object' || Object.keys(config).length !== 1 ||
+          !('workspace_root' in config) || typeof config.workspace_root !== 'string' ||
+          !isAbsolute(config.workspace_root) || Object.keys(args ?? {}).length !== 1) {
+        throw new Error('local runtime configuration is invalid');
+      }
+    }
+  }
+  if (fullDesktop && command.startsWith('iab_')) {
     void authorizedCloudRequestOwner(event);
     return executeIabCommand(command, args);
   }
-  switch (command) {
+  if (fullDesktop) switch (command) {
     case 'browser_auth_pending':
     case 'browser_auth_respond': {
       void authorizedCloudRequestOwner(event);
@@ -741,53 +760,53 @@ async function executeDesktopCommand(
     case 'mcp_app_guest_layout':
     case 'mcp_app_guest_respond': {
       void authorizedCloudRequestOwner(event);
-      if (command === 'mcp_app_guest_open') return mcpAppGuestHost.open(args);
-      if (command === 'mcp_app_guest_start') return mcpAppGuestHost.start(args);
-      if (command === 'mcp_app_guest_update') return mcpAppGuestHost.update(args);
-      if (command === 'mcp_app_guest_layout') return mcpAppGuestHost.layout(args);
-      return mcpAppGuestHost.respond(args);
+      if (command === 'mcp_app_guest_open') return mcpAppGuestHost!.open(args);
+      if (command === 'mcp_app_guest_start') return mcpAppGuestHost!.start(args);
+      if (command === 'mcp_app_guest_update') return mcpAppGuestHost!.update(args);
+      if (command === 'mcp_app_guest_layout') return mcpAppGuestHost!.layout(args);
+      return mcpAppGuestHost!.respond(args);
     }
     case 'mcp_app_guest_release': {
       void authorizedCloudRequestOwner(event);
-      return mcpAppGuestHost.release(args);
+      return mcpAppGuestHost!.release(args);
     }
     case 'mcp_app_guest_prune': {
       void authorizedCloudRequestOwner(event);
-      return mcpAppGuestHost.prune(args);
+      return mcpAppGuestHost!.prune(args);
     }
     case 'mcp_app_guest_clear': {
       void authorizedCloudRequestOwner(event);
-      return mcpAppGuestHost.clear();
+      return mcpAppGuestHost?.clear();
     }
     case 'mcp_app_frame_register': {
       void authorizedCloudRequestOwner(event);
       if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
-      const result = await mcpAppFrameHost.register(mcpAppGuestHost.owner(args), args);
+      const result = await mcpAppFrameHost!.register(mcpAppGuestHost!.owner(args), args);
       try {
         if (result && typeof result === 'object' && 'pending' in result && result.pending === false) {
-          mcpAppGuestHost.registered(args);
+          mcpAppGuestHost!.registered(args);
         }
       }
-      catch (error) { await mcpAppFrameHost.unregister(args); throw error; }
+      catch (error) { await mcpAppFrameHost!.unregister(args); throw error; }
       return result;
     }
     case 'mcp_app_frame_unregister': {
       void authorizedCloudRequestOwner(event);
-      return mcpAppFrameHost.unregister(args);
+      return mcpAppFrameHost!.unregister(args);
     }
     case 'mcp_app_operation_prepare': {
       void authorizedCloudRequestOwner(event);
-      return mcpAppFrameHost.prepare(args);
+      return mcpAppFrameHost!.prepare(args);
     }
     case 'mcp_app_operation_cancel': {
       void authorizedCloudRequestOwner(event);
-      return mcpAppFrameHost.cancel(args);
+      return mcpAppFrameHost!.cancel(args);
     }
     case 'mcp_app_operation': {
       void authorizedCloudRequestOwner(event);
       if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
       if (args?.operation === 'attach' || args?.operation === 'detach') throw new Error('mcp_app_operation_forbidden');
-      return mcpAppFrameHost.operation(args);
+      return mcpAppFrameHost!.operation(args);
     }
     case 'device_mcp_manage_v2': {
       const supervisor = sidecarSupervisor;
@@ -797,13 +816,6 @@ async function executeDesktopCommand(
         () => authorizedCloudRequestOwner(event),
         (request) => supervisor.invoke(command, request),
       );
-    }
-    case 'device_plugin_manage_v2': {
-      void authorizedCloudRequestOwner(event);
-      const supervisor = sidecarSupervisor;
-      if (!supervisor) throw new Error('desktop sidecar is unavailable');
-      return invokeDevicePlugin(join(app.getPath('userData'), 'runtime'), args,
-        request => supervisor.invoke(command, request));
     }
     case 'audio_sessions_manage_v2': {
       void authorizedCloudRequestOwner(event);
@@ -817,15 +829,8 @@ async function executeDesktopCommand(
         ? computerUseActivity.track(event.sender.id,args)
         : sidecarSupervisor.invoke(command,args);
     }
-    case 'frontend_ready':
-      return undefined;
     case 'get_desktop_capabilities':
       return await desktopNativeCapabilities();
-    case 'open_device_authorization_url':
-      await shell.openExternal(validateDeviceAuthorizationUrl(args), {
-        activate: true,
-      });
-      return undefined;
     case 'capture_current_display':
       return captureCurrentDisplay();
     case 'open_web_control_plane':
@@ -842,6 +847,52 @@ async function executeDesktopCommand(
       await sandboxDesktopGrants.close(ownerId, args);
       return undefined;
     }
+    case 'cloud_socket_open': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
+      try {
+        await cloudSocketBroker.open(ownerId, args);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'CloudSessionAuthenticationInvalidError') {
+          notifyCloudSessionInvalid();
+        }
+        throw error;
+      }
+      return undefined;
+    }
+    case 'cloud_socket_send': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
+      await cloudSocketBroker.send(ownerId, args);
+      return undefined;
+    }
+    case 'cloud_socket_close': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
+      await cloudSocketBroker.close(ownerId, args);
+      return undefined;
+    }
+    case 'request_microphone_access':
+      return process.platform === 'darwin'
+        ? systemPreferences.askForMediaAccess('microphone')
+        : true;
+  }
+  switch (command) {
+    case 'device_plugin_manage_v2': {
+      void authorizedCloudRequestOwner(event);
+      rendererDeliveryAdmissionV2.assertAdmitted();
+      const supervisor = sidecarSupervisor;
+      if (!supervisor) throw new Error('desktop sidecar is unavailable');
+      return invokeDevicePlugin(join(app.getPath('userData'), 'runtime'), args,
+        request => supervisor.invoke(command, request));
+    }
+    case 'frontend_ready':
+      return undefined;
+    case 'open_device_authorization_url':
+      await shell.openExternal(validateDeviceAuthorizationUrl(args), {
+        activate: true,
+      });
+      return undefined;
     case 'local_run_execute':
     case 'local_run_stop': {
       authorizedCloudRequestOwner(event);
@@ -866,8 +917,12 @@ async function executeDesktopCommand(
           fetch: (url, init) => net.fetch(url, init),
           refreshTrustedSession: (reason) => cloudSessionRefresher(reason),
           signal: lease.signal,
+          onPackageProgress: (data) => {
+            authorizedCloudRequestOwner(event);
+            event.senderFrame?.send('memstack:cloud-package-progress', { requestId: args?.requestId, data });
+          },
           withContextSwitch: (operation) => {
-            if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+            if (fullDesktop && !sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
             return withDesktopAuthorityTransitionV2(operation);
           },
         }));
@@ -958,14 +1013,18 @@ async function executeDesktopCommand(
     }
     case 'cloud_session_projection': {
       const ownerId = authorizedCloudRequestOwner(event);
-      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      const supervisor = sidecarSupervisor;
+      if (!supervisor) throw new Error('desktop sidecar is unavailable');
       const lease = cloudRequestExecutions.begin(ownerId, args?.requestId);
       try {
         return await projectVaultBoundCloudSession({
-          loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
+          loadTrustedSession: () => supervisor.invoke('trusted_session_load'),
           fetch: (url, init) => net.fetch(url, init),
           refreshTrustedSession: (reason) => cloudSessionRefresher(reason),
           signal: lease.signal,
+        }, async () => {
+          authorizedCloudRequestOwner(event);
+          await supervisor.invoke('retire_local_workspace_history', { cloud_history_ready: true });
         });
       } catch (error) {
         if (error instanceof CloudSessionAuthenticationInvalidError) {
@@ -975,31 +1034,6 @@ async function executeDesktopCommand(
       } finally {
         lease.release();
       }
-    }
-    case 'cloud_socket_open': {
-      const ownerId = authorizedCloudRequestOwner(event);
-      if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
-      try {
-        await cloudSocketBroker.open(ownerId, args);
-      } catch (error) {
-        if (error instanceof Error && error.name === 'CloudSessionAuthenticationInvalidError') {
-          notifyCloudSessionInvalid();
-        }
-        throw error;
-      }
-      return undefined;
-    }
-    case 'cloud_socket_send': {
-      const ownerId = authorizedCloudRequestOwner(event);
-      if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
-      await cloudSocketBroker.send(ownerId, args);
-      return undefined;
-    }
-    case 'cloud_socket_close': {
-      const ownerId = authorizedCloudRequestOwner(event);
-      if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
-      await cloudSocketBroker.close(ownerId, args);
-      return undefined;
     }
     case 'cloud_auth_password': {
       void authorizedCloudRequestOwner(event);
@@ -1126,10 +1160,7 @@ async function executeDesktopCommand(
       void authorizedCloudRequestOwner(event);
       if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
       return sidecarSupervisor.invoke(command);
-    case 'request_microphone_access':
-      return process.platform === 'darwin'
-        ? systemPreferences.askForMediaAccess('microphone')
-        : true;
+    case 'package_workspace_choose':
     case 'choose_workspace_directory': {
       void authorizedCloudRequestOwner(event);
       const ownerWindow = mainWindow;
@@ -1146,6 +1177,13 @@ async function executeDesktopCommand(
       const selected = result.filePaths[0];
       if (!selected || !isAbsolute(selected)) {
         throw new Error('workspace directory must be absolute');
+      }
+      if (command === 'package_workspace_choose') {
+        const supervisor = sidecarSupervisor;
+        if (!supervisor) throw new Error('desktop sidecar is unavailable');
+        authorizedCloudRequestOwner(event);
+        await supervisor.invoke('local_runtime_configure', {config:{workspace_root:selected}});
+        return {status:'selected'};
       }
       return { status: 'selected', path: selected };
     }
@@ -1179,7 +1217,7 @@ async function executeDesktopCommand(
         ].includes(command)) {
           await cloudAuthenticationAuthority?.cancelPendingAuthentication();
           const supervisor = sidecarSupervisor;
-          if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+          if (fullDesktop && !sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
           return withDesktopAuthorityTransitionV2(async () => {
             try {
               return await supervisor.invoke(command, args);
@@ -1485,7 +1523,7 @@ async function createMainWindow(): Promise<void> {
   });
   mainWindow = window;
   const cloudRequestOwnerId = window.webContents.id;
-  if (sandboxDesktopGrants) {
+  if (fullDesktop && sandboxDesktopGrants) {
     installSandboxDesktopGrantElectron(window.webContents.session, sandboxDesktopGrants, {
       resolveOwner: resolveSandboxDesktopOwner,
     });
@@ -1497,15 +1535,15 @@ async function createMainWindow(): Promise<void> {
     if (details.isMainFrame && !details.isSameDocument) {
       cloudSocketBroker?.cancelOwner(cloudRequestOwnerId);
       cloudRequestExecutions.cancelOwner(cloudRequestOwnerId);
-      mcpAppGuestHost.clear();
-      void mcpAppFrameHost.clear();
+      mcpAppGuestHost?.clear();
+      void mcpAppFrameHost?.clear();
       computerUseActivity?.clear(cloudRequestOwnerId);
       void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
     }
   });
   window.on('closed', () => {
-    mcpAppGuestHost.clear();
-    void mcpAppFrameHost.clear();
+    mcpAppGuestHost?.clear();
+    void mcpAppFrameHost?.clear();
     computerUseActivity?.clear(cloudRequestOwnerId);
     void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
     void sandboxDesktopGrants?.revokeOwner(cloudRequestOwnerId).catch(() => {
@@ -1517,8 +1555,8 @@ async function createMainWindow(): Promise<void> {
     if (mainWindow === window) mainWindow = null;
   });
   window.webContents.on('render-process-gone', () => {
-    mcpAppGuestHost.clear();
-    void mcpAppFrameHost.clear();
+    mcpAppGuestHost?.clear();
+    void mcpAppFrameHost?.clear();
     computerUseActivity?.clear(cloudRequestOwnerId);
     void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
     void sandboxDesktopGrants?.revokeOwner(cloudRequestOwnerId).catch(() => {
@@ -1535,17 +1573,17 @@ async function createMainWindow(): Promise<void> {
 }
 
 async function withDesktopAuthorityTransitionV2<T>(operation: () => Promise<T>): Promise<T> {
-  mcpAppGuestHost.clear();
-  const mcpRetirement = mcpAppFrameHost.clear();
+  mcpAppGuestHost?.clear();
+  const mcpRetirement = mcpAppFrameHost?.clear();
   computerUseActivity?.clear();
   const grants = sandboxDesktopGrants;
-  if (!grants) throw new Error('sandbox desktop grants unavailable');
+  if (fullDesktop && !grants) throw new Error('sandbox desktop grants unavailable');
   return rendererDeliveryAdmissionV2.transition(
     () => Promise.all([
       mcpRetirement,
       ...[...rendererDeliveryOwnersV2.keys()].map(retireRendererDeliveryOwnerV2),
     ]),
-    () => grants.withAuthorityTransition(operation),
+    () => fullDesktop ? grants!.withAuthorityTransition(operation) : operation(),
   );
 }
 
@@ -1632,7 +1670,11 @@ function handleFatalStartup(error: unknown): void {
 
 async function bootstrapApplication(): Promise<void> {
   installRendererProtocol();
-  installMediaPermissionPolicy();
+  if (fullDesktop) installMediaPermissionPolicy();
+  else {
+    session.defaultSession.setPermissionCheckHandler(() => false);
+    session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  }
   const pluginDataPlaneCredentialsV2 =
     takePlatformPluginCredentialEnvironmentsV2(process.env);
   sidecarSupervisor = createSidecarSupervisor();
@@ -1648,54 +1690,56 @@ async function bootstrapApplication(): Promise<void> {
       input: pluginDataPlaneCredentialsV2.renderer,
     });
   }
-  sandboxDesktopGrants = new SandboxDesktopGrantRegistry({
-    authorize: (request, signal) =>
-      authorizeVaultBoundSandboxDesktopGrant(request, {
-        loadTrustedSession: () => applicationSupervisor.invoke('trusted_session_load'),
-        fetch: (url, init) => net.fetch(url, init),
-        signal,
-      }),
-    randomId: () => randomUUID(),
-    blankFrame: (ownerId, frameId) =>
-      blankSandboxDesktopGrantFrame(resolveSandboxDesktopOwner, ownerId, frameId),
-  });
-  computerUseInput = new ComputerUseInputMonitor((ownerId, input) => {
-    const contents = mainWindow?.webContents;
-    if (contents && !contents.isDestroyed() && contents.id === ownerId)
-      contents.send(COMPUTER_USE_INPUT_CHANNEL, input);
-  });
-  computerUseActivity = new ComputerUseActivityMonitor({
-    invoke:(args)=>applicationSupervisor.invoke('computer_use_manage_v2',args),
-    emit:(ownerId,snapshot,mode)=>{const contents=mainWindow?.webContents;if(contents&&!contents.isDestroyed()&&contents.id===ownerId)contents.send(COMPUTER_USE_ACTIVITY_CHANNEL,{mode,snapshot});},
-    show:()=>{if(mainWindow?.isMinimized())mainWindow.restore();mainWindow?.show();mainWindow?.focus();},
-    surface:createComputerUseActivityTray(),
-    inputs: computerUseInput,
-  });
-  cloudSocketBroker = new DesktopCloudSocketBroker({
-    computerUse:createComputerUseCloudDeviceBridge((command,args)=>applicationSupervisor.invoke(command,args)),
-      authorize: (input) =>
-      authorizeVaultBoundCloudSocket(input, {
-        loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
-        fetch: (url, init) => net.fetch(url, init),
-        refreshTrustedSession: (reason) => cloudSessionRefresher(reason),
-      }),
-    createSocket: (url, protocols) =>
-      new WebSocket(url, [...protocols]) as unknown as CloudSocketLike,
-    emit: sendCloudSocketEvent,
-  });
+  if (fullDesktop) {
+    sandboxDesktopGrants = new SandboxDesktopGrantRegistry({
+      authorize: (request, signal) =>
+        authorizeVaultBoundSandboxDesktopGrant(request, {
+          loadTrustedSession: () => applicationSupervisor.invoke('trusted_session_load'),
+          fetch: (url, init) => net.fetch(url, init),
+          signal,
+        }),
+      randomId: () => randomUUID(),
+      blankFrame: (ownerId, frameId) =>
+        blankSandboxDesktopGrantFrame(resolveSandboxDesktopOwner, ownerId, frameId),
+    });
+    computerUseInput = new ComputerUseInputMonitor((ownerId, input) => {
+      const contents = mainWindow?.webContents;
+      if (contents && !contents.isDestroyed() && contents.id === ownerId)
+        contents.send(COMPUTER_USE_INPUT_CHANNEL, input);
+    });
+    computerUseActivity = new ComputerUseActivityMonitor({
+      invoke:(args)=>applicationSupervisor.invoke('computer_use_manage_v2',args),
+      emit:(ownerId,snapshot,mode)=>{const contents=mainWindow?.webContents;if(contents&&!contents.isDestroyed()&&contents.id===ownerId)contents.send(COMPUTER_USE_ACTIVITY_CHANNEL,{mode,snapshot});},
+      show:()=>{if(mainWindow?.isMinimized())mainWindow.restore();mainWindow?.show();mainWindow?.focus();},
+      surface:createComputerUseActivityTray(),
+      inputs: computerUseInput,
+    });
+    cloudSocketBroker = new DesktopCloudSocketBroker({
+      computerUse:createComputerUseCloudDeviceBridge((command,args)=>applicationSupervisor.invoke(command,args)),
+        authorize: (input) =>
+        authorizeVaultBoundCloudSocket(input, {
+          loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
+          fetch: (url, init) => net.fetch(url, init),
+          refreshTrustedSession: (reason) => cloudSessionRefresher(reason),
+        }),
+      createSocket: (url, protocols) =>
+        new WebSocket(url, [...protocols]) as unknown as CloudSocketLike,
+      emit: sendCloudSocketEvent,
+    });
+  }
   cloudAuthenticationAuthority = new DesktopCloudAuthenticationAuthority({
     now: () => Date.now(),
     randomId: () => randomUUID(),
     fetch: (url, init) => net.fetch(url, init),
     loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
     saveTrustedSession: async (input) => {
-      if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+      if (fullDesktop && !sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
       return withDesktopAuthorityTransitionV2(
         () => applicationSupervisor.invoke('trusted_session_save', input),
       );
     },
     clearTrustedSession: async () => {
-      if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+      if (fullDesktop && !sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
       return withDesktopAuthorityTransitionV2(
         () => applicationSupervisor.invoke('trusted_session_clear'),
       );
@@ -1706,7 +1750,7 @@ async function bootstrapApplication(): Promise<void> {
     fetch: (url, init) => net.fetch(url, init),
     openExternal: async (url) => shell.openExternal(url, { activate: true }),
     saveTrustedSession: async (input) => {
-      if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+      if (fullDesktop && !sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
       return withDesktopAuthorityTransitionV2(
         () => applicationSupervisor.invoke('trusted_session_save', input),
       );
@@ -1721,14 +1765,16 @@ async function bootstrapApplication(): Promise<void> {
       clear: () => sidecarSupervisor!.invoke('oauth_pending_attempt_clear'),
     },
   });
-  createIabRuntime();
   ipcMain.handle(DESKTOP_COMMAND_CHANNEL, executeDesktopCommand);
+  if (fullDesktop) {
+    createIabRuntime();
   ipcMain.handle(MCP_APP_GUEST_CHANNEL, (event, command, input) =>
-    mcpAppGuestHost.receive(event, command, input),
+    mcpAppGuestHost!.receive(event, command, input),
   );
   ipcMain.handle(NATIVE_FILE_SAVE_CHANNEL, handleNativeFileSave);
-  ipcMain.handle(NATIVE_FILE_OPEN_CHANNEL, handleNativeFileOpen);
   ipcMain.handle(NATIVE_FILE_INGEST_CHANNEL, handleNativeFileIngest);
+  }
+  ipcMain.handle(NATIVE_FILE_OPEN_CHANNEL, handleNativeFileOpen);
   ipcMain.handle(UPDATE_STATE_CHANNEL, handleUpdateState);
   ipcMain.handle(UPDATE_CHECK_CHANNEL, handleUpdateCheck);
   ipcMain.handle(UPDATE_RESTART_TO_APPLY_CHANNEL, handleUpdateInstall);

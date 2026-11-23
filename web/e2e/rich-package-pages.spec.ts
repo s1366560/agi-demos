@@ -172,3 +172,83 @@ test('a page navigates to a signed sibling only within the authenticated project
     await body.evaluate(() => window.memstack.navigate('/settings').catch((e) => e.message))
   ).toBe('page_navigation_denied');
 });
+
+test('signed Agent page keeps local replay read-only on Web and routes cloud turns to the cloud', async ({
+  page,
+}) => {
+  await page.goto('/e2e/fixtures/rich-package-host.html?chat-web');
+  const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
+  await expect(guest.getByText('Saved local')).toBeVisible();
+  await expect(guest.getByRole('button', { name: 'Send to device' })).toBeDisabled();
+  await expect(guest.getByLabel('Message', { exact: true })).toHaveAttribute('readonly', '');
+  await expect(guest.getByLabel('New conversation location')).toBeHidden();
+  await guest.getByLabel('Conversation', { exact: true }).selectOption('cloud');
+  await expect(guest.getByText('Saved cloud')).toBeVisible();
+  await guest.getByLabel('Message', { exact: true }).fill('hello cloud');
+  await guest.getByRole('button', { name: 'Send to cloud' }).click();
+  await expect(page.locator('#host-log')).toContainText('"command_id":"chat-turn"');
+  await expect(page.locator('#host-log')).not.toContainText('local_chat');
+});
+
+test('desktop Agent page binds execute and stop to the same local turn and replays synced history', async ({
+  page,
+}) => {
+  await page.goto('/e2e/fixtures/rich-package-host.html?chat-desktop');
+  const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
+  await expect(guest.getByLabel('New conversation location')).toHaveValue('local');
+  await guest.getByRole('button', { name: 'New conversation', exact: true }).click();
+  await expect(guest.getByText('Saved new')).toBeVisible();
+  await guest.getByLabel('Message', { exact: true }).fill('hello device');
+  await guest.getByRole('button', { name: 'Send to device' }).click();
+  await guest.getByRole('button', { name: 'Cancel run' }).click();
+  await expect(guest.getByText('Device turn cancelled')).toBeVisible();
+  const [create, execute, stop] = JSON.parse(await page.locator('#host-log').innerText());
+  expect(create.input.execution_target).toBe('local');
+  expect(execute.tool).toBe('local_chat');
+  expect(stop.tool).toBe('local_chat');
+  expect(execute.payload).toEqual({
+    action: 'execute',
+    conversation_id: 'new',
+    message: 'hello device',
+    idempotency_key: expect.any(String),
+  });
+  expect(stop.payload).toEqual({
+    action: 'stop',
+    conversation_id: 'new',
+    idempotency_key: execute.payload.idempotency_key,
+  });
+  expect(stop.digest).toBe(execute.digest);
+});
+
+test('desktop Agent page preserves the draft and retry key when device settings are incomplete', async ({
+  page,
+}) => {
+  await page.goto('/e2e/fixtures/rich-package-host.html?chat-denied');
+  const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
+  await expect(guest.getByText('Saved local')).toBeVisible();
+  await guest.getByLabel('Message', { exact: true }).fill('private draft');
+  await guest.getByRole('button', { name: 'Send to device' }).click();
+  await expect(guest.getByRole('status')).toContainText('Choose a workspace in device settings');
+  await expect(guest.getByLabel('Message', { exact: true })).toHaveValue('private draft');
+  await guest.getByRole('button', { name: 'Send to device' }).click();
+  await expect
+    .poll(async () => JSON.parse(await page.locator('#host-log').innerText()).length)
+    .toBe(2);
+  const [first, retry] = JSON.parse(await page.locator('#host-log').innerText());
+  expect(first.payload).toEqual(retry.payload);
+});
+
+test('desktop Agent page surfaces a revoked release grant and retains the draft', async ({
+  page,
+}) => {
+  await page.goto('/e2e/fixtures/rich-package-host.html?chat-revoked');
+  const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
+  await expect(guest.getByText('Saved local')).toBeVisible();
+  await guest.getByLabel('Message', { exact: true }).fill('retry when approved');
+  await guest.getByRole('button', { name: 'Send to device' }).click();
+  await expect(guest.getByRole('status')).toHaveText(
+    'Approve this Agent release in device settings. device_plugin_grant_revoked'
+  );
+  await expect(guest.getByLabel('Message', { exact: true })).toHaveValue('retry when approved');
+  await expect(page.locator('#host-log')).not.toContainText('chat-turn');
+});

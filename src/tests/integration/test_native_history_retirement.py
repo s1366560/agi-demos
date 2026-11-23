@@ -1,4 +1,4 @@
-"""Exercise the native history cutover against an authenticated loopback history stub."""
+"""Exercise the native history cutover through a disconnectable proxy to the real project history API."""
 
 import base64
 import hashlib
@@ -14,7 +14,7 @@ import time
 from contextlib import ExitStack, closing, contextmanager, suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import urlencode, urlsplit
 from uuid import uuid4
 
 import httpx
@@ -26,7 +26,7 @@ from playwright.sync_api import Error as BrowserError, expect, sync_playwright
 from sqlalchemy import create_engine, text
 
 from src.tests.integration.rich_page_publisher import publish_page
-from src.tests.integration.test_native_package_pages import PackageSession
+from src.tests.integration.test_native_package_pages import BASE, PackageSession
 
 pytestmark = [
     pytest.mark.integration,
@@ -53,32 +53,12 @@ def history_service(api):
                 k: self.headers[k] for k in ("Authorization", "Content-Type") if k in self.headers
             }
             data = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-            if path.path == "/api/v1/agent/conversations":
-                scope = httpx.get(api + "/api/v1/workspace-context", headers=headers)
-                if not scope.is_success or parse_qs(path.query).get("project_id") != [
-                    scope.json()["context"]["project_id"]
-                ]:
-                    self.send_error(403)
-                    return
-                if offline.is_set():
-                    self.connection.shutdown(socket.SHUT_RDWR)
-                    return
-                response = httpx.Response(
-                    200,
-                    json={
-                        "items": [
-                            {
-                                "id": "from-cloud",
-                                "project_id": scope.json()["context"]["project_id"],
-                            }
-                        ],
-                        "total": 1,
-                    },
-                )
-            else:
-                response = httpx.request(
-                    self.command, api + self.path, headers=headers, content=data, timeout=20
-                )
+            if path.path == "/api/v1/agent/conversations" and offline.is_set():
+                self.connection.shutdown(socket.SHUT_RDWR)
+                return
+            response = httpx.request(
+                self.command, api + self.path, headers=headers, content=data, timeout=20
+            )
             self.send_response(response.status_code)
             for name in ("content-type", "cache-control"):
                 if name in response.headers:
@@ -226,7 +206,16 @@ def prepare_account(open_page, proxy, owner, plugin, tmp_path, signing_key):
         ).decode()
         native.install(archive)
         native.approve(archive)
-    return scope
+        agent = PackageSession(page, scope, "memstack-agent")
+        conversation = agent.cloud(
+            BASE + "/memstack-agent/commands",
+            {
+                "expected_digest": agent.record()["actual_digest"],
+                "command_id": "chat-create",
+                "payload": {"title": "P5 history " + uuid4().hex},
+            },
+        )
+    return scope, conversation["id"]
 
 
 def test_native_history_retirement_and_private_state(tmp_path):
@@ -263,10 +252,12 @@ def test_native_history_retirement_and_private_state(tmp_path):
         def open_page():
             return native_page(pw, profile, workspace, trust)
 
-        scope = prepare_account(open_page, proxy, owner, plugin, tmp_path, signing_key)
+        scope, conversation_id = prepare_account(
+            open_page, proxy, owner, plugin, tmp_path, signing_key
+        )
         sessions, queue = seed_legacy(runtime)
         history = "/api/v1/agent/conversations?" + urlencode(
-            {"project_id": scope["project_id"], "status": "active", "offset": 0, "limit": 1}
+            {"project_id": scope["project_id"], "status": "active", "offset": 0, "limit": 100}
         )
 
         def observe(*, offline_read=False):
@@ -277,7 +268,8 @@ def test_native_history_retirement_and_private_state(tmp_path):
                     with pytest.raises((BrowserError, AssertionError)):
                         logged_in.cloud(history)
                 else:
-                    assert logged_in.cloud(history)["items"][0]["id"] == "from-cloud"
+                    rows = logged_in.cloud(history)["items"]
+                    assert any(row["id"] == conversation_id for row in rows)
                 for _ in range(2):
                     projected = logged_in.bridge(
                         "cloud_session_projection", {"requestId": str(uuid4())}

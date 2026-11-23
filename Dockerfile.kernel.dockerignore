@@ -94,3 +94,8 @@ src/tests
 
 !src/application/schemas/workspace_context.py
 !src/infrastructure/adapters/secondary/persistence/sql_desktop_workspace_context_repository.py
+
+!src/application/services/local_run_protocol.py
+!src/application/services/chat_permission_admission_v2.py
+!src/application/services/agent/runtime_model_route.py
+!src/infrastructure/agent/model_route.py

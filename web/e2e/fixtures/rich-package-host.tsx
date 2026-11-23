@@ -1,3 +1,4 @@
+import { agentChatRuntime } from './agentChatRuntime';
 import { createRoot } from 'react-dom/client';
 import { RichPackagePages } from '../../../agi-stack/packages/plugin-marketplace-ui/src/RichPackagePages';
 import type { MarketplaceTransport } from '../../../agi-stack/packages/plugin-marketplace-ui/src/client';
@@ -5,10 +6,22 @@ import type { MarketplaceTransport } from '../../../agi-stack/packages/plugin-ma
 const route = '/qa-page';
 let digest = 'sha256:' + 'a'.repeat(64);
 let corrupt = location.search === '?bad';
-const descriptor = { id: 'test', title: 'QA', routes: [route], targets: ['web'] };
+const chat = location.search.startsWith('?chat');
+const target = chat && location.search !== '?chat-web' ? 'desktop-renderer' : 'web';
+// Electron loads its renderer and trusted frame as siblings in the application root.
+if (target === 'desktop-renderer') history.replaceState(null, '', '/index.html' + location.search);
+const descriptor = { id: 'test', title: 'QA', routes: [route], targets: [target] };
 const log = document.createElement('output');
 log.id = 'host-log';
 document.body.append(log);
+const chatRuntime = agentChatRuntime(
+  log,
+  location.search === '?chat-denied'
+    ? 'device_local_workspace_required'
+    : location.search === '?chat-revoked'
+      ? 'device_plugin_grant_revoked'
+      : undefined
+);
 if (['?upgrade', '?drain'].includes(location.search)) {
   const upgrade = document.createElement('button');
   upgrade.textContent = 'Install next version';
@@ -21,11 +34,13 @@ if (['?upgrade', '?drain'].includes(location.search)) {
 }
 const billing = location.search === '?billing';
 const sandbox = location.search.startsWith('?sandbox');
-const source = sandbox
-  ? (await import('../../../plugins/business/environments/ui/sandbox.js?raw')).default
-  : billing
-    ? (await import('../../../plugins/business/billing/ui/account.js?raw')).default
-    : `
+const source = chat
+  ? (await import('../../../plugins/business/agent/ui/chat.js?raw')).default
+  : sandbox
+    ? (await import('../../../plugins/business/environments/ui/sandbox.js?raw')).default
+    : billing
+      ? (await import('../../../plugins/business/billing/ui/account.js?raw')).default
+      : `
 (async () => {
  const scope = await memstack.scope();
  const request = new AbortController();
@@ -61,13 +76,15 @@ const transport: MarketplaceTransport = async <T,>(
       schema: 'memstack.rich-page/1',
       navigation_routes: [route, '/project/:projectId/details/:id'],
       release_digest: digest,
-      target: 'web',
-      commands: sandbox
-        ? ['sandbox-status', 'prepare-sandbox', 'authorize-run-terminal']
-        : billing
-          ? ['quote-pro', 'list-invoices']
-          : ['read', 'wait'],
-      device_tools: ['test'],
+      target,
+      commands: chat
+        ? ['chat-create', 'chat-list', 'chat-history', 'chat-turn', 'chat-cancel']
+        : sandbox
+          ? ['sandbox-status', 'prepare-sandbox', 'authorize-run-terminal']
+          : billing
+            ? ['quote-pro', 'list-invoices']
+            : ['read', 'wait'],
+      device_tools: chat ? ['local_chat'] : ['test'],
       entry: {
         path: 'qa.js',
         digest: 'sha256:' + (corrupt ? '0'.repeat(64) : hash),
@@ -77,6 +94,8 @@ const transport: MarketplaceTransport = async <T,>(
       },
     } as T;
   const body = options.body as { command_id: string; payload?: unknown };
+  if (chat)
+    return chatRuntime.command(body.command_id, body.payload as Record<string, unknown>) as T;
   if (body.command_id === 'sandbox-status') {
     const degraded = location.search === '?sandbox-degraded';
     return {
@@ -115,7 +134,18 @@ const transport: MarketplaceTransport = async <T,>(
 createRoot(document.getElementById('root')!).render(
   <RichPackagePages
     scope={{ tenantId: 't', projectId: 'p' }}
-    target="web"
+    target={target}
+    invokeDevice={chat ? chatRuntime.device : undefined}
+    streamCommand={
+      chat
+        ? async (_path, body, _signal, progress) => {
+            chatRuntime.record(body);
+            progress({ type: 'accepted', run_id: 'cloud-run', revision: 1 });
+            progress({ type: 'text_delta', text: 'reply' });
+            return {};
+          }
+        : undefined
+    }
     pathname={route}
     transport={transport}
     navigate={(path) => {

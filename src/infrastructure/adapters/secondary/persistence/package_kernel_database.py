@@ -13,7 +13,13 @@ from src.infrastructure.adapters.secondary.persistence.device_plugin_grant_model
     DevicePluginGrant,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent,
+    AgentLocalRunEventModel,
+    AgentPlanRunModel,
+    AgentPlanVersionModel,
+    AgentRunAuthorityModel,
     APIKey,
+    Conversation,
     DesktopWorkspaceContext,
     DesktopWorkspaceContextEvent,
     Permission,
@@ -61,6 +67,12 @@ def package_kernel_metadata() -> MetaData:
         ProjectPluginRelease,
         PlatformPluginNamespaceRecordModelV2,
         DevicePluginGrant,
+        Conversation,
+        AgentPlanVersionModel,
+        AgentPlanRunModel,
+        AgentRunAuthorityModel,
+        AgentLocalRunEventModel,
+        AgentExecutionEvent,
     ):
         _ = cast("Table", model.__table__).to_metadata(result)
     return result

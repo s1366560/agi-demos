@@ -6,6 +6,11 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
+from src.host.operations.device_conversations import (
+    DeviceConversationCreate,
+    create_owned,
+    local_history,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentRunAuthorityModel,
     Conversation,
@@ -25,10 +30,6 @@ type Identifier = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")]
 
 class _Input(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class Create(_Input):
-    title: str = Field(min_length=1, max_length=500)
 
 
 class ConversationInput(_Input):
@@ -102,13 +103,30 @@ async def list_conversations(
 ) -> dict[str, Any]:
     _Input.model_validate(payload)
     result = await _canonical(ctx, "GET", "conversations")
-    return {"items": [_conversation(row) for row in result["items"]]}
+    items = [_conversation(row) for row in result["items"]]
+    local_ids = set(
+        await ctx.db.scalars(
+            select(Conversation.id).where(
+                Conversation.id.in_([row["id"] for row in items]),
+                Conversation.tenant_id == ctx.scope.tenant_id,
+                Conversation.project_id == ctx.scope.project_id,
+                Conversation.user_id == ctx.user.id,
+                Conversation.meta["execution_target"].as_string() == "local",
+            )
+        )
+    )
+    for row in items:
+        if row["id"] in local_ids:
+            row["execution_target"] = "local"
+    return {"items": items}
 
 
 async def create(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    data = Create.model_validate(payload)
+    data = DeviceConversationCreate.model_validate(payload)
+    if data.execution_target == "local":
+        return await create_owned(ctx, payload, progress)
     return _conversation(
         await _canonical(
             ctx,
@@ -124,6 +142,20 @@ async def history(
 ) -> dict[str, Any]:
     data = History.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
+    preferred = await ctx.db.scalar(
+        select(Conversation.meta).where(Conversation.id == data.conversation_id)
+    )
+    placements = await latest_execution_placements(
+        ctx.db,
+        tenant_id=ctx.scope.tenant_id,
+        project_id=ctx.scope.project_id,
+        conversation_ids=[data.conversation_id],
+    )
+    actual = placements.get(data.conversation_id)
+    if (actual and actual.execution_target == "local") or (preferred or {}).get(
+        "execution_target"
+    ) == "local":
+        return await local_history(ctx, payload, progress)
     query = (
         {"before_time_us": data.before_time_us, "before_counter": data.before_counter}
         if data.before_time_us is not None
@@ -162,7 +194,12 @@ async def turn(
         conversation_ids=[data.conversation_id],
     )
     previous = placements.get(data.conversation_id)
-    if previous is not None and previous.execution_target == "local":
+    preferred = await ctx.db.scalar(
+        select(Conversation.meta).where(Conversation.id == data.conversation_id)
+    )
+    if (previous is not None and previous.execution_target == "local") or (preferred or {}).get(
+        "execution_target"
+    ) == "local":
         raise OptionalBusinessError(
             "forbidden", "Local conversations support read-only cloud replay"
         )

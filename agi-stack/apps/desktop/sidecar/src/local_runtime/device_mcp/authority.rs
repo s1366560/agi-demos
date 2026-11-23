@@ -267,6 +267,42 @@ impl CloudOwner {
         self.fence(|| Ok(()))
     }
 
+    /// Private P4 admission for the exact conversation selected by this cloud project.
+    pub(in crate::local_runtime) async fn local_run_session(
+        &self,
+        conversation: &str,
+    ) -> Result<(String, String), String> {
+        self.fence(|| Ok(()))?;
+        let base = cloud_base(&self.snapshot)?;
+        let record = self
+            .snapshot
+            .record
+            .as_ref()
+            .ok_or("device_plugin_session_required")?;
+        let mut url = url::Url::parse(&format!("{base}/api/v1/agent/conversations/"))
+            .map_err(|_| "device_plugin_origin_invalid")?;
+        url.path_segments_mut()
+            .map_err(|_| "device_plugin_origin_invalid")?
+            .pop_if_empty()
+            .push(conversation);
+        url.query_pairs_mut()
+            .append_pair("project_id", &self.project);
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_secs(12))
+            .build()
+            .map_err(|_| "device_plugin_transport_unavailable")?;
+        let view = read_json(&client, url.as_str(), &record.credential).await?;
+        if view["id"] != conversation
+            || view["project_id"] != self.project
+            || view["tenant_id"] != self.tenant
+            || view["execution_target"] != "local"
+        {
+            return Err("device_local_conversation_scope_mismatch".into());
+        }
+        self.fence(|| Ok((base, format!("Bearer {}", record.credential))))
+    }
+
     pub(in crate::local_runtime) fn plugin_grant_request(
         &self,
         method: reqwest::Method,

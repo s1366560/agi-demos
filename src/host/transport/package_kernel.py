@@ -20,6 +20,7 @@ from src.host.identity.project_package_scope import (
     router as project_package_scope_router,
 )
 from src.host.identity.workspace_context import router as workspace_context_router
+from src.host.operations.device_conversations import DEVICE_HISTORY_OPERATIONS
 from src.host.operations.project_package_audit import configure_project_package_audit
 from src.host.operations.project_package_readiness import (
     project_packages_ready,
@@ -27,7 +28,10 @@ from src.host.operations.project_package_readiness import (
 from src.host.operations.remote_application_commands import application_runtime_origin
 from src.host.packages.bootstrap import bootstrap_empty_project
 from src.host.runtime.oci_mcp_lease import worker_recovery
+from src.host.transport.conversation_journal import router as journal_router
+from src.host.transport.local_run_upload import router as local_runs_router
 from src.host.transport.project_package_routes import project_package_router
+from src.host.transport.remote_local_run_upload import router as remote_local_runs_router
 from src.infrastructure.adapters.primary.web.routers.auth import router as auth_router
 from src.infrastructure.adapters.primary.web.routers.project_marketplace import (
     kernel_marketplace_router,
@@ -126,6 +130,12 @@ def create_app() -> FastAPI:
     )
     if origin := get_settings().package_application_runtime_url:
         app.state.package_application_runtime_origin = application_runtime_origin(origin)
+        app.include_router(remote_local_runs_router, prefix="/api/v1/agent")
+    else:
+        app.state.package_operations_v1 = dict(DEVICE_HISTORY_OPERATIONS)
+        app.include_router(journal_router, prefix="/api/v1/agent")
+        app.include_router(local_runs_router, prefix="/api/v1/agent")
+    app.state.standalone_run_authority = True
     app.add_middleware(LocaleMiddleware)
     app.add_middleware(
         CORSMiddleware,

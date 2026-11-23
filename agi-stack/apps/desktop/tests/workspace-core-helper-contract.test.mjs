@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import profile from '../scripts/desktop-package-profile.cjs';
 
 const mainSource = readFileSync(new URL('../electron/main/index.ts', import.meta.url), 'utf8');
 const preloadSource = readFileSync(new URL('../electron/preload/index.ts', import.meta.url), 'utf8');
@@ -69,8 +70,7 @@ test('desktop packages build, stage, and sign the workspace core helper as a nes
   assert.match(packageJson.scripts['build:workspace-core'], /build-workspace-core\.mjs/u);
   assert.match(packageJson.scripts['stage:workspace-core'], /stage-workspace-core\.mjs/u);
   for (const script of ['package:electron', 'release:electron']) {
-    assert.match(packageJson.scripts[script], /build:workspace-core/u);
-    assert.match(packageJson.scripts[script], /stage:workspace-core/u);
+    assert.match(packageJson.scripts[script], /stage-desktop-profile\.mjs/u);
   }
   assert.match(builderConfig, /from:\s*build\/workspace-core/u);
   assert.match(builderConfig, /to:\s*workspace-core/u);
@@ -78,4 +78,18 @@ test('desktop packages build, stage, and sign the workspace core helper as a nes
     builderConfig,
     /Contents\/Resources\/workspace-core\/memstack-workspace-core/u,
   );
+});
+
+test('package host distributes only the signed Sidecar and full includes its nested helpers', () => {
+  const minimal = profile.buildConfiguration({local: false, full: false});
+  const full = profile.buildConfiguration({local: false, full: true});
+  assert.deepEqual(minimal.extraResources.map(resource => resource.to), ['sidecar']);
+  assert.deepEqual(minimal.mac.binaries, ['Contents/Resources/sidecar/agistack-desktop-sidecar']);
+  assert.ok(full.extraResources.some(resource => resource.to === 'workspace-core'));
+  for (const config of [minimal, full]) {
+    assert.equal(config.forceCodeSigning, true);
+    assert.equal(config.mac.hardenedRuntime, true);
+    assert.equal(config.mac.notarize, true);
+    assert.equal(config.publish.publishAutoUpdate, true);
+  }
 });

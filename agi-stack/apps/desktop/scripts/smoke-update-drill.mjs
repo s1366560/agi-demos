@@ -135,10 +135,11 @@ export async function runUpdateDrill({
   const seed = async (directory, marker) => {
     mkdirSync(directory, { recursive: true });
     copyFileSync(sidecarSourcePath, join(directory, sidecarName));
-    copyFileSync(workspaceCoreSourcePath, join(directory, workspaceCoreName));
+    const full = process.env.AGISTACK_DESKTOP_PROFILE === 'full';
+    if (full) copyFileSync(workspaceCoreSourcePath, join(directory, workspaceCoreName));
     if (platform !== 'win32') {
       chmodSync(join(directory, sidecarName), 0o700);
-      chmodSync(join(directory, workspaceCoreName), 0o700);
+      if (full) chmodSync(join(directory, workspaceCoreName), 0o700);
     }
     writeFileSync(join(directory, 'version.txt'), marker, 'utf8');
   };

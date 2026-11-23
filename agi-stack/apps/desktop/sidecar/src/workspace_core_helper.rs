@@ -58,6 +58,10 @@ pub(crate) struct WorkspaceCoreHelperStatus {
 }
 
 impl WorkspaceCoreHelperStatus {
+    pub(crate) fn not_started() -> Self {
+        Self::stopped(0, WorkspaceCoreCutoverState::CoreUnavailable)
+    }
+
     fn starting(
         restart_attempts: usize,
         restart_generation: usize,

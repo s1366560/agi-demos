@@ -15,6 +15,52 @@ pub(super) fn digest_hex(digest: &str) -> Result<&str, String> {
     Ok(hex)
 }
 
+#[derive(Deserialize)]
+pub(super) struct ProjectSelection {
+    pub plugin_id: String,
+    pub generation_id: String,
+    digest: String,
+}
+impl ProjectSelection {
+    pub async fn resolve(owner: &CloudOwner, plugin_id: &str) -> Result<Self, String> {
+        let response = owner
+            .plugin_grant_request(reqwest::Method::GET, "selection")?
+            .query(&[("plugin_id", plugin_id)])
+            .send()
+            .await
+            .map_err(|_| "device_plugin_selection_unavailable")?;
+        if !response.status().is_success() {
+            return Err("device_plugin_selection_unavailable".into());
+        }
+        let active: Self = response
+            .json()
+            .await
+            .map_err(|_| "device_plugin_selection_invalid")?;
+        let generation = active
+            .generation_id
+            .strip_prefix('p')
+            .ok_or("device_plugin_selection_invalid")?;
+        if active.plugin_id != plugin_id
+            || generation.len() != 63
+            || !generation
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err("device_plugin_selection_invalid".into());
+        }
+        digest_hex(&active.digest)?;
+        owner.fence(|| Ok(active))
+    }
+    pub fn verify(&self, reference: &BundleReferenceV2) -> Result<(), String> {
+        if reference.bundle_id != self.plugin_id
+            || digest_hex(&reference.digest)? != digest_hex(&self.digest)?
+        {
+            return Err("device_plugin_selection_changed".into());
+        }
+        Ok(())
+    }
+}
+
 pub(super) struct Device {
     pub machine: String,
     pub fingerprint: String,
@@ -108,7 +154,7 @@ impl Device {
                 Err(error) => error,
             }
         };
-        let mut result = json!(item);
+        let mut result = store::projection(&item);
         result["grant_status"] = json!(status);
         result
     }

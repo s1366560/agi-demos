@@ -1,4 +1,6 @@
 mod llm_tool_contracts;
+#[cfg(test)]
+mod profile_tests;
 mod plan_tool_contract;
 #[cfg(test)]
 mod tool_contract_tests;
@@ -53,6 +55,7 @@ use url::{Host, Url};
 use uuid::Uuid;
 
 use crate::application_vault::ApplicationCredentialVault;
+use crate::sidecar_profile::SidecarProfile;
 
 #[cfg(test)]
 use agistack_core::model::Entity;
@@ -114,6 +117,7 @@ mod local_run_upload_command;
 mod managed_resource_tests;
 mod mcp_agent_tool_host;
 mod mcp_app_automation;
+#[cfg(any(test, feature = "legacy-business"))]
 mod mcp_app_static;
 #[cfg(test)]
 mod mcp_remote_transport_tests;
@@ -122,6 +126,11 @@ mod mcp_supervisor;
 mod mcp_supervisor_tests;
 mod message_display;
 mod model_request_replay_v2;
+#[cfg(any(test, feature = "legacy-business"))]
+mod legacy_http;
+#[cfg(any(test, feature = "legacy-business"))]
+use legacy_http::*;
+#[cfg_attr(not(any(test, feature = "legacy-business")), path = "package_mcp_contract.rs")]
 mod parity_routes;
 mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
@@ -233,13 +242,13 @@ impl LocalRuntimeService {
         local_knowledge_acceptance: Option<
             crate::local_knowledge_acceptance::LocalKnowledgeAcceptance,
         >,
+        profile: SidecarProfile,
     ) -> Result<Self, String> {
         if let Some(qualification) = &local_knowledge_acceptance {
             qualification.require_current(&app_data_dir, &workspace_root)?;
         }
         std::fs::create_dir_all(&app_data_dir).map_err(|error| error.to_string())?;
         std::fs::create_dir_all(&workspace_root).map_err(|error| error.to_string())?;
-        let browser_preferences = browser_preferences::load(&app_data_dir)?;
         let checkpoint_path = app_data_dir.join("agistack-local-agent-checkpoints.db");
         let session_store_path = app_data_dir.join("agistack-desktop-sessions.db");
         let checkpoints = Arc::new(
@@ -257,6 +266,7 @@ impl LocalRuntimeService {
             eprintln!("failed to sweep expired browser action audit rows: {error}");
         }
         let speech_credential_vault = credential_vault.clone();
+        #[cfg(any(test, feature = "legacy-business"))]
         let mcp_credential_vault = credential_vault.clone();
         let provider_credentials =
             ProviderCredentialBroker::native(credential_vault, session_store.installation_id())
@@ -269,6 +279,7 @@ impl LocalRuntimeService {
             session_store,
             provider_credentials,
         )?;
+        state.profile = profile;
         *state
             .audio_sessions
             .vault
@@ -276,50 +287,56 @@ impl LocalRuntimeService {
             .map_err(|_| "speech_vault_unavailable")? = Some(speech_credential_vault);
         state.app_data_dir = Some(app_data_dir.clone());
         state.local_knowledge_acceptance = local_knowledge_acceptance;
-        state
-            .config
-            .lock()
-            .expect("local runtime config")
-            .browser_bridge = browser_preferences;
-        let state = Arc::new(state);
-        if crate::workspace_core_cutover::load_cutover_marker(&app_data_dir.join("workspace-core"))
-            .await?
-            .is_some_and(|marker| marker.state.is_cutover())
-        {
-            workspace_core_bridge::mark_workspace_core_cutover(&state);
+        #[cfg(any(test, feature = "legacy-business"))]
+        if profile == SidecarProfile::Full {
+            state.config.lock().expect("local runtime config").browser_bridge =
+                browser_preferences::load(&app_data_dir)?;
         }
-        state
-            .mcp_supervisor
-            .install_credential_vault(mcp_credential_vault)
-            .map_err(|error| error.to_string())?;
-        plugin_marketplace_v3::recover(&state)?;
-        state
-            .mcp_supervisor
-            .prepare_startup_recovery()
-            .map_err(|error| error.to_string())?;
-        state.reconcile_recovered_runs_from_checkpoints().await?;
-        state.start_automation_worker_with_config(
-            automation_worker::AutomationWorkerConfig::local_default(),
-        )?;
+        let state = Arc::new(state);
+        #[cfg(any(test, feature = "legacy-business"))]
+        if profile == SidecarProfile::Full {
+            if crate::workspace_core_cutover::load_cutover_marker(&app_data_dir.join("workspace-core"))
+                .await?
+                .is_some_and(|marker| marker.state.is_cutover())
+            {
+                workspace_core_bridge::mark_workspace_core_cutover(&state);
+            }
+            state
+                .mcp_supervisor
+                .install_credential_vault(mcp_credential_vault)
+                .map_err(|error| error.to_string())?;
+            plugin_marketplace_v3::recover(&state)?;
+            state
+                .mcp_supervisor
+                .prepare_startup_recovery()
+                .map_err(|error| error.to_string())?;
+            state.reconcile_recovered_runs_from_checkpoints().await?;
+            state.start_automation_worker_with_config(
+                automation_worker::AutomationWorkerConfig::local_default(),
+            )?;
+        }
         let app = local_router(Arc::clone(&state));
         let listener = TcpListener::bind(("127.0.0.1", 0))
             .await
             .map_err(|error| error.to_string())?;
         let addr = listener.local_addr().map_err(|error| error.to_string())?;
         let api_base_url = format!("http://{addr}");
-        state.reconcile_browser_bridge(
-            &state
-                .config
-                .lock()
-                .expect("local runtime config")
-                .browser_bridge,
-            &api_base_url,
-        )?;
-        state
-            .mcp_supervisor
-            .recover_all_enabled()
-            .await
-            .map_err(|error| error.to_string())?;
+        #[cfg(any(test, feature = "legacy-business"))]
+        if profile == SidecarProfile::Full {
+            state.reconcile_browser_bridge(
+                &state
+                    .config
+                    .lock()
+                    .expect("local runtime config")
+                    .browser_bridge,
+                &api_base_url,
+            )?;
+            state
+                .mcp_supervisor
+                .recover_all_enabled()
+                .await
+                .map_err(|error| error.to_string())?;
+        }
         tokio::spawn(async move {
             if let Err(error) = axum::serve(listener, app).await {
                 eprintln!("agistack local runtime stopped: {error}");
@@ -545,6 +562,9 @@ impl LocalRuntimeService {
         &self,
         config: LocalRuntimeConfigPatch,
     ) -> Result<LocalRuntimeStatus, String> {
+        if self.state.profile == SidecarProfile::PackageHost && !config.is_workspace_only() {
+            return Err("local runtime configuration is invalid".into());
+        }
         self.state.configure(config, &self.api_base_url)?;
         Ok(self.status())
     }
@@ -977,6 +997,7 @@ impl PlanModeToolHost {
 }
 
 struct LocalRuntimeState {
+    profile: SidecarProfile,
     api_token: String,
     workspace_root: Mutex<PathBuf>,
     tool_host: Mutex<LocalToolHost>,
@@ -1331,6 +1352,7 @@ impl LocalRuntimeState {
         )?);
         let site_credentials = provider_credentials.site_credential_broker();
         Ok(Self {
+            profile: SidecarProfile::Full,
             api_token,
             workspace_root: Mutex::new(workspace_root),
             tool_host: Mutex::new(tool_host),
@@ -3584,315 +3606,30 @@ fn bounded_identifier(value: &str) -> bool {
     !value.is_empty() && value == value.trim() && value.len() <= 512
 }
 
+#[cfg(any(test, feature = "legacy-business"))]
+include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../plugins/business/workspace/desktop-sidecar/workspaces.rs"));
+#[cfg(any(test, feature = "legacy-business"))]
+include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../plugins/business/agent/desktop-sidecar/providers.rs"));
+#[cfg(any(test, feature = "legacy-business"))]
+include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../plugins/business/agent/desktop-sidecar/conversations.rs"));
+#[cfg(any(test, feature = "legacy-business"))]
+include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../plugins/business/environments/desktop-sidecar/sandbox.rs"));
+
 fn local_router(state: Arc<LocalRuntimeState>) -> Router {
-    #[cfg(test)]
-    {
-        let admission = PlatformPluginRouteAdmissionV2::optional_for_unit_tests(Arc::clone(&state));
-        local_router_with_generation_admission(state, admission)
+    #[cfg(any(test, feature = "legacy-business"))]
+    if state.profile == SidecarProfile::Full {
+        #[cfg(test)]
+        {
+            let admission = PlatformPluginRouteAdmissionV2::optional_for_unit_tests(Arc::clone(&state));
+            return local_router_with_generation_admission(state, admission);
+        }
+        #[cfg(not(test))]
+        return local_router_with_generation_required(state);
     }
-    #[cfg(not(test))]
-    local_router_with_generation_required(state)
-}
-
-fn local_router_with_generation_required(state: Arc<LocalRuntimeState>) -> Router {
-    let admission = PlatformPluginRouteAdmissionV2::required(Arc::clone(&state));
-    local_router_with_generation_admission(state, admission)
-}
-
-fn local_router_with_generation_admission(
-    state: Arc<LocalRuntimeState>,
-    admission: PlatformPluginRouteAdmissionV2,
-) -> Router {
-    let kernel_protected = Router::new()
-        .route("/api/v1/auth/me", get(auth_me))
-        .route("/api/v1/tenants", get(list_tenants))
-        .route("/api/v1/projects", get(list_projects))
-        .route("/api/v1/workspace-context", get(get_workspace_context))
-        .route(
-            "/api/v1/workspace-context/switch",
-            post(switch_workspace_context),
-        )
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_active_scope,
-        ))
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_user_session,
-        ));
-
-    let protected = Router::new()
-        .route(
-            "/api/v1/llm-providers/",
-            get(list_llm_providers).post(create_llm_provider),
-        )
-        .route("/api/v1/llm-providers/types", get(list_llm_provider_types))
-        .route(
-            "/api/v1/llm-providers/models/:provider_type",
-            get(list_llm_provider_models),
-        )
-        .route(
-            "/api/v1/llm-providers/test-connection",
-            post(validate_llm_provider_draft),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/tool-grants",
-            get(list_workspace_tool_grants),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/tool-grants/:grant_id",
-            delete(revoke_workspace_tool_grant),
-        )
-        .route(
-            "/api/v1/browser-bridge/origin-grants",
-            get(list_browser_origin_grants),
-        )
-        .route(
-            "/api/v1/browser-bridge/origin-grants/:grant_id",
-            delete(revoke_browser_origin_grant),
-        )
-        .route(
-            "/api/v1/browser-bridge/capability-grants",
-            get(list_browser_capability_grants),
-        )
-        .route(
-            "/api/v1/browser-bridge/capability-grants/:grant_id",
-            delete(revoke_browser_capability_grant),
-        )
-        .route(
-            "/api/v1/browser-bridge/site-credentials",
-            get(list_browser_site_credentials).put(upsert_browser_site_credential),
-        )
-        .route(
-            "/api/v1/browser-bridge/site-credentials/:credential_id",
-            delete(revoke_browser_site_credential),
-        )
-        .route(
-            "/api/v1/browser-bridge/audit",
-            get(list_browser_action_audit_entries),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id/runtime-selection",
-            put(select_llm_provider_runtime),
-        )
-        .route(
-            "/api/v1/llm-providers/routing-policy",
-            get(workspace_core_bridge::proxy_workspace_fallback)
-                .put(workspace_core_bridge::proxy_workspace_fallback),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id",
-            patch(update_llm_provider)
-                .put(update_llm_provider)
-                .delete(delete_llm_provider),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id/health-check",
-            post(validate_llm_provider),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id/models/discover",
-            post(discover_llm_provider_models),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id/usage",
-            get(get_llm_provider_usage),
-        )
-        .route(
-            "/api/v1/projects/:project_id/my-work",
-            get(list_project_my_work),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs",
-            get(automation::list).post(automation::create),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/capabilities",
-            get(automation::capabilities),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/:automation_id",
-            get(automation::get)
-                .patch(automation::update)
-                .delete(automation::delete),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/:automation_id/toggle",
-            post(automation::toggle),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/:automation_id/run",
-            post(automation::run),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/:automation_id/runs",
-            get(automation::list_runs),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces",
-            get(list_workspaces).post(create_workspace),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/task-sessions",
-            post(task_session::create_task_session),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/messages",
-            get(list_workspace_messages).post(create_workspace_message),
-        )
-        .route("/api/v1/workspaces/:workspace_id/tasks", get(list_tasks))
-        .route("/api/v1/workspaces/:workspace_id/plan", get(plan_snapshot))
-        .route(
-            "/api/v1/agent/conversations",
-            get(list_conversations).post(create_conversation),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/mode",
-            patch(update_conversation_mode),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/config",
-            patch(update_conversation_config),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/session",
-            get(session_projection::conversation_session),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/messages",
-            get(conversation_messages).post(run_conversation_message),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/messages/:message_id/model-requests/:attempt_id",
-            get(model_request_replay_v2::get),
-        )
-        .route(
-            "/api/v1/agent/plans/approve-and-start",
-            post(approve_plan_and_start),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/runs",
-            get(list_conversation_runs),
-        )
-        .route("/api/v1/agent/runs/:run_id", get(get_run))
-        .route("/api/v1/agent/runs/:run_id/changes", get(get_run_changes))
-        .route(
-            "/api/v1/agent/runs/:run_id/inputs",
-            get(list_run_inputs).post(create_run_input),
-        )
-        .route(
-            "/api/v1/agent/run-inputs/:input_id/promote-to-plan",
-            post(promote_run_input_to_plan),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/pause",
-            post(run_control::pause_run),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/resume",
-            post(run_control::resume_run),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/fork",
-            post(run_control::fork_recovery_run),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/cancel",
-            post(run_control::cancel_run),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/review",
-            post(run_control::review_run),
-        )
-        .route(
-            "/api/v1/agent/artifact-versions/:artifact_version_id/review",
-            post(review_artifact_version),
-        )
-        .route(
-            "/api/v1/agent/artifact-versions/:artifact_version_id/deliver",
-            post(deliver_artifact_version),
-        )
-        .route("/api/v1/agent/hitl/respond", post(respond_to_hitl))
-        .route("/api/v1/agent/conversations/:conversation_id/browser-auth", get(browser_auth_routes::pending))
-        .route("/api/v1/agent/browser-auth/:request_id/respond", post(browser_auth_routes::respond))
-        .route("/api/v1/agent/plan/mode", post(switch_plan_mode))
-        .route(
-            "/api/v1/agent/plan/mode/:conversation_id",
-            get(get_plan_mode),
-        )
-        .route(
-            "/api/v1/agent/plan/tasks/:conversation_id",
-            get(list_agent_plan_tasks),
-        )
-        .route("/api/v1/agent/ws", get(agent_ws))
-        .route(
-            "/api/v1/projects/:project_id/sandbox",
-            get(get_sandbox).post(ensure_sandbox),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/proxy-auth-cookie",
-            post(proxy_auth_cookie),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/desktop",
-            post(start_desktop),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/desktop/proxy/",
-            get(desktop_proxy),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/terminal",
-            post(start_terminal),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/terminal/proxy/ws",
-            get(terminal_ws),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/execute",
-            post(sandbox_execute),
-        )
-        .route("/mcp/tools/list", get(mcp_tools_list))
-        .route("/mcp/tools/call", post(mcp_tools_call))
-        .merge(platform_plugin_marketplace_v2::router())
-        .merge(plugin_marketplace_v3::router())
-        .merge(local_plugin_routes_v2::router())
-        .merge(local_plugin_instances_v2::router())
-        .merge(computer_use_v2::router())
-        .merge(knowledge_authority_v2::router())
-        .merge(parity_routes::router())
-        .fallback(workspace_core_bridge::proxy_workspace_fallback)
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            workspace_core_bridge::proxy_workspace_if_authoritative,
-        ))
-        .layer(middleware::from_fn_with_state(
-            admission,
-            platform_plugin_route_admission_v2::require_generation_v2,
-        ))
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_active_scope,
-        ))
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_user_session,
-        ));
-
-    let public_router = Router::new()
-        .route("/api/v1/auth/signout", post(sign_out))
-        .merge(kernel_protected)
-        .merge(protected)
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_launch_capability,
-        ))
-        .layer(local_cors_layer())
-        .with_state(Arc::clone(&state));
-    public_router
-        .merge(workspace_core_bridge::router(state))
-        .merge(mcp_app_static::router())
+    Router::new()
+        .route("/health", get(|| async { StatusCode::NO_CONTENT }))
+        .route_layer(middleware::from_fn_with_state(Arc::clone(&state), require_launch_capability))
+        .with_state(state)
 }
 
 fn local_cors_origins(renderer_origin: Option<&str>) -> Vec<HeaderValue> {
@@ -4416,34 +4153,6 @@ async fn list_projects(
     })))
 }
 
-async fn get_workspace_context(
-    Extension(authenticated): Extension<AuthenticatedContext>,
-) -> Json<Value> {
-    Json(json!({
-        "context": authenticated.workspace,
-        "membership_role": authenticated.membership_role,
-    }))
-}
-
-async fn switch_workspace_context(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(request): Json<ContextSwitchRequest>,
-) -> LocalJsonResult {
-    let outcome = state
-        .session_store
-        .switch_workspace_context(&authenticated, &request, Utc::now().timestamp_millis())
-        .map_err(auth_context_error)?;
-    if outcome.changed {
-        state
-            .revoke_stale_context_runs(&authenticated.user.user_id)
-            .await;
-    }
-    serde_json::to_value(outcome)
-        .map(Json)
-        .map_err(|error| local_store_error(error.to_string()))
-}
-
 #[derive(Debug, Default, Deserialize)]
 struct ManagedResourceListQuery {
     tenant_id: Option<String>,
@@ -4602,10 +4311,7 @@ struct LocalLlmProviderModelsResponse {
     source: Option<&'static str>,
 }
 
-async fn list_llm_provider_types() -> Json<Vec<LlmProviderTypeDescriptor>> {
-    Json(LOCAL_LLM_PROVIDER_TYPES.to_vec())
-}
-
+#[cfg(any(test, feature = "legacy-business"))]
 fn static_local_roster(provider_type: &str) -> LocalLlmProviderModels {
     const ROSTER_JSON: &str =
         include_str!("../../../../../../src/infrastructure/llm/static_provider_models.json");
@@ -4634,118 +4340,6 @@ fn string_list(value: Option<&Value>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-async fn list_llm_provider_models(
-    Path(provider_type): Path<String>,
-) -> Result<Json<LocalLlmProviderModelsResponse>, (StatusCode, Json<Value>)> {
-    let provider_type = provider_type.trim().to_lowercase();
-    let (models, source) = match provider_type.as_str() {
-        "openai" | "anthropic" => (
-            static_local_roster(provider_type.as_str()),
-            Some("static-fallback"),
-        ),
-        "openai_compatible" => (LocalLlmProviderModels::default(), None),
-        _ => {
-            return Err((
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({ "detail": "unsupported local provider type" })),
-            ));
-        }
-    };
-    Ok(Json(LocalLlmProviderModelsResponse {
-        provider_type,
-        models,
-        source,
-    }))
-}
-
-async fn list_llm_providers(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-) -> LocalJsonResult {
-    let tenant_id = &authenticated.workspace.tenant_id;
-    let runtime = state
-        .provider_runtime
-        .lock()
-        .map_err(|error| local_store_error(error.to_string()))?;
-    let providers = state
-        .session_store
-        .list_managed_resources(ManagedResourceKind::Provider, "tenant", tenant_id)
-        .map_err(local_store_error)?;
-    let selected_provider_id = runtime.selections.get(tenant_id);
-    let providers = providers
-        .into_iter()
-        .map(|provider| {
-            let provider_id = provider
-                .get("id")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            let key = ProviderRuntimeKey {
-                tenant_id: tenant_id.clone(),
-                provider_id: provider_id.clone(),
-            };
-            provider_with_runtime_state(
-                provider,
-                selected_provider_id.map(String::as_str) == Some(provider_id.as_str()),
-                runtime.bindings.get(&key),
-                runtime.configured_credentials.contains(&key),
-                runtime.probes.get(&key),
-            )
-        })
-        .collect();
-    Ok(Json(Value::Array(providers)))
-}
-
-async fn list_workspace_tool_grants(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
-) -> LocalJsonResult {
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        &tenant_id,
-        &project_id,
-        &workspace_id,
-    )?;
-    let items = state
-        .session_store
-        .list_workspace_tool_grants(&workspace_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({ "items": items })))
-}
-
-async fn revoke_workspace_tool_grant(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id, grant_id)): Path<(String, String, String, String)>,
-) -> LocalJsonResult {
-    ensure_provider_manager(&authenticated)?;
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        &tenant_id,
-        &project_id,
-        &workspace_id,
-    )?;
-    let grant = state
-        .session_store
-        .revoke_workspace_tool_grant(
-            &workspace_id,
-            &grant_id,
-            &authenticated.user.user_id,
-            &now_iso(),
-        )
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "workspace tool grant not found" })),
-            )
-        })?;
-    Ok(Json(json!(grant)))
 }
 
 fn browser_origin_grant_json(grant: &BrowserOriginGrant) -> Value {
@@ -5173,102 +4767,6 @@ async fn validate_llm_provider(
         "error_code": result.outcome.error_code,
         "error_message": result.outcome.error_code.map(|_| result.outcome.detail),
         "catalog": catalog,
-    })))
-}
-
-async fn validate_llm_provider_draft(
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    State(state): State<Arc<LocalRuntimeState>>,
-    Json(request): Json<LlmProviderDraftProbe>,
-) -> LocalJsonResult {
-    ensure_provider_manager(&authenticated)?;
-    if request.name.trim().is_empty() {
-        return Err(provider_probe_request_error("provider name is required"));
-    }
-    let provider_type = request.provider_type.trim().to_lowercase();
-    if !runtime_provider_supported(&provider_type) {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": "unsupported local provider type" })),
-        ));
-    }
-
-    let base_url = normalized_runtime_provider_base_url(&provider_type, &request.base_url)?;
-    let auth_method = request.auth_method.trim().to_lowercase();
-    if !matches!(auth_method.as_str(), "api_key" | "environment" | "none") {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": "unsupported local provider auth method" })),
-        ));
-    }
-    validate_provider_auth_fields(
-        &auth_method,
-        request.api_key.is_some(),
-        request.environment_variable.is_some(),
-    )?;
-    let credential = if auth_method == "environment" {
-        let environment_variable = request
-            .environment_variable
-            .as_deref()
-            .map(|value| normalized_provider_environment_variable(&provider_type, &base_url, value))
-            .transpose()?
-            .ok_or_else(|| provider_probe_request_error("environment variable name is required"))?;
-        std::env::var(environment_variable)
-            .ok()
-            .and_then(|value| normalized_runtime_credential(&value))
-    } else {
-        request
-            .api_key
-            .as_deref()
-            .and_then(normalized_runtime_credential)
-    };
-    if matches!(auth_method.as_str(), "api_key" | "environment") && credential.is_none() {
-        return Ok(Json(json!({
-            "provider": null,
-            "status": "needs_credentials",
-            "probed": false,
-            "detail": if auth_method == "environment" {
-                "The referenced environment variable is unavailable in this runtime."
-            } else {
-                "Enter a provider credential before testing this connection."
-            },
-            "last_check": null,
-            "response_time_ms": null,
-            "error_code": "credential_unavailable",
-            "error_message": if auth_method == "environment" {
-                "The referenced environment variable is unavailable in this runtime."
-            } else {
-                "Enter a provider credential before testing this connection."
-            },
-            "catalog": null,
-        })));
-    }
-    let last_check = now_iso();
-    let outcome = state
-        .provider_probe
-        .probe(ProviderProbeRequest {
-            provider_type: provider_type.clone(),
-            base_url,
-            auth_method: provider_probe_auth_method(&auth_method).to_string(),
-            credential,
-        })
-        .await;
-    Ok(Json(json!({
-        "provider": null,
-        "status": outcome.status,
-        "probed": true,
-        "detail": outcome.detail,
-        "last_check": last_check,
-        "response_time_ms": outcome.response_time_ms,
-        "error_code": outcome.error_code,
-        "error_message": outcome.error_code.map(|_| outcome.detail),
-        "catalog": provider_probe_catalog(
-            &provider_type,
-            None,
-            &outcome,
-            &last_check,
-            None,
-        ),
     })))
 }
 
@@ -6383,59 +5881,6 @@ fn hierarchy_page_bounds(
     Ok((limit, offset, end))
 }
 
-async fn list_workspaces(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id)): Path<(String, String)>,
-    Query(_query): Query<HierarchyListQuery>,
-) -> LocalJsonResult {
-    if tenant_id != authenticated.workspace.tenant_id {
-        return Err(active_workspace_scope_error());
-    }
-    ensure_active_project(&authenticated, &project_id)?;
-    Err(workspace_core_bridge::unavailable(
-        "Workspace Core authority is unavailable",
-    ))
-}
-
-async fn create_workspace(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id)): Path<(String, String)>,
-    Json(_body): Json<Value>,
-) -> LocalJsonResult {
-    if tenant_id != authenticated.workspace.tenant_id {
-        return Err(active_workspace_scope_error());
-    }
-    ensure_active_project(&authenticated, &project_id)?;
-    Err(workspace_core_bridge::unavailable(
-        "Workspace Core authority is unavailable",
-    ))
-}
-
-async fn list_workspace_messages(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
-) -> LocalJsonResult {
-    let _ = (authenticated, tenant_id, project_id, workspace_id);
-    Err(workspace_core_bridge::unavailable(
-        "Workspace Core authority is unavailable",
-    ))
-}
-
-async fn create_workspace_message(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
-    Json(_body): Json<Value>,
-) -> LocalJsonResult {
-    let _ = (authenticated, tenant_id, project_id, workspace_id);
-    Err(workspace_core_bridge::unavailable(
-        "Workspace Core authority is unavailable",
-    ))
-}
-
 async fn list_tasks(
     State(_state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
@@ -6468,52 +5913,6 @@ struct ListConversationsQuery {
     offset: Option<usize>,
 }
 
-async fn list_conversations(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Query(query): Query<ListConversationsQuery>,
-) -> LocalJsonResult {
-    let project_id = query
-        .project_id
-        .unwrap_or_else(|| authenticated.workspace.project_id.clone());
-    ensure_active_project(&authenticated, &project_id)?;
-    let workspace_id = query.workspace_id;
-    if let Some(workspace_id) = workspace_id
-        .as_deref()
-        .filter(|_| !workspace_core_bridge::workspace_core_cutover_started(&state))
-    {
-        ensure_active_workspace(&state, &authenticated, workspace_id)?;
-    }
-    let page_query = HierarchyListQuery {
-        limit: query.limit,
-        offset: query.offset,
-    };
-    let (limit, offset, end) = hierarchy_page_bounds(&page_query, 100)?;
-    let values: Vec<Value> = state
-        .session_store
-        .list_conversations(&project_id, workspace_id.as_deref())
-        .map_err(local_store_error)?
-        .iter()
-        .filter(|conversation| !query.unbound_only || conversation.workspace_id.is_none())
-        .map(|conversation| state.conversation_value(conversation))
-        .collect();
-    let total = values.len();
-    let items = values
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect::<Vec<_>>();
-    let next_offset = end.min(total);
-    Ok(Json(json!({
-        "items": items,
-        "total": total,
-        "has_more": next_offset < total,
-        "offset": offset,
-        "limit": limit,
-        "next_offset": if next_offset < total { Some(next_offset) } else { None },
-    })))
-}
-
 #[derive(Deserialize)]
 struct CreateConversationBody {
     project_id: String,
@@ -6531,58 +5930,6 @@ struct CreateConversationAgentConfig {
     llm_model_override: Option<String>,
     #[serde(default)]
     llm_route_override: Option<LlmRouteTarget>,
-}
-
-async fn create_conversation(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(body): Json<CreateConversationBody>,
-) -> LocalJsonResult {
-    ensure_active_project(&authenticated, &body.project_id)?;
-    let llm_route = normalized_conversation_llm_route(
-        body.agent_config.llm_model_override,
-        body.agent_config.llm_route_override,
-    )
-    .map_err(local_bad_request)?;
-    if let Some(route) = llm_route.as_ref() {
-        state
-            .validate_conversation_llm_route(&authenticated.workspace.tenant_id, route)
-            .map_err(local_bad_request)?;
-    }
-    let now = now_iso();
-    let conversation = LocalConversation {
-        id: format!("local-conversation-{}", Uuid::new_v4()),
-        project_id: authenticated.workspace.project_id.clone(),
-        tenant_id: authenticated.workspace.tenant_id.clone(),
-        title: body.title.unwrap_or_else(|| "Local session".to_string()),
-        workspace_id: None,
-        capability_mode: body.agent_config.capability_mode,
-        current_mode: ConversationRunMode::Plan,
-        created_at: now.clone(),
-        updated_at: now,
-    };
-    state
-        .session_store
-        .insert_conversation_with_llm_route(&conversation, llm_route.as_ref())
-        .map_err(local_store_error)?;
-    let initial_selection = execution_selection::ExecutionSelection {
-        agent_id: body.agent_config.selected_agent_id,
-        forced_skill_id: None,
-        subagent_id: None,
-    }
-    .normalized()
-    .map_err(local_bad_request)?;
-    state
-        .session_store
-        .save_execution_selection(
-            &conversation.id,
-            "conversation-created",
-            &initial_selection,
-            &now_iso(),
-        )
-        .map_err(local_store_error)?;
-    let value = state.conversation_value(&conversation);
-    Ok(Json(value))
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -6650,126 +5997,6 @@ struct ConversationConfigBody {
     llm_route_override: Option<Option<LlmRouteTarget>>,
     #[serde(default, deserialize_with = "approval_config::deserialize_mode")]
     approval_mode: Option<approval_config::ApprovalMode>,
-}
-
-async fn update_conversation_mode(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-    Json(body): Json<ConversationModeBody>,
-) -> LocalJsonResult {
-    let value = {
-        let mut conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
-        let changes_workspace_scope = match &body.workspace_id {
-            WorkspaceIdPatch::Missing => false,
-            WorkspaceIdPatch::Null => conversation.workspace_id.is_some(),
-            WorkspaceIdPatch::Value(workspace_id) => {
-                conversation.workspace_id.as_deref() != Some(workspace_id.as_str())
-            }
-        };
-        if is_local_demo_conversation(&conversation.id) && changes_workspace_scope {
-            return Err((
-                StatusCode::CONFLICT,
-                Json(json!({
-                    "detail": "local demo conversation workspace scope is immutable"
-                })),
-            ));
-        }
-        match body.workspace_id {
-            WorkspaceIdPatch::Missing => {}
-            WorkspaceIdPatch::Null => conversation.workspace_id = None,
-            WorkspaceIdPatch::Value(workspace_id) => {
-                if workspace_core_bridge::workspace_core_cutover_started(&state) {
-                    workspace_core_bridge::validate_workspace_access(
-                        &state,
-                        &authenticated,
-                        &workspace_id,
-                    )
-                    .await?;
-                } else {
-                    ensure_active_workspace(&state, &authenticated, &workspace_id)?;
-                }
-                conversation.workspace_id = Some(workspace_id);
-            }
-        }
-        if let Some(capability_mode) = body.capability_mode {
-            conversation.capability_mode = capability_mode;
-        }
-        conversation.updated_at = now_iso();
-        state
-            .session_store
-            .update_conversation(&conversation)
-            .map_err(local_store_error)?;
-        state.conversation_value(&conversation)
-    };
-    Ok(Json(value))
-}
-
-async fn update_conversation_config(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-    Json(body): Json<ConversationConfigBody>,
-) -> LocalJsonResult {
-    if let Some(patch) = body.execution_selection {
-        if body.selected_agent_id.is_some()
-            || body.llm_model_override.is_some()
-            || body.llm_route_override.is_some()
-            || body.approval_mode.is_some()
-        {
-            return Err(local_bad_request(
-                "execution_selection must be updated independently".into(),
-            ));
-        }
-        return execution_selection_patch::update(&state, &authenticated, &conversation_id, patch);
-    }
-    let route_present = body.llm_model_override.is_some() || body.llm_route_override.is_some();
-    let llm_route = normalized_conversation_llm_route(
-        body.llm_model_override.flatten(),
-        body.llm_route_override.flatten(),
-    )
-    .map_err(local_bad_request)?;
-    if let Some(route) = llm_route.as_ref() {
-        state
-            .validate_conversation_llm_route(&authenticated.workspace.tenant_id, route)
-            .map_err(local_bad_request)?;
-    }
-    let value = {
-        let mut conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
-        let now = now_iso();
-        let mut selection = state
-            .session_store
-            .execution_selection(&conversation.id)
-            .map_err(local_store_error)?
-            .unwrap_or_default();
-        if body.selected_agent_id.is_some() {
-            selection.agent_id = body.selected_agent_id;
-        }
-        let selection = selection.normalized().map_err(local_bad_request)?;
-        if route_present {
-            state
-                .session_store
-                .update_conversation_llm_route(&conversation.id, llm_route.as_ref(), &now)
-                .map_err(local_store_error)?;
-        }
-        if let Some(mode) = body.approval_mode {
-            state
-                .session_store
-                .update_conversation_approval_mode(&conversation.id, mode)
-                .map_err(local_store_error)?;
-        }
-        state
-            .session_store
-            .save_execution_selection(&conversation.id, "conversation-config", &selection, &now)
-            .map_err(local_store_error)?;
-        conversation.updated_at = now;
-        state
-            .session_store
-            .update_conversation(&conversation)
-            .map_err(local_store_error)?;
-        state.conversation_value(&conversation)
-    };
-    Ok(Json(value))
 }
 
 #[derive(Deserialize)]
@@ -6845,141 +6072,6 @@ fn conversation_messages_query_error(detail: &str) -> (StatusCode, Json<Value>) 
 struct SwitchPlanModeBody {
     conversation_id: String,
     mode: ConversationRunMode,
-}
-
-async fn switch_plan_mode(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(body): Json<SwitchPlanModeBody>,
-) -> LocalJsonResult {
-    if body.mode == ConversationRunMode::Build {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "build mode requires atomic plan approval and run authorization"
-            })),
-        ));
-    }
-    let mut conversation = scoped_conversation(&state, &authenticated, &body.conversation_id)?;
-    conversation.current_mode = body.mode;
-    conversation.updated_at = now_iso();
-    state
-        .session_store
-        .update_conversation(&conversation)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({
-        "conversation_id": conversation.id,
-        "mode": conversation.current_mode,
-        "switched_at": conversation.updated_at,
-    })))
-}
-
-async fn get_plan_mode(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-) -> LocalJsonResult {
-    let conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
-    Ok(Json(json!({
-        "conversation_id": conversation.id,
-        "mode": conversation.current_mode,
-    })))
-}
-
-async fn list_agent_plan_tasks(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-) -> LocalJsonResult {
-    scoped_conversation(&state, &authenticated, &conversation_id)?;
-    let tasks = state
-        .session_store
-        .list_agent_plan_tasks(&conversation_id)
-        .map_err(local_store_error)?;
-    let plan_version = state
-        .session_store
-        .latest_draft_plan(&conversation_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({
-        "conversation_id": conversation_id,
-        "total_count": tasks.len(),
-        "tasks": tasks,
-        "plan_version": plan_version,
-        "approval": {
-            "kind": "versioned_atomic",
-            "plan_version": plan_version,
-        },
-    })))
-}
-
-async fn conversation_messages(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-    Query(query): Query<ConversationMessagesQuery>,
-) -> LocalJsonResult {
-    let query = query.validated()?;
-    ensure_active_project(&authenticated, &query.project_id)?;
-    scoped_conversation(&state, &authenticated, &conversation_id)?;
-    let DesktopTimelinePage {
-        items,
-        has_more,
-        first_cursor,
-        last_cursor,
-    } = state
-        .session_store
-        .timeline_page(&conversation_id, query.limit, query.from, query.before)
-        .map_err(local_store_error)?;
-    let approval_requests = state
-        .session_store
-        .list_hitl_requests(&conversation_id)
-        .map_err(local_store_error)?
-        .into_iter()
-        .filter(|request| {
-            request.decision.is_some()
-                && matches!(request.kind, HitlKind::Decision | HitlKind::Permission)
-        })
-        .map(|request| {
-            let run_revision = request
-                .run_id
-                .as_deref()
-                .map(|run_id| state.session_store.run(run_id))
-                .transpose()?
-                .flatten()
-                .map(|run| run.revision);
-            let mut value = serde_json::to_value(request).map_err(|error| error.to_string())?;
-            value["run_revision"] = json!(run_revision);
-            Ok::<Value, String>(value)
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(local_store_error)?;
-    let artifact_versions = state
-        .session_store
-        .list_artifact_versions(&conversation_id)
-        .map_err(local_store_error)?;
-    let artifact_deliveries = state
-        .session_store
-        .list_artifact_deliveries(&conversation_id)
-        .map_err(local_store_error)?;
-    let tool_invocations = state
-        .session_store
-        .list_tool_invocations(&conversation_id)
-        .map_err(local_store_error)?;
-    let total = items.len();
-    Ok(Json(json!({
-        "conversationId": conversation_id,
-        "timeline": items,
-        "approval_requests": approval_requests,
-        "artifact_versions": artifact_versions,
-        "artifact_deliveries": artifact_deliveries,
-        "tool_invocations": tool_invocations,
-        "total": total,
-        "has_more": has_more,
-        "first_time_us": first_cursor.map(|cursor| cursor.time_us),
-        "first_counter": first_cursor.map(|cursor| cursor.counter),
-        "last_time_us": last_cursor.map(|cursor| cursor.time_us),
-        "last_counter": last_cursor.map(|cursor| cursor.counter),
-    })))
 }
 
 #[derive(Deserialize)]
@@ -7167,232 +6259,9 @@ struct ExecutionEnvironmentBody {
     kind: DesktopExecutionEnvironmentKind,
 }
 
-async fn approve_plan_and_start(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
-    Json(body): Json<ApprovePlanAndStartBody>,
-) -> LocalJsonResult {
-    if body.message.trim().is_empty()
-        || body.message_id.trim().is_empty()
-        || body.idempotency_key.trim().is_empty()
-        || body.plan_version_id.trim().is_empty()
-        || body.expected_plan_version < 1
-    {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "detail": "plan_version_id, expected_plan_version, message, message_id, and idempotency_key are required"
-            })),
-        ));
-    }
-    ensure_active_project(&authenticated, &body.project_id)?;
-    let conversation = scoped_conversation(&state, &authenticated, &body.conversation_id)?;
-    let existing_run = state
-        .session_store
-        .run_by_idempotency_key(&body.idempotency_key)
-        .map_err(local_store_error)?;
-    if let Some(existing_run) = existing_run.as_ref() {
-        ensure_active_project(&authenticated, &existing_run.project_id)?;
-    }
-    let prepared = if existing_run.is_some() {
-        None
-    } else {
-        local_feature_authority_v2::require_feature(
-            &state,
-            &authenticated,
-            "builtin-desktop-feature-agent-workspace-tenant-agent-workspace",
-        )
-        .map_err(|code| {
-            (
-                StatusCode::CONFLICT,
-                Json(json!({"code":code,"detail":"Agent workspace is unavailable"})),
-            )
-        })?;
-        let kind = body
-            .environment
-            .as_ref()
-            .map(|environment| environment.kind)
-            .unwrap_or(DesktopExecutionEnvironmentKind::Local);
-        if kind == DesktopExecutionEnvironmentKind::Worktree
-            && conversation.capability_mode != ConversationCapabilityMode::Code
-        {
-            return Err((
-                StatusCode::CONFLICT,
-                Json(json!({ "detail": "worktree execution requires a Code conversation" })),
-            ));
-        }
-        let environment_id = format!("local-environment-{}", Uuid::new_v4());
-        Some(
-            state
-                .worktree_manager()
-                .prepare(kind, &environment_id, &now_iso())
-                .map_err(execution_environment_error)?,
-        )
-    };
-    let approved_at = now_iso();
-    let outcome = match state.session_store.approve_plan_and_start_in_environment(
-        session_store::ApprovePlanStartInput {
-            conversation_id: &body.conversation_id,
-            project_id: &authenticated.workspace.project_id,
-            plan_version_id: &body.plan_version_id,
-            expected_plan_version: body.expected_plan_version,
-            idempotency_key: &body.idempotency_key,
-            message_id: &body.message_id,
-            request_message: &body.message,
-            environment: prepared
-                .as_ref()
-                .map(|prepared| prepared.environment.clone()),
-            requested_environment_kind: body
-                .environment
-                .as_ref()
-                .map(|environment| environment.kind)
-                .unwrap_or(DesktopExecutionEnvironmentKind::Local),
-            permission_profile: body.permission_profile,
-            now: &approved_at,
-        },
-    ) {
-        Ok(outcome) => outcome,
-        Err(error) => {
-            if let Some(prepared) = prepared.as_ref() {
-                state.worktree_manager().cleanup(&prepared.environment);
-            }
-            return Err(authority_error(error));
-        }
-    };
-    if !outcome.created {
-        if let Some(prepared) = prepared.as_ref() {
-            state.worktree_manager().cleanup(&prepared.environment);
-        }
-    } else if let Some(prepared) = prepared.as_ref() {
-        let event_type = if prepared.created_worktree {
-            "worktree_created"
-        } else {
-            "environment_selected"
-        };
-        let item = state.timeline_item(
-            event_type,
-            outcome.conversation.id.clone(),
-            Some(outcome.run.message_id.clone()),
-            None,
-            None,
-            json!({
-                "run_id": outcome.run.id,
-                "environment": prepared.environment,
-            }),
-        );
-        state.append_timeline(&outcome.conversation.id, item);
-    }
-    let should_queue = matches!(
-        outcome.run.status,
-        DesktopRunStatus::Queued | DesktopRunStatus::Interrupted
-    );
-    if should_queue {
-        let run_state = Arc::clone(&state);
-        let conversation_id = outcome.conversation.id.clone();
-        let project_id = outcome.conversation.project_id.clone();
-        let message = outcome.run.request_message.clone();
-        let message_id = outcome.run.message_id.clone();
-        let run_id = outcome.run.id.clone();
-        let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
-        let knowledge_authorization =
-            knowledge_authority_v2::agent_access::RunAuthorization::capture(
-                authenticated,
-                plugin_generation.clone(),
-                &outcome.conversation,
-                &message_id,
-                Some(&run_id),
-            );
-        tokio::spawn(async move {
-            knowledge_authority_v2::agent_access::scope(knowledge_authorization, async move {
-                run_state
-                    .run_agent_message_for_role_with_generation(
-                        conversation_id,
-                        project_id,
-                        message,
-                        message_id,
-                        None,
-                        Some(run_id),
-                        None,
-                        plugin_generation,
-                        None,
-                    )
-                    .await;
-            })
-            .await;
-        });
-    }
-    Ok(Json(json!({
-        "queued": should_queue,
-        "created": outcome.created,
-        "conversation": state.conversation_value(&outcome.conversation),
-        "plan_version": outcome.plan_version,
-        "run": outcome.run,
-    })))
-}
-
-async fn get_run(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(run_id): Path<String>,
-) -> LocalJsonResult {
-    let run = state
-        .session_store
-        .run(&run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    ensure_active_project(&authenticated, &run.project_id)?;
-    let events = state
-        .session_store
-        .run_events(&run_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({ "run": run, "events": events })))
-}
-
 #[derive(Deserialize)]
 struct RunChangesQuery {
     expected_revision: u64,
-}
-
-async fn get_run_changes(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(run_id): Path<String>,
-    Query(query): Query<RunChangesQuery>,
-) -> LocalJsonResult {
-    let run = state
-        .session_store
-        .run(&run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    ensure_active_project(&authenticated, &run.project_id)?;
-    if run.revision != query.expected_revision {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "run revision conflict",
-                "expected_revision": query.expected_revision,
-                "actual_revision": run.revision,
-            })),
-        ));
-    }
-    let snapshot =
-        tokio::task::spawn_blocking(move || GitChangesInspector::inspect(&run, &now_iso()))
-            .await
-            .map_err(|_| local_store_error("change inspection task failed".to_string()))?;
-    Ok(Json(
-        serde_json::to_value(snapshot).map_err(|error| local_store_error(error.to_string()))?,
-    ))
 }
 
 #[derive(Deserialize)]
@@ -7575,152 +6444,6 @@ async fn list_run_inputs(
         "run_revision": run.revision,
         "inputs": inputs,
         "total_count": inputs.len(),
-    })))
-}
-
-async fn create_run_input(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
-    Path(run_id): Path<String>,
-    Json(body): Json<CreateRunInputBody>,
-) -> LocalJsonResult {
-    if body.message.trim().is_empty()
-        || body.message_id.trim().is_empty()
-        || body.idempotency_key.trim().is_empty()
-    {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "detail": "message, message_id, and idempotency_key are required"
-            })),
-        ));
-    }
-    validate_composer_context_items(&body.context_items).map_err(invalid_composer_context)?;
-    let run = state
-        .session_store
-        .run(&run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    ensure_active_project(&authenticated, &run.project_id)?;
-    let run_conversation = state
-        .session_store
-        .conversation(&run.conversation_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| invalid_composer_context("run conversation was not found"))?;
-    let run_workspace_id = run_conversation
-        .workspace_id
-        .as_deref()
-        .ok_or_else(|| invalid_composer_context("run conversation has no workspace"))?;
-    validate_composer_context_authority(
-        &state,
-        &authenticated,
-        run_workspace_id,
-        &body.context_items,
-        plugin_generation
-            .as_ref()
-            .map(|Extension(generation)| generation.as_ref()),
-    )?;
-    if run.revision != body.expected_run_revision {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "run revision conflict",
-                "expected_revision": body.expected_run_revision,
-                "actual_revision": run.revision,
-            })),
-        ));
-    }
-    if run.status != DesktopRunStatus::Running {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "run is not accepting steering or queued input" })),
-        ));
-    }
-    if body.delivery == RunInputDelivery::SteerNow && state.control_for_run(&run).is_none() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "run is not attached for steering" })),
-        ));
-    }
-    if !body.references.is_empty() {
-        let run_for_inspection = run.clone();
-        let snapshot = tokio::task::spawn_blocking(move || {
-            GitChangesInspector::inspect(&run_for_inspection, &now_iso())
-        })
-        .await
-        .map_err(|_| local_store_error("change inspection task failed".to_string()))?;
-        validate_run_input_references(&snapshot, &body.references).map_err(|detail| {
-            (
-                StatusCode::CONFLICT,
-                Json(json!({
-                    "detail": detail,
-                    "snapshot_id": snapshot.id,
-                    "run_revision": run.revision,
-                })),
-            )
-        })?;
-    }
-    let created_at = now_iso();
-    let outcome = state
-        .session_store
-        .create_run_input(session_store::CreateRunInput {
-            run_id: &run.id,
-            expected_run_revision: body.expected_run_revision,
-            message_id: &body.message_id,
-            idempotency_key: &body.idempotency_key,
-            delivery: body.delivery,
-            content: &body.message,
-            references: body.references,
-            context_items: body.context_items,
-            now: &created_at,
-        });
-    let (input, created) = match outcome {
-        Ok(value) => value,
-        Err(error) if error.contains("conflict") || error.contains("not accepting") => {
-            return Err((StatusCode::CONFLICT, Json(json!({ "detail": error }))));
-        }
-        Err(error) => return Err(local_store_error(error)),
-    };
-    if created {
-        let event_type = match input.delivery {
-            RunInputDelivery::SteerNow => "user_message",
-            RunInputDelivery::QueueNext => "run_input_queued",
-        };
-        let item = state.timeline_item(
-            event_type,
-            run.conversation_id.clone(),
-            Some(input.message_id.clone()),
-            (input.delivery == RunInputDelivery::SteerNow).then_some("user"),
-            Some(input.content.clone()),
-            json!({
-                "run_id": run.id,
-                "run_revision": run.revision,
-                "run_input_id": input.id,
-                "delivery_mode": input.delivery,
-                "input_status": input.status,
-                "references": input.references,
-                "context_items": input.context_items,
-            }),
-        );
-        state.append_timeline(&run.conversation_id, item);
-    }
-    Ok(Json(json!({
-        "accepted": true,
-        "created": created,
-        "action": "send_message",
-        "conversation_id": run.conversation_id,
-        "message_id": input.message_id,
-        "delivery_mode": input.delivery,
-        "run_id": run.id,
-        "run_revision": run.revision,
-        "queue_position": input.queue_position,
-        "input": input,
     })))
 }
 
@@ -8136,102 +6859,6 @@ struct DeliverArtifactVersionBody {
 
 fn default_local_artifact_destination() -> String {
     "local_workspace".to_string()
-}
-
-async fn deliver_artifact_version(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(artifact_version_id): Path<String>,
-    Json(body): Json<DeliverArtifactVersionBody>,
-) -> LocalJsonResult {
-    let version = state
-        .session_store
-        .artifact_version(&artifact_version_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "artifact version not found" })),
-            )
-        })?;
-    scoped_conversation(&state, &authenticated, &version.conversation_id)?;
-    if version.status == DesktopArtifactStatus::Delivered {
-        let deliveries = state
-            .session_store
-            .list_artifact_deliveries(&version.conversation_id)
-            .map_err(local_store_error)?;
-        if let Some(delivery) = deliveries.into_iter().find(|delivery| {
-            delivery.artifact_version_id == version.id
-                && delivery.idempotency_key == body.idempotency_key
-        }) {
-            return Ok(Json(json!({
-                "accepted": true,
-                "status": "delivered",
-                "artifact_version": version,
-                "delivery": delivery,
-            })));
-        }
-    }
-    ensure_artifact_revision(&version, body.expected_revision)?;
-    if version.status != DesktopArtifactStatus::Approved {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "only an approved artifact version can be delivered" })),
-        ));
-    }
-    if body.idempotency_key.trim().is_empty() || body.destination.trim().is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": "idempotency_key and destination are required" })),
-        ));
-    }
-    let metadata = tokio::fs::metadata(&version.path).await.map_err(|_| {
-        (
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "artifact file is unavailable; delivery was not recorded" })),
-        )
-    })?;
-    if !metadata.is_file() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "artifact path is not a file; delivery was not recorded" })),
-        ));
-    }
-    let delivered_at = now_iso();
-    let receipt = json!({
-        "artifact_version_id": version.id,
-        "artifact_id": version.artifact_id,
-        "destination": body.destination,
-        "path": version.path,
-        "relative_path": version.relative_path,
-        "bytes": metadata.len(),
-        "actor": "local_user",
-        "delivered_at": delivered_at,
-    });
-    let (delivered, delivery) = state
-        .session_store
-        .deliver_artifact_version(
-            &version.id,
-            version.revision,
-            &body.idempotency_key,
-            &body.destination,
-            receipt,
-            &delivered_at,
-        )
-        .map_err(local_store_error)?;
-    append_artifact_event(
-        &state,
-        &delivered,
-        "artifact_delivered",
-        None,
-        Some(&delivery.receipt),
-    );
-    Ok(Json(json!({
-        "accepted": true,
-        "status": "delivered",
-        "artifact_version": delivered,
-        "delivery": delivery,
-    })))
 }
 
 fn ensure_artifact_revision(
@@ -9565,35 +8192,6 @@ fn hitl_response_approves(kind: HitlKind, response_data: &Value) -> bool {
     }
 }
 
-async fn list_conversation_runs(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-) -> LocalJsonResult {
-    scoped_conversation(&state, &authenticated, &conversation_id)?;
-    let runs = state
-        .session_store
-        .list_runs(&conversation_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({
-        "conversation_id": conversation_id,
-        "total_count": runs.len(),
-        "runs": runs,
-    })))
-}
-
-async fn agent_ws(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
-    ws: WebSocketUpgrade,
-) -> impl IntoResponse {
-    // A socket may span publications; each new turn admits its own generation.
-    drop(plugin_generation);
-    ws.protocols(["memstack.auth"])
-        .on_upgrade(move |socket| agent_socket_loop(socket, state, authenticated))
-}
-
 fn execution_selection_from_agent_message(
     value: &Value,
 ) -> Result<execution_selection::ExecutionSelection, String> {
@@ -9895,168 +8493,15 @@ fn is_subscribed_event(event: &Value, conversations: &HashSet<String>) -> bool {
         .is_some_and(|conversation_id| conversations.contains(conversation_id))
 }
 
-async fn get_sandbox(Path(project_id): Path<String>) -> Json<Value> {
-    Json(sandbox_value(project_id))
-}
-
-async fn ensure_sandbox(Path(project_id): Path<String>) -> LocalJsonResult {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "detail": "isolated local sandbox is not configured",
-            "sandbox": sandbox_value(project_id),
-        })),
-    ))
-}
-
-async fn proxy_auth_cookie() -> Json<Value> {
-    Json(json!({ "ok": true }))
-}
-
-async fn start_desktop(Path(project_id): Path<String>) -> LocalJsonResult {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "detail": "isolated local desktop is not configured",
-            "sandbox": sandbox_value(project_id),
-        })),
-    ))
-}
-
-async fn desktop_proxy() -> Html<&'static str> {
-    Html(
-        r#"<!doctype html><html><body style="margin:0;background:#111;color:#ddd;font:14px system-ui;display:grid;place-items:center;height:100vh"><div>Local desktop mode uses the native Electron window.</div></body></html>"#,
-    )
-}
-
 #[derive(Deserialize)]
 struct StartTerminalBody {
     run_id: String,
     expected_run_revision: u64,
 }
 
-async fn start_terminal(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(project_id): Path<String>,
-    Json(body): Json<StartTerminalBody>,
-) -> LocalJsonResult {
-    ensure_active_project(&authenticated, &project_id)?;
-    let run = state
-        .session_store
-        .run(&body.run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    if run.project_id != project_id {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "terminal run project mismatch" })),
-        ));
-    }
-    if run.revision != body.expected_run_revision
-        || run.status != DesktopRunStatus::Running
-        || run.permission_profile != DesktopPermissionProfile::FullAccess
-    {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "terminal requires the exact active run revision with full_access permission",
-                "actual_revision": run.revision,
-                "status": run.status,
-                "permission_profile": run.permission_profile,
-            })),
-        ));
-    }
-    let environment = run.environment.as_ref().ok_or_else(|| {
-        (
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "run has no authoritative execution environment" })),
-        )
-    })?;
-    state
-        .worktree_manager()
-        .validate(environment)
-        .map_err(execution_environment_error)?;
-    let cwd = PathBuf::from(&environment.workspace_path);
-    let created_at = now_iso();
-    let expires_at = (Utc::now() + ChronoDuration::seconds(30)).to_rfc3339();
-    let lease = state.create_terminal_session(
-        &run,
-        environment,
-        &authenticated,
-        cwd.clone(),
-        created_at,
-        expires_at,
-    );
-    Ok(Json(json!({
-        "success": true,
-        "url": null,
-        "port": null,
-        "session_id": lease.session_id,
-        "run_id": run.id,
-        "run_revision": run.revision,
-        "conversation_id": run.conversation_id,
-        "project_id": run.project_id,
-        "environment_id": environment.id,
-        "created_at": lease.created_at,
-        "expires_at": lease.expires_at,
-        "resumable": false,
-        "cwd": cwd,
-        "environment": run.environment,
-    })))
-}
-
 #[derive(Deserialize)]
 struct TerminalSocketQuery {
     session_id: String,
-}
-
-async fn terminal_ws(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
-    Path(project_id): Path<String>,
-    Query(query): Query<TerminalSocketQuery>,
-    ws: WebSocketUpgrade,
-) -> Response {
-    if let Err(error) = ensure_active_project(&authenticated, &project_id) {
-        return error.into_response();
-    }
-    let Some(lease) = state.take_terminal_session(&query.session_id) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "detail": "unknown or consumed terminal session" })),
-        )
-            .into_response();
-    };
-    let cwd = match validate_terminal_session_lease(&state, &authenticated, &project_id, &lease) {
-        Ok(cwd) => cwd,
-        Err(error) => return error.into_response(),
-    };
-    let state_for_socket = Arc::clone(&state);
-    let authenticated_for_socket = authenticated.clone();
-    let project_for_socket = project_id.clone();
-    let lease_for_socket = lease.clone();
-    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
-    ws.protocols(["memstack.auth"])
-        .on_upgrade(move |socket| {
-            terminal_socket_loop(
-                socket,
-                cwd,
-                query.session_id,
-                state_for_socket,
-                authenticated_for_socket,
-                project_for_socket,
-                lease_for_socket,
-                plugin_generation,
-            )
-        })
-        .into_response()
 }
 
 fn validate_terminal_session_lease(
@@ -10308,35 +8753,6 @@ async fn terminal_socket_loop(
     drop(plugin_generation);
 }
 
-async fn sandbox_execute(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Json(_body): Json<Value>,
-) -> LocalJsonResult {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "detail": "sandbox execution is disabled until an isolated runtime is configured"
-        })),
-    ))
-}
-
-async fn mcp_tools_list(State(state): State<Arc<LocalRuntimeState>>) -> Json<Value> {
-    let tool_host = state.tool_host.lock().expect("local tool host").clone();
-    let mut result = tool_host.mcp_tools_list_result();
-    // The engine consumes tool *names* via ToolHost::list_tools; schemas are
-    // served only through this listing, so the browser bridge merges its
-    // metadata here under the same broker-connected gate the engine uses.
-    if state.connected_browser_tool_host().is_some() {
-        if let Some(tools) = result.get_mut("tools").and_then(Value::as_array_mut) {
-            tools.extend(agistack_adapters_browser::list_tool_metadata());
-            // Wrapper-composed tools (not part of the browser crate) advertise
-            // their schemas here too.
-            tools.push(browser_run_tool_host::fill_credentials_tool_metadata());
-        }
-    }
-    Json(result)
-}
-
 #[derive(Deserialize)]
 struct McpToolCallBody {
     run_id: String,
@@ -10344,66 +8760,6 @@ struct McpToolCallBody {
     name: String,
     #[serde(default)]
     arguments: Value,
-}
-
-async fn mcp_tools_call(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(body): Json<McpToolCallBody>,
-) -> LocalJsonResult {
-    let run = state
-        .session_store
-        .run(&body.run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    ensure_active_project(&authenticated, &run.project_id)?;
-    if run.revision != body.expected_run_revision || run.status != DesktopRunStatus::Running {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "MCP tool execution requires the exact active run revision",
-                "actual_revision": run.revision,
-                "status": run.status,
-            })),
-        ));
-    }
-    let environment = run.environment.as_ref().ok_or_else(|| {
-        (
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "run has no authoritative execution environment" })),
-        )
-    })?;
-    state
-        .worktree_manager()
-        .validate(environment)
-        .map_err(execution_environment_error)?;
-    let inner = LocalToolHost::new(&environment.workspace_path)
-        .map_err(|error| execution_environment_error(error.to_string()))?;
-    let host = AuthorizedRunToolHost::new(Arc::new(inner), state.session_store.clone(), run);
-    let input_json = serde_json::to_string(&body.arguments).map_err(|error| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": error.to_string() })),
-        )
-    })?;
-    let output = host.call(&body.name, &input_json).await.map_err(|error| {
-        (
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": error.to_string() })),
-        )
-    })?;
-    let value = serde_json::from_str(&output).unwrap_or_else(|_| {
-        json!({
-            "isError": false,
-            "content": [{ "type": "text", "text": output }],
-        })
-    });
-    Ok(Json(value))
 }
 
 fn sandbox_value(project_id: String) -> Value {

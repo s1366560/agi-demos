@@ -155,7 +155,7 @@ jobs:
         working-directory: agi-stack
         env:
           CARGO_PROFILE_DEV_DEBUG: "0"
-        run: cargo build -p agistack-desktop-sidecar
+        run: cargo build -p agistack-desktop-sidecar --features legacy-business
 
       - name: Install Workspace Core native libraries
         run: |

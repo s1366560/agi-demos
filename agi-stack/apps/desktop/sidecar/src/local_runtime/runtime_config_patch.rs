@@ -22,6 +22,14 @@ fn present<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
 }
 
 impl LocalRuntimeConfigPatch {
+    pub(super) fn is_workspace_only(&self) -> bool {
+        self.browser_bridge.is_none()
+            && self
+                .workspace_root
+                .as_ref()
+                .is_some_and(|root| std::path::Path::new(root).is_absolute())
+    }
+
     pub(super) fn apply_to(self, current: LocalRuntimeConfig) -> LocalRuntimeConfig {
         LocalRuntimeConfig {
             workspace_root: self.workspace_root.unwrap_or(current.workspace_root),

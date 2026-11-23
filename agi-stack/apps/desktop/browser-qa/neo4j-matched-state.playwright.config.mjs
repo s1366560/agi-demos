@@ -56,6 +56,7 @@ export default defineConfig({
     {
       command: `pnpm exec vite --host 127.0.0.1 --port ${desktopPort} --strictPort`,
       cwd: desktopRoot,
+    env: { AGISTACK_DESKTOP_PROFILE: "full" },
       url: desktopBaseURL,
       reuseExistingServer: false,
       timeout: 120_000,

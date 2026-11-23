@@ -16,6 +16,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.scope import validate_scope_v2
 
+PROJECT_EXECUTOR_ROLES = ("owner", "admin", "member")
+
 
 async def resolve_plugin_read_scope_v2(
     db: AsyncSession, *, current_user: User, requested_scope: ScopeV2
@@ -74,7 +76,7 @@ async def project_package_actor_can_execute(
             UserProject.user_id == current_user.id, UserProject.project_id == scope.project_id
         )
     )
-    return role in {"owner", "admin", "member"}
+    return role in PROJECT_EXECUTOR_ROLES
 
 
 async def resolve_plugin_publication_scope_v2(

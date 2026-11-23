@@ -104,6 +104,14 @@ Web 和 Electron 默认从当前项目已启用的发布版本读取页面贡献
 
 需要应用数据的页面声明具名命令及对应权限，如项目目录、剧本、会话回放或运行终端。完整 API 使用已有的业务授权接口。最小 API 可通过 `PACKAGE_APPLICATION_RUNTIME_URL` 连接同一云身份及发布库的可信运行时。接收端再次核验用户、项目、命令及归档摘要。纯计算、本地检索和发票 worker 可在各自已声明目标独立执行。会话及工作区历史沿用 P5 云端记录。终端授权还需要项目对应的运行服务及有效 run revision。[云端能力转发](../../src/host/operations/remote_application_commands.py) · [终端运行授权](../../plugins/business/environments/README.md#project-sandbox-and-run-terminal)
 
+桌面和 Web 通过签名 Agent 命令读取云端会话。标准 API 在 PostgreSQL 中保存会话的目标位置、归属以及设备上传的事件。设备开始执行前通过云端读接口确认所属项目和位置，上传采用连续序号去重，终态按修订号提交。Web 可以回放这些记录。配置独立应用运行时时，会话读写与设备上传均交给同一云端权威服务。上传带文件内容的制品还需该服务提供已配置的制品存储。[设备上传协议](../../src/host/transport/local_run_upload.py) · [两轮上传与双端回放测试](../../src/tests/unit/routers/test_package_local_run_history.py)
+
+桌面开发和打包共同使用 `AGISTACK_DESKTOP_PROFILE`。默认安装包携带通用 Sidecar 和校验摘要。完整配置同时构建 Cargo 的 `legacy-business` 功能以及 Workspace Core 和原生辅助程序。macOS 正式版在签署运行时后记录二进制摘要，重新封装应用签名，再交由公证和更新器流程。[桌面打包](../../agi-stack/apps/desktop/scripts/desktop-package-profile.cjs)
+
+Agent 包给 Web 和 Electron 提供同一聊天页面。Web 可以回放本机运行。桌面执行需要当前发布声明 `device.local-chat`，项目批准安装后，用户还须在设备上批准工作目录和该发布摘要。目录绝对路径与本机模型凭据由设备保存。Sidecar 按运行登记、连续序号和批次幂等键向云端提交事件；取消期间可排空已经产生的事件，终态继续接受相同批次的幂等重投。[Agent 页面](../../plugins/business/agent/ui/chat.js) · [设备执行](../../agi-stack/apps/desktop/sidecar/src/local_runtime/device_plugins/local_chat.rs) · [云端上传协议](../../src/application/services/local_run_protocol.py)
+
+默认 Sidecar 只对其认证的控制通道开放设备宿主能力。旧业务 HTTP 路由由 `legacy-business` 编译特性启用；Agent、Workspace、Knowledge 和 Environments 的旧专属路由源码在各包的 `desktop-sidecar/` 下。通用运行状态中仍有为完整客户端保留的辅助实现。[无业务包源码构建检查](../../agi-stack/apps/desktop/scripts/verify-sidecar-package-host.py)
+
 ### 计算与容器入口
 
 Wasm 包声明 `wasm` 和 `target`，结构化工具使用 `invoke`。独立 SDK 的 `memstack-plugin-pack package.json --key "$PUBLISHER_KEY_FILE" --out release.mspkg` 可在宿主代码仓库之外运行。字节接口见 [Wasm ABI](../plugin-wasm-score-abi-v1.md)。

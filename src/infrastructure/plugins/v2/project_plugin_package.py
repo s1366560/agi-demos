@@ -76,32 +76,7 @@ def admit_package(
     kind = json.loads(artifacts.get("release-kind.json", b'{"kind":"business"}'))
     if kind not in ({"kind": "business"}, {"kind": "adapter"}):
         raise OptionalBusinessError("invalid_package", "invalid release kind")
-    targets: tuple[str, ...] = ("python",)
-    device_tool: object = None
-    device_bytes = artifacts.get("targets/desktop-sidecar.mspkg")
-    if device_bytes is not None:
-        native = parse_bundle_archive_v2(
-            device_bytes,
-            source="device-target",
-            trusted_public_keys=keys,
-            approved_permissions=frozenset({"tools.execute"}),
-            require_signature=True,
-        ).manifest
-        if (
-            native.bundle_id != plugin.plugin_id
-            or native.version != plugin.version
-            or len(native.manifests) != 1
-            or native.manifests[0].plugin_id != native.bundle_id
-            or native.manifests[0].version != native.version
-            or native.manifests[0].runtime != RuntimeKindV2.WASM
-            or len(native.manifests[0].modules) != 1
-            or native.manifests[0].modules[0].targets != (DataPlaneTargetV2.DESKTOP_SIDECAR,)
-        ):
-            raise OptionalBusinessError("invalid_package", "invalid device release target")
-        if len(native.layers) != 1 or len(native.layers[0].entries) != 1:
-            raise OptionalBusinessError("invalid_package", "expected one device module entry")
-        device_tool = native.layers[0].entries[0].config.get("tool_name")
-        targets = ("python", "desktop-sidecar")
+    targets, device_tool, device_permission = _device_target(artifacts, plugin, keys)
     require_compatible(artifacts.get(DESCRIPTOR))
     wasm, worker = _executable(archive, plugin, module, artifacts, binding)
     if "contributions.json" not in artifacts:
@@ -113,7 +88,9 @@ def admit_package(
     validate_device_tools(contribution.pages, device_tool)
     files = _ui_files(contribution, artifacts)
     entry = _bound_entry(bundle, plugin, binding)
-    granted = _package_grants(plugin, entry, approved, contribution)
+    granted = _package_grants(plugin, entry, approved, contribution, device_permission)
+    if device_permission and device_permission not in granted:
+        raise OptionalBusinessError("forbidden", "device host capability requires approval")
     _check_loop_driver(granted, contribution, worker is not None)
     if chat_grants := granted.intersection(CHAT_ADAPTER_GRANTS):
         permissions = chat_grants | {"tools.execute"}
@@ -158,15 +135,65 @@ def admit_package(
     )
 
 
+def _device_target(
+    artifacts: dict[str, bytes], plugin: PluginManifestV2, keys: tuple[str, ...]
+) -> tuple[tuple[str, ...], object, str | None]:
+    from memstack_plugin_sdk.device_capability import (
+        DESCRIPTOR as DEVICE_DESCRIPTOR,
+        LOCAL_CHAT,
+        device_capability_tool,
+    )
+
+    targets: tuple[str, ...] = ("python",)
+    device_tool: object = None
+    device_bytes = artifacts.get("targets/desktop-sidecar.mspkg")
+    if device_bytes is not None:
+        native = parse_bundle_archive_v2(
+            device_bytes,
+            source="device-target",
+            trusted_public_keys=keys,
+            approved_permissions=frozenset({"tools.execute"}),
+            require_signature=True,
+        ).manifest
+        if (
+            native.bundle_id != plugin.plugin_id
+            or native.version != plugin.version
+            or len(native.manifests) != 1
+            or native.manifests[0].plugin_id != native.bundle_id
+            or native.manifests[0].version != native.version
+            or native.manifests[0].runtime != RuntimeKindV2.WASM
+            or len(native.manifests[0].modules) != 1
+            or native.manifests[0].modules[0].targets != (DataPlaneTargetV2.DESKTOP_SIDECAR,)
+        ):
+            raise OptionalBusinessError("invalid_package", "invalid device release target")
+        if len(native.layers) != 1 or len(native.layers[0].entries) != 1:
+            raise OptionalBusinessError("invalid_package", "expected one device module entry")
+        device_tool = native.layers[0].entries[0].config.get("tool_name")
+        targets = ("python", "desktop-sidecar")
+    device_permission = None
+    if (descriptor := artifacts.get(DEVICE_DESCRIPTOR)) is not None:
+        if device_bytes is not None or LOCAL_CHAT not in plugin.permissions:
+            raise OptionalBusinessError(
+                "invalid_package", "conflicting or unapproved device capability"
+            )
+        device_tool = device_capability_tool(descriptor)
+        device_permission = LOCAL_CHAT
+        targets = ("python", "desktop-sidecar")
+    return targets, device_tool, device_permission
+
+
 def _package_grants(
     plugin: PluginManifestV2,
     entry: ProfileEntryV2,
     approved: frozenset[str],
     contribution: "ContributionDocument",
+    device_permission: str | None = None,
 ) -> frozenset[str]:
     from memstack_plugin_sdk.contract import PERMISSIONS
 
     named = {command.host_operation for command in contribution.commands if command.host_operation}
+    if device_permission:
+        named.add(device_permission)
     if not set(plugin.permissions) <= PERMISSIONS | named:
         raise OptionalBusinessError("invalid_package", "unsupported package permission")
     granted = frozenset(plugin.permissions) & frozenset(entry.permissions) & approved

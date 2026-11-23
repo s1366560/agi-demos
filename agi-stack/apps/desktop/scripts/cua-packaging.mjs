@@ -1,3 +1,4 @@
+import { sealMacRuntimes } from './signed-runtime-checksums.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { access, lstat, readFile, writeFile } from 'node:fs/promises';
@@ -112,13 +113,7 @@ export async function signCuaNodeRuntime(appPath, identity, { keychain, timestam
 }
 export async function sealCuaMacApp(appPath, identity, { keychain, timestamp = true } = {}) {
   await refreshCuaChecksums(join(appPath, 'Contents/Resources/sidecar'), 'darwin');
-  const args = ['--force', '--sign', identity,
-    '--preserve-metadata=identifier,entitlements,requirements,flags,runtime'];
-  if (keychain) args.push('--keychain', keychain);
-  if (timestamp) args.push('--timestamp');
-  args.push(appPath);
-  execFileSync('/usr/bin/codesign', args, { stdio: 'pipe' });
-  execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], { stdio: 'pipe' });
+  await sealMacRuntimes(appPath, identity, { keychain, timestamp, full: true });
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const directory = process.argv[2];

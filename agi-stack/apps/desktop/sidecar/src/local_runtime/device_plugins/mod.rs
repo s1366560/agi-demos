@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, sync::Arc};
 mod grant;
+mod local_chat;
 mod runtime;
 mod store;
 #[cfg(test)]
@@ -23,6 +24,7 @@ struct Request {
     tenant_id: String,
     project_id: String,
     context_token: Option<String>,
+    plugin_id: Option<String>,
     operation: Action,
 }
 #[derive(Deserialize)]
@@ -37,6 +39,8 @@ enum Action {
         reference: BundleReferenceV2,
         approved_permissions: BTreeSet<String>,
         approve_for_day: bool,
+        workspace_token: Option<String>,
+        local_model: Option<local_chat::LocalModel>,
     },
     Revoke {
         reference: BundleReferenceV2,
@@ -61,6 +65,10 @@ fn generation_id(state: &LocalRuntimeState) -> Result<String, String> {
     Ok(grant::digest_hex(&lease.descriptor().digest)?.to_owned())
 }
 fn require_generation(state: &LocalRuntimeState, expected: &str) -> Result<(), String> {
+    // Project generations are fenced online by Device::check before executing Wasm.
+    if expected.starts_with('p') {
+        return Ok(());
+    }
     if generation_id(state)? != expected {
         return Err("device_plugin_generation_changed".into());
     }
@@ -96,6 +104,7 @@ fn device_target(
 ) -> Result<(BundleReferenceV2, VerifiedBundleArchiveV2), String> {
     let outer = packages::inspect(raw, keys)?;
     let reference = outer.reference().clone();
+    local_chat::declares(&outer)?;
     let Some(bytes) = outer.artifact_at_path("targets/desktop-sidecar.mspkg") else {
         return Ok((reference, outer));
     };
@@ -123,7 +132,14 @@ pub(super) async fn operation(
     )
     .await?;
     let device = Device::current(state)?;
-    let generation = generation_id(state)?;
+    let selected = match request.plugin_id.as_deref() {
+        Some(plugin_id) => Some(grant::ProjectSelection::resolve(&owner, plugin_id).await?),
+        None => None,
+    };
+    let generation = match &selected {
+        Some(selection) => selection.generation_id.clone(),
+        None => generation_id(state)?,
+    };
     let context_token = {
         use sha2::{Digest, Sha256};
         format!(
@@ -163,6 +179,11 @@ pub(super) async fn operation(
                 store::list(&db, &owner.scope.project_id)?
             };
             let can_manage = Device::can_manage(&owner).await?;
+            let selections = selections.into_iter().filter(|item| {
+                selected
+                    .as_ref()
+                    .is_none_or(|selection| item.reference.bundle_id == selection.plugin_id)
+            });
             let statuses = stream::iter(selections)
                 .map(|item| device.status(&owner, item, &generation, !keys.is_empty()))
                 .buffered(4)
@@ -177,27 +198,45 @@ pub(super) async fn operation(
         Action::Inspect { archive_id } => {
             let bytes = archive_bytes(state, &archive_id)?;
             let (reference, archive) = device_target(&bytes, keys)?;
-            let permissions = archive.approved_permissions().clone();
-            let prepared = runtime::Prepared::stage(&scope, archive).await?;
-            let names = prepared.names();
-            prepared.close().await;
+            if let Some(selection) = &selected {
+                selection.verify(&reference)?;
+            }
+            let (permissions, names, workspace) =
+                local_chat::review(state, &scope, archive, &reference.digest, &context_token)
+                    .await?;
             owner.fence(|| require_generation(state, &generation))?;
-            Ok(json!({"reference":reference,"declared_permissions":permissions,"tools":names}))
+            Ok(
+                json!({"reference":reference,"declared_permissions":permissions,"tools":names, "workspace": workspace.as_ref().map(|w| w.offer())}),
+            )
         }
         Action::Install {
             archive_id,
             reference,
             approved_permissions,
             approve_for_day,
+            workspace_token,
+            local_model,
         } => {
             let bytes = archive_bytes(state, &archive_id)?;
             let (reviewed, archive) = device_target(&bytes, keys)?;
-            if reviewed != reference || archive.approved_permissions() != &approved_permissions {
+            if let Some(selection) = &selected {
+                selection.verify(&reviewed)?;
+            }
+            let (permissions, tools, workspace) =
+                local_chat::review(state, &scope, archive, &reference.digest, &context_token)
+                    .await?;
+            if workspace.as_ref().map(|w| &w.token) != workspace_token.as_ref() {
+                return Err("device_local_workspace_review_required".into());
+            }
+            if let Some(model) = &local_model {
+                if workspace.is_none() {
+                    return Err("device_plugin_review_changed".into());
+                }
+                model.validate()?;
+            }
+            if reviewed != reference || permissions != approved_permissions {
                 return Err("device_plugin_review_changed".into());
             }
-            let prepared = runtime::Prepared::stage(&scope, archive).await?;
-            let tools = prepared.names();
-            prepared.close().await;
             owner.recheck().await?;
             require_generation(state, &generation)?;
             if approve_for_day {
@@ -214,6 +253,8 @@ pub(super) async fn operation(
                 generation_id: generation.clone(),
                 approved_permissions,
                 tools,
+                workspace: workspace.map(|w| w.root),
+                local_model,
                 last_invoked_at: None,
                 last_error: None,
             };
@@ -225,7 +266,7 @@ pub(super) async fn operation(
                     .map_err(|_| "device_plugin_store_unavailable")?;
                 store::install(&db, &owner.scope.project_id, &selection, &bytes)
             })?;
-            Ok(json!(selection))
+            Ok(store::projection(&selection))
         }
         Action::Revoke {
             reference,
@@ -254,8 +295,25 @@ pub(super) async fn operation(
                     .map_err(|_| "device_plugin_store_unavailable")?;
                 store::load(&db, &owner.scope.project_id, &reference, &grant_id)?
             };
+            if selection.generation_id != generation {
+                return Err("device_plugin_generation_changed".into());
+            }
+            if let Some(active) = &selected {
+                active.verify(&reference)?;
+            }
             require_generation(state, &selection.generation_id)?;
             let (reviewed, archive) = device_target(&bytes, keys)?;
+            if local_chat::declares(&archive)? {
+                if selected.is_none()
+                    || reviewed != reference
+                    || selection.workspace.is_none()
+                    || tool != local_chat::TOOL
+                {
+                    return Err("device_plugin_review_changed".into());
+                }
+                drop(_mutation);
+                return local_chat::invoke(state.clone(), owner, device, selection, input).await;
+            }
             if reviewed != reference
                 || archive.approved_permissions() != &selection.approved_permissions
             {

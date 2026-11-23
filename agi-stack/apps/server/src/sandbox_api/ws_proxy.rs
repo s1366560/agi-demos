@@ -241,7 +241,14 @@ pub(super) async fn proxy_terminal_ws_session(
             return;
         }
     };
+    let Some(initial) = ttyd_initial_terminal_message(initial_size, &auth_header) else {
+        close_terminal_ws_with_internal_error(socket).await;
+        return;
+    };
     request.headers_mut().insert("origin", origin);
+    request
+        .headers_mut()
+        .insert("sec-websocket-protocol", HeaderValue::from_static("tty"));
     request.headers_mut().insert(AUTHORIZATION, auth_header);
 
     let upstream = match tokio::time::timeout(Duration::from_secs(10), connect_async(request)).await
@@ -269,11 +276,7 @@ pub(super) async fn proxy_terminal_ws_session(
         let _ = upstream_tx.close().await;
         return;
     }
-    if upstream_tx
-        .send(ttyd_initial_terminal_message(terminal_size))
-        .await
-        .is_err()
-    {
+    if upstream_tx.send(initial).await.is_err() {
         let _ = client_tx
             .send(AxumWsMessage::Text(terminal_error_message()))
             .await;

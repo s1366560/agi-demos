@@ -2,6 +2,30 @@
 
 Current delivery verification uses unit and integration tests. Run `make -C agi-stack desktop-check` for Rust sidecar and Electron/renderer tests and compilation. Run `make -C agi-stack desktop-browser-qa` for browser integration behavior. Native debugging starts only with `make -C agi-stack run-desktop` from the repository root.
 
+The default Electron build loads signed project pages and compiles their scoped capability broker into Main and preload. The full profile also compiles the legacy endpoint policies and native bridges for its built-in pages. Use `AGISTACK_DESKTOP_PROFILE=full make -C agi-stack run-desktop` for the legacy desktop UI. To compile the default renderer, preload and Main with the business repository directory absent, run `node agi-stack/apps/desktop/scripts/verify-package-host-build.mjs`. Run `python3 agi-stack/apps/desktop/scripts/verify-sidecar-package-host.py` to compile the default Rust device host from a directory that also excludes all six packages. The legacy HTTP router and package-specific desktop handlers are compiled only for the explicit full profile or its tests.
+
+### Signed package acceptance in Electron
+
+Use a disposable standard deployment with its own project owner and package signer. Set `MEMSTACK_QA_STANDARD_DIRECTORY` to its standard data directory and `MEMSTACK_QA_NATIVE_API` to its loopback API origin. Create two distinct private directories immediately under the OS temporary directory with names beginning `agistack-desktop-qa-`. Use one as `AGISTACK_DESKTOP_QA_PROFILE_DIR` and the other as `AGISTACK_WORKSPACE_ROOT`. Set `AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE` to a JSON file with `schema_version` equal to 1 and `public_keys_pem` containing the deployment's publisher public key.
+
+From the repository root run the following with these variables exported. Pick a free loopback debugging port for this test.
+
+```sh
+make -C agi-stack desktop-deps
+(cd agi-stack && cargo build -p agistack-desktop-sidecar)
+(cd agi-stack/apps/desktop && corepack pnpm run build:electron)
+AGISTACK_DESKTOP_FIXED_BUILD=1 AGISTACK_DESKTOP_GRANTS_LOCAL_ONLY=1 \
+  AGISTACK_DESKTOP_DEBUG_PORT=9455 make -C agi-stack run-desktop
+```
+
+In a second terminal with the same deployment variables, run `MEMSTACK_QA_NATIVE_CDP=http://127.0.0.1:9455 uv run pytest src/tests/integration/test_native_package_pages.py`. The test signs two releases after connecting to Electron. It installs and approves them using the app's native bridge, clicks the cloud and device actions in the signed page, and checks rollback, revocation and the hashes of the loaded host artifacts.
+
+To include the cross-account device check, set `MEMSTACK_QA_NATIVE_SECOND_OWNER` to a private JSON file for a second disposable cloud user with `email`, `password` and `project_id`. The test changes accounts in Electron, checks rejection of the first account’s handle, signs back in and invokes the package with a fresh handle.
+
+Run `MEMSTACK_QA_NATIVE_HISTORY=1 uv run pytest src/tests/integration/test_native_history_retirement.py` with the same API and standard directory to exercise the P5 cutover. The test launches its own disposable Electron profiles, seeds old SQLite history using test migrations, and checks offline, pending-upload, active-run, rollback and idempotent cleanup across restarts. The signed Agent package creates the test conversation in the standard PostgreSQL project. A loopback proxy forwards reads to its real history API and can drop the connection during the offline case.
+
+For device chat set `MEMSTACK_QA_NATIVE_AGENT_ARCHIVE` to the project's selected signed Agent archive and run `uv run pytest src/tests/integration/test_native_package_local_chat.py`. The signed page executes the real workspace file tool against a disposable workspace. A loopback HTTP model serves deterministic tool calls and a cancellable turn.
+
 Release builds retain platform signing, notarization, updater metadata/digest/blockmap and package payload checks. Tag pushes publish prereleases by default; workflow dispatch on a protected release tag can request a stable release with `prerelease: false`. No parity ledger, source-revision judgment, or manual evidence promotion is required.
 
 The dated observations below are historical records, not current commands or acceptance requirements. Superseded artifacts mentioned there have been removed.

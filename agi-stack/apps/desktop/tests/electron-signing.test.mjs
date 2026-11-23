@@ -170,7 +170,7 @@ test('packaging stages an integrity digest and enables signed auto-updates', () 
     packageJson.scripts['package:electron'],
     /^corepack pnpm run build:electron && corepack pnpm run build:sidecar/u,
   );
-  assert.match(packageJson.scripts['package:electron'], /electron-builder\.local\.yml/u);
+  assert.match(packageJson.scripts['package:electron'], /electron-builder\.local\.cjs/u);
   assert.match(localBuilderConfig, /forceCodeSigning:\s*false/u);
   assert.match(localBuilderConfig, /identity:\s*null/u);
   assert.match(localBuilderConfig, /publish:\s*null/u);
@@ -182,7 +182,7 @@ test('packaging stages an integrity digest and enables signed auto-updates', () 
   assert.match(localCuaSigningHook, /MEMSTACK_CUA_CODESIGN_IDENTITY/u);
   assert.match(localSigningHook, /entitlements\.mac\.local\.plist/u);
   assert.match(localSigningHook, /--verify/u);
-  assert.doesNotMatch(packageJson.scripts['release:electron'], /electron-builder\.local\.yml/u);
+  assert.doesNotMatch(packageJson.scripts['release:electron'], /electron-builder\.local\.cjs/u);
   assert.match(packageJson.scripts['release:electron'], /--publish never/u);
   assert.equal(packageJson.dependencies.yaml, '2.8.1');
 });
@@ -387,9 +387,7 @@ test('tag releases fail closed and publish the requested state after package ver
   assert.match(releaseVerification, /memstack-workspace-core/u);
   assert.match(releaseVerification, /workspace_core_sha256/u);
   assert.match(releaseVerification, /workspace_core_signature_valid/u);
-  assert.match(releaseWorkflow, /Build universal macOS Workspace Core/u);
-  assert.match(releaseWorkflow, /pnpm run build:workspace-core/u);
-  assert.match(releaseWorkflow, /pnpm run stage:workspace-core/u);
+  assert.match(releaseWorkflow, /electron-builder\.profile\.cjs/u);
   assert.match(releaseVerification, /verifyMacPackageArtifacts/u);
   assert.match(releaseVerification, /verifyWindowsInstallerArtifact/u);
   assert.match(releasePackageVerification, /ditto/u);

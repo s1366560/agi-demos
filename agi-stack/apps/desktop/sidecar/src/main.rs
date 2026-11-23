@@ -13,6 +13,7 @@ mod oauth_pending_attempt;
 mod plugin_data_plane_credential_v2;
 mod plugin_snapshots_v2;
 mod private_file_permissions;
+mod sidecar_profile;
 mod trusted_session;
 mod update_recovery;
 mod update_recovery_snapshot;

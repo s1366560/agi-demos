@@ -160,6 +160,7 @@ async def test_signed_skill_validator_upgrade_changes_project_behavior(
                     "app.agent.history",
                     "app.agent.turn",
                     "app.agent.cancel",
+                    "device.local-chat",
                 ],
             },
         )

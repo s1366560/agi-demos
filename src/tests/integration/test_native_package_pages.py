@@ -120,6 +120,37 @@ class PackageSession:
             )
 
 
+def sign_in(page, api, owner):
+    page.locator("[name=origin]").fill(api)
+    page.locator("[name=email]").fill(owner["email"])
+    page.locator("[name=password]").fill(owner["password"])
+    page.locator("form button").click()
+
+
+def verify_account_switch(session, api, owner, second, handle):
+    page = session.page
+    page.locator("header button").click()
+    expect(page.locator("form button")).to_be_enabled()
+    expect(page.locator("iframe")).to_have_count(0)
+    sign_in(page, api, second)
+    picker = page.locator("main > label select")
+    project = second["project_id"]
+    expect(picker.locator(f'option[value="{project}"]')).to_be_attached()
+    if picker.input_value() != project:
+        picker.select_option(project)
+    expect(page.locator("header")).to_contain_text(second["email"])
+    ctx, args = handle
+    with pytest.raises(BrowserError, match="device_mcp_(cloud_authority_rejected|scope_mismatch)"):
+        session.device("invoke", ctx, **args, tool="device_label", input={})
+    page.locator("header button").click()
+    expect(page.locator("form button")).to_be_enabled()
+    sign_in(page, api, owner)
+    expect(page.locator("header")).to_contain_text(owner["email"])
+    session.invoke_stale(handle)
+    session.page_results(1)
+    return session.device("list")["context_token"]
+
+
 def host_hashes():
     stack = Path(__file__).resolve().parents[3] / "agi-stack"
     files = sorted((stack / "apps/desktop/out").rglob("*"))
@@ -153,10 +184,7 @@ def test_native_project_package_upgrade_revoke_rollback(tmp_path):
         page.goto("agistack://app/index.html")
         page.locator("header button,form button:enabled").first.wait_for()
         if page.locator("form").count():
-            page.locator("[name=origin]").fill(api)
-            page.locator("[name=email]").fill(owner["email"])
-            page.locator("[name=password]").fill(owner["password"])
-            page.locator("form button").click()
+            sign_in(page, api, owner)
         expect(page.locator("header")).to_contain_text(owner["email"])
         projection = page.evaluate(
             "() => window.__MEMSTACK_DESKTOP__.core.invoke('cloud_session_projection',{requestId:crypto.randomUUID()})"
@@ -190,6 +218,9 @@ def test_native_project_package_upgrade_revoke_rollback(tmp_path):
         session.invoke_stale(handle)
         ctx, args = session.approve(archives[1])
         session.page_results(1)
+        if other_owner := os.getenv("MEMSTACK_QA_NATIVE_SECOND_OWNER"):
+            second = json.loads(Path(other_owner).read_text())
+            ctx = verify_account_switch(session, api, owner, second, (ctx, args))
         session.device("revoke", ctx, **args)
         session.invoke_stale((ctx, args))
         assert host_hashes() == frozen

@@ -123,7 +123,7 @@ desktop-check: desktop-test ## 桌面:Rust sidecar、renderer 测试，以及一
 
 desktop-test: desktop-deps desktop-cua-repl ## 桌面:Rust sidecar 与 renderer 测试，不重复打 Electron 包
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run $(DESKTOP_WORKSPACE_CORE_SCRIPT)
-	$(CARGO) build $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar
+	$(CARGO) build $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar --features legacy-business
 	$(CARGO) test $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar
 	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(DESKTOP_SIDECAR_BIN) AGISTACK_REAL_WORKSPACE_CORE=$(DESKTOP_WORKSPACE_CORE_BIN) $(PNPM) test
 
@@ -154,11 +154,25 @@ desktop-cua-repl: ## 桌面:暂存独立 Node computer-use REPL
 	cd packages/cua-repl && CI=true $(PNPM) install --ignore-workspace --frozen-lockfile
 	node $(DESKTOP_APP_DIR)/scripts/stage-cua-repl.mjs
 
-run-desktop: desktop-deps desktop-cua-helper desktop-cua-repl ## 启动 Electron 原生客户端与 Rust sidecar
+ifeq ($(AGISTACK_DESKTOP_FIXED_BUILD),1)
+run-desktop: ## Launch the already built Electron host and Sidecar without changing their artifacts
+	test -s $(DESKTOP_APP_DIR)/out/main/index.js
+	test -s $(DESKTOP_APP_DIR)/out/preload/index.cjs
+	test -s $(DESKTOP_APP_DIR)/out/renderer/index.html
+	test -x "$(CURDIR)/target/debug/agistack-desktop-sidecar"
+	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- node node_modules/electron/cli.js .
+else
+ifeq ($(AGISTACK_DESKTOP_PROFILE),full)
+run-desktop: desktop-cua-helper desktop-cua-repl desktop-full-workspace
+.PHONY: desktop-full-workspace
+desktop-full-workspace: desktop-deps
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
-	$(CARGO) build -p agistack-desktop-sidecar
+endif
+run-desktop: desktop-deps ## 启动 Electron 原生客户端与 Rust sidecar
+	$(CARGO) build -p agistack-desktop-sidecar $(if $(filter full,$(AGISTACK_DESKTOP_PROFILE)),--features legacy-business)
 	cd $(DESKTOP_APP_DIR) && $(PNPM) exec install-electron --no
 	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- $(PNPM) run dev:electron
+endif
 
 desktop-grants: ## 桌面:强制重新发放云端数据平面授权(24h 有效,仅本地开发)
 	@AGISTACK_DESKTOP_GRANTS_FORCE=1 ./scripts/ensure-desktop-grants.sh

@@ -48,6 +48,10 @@ pub(super) fn build_terminal_websocket_target(terminal_url: &str) -> SandboxApiR
     };
     url.set_scheme(scheme)
         .map_err(|_| SandboxApiError::bad_request("Invalid terminal service URL"))?;
+    // Provisioning records ttyd's listener URL. Explicit websocket paths are already resolved.
+    if url.path() == "/" {
+        url.set_path("/ws");
+    }
     url.set_query(None);
     Ok(url.to_string())
 }

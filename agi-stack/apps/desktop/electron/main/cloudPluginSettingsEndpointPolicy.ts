@@ -10,23 +10,35 @@ const SCOPE = ['tenant_id', 'project_id'];
 const MARKETPLACE = '/api/v1/plugin-marketplace/v3';
 const INSTANCES = '/api/v1/platform-plugins/v2/instances';
 
-/** Admit only the existing settings clients' scoped routes and declared payloads. */
-export function authorizeCloudPluginSettingsEndpoint(
+/** Project-scoped signed package lifecycle and capability invocation. */
+export function authorizePackageEndpoint(
   request: Request,
   target: URL,
 ): CloudProductEndpoint | null {
   if (request.mutation !== undefined) return null;
   const path = target.pathname;
   const read = request.method === 'GET' && request.body === undefined;
-  const queryScope = () => {
-    const entries = [...target.searchParams];
-    if (
-      entries.some(([key]) => !SCOPE.includes(key)) ||
-      new Set(entries.map(([key]) => key)).size !== entries.length
-    )
-      return null;
-    return scoped(Object.fromEntries(entries));
-  };
+  if (path === '/api/v1/project-packages/projects/' && read && noQuery(target))
+    return { kind: 'identity-catalog', tenantId: null, projectId: null, workspaceId: null };
+  const prefix = '/api/v1/platform-plugins/v2/optional-business/';
+  if (path.startsWith(prefix) && request.method === 'POST' && noQuery(target)) {
+    const operation = path.slice(prefix.length);
+    const body = request.body;
+    if (body && identifier(body.project_id)) {
+      if (operation === 'inspect' || operation === 'install') {
+        const keys = [...SCOPE, 'archive_base64', ...(operation === 'install' ? ['approved_permissions'] : [])];
+        if (fields(body, keys) && typeof body.archive_base64 === 'string' && body.archive_base64.length > 0 &&
+            body.archive_base64.length <= 16 * 1024 * 1024 && (operation === 'inspect' || stringList(body.approved_permissions)))
+          return scoped(body);
+      }
+      if (/^[a-z0-9][a-z0-9._-]{0,127}\/(enable|disable|rollback|uninstall)$/u.test(operation) &&
+          fields(body, [...SCOPE, 'expected_revision']) && Number.isSafeInteger(body.expected_revision) &&
+          Number(body.expected_revision) >= 0) return scoped(body);
+    }
+  }
+  if (path === '/api/v1/platform-plugins/v2/optional-business/' && read) {
+    return identifier(target.searchParams.get('project_id')) ? queryScope(target) : null;
+  }
   const business =
     /^\/api\/v1\/platform-plugins\/v2\/optional-business\/([a-z0-9][a-z0-9._-]{0,127})\/(ui|commands)$/u.exec(
       path,
@@ -38,8 +50,10 @@ export function authorizeCloudPluginSettingsEndpoint(
       const entries = [...target.searchParams];
       const data = Object.fromEntries(entries);
       if (
-        entries.length !== 4 ||
-        Object.keys(data).length !== 4 ||
+        (entries.length !== 4 && entries.length !== 5) ||
+        Object.keys(data).length !== entries.length ||
+        entries.some(([key]) => ![...SCOPE, 'target', 'expected_digest', 'page_id'].includes(key)) ||
+        (data.page_id !== undefined && !/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(data.page_id)) ||
         !identifier(data.project_id) ||
         data.target !== 'desktop-renderer' ||
         !digest(data.expected_digest)
@@ -50,7 +64,7 @@ export function authorizeCloudPluginSettingsEndpoint(
     const body = request.body;
     return business[2] === 'commands' &&
       request.method === 'POST' &&
-      noQuery(target) &&
+      (noQuery(target) || target.search === '?stream=true') &&
       fields(body, [...SCOPE, 'command_id', 'expected_digest', 'payload']) &&
       (body.payload === undefined || record(body.payload)) &&
       identifier(body.project_id) &&
@@ -59,7 +73,26 @@ export function authorizeCloudPluginSettingsEndpoint(
       ? scoped(body)
       : null;
   }
-  if (path === INSTANCES && read) return queryScope();
+  return null;
+}
+
+function queryScope(target: URL) {
+    const entries = [...target.searchParams];
+    if (
+      entries.some(([key]) => !SCOPE.includes(key)) ||
+      new Set(entries.map(([key]) => key)).size !== entries.length
+    )
+      return null;
+    return scoped(Object.fromEntries(entries));
+}
+
+/** Settings contributed by the compatible full client. */
+export function authorizeCloudPluginSettingsEndpoint(request: Request, target: URL): CloudProductEndpoint | null {
+  const release = authorizePackageEndpoint(request, target);
+  if (release || request.mutation !== undefined) return release;
+  const path = target.pathname;
+  const read = request.method === 'GET' && request.body === undefined;
+  if (path === INSTANCES && read) return queryScope(target);
   if (path === `${INSTANCES}/apply`) {
     const body = request.body;
     return request.method === 'POST' &&
@@ -77,7 +110,7 @@ export function authorizeCloudPluginSettingsEndpoint(
   if (!path.startsWith(`${MARKETPLACE}/`)) return null;
   const tail = path.slice(MARKETPLACE.length + 1).split('/');
   if (read && ['catalog/scoped', 'sources', 'installations', 'cache'].includes(tail.join('/')))
-    return queryScope();
+    return queryScope(target);
   if (
     tail.length === 2 &&
     tail[0] === 'sources' &&
@@ -85,14 +118,14 @@ export function authorizeCloudPluginSettingsEndpoint(
     request.method === 'DELETE' &&
     request.body === undefined
   )
-    return queryScope();
+    return queryScope(target);
   const oauth =
     tail.length === 5 &&
     tail[0] === 'installations' &&
     segment(tail[1]) &&
     tail[2] === 'oauth' &&
     segment(tail[3]);
-  if (oauth && tail[4] === 'status' && read) return queryScope();
+  if (oauth && tail[4] === 'status' && read) return queryScope(target);
   if (request.method !== 'POST' || !noQuery(target)) return null;
   const body = request.body;
   if (!body || !scoped(body)) return null;

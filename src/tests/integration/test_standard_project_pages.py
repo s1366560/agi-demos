@@ -8,6 +8,9 @@ from urllib.parse import urlsplit
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
+import docker
+from scripts.dev.standard_project import compose_project_name
+
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
@@ -104,6 +107,22 @@ def _initial_project(client, owner):
     return scope
 
 
+def _running_hosts(directory):
+    engine = docker.from_env(timeout=10)
+    try:
+        project = compose_project_name(directory)
+        running = engine.containers.list(filters={"label": f"com.docker.compose.project={project}"})
+        hosts = {
+            container.labels["com.docker.compose.service"]: (container.id, container.attrs["Image"])
+            for container in running
+            if container.labels["com.docker.compose.service"] in {"api", "web"}
+        }
+        assert set(hosts) == {"api", "web"}
+        return hosts
+    finally:
+        engine.close()
+
+
 def test_independent_official_page_upgrade_and_rollback(tmp_path):
     import base64
     from uuid import uuid4
@@ -145,6 +164,7 @@ def test_independent_official_page_upgrade_and_rollback(tmp_path):
             }
 
         before = active()
+        frozen_hosts = _running_hosts(state)
         assert len(archives) == len(before) == 6
         for archive in archives:
             plugin = archive.stem
@@ -169,6 +189,7 @@ def test_independent_official_page_upgrade_and_rollback(tmp_path):
             finally:
                 post("/" + plugin + "/rollback")
             assert active() == before
+            assert _running_hosts(state) == frozen_hosts
             page.reload()
             expect(frame.get_by_role("heading").first).to_be_visible(timeout=15000)
             expect(frame.get_by_text("Publisher edition " + version)).to_have_count(0)
