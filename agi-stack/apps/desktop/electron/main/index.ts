@@ -135,6 +135,7 @@ const SIDECAR_COMMANDS = new Set([
   'platform_plugin_renderer_distribution_current_v2',
   'trusted_session_clear',
   'legacy_local_login_purge',
+  'retire_local_workspace_history',
   'local_runtime_status',
   'local_runtime_configure',
   'workspace_core_status',

@@ -1187,6 +1187,7 @@ test('conversation catalog exhausts every authoritative scoped page', async () =
   try {
     const client = new DesktopApiClient({
       ...DEFAULT_CONFIG,
+      mode: 'cloud',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
       tenantId: 'tenant-1',
@@ -1250,6 +1251,7 @@ test('conversation catalog requests and validates authoritative unbound-only pag
   try {
     const client = new DesktopApiClient({
       ...DEFAULT_CONFIG,
+      mode: 'cloud',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
       tenantId: 'tenant-1',
@@ -1311,6 +1313,7 @@ test('conversation catalog retries one transport failure without changing scope'
   try {
     const client = new DesktopApiClient({
       ...DEFAULT_CONFIG,
+      mode: 'cloud',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
       tenantId: 'tenant-1',
@@ -1332,6 +1335,7 @@ test('conversation catalog does not retry HTTP failures or aborted reads', async
   const originalFetch = globalThis.fetch;
   const client = new DesktopApiClient({
     ...DEFAULT_CONFIG,
+    mode: 'cloud',
     apiBaseUrl: 'http://127.0.0.1:8088',
     apiKey: 'authenticated-session',
     tenantId: 'tenant-1',
@@ -1390,6 +1394,7 @@ test('conversation catalog accepts the Rust null terminal cursor', async () => {
   try {
     const client = new DesktopApiClient({
       ...DEFAULT_CONFIG,
+      mode: 'cloud',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
       tenantId: 'tenant-1',
@@ -1407,6 +1412,7 @@ test('conversation catalog fails closed on malformed pagination and scope drift'
   const originalFetch = globalThis.fetch;
   const client = new DesktopApiClient({
     ...DEFAULT_CONFIG,
+    mode: 'cloud',
     apiBaseUrl: 'http://127.0.0.1:8088',
     apiKey: 'authenticated-session',
     tenantId: 'tenant-1',
@@ -1839,6 +1845,7 @@ test('conversation history requests preserve forward and backward cursor pairs',
   try {
     const client = new DesktopApiClient({
       ...DEFAULT_CONFIG,
+      mode: 'cloud',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
       projectId: 'project/1',
@@ -2472,6 +2479,7 @@ test('conversation session authority request preserves scoped identity without l
   try {
     const client = new DesktopApiClient({
       ...DEFAULT_CONFIG,
+      mode: 'cloud',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
     });

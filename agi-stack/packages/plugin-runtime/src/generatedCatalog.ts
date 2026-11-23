@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:8a3023ecb723ef7688bf454526d09c0e9a703be6b119cb72e9f7a4f70a',
-  '594d69","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:6685e4934d00914615f23a88152966fb36e750c831bd4c9663f79e3998',
+  'dca909","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1275,8 +1275,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'be637cfebc08","entrypoint":"src.infrastructure.plugins.v2.instance_channel_services:',
   '_apply_instance_channel_application_v2","module_ref":"builtin://memstack/application',
   '/instance-channel-services","plugin_id":"memstack-runtime-kernel","plugin_version":"',
-  '2.0.0","targets":["python"]},{"artifact_digest":"sha256:7a9521b1a9bf2c5d24f6bb9fb941',
-  '79a8a1aa76e0f4b1bb694b13be7f9adcde51","artifact_source":"repo+python://src/infrastru',
+  '2.0.0","targets":["python"]},{"artifact_digest":"sha256:a3ec9b59be6a3ffc27702c43f34e',
+  '1503dfcce383991f134aa4da4084a07bcafb","artifact_source":"repo+python://src/infrastru',
   'cture/plugins/v2/instance_deploy_services.py","contract":{"config_schema":{"$schema"',
   ':"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"proper',
   'ties":{"strategy":{"const":"operation-scoped-provider","type":"string"}},"required":',
@@ -2341,8 +2341,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ca7cef1df427814b6e85f2b2f753533f4fc5ee31a0afb624589e108edccd18db","entrypoint":"appl',
   'yDesktopSessionArtifactActionAuthorityV2","module_ref":"builtin://memstack/desktop/s',
   'ession-artifact-action-authority","plugin_id":"memstack-renderer-target-hosts","plug',
-  'in_version":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:cbd06',
-  '430215035e773369af627c40b0b7b44e0fc62d812026d796e38569dd9b7","artifact_source":"repo',
+  'in_version":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:8915d',
+  'e7deb6f611ab5a8714f7c89c5c8433cf8f40b2140afdf9bef35a13d2f64","artifact_source":"repo',
   '+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionProjectionAuthorityMo',
   'duleV2.ts","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/202',
   '0-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"desktop',
@@ -4179,8 +4179,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   't":"src.infrastructure.plugins.v2.instance_channel_services:_apply_instance_channel_',
   'provider_v2","module_ref":"builtin://memstack/persistence/instance-channel-provider"',
   ',"plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]',
-  '},{"artifact_digest":"sha256:7a9521b1a9bf2c5d24f6bb9fb94179a8a1aa76e0f4b1bb694b13be7',
-  'f9adcde51","artifact_source":"repo+python://src/infrastructure/plugins/v2/instance_d',
+  '},{"artifact_digest":"sha256:a3ec9b59be6a3ffc27702c43f34e1503dfcce383991f134aa4da408',
+  '4a07bcafb","artifact_source":"repo+python://src/infrastructure/plugins/v2/instance_d',
   'eploy_services.py","contract":{"config_schema":{"$schema":"https://json-schema.org/d',
   'raft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":',
   '"operation-async-session","type":"string"}},"required":["strategy"],"type":"object"}',
@@ -5041,4 +5041,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:8a3023ecb723ef7688bf454526d09c0e9a703be6b119cb72e9f7a4f70a594d69' as const;
+  'sha256:6685e4934d00914615f23a88152966fb36e750c831bd4c9663f79e3998dca909' as const;

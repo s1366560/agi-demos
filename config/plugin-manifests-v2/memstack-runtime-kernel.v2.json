@@ -1826,7 +1826,7 @@
       },
       "contract_digest": "sha256:cfe78e125f46fd3b46c434766b00de4d63f0c89e03dbc4ea115365dfd379298c",
       "artifact": {
-        "digest": "sha256:7a9521b1a9bf2c5d24f6bb9fb94179a8a1aa76e0f4b1bb694b13be7f9adcde51",
+        "digest": "sha256:a3ec9b59be6a3ffc27702c43f34e1503dfcce383991f134aa4da4084a07bcafb",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_deploy_services.py"
       }
     },
@@ -1873,7 +1873,7 @@
       },
       "contract_digest": "sha256:6f4934939d317226e7b1434fc6519e905a25f4d2940a6482c8f74b7eb6128b2b",
       "artifact": {
-        "digest": "sha256:7a9521b1a9bf2c5d24f6bb9fb94179a8a1aa76e0f4b1bb694b13be7f9adcde51",
+        "digest": "sha256:a3ec9b59be6a3ffc27702c43f34e1503dfcce383991f134aa4da4084a07bcafb",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_deploy_services.py"
       }
     },

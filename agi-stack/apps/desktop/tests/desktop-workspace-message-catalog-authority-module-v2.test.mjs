@@ -563,10 +563,15 @@ test('local and cloud operations freeze config and forward AbortSignal through e
       core: {
         async invoke(command, args) {
           cloudCommands.push({ command, args });
+          const localRead = cloudCommands.length === 1;
           return {
             status: 200,
             body: {
-              messages: [{ id: 'cloud-message', content: 'Cloud message' }],
+              messages: [
+                localRead
+                  ? { id: 'local-message', content: 'Local message' }
+                  : { id: 'cloud-message', content: 'Cloud message' },
+              ],
             },
           };
         },
@@ -611,20 +616,16 @@ test('local and cloud operations freeze config and forward AbortSignal through e
     assert.equal(Object.isFrozen(local), true);
     assert.equal(Object.isFrozen(cloud), true);
     assert.deepEqual(Object.keys(local), ['listMessages']);
-    assert.equal(fetchCalls.length, 1);
-    const localUrl = new URL(fetchCalls[0].input);
-    assert.equal(localUrl.origin, 'http://127.0.0.1:46501');
+    assert.equal(fetchCalls.length, 0);
+    assert.equal(cloudCommands.length, 2);
     assert.equal(
-      localUrl.pathname,
+      new URL(cloudCommands[0].args.request.path, 'https://desktop.invalid').pathname,
       '/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/' +
         'workspaces/workspace%20%2F%20one/messages',
     );
-    assert.equal(fetchCalls[0].init.signal, controller.signal);
-    const headers = new Headers(fetchCalls[0].init.headers);
-    assert.equal(headers.get('Authorization'), 'Bearer workspace-message-session');
-    assert.equal(headers.get('X-Agistack-Launch'), 'workspace-message-launch');
-    assert.equal(cloudCommands.length, 1);
     assert.equal(cloudCommands[0].command, 'cloud_request');
+    assert.equal(JSON.stringify(cloudCommands).includes('workspace-message-session'), false);
+    assert.equal(JSON.stringify(cloudCommands).includes('workspace-message-launch'), false);
     assert.equal(
       cloudCommands[0].args.request.path,
       '/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/' +

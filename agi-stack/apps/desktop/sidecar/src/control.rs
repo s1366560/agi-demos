@@ -690,6 +690,16 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 .map_err(|error| error.to_string())
                 .map(|()| Value::Null)
         }
+        "retire_local_workspace_history" => task::block_in_place(|| {
+            let ready = request
+                .args
+                .as_ref()
+                .and_then(Value::as_object)
+                .and_then(|object| object.get("cloud_history_ready"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            state.runtime.retire_local_workspace_history(ready)
+        }),
         "legacy_local_login_purge" => task::block_in_place(|| {
             state
                 .runtime

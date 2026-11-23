@@ -103,6 +103,7 @@ mod fan_out_tool_host;
 mod hitl_model_response;
 mod knowledge_authority_v2;
 mod local_feature_authority_v2;
+mod local_history_retirement;
 mod local_plugin_instances_v2;
 mod local_plugin_routes_v2;
 mod local_plugin_tool_host_v2;
@@ -406,12 +407,21 @@ impl LocalRuntimeService {
         workspace_core_bridge::resume_recovered_workspace_task_runs(Arc::clone(&self.state)).await
     }
 
-    pub(crate) fn with_offline_workspace_import_connection<T>(
+    pub(crate) fn retire_local_workspace_history(
         &self,
-        operation: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
-    ) -> Result<T, String> {
+        cloud_history_ready: bool,
+    ) -> Result<serde_json::Value, String> {
+        let data_directory = self
+            .state
+            .app_data_dir
+            .clone()
+            .ok_or_else(|| "local_history_data_directory_unavailable".to_string())?;
         let connection = self.state.session_store.connection()?;
-        operation(&connection)
+        local_history_retirement::retire_local_workspace_history(
+            &connection,
+            &data_directory,
+            cloud_history_ready,
+        )
     }
 
     pub(crate) fn purge_legacy_local_login_residue(&self) -> Result<bool, String> {

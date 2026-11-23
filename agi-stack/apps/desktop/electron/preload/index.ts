@@ -55,6 +55,7 @@ const allowedCommands = new Set([
   'platform_plugin_renderer_owner_retire_v2',
   'trusted_session_clear',
   'legacy_local_login_purge',
+  'retire_local_workspace_history',
   'open_device_authorization_url',
   'get_desktop_capabilities',
   'capture_current_display',
