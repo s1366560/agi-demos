@@ -418,8 +418,6 @@ function VoiceTranscriptionQa() {
               activeWorkflowTarget="plan"
               modelLabel="gpt-5.5"
               selectedModelValue="gpt-5.5"
-              runtimeTargetLabel="MemStack Cloud"
-              runtimeTargetOptions={['MemStack Cloud']}
               runInputDelivery={null}
               runInputDeliveryOptions={[]}
               runInputs={[]}
@@ -439,7 +437,6 @@ function VoiceTranscriptionQa() {
               onRespondToHitl={async () => undefined}
               respondableHitlRequestIds={[]}
               onWorkflowSelect={() => undefined}
-              onRuntimeTargetChange={() => undefined}
               onOpenCommands={() => undefined}
             />
           </div>

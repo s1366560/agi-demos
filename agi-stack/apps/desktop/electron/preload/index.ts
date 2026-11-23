@@ -82,6 +82,7 @@ const allowedCommands = new Set([
   'cloud_request_cancel',
   'local_runtime_status',
   'local_runtime_configure',
+  'choose_workspace_directory',
   'workspace_core_status',
   'browser_bridge_install',
   'browser_bridge_uninstall',

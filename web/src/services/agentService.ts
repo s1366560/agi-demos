@@ -867,6 +867,10 @@ class AgentServiceImpl implements AgentService {
       image_attachments,
       agent_id,
       mentions,
+      execution_target: 'cloud',
+      execution_machine_id: null,
+      execution_environment_id: null,
+      local_root_label: null,
     });
 
     if (!sent) {

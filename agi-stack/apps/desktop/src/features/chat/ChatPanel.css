@@ -1,3 +1,5 @@
+@import './ComposerExecutionPlacement.css';
+
 .workspace-chat-panel {
   position: relative;
 }

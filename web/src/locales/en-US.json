@@ -7532,6 +7532,11 @@
       "defaultEnvironment": "Default environment",
       "localDirectory": "Local directory"
     },
+    "executionPlacement": {
+      "targetLabel": "Execution location",
+      "directoryUnavailable": "This directory is unavailable on this computer.",
+      "webLocalReadonly": "This session ran on a computer. The web composer can only view it."
+    },
     "sidebar": {
       "title": "Agent Chat",
       "workspaceTitle": "Agent Workspace",

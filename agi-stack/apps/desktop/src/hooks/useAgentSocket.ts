@@ -97,6 +97,7 @@ export type AgentRunMessage = {
   fileMetadata?: AgentInputFileMetadata[];
   appModelContext?: Record<string, unknown>;
   permissionMode?: WorkspacePermissionMode;
+  executionTarget?: 'local' | 'cloud';
 };
 
 export type AgentRunSocketMessage = {
@@ -113,6 +114,10 @@ export type AgentRunSocketMessage = {
   file_metadata?: AgentInputFileMetadata[];
   app_model_context?: Record<string, unknown>;
   permission_mode?: WorkspacePermissionMode;
+  execution_target?: 'cloud';
+  execution_machine_id?: null;
+  execution_environment_id?: null;
+  local_root_label?: null;
 };
 
 export type AgentStopSocketMessage = {
@@ -237,6 +242,8 @@ function agentRunSocketMessage(
     ?.map((mention) => mention.trim())
     .filter(Boolean);
   const permissionMode = message.permissionMode;
+  if (message.executionTarget === 'local') return null;
+  const executionTarget = message.executionTarget === 'cloud' ? 'cloud' : null;
   return {
     type: "send_message",
     conversation_id: conversationId,
@@ -255,6 +262,14 @@ function agentRunSocketMessage(
       ? { app_model_context: message.appModelContext }
       : {}),
     ...(permissionMode ? { permission_mode: permissionMode } : {}),
+    ...(executionTarget
+      ? {
+          execution_target: executionTarget,
+          execution_machine_id: null,
+          execution_environment_id: null,
+          local_root_label: null,
+        }
+      : {}),
   };
 }
 

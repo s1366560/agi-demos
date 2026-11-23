@@ -7553,6 +7553,11 @@
       "defaultEnvironment": "默认环境",
       "localDirectory": "本地目录"
     },
+    "executionPlacement": {
+      "targetLabel": "执行位置",
+      "directoryUnavailable": "此目录在这台计算机上不可用。",
+      "webLocalReadonly": "该会话在计算机上运行。网页端只能查看。"
+    },
     "sidebar": {
       "title": "智能对话",
       "workspaceTitle": "智能体工作区",

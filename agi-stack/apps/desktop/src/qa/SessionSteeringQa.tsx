@@ -3220,8 +3220,6 @@ function SessionSteeringQa() {
               modelOptions={qaModelOptions}
               selectedModelValue={model}
               modelSwitching={switchingModel}
-              runtimeTargetLabel="Local Rust Core"
-              runtimeTargetOptions={['Local Rust Core']}
               runInputDelivery={delivery}
               runInputDeliveryOptions={['steer_now', 'queue_next']}
               runInputs={runInputs}
@@ -3277,7 +3275,6 @@ function SessionSteeringQa() {
                     }
                   : undefined
               }
-              onRuntimeTargetChange={() => undefined}
               onOpenMCPAppResult={openQaMCPAppResult}
               onOpenCommands={() => undefined}
             />
