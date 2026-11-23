@@ -1,0 +1,11 @@
+{
+  "name": {
+    "en": "Billing",
+    "zh": "账单"
+  },
+  "description": {
+    "en": "Compare plan allowances, create invoices, and review billing history.",
+    "zh": "比较套餐配额、开具发票并查看账单记录。"
+  },
+  "icon": "receipt"
+}

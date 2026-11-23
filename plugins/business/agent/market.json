@@ -1,0 +1,11 @@
+{
+  "name": {
+    "en": "Agent",
+    "zh": "智能体"
+  },
+  "description": {
+    "en": "Chat with agents, replay conversations, and validate skills.",
+    "zh": "与智能体对话、回放历史记录并验证技能。"
+  },
+  "icon": "message-square"
+}

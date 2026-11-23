@@ -1,0 +1,11 @@
+{
+  "name": {
+    "en": "Workspace",
+    "zh": "工作空间"
+  },
+  "description": {
+    "en": "Browse project workspaces and export directory records to CSV.",
+    "zh": "浏览项目工作空间，将目录数据导出为 CSV。"
+  },
+  "icon": "panels-top-left"
+}

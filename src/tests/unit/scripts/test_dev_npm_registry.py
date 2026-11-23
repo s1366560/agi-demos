@@ -2,7 +2,9 @@
 
 import base64
 import hashlib
+import io
 import json
+import tarfile
 
 import pytest
 
@@ -42,3 +44,29 @@ def test_registry_restart_preserves_publisher(tmp_path):
     npm_registry.initialize(state)
     assert (state / "password").read_bytes() == credentials
     assert (state / "publishers").read_bytes() == approved
+
+
+@pytest.mark.parametrize("with_metadata", [False, True])
+def test_market_card_metadata_preserves_archive(tmp_path, with_metadata):
+    source = tmp_path / "market.json"
+    if with_metadata:
+        source.write_text(
+            json.dumps(
+                {
+                    "name": {"en": "Directory", "zh": "目录"},
+                    "description": {"zh": "工作目录"},
+                    "icon": "panels-top-left",
+                }
+            )
+        )
+    market = npm_registry._market_presentation(source, {"web", "python"})
+    package = npm_registry.Package("@memstack/sample", "1.0.0", b"signed bytes", market)
+    with tarfile.open(fileobj=io.BytesIO(npm_registry.tarball(package))) as archive:
+        assert archive.extractfile(npm_registry.PACKAGE_FILE).read() == package.archive
+        manifest = json.load(archive.extractfile("package/package.json"))
+    if with_metadata:
+        assert manifest["memstack"]["market"]["targets"] == ["python", "web"]
+        assert manifest["memstack"]["market"]["name"]["zh"] == "目录"
+        assert manifest["description"] == "工作目录"
+    else:
+        assert "memstack" not in manifest

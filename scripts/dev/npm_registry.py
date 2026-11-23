@@ -17,6 +17,7 @@ import tarfile
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
 import bcrypt
 
@@ -32,27 +33,66 @@ ORIGIN = "http://127.0.0.1:4873"
 PACKAGE_FILE = "package/plugin.mspkg"
 
 
+class MarketPresentation(TypedDict):
+    name: dict[str, str]
+    description: dict[str, str]
+    icon: str
+    targets: list[str]
+
+
+def _localized(value: object, limit: int) -> dict[str, str]:
+    if not isinstance(value, dict) or not value or not value.keys() <= {"en", "zh"}:
+        raise ValueError("Provide an English or Chinese market translation")
+    if any(
+        not isinstance(text, str) or not text.strip() or len(text) > limit
+        for text in value.values()
+    ):
+        raise ValueError("Invalid market translation")
+    return dict(value)
+
+
+def _market_presentation(path: Path, targets: set[str]) -> MarketPresentation | None:
+    if not path.exists():
+        return None
+    value = json.loads(path.read_bytes())
+    if not isinstance(value, dict) or value.keys() != {"name", "description", "icon"}:
+        raise ValueError("Invalid market presentation")
+    icon = value["icon"]
+    if not isinstance(icon, str) or not re.fullmatch(r"[a-z0-9-]{1,48}", icon):
+        raise ValueError("Expected a market icon identifier")
+    return MarketPresentation(
+        name=_localized(value["name"], 80),
+        description=_localized(value["description"], 320),
+        icon=icon,
+        targets=sorted(targets),
+    )
+
+
 @dataclass(frozen=True)
 class Package:
     name: str
     version: str
     archive: bytes
+    market: MarketPresentation | None = None
 
     @property
     def selector(self) -> str:
         return f"{self.name}@{self.version}"
 
 
-def signed_package(path: Path, public_key: str) -> Package:
+def signed_package(
+    path: Path, public_key: str, metadata_directory: Path = ROOT / "plugins/business"
+) -> Package:
     with path.open("rb") as archive:
         raw = archive.read(MAX_BUNDLE_BYTES_V2 + 1)
-    signed = parse_bundle_archive_v2(
+    verified = parse_bundle_archive_v2(
         raw,
         source=path.name,
         trusted_public_keys=(public_key,),
         require_signature=True,
         approved_permissions=declared_bundle_permissions_v2(raw),
-    ).manifest
+    )
+    signed = verified.manifest
     match = re.fullmatch(r"memstack-([a-z0-9][a-z0-9-]*)", signed.bundle_id)
     if (
         not match
@@ -63,16 +103,33 @@ def signed_package(path: Path, public_key: str) -> Package:
         )
     ):
         raise ValueError("Expected a signed project package with a matching business identity")
-    return Package(f"@memstack/{match[1]}", signed.version, raw)
+    targets = {a.target.value for a in signed.artifacts}
+    for artifact in signed.artifacts:
+        if artifact.path in {"targets/desktop-capability.json", "targets/desktop-sidecar.mspkg"}:
+            targets.add("desktop-sidecar")
+        if artifact.path == "contributions.json":
+            contribution = json.loads(verified.artifacts[artifact.artifact_id])
+            targets.update(t for page in contribution.get("pages", []) for t in page["targets"])
+    market = _market_presentation(metadata_directory / match[1] / "market.json", targets)
+    return Package(f"@memstack/{match[1]}", signed.version, raw, market)
 
 
 def tarball(package: Package) -> bytes:
-    manifest = {
+    manifest: dict[str, object] = {
         "name": package.name,
         "version": package.version,
         "files": ["plugin.mspkg"],
         "publishConfig": {"registry": ORIGIN},
     }
+    if package.market:
+        descriptions = package.market["description"]
+        manifest.update(
+            {
+                "description": descriptions.get("en") or descriptions["zh"],
+                "keywords": ["memstack-plugin"],
+                "memstack": {"market": package.market},
+            }
+        )
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w", format=tarfile.USTAR_FORMAT) as tar:
         for name, content in (
@@ -197,13 +254,18 @@ def main() -> None:
     parser.add_argument("action", choices=("start", "stop", "restart", "publish", "verify"))
     parser.add_argument("--state", type=Path, default=STATE)
     parser.add_argument("--standard-directory", type=Path, default=ROOT / ".memstack/standard")
+    parser.add_argument("--metadata-directory", type=Path, default=ROOT / "plugins/business")
     args = parser.parse_args()
     if args.action in {"publish", "verify"}:
         archives = sorted((args.standard_directory / "archives").glob("*.mspkg"))
         if not archives:
             parser.error("No .mspkg files found in the standard project's archives directory")
         public = (args.standard_directory / "publisher.pem").read_text()
-        distribute(args.action, [signed_package(path, public) for path in archives], args.state)
+        distribute(
+            args.action,
+            [signed_package(path, public, args.metadata_directory) for path in archives],
+            args.state,
+        )
     else:
         lifecycle(args.action, args.state)
 
