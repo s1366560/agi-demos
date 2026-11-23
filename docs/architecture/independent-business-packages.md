@@ -167,7 +167,7 @@ memstack --json plugin memstack-billing quote-pro --tenant "$TENANT_ID" --projec
 | 业务或宿主 | 当前可交付单位 | 距离全业务切换还需完成 |
 | --- | --- | --- |
 | Billing | 签名 OCI 包在空宿主上提供报价、项目发票创建/读取/分页、Web/桌面设置页和 CLI 命令。包内 worker 定义发票字段、幂等规则和到期日，宿主限制每次调用可读写的项目记录。 | 历史发票表只有租户 ID，仍由原租户 API 读取并沿用 Billing 自己的 Alembic 迁移。导入新项目需明确发票所属项目；租户配额变更继续使用 Tenant 所有者授权。 |
-| 设备知识检索 | Knowledge 的同一签名归档包含云端 `project_graph` 与设备端 `search_documents`，两端分别校验授权和执行目标 | 当前查询对象是调用方本次提交的文档。图谱索引、增量同步和历史知识库仍有各自的服务与权限。 |
+| 设备知识检索 | Knowledge 的同一签名归档包含云端 `project_graph` 与设备端 `search_documents`，两端分别校验授权和执行目标 | 设备检索读取本次提交的文档。云端记忆页可按项目查询已持久化的标题和正文。图存储与索引同步使用各自的服务与权限。 |
 | Agent、Skill/SubAgent | ToolSet、签名 Skill 与 SubAgent 声明随 run 固定。Agent 包在同一 OCI worker 中驱动 ReAct 的模型步骤、目标判断、观察和停止，并提供 Skill 校验与执行统计，并发布格式审阅 SubAgent，CLI 可按项目执行已批准版本。 | ReActAgent 和 SessionProcessor 的源码已迁入 Agent 包。模型连接、内建工具、既有 SubAgent 模板、会话注册表、并发控制和调度仍由完整运行时装配。后续按业务所有权拆包，并保持取消、流式事件、凭据和恢复的授权边界。 |
 | 模型提供者 | OpenAI 与 DeepSeek 各有自己的签名包、项目授权和流式协议映射，可在同一项目分别升级或停用；增强搜索可独立升级 Cohere 重排参数与结果映射。 | 模型 HTTP 传输、路由与池化、Embedding、模型清单以及其他提供者协议仍随平台发布。 |
 | 渠道 | 飞书任务开始、完成卡片的进度前缀由独立签名 Wasm 包生成；同一渠道桥接进程按到达顺序发送该会话的卡片与 HITL 事件。 | 渠道连接、回调验签、HITL 卡片与上传位于飞书包的 Python 实现中，运行时仍由现有渠道进程装载。 |

@@ -54,7 +54,7 @@
 memstack packages --tenant "$TENANT" --project "$PROJECT" inspect knowledge.mspkg
 memstack packages --tenant "$TENANT" --project "$PROJECT" install \
   --approve tools.execute --approve subagents.register --approve agent.loop.drive \
-  --approve graph.projection.compute --approve ui.slot \
+  --approve graph.projection.compute --approve app.knowledge.memories.read --approve ui.slot \
   agent.mspkg knowledge.mspkg workspace.mspkg automation.mspkg environments.mspkg billing.mspkg
 memstack packages --tenant "$TENANT" --project "$PROJECT" list
 ```

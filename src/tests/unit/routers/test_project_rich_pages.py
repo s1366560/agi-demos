@@ -188,7 +188,7 @@ async def test_application_command_requires_install_grant_registered_authority_a
     publisher,  # noqa: F811
 ):
     client, keys = http
-    body, digest = publisher[1](application_command="app.agent.list")
+    body, digest = publisher[1](application_command="app.inventory.supplier.read")
     headers = {"Authorization": "Bearer " + keys["owner"]}
     denied = await client.post(
         BASE + "/install",
@@ -208,7 +208,7 @@ async def test_application_command_requires_install_grant_registered_authority_a
         calls.append((ctx.user.id, ctx.scope.tenant_id, ctx.scope.project_id, payload))
         return {"items": []}
 
-    client._transport.app.state.package_operations_v1 = {"app.agent.list": execute}
+    client._transport.app.state.package_operations_v1 = {"app.inventory.supplier.read": execute}
     assert (
         await client.post(
             base + "/commands", json={**command, "project_id": "second"}, headers=headers

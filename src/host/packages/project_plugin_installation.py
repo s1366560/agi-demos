@@ -181,9 +181,10 @@ class ProjectPluginInstallationService:
             )
 
     async def inspect(self, raw: bytes) -> SignedPackageBytesV2:
-        from memstack_plugin_sdk.contract import PERMISSIONS
+        from src.infrastructure.plugins.v2.bundle_archive import declared_bundle_permissions_v2
 
-        package = await asyncio.to_thread(admit_package, raw, self.keys, PERMISSIONS, self.scope)
+        requested = await asyncio.to_thread(declared_bundle_permissions_v2, raw)
+        package = await asyncio.to_thread(admit_package, raw, self.keys, requested, self.scope)
         await self._catalog_check(package.plugin_id, package.version, raw)
         return package
 

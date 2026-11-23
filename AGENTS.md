@@ -289,7 +289,7 @@ Patterns for new domain/application/infrastructure layers follow standard DDD; e
 | Events | `src/domain/events/{agent_events,types}.py`, `src/infrastructure/agent/events/converter.py` |
 | Actor exec | `src/infrastructure/agent/actor/execution.py` |
 | Graph | `src/infrastructure/graph/native_graph_adapter.py`, `extraction/entity_extractor.py`, `search/hybrid_search.py` |
-| Frontend | `web/src/App.tsx`, `pages/tenant/AgentWorkspace.tsx`, `stores/agent/`, `services/agentService.ts` |
+| Frontend | Default hosts: `web/src/projectPackages/` and `agi-stack/apps/desktop/src/packageHost/`. Agent: `plugins/business/agent/ui/web/tenant/AgentWorkspace.tsx` and `plugins/business/agent/ui/web/stores/agent/`. Cloud transport: `web/src/services/agentService.ts`. |
 
 ## API Testing
 

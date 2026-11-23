@@ -48,7 +48,6 @@ def admit_package(
     raw: bytes, keys: tuple[str, ...], approved: frozenset[str], binding: ScopeBindingV2 | None
 ) -> SignedPackageBytesV2:
     from memstack_plugin_sdk.compatibility import DESCRIPTOR, require_compatible
-    from memstack_plugin_sdk.contract import PERMISSIONS
     from memstack_plugin_sdk.rich_pages import validate_device_tools
 
     archive = parse_bundle_archive_v2(
@@ -68,7 +67,6 @@ def admit_package(
         or len(plugin.modules) != 1
         or plugin.plugin_id != bundle.bundle_id
         or plugin.version != bundle.version
-        or not set(plugin.permissions) <= PERMISSIONS
     ):
         raise OptionalBusinessError("invalid_package", "unsupported project business contract")
     module = plugin.modules[0]
@@ -115,11 +113,7 @@ def admit_package(
     validate_device_tools(contribution.pages, device_tool)
     files = _ui_files(contribution, artifacts)
     entry = _bound_entry(bundle, plugin, binding)
-    granted = frozenset(plugin.permissions) & frozenset(entry.permissions) & approved
-    if not declared_permissions(contribution) <= granted:
-        raise OptionalBusinessError(
-            "forbidden", "a contribution lacks a signed and approved permission"
-        )
+    granted = _package_grants(plugin, entry, approved, contribution)
     _check_loop_driver(granted, contribution, worker is not None)
     if chat_grants := granted.intersection(CHAT_ADAPTER_GRANTS):
         permissions = chat_grants | {"tools.execute"}
@@ -162,6 +156,25 @@ def admit_package(
             if v is not None
         ),
     )
+
+
+def _package_grants(
+    plugin: PluginManifestV2,
+    entry: ProfileEntryV2,
+    approved: frozenset[str],
+    contribution: "ContributionDocument",
+) -> frozenset[str]:
+    from memstack_plugin_sdk.contract import PERMISSIONS
+
+    named = {command.host_operation for command in contribution.commands if command.host_operation}
+    if not set(plugin.permissions) <= PERMISSIONS | named:
+        raise OptionalBusinessError("invalid_package", "unsupported package permission")
+    granted = frozenset(plugin.permissions) & frozenset(entry.permissions) & approved
+    if not declared_permissions(contribution) <= granted:
+        raise OptionalBusinessError(
+            "forbidden", "a contribution lacks a signed and approved permission"
+        )
+    return granted
 
 
 def _check_loop_driver(

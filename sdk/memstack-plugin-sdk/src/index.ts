@@ -12,17 +12,6 @@ export const PERMISSIONS = [
   'services.provide',
   'graph.projection.compute',
   'agent.loop.drive',
-  'app.agent.list',
-  'app.agent.create',
-  'app.agent.history',
-  'app.agent.turn',
-  'app.agent.cancel',
-  'app.automation.playbooks.read',
-  'app.workspace.directory.read',
-  'app.workspace.detail.read',
-  'app.environments.sandbox.read',
-  'app.environments.sandbox.prepare',
-  'app.environments.terminal.authorize',
   'model.chat.adapt',
   'model.chat.adapt.openai',
   'model.chat.adapt.deepseek',
@@ -32,7 +21,7 @@ export const PERMISSIONS = [
   'storage.write',
 ] as const;
 
-export type PluginPermission = (typeof PERMISSIONS)[number];
+export type PluginPermission = (typeof PERMISSIONS)[number] | `app.${string}.${string}`;
 
 export interface ScanEvidence {
   readonly status: 'unknown' | 'passed' | 'failed';

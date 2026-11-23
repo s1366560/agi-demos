@@ -24,17 +24,6 @@ PERMISSIONS = frozenset(
         "services.call",
         "graph.projection.compute",
         "agent.loop.drive",
-        "app.agent.list",
-        "app.agent.create",
-        "app.agent.history",
-        "app.agent.turn",
-        "app.agent.cancel",
-        "app.automation.playbooks.read",
-        "app.workspace.directory.read",
-        "app.workspace.detail.read",
-        "app.environments.sandbox.read",
-        "app.environments.sandbox.prepare",
-        "app.environments.terminal.authorize",
         "model.chat.adapt",
         "model.chat.adapt.openai",
         "model.chat.adapt.deepseek",
@@ -45,6 +34,15 @@ PERMISSIONS = frozenset(
         "storage.write",
     }
 )
+
+
+# Trusted application runtimes register individual named operations. Each operation
+# requires an exact project approval, including capabilities added after host build.
+_APPLICATION_CAPABILITY = re.compile(r"app(?:\.[a-z][a-z0-9_]{0,31}){2,6}")
+
+
+def is_application_capability(name: str) -> bool:
+    return _APPLICATION_CAPABILITY.fullmatch(name) is not None
 
 
 class ContractError(ValueError):
@@ -176,7 +174,8 @@ def parse_contribution(payload: dict[str, Any]) -> ContributionDocument:
         declared |= storage.permissions
     for command in commands:
         declared |= command.permissions
-    unknown = sorted(declared - PERMISSIONS)
+    named = {command.host_operation for command in commands if command.host_operation}
+    unknown = sorted(declared - PERMISSIONS - named)
     if unknown:
         raise ContractError("permission_unknown", f"unknown permissions: {', '.join(unknown)}")
     try:
@@ -314,7 +313,7 @@ def _command(value: object) -> CommandContribution:
     if "host_operation" in value and (
         "tool" in value
         or not isinstance(operation, str)
-        or not operation.startswith("app.")
+        or not is_application_capability(operation)
         or permissions != frozenset({operation})
     ):
         raise ContractError("command", "a host command requires its exact capability grant")
