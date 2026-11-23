@@ -29,7 +29,7 @@ use crate::workspace_core_cutover::{
     load_cutover_marker, persist_cutover_marker, staged_snapshot_from_marker,
     WorkspaceCoreCutoverState,
 };
-use crate::workspace_core_legacy_import::stage_legacy_workspace_snapshot;
+use crate::workspace_core_legacy_import::stage_empty_workspace_history_snapshot;
 
 const DEFAULT_MAX_RESTART_ATTEMPTS: usize = 4;
 const DESKTOP_CONTROL_PROTOCOL_VERSION: u16 = 1;
@@ -198,8 +198,7 @@ impl WorkspaceCoreSupervisor {
                 staged_snapshot_from_marker(&runtime_directory, marker).await?
             }
             _ => {
-                let snapshot =
-                    stage_legacy_workspace_snapshot(&runtime, &runtime_directory).await?;
+                let snapshot = stage_empty_workspace_history_snapshot(&runtime_directory).await?;
                 persist_cutover_marker(
                     &runtime_directory,
                     WorkspaceCoreCutoverState::Importing,

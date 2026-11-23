@@ -558,13 +558,28 @@ test('Loader activates the exact service and disable removes it without fallback
   await manager.close();
 });
 
-test('local transport performs one exact request for each page and forwards every cursor', async () => {
+test('local history reads use cloud and do not fall back to the sidecar', async () => {
   const originalFetch = globalThis.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const fetches = [];
   const calls = [];
   globalThis.fetch = async (input, init) => {
-    calls.push({ input: String(input), init });
-    return json(timelinePayload({ page: calls.length }));
+    fetches.push({ input: String(input), init });
+    return json(timelinePayload({ page: fetches.length }));
   };
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      __MEMSTACK_DESKTOP__: {
+        core: {
+          async invoke(command, args) {
+            calls.push({ command, args });
+            return { status: 200, body: timelinePayload({ page: calls.length }) };
+          },
+        },
+      },
+    },
+  });
 
   try {
     let service;
@@ -591,25 +606,28 @@ test('local transport performs one exact request for each page and forwards ever
 
     assert.equal(initial.page, 1);
     assert.equal(earlier.page, 2);
+    assert.equal(fetches.length, 0);
     assert.equal(calls.length, 2);
-    assertTimelineCall(calls[0], {
+    assertCloudTimelineCall(calls[0], {
       limit: '75',
       fromTimeUs: '1000',
       fromCounter: '4',
       beforeTimeUs: null,
       beforeCounter: null,
-      signal: controller.signal,
     });
-    assertTimelineCall(calls[1], {
+    assertCloudTimelineCall(calls[1], {
       limit: '50',
       fromTimeUs: null,
       fromCounter: null,
       beforeTimeUs: '2000',
       beforeCounter: '7',
-      signal: controller.signal,
     });
+    assert.equal(JSON.stringify(calls).includes('timeline-session'), false);
+    assert.equal(JSON.stringify(calls).includes('timeline-launch'), false);
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else Object.defineProperty(globalThis, 'window', originalWindow);
   }
 });
 
@@ -844,8 +862,25 @@ test('transport scope is revalidated and non-2xx preserves DesktopApiError', asy
   );
 
   const originalFetch = globalThis.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const response = { detail: { reason_code: 'session_timeline_unavailable' } };
-  globalThis.fetch = async () => json(response, 503);
+  const fetches = [];
+  globalThis.fetch = async () => {
+    fetches.push(true);
+    return json(response, 503);
+  };
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      __MEMSTACK_DESKTOP__: {
+        core: {
+          async invoke() {
+            return { status: 503, body: response };
+          },
+        },
+      },
+    },
+  });
   try {
     await assert.rejects(
       authority.getConversationMessages(conversation(), { limit: 50 }),
@@ -853,11 +888,14 @@ test('transport scope is revalidated and non-2xx preserves DesktopApiError', asy
         assert.equal(error instanceof DesktopApiError, true);
         assert.equal(error.status, 503);
         assert.deepEqual(error.payload, response);
+        assert.equal(fetches.length, 0);
         return true;
       },
     );
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else Object.defineProperty(globalThis, 'window', originalWindow);
   }
 });
 
@@ -1069,6 +1107,22 @@ test('concurrent pages pin independent generations and release independently', a
     ['sha256:next', 'sha256:old'],
   );
 });
+
+function assertCloudTimelineCall(
+  call,
+  { limit, fromTimeUs, fromCounter, beforeTimeUs, beforeCounter },
+) {
+  assert.equal(call.command, 'cloud_request');
+  assert.equal(call.args.request.method, 'GET');
+  const url = new URL(call.args.request.path, 'https://desktop.invalid');
+  assert.equal(url.pathname, '/api/v1/agent/conversations/conversation-1/messages');
+  assert.equal(url.searchParams.get('project_id'), 'project-1');
+  assert.equal(url.searchParams.get('limit'), limit);
+  assert.equal(url.searchParams.get('from_time_us'), fromTimeUs);
+  assert.equal(url.searchParams.get('from_counter'), fromCounter);
+  assert.equal(url.searchParams.get('before_time_us'), beforeTimeUs);
+  assert.equal(url.searchParams.get('before_counter'), beforeCounter);
+}
 
 function assertTimelineCall(
   call,
