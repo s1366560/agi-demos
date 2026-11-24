@@ -890,8 +890,8 @@ export function SettingsWindow({
               ) : null}
               {isResourceSection ? (
                 <div className={`settings-resource-container${section === 'plugins' ? ' settings-resource-container--plugins' : ''}`}>
-                  {section === 'plugins' && config.mode === 'cloud' && config.tenantId && config.projectId ? (
-                    <PackageManagement tenant={config.tenantId} project={config.projectId}
+                  {section === 'plugins' && config.mode === 'cloud' && config.tenantId ? (
+                    <PackageManagement tenant={config.tenantId} project={config.projectId || null}
                       full canManage locale={locale} />
                   ) : null}
                   <SettingsIntegrations collapsible={section === 'plugins' && config.mode === 'cloud'}>
@@ -910,7 +910,7 @@ export function SettingsWindow({
                     />
                   ) : null}
                   <div id={section === 'plugins' ? 'signed-plugin-marketplace' : undefined} tabIndex={-1}>
-                  {section === 'plugins' && config.mode === 'cloud' && config.tenantId && config.projectId ? (
+                  {section === 'plugins' && config.mode === 'cloud' && config.tenantId ? (
                     <DevicePluginSettings
                       key={JSON.stringify([config.apiBaseUrl, auth.user?.user_id, config.tenantId, config.projectId])}
                       tenant={config.tenantId}

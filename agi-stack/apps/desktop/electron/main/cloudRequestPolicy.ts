@@ -370,6 +370,15 @@ export async function executeVaultBoundCloudRequest(
   if (request.method === 'GET' && request.path === '/api/v1/project-packages/projects/') {
     return projectCatalog();
   }
+  const tenantCatalog = async () => {
+    const response = await authorizedFetch(session, dependencies, {
+      path: '/api/v1/tenant-packages/tenants', method: 'GET',
+    });
+    return {status: response.status, body: await boundedJson(response, false, session.credential)};
+  };
+  if (request.method === 'GET' && request.path === '/api/v1/tenant-packages/tenants') {
+    return tenantCatalog();
+  }
   const contextResponse = await authorizedFetch(
     session,
     dependencies,
@@ -398,10 +407,20 @@ export async function executeVaultBoundCloudRequest(
       ? dependencies.withContextSwitch(switchContext)
       : switchContext();
   }
-  if (!contextResponse.ok) {
+  let selected: ReturnType<typeof parseObservedContext>;
+  if (contextResponse.ok) selected = parseObservedContext(contextBody);
+  else if (contextResponse.status === 404 && isRecord(contextBody) && isRecord(contextBody.detail)
+      && contextBody.detail.code === 'workspace_context_unavailable'
+      && request.path.startsWith('/api/v1/tenant-packages/') && endpoint.tenantId) {
+    const catalog = await tenantCatalog();
+    if (catalog.status !== 200 || !isRecord(catalog.body) || !Array.isArray(catalog.body.items)
+        || !catalog.body.items.some(item => isRecord(item) && item.tenant_id === endpoint.tenantId)) {
+      throw new Error('cloud request tenant scope mismatch');
+    }
+    selected = {tenantId:endpoint.tenantId, projectId:null, workspaceId:null};
+  } else {
     return Object.freeze({ status: contextResponse.status, body: contextBody });
   }
-  const selected = parseObservedContext(contextBody);
   const context = fullDesktop
     ? await observeEndpointWorkspaceScope(endpoint, selected, session, dependencies) : selected;
   assertEndpointScope(endpoint, context);
@@ -435,7 +454,7 @@ export async function executeVaultBoundCloudRequest(
     session, fullDesktop ? activityDeliveryDependencies(request, dependencies) : dependencies, request,
   );
   if (response.ok && request.method === 'POST' &&
-      /^\/api\/v1\/platform-plugins\/v2\/optional-business\/[a-z0-9][a-z0-9._-]{0,127}\/commands\?stream=true$/u.test(request.path)) {
+      /^\/api\/v1\/(?:platform-plugins\/v2\/optional-business|tenant-packages)\/[a-z0-9][a-z0-9._-]{0,127}\/commands\?stream=true$/u.test(request.path)) {
     const check = (value: unknown) => {
       dependencies.signal?.throwIfAborted();
       const text = JSON.stringify(value);
@@ -793,7 +812,7 @@ function parseRequest(input: unknown): VaultBoundCloudRequestInput {
   if (body !== undefined) {
     const bodyBytes = new TextEncoder().encode(JSON.stringify(body)).byteLength;
     const packageUpload = record.method === 'POST' &&
-      ['/api/v1/platform-plugins/v2/optional-business/inspect', '/api/v1/platform-plugins/v2/optional-business/install'].includes(String(record.path)) &&
+      ['/api/v1/platform-plugins/v2/optional-business/inspect', '/api/v1/platform-plugins/v2/optional-business/install', '/api/v1/tenant-packages/inspect', '/api/v1/tenant-packages/install'].includes(String(record.path)) &&
       bodyBytes <= 16 * 1024 * 1024 + 8192;
     if (bodyBytes > MAX_REQUEST_BYTES && !packageUpload && !(fullDesktop && allowsCloudSandboxImportBudget(record, body, bodyBytes))) {
       throw new Error('cloud request body is too large');

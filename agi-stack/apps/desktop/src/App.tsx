@@ -262,6 +262,7 @@ import {
   type DesktopTerminalLifecycleAuthorityV2,
 } from './plugins/desktopTerminalLifecycleAuthorityModuleV2';
 import { DesktopRendererAuthenticationRouterV2 } from './plugins/DesktopRendererAuthenticationRouterV2';
+import { DesktopPackageWorkbench, useSignedWorkbench } from './packageHost/DesktopPackageWorkbench';
 import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
 import {
   DesktopRendererGenerationProviderV2,
@@ -3149,7 +3150,8 @@ export function App() {
     shortcutsDialogOpen,
   ]);
 
-  useDesktopModalBackgroundV2(appShellRef, identityAuthenticated && modalOpen);
+  const signedWorkbench = useSignedWorkbench(config.mode === 'cloud' ? config.tenantId : '');
+  useDesktopModalBackgroundV2(appShellRef, identityAuthenticated && modalOpen && !signedWorkbench);
 
   useEffect(() => {
     if (!runActionsMenuOpen) return;
@@ -8334,9 +8336,9 @@ export function App() {
           <ComputerUseDeviceProvider config={config}>
           <ComputerUseActivity conversationId={selectedConversationId}
             runId={currentArtifactRun?.id ?? sessionDetailViewModel?.runId ?? null} />
-          <DesktopRendererAuthenticatedShellV2
-            viewModel={desktopAuthenticatedShellViewModelV2}
-          />
+          {signedWorkbench
+            ? <DesktopPackageWorkbench tenant={config.tenantId} project={config.projectId || null} locale={locale} />
+            : <DesktopRendererAuthenticatedShellV2 viewModel={desktopAuthenticatedShellViewModelV2} />}
           </ComputerUseDeviceProvider>
         </TimelineInspectionProvider>
       </NativeMemoriesRouteProvider>

@@ -35,15 +35,27 @@ export function PackageManagement({
   locale = document.documentElement.lang,
 }: {
   tenant: string;
-  project: string;
+  project: string | null;
   canManage: boolean;
   refresh?: () => void;
   full?: boolean;
   locale?: string;
 }) {
+  const hash = useSyncExternalStore(subscribe, currentLocation).slice(1);
+  const base = full ? '/tenant/' + encodeURIComponent(tenant) + '/plugins' : '/plugins';
+  const index = hash.indexOf('?');
+  const pathname = index < 0 ? hash : hash.slice(0, index);
+  const params = new URLSearchParams(index < 0 ? '' : hash.slice(index + 1));
+  const tenantOnly =
+    project === null || (pathname === base && params.get('marketScope') === 'tenant');
+  const scopeProject = tenantOnly ? null : project;
   const marketplace = useMemo(
-    () => createMarketplaceClient(transport, { tenant_id: tenant, project_id: project }),
-    [tenant, project],
+    () =>
+      createMarketplaceClient(
+        transport,
+        scopeProject ? { tenant_id: tenant, project_id: scopeProject } : { tenant_id: tenant },
+      ),
+    [tenant, scopeProject],
   );
   const declarativePage = (installation: Installation, canExecute: boolean) =>
     installation.actual_digest && (
@@ -56,40 +68,40 @@ export function PackageManagement({
         canExecute={canExecute}
       />
     );
-  const hash = useSyncExternalStore(subscribe, currentLocation).slice(1);
-  const base = full ? '/tenant/' + encodeURIComponent(tenant) + '/plugins' : '/plugins';
-  const index = hash.indexOf('?');
-  const pathname = index < 0 ? hash : hash.slice(0, index);
-  const params = new URLSearchParams(index < 0 ? '' : hash.slice(index + 1));
   const plugin = pathname === base ? params.get('marketPlugin') : null;
-  const page = full && pathname === base ? params.get('marketPage') : null;
-  const navigate = (id: string | null, path?: string) => {
+  const page = pathname === base ? params.get('marketPage') : null;
+  const navigate = (id: string | null, path?: string, replace = false) => {
     const query = pathname === base ? new URLSearchParams(params) : new URLSearchParams();
     if (id) query.set('marketPlugin', id);
     else query.delete('marketPlugin');
     if (path) query.set('marketPage', path);
     else query.delete('marketPage');
     const search = query.toString();
-    window.location.hash = base + (search ? '?' + search : '');
+    const destination = base + (search ? '?' + search : '');
+    if (replace) window.location.replace('#' + destination);
+    else window.location.hash = destination;
   };
-  const open = (path: string) => {
-    if (full) navigate(plugin, path);
+  const open = (path: string, options?: { pluginId?: string; replace?: boolean }) => {
+    if (full || tenantOnly) navigate(options?.pluginId ?? plugin, path, options?.replace);
+    else if (options?.replace) window.location.replace('#' + path);
     else window.location.hash = path;
   };
   const device = useCallback(
-    (pluginId: string, digest: string | null, release?: NpmRelease) => (
-      <DevicePluginSettings
-        key={JSON.stringify([tenant, project, pluginId, digest])}
-        tenant={tenant}
-        project={project}
-        pluginId={pluginId}
-        digest={digest}
-        loadArchive={
-          release && canManage
-            ? async () => {
-                const result = await transport<{ archive_base64: string; digest: string }>(
-                  packages + '/npm/resolve',
-                  {
+    (pluginId: string, digest: string | null, release?: NpmRelease) =>
+      project && (
+        <DevicePluginSettings
+          key={JSON.stringify([tenant, project, pluginId, digest])}
+          tenant={tenant}
+          project={project}
+          pluginId={pluginId}
+          digest={digest}
+          loadArchive={
+            release && canManage
+              ? async () => {
+                  const result = await transport<{
+                    archive_base64: string;
+                    digest: string;
+                  }>(packages + '/npm/resolve', {
                     method: 'POST',
                     body: {
                       tenant_id: tenant,
@@ -97,16 +109,15 @@ export function PackageManagement({
                       package_name: release.packageName,
                       version: release.version,
                     },
-                  },
-                );
-                if (!digest || result.digest !== digest)
-                  throw new Error('device_plugin_release_changed');
-                return result.archive_base64;
-              }
-            : undefined
-        }
-      />
-    ),
+                  });
+                  if (!digest || result.digest !== digest)
+                    throw new Error('device_plugin_release_changed');
+                  return result.archive_base64;
+                }
+              : undefined
+          }
+        />
+      ),
     [tenant, project, canManage],
   );
   if (page)
@@ -116,33 +127,49 @@ export function PackageManagement({
           {t.backToMarket}
         </button>
         <RichPackagePages
-          scope={{ tenantId: tenant, projectId: project }}
+          scope={{ tenantId: tenant, projectId: scopeProject }}
+          pluginId={plugin ?? undefined}
           target="desktop-renderer"
           pathname={page}
           navigate={open}
           locale={locale}
           transport={transport}
           streamCommand={streamCommand}
-          invokeDevice={devicePageCall(tenant, project)}
+          invokeDevice={scopeProject ? devicePageCall(tenant, scopeProject) : undefined}
         />
       </>
     );
   return (
-    <PluginMarket
-      key={JSON.stringify([tenant, project])}
-      tenantId={tenant}
-      projectId={project}
-      target="desktop-renderer"
-      transport={transport}
-      canManage={canManage}
-      locale={locale}
-      pluginId={plugin}
-      onSelect={(id) => navigate(id)}
-      onOpen={open}
-      importArchive={importArchive}
-      deviceSettings={device}
-      declarativePage={declarativePage}
-      onChanged={refresh}
-    />
+    <>
+      <label className="package-market-scope">
+        {t.installationScope}
+        <select
+          value={tenantOnly ? 'tenant' : 'project'}
+          onChange={(event) => {
+            window.location.hash =
+              base + (event.target.value === 'tenant' ? '?marketScope=tenant' : '');
+          }}
+        >
+          {project && <option value="project">{t.project}</option>}
+          <option value="tenant">{t.tenant}</option>
+        </select>
+      </label>
+      <PluginMarket
+        key={JSON.stringify([tenant, scopeProject])}
+        tenantId={tenant}
+        projectId={scopeProject}
+        target="desktop-renderer"
+        transport={transport}
+        canManage={canManage}
+        locale={locale}
+        pluginId={plugin}
+        onSelect={(id) => navigate(id)}
+        onOpen={open}
+        importArchive={importArchive}
+        deviceSettings={scopeProject ? device : undefined}
+        declarativePage={scopeProject ? declarativePage : undefined}
+        onChanged={refresh}
+      />
+    </>
   );
 }

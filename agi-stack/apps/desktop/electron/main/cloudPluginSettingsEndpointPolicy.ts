@@ -19,10 +19,10 @@ function revision(value: unknown): boolean {
   return Number.isSafeInteger(value) && Number(value) >= 0;
 }
 
-function marketRead(url: URL, catalog: boolean): CloudProductEndpoint | null {
+function marketRead(url: URL, catalog: boolean, tenantOnly: boolean): CloudProductEndpoint | null {
   const entries = [...url.searchParams];
   const params = Object.fromEntries(entries);
-  if (entries.length !== Object.keys(params).length || !identifier(params.project_id))
+  if (entries.length !== Object.keys(params).length || !validPackageScope(params, tenantOnly))
     return null;
   if (catalog) {
     if (!fields(params, [...SCOPE, 'q', 'view', 'offset', 'limit']) ||
@@ -40,7 +40,11 @@ function marketRead(url: URL, catalog: boolean): CloudProductEndpoint | null {
   return scoped(params);
 }
 
-/** Project-scoped signed package lifecycle and capability invocation. */
+function validPackageScope(body: Body, tenantOnly: boolean): boolean {
+  return identifier(body.tenant_id) && (tenantOnly ? !Object.hasOwn(body, 'project_id') : identifier(body.project_id));
+}
+
+/** Scope-bound signed package lifecycle and capability invocation. */
 export function authorizePackageEndpoint(
   request: Request,
   target: URL,
@@ -48,16 +52,18 @@ export function authorizePackageEndpoint(
   if (request.mutation !== undefined) return null;
   const path = target.pathname;
   const read = request.method === 'GET' && request.body === undefined;
-  if (path === '/api/v1/project-packages/projects/' && read && noQuery(target))
+  if (['/api/v1/project-packages/projects/', '/api/v1/tenant-packages/tenants'].includes(path) && read && noQuery(target))
     return { kind: 'identity-catalog', tenantId: null, projectId: null, workspaceId: null };
-  const prefix = '/api/v1/platform-plugins/v2/optional-business/';
+  const tenantOnly = path.startsWith('/api/v1/tenant-packages/');
+  const prefix = tenantOnly ? '/api/v1/tenant-packages/' : '/api/v1/platform-plugins/v2/optional-business/';
+  if (!path.startsWith(prefix)) return null;
+  const operation = path.slice(prefix.length);
   if (read && (path === prefix + 'npm/catalog' || path === prefix + 'npm/detail'))
-    return marketRead(target, path === prefix + 'npm/catalog');
+    return marketRead(target, path === prefix + 'npm/catalog', tenantOnly);
   if (path.startsWith(prefix) && request.method === 'POST' && noQuery(target)) {
-    const operation = path.slice(prefix.length);
     const body = request.body;
-    if (body && identifier(body.project_id)) {
-      if (operation === 'npm/resolve' && fields(body, [...SCOPE, 'package_name', 'version']) &&
+    if (body && validPackageScope(body, tenantOnly)) {
+      if (!tenantOnly && operation === 'npm/resolve' && fields(body, [...SCOPE, 'package_name', 'version']) &&
           isNpmPackageReference(body.package_name, body.version)) return scoped(body);
       if (operation === 'npm/apply' &&
           fields(body, [...SCOPE, 'package_name', 'version', 'expected_revision', 'expected_digest', 'approved_permissions']) &&
@@ -75,23 +81,20 @@ export function authorizePackageEndpoint(
           Number(body.expected_revision) >= 0) return scoped(body);
     }
   }
-  if (path === '/api/v1/platform-plugins/v2/optional-business/' && read) {
-    return identifier(target.searchParams.get('project_id')) ? queryScope(target) : null;
+  if (read && (operation === '' || (tenantOnly && /^[a-z0-9][a-z0-9._-]{0,127}$/u.test(operation)))) {
+    return validPackageScope(Object.fromEntries(target.searchParams), tenantOnly) ? queryScope(target) : null;
   }
-  const business =
-    /^\/api\/v1\/platform-plugins\/v2\/optional-business\/([a-z0-9][a-z0-9._-]{0,127})\/(ui|commands)$/u.exec(
-      path,
-    );
+  const business = /^([a-z0-9][a-z0-9._-]{0,127})\/(ui|commands)$/u.exec(operation);
   if (business) {
     if (business[2] === 'ui' && read) {
       const entries = [...target.searchParams];
       const data = Object.fromEntries(entries);
       if (
-        (entries.length !== 4 && entries.length !== 5) ||
+        (entries.length !== (tenantOnly ? 3 : 4) + Number(data.page_id !== undefined)) ||
         Object.keys(data).length !== entries.length ||
         entries.some(([key]) => ![...SCOPE, 'target', 'expected_digest', 'page_id'].includes(key)) ||
         (data.page_id !== undefined && !/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(data.page_id)) ||
-        !identifier(data.project_id) ||
+        !validPackageScope(data, tenantOnly) ||
         data.target !== 'desktop-renderer' ||
         !releaseDigest(data.expected_digest)
       )
@@ -104,7 +107,7 @@ export function authorizePackageEndpoint(
       (noQuery(target) || target.search === '?stream=true') &&
       fields(body, [...SCOPE, 'command_id', 'expected_digest', 'payload']) &&
       (body.payload === undefined || record(body.payload)) &&
-      identifier(body.project_id) &&
+      validPackageScope(body, tenantOnly) &&
       identifier(body.command_id) &&
       releaseDigest(body.expected_digest)
       ? scoped(body)

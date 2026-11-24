@@ -417,3 +417,44 @@ test('only verified npm archive resolution receives the larger JSON response bud
     /cloud response is too large/,
   );
 });
+
+test('tenant releases admit the active tenant without borrowing a project or device grant', async () => {
+  const base = '/api/v1/tenant-packages';
+  const query = '?tenant_id=tenant-1';
+  const digest = 'sha256:' + '1'.repeat(64);
+  const body = {tenant_id: 'tenant-1', command_id:'get-account', expected_digest:digest};
+  const h = harness();
+  for (const path of ['/tenants', '/' + query, '/npm/catalog' + query,
+    '/npm/detail' + query + '&plugin_id=memstack-billing',
+    '/memstack-billing/ui' + query + '&target=desktop-renderer&expected_digest=' + digest]) {
+    assert.equal((await executeVaultBoundCloudRequest({path:base + path, method:'GET'}, h.dependencies)).status, 200);
+  }
+  const command = data => ({path:base + '/memstack-billing/commands',method:'POST',body:data});
+  assert.equal((await executeVaultBoundCloudRequest(command(body), h.dependencies)).status, 200);
+  for (const request of [command({...body, tenant_id:'foreign'}),command({...body, project_id:'project-1'}),
+    {path:base+'/npm/catalog'+query+'&project_id=project-1',method:'GET'},
+    {path:base+'/npm/resolve',method:'POST',body:{tenant_id:'tenant-1',package_name:'@memstack/billing',version:'1.2.0'}}]) {
+    await assert.rejects(executeVaultBoundCloudRequest(request,h.dependencies));
+  }
+});
+
+test('a tenant-only operation rechecks membership when no project has been selected', async () => {
+  const h = harness();
+  const send = h.dependencies.fetch;
+  h.dependencies.fetch = async (url, init) => {
+    const path = new URL(url).pathname;
+    if (path === '/api/v1/workspace-context') {
+      return Response.json({detail:{code:'workspace_context_unavailable'}}, {status:404});
+    }
+    if (path === '/api/v1/tenant-packages/tenants') {
+      return Response.json({items:[{tenant_id:'member-tenant'}]});
+    }
+    return send(url, init);
+  };
+  const catalog = tenant => ({
+    path:'/api/v1/tenant-packages/npm/catalog?tenant_id=' + tenant, method:'GET',
+  });
+  assert.equal((await executeVaultBoundCloudRequest(catalog('member-tenant'), h.dependencies)).status, 200);
+  await assert.rejects(executeVaultBoundCloudRequest(catalog('foreign-tenant'), h.dependencies), /tenant scope mismatch/);
+  assert.equal(h.requests.length, 1);
+});

@@ -27,11 +27,14 @@ function ProjectHost({
   session: CloudSessionProjection | null;
   reload(): Promise<void>;
 }) {
-  const { tenantId, projectId, revision } = session?.workspaceContext ?? {
+  const { tenantId: selectedTenant, projectId, revision } = session?.workspaceContext ?? {
     tenantId: '',
     projectId: null,
     revision: 0,
   };
+  const [tenants, setTenants] = useState<{tenant_id:string; name:string}[]>([]);
+  const [chosenTenant, setChosenTenant] = useState('');
+  const tenantId = selectedTenant || chosenTenant || (tenants.length === 1 ? tenants[0]!.tenant_id : '');
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
@@ -41,6 +44,11 @@ function ProjectHost({
     const update = () => setPath(location.hash.slice(1) || '/');
     window.addEventListener('hashchange', update);
     const stop = new AbortController();
+    if (!selectedTenant) {
+      transport<{items:{tenant_id:string;name:string}[]}>('/api/v1/tenant-packages/tenants', { signal: stop.signal })
+        .then(result => setTenants(result.items))
+        .catch(cause => { if (!stop.signal.aborted) setError(String(cause)); });
+    }
     transport<Project[]>('/api/v1/project-packages/projects/', {
       signal: stop.signal,
     })
@@ -52,7 +60,7 @@ function ProjectHost({
       stop.abort();
       window.removeEventListener('hashchange', update);
     };
-  }, []);
+  }, [selectedTenant]);
   async function switchProject(id: string) {
     const requested = projects.find((item) => item.project_id === id);
     if (!requested) return;
@@ -97,13 +105,22 @@ function ProjectHost({
           ))}
         </select>
       </label>
+      {!selectedTenant && tenants.length > 0 && (
+        <label>{t.tenant}
+          <select value={tenantId} onChange={event => { setChosenTenant(event.target.value); location.hash = '/plugins?marketScope=tenant'; }}>
+            {!tenantId && <option value="">{t.tenant}</option>}
+            {tenants.map(item => <option key={item.tenant_id} value={item.tenant_id}>{item.name}</option>)}
+          </select>
+        </label>
+      )}
       {error && <p role="alert">{error}</p>}
+      {tenantId && !projectId && !pending && <PackageManagement tenant={tenantId} project={null} canManage />}
       {projectId && !pending && (
         <>
           <RichPackagePages
             scope={{ tenantId, projectId }}
             target="desktop-renderer"
-            pathname={path.split('?')[0] ?? '/'}
+            pathname={path}
             navigate={(next, options) => {
               if (options?.replace) location.replace('#' + next);
               else location.hash = next;
