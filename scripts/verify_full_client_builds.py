@@ -1,5 +1,6 @@
-"""Run both full client builds in a disposable checkout without business package sources."""
+"""Build the full clients without business package sources, optionally keeping them for UI tests."""
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -41,16 +42,34 @@ def copy_client_sources(destination: Path) -> None:
         )
 
 
+def build_clients(checkout: Path) -> int:
+    copy_client_sources(checkout)
+    results = []
+    for package, script in ((WEB, "build:full"), (DESKTOP, "build:electron:full")):
+        print(f"Building {package} with {script}", flush=True)
+        result = subprocess.run(["npm", "run", script], cwd=checkout / package, check=False)
+        results.append(result.returncode)
+    return int(any(results))
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--build-root",
+        type=Path,
+        help="Create a new directory and retain the isolated checkout and both build outputs.",
+    )
+    args = parser.parse_args()
+    if args.build_root is not None:
+        checkout = args.build_root.resolve()
+        try:
+            checkout.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            parser.error(f"Choose a new build directory: {checkout}")
+        print(f"Retaining builds in {checkout}", flush=True)
+        return build_clients(checkout)
     with tempfile.TemporaryDirectory(prefix="memstack-full-clients-") as directory:
-        checkout = Path(directory).resolve()
-        copy_client_sources(checkout)
-        results = []
-        for package, script in ((WEB, "build:full"), (DESKTOP, "build:electron:full")):
-            print(f"Building {package} with {script}", flush=True)
-            result = subprocess.run(["npm", "run", script], cwd=checkout / package, check=False)
-            results.append(result.returncode)
-        return int(any(results))
+        return build_clients(Path(directory).resolve())
 
 
 if __name__ == "__main__":
