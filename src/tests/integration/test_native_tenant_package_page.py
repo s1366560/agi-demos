@@ -68,3 +68,38 @@ def test_tenant_automation_uses_the_original_patterns_view():
         ).to_be_visible()
         page.get_by_role("button", name=re.compile("返回插件市场|Back to marketplace")).click()
         expect(page.locator(".pm-spec select")).to_be_visible(timeout=30000)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not os.getenv("MEMSTACK_QA_NATIVE_BILLING"),
+    reason="requires a disposable owner tenant in Electron",
+)
+def test_native_original_billing_respects_plan_authority():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.connect_over_cdp(
+            os.environ["MEMSTACK_QA_BUSINESS_MARKET_CDP"]
+        )
+        page = browser.contexts[0].pages[0]
+        page.locator(".package-market-scope select").select_option("tenant")
+        page.locator("#pm-card-memstack-billing").click()
+        if page.locator(".pm-spec dd").first.inner_text() != "1.3.1":
+            apply(page, "1.3.1")
+        page.locator(".pm-page-list").get_by_role("button", name="Tenant billing").click()
+        frame = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
+        billing = frame.locator('[data-tenant-admin-route="billing"]')
+        expect(billing).to_be_visible(timeout=30000)
+        plan = billing.locator(":scope > dl dd").last
+        before = plan.inner_text()
+        if os.getenv("MEMSTACK_QA_NATIVE_BILLING") == "admin":
+            expect(billing.get_by_role("button", name="pro", exact=True)).to_have_count(0)
+            expect(billing.get_by_role("heading", name=re.compile("Usage|用量"))).to_be_visible()
+            return
+        try:
+            choice = "free" if before == "pro" else "pro"
+            billing.get_by_role("button", name=choice, exact=True).click()
+            expect(plan).to_have_text(choice, timeout=30000)
+        finally:
+            if plan.inner_text() != before:
+                billing.get_by_role("button", name=before, exact=True).click()
+                expect(plan).to_have_text(before, timeout=30000)

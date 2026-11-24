@@ -44,5 +44,15 @@
         "failed": "Failed"
       }
     }
+  },
+  "common": {
+    "loading": "Loading…",
+    "cancel": "Cancel",
+    "noTenant": "No tenant selected",
+    "retry": "Retry",
+    "status": {
+      "active": "Active",
+      "unknown": "Unknown"
+    }
   }
 }

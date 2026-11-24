@@ -134,9 +134,8 @@ def build_release(
         contribution["commands"] = commands + [
             command for command in contribution["commands"] if "host_operation" in command
         ]
-        contribution["pages"][0]["commands"] = [
-            command["id"] for command in contribution["commands"]
-        ]
+        for package_page in (p for p in contribution["pages"] if p["id"] == "account"):
+            package_page["commands"] = [command["id"] for command in contribution["commands"]]
         contribution["tools"][0]["input_schema"]["properties"]["plan"]["enum"] = list(plans)
         page_path = Path(contribution["ui"][0]["path"])
         page_spec = json.loads((ROOT / page_path).read_bytes())

@@ -98,7 +98,7 @@ python -m src.cli.package_kernel_owner --email "$OWNER_EMAIL" --tenant "$TENANT_
 
 Web 和 Electron 默认从当前项目已启用的发布版本读取页面贡献。一个签名归档中的 `pages` 可以把同一入口发给 `web` 和 `desktop-renderer`，也可以声明不同的目标入口。深链接由贡献声明。运行时先检查 ABI、目标和资源摘要，再在隔离 iframe 中加载资源。切换项目、版本或账户时，原页面的能力通道随之释放。
 
-包作者在归档中提供独立构建的 JavaScript IIFE 及可选 CSS。页面可通过 `window.memstack.scope()` 读取项目、语言、目标及获批操作。使用 `invoke(command)` 调用无参命令，使用 `invoke(command, payload, {signal, onEvent})` 接收进度、取消调用。桌面可通过 `device(tool, payload)` 请求设备授权范围内的操作。用户凭据、设备证明和本机路径由宿主管理。[页面 SDK 类型](../../sdk/memstack-plugin-sdk/src/pageRuntime.ts) · [Billing 共享页面源码](../../plugins/business/billing/ui/shared/AccountPage.tsx)
+包作者在归档中提供独立构建的 JavaScript IIFE 及可选 CSS。页面可通过 `window.memstack.scope()` 读取项目、语言、目标及获批操作。使用 `invoke(command)` 调用无参命令，使用 `invoke(command, payload, {signal, onEvent})` 接收进度、取消调用。桌面可通过 `device(tool, payload)` 请求设备授权范围内的操作。用户凭据、设备证明和本机路径由宿主管理。[页面 SDK 类型](../../sdk/memstack-plugin-sdk/src/pageRuntime.ts) · [Billing 共享页面源码](../../plugins/business/billing/ui/shared/WebBillingPage.tsx)
 
 独立启动默认桌面客户端使用 `make -C agi-stack run-desktop`。完整旧客户端仍可通过显式 full 配置构建，供迁移中的旧页面使用。固定宿主的浏览器回归在宿主构建后签发未知包，检查深链接、版本切换和回退。[未知包发行与宿主集成测试](../../src/tests/integration/test_package_kernel_image.py) · [六包业务页面验收](../../src/tests/integration/test_standard_project_pages.py)
 

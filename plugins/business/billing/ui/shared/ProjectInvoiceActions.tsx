@@ -1,12 +1,9 @@
 import { useState } from "react";
-import { createRoot } from "react-dom/client";
 import type {} from "../../../../../sdk/memstack-plugin-sdk/src/pageRuntime";
-import plans from "../../plans.json";
-import { TenantAccount } from "./TenantAccount";
 import { CreateInvoice } from "./CreateInvoice";
 import { InvoiceTable, type InvoiceRow } from "./InvoiceTable";
 
-function AccountPage({
+export function ProjectInvoiceActions({
   commands,
   locale,
 }: {
@@ -45,7 +42,7 @@ function AccountPage({
   }
   return (
     <>
-      <h1>{text("Plans and invoices", "套餐和发票")}</h1>
+      <h2>{text("Plans and invoices", "套餐和发票")}</h2>
       {commands
         .filter((id) => id.startsWith("quote-"))
         .map((command) => (
@@ -56,9 +53,6 @@ function AccountPage({
             <output aria-live="polite">{quotes[command]}</output>
           </p>
         ))}
-      {commands.includes("tenant-account") && (
-        <TenantAccount plans={Object.keys(plans)} canChange={commands.includes("change-plan")} locale={locale} text={text}/>
-      )}
       {commands.includes("list-invoices") && (
         <section>
           <button disabled={busy} onClick={() => void invoke("list-invoices")}>
@@ -89,9 +83,3 @@ function AccountPage({
     </>
   );
 }
-
-void window.memstack.scope().then(({ commands, locale }) => {
-  createRoot(document.getElementById("root")!).render(
-    <AccountPage commands={commands} locale={locale} />,
-  );
-});

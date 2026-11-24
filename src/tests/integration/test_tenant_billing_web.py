@@ -15,9 +15,24 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
         not os.getenv("MEMSTACK_QA_EMPTY_TENANT_OWNER"),
-        reason="requires the dedicated local empty tenant and published Billing 1.2.0",
+        reason="requires the dedicated local empty tenant and published Billing releases",
     ),
 ]
+
+
+def _check_original_billing_view(page):
+    original_ui = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
+    expect(
+        original_ui.get_by_role("heading", name=re.compile("Current Plan|当前计划"))
+    ).to_be_visible(timeout=30000)
+    expect(
+        original_ui.get_by_role("heading", name=re.compile("Billing History|账单历史|账单记录"))
+    ).to_be_visible()
+    original_ui.get_by_role("button", name=re.compile("Upgrade to Pro|升级到 Pro")).click()
+    confirmation = original_ui.get_by_role("dialog")
+    expect(confirmation).to_be_visible()
+    confirmation.get_by_role("button", name=re.compile(r"Cancel|取\s*消")).click()
+    expect(confirmation).to_have_count(0)
 
 
 def test_empty_tenant_billing_via_market_and_direct_url():
@@ -47,6 +62,12 @@ def test_empty_tenant_billing_via_market_and_direct_url():
             more(page, "Uninstall|卸载")
             expect(current).to_have_text(re.compile("Inactive|未运行"))
         apply(page, "1.2.0")
+        apply(page, "1.3.1")
+        page.goto(base + "/billing")
+        _check_original_billing_view(page)
+        details()
+        more(page, "Roll back|回退|回滚")
+        expect(current).to_have_text("1.2.0")
         page.goto(base + "/billing")
         page.reload()
         frame = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")

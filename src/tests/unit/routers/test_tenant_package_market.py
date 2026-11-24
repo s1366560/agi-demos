@@ -88,7 +88,10 @@ async def test_independent_billing_approval_before_first_project(
         "tenant",
         b["actual_digest"],
     )
-    assert [p["id"] for p in b["pages"]] == ["tenant-account"]
+    assert {(p["id"], tuple(p["targets"])) for p in b["pages"]} == {
+        ("tenant-account", ("web",)),
+        ("tenant-account", ("desktop-renderer",)),
+    }
     params = {
         **scope,
         "target": "web",
@@ -107,17 +110,17 @@ async def test_independent_billing_approval_before_first_project(
         )
 
     assert (await command(b["actual_digest"], "list-invoices")).status_code == 403
-    account = await command(b["actual_digest"], "tenant-account")
+    account = await command(b["actual_digest"], "billing-details")
     assert account.is_success, account.text
     assert account.json()["usage"]["projects"] == 0
     changed = await command(b["actual_digest"], "change-plan", {"plan": "pro"})
     assert changed.is_success, changed.text
-    assert (await command(a["actual_digest"], "tenant-account")).status_code == 409
+    assert (await command(a["actual_digest"], "billing-details")).status_code == 409
     restored = await api.post(
         BILLING + "/rollback", json={**scope, "expected_revision": b["desired_revision"]}
     )
     assert restored.json()["actual_digest"] == a["actual_digest"]
-    assert (await command(a["actual_digest"], "tenant-account")).json()["tenant"]["plan"] == "pro"
+    assert (await command(a["actual_digest"], "billing-details")).json()["tenant"]["plan"] == "pro"
     await test_db.execute(
         update(UserTenant)
         .where(UserTenant.user_id == test_user.id, UserTenant.tenant_id == test_tenant_db.id)
@@ -125,7 +128,7 @@ async def test_independent_billing_approval_before_first_project(
     )
     await test_db.commit()
     assert (await api.get(BILLING, params=scope)).is_success
-    assert (await command(a["actual_digest"], "tenant-account")).status_code == 403
+    assert (await command(a["actual_digest"], "billing-details")).status_code == 403
     assert (
         await api.post(
             BILLING + "/uninstall",

@@ -1,0 +1,9 @@
+@import 'tailwindcss' source(none);
+@source '../web/BillingView.tsx';
+@custom-variant dark (&:where(.dark, .dark *));
+@theme {
+  --color-primary: #262626;
+  --color-primary-dark: #171717;
+  --color-surface-dark: #171717;
+}
+body { padding: 1.5rem; }

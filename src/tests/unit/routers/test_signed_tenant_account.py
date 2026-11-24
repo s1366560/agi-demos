@@ -69,6 +69,9 @@ async def test_project_package_reads_real_account_and_owner_changes_plan(
     assert account.is_success, account.text
     assert account.json()["tenant"]["plan"] == "free"
     assert account.json()["usage"]["projects"] == 1
+    details = await invoke("billing-details", {})
+    assert details.json()["membership_role"] == "owner"
+    assert details.json()["invoices"] == []
     changed = await invoke("change-plan", {"plan": "pro"})
     assert changed.is_success, changed.text
     assert (await invoke("tenant-account", {})).json()["tenant"]["storage_limit"] == 100 * 1024**3
@@ -81,5 +84,6 @@ async def test_project_package_reads_real_account_and_owner_changes_plan(
         .values(role="admin")
     )
     await test_db.commit()
+    assert (await invoke("billing-details", {})).json()["membership_role"] == "admin"
     assert (await invoke("change-plan", {"plan": "free"})).status_code == 403
     assert (await invoke("tenant-account", {})).json()["tenant"]["plan"] == "pro"

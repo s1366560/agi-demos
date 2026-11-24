@@ -7,6 +7,26 @@ import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 import { buildAgentWorkspacePath } from '../../utils/agentWorkspacePath';
 
+export const TenantPackageRouteFallback: FC = () => {
+  const { tenantId } = useParams();
+  const location = useLocation();
+  const active = useTenantStore((state) => state.currentTenant?.id);
+  const fallback = useAuthStore((state) => state.user?.tenant_id);
+  const tenant = tenantId || active || fallback;
+  if (!tenant) return <Navigate replace to="/tenant/plugins" />;
+  const base = '/tenant/' + encodeURIComponent(tenant);
+  return (
+    <Navigate
+      replace
+      to={
+        tenantId
+          ? base + '/plugins'
+          : base + location.pathname.slice('/tenant'.length) + location.search
+      }
+    />
+  );
+};
+
 export const ProjectChannelsRedirect: FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const currentTenant = useTenantStore((state) => state.currentTenant);

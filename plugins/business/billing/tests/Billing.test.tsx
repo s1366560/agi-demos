@@ -1,29 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Billing } from '../ui/web/Billing';
-import { billingService } from '../ui/web/billingService';
-import { useTenantStore } from '@/stores/tenant';
+import { BillingView } from '../ui/web/BillingView';
+import type { BillingService } from '../ui/web/billingTypes';
 import { fireEvent, render, screen, waitFor } from '@/test/utils';
 
 const confirmActionMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/stores/tenant');
-vi.mock('../ui/web/billingService');
-vi.mock('@/utils/confirmAction', () => ({
+const billingService = {
+  getBillingInfo: vi.fn<BillingService['getBillingInfo']>(),
+  upgradePlan: vi.fn<BillingService['upgradePlan']>(),
+};
+vi.mock('../../../../sdk/memstack-plugin-sdk/ui/confirmAction', () => ({
   confirmAction: confirmActionMock,
 }));
-
-const tenant = {
-  id: 't1',
-  name: 'Test Tenant',
-  description: 'Memory org',
-  owner_id: 'owner-1',
-  plan: 'free',
-  max_projects: 10,
-  max_users: 25,
-  max_storage: 10 * 1024 * 1024 * 1024,
-  created_at: '2026-01-01T00:00:00',
-};
 
 const billingInfo = {
   tenant: {
@@ -45,9 +34,6 @@ describe('Billing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     confirmActionMock.mockResolvedValue(true);
-    vi.mocked(useTenantStore).mockReturnValue({
-      currentTenant: tenant,
-    } as any);
     vi.mocked(billingService.getBillingInfo).mockResolvedValue(billingInfo);
     vi.mocked(billingService.upgradePlan).mockResolvedValue({
       message: 'Plan upgraded successfully',
@@ -61,7 +47,7 @@ describe('Billing', () => {
   });
 
   it('upgrades to the next plan through the billing service', async () => {
-    render(<Billing />);
+    render(<BillingView tenantId="t1" billingService={billingService} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Pro' }));
 
@@ -72,7 +58,7 @@ describe('Billing', () => {
   });
 
   it('upgrades to enterprise from the enterprise card', async () => {
-    render(<Billing />);
+    render(<BillingView tenantId="t1" billingService={billingService} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Enterprise' }));
 
@@ -82,7 +68,7 @@ describe('Billing', () => {
   });
 
   it('does not expose an unavailable sales contact action', async () => {
-    render(<Billing />);
+    render(<BillingView tenantId="t1" billingService={billingService} />);
 
     await screen.findByRole('button', { name: 'Upgrade to Pro' });
 
@@ -99,7 +85,7 @@ describe('Billing', () => {
       tenant: { ...billingInfo.tenant, projects_limit: 17, users_limit: 9 },
       usage: { ...billingInfo.usage, storage: 59 },
     });
-    render(<Billing />);
+    render(<BillingView tenantId="t1" billingService={billingService} />);
 
     expect(await screen.findByText('59 B')).toBeInTheDocument();
     expect(screen.getByText('/ 17')).toBeInTheDocument();
@@ -108,7 +94,7 @@ describe('Billing', () => {
   });
 
   it('does not invent quotas when an older API omits them', async () => {
-    render(<Billing />);
+    render(<BillingView tenantId="t1" billingService={billingService} />);
 
     expect(await screen.findAllByText('/ common.status.unknown')).toHaveLength(2);
     expect(screen.queryByText('/ 20')).not.toBeInTheDocument();

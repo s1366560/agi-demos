@@ -47,5 +47,15 @@
         "unavailable": "不可用"
       }
     }
+  },
+  "common": {
+    "loading": "加载中…",
+    "cancel": "取消",
+    "noTenant": "未选择租户",
+    "retry": "重试",
+    "status": {
+      "active": "活跃",
+      "unknown": "未知"
+    }
   }
 }

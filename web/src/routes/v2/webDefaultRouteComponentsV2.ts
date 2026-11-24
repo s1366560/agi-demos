@@ -90,7 +90,6 @@ export const ProjectSettings = lazy(() =>
 
 export * from '@business/agent/ui/web/routes';
 export * from '@business/automation/ui/web/routes';
-export * from '@business/billing/ui/web/routes';
 export * from '@business/environments/ui/web/routes';
 export * from '@business/knowledge/ui/web/routes';
 export * from '@business/workspace/ui/web/routes';

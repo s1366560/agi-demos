@@ -3,8 +3,6 @@ import agentEn from '@business/agent/ui/web/locales/en-US.json';
 import agentZh from '@business/agent/ui/web/locales/zh-CN.json';
 import automationEn from '@business/automation/ui/web/locales/en-US.json';
 import automationZh from '@business/automation/ui/web/locales/zh-CN.json';
-import billingEn from '@business/billing/ui/web/locales/en-US.json';
-import billingZh from '@business/billing/ui/web/locales/zh-CN.json';
 import environmentsEn from '@business/environments/ui/web/locales/en-US.json';
 import environmentsZh from '@business/environments/ui/web/locales/zh-CN.json';
 import knowledgeEn from '@business/knowledge/ui/web/locales/en-US.json';
@@ -33,7 +31,6 @@ function mergeResources(...sources: ResourceLanguage[]): ResourceLanguage {
 export const enUS = mergeResources(
   agentEn,
   automationEn,
-  billingEn,
   environmentsEn,
   knowledgeEn,
   workspaceEn,
@@ -43,7 +40,6 @@ export const enUS = mergeResources(
 export const zhCN = mergeResources(
   agentZh,
   automationZh,
-  billingZh,
   environmentsZh,
   knowledgeZh,
   workspaceZh,

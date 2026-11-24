@@ -2,9 +2,6 @@ import type { DesktopRuntimeConfig } from '../../types';
 import { createDesktopTenantAuditClientV2, type DesktopTenantAuditOperationsV2 } from '../../plugins/desktopTenantAuditAuthorityModuleV2';
 import { createTenantAuditController } from './tenantAuditController';
 import type { TenantAuditRouteBinding } from './tenantAuditRouteModule';
-import { createDesktopTenantBillingClientV2, type DesktopTenantBillingOperationsV2 } from '../../plugins/desktopTenantBillingAuthorityModuleV2';
-import { createTenantBillingController } from '@business/billing/ui/desktop/tenant-admin/tenantBillingController';
-import type { TenantBillingRouteBinding } from '@business/billing/ui/desktop/tenant-admin/tenantBillingRouteModule';
 import { createDesktopTenantGovernanceClientV2, type DesktopTenantGovernanceOperationsV2 } from '../../plugins/desktopTenantGovernanceAuthorityModuleV2';
 import { createTenantGovernanceController } from './tenantGovernanceController';
 import type { TenantGovernanceRouteBinding } from './tenantGovernanceRouteModule';
@@ -23,21 +20,6 @@ export function createTenantGovernanceRouteBindingForRuntime(
     scope,
     controller: createTenantGovernanceController({
       client: createDesktopTenantGovernanceClientV2(operations, config),
-      initialScope: scope,
-    }),
-  });
-}
-
-export function createTenantBillingRouteBindingForRuntime(
-  config: DesktopRuntimeConfig,
-  context: TenantAdminRouteContext,
-  operations: DesktopTenantBillingOperationsV2,
-): TenantBillingRouteBinding {
-  const scope = tenantScope(config, context);
-  return Object.freeze({
-    scope,
-    controller: createTenantBillingController({
-      client: createDesktopTenantBillingClientV2(operations, config),
       initialScope: scope,
     }),
   });

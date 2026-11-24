@@ -10,7 +10,7 @@ import {
   nativeKnowledgeCommunityZhCN,
 } from './features/project-knowledge/locales/nativeKnowledgeCommunityMessages';
 import { projectGraphEnUS, projectGraphZhCN } from './features/project-knowledge/locales/projectGraphMessages';
-import { type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import {
   I18nContext,
@@ -8921,11 +8921,7 @@ function readStoredLocale(): string | null {
   }
 }
 
-export function useI18n(): I18nContextValue {
-  const context = useContext(I18nContext);
-  if (!context) throw new Error('useI18n must be used inside I18nProvider');
-  return context;
-}
+export { useI18n } from './i18nContext';
 
 function interpolate(value: string, values?: TranslationValues): string {
   if (!values) return value;

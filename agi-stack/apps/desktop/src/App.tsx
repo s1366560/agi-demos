@@ -197,7 +197,6 @@ import { createDesktopTenantAcpOperationsV2 } from './plugins/desktopTenantAcpAu
 import { createDesktopTenantDecisionRecordsOperationsV2 } from './plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import { createDesktopTenantSettingsOperationsV2 } from './plugins/desktopTenantSettingsAuthorityModuleV2';
 import { createDesktopTenantWebhooksOperationsV2 } from './plugins/desktopTenantWebhooksAuthorityModuleV2';
-import { createDesktopTenantBillingOperationsV2 } from './plugins/desktopTenantBillingAuthorityModuleV2';
 import { createDesktopTenantAuditOperationsV2 } from './plugins/desktopTenantAuditAuthorityModuleV2';
 import { createDesktopTenantGovernanceOperationsV2 } from './plugins/desktopTenantGovernanceAuthorityModuleV2';
 import { createDesktopTenantTrustOperationsV2 } from './plugins/desktopTenantTrustAuthorityModuleV2';
@@ -1347,13 +1346,6 @@ export function App() {
       ),
     [],
   );
-  const desktopTenantBillingOperationsV2 = useMemo(
-    () =>
-      createDesktopTenantBillingOperationsV2(
-        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
-      ),
-    [],
-  );
   const desktopTenantAuditOperationsV2 = useMemo(
     () =>
       createDesktopTenantAuditOperationsV2(
@@ -1831,7 +1823,6 @@ export function App() {
       tenantDecisionRecordsOperationsV2: desktopTenantDecisionRecordsOperationsV2,
       tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
       tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
-      tenantBillingOperationsV2: desktopTenantBillingOperationsV2,
       tenantAuditOperationsV2: desktopTenantAuditOperationsV2,
       tenantGovernanceOperationsV2: desktopTenantGovernanceOperationsV2,
       tenantTrustOperationsV2: desktopTenantTrustOperationsV2,

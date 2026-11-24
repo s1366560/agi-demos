@@ -5,22 +5,27 @@ import { useTranslation } from 'react-i18next';
 import { Empty, Pagination } from 'antd';
 import { Check, CreditCard, Download, Receipt } from 'lucide-react';
 
-import { formatStorage } from '@/hooks/useDateFormatter';
-import { billingService } from './billingService';
-import { useTenantStore } from '@/stores/tenant';
-import { confirmAction } from '@/utils/confirmAction';
-import { formatDateTime } from '@/utils/date';
-import { logger } from '@/utils/logger';
+import { formatStorage } from '../../../../../sdk/memstack-plugin-sdk/ui/formatStorage';
 
-import { LoadingState } from '@/components/common/PageLoadingState';
 
-import type { BillingInfo, UpgradePlanRequest } from './billingService';
+import { confirmAction } from '../../../../../sdk/memstack-plugin-sdk/ui/confirmAction';
+import { formatDateTime } from '../../../../../sdk/memstack-plugin-sdk/ui/localDate';
+
+
+import { LoadingState } from '../../../../../sdk/memstack-plugin-sdk/ui/LoadingState';
+
+import type { BillingInfo, BillingService, UpgradePlanRequest } from './billingTypes';
 
 const INVOICES_PER_PAGE = 10;
 
-export const Billing: FC = memo(() => {
+type BillingViewProps = {
+  tenantId: string | null;
+  billingService: BillingService;
+  canUpgrade?: boolean;
+};
+
+export const BillingView: FC<BillingViewProps> = memo(({ tenantId, billingService, canUpgrade = true }) => {
   const { t } = useTranslation();
-  const { currentTenant } = useTenantStore();
   const [billingInfo, setBillingInfo] = useState<BillingInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -32,25 +37,26 @@ export const Billing: FC = memo(() => {
   } | null>(null);
 
   const fetchBillingInfo = useCallback(async () => {
-    if (currentTenant) {
+    if (tenantId) {
       setLoading(true);
       setLoadError(false);
       try {
-        const data = await billingService.getBillingInfo(currentTenant.id);
+        const data = await billingService.getBillingInfo(tenantId);
         setBillingInfo(data);
       } catch (error) {
-        logger.error('Failed to fetch billing info:', error);
+        console.error('Failed to fetch billing info:', error);
         setLoadError(true);
       } finally {
         setLoading(false);
       }
     }
-  }, [currentTenant]);
+  }, [tenantId, billingService]);
 
   useEffect(() => {
     void fetchBillingInfo();
   }, [fetchBillingInfo]);
 
+  const mayChangePlan = canUpgrade && billingInfo?.membership_role !== 'admin';
   const currentPlan = billingInfo?.tenant.plan ?? '';
   const getNextPlan = useCallback((plan: string): UpgradePlanRequest['plan'] | null => {
     if (plan === 'enterprise') return null;
@@ -65,7 +71,7 @@ export const Billing: FC = memo(() => {
 
   const handleUpgrade = useCallback(
     async (plan: UpgradePlanRequest['plan']) => {
-      if (!currentTenant) return;
+      if (!tenantId || !mayChangePlan) return;
 
       const confirmed = await confirmAction({
         title: t('tenant.billing.confirm_upgrade_title'),
@@ -78,20 +84,20 @@ export const Billing: FC = memo(() => {
       setActionLoading(plan);
       setActionMessage(null);
       try {
-        const response = await billingService.upgradePlan(currentTenant.id, plan);
+        const response = await billingService.upgradePlan(tenantId, plan);
         setActionMessage({
           type: 'success',
           text: response.message || t('tenant.billing.upgrade_success'),
         });
         await fetchBillingInfo();
       } catch (error) {
-        logger.error('Failed to upgrade plan:', error);
+        console.error('Failed to upgrade plan:', error);
         setActionMessage({ type: 'error', text: t('tenant.billing.upgrade_error') });
       } finally {
         setActionLoading(null);
       }
     },
-    [currentTenant, fetchBillingInfo, formatPlanName, t]
+    [mayChangePlan, billingService, tenantId, fetchBillingInfo, formatPlanName, t]
   );
 
   // Format date string
@@ -161,7 +167,7 @@ export const Billing: FC = memo(() => {
     };
   }, [billingInfo]);
 
-  if (!currentTenant) {
+  if (!tenantId) {
     return (
       <div className="flex items-center justify-center p-16">
         <Empty description={t('common.noTenant')} />
@@ -260,7 +266,7 @@ export const Billing: FC = memo(() => {
             <div className="flex gap-3">
               <button
                 className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                disabled={!nextPlan || actionLoading !== null}
+                disabled={!mayChangePlan || !nextPlan || actionLoading !== null}
                 type="button"
                 onClick={() => {
                   if (nextPlan) {
@@ -388,7 +394,7 @@ export const Billing: FC = memo(() => {
           </div>
           <button
             className="w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 font-bold py-3 rounded-lg transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
-            disabled={currentPlan === 'enterprise' || actionLoading !== null}
+            disabled={!mayChangePlan || currentPlan === 'enterprise' || actionLoading !== null}
             type="button"
             onClick={() => {
               void handleUpgrade('enterprise');
@@ -511,4 +517,4 @@ export const Billing: FC = memo(() => {
     </div>
   );
 });
-Billing.displayName = 'Billing';
+BillingView.displayName = 'BillingView';

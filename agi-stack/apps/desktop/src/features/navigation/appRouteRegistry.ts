@@ -156,7 +156,7 @@ import { createTenantProjectsRouteModuleLoader } from '../tenant/tenantProjectsR
 import { createTenantTasksRouteModuleLoader } from '@business/workspace/ui/desktop/tenant/tenantTasksRouteModule';
 import { createTenantWorkspacesRouteModuleLoader } from '@business/workspace/ui/desktop/tenant/tenantWorkspacesRouteModule';
 import { createTenantGovernanceRouteModuleLoader } from '../tenant-admin/tenantGovernanceRouteModule';
-import { createTenantBillingRouteModuleLoader } from '@business/billing/ui/desktop/tenant-admin/tenantBillingRouteModule';
+import { tenantPackageRoute } from '../../packageHost/tenantPackageRoute';
 import { createTenantAuditRouteModuleLoader } from '../tenant-admin/tenantAuditRouteModule';
 import { createTenantTrustRouteModuleLoader } from '../tenant-admin/tenantTrustRouteModule';
 import { createTenantAcpRouteModuleLoader } from '../tenant-admin/tenantAcpRouteModule';
@@ -170,7 +170,6 @@ import { createTenantSettingsRouteModuleLoader } from '../tenant-admin/tenantSet
 import { createTenantWebhooksRouteModuleLoader } from '@business/automation/ui/desktop/tenant-admin/tenantWebhooksRouteModule';
 import {
   createTenantAuditRouteBindingForRuntime,
-  createTenantBillingRouteBindingForRuntime,
   createTenantGovernanceRouteBindingForRuntime,
   createTenantTrustRouteBindingForRuntime,
 } from '../tenant-admin/tenantAdminRouteRuntime';
@@ -377,7 +376,6 @@ export type AppRouteRegistryRefs = {
   tenantOrganizationSettingsOperationsV2: import('../../plugins/desktopTenantOrganizationSettingsAuthorityModuleV2').DesktopTenantOrganizationSettingsOperationsV2;
   tenantSettingsOperationsV2: import('../../plugins/desktopTenantSettingsAuthorityModuleV2').DesktopTenantSettingsOperationsV2;
   tenantWebhooksOperationsV2: import('../../plugins/desktopTenantWebhooksAuthorityModuleV2').DesktopTenantWebhooksOperationsV2;
-  tenantBillingOperationsV2: import('../../plugins/desktopTenantBillingAuthorityModuleV2').DesktopTenantBillingOperationsV2;
   tenantAuditOperationsV2: import('../../plugins/desktopTenantAuditAuthorityModuleV2').DesktopTenantAuditOperationsV2;
   tenantGovernanceOperationsV2: import('../../plugins/desktopTenantGovernanceAuthorityModuleV2').DesktopTenantGovernanceOperationsV2;
   tenantTrustOperationsV2: import('../../plugins/desktopTenantTrustAuthorityModuleV2').DesktopTenantTrustOperationsV2;
@@ -500,7 +498,6 @@ export type AppTenantGovernanceRouteRegistryRefs = Pick<
   | 'tenantDecisionRecordsOperationsV2'
   | 'tenantOrganizationSettingsOperationsV2'
   | 'tenantSettingsOperationsV2'
-  | 'tenantBillingOperationsV2'
   | 'tenantAuditOperationsV2'
   | 'tenantGovernanceOperationsV2'
   | 'tenantTrustOperationsV2'
@@ -1380,7 +1377,7 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
 export function createAppTenantGovernanceRouteRegistry(
   refs: AppTenantGovernanceRouteRegistryRefs,
 ) {
-  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2, tenantDecisionRecordsOperationsV2, tenantOrganizationSettingsOperationsV2, tenantSettingsOperationsV2, tenantBillingOperationsV2, tenantAuditOperationsV2, tenantGovernanceOperationsV2, tenantTrustOperationsV2 } = refs;
+  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2, tenantDecisionRecordsOperationsV2, tenantOrganizationSettingsOperationsV2, tenantSettingsOperationsV2, tenantAuditOperationsV2, tenantGovernanceOperationsV2, tenantTrustOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_USERS_ROUTE_ID]: createTenantGovernanceRouteModuleLoader({
@@ -1426,14 +1423,7 @@ export function createAppTenantGovernanceRouteRegistry(
           );
         },
       }),
-      [TENANT_BILLING_ROUTE_ID]: createTenantBillingRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantBillingRouteBindingForRuntime(
-            configRef.current,
-            context,
-            tenantBillingOperationsV2,
-          ),
-      }),
+      [TENANT_BILLING_ROUTE_ID]: tenantPackageRoute(TENANT_BILLING_ROUTE_ID, 'billing'),
       [TENANT_ORGANIZATION_SETTINGS_ROUTE_ID]: createTenantOrganizationSettingsRouteModuleLoader({
         createBinding: (context) =>
           createTenantOrganizationSettingsRouteBindingForRuntime(

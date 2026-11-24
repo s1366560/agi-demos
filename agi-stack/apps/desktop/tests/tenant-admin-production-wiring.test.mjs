@@ -97,11 +97,9 @@ test('tenant governance routes have real production route registry bindings', ()
   }
 
   assert.match(registrySource, /createTenantGovernanceRouteModuleLoader/u);
-  assert.match(registrySource, /createTenantBillingRouteModuleLoader/u);
   assert.match(registrySource, /createTenantAuditRouteModuleLoader/u);
   assert.match(registrySource, /createTenantTrustRouteModuleLoader/u);
   assert.match(registrySource, /createTenantGovernanceRouteBindingForRuntime/u);
-  assert.match(registrySource, /createTenantBillingRouteBindingForRuntime/u);
   assert.match(registrySource, /createTenantAuditRouteBindingForRuntime/u);
   assert.match(registrySource, /createTenantTrustRouteBindingForRuntime/u);
   assert.doesNotMatch(

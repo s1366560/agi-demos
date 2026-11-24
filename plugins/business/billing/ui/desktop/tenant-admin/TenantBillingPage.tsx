@@ -1,4 +1,4 @@
-import { useI18n } from '@desktop/i18n';
+import { useI18n } from '@desktop/i18nContext';
 import type { TenantBillingController } from './tenantBillingController';
 import type { TenantBillingPlan } from './tenantBillingClient';
 import type { TenantBillingViewModel } from './tenantBillingPresentationModel';

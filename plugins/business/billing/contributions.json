@@ -90,6 +90,17 @@
         "app.billing.plan.write"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "billing-details",
+      "host_operation": "app.billing.account.read",
+      "payload": {
+        "full_history": true
+      },
+      "permissions": [
+        "app.billing.account.read"
+      ],
+      "accepts_input": false
     }
   ],
   "ui": [
@@ -114,21 +125,54 @@
         "/billing"
       ],
       "targets": [
-        "web",
-        "desktop-renderer"
+        "web"
       ],
       "entry": {
-        "path": "ui/account.js",
-        "digest": "sha256:7bfc950f17b52c42b042856aebcafe452b2790c2296ecff94e7c98004dc7c466"
+        "path": "ui/web-billing.js",
+        "digest": "sha256:53489796bf8a29133b797184542251c116b3247719fb666dbd5da27d499f9984"
       },
       "commands": [
         "quote-free",
         "quote-pro",
         "quote-enterprise",
         "tenant-account",
-        "change-plan"
+        "change-plan",
+        "billing-details"
       ],
-      "device_tools": []
+      "device_tools": [],
+      "workbench": true,
+      "style": {
+        "path": "ui/web-billing.css",
+        "digest": "sha256:f65b452421a1914d5d870dff29882e0f033e536103d9e4b26b3ded8c1945cd13"
+      }
+    },
+    {
+      "id": "account",
+      "title": "Plans and invoices",
+      "routes": [
+        "/billing"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/desktop-billing.js",
+        "digest": "sha256:093cdc0831e117b8ab9d7031c287939fcef331e35b35b4ac48db14d68ed3b342"
+      },
+      "commands": [
+        "quote-free",
+        "quote-pro",
+        "quote-enterprise",
+        "tenant-account",
+        "change-plan",
+        "billing-details"
+      ],
+      "device_tools": [],
+      "workbench": true,
+      "style": {
+        "path": "ui/desktop-billing.css",
+        "digest": "sha256:e5e8a978770bf7ffc632b5e5087a3f5b4e96573f6d96ecc5cadf5a67fc7c2004"
+      }
     },
     {
       "id": "tenant-account",
@@ -137,19 +181,48 @@
         "/tenant/:tenantId/billing"
       ],
       "targets": [
-        "web",
-        "desktop-renderer"
+        "web"
       ],
       "entry": {
-        "path": "ui/account.js",
-        "digest": "sha256:7bfc950f17b52c42b042856aebcafe452b2790c2296ecff94e7c98004dc7c466"
+        "path": "ui/web-billing.js",
+        "digest": "sha256:53489796bf8a29133b797184542251c116b3247719fb666dbd5da27d499f9984"
       },
       "commands": [
-        "tenant-account",
+        "billing-details",
         "change-plan"
       ],
       "device_tools": [],
-      "scope": "tenant"
+      "scope": "tenant",
+      "workbench": true,
+      "style": {
+        "path": "ui/web-billing.css",
+        "digest": "sha256:f65b452421a1914d5d870dff29882e0f033e536103d9e4b26b3ded8c1945cd13"
+      }
+    },
+    {
+      "id": "tenant-account",
+      "title": "Tenant billing",
+      "routes": [
+        "/tenant/:tenantId/billing"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/desktop-billing.js",
+        "digest": "sha256:093cdc0831e117b8ab9d7031c287939fcef331e35b35b4ac48db14d68ed3b342"
+      },
+      "commands": [
+        "billing-details",
+        "change-plan"
+      ],
+      "device_tools": [],
+      "scope": "tenant",
+      "workbench": true,
+      "style": {
+        "path": "ui/desktop-billing.css",
+        "digest": "sha256:e5e8a978770bf7ffc632b5e5087a3f5b4e96573f6d96ecc5cadf5a67fc7c2004"
+      }
     }
   ]
 }

@@ -14,7 +14,6 @@ import {
   Analytics,
   Events,
   Webhooks,
-  Billing,
   TenantSettings,
   WorkflowPatterns,
   TaskDashboard,
@@ -68,7 +67,7 @@ import {
   GenomeDetail,
 } from './webDefaultRouteComponentsV2';
 import { WebRoutePageLoaderV2 as PageLoader } from './WebRoutePageLoaderV2';
-import { LegacyTenantSingleSegmentRedirect } from './webRouteRedirectsV2';
+import { LegacyTenantSingleSegmentRedirect, TenantPackageRouteFallback } from './webRouteRedirectsV2';
 
 export function createTenantGenericRouteElementsV2(): ReactNode {
   return (
@@ -192,13 +191,9 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-billing' }}
+        handle={{ pluginFeature: 'tenant-billing', signedPage: true }}
         path="billing"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <Billing />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-settings' }}
