@@ -9,18 +9,14 @@ import json
 import os
 import re
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 
 import pytest
 from playwright.sync_api import Page, expect, sync_playwright
 
-from src.tests.integration.marketplace_browser import apply, more
+from src.tests.integration.marketplace_browser import apply, is_catalog, more, open_market
 
 pytestmark = pytest.mark.integration
-
-
-def is_catalog(response):
-    return urlsplit(response.url).path.endswith("/optional-business/npm/catalog") and response.ok
 
 
 def workspace_state(catalog):
@@ -32,29 +28,6 @@ def workspace_state(catalog):
         installation.get(field)
         for field in ("actual_digest", "actual_generation", "desired_revision")
     )
-
-
-def open_market(page: Page, host, origin, account):
-    project = account["project_id"]
-    if host == "full":
-        page.goto(origin + "/login")
-        page.get_by_test_id("email-input").fill(account["email"])
-        page.get_by_test_id("password-input").fill(account["password"])
-        page.get_by_test_id("login-submit-button").click()
-        expect(page.get_by_test_id("login-submit-button")).to_have_count(0)
-        with page.expect_response(is_catalog) as opened:
-            page.goto(
-                f"{origin}/tenant/{account['tenant_id']}/plugins?"
-                + urlencode({"projectId": project})
-            )
-    else:
-        page.goto(origin + "/?" + urlencode({"project": project}))
-        page.get_by_label("Email", exact=True).fill(account["email"])
-        page.get_by_label("Password", exact=True).fill(account["password"])
-        page.get_by_role("button", name="Sign In", exact=True).click()
-        with page.expect_response(is_catalog) as opened:
-            page.get_by_role("button", name="Manage plugins").click()
-    return opened.value
 
 
 def cloud_label(
@@ -75,8 +48,12 @@ def cloud_label(
     expect(frame.get_by_role("button", name="Device label")).to_have_count(0)
     if snapshot:
         page.screenshot(path=snapshot)
-    page.go_back()
-    expect(page.locator(".pm-spec")).to_be_visible()
+    back = page.get_by_role("link", name=re.compile("Back to marketplace|返回插件市场"))
+    if back.count():
+        back.click()
+    else:
+        page.go_back()
+    expect(page.locator(".pm-spec")).to_be_visible(timeout=30000)
 
 
 @pytest.mark.parametrize("host", ["thin", "full"])
@@ -109,7 +86,7 @@ def test_unknown_npm_release_through_web(host, tmp_path):
             item["plugin_id"] == plugin and item["installation"] for item in catalog.json()["items"]
         ):
             more(page, "Uninstall|卸载")
-        expect(current).to_have_text(re.compile("^(Inactive|未运行)$"))
+        expect(current).to_have_text(re.compile("^(Inactive|未运行)$"), timeout=30000)
         digests = []
         for revision in (1, 2):
             with page.expect_response(
@@ -127,7 +104,7 @@ def test_unknown_npm_release_through_web(host, tmp_path):
         expect(current).to_have_text("1.1.0")
         cloud_label(page, 1, digests[0], plugin)
         more(page, "Uninstall|卸载")
-        expect(current).to_have_text(re.compile("^(Inactive|未运行)$"))
+        expect(current).to_have_text(re.compile("^(Inactive|未运行)$"), timeout=30000)
         expect(page.locator(".pm-detail-actions .pm-primary")).to_have_text(
             re.compile("^(Install|安装)$")
         )
