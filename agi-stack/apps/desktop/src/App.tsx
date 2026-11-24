@@ -141,8 +141,6 @@ import { createDesktopProjectMaintenanceOperationsV2 } from './plugins/desktopPr
 import { createDesktopProjectSettingsOperationsV2 } from './plugins/desktopProjectSettingsAuthorityModuleV2';
 import { createDesktopProjectChannelsOperationsV2 } from './plugins/desktopProjectChannelsAuthorityModuleV2';
 import { createDesktopProjectSupportOperationsV2 } from './plugins/desktopProjectSupportAuthorityModuleV2';
-import { createDesktopProjectPlaybooksReadOperationsV2 } from './plugins/desktopProjectPlaybooksReadAuthorityModuleV2';
-import { createDesktopProjectPlaybooksEventsOperationsV2 } from './plugins/desktopProjectPlaybooksEventsAuthorityModuleV2';
 import { createDesktopBackendStoresOperationsV2 } from './plugins/desktopBackendStoresAuthorityModuleV2';
 import { createDesktopDeadLetterQueueOperationsV2 } from './plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import { createDesktopInstanceTemplatesOperationsV2 } from './plugins/desktopInstanceTemplatesAuthorityModuleV2';
@@ -1137,20 +1135,6 @@ export function App() {
       ),
     [],
   );
-  const desktopProjectPlaybooksReadOperationsV2 = useMemo(
-    () =>
-      createDesktopProjectPlaybooksReadOperationsV2(
-        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
-      ),
-    [],
-  );
-  const desktopProjectPlaybooksEventsOperationsV2 = useMemo(
-    () =>
-      createDesktopProjectPlaybooksEventsOperationsV2(
-        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
-      ),
-    [],
-  );
   const desktopBackendStoresOperationsV2 = useMemo(
     () =>
       createDesktopBackendStoresOperationsV2(
@@ -1801,8 +1785,6 @@ export function App() {
       projectSettingsOperationsV2: desktopProjectSettingsOperationsV2,
       projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
       projectSupportOperationsV2: desktopProjectSupportOperationsV2,
-      projectPlaybooksReadOperationsV2: desktopProjectPlaybooksReadOperationsV2,
-      projectPlaybooksEventsOperationsV2: desktopProjectPlaybooksEventsOperationsV2,
       backendStoresOperationsV2: desktopBackendStoresOperationsV2,
       deadLetterQueueOperationsV2: desktopDeadLetterQueueOperationsV2,
       instanceTemplatesOperationsV2: desktopInstanceTemplatesOperationsV2,
@@ -1868,8 +1850,6 @@ export function App() {
       desktopProjectSettingsOperationsV2,
       desktopProjectChannelsOperationsV2,
       desktopProjectSupportOperationsV2,
-      desktopProjectPlaybooksReadOperationsV2,
-      desktopProjectPlaybooksEventsOperationsV2,
       desktopBackendStoresOperationsV2,
       desktopDeadLetterQueueOperationsV2,
       desktopInstanceTemplatesOperationsV2,

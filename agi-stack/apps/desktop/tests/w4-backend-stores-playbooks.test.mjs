@@ -76,10 +76,6 @@ const playbooksRouteSource = readFileSync(
   new URL('../../../../plugins/business/automation/ui/desktop/project-playbooks/projectPlaybooksRouteModule.tsx', import.meta.url),
   'utf8',
 );
-const appRouteRegistrySource = readFileSync(
-  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
-  'utf8',
-);
 const localConfig = Object.freeze({
   ...cloudConfig,
   apiBaseUrl: 'http://127.0.0.1:43117',
@@ -2116,10 +2112,7 @@ test('Project Playbooks route binds reflection refresh and native Cloud socket c
   assert.match(playbooksRouteSource, /binding\.events\.subscribe\(binding\.scope/u);
   assert.match(playbooksRouteSource, /binding\.controller\.retry\(\)/u);
   assert.match(playbooksRouteSource, /unsubscribe\(\)[\s\S]*binding\.controller\.stop\(\)/u);
-  assert.match(
-    appRouteRegistrySource,
-    /createDesktopProjectPlaybooksEventSourceV2\([\s\S]*projectPlaybooksEventsOperationsV2/u,
-  );
+
 });
 
 test('Project Playbooks uses Cloud authority from Local-online through the vault broker', async () => {

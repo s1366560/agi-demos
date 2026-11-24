@@ -24,7 +24,7 @@ let tenantState: any;
 let authState: any;
 let workspaceState: any;
 
-vi.mock('../../../components/agent/AgentChatContent', () => ({
+vi.mock('@business/agent/ui/web/chat/AgentChatContent', () => ({
   AgentChatContent: (props: unknown) => {
     agentChatContentProps(props);
     return <div data-testid="agent-chat-content" />;

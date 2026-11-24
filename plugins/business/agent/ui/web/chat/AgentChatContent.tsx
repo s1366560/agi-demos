@@ -76,39 +76,39 @@ import { AppLauncher } from '@/components/mcp-app/AppLauncher';
 import {
   getWebOperationAvailabilityV2,
   subscribeWebOperationAvailabilityV2,
-} from '../../plugins/webOperationAdmissionV2';
+} from '@/plugins/webOperationAdmissionV2';
 
 // Import design components
-import { formatDateTime } from '../../utils/date';
+import { formatDateTime } from '@/utils/date';
 import {
   downloadConversationMarkdown,
   downloadConversationPdf,
-} from '../../utils/exportConversation';
-import { ExecutionTargetBadge } from '../execution-target/ExecutionTargetBadge';
-import { WebComposerExecutionPlacement } from '../execution-target/WebComposerExecutionPlacement';
-import { webComposerPlacement } from '../execution-target/webExecutionPlacement';
-import { PluginSlotOutlet } from '../plugins/PluginSlotOutlet';
-import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
+} from '@/utils/exportConversation';
+import { ExecutionTargetBadge } from '@/components/execution-target/ExecutionTargetBadge';
+import { WebComposerExecutionPlacement } from '@/components/execution-target/WebComposerExecutionPlacement';
+import { webComposerPlacement } from '@/components/execution-target/webExecutionPlacement';
+import { PluginSlotOutlet } from '@/components/plugins/PluginSlotOutlet';
+import { WorkspaceStatusBar } from '@/components/workspace/WorkspaceStatusBar';
 
-import { deriveAgentChatTenantId } from './agentChatScope';
-import { ChatSearch } from './chat/ChatSearch';
-import { requestComposerRefill } from './chat/composerEvents';
-import { OnboardingTour } from './chat/OnboardingTour';
-import { subscribeToAgentChatSearchRequests } from './chat/searchEvents';
-import { ShortcutOverlay } from './chat/ShortcutOverlay';
-import { ConversationAgentBadge } from './ConversationAgentBadge';
-import { EmptyState } from './EmptyState';
-import { EvidenceBundleDrawer } from './evidence/EvidenceBundleDrawer';
-import { InputBar } from './InputBar';
-import { LayoutModeSelector } from './layout/LayoutModeSelector';
-import { MessageArea } from './MessageArea';
-import { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
-import { Resizer } from './Resizer';
-import { RunReviewDrawer } from './review/RunReviewDrawer';
-import { SplitPaneLayout } from './SplitPaneLayout';
+import { deriveAgentChatTenantId } from '@/components/agent/agentChatScope';
+import { ChatSearch } from '@/components/agent/chat/ChatSearch';
+import { requestComposerRefill } from '@/components/agent/chat/composerEvents';
+import { OnboardingTour } from '@/components/agent/chat/OnboardingTour';
+import { subscribeToAgentChatSearchRequests } from '@/components/agent/chat/searchEvents';
+import { ShortcutOverlay } from '@/components/agent/chat/ShortcutOverlay';
+import { ConversationAgentBadge } from '@/components/agent/ConversationAgentBadge';
+import { EmptyState } from '@/components/agent/EmptyState';
+import { EvidenceBundleDrawer } from '@/components/agent/evidence/EvidenceBundleDrawer';
+import { InputBar } from '@/components/agent/InputBar';
+import { LayoutModeSelector } from '@/components/agent/layout/LayoutModeSelector';
+import { MessageArea } from '@/components/agent/MessageArea';
+import { ProjectAgentStatusBar } from '@/components/agent/ProjectAgentStatusBar';
+import { Resizer } from '@/components/agent/Resizer';
+import { RunReviewDrawer } from '@/components/agent/review/RunReviewDrawer';
+import { SplitPaneLayout } from '@/components/agent/SplitPaneLayout';
 import { ICON_BUTTON_CLASSES, LAYOUT_BG_CLASSES } from './styles';
-import { deriveTaskProgress } from './tasks/taskProgressDerivation';
-import { useProjectConversationLoader } from './useProjectConversationLoader';
+import { deriveTaskProgress } from '@/components/agent/tasks/taskProgressDerivation';
+import { useProjectConversationLoader } from '@/components/agent/useProjectConversationLoader';
 
 import type {
   AgentTask,
@@ -119,7 +119,7 @@ import type {
   SelectionTraceEventData,
   TimelineEvent,
   ToolsetChangedEventData,
-} from '../../types/agent';
+} from '@/types/agent';
 
 interface AgentChatContentProps {
   /** Optional className for styling */
@@ -182,26 +182,26 @@ function resolveCurrentWorkspaceTaskId(
 }
 
 const CanvasPanel = lazy(() =>
-  import('./canvas/CanvasPanel').then((module) => ({ default: module.CanvasPanel }))
+  import('@/components/agent/canvas/CanvasPanel').then((module) => ({ default: module.CanvasPanel }))
 );
 const RightPanel = lazy(() =>
-  import('./RightPanel').then((module) => ({ default: module.RightPanel }))
+  import('@/components/agent/RightPanel').then((module) => ({ default: module.RightPanel }))
 );
 const SandboxSection = lazy(() =>
   import('@business/environments/ui/web/components/SandboxSection').then((module) => ({ default: module.SandboxSection }))
 );
 const WorkspaceGroupChatPanel = lazy(() =>
-  import('../workspace/chat/WorkspaceGroupChatPanel').then((module) => ({
+  import('@/components/workspace/chat/WorkspaceGroupChatPanel').then((module) => ({
     default: module.WorkspaceGroupChatPanel,
   }))
 );
 const ConversationCompareView = lazy(() =>
-  import('./comparison/ConversationCompareView').then((module) => ({
+  import('@/components/agent/comparison/ConversationCompareView').then((module) => ({
     default: module.ConversationCompareView,
   }))
 );
 const ConversationPickerModal = lazy(() =>
-  import('./comparison/ConversationPickerModal').then((module) => ({
+  import('@/components/agent/comparison/ConversationPickerModal').then((module) => ({
     default: module.ConversationPickerModal,
   }))
 );

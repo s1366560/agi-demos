@@ -6,14 +6,11 @@ import { SchemaLayout } from '../../layouts/SchemaLayout';
 
 import {
   ProjectOverview,
-  MemoryList,
   NewMemory,
-  MemoryDetail,
   MemoryGraph,
   CommunitiesList,
   EnhancedSearch,
   Maintenance,
-  CronJobs,
   SchemaOverview,
   EntityTypeList,
   EdgeTypeList,
@@ -22,9 +19,6 @@ import {
   ProjectSettings,
   Support,
   Blackboard,
-  PlaybookLibrary,
-  WorkspaceList,
-  WorkspaceCreate,
   WorkspaceBlackboardRedirect,
   ProjectAgentDashboard,
   ProjectAgentLogs,
@@ -61,13 +55,9 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
-          handle={{ pluginFeature: 'project-memories' }}
+          handle={{ pluginFeature: 'project-memories', signedPage: true }}
           path="memories"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <MemoryList />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route
           handle={{ pluginFeature: 'project-memories' }}
@@ -79,13 +69,9 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
-          handle={{ pluginFeature: 'project-memories' }}
+          handle={{ pluginFeature: 'project-memories', signedPage: true }}
           path="memory/:memoryId"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <MemoryDetail />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route
           handle={{ pluginFeature: 'project-graph' }}
@@ -134,13 +120,9 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
-          handle={{ pluginFeature: 'project-cron-jobs' }}
+          handle={{ pluginFeature: 'project-cron-jobs', signedPage: true }}
           path="cron-jobs"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <CronJobs />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route
           handle={{ pluginFeature: 'project-schema' }}
@@ -222,31 +204,19 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
-          handle={{ pluginFeature: 'project-playbooks' }}
+          handle={{ pluginFeature: 'project-playbooks', signedPage: true }}
           path="playbooks"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <PlaybookLibrary />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route
-          handle={{ pluginFeature: 'project-workspaces' }}
+          handle={{ pluginFeature: 'project-workspaces', signedPage: true }}
           path="workspaces"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <WorkspaceList />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route
-          handle={{ pluginFeature: 'project-workspaces' }}
+          handle={{ pluginFeature: 'project-workspaces', signedPage: true }}
           path="workspaces/new"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <WorkspaceCreate />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route
           handle={{ pluginFeature: 'project-workspaces' }}

@@ -88,8 +88,6 @@ import {
   TENANT_BILLING_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
 } from './desktopProductionRouteRegistry';
-import { createProjectPlaybooksController } from '@business/automation/ui/desktop/project-playbooks/projectPlaybooksController';
-import { createProjectPlaybooksRouteModuleLoader } from '@business/automation/ui/desktop/project-playbooks/projectPlaybooksRouteModule';
 import {
   createDeadLetterQueueRouteBindingForRuntime,
   createProjectOverviewRouteBindingForRuntime,
@@ -156,7 +154,7 @@ import { createTenantProjectsRouteModuleLoader } from '../tenant/tenantProjectsR
 import { createTenantTasksRouteModuleLoader } from '@business/workspace/ui/desktop/tenant/tenantTasksRouteModule';
 import { createTenantWorkspacesRouteModuleLoader } from '@business/workspace/ui/desktop/tenant/tenantWorkspacesRouteModule';
 import { createTenantGovernanceRouteModuleLoader } from '../tenant-admin/tenantGovernanceRouteModule';
-import { tenantPackageRoute } from '../../packageHost/tenantPackageRoute';
+import { packageRoute } from '../../packageHost/packageRoute';
 import { createTenantAuditRouteModuleLoader } from '../tenant-admin/tenantAuditRouteModule';
 import { createTenantTrustRouteModuleLoader } from '../tenant-admin/tenantTrustRouteModule';
 import { createTenantAcpRouteModuleLoader } from '../tenant-admin/tenantAcpRouteModule';
@@ -266,14 +264,6 @@ import {
   type DesktopProjectSupportOperationsV2,
 } from '../../plugins/desktopProjectSupportAuthorityModuleV2';
 import {
-  createDesktopProjectPlaybooksReadClientV2,
-  type DesktopProjectPlaybooksReadOperationsV2,
-} from '../../plugins/desktopProjectPlaybooksReadAuthorityModuleV2';
-import {
-  createDesktopProjectPlaybooksEventSourceV2,
-  type DesktopProjectPlaybooksEventsOperationsV2,
-} from '../../plugins/desktopProjectPlaybooksEventsAuthorityModuleV2';
-import {
   createDesktopBackendStoresClientV2,
   type DesktopBackendStoresOperationsV2,
 } from '../../plugins/desktopBackendStoresAuthorityModuleV2';
@@ -358,8 +348,6 @@ export type AppRouteRegistryRefs = {
   projectSettingsOperationsV2: DesktopProjectSettingsOperationsV2;
   projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
   projectSupportOperationsV2: DesktopProjectSupportOperationsV2;
-  projectPlaybooksReadOperationsV2: DesktopProjectPlaybooksReadOperationsV2;
-  projectPlaybooksEventsOperationsV2: DesktopProjectPlaybooksEventsOperationsV2;
   backendStoresOperationsV2: DesktopBackendStoresOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
@@ -395,8 +383,6 @@ export type AppAuxiliaryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   | 'configRef'
   | 'backendStoresOperationsV2'
-  | 'projectPlaybooksReadOperationsV2'
-  | 'projectPlaybooksEventsOperationsV2'
   | 'projectSupportOperationsV2'
   | 'userProfileOperationsV2'
   | 'setAuth'
@@ -649,31 +635,7 @@ export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryR
           });
         },
       }),
-      [PROJECT_PLAYBOOKS_ROUTE_ID]: createProjectPlaybooksRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: 'cloud',
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          return Object.freeze({
-            controller: createProjectPlaybooksController({
-              authority: 'cloud',
-              client: createDesktopProjectPlaybooksReadClientV2(
-                refs.projectPlaybooksReadOperationsV2,
-                currentConfig,
-              ),
-              initialScope: scope,
-            }),
-            events: createDesktopProjectPlaybooksEventSourceV2(
-              refs.projectPlaybooksEventsOperationsV2,
-              currentConfig,
-            ),
-            scope,
-          });
-        },
-      }),
+      [PROJECT_PLAYBOOKS_ROUTE_ID]: packageRoute(PROJECT_PLAYBOOKS_ROUTE_ID, 'playbooks', 'project'),
       [PROJECT_SUPPORT_ROUTE_ID]: createProjectSupportRouteModuleLoader({
         createBinding: (context) => {
           const currentConfig = configRef.current;
@@ -1423,7 +1385,7 @@ export function createAppTenantGovernanceRouteRegistry(
           );
         },
       }),
-      [TENANT_BILLING_ROUTE_ID]: tenantPackageRoute(TENANT_BILLING_ROUTE_ID, 'billing'),
+      [TENANT_BILLING_ROUTE_ID]: packageRoute(TENANT_BILLING_ROUTE_ID, 'billing', 'tenant'),
       [TENANT_ORGANIZATION_SETTINGS_ROUTE_ID]: createTenantOrganizationSettingsRouteModuleLoader({
         createBinding: (context) =>
           createTenantOrganizationSettingsRouteBindingForRuntime(

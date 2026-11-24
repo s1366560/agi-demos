@@ -144,19 +144,9 @@ test('V2 route factories retain the latest native route bindings', () => {
     registrySource,
     /BACKEND_STORES_ROUTE_ID[\s\S]*createBackendStoresRouteModuleLoader\(\{[\s\S]*createBackendStoresController\(\{[\s\S]*createDesktopBackendStoresClientV2\([\s\S]*refs\.backendStoresOperationsV2/u,
   );
-  assert.match(
-    registrySource,
-    /PROJECT_PLAYBOOKS_ROUTE_ID[\s\S]*createProjectPlaybooksRouteModuleLoader\(\{[\s\S]*createProjectPlaybooksController\(\{[\s\S]*createDesktopProjectPlaybooksReadClientV2\([\s\S]*refs\.projectPlaybooksReadOperationsV2/u,
-  );
-  assert.doesNotMatch(registrySource, /createProjectPlaybooksClient/u);
-  assert.match(
-    registrySource,
-    /BACKEND_STORES_ROUTE_ID[\s\S]*authority:\s*['"]cloud['"][\s\S]*PROJECT_PLAYBOOKS_ROUTE_ID[\s\S]*authority:\s*['"]cloud['"]/u,
-  );
-  assert.doesNotMatch(
-    registrySource,
-    /(?:BACKEND_STORES_ROUTE_ID|PROJECT_PLAYBOOKS_ROUTE_ID)[\s\S]{0,700}authority:\s*currentConfig\.mode/u,
-  );
+  assert.match(registrySource, /packageRoute\(PROJECT_PLAYBOOKS_ROUTE_ID, 'playbooks', 'project'\)/u);
+  assert.doesNotMatch(registrySource, /createProjectPlaybooksController/u);
+  assert.match(registrySource, /BACKEND_STORES_ROUTE_ID[\s\S]*authority:\s*['"]cloud['"]/u);
 });
 
 test('auxiliary V2 route composition binds its three native loaders and Profile route', () => {

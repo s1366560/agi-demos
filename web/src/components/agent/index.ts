@@ -14,9 +14,6 @@ export { SandboxSection } from '@business/environments/ui/web/components/Sandbox
 // ProjectReActAgent Lifecycle Status Bar
 export { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
 
-// Content-only component for tenant/project agent workspace routes
-export { AgentChatContent } from './AgentChatContent';
-
 // Resizer component for draggable panels
 export { Resizer } from './Resizer';
 

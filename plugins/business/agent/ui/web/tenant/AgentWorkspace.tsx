@@ -33,7 +33,7 @@ import {
 import type { Project } from '@/types/memory';
 
 const AgentChatContent = lazy(() =>
-  import('@/components/agent/AgentChatContent').then((module) => ({
+  import('../chat/AgentChatContent').then((module) => ({
     default: module.AgentChatContent,
   }))
 );

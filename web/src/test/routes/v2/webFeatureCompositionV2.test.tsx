@@ -170,16 +170,22 @@ describe('Web feature composition', () => {
 describe('full workbench access for signed routes', () => {
   const scope = { tenant: 't', project: 'p' };
   const current = { id: 'p', tenant_id: 't' };
-  const path = '/tenant/t/project/p/workspaces/new';
+  const path = '/tenant/t/project/p/team';
 
   it('links a matching full route only when its feature and parent authority are enabled', () => {
     expect(hasFullWorkbenchRoute(path, scope, null, routesWithout())).toBe(true);
     expect(hasFullWorkbenchRoute('/tenant/t/project/p/entities', scope, current, routesWithout())).toBe(false);
-    expect(hasFullWorkbenchRoute(path, scope, current, routesWithout('project-workspaces'))).toBe(
+    expect(hasFullWorkbenchRoute(path, scope, current, routesWithout('project-team'))).toBe(
       false
     );
     expect(hasFullWorkbenchRoute(path, scope, current, [])).toBe(false);
   });
+  it.each(['memories', 'memory/abc', 'workspaces', 'workspaces/new', 'cron-jobs', 'playbooks'])(
+    'resolves the installed page even for a full-workbench bookmark at %s',
+    (segment) => {
+      expect(hasFullWorkbenchRoute('/tenant/t/project/p/' + segment, scope, current, routesWithout())).toBe(false);
+    }
+  );
   it('rejects unknown paths, wildcard redirects and unrelated project scopes', () => {
     const artifacts = routesWithout();
     for (const url of [
