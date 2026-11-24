@@ -4,8 +4,8 @@
     "zh": "工作空间"
   },
   "description": {
-    "en": "Browse project workspaces and export directory records to CSV.",
-    "zh": "浏览项目工作空间，将目录数据导出为 CSV。"
+    "en": "Create workspaces, manage their settings and export directory records to CSV.",
+    "zh": "创建和管理项目工作区，将目录导出为 CSV。"
   },
   "icon": "panels-top-left"
 }

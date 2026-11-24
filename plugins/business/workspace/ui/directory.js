@@ -1,10 +1,10 @@
 (async () => {
   const root = document.getElementById('root');
-  const zh = navigator.language.startsWith('zh');
+  const scope = await window.memstack.getContext();
+  const zh = scope.locale.startsWith('zh');
   const label = (en, cn) => zh ? cn : en;
   const title = document.createElement('h1');
   title.textContent = label('Workspace directory', '工作区目录');
-  const scope = await window.memstack.scope();
   const project = document.createElement('p');
   project.textContent = label('Project ', '项目 ') + scope.projectId;
   const form = document.createElement('form');
@@ -90,5 +90,43 @@
   editor.setAttribute('aria-label', label('Workspace rows', '工作区记录'));
   editor.append(table);
   form.append(browse, editor, add, submit);
-  root.append(title, project, form, output);
+  const directory = '/tenant/' + encodeURIComponent(scope.tenantId) + '/project/' + encodeURIComponent(scope.projectId) + '/workspaces';
+  const status = document.createElement('p');
+  status.setAttribute('role', 'status');
+  const link = (title, path) => {
+    const anchor = document.createElement('a');
+    anchor.textContent = title;
+    anchor.href = path;
+    anchor.onclick = event => {
+      event.preventDefault();
+      window.memstack.navigate(path).catch(error => { status.textContent = error.message; });
+    };
+    return anchor;
+  };
+  const list = document.createElement('ul');
+  const more = document.createElement('button');
+  more.type = 'button';
+  more.textContent = label('Load more workspaces', '加载更多工作区');
+  let offset = 0;
+  async function load() {
+    more.disabled = true;
+    try {
+      const page = await window.memstack.invoke('list-directory', {offset, limit: 8});
+      for (const item of page.rows) {
+        const li = document.createElement('li');
+        li.append(link(item.name, directory + '/' + encodeURIComponent(item.id)));
+        li.append(document.createTextNode(' · ' + (item.is_archived ? label('Archived', '已归档') : item.office_status)));
+        list.append(li);
+      }
+      offset += page.rows.length;
+      more.hidden = page.rows.length !== 8;
+      status.textContent = offset ? '' : label('No accessible workspaces in this project.', '当前项目没有可访问的工作区。');
+    } catch (error) { status.textContent = error.message; }
+    finally { more.disabled = false; }
+  }
+  more.onclick = load;
+  const csv = document.createElement('h2');
+  csv.textContent = label('CSV export', '导出 CSV');
+  root.append(title, project, link(label('Create workspace', '创建工作区'), directory + '/new'), list, more, status, csv, form, output);
+  await load();
 })();

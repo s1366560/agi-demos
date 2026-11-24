@@ -33,7 +33,7 @@
         [t('Status', '状态'), info.office_status],
         [t('Archived', '已归档'), info.is_archived ? t('Yes','是') : t('No','否')],
       ]) fields.append(node('dt', label), node('dd', value));
-      root.append(fields);
+      root.append(fields, link(t('Workspace settings', '工作区设置'), base + '/workspaces/' + encodeURIComponent(info.id) + '/settings'));
       return;
     }
     root.append(node('h1', t('Project overview', '项目概览')), node('p', scope.projectId),
@@ -41,7 +41,7 @@
     const list = node('ul', '');
     const more = node('button', t('Load more', '加载更多'));
     more.type = 'button';
-    root.append(list, more, status, link(t('Directory and CSV export', '目录与 CSV 导出'), base + '/workspaces'));
+    root.append(list, more, status, link(t('Create workspace', '创建工作区'), base + '/workspaces/new'), link(t('Directory and CSV export', '目录与 CSV 导出'), base + '/workspaces'));
     let offset = 0;
     async function load() {
       more.disabled = true;

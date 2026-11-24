@@ -2,11 +2,15 @@
 
 The legacy Web directory, task queue client, task state, blackboard hooks and collaboration views live together under [ui/web](ui/web). The desktop directory, overview, support and blackboard controllers live alongside their pages under [ui/desktop](ui/desktop). The signed project directory uses the scoped application capability and package worker described below.
 
-Workspace Core owns membership, task and collaboration transactions. The independently installable Workspace package currently contributes directory export. Code under `backend/` authorizes and projects the request. `src/lib.rs` formats the CSV in a Wasm guest. Run `uv run pytest plugins/business/workspace/tests` for the boundary tests.
+Workspace Core owns membership, task and collaboration transactions. The independently installable Workspace package contributes the directory, workspace creation, project overview, workspace details, general settings and CSV export. Code under `backend/` authorizes and projects the request. `src/lib.rs` formats the CSV in a Wasm guest. Run `uv run pytest plugins/business/workspace/tests` for the boundary tests.
 
 ## Directory CSV export
 
 The full API can export the current user's page of workspaces. Workspace Core authorizes the caller, filters by tenant, project and workspace membership, applies the requested pagination, and reads its PostgreSQL records. The isolated Wasm package receives four fields from each returned workspace: its ID, name, office status and archived flag. It formats an RFC 4180-style UTF-8 attachment and keeps spreadsheet cells containing user-provided names literal. The host validates its output and pins one package release across the page.
+
+## Workspace lifecycle
+
+Both renderers load the same signed pages. The directory lists the workspaces visible to the current user. Creation preserves use case, collaboration mode and the programming sandbox directory. General settings edit the name, description and archive status. The package passes the authenticated user and project to Workspace Core. Workspace Core checks membership, persists writes and deduplicates retries by request ID. Saving settings includes the revision observed when the editor loaded.
 
 ## Publish and install
 
@@ -18,7 +22,9 @@ cp target/wasm32-unknown-unknown/release/memstack_workspace.wasm directory.wasm
 uv run --with ../../../sdk/memstack-plugin-sdk memstack-plugin-pack package.json \
   --key "$PUBLISHER_KEY" --out directory.mspkg
 memstack packages --tenant "$TENANT_ID" --project "$PROJECT_ID" install \
-  --approve ui.slot --approve tools.execute --approve app.workspace.directory.read --approve app.workspace.detail.read directory.mspkg
+  --approve ui.slot --approve tools.execute --approve app.workspace.directory.read \
+  --approve app.workspace.detail.read --approve app.workspace.create \
+  --approve app.workspace.settings.update directory.mspkg
 ```
 
 Configure the API's trusted publisher via `PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES`. The API needs its usual Workspace Core and project-package connections. The exporter uses `tools.execute`. Its optional Web and desktop settings page uses `ui.slot` and invokes the same signed command.

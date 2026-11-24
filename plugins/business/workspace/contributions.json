@@ -96,6 +96,24 @@
       ],
       "payload": {},
       "accepts_input": true
+    },
+    {
+      "id": "create-workspace",
+      "host_operation": "app.workspace.create",
+      "permissions": [
+        "app.workspace.create"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "update-workspace",
+      "host_operation": "app.workspace.settings.update",
+      "permissions": [
+        "app.workspace.settings.update"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -126,7 +144,7 @@
       ],
       "entry": {
         "path": "ui/directory.js",
-        "digest": "sha256:76e8d20edff83bc0a702d4c013e6b6075e6760e870a032af6296e69182d74ec6"
+        "digest": "sha256:b39e16bcaf7600f409b41aa0c4d8e79cc37f655c14ed33ef00c453be8b403ab6"
       },
       "commands": [
         "export-csv",
@@ -135,7 +153,7 @@
       "device_tools": [],
       "style": {
         "path": "ui/directory.css",
-        "digest": "sha256:a0eb0bb18956a450e8ac13cf5d0f1f40f8facaf1a08db29f36f02a20b6370d2e"
+        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
       }
     },
     {
@@ -154,9 +172,16 @@
       ],
       "entry": {
         "path": "ui/overview.js",
-        "digest": "sha256:d3bbbd3fd6cd908ff842e540ea211251bf8c427fc7a475fdf82d6257ba67dbc6"
+        "digest": "sha256:e2d308e641f4566c4862be37ffd9e80e83997fafb3e19926c0fc9432988fe4f5"
       },
-      "device_tools": []
+      "device_tools": [],
+      "style": {
+        "path": "ui/directory.css",
+        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
+      },
+      "slots": [
+        "recent-memories@1"
+      ]
     },
     {
       "id": "detail",
@@ -174,9 +199,64 @@
       ],
       "entry": {
         "path": "ui/overview.js",
-        "digest": "sha256:d3bbbd3fd6cd908ff842e540ea211251bf8c427fc7a475fdf82d6257ba67dbc6"
+        "digest": "sha256:e2d308e641f4566c4862be37ffd9e80e83997fafb3e19926c0fc9432988fe4f5"
       },
-      "device_tools": []
+      "device_tools": [],
+      "style": {
+        "path": "ui/directory.css",
+        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
+      }
+    },
+    {
+      "id": "create",
+      "title": "Create workspace",
+      "routes": [
+        "/workspaces/new",
+        "/tenant/:tenantId/project/:projectId/workspaces/new",
+        "/tenant/:tenantId/workspaces/new",
+        "/tenant/workspaces/new"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workspaceForm.js",
+        "digest": "sha256:df4335c492916ca178fd50d27c82dbbaa5f62947b1034b9b5f3095aafa1fce94"
+      },
+      "commands": [
+        "create-workspace"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/directory.css",
+        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
+      }
+    },
+    {
+      "id": "settings",
+      "title": "Workspace settings",
+      "routes": [
+        "/workspaces/:workspaceId/settings",
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/settings"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workspaceForm.js",
+        "digest": "sha256:df4335c492916ca178fd50d27c82dbbaa5f62947b1034b9b5f3095aafa1fce94"
+      },
+      "commands": [
+        "read-workspace",
+        "update-workspace"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/directory.css",
+        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
+      }
     }
   ]
 }

@@ -20,8 +20,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 import docker
 from alembic import command
 from plugins.business.workspace.backend.workspace_directory_export import (
+    create_workspace_operation,
     read_directory_operation,
     read_workspace_operation,
+    update_workspace_operation,
 )
 from src.configuration.workspace_core import WorkspaceCoreSettings
 from src.infrastructure.adapters.primary.web import workspace_core_routes as routes
@@ -178,6 +180,8 @@ async def _project_host(http, db_session, core, public, monkeypatch):
     )[0]
     app.state.workspace_core_client = core
     app.state.package_operations_v1 = {
+        "app.workspace.create": create_workspace_operation,
+        "app.workspace.settings.update": update_workspace_operation,
         "app.workspace.directory.read": read_directory_operation,
         "app.workspace.detail.read": read_workspace_operation,
     }
@@ -202,7 +206,7 @@ async def _project_host(http, db_session, core, public, monkeypatch):
     return app, keys
 
 
-async def test_directory_exports_only_actual_core_memberships(
+async def test_directory_exports_only_actual_core_memberships(  # noqa: PLR0915
     http, db_session, core, releases, monkeypatch
 ):
     public, first, second = releases
@@ -244,6 +248,8 @@ async def test_directory_exports_only_actual_core_memberships(
                         "tools.execute",
                         "app.workspace.directory.read",
                         "app.workspace.detail.read",
+                        "app.workspace.create",
+                        "app.workspace.settings.update",
                     ],
                     "archive_base64": base64.b64encode(raw).decode(),
                 },
@@ -297,6 +303,7 @@ async def test_directory_exports_only_actual_core_memberships(
         assert private not in (await report(list_path, actor)).text
 
         await _verify_exported_pages(api, list_path, actor, create, report)
+        await _verify_workspace_writes(api, base, actor, viewer, other)
 
 
 async def _verify_directory_command(api, base, actor, visible):
@@ -360,3 +367,142 @@ async def _verify_detail_command(api, base, actor, viewer, visible, other, title
     assert (await detail(other, actor)).status_code in (403, 404)
     assert (await detail(visible, viewer)).status_code in (403, 404)
     assert (await detail("../other", actor)).status_code == 422
+
+
+async def _verify_workspace_writes(api, base, actor, viewer, other):
+    async def invoke(command, payload, headers=actor):
+        return await api.post(
+            f"{base}/{PACKAGE}/commands",
+            headers=headers,
+            json={"tenant_id": "t", "project_id": "p", "command_id": command, "payload": payload},
+        )
+
+    payload = {
+        "request_id": str(uuid4()),
+        "name": "Release planning",
+        "description": "Release milestones",
+    }
+    created = await invoke("create-workspace", payload)
+    assert created.is_success, created.text
+    identity = created.json()["id"]
+    retry = await invoke("create-workspace", payload)
+    assert retry.is_success and retry.json()["id"] == identity
+    assert (await invoke("create-workspace", {**payload, "tenant_id": "spoof"})).status_code == 422
+    detail = await invoke("read-workspace", {"workspace_id": identity, "include_revision": True})
+    assert detail.is_success
+    change = {
+        "workspace_id": identity,
+        "expected_revision": detail.json()["revision"],
+        "request_id": str(uuid4()),
+        "name": "Next release",
+        "is_archived": True,
+    }
+    assert (await invoke("update-workspace", change, viewer)).status_code in (403, 404)
+    assert (await invoke("update-workspace", {**change, "workspace_id": other})).status_code in (
+        403,
+        404,
+    )
+    updated = await invoke("update-workspace", change)
+    assert updated.is_success, updated.text
+    stale = await invoke(
+        "update-workspace", {**change, "name": "Stale", "request_id": str(uuid4())}
+    )
+    assert stale.status_code == 409
+    saved = await invoke("read-workspace", {"workspace_id": identity})
+    assert saved.json()["name"] == "Next release" and saved.json()["is_archived"] is True
+
+
+@pytest.mark.parametrize("http", ["package-kernel"], indirect=True)
+@pytest.mark.skipif(
+    os.getenv("WEB_PACKAGE_CHROMIUM_TESTS") != "1",
+    reason="requires Chromium and the package client",
+)
+async def test_signed_workspace_forms_persist_in_workspace_core(
+    http, db_session, core, releases, monkeypatch, tmp_path
+):
+    import asyncio
+
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+    from playwright.async_api import async_playwright, expect
+
+    from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
+        get_password_hash,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import User
+
+    public, archive, _ = releases
+    app, keys = await _project_host(http, db_session, core, public, monkeypatch)
+    api, _ = http
+    base = "/api/v1/platform-plugins/v2/optional-business"
+    actor = {"Authorization": f"Bearer {keys['owner']}"}
+    scope = {"tenant_id": "t", "project_id": "p"}
+    body = {**scope, "archive_base64": base64.b64encode(archive).decode()}
+    inspect = await api.post(base + "/inspect", json=body, headers=actor)
+    inspect.raise_for_status()
+    installed = await api.post(
+        base + "/install",
+        json={**body, "approved_permissions": inspect.json()["permissions"]},
+        headers=actor,
+    )
+    installed.raise_for_status()
+    (await api.post(f"{base}/{PACKAGE}/enable", json=scope, headers=actor)).raise_for_status()
+
+    password = secrets.token_urlsafe(24)
+    owner = await db_session.get(User, "owner")
+    owner.hashed_password = get_password_hash(password)
+    await db_session.commit()
+    output = tmp_path / "web"
+    build = await asyncio.create_subprocess_exec(
+        "pnpm",
+        "exec",
+        "vite",
+        "build",
+        "--mode",
+        "project-packages",
+        "--outDir",
+        str(output),
+        cwd=ROOT / "web",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    log, _ = await build.communicate()
+    assert build.returncode == 0, log.decode()[-2000:]
+
+    async def shell():
+        return FileResponse(output / "project-packages.html")
+
+    app.add_api_route("/tenant/t/project/p/workspaces/{path:path}", shell)
+    app.mount("/", StaticFiles(directory=output), name="workspace-package-shell")
+    async with serve_project_api(app) as origin, async_playwright() as pw:
+        browser = await pw.chromium.launch()
+        page = await browser.new_page(locale="en-US")
+        await page.goto(origin + "/tenant/t/project/p/workspaces/new?tenant=t&project=p")
+        await page.get_by_label("Email", exact=True).fill(owner.email)
+        await page.get_by_label("Password", exact=True).fill(password)
+        await page.get_by_role("button", name="Sign In", exact=True).click()
+        await _edit_workspace_in_browser(page, expect)
+        await browser.close()
+
+
+async def _edit_workspace_in_browser(page, expect):
+    guest = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
+    await guest.get_by_label("Workspace name").fill("Shared planning")
+    await guest.get_by_label("Description").fill("Coordinate the release milestones")
+    await guest.get_by_label("Use case").select_option("research")
+    await guest.get_by_label("Collaboration mode").select_option("multi_agent_shared")
+    async with page.expect_response(lambda r: "/commands" in r.url) as pending:
+        await guest.get_by_role("button", name="Create workspace").click()
+    response = await pending.value
+    assert response.ok, (response.status, await response.text())
+    await expect(guest.get_by_role("heading", name="Shared planning")).to_be_visible()
+    await guest.get_by_role("link", name="Workspace settings").click()
+    await guest.get_by_label("Workspace name").fill("Release council")
+    await guest.get_by_label("Archived", exact=True).check()
+    await guest.get_by_role("button", name="Save changes").click()
+    await expect(guest.get_by_role("heading", name="Release council")).to_be_visible()
+    await page.reload()
+    await expect(guest.get_by_role("heading", name="Release council")).to_be_visible()
+    await guest.get_by_role("link", name="Project overview").click()
+    await guest.get_by_role("link", name="Directory and CSV export").click()
+    await expect(guest.get_by_role("link", name="Release council")).to_be_visible()
