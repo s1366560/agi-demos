@@ -15,7 +15,6 @@ import {
   Events,
   Webhooks,
   TenantSettings,
-  WorkflowPatterns,
   TaskDashboard,
   WorkspaceList,
   AgentDashboard,
@@ -56,7 +55,6 @@ import {
   OrgRegistry,
   OrgSmtp,
   OrgGenes,
-  ClusterList,
   ClusterDetail,
   GeneMarket,
   GeneDetail,
@@ -190,7 +188,7 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-billing', signedPage: true }}
+        handle={{ pluginFeature: 'tenant-billing', signedPage: true, tenantBookmark: true }}
         path="billing"
         element={<TenantPackageRouteFallback />}
       />
@@ -204,13 +202,9 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-patterns' }}
+        handle={{ pluginFeature: 'tenant-patterns', signedPage: true, tenantBookmark: true }}
         path="patterns"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <WorkflowPatterns />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-tasks' }}
@@ -598,13 +592,9 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-clusters' }}
+        handle={{ pluginFeature: 'tenant-clusters', signedPage: true, tenantBookmark: true }}
         path="clusters"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <ClusterList />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-clusters' }}

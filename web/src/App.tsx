@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import './i18n/config';
@@ -13,10 +13,12 @@ import {
   ProjectBusinessRoute,
   type FullWorkbenchMatcher,
 } from './projectPackages/ProjectBusinessRoute';
+import { TenantPackageBookmark } from './projectPackages/TenantPackageBookmark';
 import { LoginRedirect, RedirectToLogin } from './routes/v2/webCoreRouteRedirectsV2';
 import {
   composeWebRouteArtifactsV2,
   hasFullWorkbenchRoute,
+  isTenantPackageBookmark,
 } from './routes/v2/webFeatureCompositionV2';
 import { WebNavigationAuthorityProviderV2 } from './routes/v2/WebNavigationAuthorityV2';
 import { WebRouteAuthorityProviderV2 } from './routes/v2/WebRouteAuthorityV2';
@@ -58,6 +60,8 @@ function BusinessRoutes({
   children: ReactNode;
   matchesFullRoute: FullWorkbenchMatcher;
 }) {
+  const { pathname } = useLocation();
+  if (enabled && isTenantPackageBookmark(pathname)) return <TenantPackageBookmark />;
   const routes = <Routes>{children}</Routes>;
   return enabled ? (
     <ProjectBusinessRoute matchesFullRoute={matchesFullRoute}>{routes}</ProjectBusinessRoute>

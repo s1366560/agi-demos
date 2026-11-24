@@ -37,6 +37,7 @@ vi.mock('../../../routes/v2/webDefaultRouteComponentsV2', async (original) => ({
 import {
   composeWebRouteArtifactsV2,
   hasFullWorkbenchRoute,
+  isTenantPackageBookmark,
   createWebFeatureArtifactsV2,
   WEB_FEATURE_IDS_V2,
   WEB_CORE_ROUTE_ARTIFACT_ID_V2,
@@ -186,6 +187,11 @@ describe('full workbench access for signed routes', () => {
       expect(hasFullWorkbenchRoute('/tenant/t/project/p/' + segment, scope, current, routesWithout())).toBe(false);
     }
   );
+  it.each(['clusters', 'patterns'])('resolves the installed tenant page at %s', (segment) => {
+    expect(isTenantPackageBookmark('/tenant/' + segment)).toBe(true);
+    expect(isTenantPackageBookmark('/tenant/t/' + segment)).toBe(false);
+    expect(hasFullWorkbenchRoute('/tenant/t/' + segment, scope, current, routesWithout())).toBe(false);
+  });
   it('rejects unknown paths, wildcard redirects and unrelated project scopes', () => {
     const artifacts = routesWithout();
     for (const url of [

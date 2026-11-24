@@ -43,9 +43,6 @@ export const DeployProgress = lazy(() =>
     default: m.DeployProgress,
   }))
 );
-export const ClusterList = lazy(() =>
-  import('./tenant/ClusterList').then((m) => ({ default: m.ClusterList }))
-);
 export const ClusterDetail = lazy(() =>
   import('./tenant/ClusterDetail').then((m) => ({ default: m.ClusterDetail }))
 );

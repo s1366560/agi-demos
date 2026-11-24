@@ -27,7 +27,6 @@ import {
   OrgRegistry,
   OrgSmtp,
   OrgGenes,
-  WorkflowPatterns,
   SubAgentList,
   AgentDefinitions,
   AgentDefinitionDetail,
@@ -56,7 +55,6 @@ import {
   DeadLetterQueue,
   TrustPolicies,
   DecisionRecords,
-  ClusterList,
   ClusterDetail,
   GeneMarket,
   GeneDetail,
@@ -293,13 +291,9 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         />
       </Route>
       <Route
-        handle={{ pluginFeature: 'tenant-patterns' }}
+        handle={{ pluginFeature: 'tenant-patterns', signedPage: true }}
         path=":tenantId/patterns"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <WorkflowPatterns />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-agent-definitions' }}
@@ -567,13 +561,9 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-clusters' }}
+        handle={{ pluginFeature: 'tenant-clusters', signedPage: true }}
         path=":tenantId/clusters"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <ClusterList />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-clusters' }}

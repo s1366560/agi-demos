@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkflowPatterns } from '@business/automation/ui/web/tenant/WorkflowPatterns';
+import { WorkflowPatternsView } from '@business/automation/ui/web/tenant/WorkflowPatternsView';
 
 const { modalConfirm, listPatterns, deletePattern, successMessage, errorMessage, lazyMessage } =
   vi.hoisted(() => {
@@ -26,14 +26,6 @@ const { modalConfirm, listPatterns, deletePattern, successMessage, errorMessage,
 const { translate } = vi.hoisted(() => ({
   translate: (key: string) => key,
 }));
-
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-router-dom')>();
-  return {
-    ...actual,
-    useParams: () => ({ tenantId: 'tenant-1' }),
-  };
-});
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -90,13 +82,7 @@ vi.mock('@business/automation/ui/web/tenant/patterns/PatternInspector', () => ({
   ),
 }));
 
-vi.mock('@/services/patternService', () => ({
-  PatternServiceError: class PatternServiceError extends Error {},
-  patternService: {
-    listPatterns,
-    deletePattern,
-  },
-}));
+const client = { listPatterns, deletePattern, errorMessage: () => null };
 
 const mockPattern = {
   id: 'pattern-1',
@@ -133,7 +119,7 @@ describe('WorkflowPatterns', () => {
   });
 
   it('renders page controls through translation keys', async () => {
-    render(<WorkflowPatterns />);
+    render(<WorkflowPatternsView tenantId="tenant-1" client={client} canDelete />);
 
     expect(await screen.findByText('tenant.workflowPatterns.title')).toBeInTheDocument();
     expect(screen.getByText('tenant.workflowPatterns.description')).toBeInTheDocument();
@@ -145,7 +131,7 @@ describe('WorkflowPatterns', () => {
   });
 
   it('uses localized copy for destructive pattern deletion', async () => {
-    render(<WorkflowPatterns />);
+    render(<WorkflowPatternsView tenantId="tenant-1" client={client} canDelete />);
 
     fireEvent.click(await screen.findByText('Research pattern'));
 
@@ -171,7 +157,7 @@ describe('WorkflowPatterns', () => {
   it('shows localized fallback copy when pattern loading fails', async () => {
     listPatterns.mockRejectedValue(new Error('network unavailable'));
 
-    render(<WorkflowPatterns />);
+    render(<WorkflowPatternsView tenantId="tenant-1" client={client} canDelete />);
 
     expect(await screen.findByText('tenant.workflowPatterns.loadErrorTitle')).toBeInTheDocument();
     expect(screen.getByText('tenant.workflowPatterns.loadError')).toBeInTheDocument();

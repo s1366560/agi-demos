@@ -86,6 +86,17 @@ export function createWebFeatureArtifactsV2(): readonly (
   ]);
 }
 
+export function isTenantPackageBookmark(pathname: string): boolean {
+  const leaf = matchRoutes(navigationRouteObjects, pathname)?.at(-1);
+  const handle: unknown = leaf?.route.handle;
+  return (
+    !!handle &&
+    typeof handle === 'object' &&
+    'tenantBookmark' in handle &&
+    handle.tenantBookmark === true
+  );
+}
+
 /** Match the current full-client route generation before linking out of a signed page. */
 export function hasFullWorkbenchRoute(
   pathname: string,
