@@ -5,13 +5,13 @@ import { useTranslation } from 'react-i18next';
 import { Input, Select } from 'antd';
 import { GitBranch } from 'lucide-react';
 
-import { SOURCE_CONTROL_PROVIDER_OPTIONS } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
-import { Field, SettingsSection } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
+import { SOURCE_CONTROL_PROVIDER_OPTIONS } from '../../tenant/workspaceSettingsModel';
+import { Field, SettingsSection } from '../../tenant/WorkspaceSettingsPrimitives';
 
-import type { WorkspaceSourceControlProvider } from '@business/workspace/ui/web/types/workspace';
+import type { WorkspaceSourceControlProvider } from '../../types/workspace';
 
 import type { UpdateDraft } from './types';
-import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
+import type { SettingsDraft } from '../../tenant/workspaceSettingsModel';
 
 export interface SourceControlSectionProps {
   draft: SettingsDraft;

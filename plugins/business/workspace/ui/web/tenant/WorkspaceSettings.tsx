@@ -21,17 +21,17 @@ import {
 } from '../workspaceConfig';
 
 import { Spinner } from '@/components/common/Spinner';
-import { AutonomySection } from '@/components/workspace/settings/AutonomySection';
-import { CodeContextSection } from '@/components/workspace/settings/CodeContextSection';
-import { DangerZoneSection } from '@/components/workspace/settings/DangerZoneSection';
-import { DeliverySection } from '@/components/workspace/settings/DeliverySection';
-import { GeneralSettingsSection } from '@/components/workspace/settings/GeneralSettingsSection';
-import { MembersSection } from '@/components/workspace/settings/MembersSection';
-import { MetadataSection } from '@/components/workspace/settings/MetadataSection';
-import { OperatingModelSection } from '@/components/workspace/settings/OperatingModelSection';
-import { SettingsHeader } from '@/components/workspace/settings/SettingsHeader';
-import { SourceControlSection } from '@/components/workspace/settings/SourceControlSection';
-import { SummarySection } from '@/components/workspace/settings/SummarySection';
+import { AutonomySection } from '../components/settings/AutonomySection';
+import { CodeContextSection } from '../components/settings/CodeContextSection';
+import { DangerZoneSection } from '../components/settings/DangerZoneSection';
+import { DeliverySection } from '../components/settings/DeliverySection';
+import { GeneralSettingsSection } from '../components/settings/GeneralSettingsSection';
+import { MembersSection } from '../components/settings/MembersSection';
+import { MetadataSection } from '../components/settings/MetadataSection';
+import { OperatingModelSection } from '../components/settings/OperatingModelSection';
+import { SettingsHeader } from '../components/settings/SettingsHeader';
+import { SourceControlSection } from '../components/settings/SourceControlSection';
+import { SummarySection } from '../components/settings/SummarySection';
 
 import {
   COLLABORATION_MODE_OPTIONS,

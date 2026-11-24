@@ -5,11 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { Input } from 'antd';
 import { Plus, Trash2 } from 'lucide-react';
 
-import { Field, SwitchField } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
+import { Field, SwitchField } from '../../tenant/WorkspaceSettingsPrimitives';
 
 import { DraftNumberInput } from './DraftNumberInput';
 
-import type { WorkspaceDeliveryServiceConfig } from '@business/workspace/ui/web/types/workspace';
+import type { WorkspaceDeliveryServiceConfig } from '../../types/workspace';
 
 import type { UpdateDeliveryService } from './types';
 

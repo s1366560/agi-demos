@@ -1,6 +1,6 @@
-import type { WorkspaceDeliveryServiceConfig } from '@business/workspace/ui/web/types/workspace';
+import type { WorkspaceDeliveryServiceConfig } from '../../types/workspace';
 
-import type { SettingsDraft } from '@business/workspace/ui/web/tenant/workspaceSettingsModel';
+import type { SettingsDraft } from '../../tenant/workspaceSettingsModel';
 
 export type UpdateDraft = <TKey extends keyof SettingsDraft>(
   key: TKey,

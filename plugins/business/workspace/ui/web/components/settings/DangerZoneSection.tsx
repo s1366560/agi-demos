@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Archive, Trash2 } from 'lucide-react';
 
-import { SettingsSection } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
+import { SettingsSection } from '../../tenant/WorkspaceSettingsPrimitives';
 
 import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 

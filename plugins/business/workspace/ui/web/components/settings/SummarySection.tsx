@@ -2,7 +2,7 @@ import type React from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { SummaryTile } from '@business/workspace/ui/web/tenant/WorkspaceSettingsPrimitives';
+import { SummaryTile } from '../../tenant/WorkspaceSettingsPrimitives';
 
 export interface SummarySectionProps {
   useCaseLabel: string;
