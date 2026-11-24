@@ -9,7 +9,7 @@ import { useThemeColors } from '@/hooks/useThemeColor';
 import { useCreateBinding, useBindingSubmitting } from '@business/agent/ui/web/stores/agentBindings';
 import { useDefinitions, useListDefinitions } from '@business/agent/ui/web/stores/agentDefinitions';
 
-import type { CreateBindingRequest } from '../../types/multiAgent';
+import type { CreateBindingRequest } from '@/types/multiAgent';
 
 const { Option } = Select;
 

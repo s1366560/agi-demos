@@ -1,13 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from '../../utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentDefinitionModal } from '@/components/agent/AgentDefinitionModal';
+import { AgentDefinitionModal } from '@business/agent/ui/web/configuration/AgentDefinitionModal';
 import {
   buildDelegateConfig,
   buildSessionPolicy,
   buildSpawnPolicy,
   buildToolPolicy,
-} from '@/components/agent/agentDefinitionPolicyForm';
+} from '@business/agent/ui/web/configuration/agentDefinitionPolicyForm';
 
 import type { AgentDefinition } from '@/types/multiAgent';
 

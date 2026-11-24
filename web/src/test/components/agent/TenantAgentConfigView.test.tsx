@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TenantAgentConfigView } from '../../../components/agent/TenantAgentConfigView';
+import { TenantAgentConfigView } from '@business/agent/ui/web/configuration/TenantAgentConfigView';
 
 const { mockGetConfig, mockGetInfo } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),

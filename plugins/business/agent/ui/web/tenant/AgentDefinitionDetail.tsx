@@ -19,7 +19,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import { AgentDefinitionModal } from '@/components/agent/AgentDefinitionModal';
+import { AgentDefinitionModal } from '../configuration/AgentDefinitionModal';
 import { definitionsService } from '../services/agent/definitionsService';
 import { useUser } from '@/stores/auth';
 import { useCurrentTenant } from '@/stores/tenant';

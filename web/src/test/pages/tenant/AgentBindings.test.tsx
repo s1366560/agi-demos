@@ -42,7 +42,7 @@ vi.mock('@business/agent/ui/web/services/agent/definitionsService', () => ({
   },
 }));
 
-vi.mock('../../../components/agent/AgentBindingModal', () => ({
+vi.mock('@business/agent/ui/web/configuration/AgentBindingModal', () => ({
   AgentBindingModal: ({
     isOpen,
     tenantId,

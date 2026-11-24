@@ -16,7 +16,7 @@ import {
 } from 'antd';
 import { Bot, Edit2, Eye, MoreVertical, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 
-import { AgentDefinitionModal } from '@/components/agent/AgentDefinitionModal';
+import { AgentDefinitionModal } from '../configuration/AgentDefinitionModal';
 import { Spinner } from '@/components/common/Spinner';
 import { useDebounce } from '@/hooks/useDebounce';
 import {

@@ -5,7 +5,7 @@ import type {
   AgentDefinitionSessionPolicy,
   AgentDefinitionSpawnPolicy,
   AgentDefinitionToolPolicy,
-} from '../../types/multiAgent';
+} from '@/types/multiAgent';
 
 export interface AgentDefinitionPolicyFormValues {
   can_spawn?: boolean | undefined;

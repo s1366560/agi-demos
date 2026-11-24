@@ -21,8 +21,8 @@ export { AgentChatContent } from './AgentChatContent';
 export { Resizer } from './Resizer';
 
 // Utility Components
-export { TenantAgentConfigEditor } from './TenantAgentConfigEditor';
-export { TenantAgentConfigView } from './TenantAgentConfigView';
+export { TenantAgentConfigEditor } from '@business/agent/ui/web/configuration/TenantAgentConfigEditor';
+export { TenantAgentConfigView } from '@business/agent/ui/web/configuration/TenantAgentConfigView';
 export { InlineHITLCard } from './InlineHITLCard';
 export { AgentProgressBar } from './AgentProgressBar';
 

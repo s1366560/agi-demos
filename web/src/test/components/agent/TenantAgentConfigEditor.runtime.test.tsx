@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TenantAgentConfigEditor } from '../../../components/agent/TenantAgentConfigEditor';
+import { TenantAgentConfigEditor } from '@business/agent/ui/web/configuration/TenantAgentConfigEditor';
 
 const {
   mockGetAuthorityRevision,

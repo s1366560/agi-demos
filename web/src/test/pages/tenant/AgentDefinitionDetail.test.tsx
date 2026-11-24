@@ -22,7 +22,7 @@ vi.mock('@business/agent/ui/web/services/agent/definitionsService', () => ({
   },
 }));
 
-vi.mock('../../../components/agent/AgentDefinitionModal', () => ({
+vi.mock('@business/agent/ui/web/configuration/AgentDefinitionModal', () => ({
   AgentDefinitionModal: ({
     isOpen,
     initialProjectId,

@@ -12,15 +12,15 @@ import { useTranslation } from 'react-i18next';
 import { Modal, Form, Input, Select, Tabs, InputNumber, Switch, Tag, message, Slider } from 'antd';
 
 import { acpService } from '@business/agent/ui/web/services/acpService';
-import { agentService } from '../../services/agentService';
-import { mcpAPI } from '../../services/mcpService';
+import { agentService } from '@/services/agentService';
+import { mcpAPI } from '@/services/mcpService';
 import { skillAPI } from '@business/agent/ui/web/services/skillService';
 import {
   useCreateDefinition,
   useUpdateDefinition,
   useDefinitionSubmitting,
 } from '@business/agent/ui/web/stores/agentDefinitions';
-import { StateDisplay } from '../shared/ui/StateDisplay';
+import { StateDisplay } from '@/components/shared/ui/StateDisplay';
 
 import {
   buildDelegateConfig,
@@ -30,8 +30,8 @@ import {
   normalizeStringList,
 } from './agentDefinitionPolicyForm';
 
-import type { TenantExternalACPAgent } from '../../types/acp';
-import type { SkillResponse, MCPServerResponse, ToolInfo } from '../../types/agent';
+import type { TenantExternalACPAgent } from '@/types/acp';
+import type { SkillResponse, MCPServerResponse, ToolInfo } from '@/types/agent';
 import type {
   AgentDefinition,
   AgentDefinitionDelegateCapabilityTier,
@@ -40,7 +40,7 @@ import type {
   CreateDefinitionRequest,
   UpdateDefinitionRequest,
   WorkspaceConfig,
-} from '../../types/multiAgent';
+} from '@/types/multiAgent';
 import type { DefaultOptionType } from 'antd/es/select';
 
 const { TextArea } = Input;

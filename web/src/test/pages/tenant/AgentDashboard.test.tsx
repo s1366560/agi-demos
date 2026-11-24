@@ -37,7 +37,7 @@ vi.mock('../../../services/traceService', () => ({
   },
 }));
 
-vi.mock('../../../components/agent/TenantAgentConfigView', () => ({
+vi.mock('@business/agent/ui/web/configuration/TenantAgentConfigView', () => ({
   TenantAgentConfigView: ({
     tenantId,
     canEdit,
@@ -55,7 +55,7 @@ vi.mock('../../../components/agent/TenantAgentConfigView', () => ({
   ),
 }));
 
-vi.mock('../../../components/agent/TenantAgentConfigEditor', () => ({
+vi.mock('@business/agent/ui/web/configuration/TenantAgentConfigEditor', () => ({
   TenantAgentConfigEditor: ({ open }: { open: boolean }) =>
     open ? <div data-testid="tenant-config-editor">Editor open</div> : null,
 }));

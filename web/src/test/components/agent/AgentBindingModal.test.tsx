@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '../../utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentBindingModal } from '@/components/agent/AgentBindingModal';
+import { AgentBindingModal } from '@business/agent/ui/web/configuration/AgentBindingModal';
 
 import type { AgentDefinition } from '@/types/multiAgent';
 

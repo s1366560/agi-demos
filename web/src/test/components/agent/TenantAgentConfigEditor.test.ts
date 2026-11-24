@@ -6,7 +6,7 @@ import {
   hookKey,
   serializeCustomRuntimeHooks,
   serializeRuntimeHooks,
-} from '../../../components/agent/tenantAgentConfigHelpers';
+} from '@business/agent/ui/web/configuration/tenantAgentConfigHelpers';
 
 import type { HookCatalogEntry, TenantAgentConfig } from '../../../types/agent';
 

@@ -18,7 +18,7 @@ import {
 } from 'antd';
 import { Link, Plus, RefreshCw, Route, Search } from 'lucide-react';
 
-import { AgentBindingModal } from '@/components/agent/AgentBindingModal';
+import { AgentBindingModal } from '../configuration/AgentBindingModal';
 import { Spinner } from '@/components/common/Spinner';
 import { bindingsService } from '../services/agent/bindingsService';
 import {
