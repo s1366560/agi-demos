@@ -58,7 +58,8 @@
       "app.automation.schedules.run",
       "app.automation.schedules.delete",
       "storage.read",
-      "storage.write"
+      "storage.write",
+      "app.automation.verdicts.read"
     ]
   },
   {
@@ -69,7 +70,11 @@
       "app.environments.inventory.read",
       "app.environments.sandbox.read",
       "app.environments.sandbox.prepare",
-      "app.environments.terminal.authorize"
+      "app.environments.terminal.authorize",
+      "app.environments.clusters.write",
+      "app.environments.clusters.delete",
+      "app.environments.sandbox.restart",
+      "app.environments.sandbox.terminate"
     ]
   },
   {

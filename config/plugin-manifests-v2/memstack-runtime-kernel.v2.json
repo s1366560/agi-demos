@@ -15051,7 +15051,7 @@
       },
       "contract_digest": "sha256:8277ed5bbfbcd4cd2dc438259bcc27e71848bb4eba45427051bfb18b63ff9cdb",
       "artifact": {
-        "digest": "sha256:e81452b1f2f715bc93cf11ec67f20af1843fa7dc75681f2838494c32e814c4b8",
+        "digest": "sha256:9e267f2481869fff2beeafb27a0c5af4b3d1b187a4c5a3b073c326382df653a0",
         "source": "repo+python://plugins/business/automation/backend/application_adapter.py"
       }
     },
@@ -15117,7 +15117,7 @@
       },
       "contract_digest": "sha256:e2ae5c4f558cce5a3cb94163f7297676138945d7d836cad6b526b5db206c332c",
       "artifact": {
-        "digest": "sha256:5f7d57d7ff77d8c40e82b612d479549f27826575e1cea8ae90f28d4fb854fcb6",
+        "digest": "sha256:96d96874d17f67a88c9bb37fb091c1a19a263dd7b0101ba431084f99b104aa8c",
         "source": "repo+python://plugins/business/environments/backend/application_adapter.py"
       }
     },

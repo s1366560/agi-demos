@@ -15,7 +15,10 @@
 ui/**
 !ui/settings.json
 !ui/skill.js
-!ui/chat.js
+!ui/chat-web.js
+!ui/chat-web.css
+!ui/chat-desktop.js
+!ui/chat-desktop.css
 !engine/
 !engine/__init__.py
 !engine/processor/

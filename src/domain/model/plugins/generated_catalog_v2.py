@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:639918f12c59b2165e7ee16072cbdce197c0815da8bfa16ef90d4e662ee8b6'
-    '48","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:b161e48beaf511c70170a29122077fa0e44561af105e278487765078082aff'
+    'fc","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -3653,8 +3653,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'quires":[]}},"contract_digest":"sha256:8f0fca0bd5f717517f49b5be97078ee6a6e9b695e8e5d4d73'
     'b7429fd90cd712b","entrypoint":"plugins.business.agent.backend.application_adapter:apply"'
     ',"module_ref":"builtin://memstack/package-application/agent","plugin_id":"memstack-runti'
-    'me-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:e81'
-    '452b1f2f715bc93cf11ec67f20af1843fa7dc75681f2838494c32e814c4b8","artifact_source":"repo+p'
+    'me-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:9e2'
+    '67f2481869fff2beeafb27a0c5af4b3d1b187a4c5a3b073c326382df653a0","artifact_source":"repo+p'
     'ython://plugins/business/automation/backend/application_adapter.py","contract":{"config_'
     'schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties"'
     ':false,"properties":{},"type":"object"},"events":{"emits":[],"handles":[]},"services":{"'
@@ -3672,7 +3672,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'e30c99fec1ed40a565283b88302e8ed67","entrypoint":"plugins.business.billing.backend.applic'
     'ation_adapter:apply","module_ref":"builtin://memstack/package-application/billing","plug'
     'in_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifa'
-    'ct_digest":"sha256:5f7d57d7ff77d8c40e82b612d479549f27826575e1cea8ae90f28d4fb854fcb6","ar'
+    'ct_digest":"sha256:96d96874d17f67a88c9bb37fb091c1a19a263dd7b0101ba431084f99b104aa8c","ar'
     'tifact_source":"repo+python://plugins/business/environments/backend/application_adapter.'
     'py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema'
     '","additionalProperties":false,"properties":{},"type":"object"},"events":{"emits":[],"ha'
@@ -4846,7 +4846,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:639918f12c59b2165e7ee16072cbdce197c0815da8bfa16ef90d4e662ee8b648"
+    "sha256:b161e48beaf511c70170a29122077fa0e44561af105e278487765078082afffc"
 )
 # fmt: on
 
