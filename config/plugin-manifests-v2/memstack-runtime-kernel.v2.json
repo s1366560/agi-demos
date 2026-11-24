@@ -15051,7 +15051,7 @@
       },
       "contract_digest": "sha256:8277ed5bbfbcd4cd2dc438259bcc27e71848bb4eba45427051bfb18b63ff9cdb",
       "artifact": {
-        "digest": "sha256:a304668e114bcefd83ed3912dab3dd06647e62b4baff48aca0ef3ee3324d9c41",
+        "digest": "sha256:e81452b1f2f715bc93cf11ec67f20af1843fa7dc75681f2838494c32e814c4b8",
         "source": "repo+python://plugins/business/automation/backend/application_adapter.py"
       }
     },

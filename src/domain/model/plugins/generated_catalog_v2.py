@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:2e5da96ca8532b96ed55f1e89a12d9e3a01deb98e3a61cda79b56d1f908584'
-    'd0","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:639918f12c59b2165e7ee16072cbdce197c0815da8bfa16ef90d4e662ee8b6'
+    '48","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -3653,8 +3653,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'quires":[]}},"contract_digest":"sha256:8f0fca0bd5f717517f49b5be97078ee6a6e9b695e8e5d4d73'
     'b7429fd90cd712b","entrypoint":"plugins.business.agent.backend.application_adapter:apply"'
     ',"module_ref":"builtin://memstack/package-application/agent","plugin_id":"memstack-runti'
-    'me-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:a30'
-    '4668e114bcefd83ed3912dab3dd06647e62b4baff48aca0ef3ee3324d9c41","artifact_source":"repo+p'
+    'me-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:e81'
+    '452b1f2f715bc93cf11ec67f20af1843fa7dc75681f2838494c32e814c4b8","artifact_source":"repo+p'
     'ython://plugins/business/automation/backend/application_adapter.py","contract":{"config_'
     'schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties"'
     ':false,"properties":{},"type":"object"},"events":{"emits":[],"handles":[]},"services":{"'
@@ -4846,7 +4846,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:2e5da96ca8532b96ed55f1e89a12d9e3a01deb98e3a61cda79b56d1f908584d0"
+    "sha256:639918f12c59b2165e7ee16072cbdce197c0815da8bfa16ef90d4e662ee8b648"
 )
 # fmt: on
 

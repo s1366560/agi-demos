@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:2e5da96ca8532b96ed55f1e89a12d9e3a01deb98e3a61cda79b56d1f90',
-  '8584d0","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:639918f12c59b2165e7ee16072cbdce197c0815da8bfa16ef90d4e662e',
+  'e8b648","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -3844,8 +3844,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'f0fca0bd5f717517f49b5be97078ee6a6e9b695e8e5d4d73b7429fd90cd712b","entrypoint":"plugi',
   'ns.business.agent.backend.application_adapter:apply","module_ref":"builtin://memstac',
   'k/package-application/agent","plugin_id":"memstack-runtime-kernel","plugin_version":',
-  '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:a304668e114bcefd83ed3912dab',
-  '3dd06647e62b4baff48aca0ef3ee3324d9c41","artifact_source":"repo+python://plugins/busi',
+  '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:e81452b1f2f715bc93cf11ec67f',
+  '20af1843fa7dc75681f2838494c32e814c4b8","artifact_source":"repo+python://plugins/busi',
   'ness/automation/backend/application_adapter.py","contract":{"config_schema":{"$schem',
   'a":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"prop',
   'erties":{},"type":"object"},"events":{"emits":[],"handles":[]},"services":{"provides',
@@ -5099,4 +5099,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:2e5da96ca8532b96ed55f1e89a12d9e3a01deb98e3a61cda79b56d1f908584d0' as const;
+  'sha256:639918f12c59b2165e7ee16072cbdce197c0815da8bfa16ef90d4e662ee8b648' as const;
