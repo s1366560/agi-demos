@@ -49,6 +49,8 @@ Use `make status`, `make logs`, `make restart` and `make stop` with the same pro
 
 The full-stack development entry is `MEMSTACK_DEV_PROFILE=full make init dev`. Its Ray, Neo4j, Workspace Core and MinIO services continue to use the existing full-schema database. See the [business source guide](plugins/README.md) and [Helm release instructions](charts/memstack/README.md).
 
+To build both full clients in isolation, run `python3 scripts/verify_full_client_builds.py --build-root "$(mktemp -d)/checkout"`. It stages the host and shared sources, installs the pinned dependencies, and writes the Web build to `web/dist` and the Electron build to `agi-stack/apps/desktop/out`. The full workbenches load installed pages from signed releases. To open older pages during migration, start the Web compatibility workbench with `npm --prefix web run dev:compat` on port 3001 or launch the [desktop compatibility profile](agi-stack/README.md#桌面开发入口).
+
 ## Development Commands
 
 | Task | Command |
