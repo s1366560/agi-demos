@@ -261,7 +261,8 @@ import {
   type DesktopTerminalLifecycleAuthorityV2,
 } from './plugins/desktopTerminalLifecycleAuthorityModuleV2';
 import { DesktopRendererAuthenticationRouterV2 } from './plugins/DesktopRendererAuthenticationRouterV2';
-import { DesktopPackageWorkbench, useSignedWorkbench } from './packageHost/DesktopPackageWorkbench';
+import { useSignedWorkbench } from './packageHost/useSignedWorkbench';
+import { DesktopPackageWorkbench } from './packageHost/DesktopPackageWorkbench';
 import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
 import {
   DesktopRendererGenerationProviderV2,
@@ -3141,7 +3142,7 @@ export function App() {
     shortcutsDialogOpen,
   ]);
 
-  const signedWorkbench = useSignedWorkbench(config.mode === 'cloud' ? config.tenantId : '');
+  const signedWorkbench = useSignedWorkbench(config.mode === 'cloud' ? config.tenantId : '', config.projectId || null, auth.user?.user_id);
   useDesktopModalBackgroundV2(appShellRef, identityAuthenticated && modalOpen && !signedWorkbench);
 
   useEffect(() => {
@@ -8328,7 +8329,7 @@ export function App() {
           <ComputerUseActivity conversationId={selectedConversationId}
             runId={currentArtifactRun?.id ?? sessionDetailViewModel?.runId ?? null} />
           {signedWorkbench
-            ? <DesktopPackageWorkbench tenant={config.tenantId} project={config.projectId || null} locale={locale} />
+            ? <DesktopPackageWorkbench workbench={signedWorkbench} tenant={config.tenantId} project={config.projectId || null} locale={locale} />
             : <DesktopRendererAuthenticatedShellV2 viewModel={desktopAuthenticatedShellViewModelV2} />}
           </ComputerUseDeviceProvider>
         </TimelineInspectionProvider>

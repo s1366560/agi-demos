@@ -72,7 +72,9 @@ def test_tenant_automation_uses_the_original_patterns_view():
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    not os.getenv("MEMSTACK_QA_NATIVE_BILLING"),
+    not (
+        os.getenv("MEMSTACK_QA_NATIVE_BILLING") and os.getenv("MEMSTACK_QA_NATIVE_BILLING_TENANT")
+    ),
     reason="requires a disposable owner tenant in Electron",
 )
 def test_native_original_billing_respects_plan_authority():
@@ -89,6 +91,9 @@ def test_native_original_billing_respects_plan_authority():
         frame = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
         billing = frame.locator('[data-tenant-admin-route="billing"]')
         expect(billing).to_be_visible(timeout=30000)
+        expect(billing.locator(":scope > dl dd").first).to_have_text(
+            os.environ["MEMSTACK_QA_NATIVE_BILLING_TENANT"]
+        )
         plan = billing.locator(":scope > dl dd").last
         before = plan.inner_text()
         if os.getenv("MEMSTACK_QA_NATIVE_BILLING") == "admin":
@@ -103,3 +108,14 @@ def test_native_original_billing_respects_plan_authority():
             if plan.inner_text() != before:
                 billing.get_by_role("button", name=before, exact=True).click()
                 expect(plan).to_have_text(before, timeout=30000)
+        page.get_by_role("button", name=re.compile("^返回工作台$|^Back to workspace$", re.I)).click()
+        close = page.get_by_role("button", name=re.compile("^关闭设置$|^Close settings$", re.I))
+        if close.is_visible():
+            close.click()
+        page.get_by_role("button", name=re.compile("^全部功能$|^All features$", re.I)).click()
+        page.locator('[role="dialog"] button').filter(has_text=re.compile("账单|Billing")).first.click()
+        expect(billing).to_be_visible(timeout=30000)
+        expect(billing.locator(":scope > dl dd").first).to_have_text(
+            os.environ["MEMSTACK_QA_NATIVE_BILLING_TENANT"]
+        )
+        expect(plan).to_have_text(before)
