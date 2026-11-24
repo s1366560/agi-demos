@@ -31,6 +31,7 @@ export function PackageManagement({
   project,
   canManage,
   refresh,
+  onNavigate,
   full = false,
   locale = document.documentElement.lang,
 }: {
@@ -38,6 +39,7 @@ export function PackageManagement({
   project: string | null;
   canManage: boolean;
   refresh?: () => void;
+  onNavigate?: () => void;
   full?: boolean;
   locale?: string;
 }) {
@@ -78,6 +80,7 @@ export function PackageManagement({
     else query.delete('marketPage');
     const search = query.toString();
     const destination = base + (search ? '?' + search : '');
+    onNavigate?.();
     if (replace) window.location.replace('#' + destination);
     else window.location.hash = destination;
   };
@@ -146,6 +149,7 @@ export function PackageManagement({
         <select
           value={tenantOnly ? 'tenant' : 'project'}
           onChange={(event) => {
+            onNavigate?.();
             window.location.hash =
               base + (event.target.value === 'tenant' ? '?marketScope=tenant' : '');
           }}

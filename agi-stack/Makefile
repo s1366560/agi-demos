@@ -169,24 +169,27 @@ endif
 export AGISTACK_DESKTOP_PROFILE AGISTACK_WEB_CONTROL_PLANE_ORIGIN AGISTACK_DESKTOP_GRANTS_API_BASE
 endif
 
+DESKTOP_PROFILE_OUTPUT = $(if $(filter compat,$(AGISTACK_DESKTOP_PROFILE)),out-compat,out)
+DESKTOP_PROFILE_ENTRY = $(if $(filter compat,$(AGISTACK_DESKTOP_PROFILE)),./out-compat/main/index.js,.)
+
 ifeq ($(AGISTACK_DESKTOP_FIXED_BUILD),1)
 run-desktop: ## Launch the already built Electron host and Sidecar without changing their artifacts
-	test -s $(DESKTOP_APP_DIR)/out/main/index.js
-	test -s $(DESKTOP_APP_DIR)/out/preload/index.cjs
-	test -s $(DESKTOP_APP_DIR)/out/renderer/index.html
+	test -s $(DESKTOP_APP_DIR)/$(DESKTOP_PROFILE_OUTPUT)/main/index.js
+	test -s $(DESKTOP_APP_DIR)/$(DESKTOP_PROFILE_OUTPUT)/preload/index.cjs
+	test -s $(DESKTOP_APP_DIR)/$(DESKTOP_PROFILE_OUTPUT)/renderer/index.html
 	test -x "$(CURDIR)/target/debug/agistack-desktop-sidecar"
-	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- node node_modules/electron/cli.js .
+	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- node node_modules/electron/cli.js $(DESKTOP_PROFILE_ENTRY)
 else
-ifeq ($(AGISTACK_DESKTOP_PROFILE),full)
+ifneq ($(filter full compat,$(AGISTACK_DESKTOP_PROFILE)),)
 run-desktop: desktop-cua-helper desktop-cua-repl desktop-full-workspace
 .PHONY: desktop-full-workspace
 desktop-full-workspace: desktop-deps
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
 endif
 run-desktop: desktop-deps ## 启动 Electron 原生客户端与 Rust sidecar
-	$(CARGO) build -p agistack-desktop-sidecar $(if $(filter full,$(AGISTACK_DESKTOP_PROFILE)),--features legacy-business)
+	$(CARGO) build -p agistack-desktop-sidecar $(if $(filter full compat,$(AGISTACK_DESKTOP_PROFILE)),--features legacy-business)
 	cd $(DESKTOP_APP_DIR) && $(PNPM) exec install-electron --no
-	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- $(PNPM) run dev:electron
+	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- $(PNPM) run dev:electron $(if $(filter compat,$(AGISTACK_DESKTOP_PROFILE)),--entry $(DESKTOP_PROFILE_ENTRY))
 endif
 
 desktop-grants: ## 桌面:强制重新发放云端数据平面授权(24h 有效,仅本地开发)

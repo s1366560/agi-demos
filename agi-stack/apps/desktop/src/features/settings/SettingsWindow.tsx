@@ -892,7 +892,7 @@ export function SettingsWindow({
                 <div className={`settings-resource-container${section === 'plugins' ? ' settings-resource-container--plugins' : ''}`}>
                   {section === 'plugins' && config.mode === 'cloud' && config.tenantId ? (
                     <PackageManagement tenant={config.tenantId} project={config.projectId || null}
-                      full canManage locale={locale} />
+                      full canManage locale={locale} onNavigate={onClose} />
                   ) : null}
                   <SettingsIntegrations collapsible={section === 'plugins' && config.mode === 'cloud'}>
                   {section === 'plugins' ? <ComputerUseSettingsPage /> : null}

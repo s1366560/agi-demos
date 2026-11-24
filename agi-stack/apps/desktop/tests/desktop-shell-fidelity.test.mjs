@@ -65,10 +65,9 @@ const runtimeConfigSource = readFileSync(
   new URL('../src/features/runtime/RuntimeConfigPanel.tsx', import.meta.url),
   'utf8',
 );
-const sidebarSource = readFileSync(
-  new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
-  'utf8',
-);
+const sidebarSource = ['DesktopSidebar', 'DesktopSidebarFrame'].map(name =>
+  readFileSync(new URL(`../src/features/navigation/${name}.tsx`, import.meta.url), 'utf8')
+).join('\n');
 const sidebarStyles = readFileSync(
   new URL('../src/features/navigation/DesktopSidebar.css', import.meta.url),
   'utf8',

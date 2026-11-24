@@ -1,0 +1,99 @@
+import { useCallback, useEffect, useState } from 'react';
+import {
+  type Installation,
+  packageBase,
+  packageScope,
+} from '../../../../packages/plugin-marketplace-ui/src/pluginMarketTypes';
+import {
+  menuPath,
+  routeRank,
+  type PackagePage,
+} from '../../../../packages/plugin-slots/src/richPage';
+import { splitPageLocation } from '../../../../packages/plugin-slots/src/pageLocation';
+import { transport } from '../packageHost/transport';
+
+export type InstalledPage = {
+  projectId: string | null;
+  pluginId: string;
+  page: PackagePage;
+  path: string | null;
+};
+export function matchPage(entries: readonly InstalledPage[], tenantId: string, address: string) {
+  const { pathname } = splitPageLocation(address);
+  let winner: InstalledPage | null = null;
+  let best = '';
+  for (const entry of entries) {
+    for (const route of entry.page.routes) {
+      const rank = routeRank(route, pathname, {
+        tenantId,
+        projectId: entry.projectId,
+      });
+      if (rank !== null && (!winner || rank > best)) {
+        winner = entry;
+        best = rank;
+      }
+    }
+  }
+  return winner;
+}
+export function useInstalledPages(tenantId: string, projectId: string | null) {
+  const key = JSON.stringify([tenantId, projectId]);
+  const [snapshot, setSnapshot] = useState<{
+    key: string;
+    entries: InstalledPage[];
+    error: string | null;
+  } | null>(null);
+  const [revision, setRevision] = useState(0);
+  const refresh = useCallback(() => setRevision((i) => i + 1), []);
+  useEffect(() => {
+    if (!tenantId) return;
+    const controller = new AbortController();
+    const scopes = projectId ? [projectId, null] : [null];
+    void Promise.allSettled(
+      scopes.map(async (id) => {
+        const query = new URLSearchParams(packageScope(tenantId, id));
+        const result = await transport<{
+          items: (Installation & { status: string })[];
+        }>(packageBase(id) + '/?' + query, { signal: controller.signal });
+        return result.items.flatMap((release) => {
+          if (!release.actual_digest || !['enabled', 'failed'].includes(release.status)) return [];
+          return (release.pages ?? [])
+            .filter((page) => page.targets.includes('desktop-renderer') && page.routes.length > 0)
+            .map((page) => {
+              const paths = page.routes.map((route) =>
+                menuPath(route, { tenantId, projectId: id }),
+              );
+              return {
+                pluginId: release.plugin_id,
+                projectId: id,
+                page,
+                path:
+                  paths.find((path) => path?.startsWith('/tenant/')) || paths.find(Boolean) || null,
+              };
+            });
+        });
+      }),
+    ).then((results) => {
+      if (controller.signal.aborted) return;
+      setSnapshot({
+        key,
+        entries: results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
+        error:
+          results
+            .flatMap((result) => (result.status === 'rejected' ? [String(result.reason)] : []))
+            .join('\n') || null,
+      });
+    });
+    window.addEventListener('focus', refresh);
+    return () => {
+      controller.abort();
+      window.removeEventListener('focus', refresh);
+    };
+  }, [key, tenantId, projectId, revision, refresh]);
+  return {
+    entries: snapshot?.key === key ? snapshot.entries : [],
+    loading: !!tenantId && snapshot?.key !== key,
+    error: snapshot?.key === key ? snapshot.error : null,
+    refresh,
+  };
+}

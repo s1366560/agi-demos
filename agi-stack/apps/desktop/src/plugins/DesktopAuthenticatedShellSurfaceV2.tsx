@@ -1,3 +1,4 @@
+import { DesktopPackageWorkbench, type DesktopPackageWorkbenchProps } from '../packageHost/DesktopPackageWorkbench';
 import { TitlebarToolbarProvider } from '../features/chat/ConversationToolbar';
 import type { ComponentProps, CSSProperties, RefObject } from 'react';
 import { Theme } from '@radix-ui/themes';
@@ -46,6 +47,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
     windowMode: 'browser' | 'native';
   }>;
   readonly surfaces: Readonly<{
+    signedWorkbench?: DesktopPackageWorkbenchProps | null;
     commandPalette: DesktopCommandPaletteInputV2;
     keyboardShortcuts: DesktopKeyboardShortcutsInputV2;
     newTask: DesktopNewTaskFlowInputV2;
@@ -73,6 +75,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
   ]
     .filter(Boolean)
     .join(' ');
+  const WorkbenchContainer = surfaces.signedWorkbench ? 'section' : 'main';
   return (
     <TitlebarToolbarProvider>
       <Theme
@@ -100,12 +103,14 @@ export function DesktopAuthenticatedShellSurfaceV2({
           <section className="desktop-body">
             <DesktopRendererSidebarV2 input={surfaces.sidebar} />
 
-            <main ref={meta.workbenchRef} className="workbench" tabIndex={-1}>
+            <WorkbenchContainer ref={meta.workbenchRef} className="workbench" tabIndex={-1}>
               <DesktopRendererWorkbenchTabBarV2 input={surfaces.tabBar} />
               <div className="workbench-content">
-                <DesktopRendererProductionRouterV2 {...surfaces.router} />
+                {surfaces.signedWorkbench
+                  ? <DesktopPackageWorkbench {...surfaces.signedWorkbench} />
+                  : <DesktopRendererProductionRouterV2 {...surfaces.router} />}
               </div>
-            </main>
+            </WorkbenchContainer>
 
             {surfaces.rightSidebar.kind === 'visible' ? (
               <DesktopRendererRightSidebarV2

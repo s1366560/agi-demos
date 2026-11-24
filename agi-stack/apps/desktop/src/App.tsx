@@ -128,9 +128,6 @@ import {
   createDesktopProjectEntitiesOperationsV2,
 } from './plugins/desktopProjectEntitiesAuthorityModuleV2';
 import {
-  createDesktopProjectGraphOperationsV2,
-} from './plugins/desktopProjectGraphAuthorityModuleV2';
-import {
   createDesktopProjectMemoriesOperationsV2,
 } from './plugins/desktopProjectMemoriesAuthorityModuleV2';
 import {
@@ -259,7 +256,6 @@ import {
 } from './plugins/desktopTerminalLifecycleAuthorityModuleV2';
 import { DesktopRendererAuthenticationRouterV2 } from './plugins/DesktopRendererAuthenticationRouterV2';
 import { useSignedWorkbench } from './packageHost/useSignedWorkbench';
-import { DesktopPackageWorkbench } from './packageHost/DesktopPackageWorkbench';
 import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
 import {
   DesktopRendererGenerationProviderV2,
@@ -1362,13 +1358,6 @@ export function App() {
       ),
     [],
   );
-  const desktopProjectGraphOperationsV2 = useMemo(
-    () =>
-      createDesktopProjectGraphOperationsV2(
-        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
-      ),
-    [],
-  );
   const desktopRuntimePoolOperationsV2 = useMemo(
     () =>
       createDesktopRuntimePoolOperationsV2(
@@ -1769,7 +1758,6 @@ export function App() {
       projectAgentPatternsOperationsV2: desktopProjectAgentPatternsOperationsV2,
       projectCommunitiesOperationsV2: desktopProjectCommunitiesOperationsV2,
       projectEntitiesOperationsV2: desktopProjectEntitiesOperationsV2,
-      projectGraphOperationsV2: desktopProjectGraphOperationsV2,
       projectMemoriesOperationsV2: desktopProjectMemoriesOperationsV2,
       projectTeamOperationsV2: desktopProjectTeamOperationsV2,
       projectSchemaOperationsV2: desktopProjectSchemaOperationsV2,
@@ -1833,7 +1821,6 @@ export function App() {
       desktopProjectAgentPatternsOperationsV2,
       desktopProjectCommunitiesOperationsV2,
       desktopProjectEntitiesOperationsV2,
-      desktopProjectGraphOperationsV2,
       desktopProjectMemoriesOperationsV2,
       desktopProjectTeamOperationsV2,
       desktopProjectSchemaOperationsV2,
@@ -3113,7 +3100,7 @@ export function App() {
   ]);
 
   const signedWorkbench = useSignedWorkbench(config.mode === 'cloud' ? config.tenantId : '', config.projectId || null, auth.user?.user_id);
-  useDesktopModalBackgroundV2(appShellRef, identityAuthenticated && modalOpen && !signedWorkbench);
+  useDesktopModalBackgroundV2(appShellRef, identityAuthenticated && modalOpen);
 
   useEffect(() => {
     if (!runActionsMenuOpen) return;
@@ -6580,6 +6567,7 @@ export function App() {
       setSettingsWindowOpen(true);
       return;
     }
+    if (signedWorkbench) desktopProductionRouteNavigation.clearHash();
     const currentSection = activeSectionRef.current;
     if (section !== currentSection) {
       setSectionBackStack([...sectionBackStack, currentSection].slice(-24));
@@ -8034,6 +8022,12 @@ export function App() {
       windowMode: runsInNativeDesktop ? 'native' : 'browser',
     },
     surfaces: {
+      signedWorkbench: signedWorkbench ? {
+        workbench: signedWorkbench,
+        tenant: config.tenantId,
+        project: config.projectId || null,
+        locale,
+      } : null,
       titlebar: runsInNativeDesktop
         ? {
             kind: 'visible',
@@ -8298,9 +8292,7 @@ export function App() {
           <ComputerUseDeviceProvider config={config}>
           <ComputerUseActivity conversationId={selectedConversationId}
             runId={currentArtifactRun?.id ?? sessionDetailViewModel?.runId ?? null} />
-          {signedWorkbench
-            ? <DesktopPackageWorkbench workbench={signedWorkbench} tenant={config.tenantId} project={config.projectId || null} locale={locale} />
-            : <DesktopRendererAuthenticatedShellV2 viewModel={desktopAuthenticatedShellViewModelV2} />}
+          <DesktopRendererAuthenticatedShellV2 viewModel={desktopAuthenticatedShellViewModelV2} />
           </ComputerUseDeviceProvider>
         </TimelineInspectionProvider>
       </NativeMemoriesRouteProvider>

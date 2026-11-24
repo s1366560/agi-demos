@@ -6,7 +6,7 @@ const readSource = (path) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
 
 const appSource = readSource('App.tsx');
-const commandPaletteSource = readSource('features/navigation/CommandPalette.tsx');
+const commandPaletteSource = readSource('features/navigation/CommandPaletteSurface.tsx');
 const reviewPanelSource = readSource('features/session/WorkspaceReviewPanel.tsx');
 const flowSource = readSource('../../../../plugins/business/agent/ui/desktop/task/NewTaskFlow.tsx');
 const stagesSource = readSource('features/task/NewTaskFlowStages.tsx');

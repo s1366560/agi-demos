@@ -1,0 +1,312 @@
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { CubeIcon, GearIcon, GridIcon } from '@radix-ui/react-icons';
+import type { CloudSessionProjection } from '../api/cloudSessionProjectionClient';
+import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
+import { DesktopSidebarFrame } from '../features/navigation/DesktopSidebarFrame';
+import {
+  CommandPaletteSurface,
+  type CommandPaletteItem,
+} from '../features/navigation/CommandPaletteSurface';
+import { useI18n } from '../i18n';
+import { DesktopPackageWorkbench } from '../packageHost/DesktopPackageWorkbench';
+import { messages } from '../packageHost/messages';
+import { transport } from '../packageHost/transport';
+import { HostSettings, type HostSettingsTab } from './HostSettings';
+import { matchPage, useInstalledPages } from './pages';
+import './style.css';
+
+function subscribe(listener: () => void) {
+  window.addEventListener('hashchange', listener);
+  return () => window.removeEventListener('hashchange', listener);
+}
+const readHash = () => window.location.hash.slice(1);
+function navigate(path: string) {
+  window.location.hash = path;
+}
+
+export function FullWorkbench({
+  session,
+  reload,
+  signOut,
+}: {
+  session: CloudSessionProjection | null;
+  reload(): Promise<void>;
+  signOut(): void;
+}) {
+  const { locale, t } = useI18n();
+  const hash = useSyncExternalStore(subscribe, readHash);
+  const [memberships, setMemberships] = useState<{ tenant_id: string; name: string }[]>([]);
+  const [tenantError, setTenantError] = useState('');
+  const [chosenTenant, setChosenTenant] = useState('');
+  useEffect(() => {
+    if (session) return;
+    const controller = new AbortController();
+    void transport<{ items: { tenant_id: string; name: string }[] }>(
+      '/api/v1/tenant-packages/tenants',
+      { signal: controller.signal },
+    )
+      .then((result) => setMemberships(result.items))
+      .catch((cause) => {
+        if (!controller.signal.aborted) setTenantError(String(cause));
+      });
+    return () => controller.abort();
+  }, [session]);
+  const linkedTenant = memberships.find(
+    (item) => hash.split('/')[2] === encodeURIComponent(item.tenant_id),
+  );
+  const tenant =
+    session?.workspaceContext.tenantId ??
+    linkedTenant?.tenant_id ??
+    (chosenTenant || (memberships.length === 1 ? memberships[0]!.tenant_id : ''));
+  const project = session?.workspaceContext.projectId ?? null;
+  const [settings, setSettings] = useState<HostSettingsTab | null>(null);
+  const [directory, setDirectory] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [query, setQuery] = useState('');
+  const trigger = useRef<HTMLElement | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const { entries, error, loading, refresh } = useInstalledPages(tenant, project);
+  const base = '/tenant/' + encodeURIComponent(tenant);
+  const market = base + '/plugins';
+  const root = hash === '' || hash === '/';
+  const newTaskPath = base + '/agent-workspace';
+  const newTask = matchPage(entries, tenant, newTaskPath);
+  const home = entries.find((entry) => entry.page.home && entry.path);
+  const address = root ? (home?.path ?? (newTask ? newTaskPath : '')) : hash;
+  const inMarket = hash.split('?')[0] === market;
+  const selected = matchPage(entries, tenant, address);
+  const createWorkspace =
+    project &&
+    matchPage(
+      entries,
+      tenant,
+      base + '/project/' + encodeURIComponent(project) + '/workspaces/new',
+    );
+  const tenantName =
+    session?.tenants.find((item) => item.id === tenant)?.name ??
+    memberships.find((item) => item.tenant_id === tenant)?.name ??
+    tenant;
+  const projectName =
+    session?.projects.find((item) => item.id === project)?.name ?? t('settings.noProjectSelected');
+  const openDirectory = useCallback((button?: HTMLElement) => {
+    trigger.current =
+      button ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setQuery('');
+    setDirectory(true);
+  }, []);
+  useEffect(() => {
+    function keydown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openDirectory();
+      }
+    }
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  }, [openDirectory]);
+  useEffect(() => {
+    if (directory) input.current?.focus();
+  }, [directory]);
+  const previousHash = useRef(hash);
+  useEffect(() => {
+    if (previousHash.current.startsWith(market) && !hash.startsWith(market)) refresh();
+    previousHash.current = hash;
+  }, [hash, market, refresh]);
+  const items: CommandPaletteItem[] = [];
+  function item(
+    id: string,
+    label: string,
+    groupLabel: string,
+    action: () => void,
+    icon = <CubeIcon />,
+  ) {
+    items.push({
+      id,
+      kind: 'route',
+      groupId: groupLabel,
+      groupLabel,
+      label,
+      description: '',
+      icon,
+      searchText: label + ' ' + groupLabel,
+      onSelect: action,
+    });
+  }
+  item(
+    'host-market',
+    t('nav.plugins'),
+    t('featureDirectory.open'),
+    () => navigate(market),
+    <GridIcon />,
+  );
+  item(
+    'host-settings',
+    t('sidebar.accountSettings'),
+    t('settings.title'),
+    () => setSettings('account'),
+    <GearIcon />,
+  );
+  for (const entry of entries)
+    if (entry.path)
+      item(
+        JSON.stringify([entry.projectId, entry.pluginId, entry.page.id]),
+        entry.page.title,
+        entry.pluginId,
+        () => navigate(entry.path!),
+      );
+  const primary = entries.filter(
+    (entry) => entry.path && (entry.page.workbench || entry.page.home),
+  );
+  const visible = primary.length ? primary : entries.filter((entry) => entry.path);
+  const props = { tenant, project, locale };
+  return (
+    <div
+      className={
+        'app-shell hierarchy-shell runtime-mode desktop-window' +
+        (collapsed ? ' sidebar-collapsed' : '')
+      }
+    >
+      <DesktopTitlebar
+        contextTitle={inMarket ? t('nav.plugins') : (selected?.page.title ?? projectName)}
+        sidebarCollapsed={collapsed}
+        rightSidebarOpen={false}
+        rightSidebarAvailable={false}
+        onToggleSidebar={() => setCollapsed((value) => !value)}
+        onToggleRightSidebar={() => {}}
+      />
+      <section className="desktop-body">
+        <DesktopSidebarFrame
+          tenantName={tenantName}
+          projectName={projectName}
+          user={session?.user ?? null}
+          onNavigate={() => navigate('')}
+          onOpenFeatureDirectory={openDirectory}
+          onOpenSearch={() => openDirectory()}
+          onCreateWorkspace={
+            createWorkspace
+              ? () =>
+                  navigate(base + '/project/' + encodeURIComponent(project!) + '/workspaces/new')
+              : undefined
+          }
+          newTaskDisabledReason={newTask ? null : t('desktopProductionRouter.unavailable.title')}
+          onNewTask={() => navigate(base + '/agent-workspace')}
+          onOpenAccountSettings={() => setSettings('account')}
+          onSwitchWorkspace={() => setSettings('workspace')}
+          onSignOut={signOut}
+          workspaceDock={
+            <nav className="desktop-design-primary-nav">
+              {visible.map((entry) => (
+                <button
+                  key={JSON.stringify([entry.projectId, entry.pluginId, entry.page.id])}
+                  className={selected === entry ? 'active' : ''}
+                  onClick={() => navigate(entry.path!)}
+                  type="button"
+                >
+                  <CubeIcon />
+                  <span>{entry.page.title}</span>
+                </button>
+              ))}
+            </nav>
+          }
+        />
+        <section className="workbench">
+          <div className="workbench-content">
+            {inMarket && tenant ? (
+              <DesktopPackageWorkbench
+                {...props}
+                workbench={{ kind: 'market' }}
+                onChanged={refresh}
+              />
+            ) : selected ? (
+              <DesktopPackageWorkbench
+                {...props}
+                workbench={{
+                  kind: 'page',
+                  address,
+                  route: {
+                    projectId: selected.projectId,
+                    pluginId: selected.pluginId,
+                    rank: '',
+                  },
+                }}
+              />
+            ) : (
+              <main className="desktop-package-workbench">
+                <h1>{project ? projectName : tenantName || messages.tenant}</h1>
+                {!session && memberships.length > 0 && (
+                  <label>
+                    {messages.tenant}
+                    <select
+                      value={tenant}
+                      onChange={(event) => {
+                        setChosenTenant(event.target.value);
+                        navigate(
+                          '/tenant/' +
+                            encodeURIComponent(event.target.value) +
+                            '/plugins?marketScope=tenant',
+                        );
+                      }}
+                    >
+                      {!tenant && <option value="">{messages.tenant}</option>}
+                      {memberships.map((item) => (
+                        <option key={item.tenant_id} value={item.tenant_id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {tenantError && <p role="alert">{tenantError}</p>}
+                {!root && !loading && !error && (
+                  <p role="status">{t('desktopProductionRouter.unavailable.description')}</p>
+                )}
+                {error && <p role="alert">{error}</p>}
+                {loading ? (
+                  <p role="status">{messages.loading}</p>
+                ) : tenant ? (
+                  <button type="button" onClick={() => navigate(market)}>
+                    {t('nav.plugins')}
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => setSettings('workspace')}>
+                    {t('settings.switchWorkspace')}
+                  </button>
+                )}
+              </main>
+            )}
+          </div>
+        </section>
+      </section>
+      {directory && (
+        <CommandPaletteSurface
+          inputRef={input}
+          query={query}
+          items={items.filter((entry) =>
+            entry.searchText.toLowerCase().includes(query.trim().toLowerCase()),
+          )}
+          shortcutIds={['palette-move', 'palette-jump', 'palette-run']}
+          onQueryChange={setQuery}
+          onClose={(restore = true) => {
+            setDirectory(false);
+            if (restore) trigger.current?.focus();
+          }}
+        />
+      )}
+      {settings && (
+        <HostSettings
+          initial={settings}
+          session={session}
+          reload={reload}
+          signOut={signOut}
+          memberships={memberships}
+          onTenant={(id) => {
+            setChosenTenant(id);
+            navigate('/tenant/' + encodeURIComponent(id) + '/plugins?marketScope=tenant');
+            setSettings(null);
+          }}
+          close={() => setSettings(null)}
+        />
+      )}
+    </div>
+  );
+}

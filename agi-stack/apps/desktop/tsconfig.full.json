@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/fullHost/main.tsx",
+    "src/features/chat/McpAppGuestRenderer.tsx",
+    "src/**/*.d.ts",
+    "../../packages/plugin-slots/src/raw.d.ts"
+  ]
+}

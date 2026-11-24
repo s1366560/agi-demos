@@ -7,17 +7,21 @@ import { PackageManagement } from './PackageManagement';
 import { messages } from './messages';
 import './workbench.css';
 
+export type DesktopPackageWorkbenchProps = {
+  workbench: SignedWorkbench;
+  tenant: string;
+  project: string | null;
+  locale: string;
+  onChanged?: () => void;
+};
+
 export function DesktopPackageWorkbench({
   workbench,
   tenant,
   project,
   locale,
-}: {
-  workbench: SignedWorkbench;
-  tenant: string;
-  project: string | null;
-  locale: string;
-}) {
+  onChanged,
+}: DesktopPackageWorkbenchProps) {
   return (
     <main className="desktop-package-workbench">
       <button
@@ -29,7 +33,7 @@ export function DesktopPackageWorkbench({
         {messages.backToWorkspace}
       </button>
       {workbench.kind === 'market' ? (
-        <PackageManagement tenant={tenant} project={project} full canManage locale={locale} />
+        <PackageManagement tenant={tenant} project={project} full canManage locale={locale} refresh={onChanged} />
       ) : (
         <RichPackagePages
           scope={{ tenantId: tenant, projectId: workbench.route.projectId }}

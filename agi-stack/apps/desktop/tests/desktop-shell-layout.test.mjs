@@ -47,10 +47,9 @@ const statusBarStyles = readFileSync(
   new URL('../src/features/chrome/DesktopStatusBar.css', import.meta.url),
   'utf8',
 );
-const sidebarSource = readFileSync(
-  new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
-  'utf8',
-);
+const sidebarSource = ['DesktopSidebar', 'DesktopSidebarFrame'].map(name =>
+  readFileSync(new URL(`../src/features/navigation/${name}.tsx`, import.meta.url), 'utf8')
+).join('\n');
 const tabBarSource = readFileSync(
   new URL('../src/features/chrome/WorkbenchTabBar.tsx', import.meta.url),
   'utf8',

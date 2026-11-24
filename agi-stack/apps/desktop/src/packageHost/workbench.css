@@ -19,3 +19,8 @@
 .desktop-package-workbench iframe {
   width: 100%;
 }
+
+.workbench-content > .desktop-package-workbench {
+  height: 100%;
+  min-height: 0;
+}

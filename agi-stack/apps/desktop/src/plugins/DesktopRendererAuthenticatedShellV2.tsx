@@ -1,3 +1,4 @@
+import { DesktopPackageWorkbench } from '../packageHost/DesktopPackageWorkbench';
 import { useI18n } from '../i18n';
 import type { DesktopAuthenticatedShellViewModelV2 } from './DesktopAuthenticatedShellSurfaceV2';
 import {
@@ -19,6 +20,10 @@ export function DesktopRendererAuthenticatedShellV2({
   if (shell.status === 'ready') {
     const Surface = shell.Surface;
     return <Surface viewModel={viewModel} />;
+  }
+  // Signed pages use the package runtime even while the legacy chrome is recovering.
+  if (viewModel.surfaces.signedWorkbench) {
+    return <DesktopPackageWorkbench {...viewModel.surfaces.signedWorkbench} />;
   }
   return (
     <DesktopRendererAuthenticatedShellBoundaryV2

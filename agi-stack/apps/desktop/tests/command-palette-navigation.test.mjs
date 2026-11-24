@@ -13,7 +13,7 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/CommandPalette.js');
 
 const source = readFileSync(
-  new URL('../src/features/navigation/CommandPalette.tsx', import.meta.url),
+  new URL('../src/features/navigation/CommandPaletteSurface.tsx', import.meta.url),
   'utf8',
 );
 

@@ -127,8 +127,6 @@ import { createProjectCommunitiesController } from '@business/knowledge/ui/deskt
 import { createProjectCommunitiesRouteModuleLoader } from '../project-knowledge/projectCommunitiesRouteModule';
 import { createProjectEntitiesController } from '@business/knowledge/ui/desktop/project-knowledge/projectEntitiesController';
 import { createProjectEntitiesRouteModuleLoader } from '../project-knowledge/projectEntitiesRouteModule';
-import { createProjectGraphController } from '@business/knowledge/ui/desktop/project-knowledge/projectGraphController';
-import { createProjectGraphRouteModuleLoader } from '../project-knowledge/projectGraphRouteModule';
 import { createProjectMemoriesController } from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesController';
 import { createProjectMemoriesRouteModuleLoader } from '../project-knowledge/projectMemoriesRouteModule';
 import { createProjectTeamController } from '../project-knowledge/projectTeamController';
@@ -233,10 +231,6 @@ import {
   type DesktopProjectEntitiesOperationsV2,
 } from '../../plugins/desktopProjectEntitiesAuthorityModuleV2';
 import {
-  createDesktopProjectGraphClientV2,
-  type DesktopProjectGraphOperationsV2,
-} from '../../plugins/desktopProjectGraphAuthorityModuleV2';
-import {
   createDesktopProjectMemoriesClientV2,
   type DesktopProjectMemoriesOperationsV2,
 } from '../../plugins/desktopProjectMemoriesAuthorityModuleV2';
@@ -337,7 +331,6 @@ export type AppRouteRegistryRefs = {
   projectAgentPatternsOperationsV2: DesktopProjectAgentPatternsOperationsV2;
   projectCommunitiesOperationsV2: DesktopProjectCommunitiesOperationsV2;
   projectEntitiesOperationsV2: DesktopProjectEntitiesOperationsV2;
-  projectGraphOperationsV2: DesktopProjectGraphOperationsV2;
   projectMemoriesOperationsV2: DesktopProjectMemoriesOperationsV2;
   projectTeamOperationsV2: DesktopProjectTeamOperationsV2;
   projectSchemaOperationsV2: DesktopProjectSchemaOperationsV2;
@@ -388,7 +381,6 @@ export type AppProjectKnowledgeRouteRegistryRefs = Pick<
   | 'configRef'
   | 'projectCommunitiesOperationsV2'
   | 'projectEntitiesOperationsV2'
-  | 'projectGraphOperationsV2'
   | 'projectMemoriesOperationsV2'
   | 'projectTeamOperationsV2'
 >;
@@ -693,7 +685,6 @@ export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledge
     configRef,
     projectCommunitiesOperationsV2,
     projectEntitiesOperationsV2,
-    projectGraphOperationsV2,
     projectMemoriesOperationsV2,
     projectTeamOperationsV2,
   } = refs;
@@ -783,25 +774,20 @@ export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledge
           });
         },
       }),
-      [PROJECT_GRAPH_ROUTE_ID]: createProjectGraphRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          return Object.freeze({
-            controller: createProjectGraphController({
-              authority: currentConfig.mode,
-              client: createDesktopProjectGraphClientV2(
-                projectGraphOperationsV2,
-                currentConfig,
-              ),
-              initialScope: scope,
-            }),
-            scope,
-          });
+      [PROJECT_GRAPH_ROUTE_ID]: packageRoute(PROJECT_GRAPH_ROUTE_ID, 'graph', 'project', {
+        isLocal: () => configRef.current.mode === 'local',
+        load: async () => {
+          const { NativeKnowledgeGraphRouteSurface } = await import('../project-knowledge/NativeKnowledgeGraphRouteSurface');
+          return {
+            routeId: PROJECT_GRAPH_ROUTE_ID,
+            capability: PROJECT_GRAPH_ROUTE_ID,
+            localPolicy: 'native_equivalent',
+            disposition: 'implemented',
+            availability: 'available',
+            reasonCode: null,
+            contentPolicy: 'route_content',
+            Surface: NativeKnowledgeGraphRouteSurface,
+          };
         },
       }),
     }),

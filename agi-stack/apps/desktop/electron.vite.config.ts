@@ -1,5 +1,5 @@
 import { richPageFramePlugin } from '../../packages/plugin-slots/viteRichPageFrame.mjs';
-import { fullDesktopProfile, legacyRendererEntry } from './scripts/legacyRendererProfile';
+import { compatibilityProfile, fullDesktopProfile, legacyRendererEntry } from './scripts/legacyRendererProfile';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 import { dirname, resolve } from 'node:path';
@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { rendererRootHotReload } from './scripts/rendererRootHotReload.mjs';
 
 const desktopRoot = dirname(fileURLToPath(import.meta.url));
+
+const desktopOutput = compatibilityProfile ? 'out-compat' : 'out';
 
 // Generated output directories must not trigger renderer page reloads or
 // main/preload rebuilds while the dev app is running (QA traces, release
@@ -17,13 +19,14 @@ const generatedOutputWatchIgnores = [
   '**/release/**',
   '**/dist/**',
   '**/out/**',
+  '**/out-compat/**',
 ];
 
 export default defineConfig(({ command }) => ({
   main: {
     define: { __AGISTACK_FULL_DESKTOP__: JSON.stringify(fullDesktopProfile) },
     build: {
-      outDir: resolve(desktopRoot, 'out/main'),
+      outDir: resolve(desktopRoot, desktopOutput, 'main'),
       // `build.watch` is dev-only input for electron-vite; enabling it in a
       // production build would leave Rollup in watch mode forever.
       ...(command === 'serve' ? { watch: { exclude: generatedOutputWatchIgnores } } : {}),
@@ -44,7 +47,7 @@ export default defineConfig(({ command }) => ({
   preload: {
     define: { __AGISTACK_FULL_DESKTOP__: JSON.stringify(fullDesktopProfile) },
     build: {
-      outDir: resolve(desktopRoot, 'out/preload'),
+      outDir: resolve(desktopRoot, desktopOutput, 'preload'),
       ...(command === 'serve' ? { watch: { exclude: generatedOutputWatchIgnores } } : {}),
       rollupOptions: {
         input: {
@@ -74,7 +77,7 @@ export default defineConfig(({ command }) => ({
       dedupe: ['@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm', 'react', 'react-dom', '@radix-ui/themes', '@radix-ui/react-icons'],
       alias: {
         '@desktop': resolve(desktopRoot, 'src'),
-        ...(fullDesktopProfile ? {'@business': resolve(desktopRoot, '../../../plugins/business')} : {}),
+        ...(compatibilityProfile ? {'@business': resolve(desktopRoot, '../../../plugins/business')} : {}),
         '@agistack/plugin-runtime': resolve(
           desktopRoot,
           '../../packages/plugin-runtime/src/index.ts',
@@ -93,7 +96,7 @@ export default defineConfig(({ command }) => ({
       },
     },
     build: {
-      outDir: resolve(desktopRoot, 'out/renderer'),
+      outDir: resolve(desktopRoot, desktopOutput, 'renderer'),
       emptyOutDir: true,
       rollupOptions: {
         input: { index: resolve(desktopRoot, 'index.html'), ...(fullDesktopProfile
