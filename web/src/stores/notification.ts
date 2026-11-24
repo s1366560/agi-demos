@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import api from '../services/api';
+import { hostControlClient as api } from '../services/client/hostControlClient';
 
 interface Notification {
   id: string;

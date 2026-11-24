@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import { onTenantScopeRetired } from '../../core/tenantScopeLifecycle';
 import { TenantLayout } from '../../layouts/TenantLayout';
 import { logger } from '../../utils/logger';
 import { screen, render, waitFor, act, fireEvent } from '../utils';
@@ -37,29 +38,8 @@ const mockRouteParamListeners = new Set<() => void>();
 let mockLocationPathname = '/tenant/t1/overview';
 let mockLocationSearch = '';
 const mockNavigate = vi.fn();
-const {
-  mockAgentV3SetState,
-  mockConversationReset,
-  mockTimelineReset,
-  mockStreamingReset,
-  mockExecutionReset,
-  mockHITLSyncFromConversation,
-  mockSandboxUnsubscribeSSE,
-  mockSandboxReset,
-  mockAgentDisconnect,
-  mockUnifiedDisconnect,
-} = vi.hoisted(() => ({
-  mockAgentV3SetState: vi.fn(),
-  mockConversationReset: vi.fn(),
-  mockTimelineReset: vi.fn(),
-  mockStreamingReset: vi.fn(),
-  mockExecutionReset: vi.fn(),
-  mockHITLSyncFromConversation: vi.fn(),
-  mockSandboxUnsubscribeSSE: vi.fn(),
-  mockSandboxReset: vi.fn(),
-  mockAgentDisconnect: vi.fn(),
-  mockUnifiedDisconnect: vi.fn(),
-}));
+const mockAgentDisconnect = vi.fn();
+const mockUnifiedDisconnect = vi.fn();
 
 function setMockRouteParams(params: Record<string, string | undefined>) {
   mockRouteParams = params;
@@ -168,84 +148,6 @@ vi.mock('../../stores/tenant', () => ({
   useTenantStore: createMockStore(),
 }));
 
-vi.mock('@business/agent/ui/web/stores/agent/conversationsStore', () => ({
-  useConversationsStore: Object.assign(
-    (
-      selector?: (state: {
-        conversations: unknown[];
-        reset: typeof mockConversationReset;
-      }) => unknown
-    ) =>
-      selector
-        ? selector({ conversations: [], reset: mockConversationReset })
-        : { conversations: [], reset: mockConversationReset },
-    {
-      getState: () => ({
-        reset: mockConversationReset,
-      }),
-    }
-  ),
-}));
-
-vi.mock('@business/agent/ui/web/stores/agent/executionStore', () => ({
-  useExecutionStore: {
-    getState: () => ({
-      reset: mockExecutionReset,
-    }),
-  },
-}));
-
-vi.mock('@business/agent/ui/web/stores/agent/hitlStore', () => ({
-  useAgentHITLStore: {
-    getState: () => ({
-      syncFromConversation: mockHITLSyncFromConversation,
-    }),
-  },
-}));
-
-vi.mock('@business/agent/ui/web/stores/agent/streamingStore', () => ({
-  useStreamingStore: {
-    getState: () => ({
-      reset: mockStreamingReset,
-    }),
-  },
-}));
-
-vi.mock('@business/agent/ui/web/stores/agent/timelineStore', () => ({
-  useTimelineStore: {
-    getState: () => ({
-      reset: mockTimelineReset,
-    }),
-  },
-}));
-
-vi.mock('@business/agent/ui/web/stores/agentV3', () => ({
-  useAgentV3Store: {
-    setState: mockAgentV3SetState,
-  },
-}));
-
-vi.mock('@business/environments/ui/web/stores/sandbox', () => ({
-  useSandboxStore: {
-    getState: () => ({
-      unsubscribeSSE: mockSandboxUnsubscribeSSE,
-      reset: mockSandboxReset,
-    }),
-  },
-}));
-
-vi.mock('@/services/agentService', () => ({
-  agentService: {
-    disconnect: mockAgentDisconnect,
-  },
-}));
-
-vi.mock('@/services/unifiedEventService', () => ({
-  unifiedEventService: {
-    disconnect: mockUnifiedDisconnect,
-  },
-}));
-
 vi.mock('@/components/layout/TenantChatSidebar', () => ({
   TenantChatSidebar: () => <div data-testid="tenant-sidebar">MemStack</div>,
 }));
@@ -302,6 +204,12 @@ vi.mock('react-router-dom', async () => {
 });
 
 describe('TenantLayout', () => {
+  let releaseCleanups: Array<() => void> = [];
+  beforeEach(() => {
+    releaseCleanups = [onTenantScopeRetired(mockAgentDisconnect), onTenantScopeRetired(mockUnifiedDisconnect)];
+  });
+  afterEach(() => releaseCleanups.forEach((release) => release()));
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -767,7 +675,6 @@ describe('TenantLayout', () => {
       expect(screen.getByText('MemStack')).toBeInTheDocument();
     });
     expect(mockProjectState.clearProjects).not.toHaveBeenCalled();
-    expect(mockAgentV3SetState).not.toHaveBeenCalled();
     expect(mockAgentDisconnect).not.toHaveBeenCalled();
     expect(mockUnifiedDisconnect).not.toHaveBeenCalled();
 
@@ -781,33 +688,6 @@ describe('TenantLayout', () => {
     });
     expect(mockProjectState.projects).toEqual([]);
     expect(mockProjectState.currentProject).toBeNull();
-    const agentStateUpdater = mockAgentV3SetState.mock.calls[0]?.[0];
-    expect(agentStateUpdater).toEqual(expect.any(Function));
-    expect(agentStateUpdater({ conversationScopeGeneration: 7 })).toEqual({
-      conversations: [],
-      activeConversationId: null,
-      isCreatingConversation: false,
-      hasMoreConversations: false,
-      conversationsTotal: 0,
-      conversationStates: expect.any(Map),
-      conversationScopeGeneration: 8,
-    });
-    expect(mockConversationReset).toHaveBeenCalledTimes(1);
-    expect(mockTimelineReset).toHaveBeenCalledTimes(1);
-    expect(mockStreamingReset).toHaveBeenCalledTimes(1);
-    expect(mockExecutionReset).toHaveBeenCalledTimes(1);
-    expect(mockHITLSyncFromConversation).toHaveBeenCalledWith({
-      pendingClarification: null,
-      pendingDecision: null,
-      pendingEnvVarRequest: null,
-      pendingPermission: null,
-      doomLoopDetected: null,
-      costTracking: null,
-      suggestions: [],
-      pinnedEventIds: expect.any(Set),
-    });
-    expect(mockSandboxUnsubscribeSSE).toHaveBeenCalledTimes(1);
-    expect(mockSandboxReset).toHaveBeenCalledTimes(1);
     expect(mockAgentDisconnect).toHaveBeenCalledTimes(1);
     expect(mockUnifiedDisconnect).toHaveBeenCalledTimes(1);
   });

@@ -1,5 +1,11 @@
 import { lazy } from 'react';
 
+import { addWorkbenchTranslations } from '@/i18n/fullResources';
+import english from './locales/en-US.json';
+import chinese from './locales/zh-CN.json';
+
+addWorkbenchTranslations(english, chinese);
+
 export const ProviderList = lazy(() =>
   import('./tenant/ProviderList').then((m) => ({
     default: m.ProviderList,

@@ -10,6 +10,7 @@
  * @packageDocumentation
  */
 
+import { onTenantScopeRetired } from '@/core/tenantScopeLifecycle';
 import { getWebOperationAvailabilityV2 } from '../plugins/webOperationAdmissionV2';
 import type { WebOperationContextV2 } from '../plugins/webOperationAdmissionV2';
 
@@ -1159,3 +1160,6 @@ if (import.meta.hot) {
 // Export type for convenience
 export type { AgentService };
 export type { WebSocketStatus, ServerMessage } from './agent/types';
+
+const releaseScopeCleanup = onTenantScopeRetired(() => agentService.disconnect());
+if (import.meta.hot) import.meta.hot.dispose(releaseScopeCleanup);

@@ -1,3 +1,4 @@
+import { onTenantScopeRetired } from '@/core/tenantScopeLifecycle';
 import { getWebOperationAvailabilityV2 } from '@/plugins/webOperationAdmissionV2';
 /**
  * Sandbox Store - State management for sandbox terminal and tool execution
@@ -1172,3 +1173,10 @@ export const useArtifactsByToolExecution = (toolExecutionId: string) =>
 export function isSandboxTool(toolName: string): boolean {
   return SANDBOX_TOOLS.includes(toolName as SandboxToolName);
 }
+
+const releaseScopeCleanup = onTenantScopeRetired(() => {
+  const sandbox = useSandboxStore.getState();
+  sandbox.unsubscribeSSE();
+  sandbox.reset();
+});
+if (import.meta.hot) import.meta.hot.dispose(releaseScopeCleanup);

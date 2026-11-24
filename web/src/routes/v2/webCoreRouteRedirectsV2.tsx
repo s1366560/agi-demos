@@ -12,9 +12,9 @@ export const LoginRedirect = () => {
   if (typeof stateFrom === 'string') {
     statePath = stateFrom;
   } else if (stateFrom && typeof stateFrom === 'object') {
-    const { pathname, search } = stateFrom as { pathname?: unknown; search?: unknown };
+    const { pathname, search, hash } = stateFrom as { pathname?: unknown; search?: unknown; hash?: unknown };
     if (typeof pathname === 'string') {
-      statePath = pathname + (typeof search === 'string' ? search : '');
+      statePath = pathname + (typeof search === 'string' ? search : '') + (typeof hash === 'string' ? hash : '');
     }
   }
   const raw = statePath ?? params.get('redirect');
@@ -27,7 +27,7 @@ export const LoginRedirect = () => {
 // returned to where they originally wanted to go. Paired with LoginRedirect.
 export const RedirectToLogin = () => {
   const location = useLocation();
-  const target = `${location.pathname}${location.search}`;
+  const target = `${location.pathname}${location.search}${location.hash}`;
   const safe = target.startsWith('/') && !target.startsWith('//') ? target : '/';
   const loginHref =
     safe === '/' || safe === '/login' ? '/login' : `/login?redirect=${encodeURIComponent(safe)}`;

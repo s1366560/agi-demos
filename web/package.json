@@ -6,8 +6,11 @@
     "scripts": {
         "dev": "vite --config vite.config.ts",
         "build": "tsc -p tsconfig.project-packages.json && vite build --config vite.config.ts",
-        "build:full": "tsc && vite build --config vite.config.ts --mode full",
+        "build:full": "tsc -p tsconfig.full.json && vite build --config vite.config.ts --mode full",
         "build:project-packages": "tsc -p tsconfig.project-packages.json && vite build --mode project-packages",
+        "build:compat": "tsc -p tsconfig.compat.json && vite build --mode compat",
+        "dev:compat": "vite --mode compat --port 3001",
+        "preview:compat": "vite preview --mode compat --port 3001",
         "dev:full": "vite --mode full",
         "dev:project-packages": "vite --mode project-packages --open /project-packages.html",
         "preview": "vite preview --config vite.config.ts",

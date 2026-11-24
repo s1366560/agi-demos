@@ -9,19 +9,19 @@ import { defineConfig } from 'vite';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  const packageHost = mode !== 'full' && mode !== 'test';
+  const packageHost = !['full', 'compat', 'test'].includes(mode);
   return {
     publicDir: packageHost ? false : 'public',
     plugins: [
       richPageFramePlugin(),
-      ...(mode === 'full'
+      ...(['full', 'compat'].includes(mode)
         ? [
             {
               name: 'full-client-entry',
               transformIndexHtml: {
                 order: 'pre' as const,
                 handler(html: string) {
-                  return html.replace('/src/projectPackages/main.tsx', '/src/main.tsx');
+                  return html.replace('/src/projectPackages/main.tsx', mode === 'full' ? '/src/fullHost/main.tsx' : '/src/main.tsx');
                 },
               },
             },
@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => {
               open: false,
               gzipSize: true,
               brotliSize: true,
-              filename: 'dist/stats.html',
+              filename: mode === 'compat' ? 'dist-compat/stats.html' : 'dist/stats.html',
             }),
           ]),
     ],
@@ -64,7 +64,7 @@ export default defineConfig(({ mode }) => {
       alias: {
       '@copilotkit/a2ui-renderer/dist': path.resolve(__dirname, './node_modules/@copilotkit/a2ui-renderer/dist'),
         '@': path.resolve(__dirname, './src'),
-        ...(!packageHost ? { '@business': path.resolve(__dirname, '../plugins/business') } : {}),
+        ...(['compat', 'test'].includes(mode) ? { '@business': path.resolve(__dirname, '../plugins/business') } : {}),
         '@agistack/plugin-slots': path.resolve(
           __dirname,
           '../agi-stack/packages/plugin-slots/src/index.ts'
@@ -99,7 +99,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      outDir: mode === 'project-packages' ? 'dist-project-packages' : 'dist',
+      outDir: mode === 'compat' ? 'dist-compat' : mode === 'project-packages' ? 'dist-project-packages' : 'dist',
       ...(mode === 'project-packages'
         ? { rollupOptions: { input: path.resolve(__dirname, 'project-packages.html') } }
         : {}),

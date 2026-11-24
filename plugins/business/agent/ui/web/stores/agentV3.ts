@@ -1,3 +1,5 @@
+import { onTenantScopeRetired } from '@/core/tenantScopeLifecycle';
+import { retireTenantAgent } from './retireTenantAgent';
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
@@ -264,3 +266,6 @@ export const useAgentV3Store = create<AgentV3State>()(
 registerConversationStatesReader(() => useAgentV3Store.getState().conversationStates);
 registerAgentV3Store(useAgentV3Store);
 initTabSync();
+
+const releaseScopeCleanup = onTenantScopeRetired(retireTenantAgent);
+if (import.meta.hot) import.meta.hot.dispose(releaseScopeCleanup);

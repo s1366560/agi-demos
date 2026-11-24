@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import '@business/agent/ui/web/routes';
+import '@business/workspace/ui/web/routes';
 import { enUS, zhCN } from '@/i18n/fullResources';
 
 const BLACKBOARD_PRODUCT_KEYS = [

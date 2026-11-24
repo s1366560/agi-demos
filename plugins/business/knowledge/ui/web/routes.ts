@@ -1,5 +1,11 @@
 import { lazy, type ComponentType } from 'react';
 
+import { addWorkbenchTranslations } from '@/i18n/fullResources';
+import english from './locales/en-US.json';
+import chinese from './locales/zh-CN.json';
+
+addWorkbenchTranslations(english, chinese);
+
 export const BackendStores = lazy(() =>
   import('./tenant/BackendStores').then((m) => ({ default: m.BackendStores }))
 );

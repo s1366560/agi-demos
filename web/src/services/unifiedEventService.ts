@@ -17,6 +17,7 @@
  * @packageDocumentation
  */
 
+import { onTenantScopeRetired } from '@/core/tenantScopeLifecycle';
 import { logger } from '../utils/logger';
 import { getWebOperationAvailabilityV2 } from '@/plugins/webOperationAdmissionV2';
 import { UnifiedEventConnectionV2 } from './unifiedEventConnectionV2';
@@ -722,3 +723,6 @@ if (import.meta.hot) {
  * Export the class for type usage
  */
 export type UnifiedEventService = UnifiedEventServiceImpl;
+
+const releaseScopeCleanup = onTenantScopeRetired(() => unifiedEventService.disconnect());
+if (import.meta.hot) import.meta.hot.dispose(releaseScopeCleanup);

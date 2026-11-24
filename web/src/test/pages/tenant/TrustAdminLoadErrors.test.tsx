@@ -7,7 +7,7 @@ import { App as AntApp } from 'antd';
 import { DecisionRecords } from '@/pages/tenant/DecisionRecords';
 import { TrustPolicies } from '@/pages/tenant/TrustPolicies';
 import { projectService } from '@/services/projectService';
-import { workspaceService } from '@business/workspace/ui/web/services/workspaceService';
+import { optionalBusinessService } from '@/services/optionalBusinessService';
 import { useTenantStore } from '@/stores/tenant';
 import { useTrustStore } from '@/stores/trust';
 
@@ -35,9 +35,10 @@ vi.mock('@/services/projectService', () => ({
   },
 }));
 
-vi.mock('@business/workspace/ui/web/services/workspaceService', () => ({
-  workspaceService: {
-    listByProject: vi.fn(),
+vi.mock('@/services/optionalBusinessService', () => ({
+  optionalBusinessService: {
+    projection: vi.fn(),
+    command: vi.fn(),
   },
 }));
 
@@ -153,7 +154,12 @@ describe('trust admin load errors', () => {
     trustServiceMocks.listDecisions.mockResolvedValue({ items: [] });
     trustServiceMocks.listPolicies.mockResolvedValue({ items: [] });
     vi.mocked(projectService.listProjects).mockResolvedValue([{ id: 'project-1' } as Project]);
-    vi.mocked(workspaceService.listByProject).mockResolvedValue([makeWorkspace()]);
+    vi.mocked(optionalBusinessService.projection).mockResolvedValue({
+      actual_digest: 'test-digest', commands: ['list-directory'],
+    } as Awaited<ReturnType<typeof optionalBusinessService.projection>>);
+    vi.mocked(optionalBusinessService.command).mockImplementation(async (_, scope) => ({
+      rows: [makeWorkspace({ tenant_id: scope.tenantId, project_id: scope.projectId, is_archived: false })],
+    }));
   });
 
   it('shows a retryable decision-record load error instead of an empty state', async () => {
@@ -245,7 +251,7 @@ describe('trust admin load errors', () => {
   });
 
   it('does not fire doomed requests when the tenant has no workspace', async () => {
-    vi.mocked(workspaceService.listByProject).mockResolvedValue([]);
+    vi.mocked(optionalBusinessService.command).mockResolvedValue({ rows: [] });
 
     renderWithProviders(<TrustPolicies />);
 

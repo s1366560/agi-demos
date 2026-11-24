@@ -32,7 +32,7 @@ import { useUrlState } from '../../hooks/useUrlState';
 import { AgentGraphView } from './AgentGraphView';
 import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { buildWorkspaceAgentNodes } from './multiAgent/workspaceAgentPanelModel';
-import { Resizer } from './Resizer';
+import { Resizer } from '../layout/Resizer';
 import { PANEL_HEADER_CLASSES, PANEL_SCROLL_BODY_CLASSES } from './styles';
 import { TaskList } from './TaskList';
 import { TaskLanePanel } from './tasks/TaskLanePanel';

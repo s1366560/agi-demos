@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { cloudIdentity, type BackendUserResponse } from './client/cloudIdentity';
+import { hostControlClient } from './client/hostControlClient';
 import { httpClient } from './client/httpClient';
 
 import type {
@@ -130,7 +131,7 @@ const createBackendStoreAPI = (baseUrl: '/graph-stores' | '/retrieval-stores') =
 export const authAPI = {
   ...cloudIdentity,
   updateProfile: async (data: Partial<UserUpdate>): Promise<User> => {
-    const userResponse = await api.put<BackendUserResponse>('/users/me', data);
+    const userResponse = await hostControlClient.put<BackendUserResponse>('/users/me', data);
     return {
       id: userResponse.user_id,
       email: userResponse.email,
@@ -144,7 +145,7 @@ export const authAPI = {
     };
   },
   updatePreferredLanguage: async (language: 'en-US' | 'zh-CN'): Promise<User> => {
-    const userResponse = await api.put<BackendUserResponse>('/users/me', {
+    const userResponse = await hostControlClient.put<BackendUserResponse>('/users/me', {
       preferred_language: language,
     });
     return {
@@ -166,56 +167,56 @@ export const retrievalStoreAPI = createBackendStoreAPI('/retrieval-stores');
 
 export const tenantAPI = {
   list: async (params = {}): Promise<TenantListResponse> => {
-    return await api.get('/tenants/', { params });
+    return await hostControlClient.get('/tenants/', { params });
   },
   create: async (data: TenantCreate): Promise<Tenant> => {
-    return await api.post('/tenants/', data);
+    return await hostControlClient.post('/tenants/', data);
   },
   update: async (id: string, data: TenantUpdate): Promise<Tenant> => {
-    return await api.put(`/tenants/${id}`, data);
+    return await hostControlClient.put(`/tenants/${id}`, data);
   },
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/tenants/${id}`);
+    await hostControlClient.delete(`/tenants/${id}`);
   },
   addMember: async (tenantId: string, userId: string, role: string): Promise<void> => {
-    await api.post(`/tenants/${tenantId}/members`, { user_id: userId, role });
+    await hostControlClient.post(`/tenants/${tenantId}/members`, { user_id: userId, role });
   },
   removeMember: async (tenantId: string, userId: string): Promise<void> => {
-    await api.delete(`/tenants/${tenantId}/members/${userId}`);
+    await hostControlClient.delete(`/tenants/${tenantId}/members/${userId}`);
   },
   listMembers: async (tenantId: string): Promise<UserTenant[]> => {
-    const response = await api.get<TenantMembersApiResponse>(`/tenants/${tenantId}/members`);
+    const response = await hostControlClient.get<TenantMembersApiResponse>(`/tenants/${tenantId}/members`);
     return Array.isArray(response) ? response : (response.members ?? []);
   },
   get: async (id: string): Promise<Tenant> => {
-    return await api.get(`/tenants/${id}`);
+    return await hostControlClient.get(`/tenants/${id}`);
   },
   getStats: async (id: string): Promise<unknown> => {
-    return await api.get(`/tenants/${id}/stats`);
+    return await hostControlClient.get(`/tenants/${id}/stats`);
   },
   getAnalytics: async (id: string): Promise<unknown> => {
-    return await api.get(`/tenants/${id}/analytics`);
+    return await hostControlClient.get(`/tenants/${id}/analytics`);
   },
 };
 
 export const projectAPI = {
   list: async (tenantId: string, params = {}): Promise<ProjectListResponse> => {
-    return await api.get('/projects/', { params: { ...params, tenant_id: tenantId } });
+    return await hostControlClient.get('/projects/', { params: { ...params, tenant_id: tenantId } });
   },
   create: async (tenantId: string, data: ProjectCreate): Promise<Project> => {
-    return await api.post('/projects/', { ...data, tenant_id: tenantId });
+    return await hostControlClient.post('/projects/', { ...data, tenant_id: tenantId });
   },
   update: async (_tenantId: string, projectId: string, data: ProjectUpdate): Promise<Project> => {
-    return await api.put(`/projects/${projectId}`, data);
+    return await hostControlClient.put(`/projects/${projectId}`, data);
   },
   delete: async (_tenantId: string, projectId: string): Promise<void> => {
-    await api.delete(`/projects/${projectId}`);
+    await hostControlClient.delete(`/projects/${projectId}`);
   },
   get: async (tenantId: string, projectId: string): Promise<Project> => {
-    return await api.get(`/projects/${projectId}`, { params: { tenant_id: tenantId } });
+    return await hostControlClient.get(`/projects/${projectId}`, { params: { tenant_id: tenantId } });
   },
   getStats: async (projectId: string): Promise<unknown> => {
-    return await api.get(`/projects/${projectId}/stats`);
+    return await hostControlClient.get(`/projects/${projectId}/stats`);
   },
 };
 

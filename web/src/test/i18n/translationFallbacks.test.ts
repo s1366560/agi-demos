@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import '../../routes/v2/webDefaultRouteComponentsV2';
 import { enUS } from '@/i18n/fullResources';
 
 const sourceModules = import.meta.glob('../../**/*.{ts,tsx}', {

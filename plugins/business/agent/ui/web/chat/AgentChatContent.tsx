@@ -103,7 +103,7 @@ import { InputBar } from '@/components/agent/InputBar';
 import { LayoutModeSelector } from '@/components/agent/layout/LayoutModeSelector';
 import { MessageArea } from '../transcript/MessageArea';
 import { ProjectAgentStatusBar } from '@/components/agent/ProjectAgentStatusBar';
-import { Resizer } from '@/components/agent/Resizer';
+import { Resizer } from '@/components/layout/Resizer';
 import { RunReviewDrawer } from '@/components/agent/review/RunReviewDrawer';
 import { SplitPaneLayout } from '@/components/agent/SplitPaneLayout';
 import { ICON_BUTTON_CLASSES, LAYOUT_BG_CLASSES } from './styles';

@@ -15,7 +15,7 @@ export { SandboxSection } from '@business/environments/ui/web/components/Sandbox
 export { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
 
 // Resizer component for draggable panels
-export { Resizer } from './Resizer';
+export { Resizer } from '../layout/Resizer';
 
 // Utility Components
 export { TenantAgentConfigEditor } from '@business/agent/ui/web/configuration/TenantAgentConfigEditor';

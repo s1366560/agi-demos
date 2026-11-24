@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/main.tsx", "src/env.d.ts", "src/vendor/kasmvnc/core/kasmvnc.d.ts"]
+}
