@@ -154,6 +154,15 @@ desktop-cua-repl: ## 桌面:暂存独立 Node computer-use REPL
 	cd packages/cua-repl && CI=true $(PNPM) install --ignore-workspace --frozen-lockfile
 	node $(DESKTOP_APP_DIR)/scripts/stage-cua-repl.mjs
 
+ifneq ($(filter run-desktop run-desktop-electron,$(MAKECMDGOALS)),)
+MEMSTACK_DEV_ROOT := $(abspath ..)
+include $(dir $(lastword $(MAKEFILE_LIST)))../scripts/dev/profile.mk
+AGISTACK_DESKTOP_PROFILE ?= $(if $(filter full,$(MEMSTACK_DEV_PROFILE)),full,thin)
+AGISTACK_WEB_CONTROL_PLANE_ORIGIN ?= http://localhost:3000
+AGISTACK_DESKTOP_GRANTS_API_BASE ?= http://127.0.0.1:8000
+export AGISTACK_DESKTOP_PROFILE AGISTACK_WEB_CONTROL_PLANE_ORIGIN AGISTACK_DESKTOP_GRANTS_API_BASE
+endif
+
 ifeq ($(AGISTACK_DESKTOP_FIXED_BUILD),1)
 run-desktop: ## Launch the already built Electron host and Sidecar without changing their artifacts
 	test -s $(DESKTOP_APP_DIR)/out/main/index.js

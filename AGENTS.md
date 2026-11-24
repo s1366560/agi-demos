@@ -41,6 +41,9 @@ make fresh         # reset + init + dev
 
 - Agents **MUST** launch the native desktop client from the repository root with
   `make -C agi-stack run-desktop`.
+  This development command follows the same profile as `make dev`. Existing full-stack
+  checkouts open the full client, and standard projects open the package host. Override with
+  `AGISTACK_DESKTOP_PROFILE=thin` or `AGISTACK_DESKTOP_PROFILE=full`.
 - The desktop shell is Electron and starts the independently built Rust sidecar through its private
   authenticated control pipe. Do not launch the sidecar directly when validating the native client.
 - Do not treat `pnpm run dev` in `agi-stack/apps/desktop` as a native-client launch. It starts only

@@ -74,14 +74,8 @@ DEV_COMPOSE_WAIT_CMD ?= $(DEV_PYTHON) scripts/dev/wait_compose.py
 DEV_BUILD_CMD ?= $(DEV_PYTHON) scripts/dev/build_compose.py
 AGISTACK_DIR ?= agi-stack
 PNPM ?= corepack pnpm
-# Preserve an existing full-stack checkout. Fresh checkouts use the standalone project.
-STANDARD_DIRECTORY ?= $(CURDIR)/.memstack/standard
-MEMSTACK_DEV_PROFILE ?= $(if $(wildcard $(STANDARD_DIRECTORY)/owner.json),standard,$(if $(wildcard .env),full,standard))
-ifneq ($(MEMSTACK_DEV_PROFILE),standard)
-ifneq ($(MEMSTACK_DEV_PROFILE),full)
-$(error MEMSTACK_DEV_PROFILE must be standard or full)
-endif
-endif
+MEMSTACK_DEV_ROOT := $(CURDIR)
+include $(dir $(lastword $(MAKEFILE_LIST)))scripts/dev/profile.mk
 WEB_DEV_CMD ?= node_modules/.bin/vite --config vite.config.ts $(if $(filter full,$(MEMSTACK_DEV_PROFILE)),--mode full) --host 0.0.0.0 --port 3000
 STANDARD_DEV = STANDARD_DIRECTORY="$(STANDARD_DIRECTORY)" uv run --locked python -m scripts.dev.standard_project
 
