@@ -15,6 +15,8 @@ The installable identity is `memstack-billing`. Start with [package.json](packag
 
 The plan catalog in `plans.json` supplies the `quote` Wasm guest used by the tenant upgrade API. The guest accepts a plan identifier and returns its storage limit in bytes. The API authenticates the caller, checks the current tenant owner, validates the guest response and commits the quota update through the tenancy service. Invoice data and its Alembic revision history belong to this package.
 
+The signed account page also opens the existing tenant usage counters and tenant invoice history. `app.billing.account.read` requires tenant billing access. The owner can confirm a plan change with `app.billing.plan.write`. Both commands use the same scoped entitlement and billing services as tenant HTTP. Project-issued invoices use the package worker and stay within the selected project.
+
 The signed account page is built from `ui/shared/AccountPage.tsx`. It bundles React and reuses the invoice table from the desktop billing screen. To regenerate its checked-in browser artifact and resource digest after editing it, run `corepack pnpm --dir plugins/business/billing/ui/shared install --frozen-lockfile` followed by `corepack pnpm --dir plugins/business/billing/ui/shared run build`. The Python publisher includes the prepared artifact without a Node toolchain.
 
 ## Publish a release
@@ -26,7 +28,7 @@ PYTHONPATH=sdk/memstack-plugin-sdk/src uv run python plugins/business/billing/bu
   --version 3.1.0 --key "$PUBLISHER_KEY_FILE" --out billing.zip
 ```
 
-The resulting Ed25519-signed archive contains a Wasm module, the `quote` operation, a settings page for Web and Desktop, and a command for each plan. The project package installer accepts this archive with `tools.execute` and `ui.slot` approval. Its commands return a quote for the requested plan. The project installation can be upgraded or rolled back independently.
+The resulting Ed25519-signed archive contains a Wasm module, the `quote` operation, a settings page for Web and Desktop, and a command for each plan. The project package installer accepts this archive with `tools.execute`, `ui.slot`, `app.billing.account.read` and `app.billing.plan.write` approval. Its commands return a quote for the requested plan. The project installation can be upgraded or rolled back independently.
 
 ## Select a tenant quota policy
 

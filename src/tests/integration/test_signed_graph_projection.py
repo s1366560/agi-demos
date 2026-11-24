@@ -358,7 +358,8 @@ async def test_episode_projection_runs_once_across_worker_loss_upgrade_and_withd
                 **binding,
                 "archive_base64": archive,
                 "approved_permissions": sorted(
-                    jobs.GRANT | {"ui.slot", "app.knowledge.memories.read"}
+                    jobs.GRANT
+                    | {"ui.slot", "app.knowledge.memories.read", "app.knowledge.memories.write"}
                 ),
             },
         )

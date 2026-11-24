@@ -29,6 +29,10 @@ async def list_project_memories(
     """Use the authenticated package invocation's project as the only data scope."""
     if not ctx.scope.project_id or not ctx.scope.tenant_id:
         raise HTTPException(403, _("Project membership is required"))
+    if "id" in payload:
+        from plugins.business.knowledge.backend.package_memory_editor import read_memory
+
+        return await read_memory(ctx, payload)
     query = _Search.model_validate(payload)
     rows = await ListMemoriesUseCase(SqlMemoryRepository(ctx.db)).execute(
         ListMemoriesQuery(

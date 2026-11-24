@@ -199,6 +199,8 @@ async def invoice_project(
         probe = await client.post(base + "/inspect", json=data, headers=headers)
         assert probe.status_code == 200, probe.text
         assert set(probe.json()["permissions"]) == {
+            "app.billing.account.read",
+            "app.billing.plan.write",
             "storage.read",
             "storage.write",
             "tools.execute",

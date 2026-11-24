@@ -50,7 +50,21 @@ def load_policy(archive_digest: object = None) -> WasmToolHost:
 
         # Only an operator pin can assign a signed release authority over tenant quotas.
         keys = tuple(path.read_text() for path in settings.plugin_marketplace_trusted_key_files)
-        package = admit_package(raw, keys, frozenset({"tools.execute", "ui.slot"}), binding=None)
+        # The signed account UI can declare these tenant commands alongside the Wasm.
+        # This resolver extracts only the import-free quote guest and never dispatches commands.
+        package = admit_package(
+            raw,
+            keys,
+            frozenset(
+                {
+                    "tools.execute",
+                    "ui.slot",
+                    "app.billing.account.read",
+                    "app.billing.plan.write",
+                }
+            ),
+            binding=None,
+        )
         if package.plugin_id != _ID or not any(
             tool.name == "quote" and tool.abi == "invoke" for tool in package.contribution.tools
         ):

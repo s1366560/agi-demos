@@ -131,8 +131,12 @@ def build_release(
             actions.append({"id": "list-invoices", "label": "View project invoices"})
         contribution = json.loads((ROOT / spec["contribution"]).read_bytes())
         stage_contribution(ROOT, root, spec["contribution"])
-        contribution["pages"][0]["commands"] = [command["id"] for command in commands]
-        contribution["commands"] = commands
+        contribution["commands"] = commands + [
+            command for command in contribution["commands"] if "host_operation" in command
+        ]
+        contribution["pages"][0]["commands"] = [
+            command["id"] for command in contribution["commands"]
+        ]
         contribution["tools"][0]["input_schema"]["properties"]["plan"]["enum"] = list(plans)
         page_path = Path(contribution["ui"][0]["path"])
         page_spec = json.loads((ROOT / page_path).read_bytes())

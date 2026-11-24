@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import type {} from "../../../../../sdk/memstack-plugin-sdk/src/pageRuntime";
+import { TenantAccount } from "./TenantAccount";
 import { CreateInvoice } from "./CreateInvoice";
 import { InvoiceTable, type InvoiceRow } from "./InvoiceTable";
 
@@ -54,6 +55,9 @@ function AccountPage({
             <output aria-live="polite">{quotes[command]}</output>
           </p>
         ))}
+      {commands.includes("tenant-account") && (
+        <TenantAccount plans={commands.filter(id => id.startsWith("quote-")).map(id => id.slice(6))} canChange={commands.includes("change-plan")} locale={locale} text={text}/>
+      )}
       {commands.includes("list-invoices") && (
         <section>
           <button disabled={busy} onClick={() => void invoke("list-invoices")}>

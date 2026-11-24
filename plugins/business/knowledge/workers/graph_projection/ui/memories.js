@@ -8,6 +8,10 @@
     element.textContent = text;
     return element;
   };
+  const project = '/tenant/' + encodeURIComponent(scope.tenantId) + '/project/' + encodeURIComponent(scope.projectId);
+  const navigate = path => sdk.navigate(project + path).catch(error => status.textContent = String(error));
+  const create = node('button', t('New memory', '新建记忆'));
+  create.onclick = () => navigate('/memories/new');
   const form = node('form');
   const label = node('label', t('Search title or content', '搜索标题或正文'));
   const input = node('input');
@@ -22,7 +26,7 @@
   more.type = 'button';
   const status = node('p');
   status.setAttribute('role', 'status');
-  root.append(node('h1', t('Project memories', '项目记忆')), form, list, more, status);
+  root.append(node('h1', t('Project memories', '项目记忆')), create, form, list, more, status);
 
   let search = '';
   let offset = 0;
@@ -41,7 +45,9 @@
       if (request !== activeRequest) return;
       for (const item of page.items) {
         const row = node('li');
-        row.append(node('h2', item.title), node('p', item.excerpt));
+        const open = node('button', item.title);
+        open.onclick = () => navigate('/memory/' + encodeURIComponent(item.id));
+        row.append(open, node('p', item.excerpt));
         list.append(row);
       }
       offset += page.items.length;

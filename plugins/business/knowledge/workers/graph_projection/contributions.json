@@ -192,6 +192,24 @@
         "app.knowledge.memories.read"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "read-memory",
+      "host_operation": "app.knowledge.memories.read",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.memories.read"
+      ],
+      "accepts_input": true
+    },
+    {
+      "id": "save-memory",
+      "host_operation": "app.knowledge.memories.write",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.memories.write"
+      ],
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -245,11 +263,50 @@
       ],
       "entry": {
         "path": "ui/memories.js",
-        "digest": "sha256:b2b655a01353017665ec3d8f31dac4732b0eb9b241680976628ece49b7c43876"
+        "digest": "sha256:a71d9a7bf356dcf3f4a8bba7f3f15e24d0858f08a6f85c601f7b307d41b0592e"
       },
       "commands": [
         "list-memories"
       ]
+    },
+    {
+      "id": "memory-editor",
+      "title": "Memory editor",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/memories/new",
+        "/tenant/:tenantId/project/:projectId/memory/:memoryId",
+        "/project/:projectId/memories/new",
+        "/project/:projectId/memory/:memoryId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/editor.js",
+        "digest": "sha256:94cfd3e10261eedebe4db5babb6daeb09d94ecdbd1896836da0e6f6ed759bd67"
+      },
+      "commands": [
+        "read-memory",
+        "save-memory"
+      ]
+    },
+    {
+      "id": "recent-memories",
+      "title": "Recent memories",
+      "routes": [],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "contributes_to": "memstack-workspace/recent-memories@1",
+      "commands": [
+        "list-memories"
+      ],
+      "entry": {
+        "path": "ui/recent.js",
+        "digest": "sha256:f8814a574dc653d2df696d7008a2d287f13d8e56fcf9a4f2bf533d7f5018c95c"
+      }
     }
   ]
 }
