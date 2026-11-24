@@ -45,6 +45,9 @@ def copy_client_sources(destination: Path) -> None:
             target.symlink_to(link)
         else:
             shutil.copyfile(source, target)
+
+
+def install_dependencies(destination: Path) -> None:
     # Reinstall from each host's lockfile. Linking node_modules to the development
     # checkout lets its absolute pnpm shims and transformed module caches leak in.
     for package in (Path("."), WEB, DESKTOP):
@@ -64,6 +67,7 @@ def copy_client_sources(destination: Path) -> None:
 
 def build_clients(checkout: Path) -> int:
     copy_client_sources(checkout)
+    install_dependencies(checkout)
     results = []
     for package, script in ((WEB, "build:full"), (DESKTOP, "build:electron:full")):
         print(f"Building {package} with {script}", flush=True)
