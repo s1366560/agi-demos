@@ -263,7 +263,7 @@
       ],
       "entry": {
         "path": "ui/memories.js",
-        "digest": "sha256:a71d9a7bf356dcf3f4a8bba7f3f15e24d0858f08a6f85c601f7b307d41b0592e"
+        "digest": "sha256:1442f40f91f16205f89dd61e150b27a6f8de1626cec852b4b11e5c5081ca7ea2"
       },
       "commands": [
         "list-memories"
@@ -284,7 +284,7 @@
       ],
       "entry": {
         "path": "ui/editor.js",
-        "digest": "sha256:94cfd3e10261eedebe4db5babb6daeb09d94ecdbd1896836da0e6f6ed759bd67"
+        "digest": "sha256:732f7b7e00cedbdbfee10b99af19d21be2dfc913a3e88b6d58f4083b2321be7e"
       },
       "commands": [
         "read-memory",

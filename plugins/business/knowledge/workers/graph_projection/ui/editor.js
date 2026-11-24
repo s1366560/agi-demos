@@ -30,7 +30,7 @@
   contentLabel.append(content);
   const revision = element('p');
   const save = element('button', t('Save memory', '保存记忆'));
-  save.type = 'submit';
+  save.type = 'button';
   const reload = element('button', t('Reload saved version', '重新读取已保存版本'));
   reload.type = 'button';
   fields.append(titleLabel, contentLabel, save);
@@ -63,9 +63,14 @@
   back.onclick = () => sdk.navigate(project + '/memories').catch(error => status.textContent = String(error));
   reload.onclick = load;
   form.oninput = () => { changeId = undefined; };
-  form.onsubmit = async event => {
-    event.preventDefault();
-    if (fields.disabled) return;
+  title.onkeydown = event => {
+    if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault();
+      save.click();
+    }
+  };
+  save.onclick = async () => {
+    if (fields.disabled || !form.reportValidity()) return;
     fields.disabled = true;
     reload.disabled = true;
     try {

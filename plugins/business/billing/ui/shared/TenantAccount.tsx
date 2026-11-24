@@ -50,15 +50,15 @@ export function TenantAccount({ plans, canChange, text, locale }: {
         <dt>{text("Members", "成员")}</dt><dd>{account.usage.users}</dd>
         <dt>{text("Memories", "记忆")}</dt><dd>{account.usage.memories}</dd>
       </dl>
-      {canChange && <form onSubmit={event => {event.preventDefault(); void load(true);}}>
+      {canChange && <div>
         <label>{text("New tenant plan", "租户新套餐")}
           <select value={plan} disabled={busy} onChange={event => setPlan(event.target.value)}>
             <option value="">{text("Select plan", "选择套餐")}</option>
             {plans.filter(id => id !== account.tenant.plan).map(id => <option key={id}>{id}</option>)}
           </select>
         </label>
-        <button disabled={busy || !plan}>{text("Confirm plan change", "确认更改套餐")}</button>
-      </form>}
+        <button type="button" disabled={busy || !plan} onClick={() => void load(true)}>{text("Confirm plan change", "确认更改套餐")}</button>
+      </div>}
       <h3>{text("Tenant invoice history", "租户历史发票")}</h3>
       {account.invoices.length ? <InvoiceTable invoices={account.invoices}/> : <p>{text("No invoices", "暂无发票")}</p>}
     </>}

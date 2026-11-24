@@ -120,7 +120,7 @@
       ],
       "entry": {
         "path": "ui/account.js",
-        "digest": "sha256:fcfbecf6e8116d4b021c92c92ef854dd6930df5ee2470f14c59391862638427b"
+        "digest": "sha256:8de7780bef64207642b925b51d137e264eb9393e3a24e3037b90c73c42b9d5a0"
       },
       "commands": [
         "quote-free",

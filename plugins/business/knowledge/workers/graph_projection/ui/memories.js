@@ -19,7 +19,7 @@
   input.maxLength = 200;
   label.append(input);
   const submit = node('button', t('Search', '搜索'));
-  submit.type = 'submit';
+  submit.type = 'button';
   form.append(label, submit);
   const list = node('ul');
   const more = node('button', t('Load more', '加载更多'));
@@ -59,9 +59,12 @@
       more.hidden = offset === 0;
     }
   }
-  form.onsubmit = event => {
-    event.preventDefault();
-    void load(true);
+  submit.onclick = () => load(true);
+  input.onkeydown = event => {
+    if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault();
+      submit.click();
+    }
   };
   more.onclick = () => load(false);
   await load(true);
