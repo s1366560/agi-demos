@@ -6,7 +6,9 @@ import json
 import os
 import subprocess
 import sys
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -116,7 +118,15 @@ async def test_packages_coexist_after_model_adapter_withdrawal(http, deployment,
         if info["kind"] == "business":
             rich_pages = state.json()["pages"]
             assert rich_pages
-            desktop_assets = {}
+            with ZipFile(BytesIO(raw)) as archive:
+                declared = json.loads(archive.read("contributions.json"))["pages"]
+            expected = {
+                (page["id"], target): page["entry"]["digest"]
+                for page in declared
+                for target in page["targets"]
+                if page.get("scope", "project") == "project"
+            }
+            served = {}
             for target in ("web", "desktop-renderer"):
                 page = await client.get(
                     base + path + "/ui",
@@ -127,7 +137,8 @@ async def test_packages_coexist_after_model_adapter_withdrawal(http, deployment,
                 document = json.loads(base64.b64decode(page.json()["bytes_base64"]))
                 assert document["actions"][0]["id"] in state.json()["commands"]
                 for descriptor in rich_pages:
-                    assert target in descriptor["targets"]
+                    if target not in descriptor["targets"]:
+                        continue
                     rich = await client.get(
                         base + path + "/ui",
                         headers=headers,
@@ -146,7 +157,8 @@ async def test_packages_coexist_after_model_adapter_withdrawal(http, deployment,
                     )
                     assert entry["digest"] == digest
                     assert rich.json()["release_digest"] == info["digest"]
-                    assert desktop_assets.setdefault(descriptor["id"], digest) == digest
+                    served[descriptor["id"], target] = digest
+            assert served == expected
         installed[info["kind"]].add(info["plugin_id"])
 
     assert len(installed["business"]) == 6
