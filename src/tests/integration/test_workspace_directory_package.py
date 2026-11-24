@@ -4,6 +4,7 @@ import base64
 import csv
 import io
 import os
+import re
 import secrets
 import time
 from contextlib import ExitStack
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 import docker
 from alembic import command
+from plugins.business.workspace.backend.blackboard_surface import change_surface, read_surface
 from plugins.business.workspace.backend.collaboration import WORKSPACE_COLLABORATION_OPERATIONS
 from plugins.business.workspace.backend.workspace_directory_export import (
     create_workspace_operation,
@@ -182,6 +184,8 @@ async def _project_host(http, db_session, core, public, monkeypatch):
     app.state.workspace_core_client = core
     app.state.package_operations_v1 = {
         **WORKSPACE_COLLABORATION_OPERATIONS,
+        "app.workspace.blackboard.read": read_surface,
+        "app.workspace.blackboard.write": change_surface,
         "app.workspace.create": create_workspace_operation,
         "app.workspace.settings.update": update_workspace_operation,
         "app.workspace.directory.read": read_directory_operation,
@@ -247,6 +251,8 @@ async def test_directory_exports_only_actual_core_memberships(  # noqa: PLR0915
                     "project_id": "p",
                     "approved_permissions": [
                         *WORKSPACE_COLLABORATION_OPERATIONS,
+                        "app.workspace.blackboard.read",
+                        "app.workspace.blackboard.write",
                         "ui.slot",
                         "tools.execute",
                         "app.workspace.directory.read",
@@ -378,6 +384,24 @@ async def _verify_detail_command(api, base, actor, viewer, visible, other, title
     assert (await detail(visible, viewer)).status_code in (403, 404)
     assert (await detail("../other", actor)).status_code == 422
 
+    async def surface(workspace, resource):
+        return await api.post(
+            f"{base}/{PACKAGE}/commands",
+            headers=actor,
+            json={
+                "tenant_id": "t",
+                "project_id": "p",
+                "command_id": "blackboard-read",
+                "payload": {"workspace_id": workspace, "resource": resource},
+            },
+        )
+
+    projected = await surface(visible, "objectives")
+    assert projected.is_success, projected.text
+    assert "items" in projected.json()["data"]
+    assert (await surface(other, "objectives")).status_code in (403, 404)
+    assert (await surface(visible, "../credentials")).status_code == 422
+
 
 async def _verify_workspace_writes(api, base, actor, viewer, other):
     async def invoke(command, payload, headers=actor):
@@ -507,6 +531,7 @@ async def test_signed_workspace_forms_persist_in_workspace_core(
         return FileResponse(output / "project-packages.html")
 
     app.add_api_route("/tenant/t/project/p/workspaces/{path:path}", shell)
+    app.add_api_route("/tenant/t/project/p/blackboard", shell)
     app.mount("/", StaticFiles(directory=output), name="workspace-package-shell")
     async with serve_project_api(app) as origin, async_playwright() as pw:
         browser = await pw.chromium.launch()
@@ -529,66 +554,78 @@ async def _edit_workspace_in_browser(page, expect):
         await guest.locator('button[form="workspace-create-form"]').click()
     response = await pending.value
     assert response.ok, (response.status, await response.text())
-    await guest.get_by_role("link", name="Workspace details").click()
-    await expect(guest.get_by_role("heading", name="Shared planning")).to_be_visible()
-    await _check_workspace_collaboration(page, guest, expect)
-    await guest.get_by_role("link", name="Workspace settings").click()
-    await guest.get_by_label("Workspace name").fill("Release council")
-    await guest.get_by_label("Archived", exact=True).check()
-    await guest.get_by_role("button", name="Save changes").click()
-    await expect(guest.get_by_role("heading", name="Release council")).to_be_visible()
+    await _post_in_workspace(page, guest, expect)
+    await _create_workspace_task(page, guest, expect)
+    await _update_workspace_settings(page, guest, expect)
+
+
+async def _post_in_workspace(page, guest, expect):
+    discussion = guest.get_by_role("tab", name=re.compile("Discussion"))
+    await discussion.click()
+    await guest.get_by_role("button", name="+ Create Post", exact=True).click()
+    await guest.locator("#blackboard-post-title").fill("First announcement")
+    await guest.locator("#blackboard-post-content").fill("Shared release notes")
+    await guest.get_by_role("button", name="Create Post", exact=True).click()
+    await expect(guest.get_by_text("First announcement", exact=True).first).to_be_visible()
     await page.reload()
-    await expect(guest.get_by_role("heading", name="Release council")).to_be_visible()
-    await guest.get_by_role("link", name="Project overview").click()
-    await guest.get_by_role("link", name="Directory and CSV export").click()
-    await expect(guest.get_by_role("link", name="Release council")).to_be_visible()
+    await discussion.click()
+    await guest.get_by_text("First announcement", exact=True).first.click()
+    await expect(guest.get_by_text("Shared release notes", exact=True)).to_be_visible()
+    await guest.get_by_role("button", name="Edit", exact=True).click()
+    await guest.get_by_label("Title", exact=True).fill("Updated announcement")
+    await guest.get_by_role("button", name="Save", exact=True).click()
+    await expect(guest.get_by_role("heading", name="Updated announcement")).to_be_visible()
+    await guest.get_by_role("button", name="Pin", exact=True).click()
+    await expect(guest.get_by_role("button", name="Unpin", exact=True)).to_be_visible()
+    await guest.get_by_role("button", name="Delete", exact=True).click()
+    await guest.locator(".ant-popconfirm-buttons .ant-btn-primary").click()
+    await expect(guest.get_by_role("button", name="+ Create Post", exact=True)).to_be_visible()
+    await expect(guest.get_by_text("Updated announcement", exact=True)).to_have_count(0)
 
 
-async def _check_workspace_collaboration(page, guest, expect):
-    observations = []
+async def _create_workspace_task(page, guest, expect):
+    await guest.get_by_role("tab", name=re.compile("Goals")).click()
+    await guest.get_by_role("button", name="Add", exact=True).first.click()
+    task = guest.get_by_label("Task title")
+    await task.fill("Follow up")
+    async with page.expect_response(
+        lambda r: r.url.endswith("/commands")
+        and r.request.post_data_json.get("command_id") == "blackboard-change"
+    ) as submitted:
+        await task.press("Enter")
+    created = await submitted.value
+    assert created.ok, await created.text()
+    await expect(guest.get_by_text("Follow up", exact=True).first).to_be_visible(timeout=30000)
+    await page.reload()
+    await guest.get_by_role("tab", name=re.compile("Goals")).click()
+    await expect(guest.get_by_text("Follow up", exact=True).first).to_be_visible(timeout=30000)
 
-    def observe(response):
-        if response.request.method == "POST" and "/commands" in response.url:
-            observations.append(
-                (response.request.post_data_json.get("command_id"), response.status)
-            )
 
-    page.on("response", observe)
-    for section, value, label in [
-        ("Blackboard posts", "First announcement", "Title"),
-        ("Tasks", "Follow up", "Title"),
-        ("Members", "viewer", "User ID"),
-    ]:
-        await guest.get_by_role("link", name=section, exact=True).click()
-        await guest.get_by_label(label).fill(value)
-        if section == "Blackboard posts":
-            await guest.get_by_label("Content").fill("Shared release notes")
-            await guest.get_by_label("Pinned").check()
-        async with page.expect_response(
-            lambda r: "/commands" in r.url and "change-" in (r.request.post_data or "")
-        ) as saved:
-            await guest.get_by_role("button", name="Add", exact=True).click()
-        response = await saved.value
-        assert response.ok, (section, response.status, await response.text())
-        row = guest.get_by_role("listitem").filter(has_text=value)
-        try:
-            await expect(row).to_be_visible()
-        except AssertionError as exc:
-            raise AssertionError(
-                (section, observations[-15:], await guest.locator("body").inner_text())
-            ) from exc
-        await page.reload()
-        await expect(row).to_be_visible()
-        await row.get_by_role("button", name="Edit").click()
-        if section == "Members":
-            await guest.get_by_label("Role").select_option("editor")
-        else:
-            await guest.get_by_label(label).fill(value + " updated")
-            if section == "Tasks":
-                await guest.get_by_label("Status").select_option("in_progress")
-        await guest.get_by_role("button", name="Save").click()
-        await expect(row).to_contain_text("editor" if section == "Members" else "updated")
-        await row.get_by_role("button", name="Remove").click()
-        await row.get_by_role("button", name="Confirm removal").click()
-        await expect(row).to_have_count(0)
-        await guest.get_by_role("link", name="Workspace details").click()
+async def _update_workspace_settings(page, guest, expect):
+    await guest.get_by_role("tab", name=re.compile("Settings")).click()
+    await guest.get_by_placeholder("Enter user email or ID").fill("viewer")
+    await guest.get_by_role("button", name="Add Member", exact=True).click()
+    member = guest.get_by_role("row").filter(has_text="viewer").first
+    await expect(member).to_be_visible()
+    await member.locator(".ant-select").click()
+    await guest.locator(".ant-select-item-option").filter(has_text="Editor").click()
+    await expect(member).to_contain_text("Editor")
+    await member.get_by_role("button", name="Remove member").click()
+    await guest.locator(".ant-popconfirm-buttons .ant-btn-primary").click()
+    await expect(member).to_have_count(0)
+    await guest.locator("#workspace-name").fill("Release council")
+    await guest.locator("#workspace-archive").click()
+    async with page.expect_response(
+        lambda r: r.url.endswith("/commands")
+        and r.request.post_data_json.get("command_id") == "blackboard-change"
+    ) as submitted:
+        await guest.get_by_role("button", name=re.compile(r"^(Save|common\.save)$")).click()
+    saved = await submitted.value
+    assert saved.ok, await saved.text()
+    await expect(
+        guest.get_by_role("button", name=re.compile(r"^(Save|common\.save)$"))
+    ).to_be_disabled()
+    await page.reload()
+    await guest.get_by_role("tab", name=re.compile("Settings")).click()
+    await expect(guest.locator("#workspace-name")).to_have_value("Release council")
+    await expect(guest.locator("#workspace-archive")).to_have_attribute("aria-checked", "true")

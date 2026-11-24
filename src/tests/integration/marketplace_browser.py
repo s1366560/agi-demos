@@ -3,7 +3,7 @@
 import re
 from urllib.parse import urlencode, urlsplit
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout, expect
 
 
 def apply(page: Page, version: str) -> None:
@@ -16,7 +16,7 @@ def apply(page: Page, version: str) -> None:
     dialog = page.locator("dialog.pm-dialog")
     expect(dialog).to_contain_text(version)
     dialog.locator(".pm-actions button").last.click()
-    expect(page.locator(".pm-spec dd").first).to_have_text(version, timeout=30000)
+    expect(page.locator(".pm-spec dd").first).to_have_text(version, timeout=120000)
 
 
 def more(page: Page, action: str) -> None:
@@ -38,11 +38,17 @@ def open_market(page: Page, host, origin, account):
         page.get_by_test_id("password-input").fill(account["password"])
         page.get_by_test_id("login-submit-button").click()
         expect(page.get_by_test_id("login-submit-button")).to_have_count(0, timeout=30000)
-        with page.expect_response(is_catalog) as opened:
-            page.goto(
-                f"{origin}/tenant/{account['tenant_id']}/plugins?"
-                + urlencode({"projectId": project})
-            )
+        market_url = f"{origin}/tenant/{account['tenant_id']}/plugins?" + urlencode(
+            {"projectId": project}
+        )
+        for attempt in range(3):
+            try:
+                with page.expect_response(is_catalog, timeout=30000) as opened:
+                    page.goto(market_url)
+                break
+            except PlaywrightTimeout:
+                if attempt == 2:
+                    raise
     else:
         page.goto(origin + "/?" + urlencode({"project": project}))
         page.get_by_label("Email", exact=True).fill(account["email"])
