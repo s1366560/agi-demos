@@ -189,7 +189,7 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
                         email: member.user_email ?? member.user_id,
                       })}
                       onChange={(value: WorkspaceMemberRole) => {
-                        void handleRoleChange(member.id, value);
+                        void handleRoleChange(member.user_id, value);
                       }}
                       size="small"
                       style={{ width: 108 }}
@@ -203,7 +203,7 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
                     <LazyPopconfirm
                       title={t('workspaceSettings.members.removeConfirm')}
                       onConfirm={() => {
-                        void handleRemoveMember(member.id);
+                        void handleRemoveMember(member.user_id);
                       }}
                       okText={t('common.delete')}
                       cancelText={t('common.cancel')}
