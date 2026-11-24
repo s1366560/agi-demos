@@ -126,3 +126,82 @@ def test_official_market_update_and_rollback(package: str) -> None:
             else:
                 environment(page, version == release)
         page.locator(".pm-back").click()
+
+
+@pytest.mark.parametrize("package", ["knowledge", "agent"])
+def test_signed_react_page_upgrade_and_rollback(package: str) -> None:
+    """Use the fixed native host to switch the signed runtime and operate its new page."""
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.connect_over_cdp(
+            os.environ["MEMSTACK_QA_BUSINESS_MARKET_CDP"]
+        )
+        page = browser.contexts[0].pages[0]
+        page.set_default_timeout(25000)
+        page.locator(".package-market-scope select").select_option("project")
+        page.locator("#pm-card-memstack-" + package).click()
+        running = page.locator(".pm-spec dd").first
+        prior = "1.1.1" if package == "knowledge" else "1.1.0"
+        if running.inner_text() != prior:
+            apply(page, prior)
+        apply(page, "1.2.0")
+        title = "Graph entities" if package == "knowledge" else "Agent chat"
+        page.locator(".pm-page-list").get_by_role("button", name=title, exact=True).click()
+        expect(page.locator("main.desktop-package-workbench")).to_be_visible()
+        frame = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
+        if package == "knowledge":
+            search = frame.get_by_placeholder(re.compile("Search entities|搜索实体|名称或摘要"))
+            search.fill("native-filter")
+            expect(search).to_have_value("native-filter")
+            expect(page).to_have_url(re.compile("native-filter"))
+        else:
+            history = frame.get_by_role("region", name=re.compile("Conversation history|会话历史"))
+            expect(history).to_be_visible()
+            frame.get_by_role("button", name=re.compile("Reload history|刷新历史")).click()
+            expect(history).to_be_visible()
+        page.get_by_role(
+            "button", name=re.compile("Return to market|返回插件市场|Back to market")
+        ).click()
+        expect(page.locator(".pm-spec select")).to_be_visible(timeout=30000)
+        more(page, "回退|回滚|Roll back")
+        expect(running).to_have_text(prior, timeout=30000)
+        page.locator(".pm-spec select").select_option(prior)
+        if package == "knowledge":
+            expect(page.locator(".pm-page-list button", has_text="Graph entities")).to_have_count(0)
+        else:
+            open_page(page, title)
+            expect(
+                frame.get_by_role("region", name=re.compile("Conversation history|会话历史"))
+            ).to_have_count(0)
+            detail(page)
+        page.locator(".pm-back").click()
+
+
+def test_signed_schedule_form_persists_and_deletes_agent_turn() -> None:
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.connect_over_cdp(
+            os.environ["MEMSTACK_QA_BUSINESS_MARKET_CDP"]
+        )
+        page = browser.contexts[0].pages[0]
+        page.set_default_timeout(30000)
+        page.locator(".package-market-scope select").select_option("project")
+        page.locator("#pm-card-memstack-automation").click()
+        if page.locator(".pm-spec dd").first.inner_text() != "1.2.0":
+            apply(page, "1.2.0")
+        frame = open_page(page, "Project schedules")
+        name = "Native schedule " + uuid4().hex[:10]
+        schedule = frame.get_by_label(re.compile("^(Schedule|计划任务)"))
+        expect(schedule.locator("option").first).to_be_attached()
+        frame.get_by_label(re.compile("^(Name|名称)$")).fill(name)
+        frame.get_by_label(re.compile("^(Action|任务操作)")).select_option("agent_turn")
+        message = frame.get_by_label(re.compile("^(Message|消息内容)$"))
+        message.fill("Native review")
+        frame.get_by_label(re.compile("^(Conversation|会话)")).select_option("fresh")
+        frame.get_by_role("button", name=re.compile("^Save|^保存")).click()
+        expect(schedule.locator("option:checked")).to_have_text(name, timeout=20000)
+        frame.get_by_role("button", name=re.compile("Refresh|刷新")).click()
+        expect(message).to_have_value("Native review")
+        frame.get_by_role("button", name=re.compile("^Delete schedule$|^删除计划任务$")).click()
+        frame.get_by_role("button", name=re.compile("^Confirm deletion$|^确认删除$")).click()
+        expect(frame.get_by_role("status")).to_contain_text(re.compile("deleted|已删除"))
+        expect(schedule.locator("option", has_text=name)).to_have_count(0)
+        detail(page)

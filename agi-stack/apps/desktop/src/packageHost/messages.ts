@@ -1,5 +1,6 @@
 const en = {
   backToMarket: 'Back to marketplace',
+  backToWorkspace: 'Back to workspace',
   moreIntegrations: 'Other integrations and credentials',
   signIn: 'Sign in',
   signOut: 'Sign out',
@@ -30,6 +31,7 @@ const en = {
 };
 const zh: typeof en = {
   backToMarket: '返回插件市场',
+  backToWorkspace: '返回工作台',
   moreIntegrations: '其他集成与凭据',
   signIn: '登录',
   signOut: '退出登录',
