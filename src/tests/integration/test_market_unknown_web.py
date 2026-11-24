@@ -60,7 +60,9 @@ def open_market(page: Page, host, origin, account):
 def cloud_label(
     page: Page, revision: int, expected_digest: str, plugin: str, snapshot: Path | None = None
 ):
-    page.locator(".pm-detail-actions").get_by_role("button", name="Open feature").click()
+    page.locator(".pm-detail-actions").get_by_role(
+        "button", name=re.compile("^(Open feature|打开功能)$")
+    ).click()
     frame = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
     expect(frame.get_by_role("heading", name=f"Inventory labels {revision}")).to_be_visible()
     with page.expect_response(
@@ -106,8 +108,8 @@ def test_unknown_npm_release_through_web(host, tmp_path):
         if any(
             item["plugin_id"] == plugin and item["installation"] for item in catalog.json()["items"]
         ):
-            more(page, "Uninstall")
-        expect(current).to_have_text("Inactive")
+            more(page, "Uninstall|卸载")
+        expect(current).to_have_text(re.compile("^(Inactive|未运行)$"))
         digests = []
         for revision in (1, 2):
             with page.expect_response(
@@ -121,14 +123,18 @@ def test_unknown_npm_release_through_web(host, tmp_path):
             digests.append(digest)
             cloud_label(page, revision, digest, plugin, tmp_path / f"{host}-{revision}.png")
         assert digests[0] != digests[1]
-        more(page, "Roll back")
+        more(page, "Roll back|回退至")
         expect(current).to_have_text("1.1.0")
         cloud_label(page, 1, digests[0], plugin)
-        more(page, "Uninstall")
-        expect(current).to_have_text("Inactive")
-        expect(page.locator(".pm-detail-actions .pm-primary")).to_have_text("Install")
+        more(page, "Uninstall|卸载")
+        expect(current).to_have_text(re.compile("^(Inactive|未运行)$"))
+        expect(page.locator(".pm-detail-actions .pm-primary")).to_have_text(
+            re.compile("^(Install|安装)$")
+        )
         with page.expect_response(is_catalog) as listed:
-            page.get_by_role("button", name="Back to marketplace").click()
+            page.get_by_role(
+                "button", name=re.compile("^(Back to marketplace|返回插件市场)$")
+            ).click()
             page.reload()
         assert workspace_state(listed.value) == baseline
         expect(page.locator("vite-error-overlay")).to_have_count(0)

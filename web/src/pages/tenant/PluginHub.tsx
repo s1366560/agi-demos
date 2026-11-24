@@ -1,13 +1,14 @@
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
 import { projectAPI } from '@/services/api';
 
+import { businessLocation } from '@/projectPackages/businessLocation';
 import { useWebPackageSession } from '@/projectPackages/useWebPackageSession';
 import { WebProjectMarket } from '@/projectPackages/WebProjectMarket';
 import { getAuthToken, subscribeCloudIdentity } from '@/utils/tokenResolver';
@@ -21,6 +22,7 @@ const IntegrationSettings = lazy(() => import('./PluginIntegrationSettings'));
 export function PluginHub() {
   const { t, i18n } = useTranslation();
   const { tenantId: routeTenant } = useParams();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tenant = useTenantStore((state) => state.currentTenant);
   const current = useProjectStore((state) => state.currentProject);
@@ -163,7 +165,8 @@ export function PluginHub() {
             transport={session.transport}
             scopeParams={{ projectId: selected.id }}
             onOpen={(path) => {
-              change({ projectId: selected.id, marketPage: path });
+              const plugin = params.get('marketPlugin') ?? params.get('optionalPlugin');
+              if (plugin) void navigate(businessLocation(path, tenantId, selected.id, plugin));
             }}
           />
         )

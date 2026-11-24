@@ -4,6 +4,8 @@ export type PageTarget = 'web' | 'desktop-renderer';
 export type PageScope = Readonly<{ tenantId: string; projectId: string }>;
 export interface PackagePage {
   readonly home?: boolean;
+  readonly slots?: readonly string[];
+  readonly contributes_to?: string;
   readonly id: string;
   readonly title: string;
   readonly routes: readonly string[];

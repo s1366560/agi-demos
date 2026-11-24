@@ -5,7 +5,8 @@
   "type": "module",
   "description": "In-repo TypeScript contract for signed optional-business plugins. Not published.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./build-pages": "./buildPages.mjs"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit"

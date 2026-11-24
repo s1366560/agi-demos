@@ -42,11 +42,33 @@ def page(script=b"app.mount(1)"):
         {"routes": ["/:id/:id"]},
         {"targets": []},
         {"home": "true"},
+        {"contributes_to": "unversioned"},
+        {"routes": [], "contributes_to": "pkg/status@1", "slots": ["nested@1"]},
+        {"routes": [], "contributes_to": "pkg/status@1", "home": True},
+        {"slots": ["status@1", "status@1"]},
     ],
 )
 def test_invalid_rich_declarations(modify):
     with pytest.raises(ValueError):
         parse_rich_pages([{**page(), **modify}], {"ping"})
+
+
+def test_signed_embedded_views_use_versioned_slots_and_have_no_navigation_route():
+    owner, widget = parse_rich_pages(
+        [
+            {**page(), "slots": ["recent@1"]},
+            {
+                **page(),
+                "id": "summary",
+                "routes": [],
+                "contributes_to": "memstack-workspace/recent@1",
+            },
+        ],
+        {"ping"},
+    )
+    assert owner.descriptor()["slots"] == ("recent@1",)
+    assert widget.descriptor()["contributes_to"] == "memstack-workspace/recent@1"
+    assert not widget.routes
 
 
 def test_home_is_declared_by_the_signed_page():

@@ -1,10 +1,11 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import './i18n/config';
 import { Login } from './pages/Login';
+import { ProjectBusinessRoute } from './projectPackages/ProjectBusinessRoute';
 import { WebPluginBootstrapBoundaryV2 } from './plugins/WebPluginBootstrapBoundaryV2';
 import { WebPluginGenerationHostV2 } from './plugins/WebPluginGenerationHostV2';
 import { createWebRendererAppCompositionPortV2 } from './plugins/webRendererAppCompositionV2';
@@ -42,6 +43,11 @@ const DeviceApprove = lazy(() =>
 );
 const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
 
+function BusinessRoutes({ enabled, children }: { enabled: boolean; children: ReactNode }) {
+  const routes = <Routes>{children}</Routes>;
+  return enabled ? <ProjectBusinessRoute>{routes}</ProjectBusinessRoute> : routes;
+}
+
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
@@ -59,7 +65,7 @@ function App() {
               {({ routeArtifacts, status }) => (
                 <WebNavigationAuthorityProviderV2 enabled={isAuthenticated}>
                   <WebUiSlotAuthorityProviderV2 enabled={isAuthenticated}>
-                    <Routes>
+                    <BusinessRoutes enabled={isAuthenticated && !mustChangePassword}>
                       <Route
                         path="/login"
                         element={!isAuthenticated ? <Login /> : <LoginRedirect />}
@@ -141,7 +147,7 @@ function App() {
                           )
                         }
                       />
-                    </Routes>
+                    </BusinessRoutes>
                   </WebUiSlotAuthorityProviderV2>
                 </WebNavigationAuthorityProviderV2>
               )}

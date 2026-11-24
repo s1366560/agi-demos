@@ -6,9 +6,9 @@ import pytest
 from fastapi import FastAPI, Request, WebSocket
 from pydantic import ValidationError
 
+from plugins.business.agent.backend import chat_operations as ops
+from plugins.business.agent.backend.chat_stream import stream_turn
 from src.host.operations.application_commands import PackageOperationContext
-from src.infrastructure.adapters.primary.web.routers.agent import package_chat_operations as ops
-from src.infrastructure.adapters.primary.web.routers.agent.package_chat_stream import stream_turn
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
     OptionalBusinessError,
     ScopeBindingV2,
@@ -75,6 +75,7 @@ async def test_turn_stream_dispatches_fixed_cloud_operation_and_projects_own_eve
 async def test_chat_operations_reject_cross_project_before_calling_handler(db_session):
     ctx = context(FastAPI(), db_session)
     for op, payload in [
+        (ops.rename, {"conversation_id": "other", "title": "new title"}),
         (ops.history, {"conversation_id": "other"}),
         (ops.cancel, {"conversation_id": "other", "run_id": "run", "expected_revision": 1}),
         (ops.turn, {"conversation_id": "other", "message": "hi", "message_id": "m"}),
@@ -89,3 +90,17 @@ async def test_chat_operations_reject_cross_project_before_calling_handler(db_se
         )
     with pytest.raises(ValidationError):
         await ops.history(ctx, {"conversation_id": "../secrets"}, None)
+
+
+async def test_device_conversation_rename_survives_history_refresh(db_session):
+    from src.host.operations.device_conversations import create_owned, list_owned, rename_owned
+
+    ctx = context(FastAPI(), db_session)
+    conversation = await create_owned(ctx, {"title": "Original", "execution_target": "local"}, None)
+    result = await rename_owned(
+        ctx, {"conversation_id": conversation["id"], "title": "  New  "}, None
+    )
+    assert result == {"id": conversation["id"], "title": "New"}
+    assert (await list_owned(ctx, {}, None))["items"] == [
+        {**conversation, "title": "New"},
+    ]

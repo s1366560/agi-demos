@@ -36,50 +36,59 @@ def build_worker(package: Path, image: str, executable: str, signer: Ed25519Priv
         return build(stage / "package.json", signer)
 
 
+def build_package(name: str, args: argparse.Namespace, signer: Ed25519PrivateKey) -> bytes:
+    root = BUSINESS / name
+    if name == "workspace":
+        from memstack_plugin_sdk.pack import build
+
+        return build(root / "package.json", signer)
+
+    image = getattr(args, f"{name}_image")
+    version = json.loads((root / "package.json").read_bytes())["version"]
+    if name == "agent":
+        from plugins.business.agent.release import build_release
+
+        return build_release(image, version, signer)
+    if name == "knowledge":
+        from plugins.business.knowledge.build import release
+
+        return release(image, args.device_wasm, version, signer)
+    if name == "billing":
+        from plugins.business.billing.build import build_release as build_billing
+
+        return build_billing(
+            json.loads((root / "plans.json").read_bytes()),
+            version=version,
+            signer=signer,
+            worker_image=image,
+        )
+    executable = {"automation": "/app/schedule-worker", "environments": "/app/worker"}[name]
+    return build_worker(root, image, executable, signer)
+
+
 def main() -> None:
-    from memstack_plugin_sdk.pack import build
-
-    from plugins.business.agent.release import build_release as build_agent
-    from plugins.business.billing.build import build_release as build_billing
-    from plugins.business.knowledge.build import release as build_knowledge
-
+    names = ("workspace", *WORKER_CONTEXTS)
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--package", choices=names, help="Build only this package")
     for name in WORKER_CONTEXTS:
         parser.add_argument(
-            "--" + name + "-image",
-            required=True,
-            help="Published OCI image at its immutable digest",
+            "--" + name + "-image", help="Published OCI image at its immutable digest"
         )
-    parser.add_argument("--device-wasm", required=True, type=Path)
+    parser.add_argument("--device-wasm", type=Path, help="Knowledge device executable")
     parser.add_argument("--key", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
+    selected = (args.package,) if args.package else names
+    for name in selected:
+        if name in WORKER_CONTEXTS and not getattr(args, f"{name}_image"):
+            parser.error(f"--{name}-image is required for {name}")
+    if "knowledge" in selected and not args.device_wasm:
+        parser.error("--device-wasm is required for knowledge")
     signer = load_pem_private_key(args.key.read_bytes(), password=None)
     if not isinstance(signer, Ed25519PrivateKey):
         parser.error("Expected an Ed25519 publisher key")
 
-    def version(name: str) -> str:
-        return str(json.loads((BUSINESS / name / "package.json").read_bytes())["version"])
-
-    archives = {
-        "agent": build_agent(args.agent_image, version("agent"), signer),
-        "knowledge": build_knowledge(
-            args.knowledge_image, args.device_wasm, version("knowledge"), signer
-        ),
-        "workspace": build(BUSINESS / "workspace/package.json", signer),
-        "automation": build_worker(
-            BUSINESS / "automation", args.automation_image, "/app/schedule-worker", signer
-        ),
-        "environments": build_worker(
-            BUSINESS / "environments", args.environments_image, "/app/worker", signer
-        ),
-        "billing": build_billing(
-            json.loads((BUSINESS / "billing/plans.json").read_bytes()),
-            version=version("billing"),
-            signer=signer,
-            worker_image=args.billing_image,
-        ),
-    }
+    archives = {name: build_package(name, args, signer) for name in selected}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=args.out.parent) as temporary:
         staged = Path(temporary) / "archives"

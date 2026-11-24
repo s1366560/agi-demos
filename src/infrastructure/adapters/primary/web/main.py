@@ -415,24 +415,32 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
         },
     )
 
+    from plugins.business.agent.backend.chat_operations import (
+        AGENT_OPERATIONS,
+    )
     from plugins.business.automation.backend.playbook_operation import read_playbooks
     from plugins.business.automation.backend.schedule_operations import SCHEDULE_OPERATIONS
+    from plugins.business.billing.backend.account_operations import BILLING_OPERATIONS
     from plugins.business.environments.backend.package_sandbox_operations import SANDBOX_OPERATIONS
+    from plugins.business.knowledge.backend.package_memory_editor import save_memory
     from plugins.business.knowledge.backend.project_memory_operation import list_project_memories
     from plugins.business.workspace.backend.workspace_directory_export import (
+        create_workspace_operation,
         read_directory_operation,
         read_workspace_operation,
-    )
-    from src.infrastructure.adapters.primary.web.routers.agent.package_chat_operations import (
-        AGENT_OPERATIONS,
+        update_workspace_operation,
     )
 
     app.state.package_operations_v1 = {
         "app.automation.playbooks.read": read_playbooks,
         **AGENT_OPERATIONS,
+        **BILLING_OPERATIONS,
         **SANDBOX_OPERATIONS,
         **SCHEDULE_OPERATIONS,
         "app.knowledge.memories.read": list_project_memories,
+        "app.knowledge.memories.write": save_memory,
+        "app.workspace.create": create_workspace_operation,
+        "app.workspace.settings.update": update_workspace_operation,
         "app.workspace.directory.read": read_directory_operation,
         "app.workspace.detail.read": read_workspace_operation,
     }

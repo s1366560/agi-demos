@@ -10,6 +10,8 @@ from pathlib import PurePosixPath
 RICH_PAGE_SCHEMA = "memstack.rich-page/1"
 _RENDERERS = {"web", "desktop-renderer"}
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+_SLOT = re.compile(r"[a-z][a-z0-9-]{0,63}@[1-9][0-9]{0,3}")
+_SLOT_REFERENCE = re.compile(r"[a-z][a-z0-9.-]{0,127}/" + _SLOT.pattern)
 _ROUTE = re.compile(r"(?:/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*|:[A-Za-z][A-Za-z0-9_]*))+")
 # These URL namespaces belong to the shell even when the project has no packages.
 _HOST_ROOTS = frozenset(
@@ -61,6 +63,8 @@ class RichPage:
     commands: tuple[str, ...]
     device_tools: tuple[str, ...]
     home: bool = False
+    slots: tuple[str, ...] = ()
+    contributes_to: str | None = None
 
     @property
     def assets(self) -> tuple[PageAsset, ...]:
@@ -72,6 +76,8 @@ class RichPage:
             "title": self.title,
             "routes": self.routes,
             "targets": sorted(self.targets),
+            **({"slots": self.slots} if self.slots else {}),
+            **({"contributes_to": self.contributes_to} if self.contributes_to else {}),
             **({"home": True} if self.home else {}),
         }
 
@@ -142,6 +148,8 @@ def _parse_page(value: object) -> RichPage:
         "entry",
         "style",
         "home",
+        "slots",
+        "contributes_to",
     }:
         raise ValueError("unsupported rich page declaration")
     home = value.get("home", False)
@@ -154,13 +162,25 @@ def _parse_page(value: object) -> RichPage:
         raise ValueError("invalid page title")
     routes = _strings(value.get("routes"), _ROUTE)
     targets = frozenset(_strings(value.get("targets"), _IDENTIFIER))
-    if not routes or not targets or not targets <= _RENDERERS:
+    slots = _strings(value.get("slots", []), _SLOT)
+    destination = value.get("contributes_to")
+    if destination is not None and (
+        not isinstance(destination, str)
+        or not _SLOT_REFERENCE.fullmatch(destination)
+        or routes
+        or slots
+        or home
+    ):
+        raise ValueError("invalid embedded page slot")
+    if not (routes or destination) or not targets or not targets <= _RENDERERS:
         raise ValueError("rich pages require routes and supported renderer targets")
     for route in routes:
         _check_route(route)
     return RichPage(
         id=page_id,
         home=home,
+        slots=slots,
+        contributes_to=destination,
         title=title,
         routes=routes,
         targets=targets,

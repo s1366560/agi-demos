@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from src.host.operations.device_conversations import (
+    ConversationRename,
     DeviceConversationCreate,
     create_owned,
     local_history,
@@ -20,7 +21,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
 )
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
-from .package_chat_stream import stream_turn
+from .chat_stream import stream_turn
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
@@ -137,6 +138,17 @@ async def create(
     )
 
 
+async def rename(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    data = ConversationRename.model_validate(payload)
+    await _own_conversation(ctx, data.conversation_id)
+    row = await _canonical(
+        ctx, "PATCH", f"conversations/{data.conversation_id}/title", body={"title": data.title}
+    )
+    return {"id": row["id"], "title": row["title"]}
+
+
 async def history(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
@@ -234,6 +246,7 @@ async def cancel(
 AGENT_OPERATIONS = {
     "app.agent.list": list_conversations,
     "app.agent.create": create,
+    "app.agent.rename": rename,
     "app.agent.history": history,
     "app.agent.turn": turn,
     "app.agent.cancel": cancel,

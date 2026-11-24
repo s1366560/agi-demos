@@ -18,6 +18,10 @@
   newTarget.hidden = !desktop;
   const refresh = element('button', t('Reload history', '刷新历史'));
   const create = element('button', t('New conversation', '新会话'));
+  const title = element('input');
+  title.maxLength = 500;
+  title.setAttribute('aria-label', t('Conversation title', '会话标题'));
+  const rename = element('button', t('Rename conversation', '重命名会话'));
   const older = element('button', t('Earlier messages', '更早的消息'));
   older.hidden = true;
   const transcript = element('ol');
@@ -29,7 +33,7 @@
   const placement = element('p');
   const status = element('p');
   status.setAttribute('role', 'status');
-  root.append(element('h1', t('Agent chat', '智能体对话')), select, newTarget, create, refresh,
+  root.append(element('h1', t('Agent chat', '智能体对话')), select, newTarget, create, title, rename, refresh,
     older, transcript, placement, draft, send, stop, status);
 
   let active = false;
@@ -44,6 +48,8 @@
     const local = target() === 'local';
     const writable = target() === 'cloud' || (local && hasLocalChat);
     select.disabled = newTarget.disabled = create.disabled = refresh.disabled = active;
+    title.disabled = !select.value || active;
+    rename.disabled = title.disabled || !title.value.trim() || title.value.trim() === select.selectedOptions[0]?.text;
     draft.readOnly = !writable || active;
     send.textContent = local ? t('Send to device', '发送到本机') : t('Send to cloud', '发送到云端');
     send.disabled = !writable || active || !draft.value.trim();
@@ -62,6 +68,8 @@
     const version = ++historyVersion;
     if (!previous) { transcript.replaceChildren(); before = undefined; }
     older.hidden = true;
+    if (!previous) title.value = select.selectedOptions[0]?.text ?? '';
+    controls();
     if (!select.value) return;
     const result = await sdk.invoke('chat-history', {conversation_id: select.value, ...(previous ? before : {})});
     if (version !== historyVersion) return;
@@ -105,6 +113,17 @@
         ...(desktop && newTarget.value === 'local' ? { execution_target: 'local' } : {}),
       });
       await conversations(row.id);
+    } catch (error) { report(error); }
+    finally { active = false; controls(); }
+  };
+  title.oninput = controls;
+  rename.onclick = async () => {
+    if (rename.disabled) return;
+    active = true;
+    controls();
+    try {
+      const row = await sdk.invoke('chat-rename', { conversation_id: select.value, title: title.value.trim() });
+      select.selectedOptions[0].text = title.value = row.title;
     } catch (error) { report(error); }
     finally { active = false; controls(); }
   };

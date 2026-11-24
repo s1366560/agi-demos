@@ -11,6 +11,7 @@
       "app.agent.history",
       "app.agent.turn",
       "app.agent.cancel",
+      "app.agent.rename",
       "device.local-chat"
     ]
   },
@@ -20,7 +21,8 @@
       "tools.execute",
       "ui.slot",
       "graph.projection.compute",
-      "app.knowledge.memories.read"
+      "app.knowledge.memories.read",
+      "app.knowledge.memories.write"
     ]
   },
   {
@@ -29,7 +31,9 @@
       "tools.execute",
       "ui.slot",
       "app.workspace.directory.read",
-      "app.workspace.detail.read"
+      "app.workspace.detail.read",
+      "app.workspace.create",
+      "app.workspace.settings.update"
     ]
   },
   {
@@ -40,7 +44,9 @@
       "app.automation.playbooks.read",
       "app.automation.schedules.read",
       "app.automation.schedules.write",
-      "app.automation.schedules.run"
+      "app.automation.schedules.run",
+      "storage.read",
+      "storage.write"
     ]
   },
   {
@@ -59,7 +65,9 @@
       "tools.execute",
       "ui.slot",
       "storage.read",
-      "storage.write"
+      "storage.write",
+      "app.billing.account.read",
+      "app.billing.plan.write"
     ]
   }
 ]

@@ -24,6 +24,12 @@ class DeviceConversationCreate(BaseModel):
     execution_target: Literal["cloud", "local"] = "cloud"
 
 
+class ConversationRename(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
+    conversation_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    title: str = Field(min_length=1, max_length=500)
+
+
 class Replay(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     conversation_id: str = Field(min_length=1, max_length=128)
@@ -88,6 +94,20 @@ async def create_owned(
     return {"id": row.id, "title": body.title, "execution_target": body.execution_target}
 
 
+async def rename_owned(
+    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+) -> dict[str, Any]:
+    data = ConversationRename.model_validate(payload)
+    row = await ctx.db.scalar(
+        select(Conversation).where(*_owned(ctx), Conversation.id == data.conversation_id)
+    )
+    if row is None:
+        raise OptionalBusinessError("forbidden", "conversation unavailable for this project")
+    row.title = data.title
+    await ctx.db.commit()
+    return {"id": data.conversation_id, "title": data.title}
+
+
 async def local_history(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
@@ -132,5 +152,6 @@ async def local_history(
 DEVICE_HISTORY_OPERATIONS = {
     "app.agent.list": list_owned,
     "app.agent.create": create_owned,
+    "app.agent.rename": rename_owned,
     "app.agent.history": local_history,
 }

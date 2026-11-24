@@ -23,8 +23,11 @@ export interface RichPackagePagesProps {
   target: PageTarget;
   transport: MarketplaceTransport;
   pathname: string;
-  navigate(path: string, options?: { replace?: boolean }): void;
+  navigate(path: string, options?: { replace?: boolean; pluginId?: string }): void;
   management?: ReactNode;
+  pluginId?: string;
+  unmatched?: ReactNode;
+  backToMarket?: ReactNode;
   managementLabel?: string;
   invokeDevice?: DevicePageCall;
   streamCommand?: (
@@ -391,7 +394,8 @@ export function RichPackagePages(props: RichPackagePagesProps) {
 
   let bestRank: string | null = null;
   let selected: Item | undefined;
-  for (const item of items) {
+  const navigable = props.pluginId ? items.filter((i) => i.pluginId === props.pluginId) : items;
+  for (const item of navigable) {
     for (const route of item.page.routes) {
       const rank = routeRank(route, pathname, scope);
       if (rank !== null && (bestRank === null || rank > bestRank)) {
@@ -400,7 +404,7 @@ export function RichPackagePages(props: RichPackagePagesProps) {
       }
     }
   }
-  const links = items.flatMap((item) => {
+  const links = navigable.flatMap((item) => {
     const path = item.page.routes.map((route) => menuPath(route, scope)).find(Boolean);
     return path ? [{ item, path }] : [];
   });
@@ -413,12 +417,19 @@ export function RichPackagePages(props: RichPackagePagesProps) {
     if (atHome && home) props.navigate(home, { replace: true });
   }, [atHome, home, props.navigate]);
 
+  if (props.unmatched !== undefined && !selected && (loaded || error)) {
+    if (error && props.pluginId) return <><p role="alert">{error}</p>{props.unmatched}</>;
+    return props.unmatched;
+  }
+  const slots = new Set(selected?.page.slots?.map((name) => selected.pluginId + '/' + name));
+  const embedded = items.filter((i) => i.page.contributes_to && slots.has(i.page.contributes_to));
   return (
     <div className="project-business-pages" data-testid="project-business-pages">
       <nav
         className="project-business-navigation"
         aria-label={zh ? '项目导航' : 'Project navigation'}
       >
+        {props.backToMarket}
         {links.length > 0 && (
           <label>
             {zh ? '业务页面' : 'Applications'}
@@ -472,6 +483,19 @@ export function RichPackagePages(props: RichPackagePagesProps) {
           </p>
         ))
       )}
+      {embedded.map((item) => (
+        <section
+          key={JSON.stringify([tenantId, projectId, selected?.pluginId, pathname, item.pluginId, item.page.id])}
+          aria-label={item.page.title}
+        >
+          <PageRelease
+            {...props}
+            item={item}
+            onStatus={() => {}}
+            navigate={(path) => props.navigate(path, { pluginId: item.pluginId })}
+          />
+        </section>
+      ))}
     </div>
   );
 }

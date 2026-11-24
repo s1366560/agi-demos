@@ -296,6 +296,15 @@
       "permissions": [
         "app.agent.cancel"
       ]
+    },
+    {
+      "id": "chat-rename",
+      "host_operation": "app.agent.rename",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.rename"
+      ]
     }
   ],
   "ui": [
@@ -347,14 +356,15 @@
       ],
       "entry": {
         "path": "ui/chat.js",
-        "digest": "sha256:99d21b6e4544e56bf909464d2ee4c856d53dc2f08bd2ae44dda88cc5d9084a5e"
+        "digest": "sha256:8ec3cdef0c44f08318bdc3b1cecec7710385e986003f7d4aea47970abfdf01ea"
       },
       "commands": [
         "chat-list",
         "chat-create",
         "chat-history",
         "chat-turn",
-        "chat-cancel"
+        "chat-cancel",
+        "chat-rename"
       ],
       "device_tools": [
         "local_chat"
