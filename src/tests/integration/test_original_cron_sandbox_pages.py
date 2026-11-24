@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from src.tests.integration.marketplace_browser import apply, open_market
+from src.tests.integration.marketplace_browser import apply, business_release, open_market
 
 pytestmark = [
     pytest.mark.integration,
@@ -39,7 +39,7 @@ def market():
 def enter(page, plugin, title):
     page.locator("#pm-card-memstack-" + plugin).click()
     active = page.locator(".pm-spec dd").first
-    version = "1.4.1" if plugin == "automation" else "1.4.0"
+    version = business_release("automation") if plugin == "automation" else "1.4.0"
     if active.inner_text(timeout=90000) != version:
         apply(page, version)
     page.locator(".pm-page-list").get_by_role("button", name=title, exact=True).click()
@@ -141,7 +141,14 @@ def test_fixed_electron_opens_the_original_schedule_form_and_sandbox():
 @pytest.mark.parametrize(
     ("plugin", "prior", "current", "title", "original_selector", "previous_selector"),
     [
-        ("automation", "1.3.1", "1.4.1", "Project schedules", ".ant-table", "fieldset,select"),
+        (
+            "automation",
+            "1.3.1",
+            business_release("automation"),
+            "Project schedules",
+            ".ant-table",
+            "fieldset,select",
+        ),
         ("environments", "1.3.0", "1.4.0", "Project sandbox", "section#sandbox", "fieldset,output"),
     ],
 )

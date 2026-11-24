@@ -565,7 +565,7 @@
       ],
       "entry": {
         "path": "ui/playbooks-web.js",
-        "digest": "sha256:348d056bfaa9d33320f5e619e4a2eb3b453e35e190694c4eb405572c9afe5d49"
+        "digest": "sha256:7fbbef4e67cd47de0ea0942229980b0829deb597f86c19e43c1a44738e081756"
       },
       "commands": [
         "list-playbooks",
@@ -612,7 +612,7 @@
       ],
       "entry": {
         "path": "ui/cron-jobs.js",
-        "digest": "sha256:da83b012d44ac8b449e2ed6d9cb4f5a13594fd952e9d1b473f347e1d63aa6f62"
+        "digest": "sha256:a55bb4cdf7887c325adb4e9c24b7429d1a186ba3f22ecc0b26c6b036ffe42b47"
       },
       "commands": [
         "list-schedules",
@@ -623,7 +623,7 @@
       "device_tools": [],
       "style": {
         "path": "ui/cron-jobs.css",
-        "digest": "sha256:ef35c7694c610c1a629ca7ccd179cef2a0d741df0e37057b98e41d47925b1468"
+        "digest": "sha256:7d380871b1400ac64fb1442ee3c03147c5518b69f78eeee48cd76cc5f5974170"
       },
       "workbench": true
     },
@@ -640,7 +640,7 @@
       ],
       "entry": {
         "path": "ui/workflow-patterns.js",
-        "digest": "sha256:fe949eea74e24a25d672cd1a85fd09636db7d3af9978f54b6aec6f2962085c84"
+        "digest": "sha256:173098764be4a936ac7354d0a6c6efad54d23278aa8711aefb773cb37f0d22c8"
       },
       "style": {
         "path": "ui/workflow-patterns.css",

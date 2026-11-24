@@ -1,6 +1,6 @@
 {
   "plugin_id": "memstack-automation",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "kind": "business",
   "target": "python",
   "tool_name": "next_scheduled_run",

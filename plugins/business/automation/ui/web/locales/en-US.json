@@ -196,6 +196,7 @@
   },
   "project": {
     "cronJobs": {
+      "searchPlaceholder": "Search by name",
       "operationsUnavailable": "Some scheduled task operations are not ready and cannot be used yet. Existing tasks and run history remain available.",
       "capabilitiesLoadFailed": "Could not verify available scheduled task operations. Changes are disabled until you retry.",
       "title": "Scheduled Tasks",

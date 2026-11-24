@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from src.tests.integration.marketplace_browser import apply, more
+from src.tests.integration.marketplace_browser import apply, business_release, more
 
 pytestmark = [
     pytest.mark.integration,
@@ -23,7 +23,7 @@ pytestmark = [
 @pytest.mark.parametrize(
     ("package", "version", "route", "search_label"),
     [
-        ("automation", "1.4.1", "patterns", "Search patterns|搜索模式"),
+        ("automation", business_release("automation"), "patterns", "Search patterns|搜索模式"),
         ("environments", "1.5.3", "clusters", "Search clusters|搜索集群"),
     ],
 )

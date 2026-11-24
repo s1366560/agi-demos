@@ -196,6 +196,7 @@
   },
   "project": {
     "cronJobs": {
+      "searchPlaceholder": "按名称搜索",
       "operationsUnavailable": "部分定时任务操作尚未就绪，暂不可使用。仍可查看现有任务和运行历史。",
       "capabilitiesLoadFailed": "无法确认定时任务的可用操作，暂时禁止修改，请重试。",
       "title": "定时任务",
