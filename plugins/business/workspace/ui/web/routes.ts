@@ -13,15 +13,6 @@ export const WorkspaceCreate = lazy(() =>
     default: m.WorkspaceCreate,
   }))
 );
-export const WorkspaceBlackboardRedirect = lazy(() =>
-  import('./project/WorkspaceBlackboardRedirect').then((m) => ({
-    default: m.WorkspaceBlackboardRedirect,
-  }))
-);
-export const Blackboard = lazy(() =>
-  import('./project/Blackboard').then((m) => ({ default: m.Blackboard }))
-);
-
 export const TenantOverview = lazy(() =>
   import('./tenant/TenantOverview').then((m) => ({
     default: m.TenantOverview,

@@ -6,7 +6,6 @@ import { SchemaLayout } from '../../layouts/SchemaLayout';
 
 import {
   ProjectOverview,
-  NewMemory,
   MemoryGraph,
   CommunitiesList,
   EnhancedSearch,
@@ -18,8 +17,6 @@ import {
   Team,
   ProjectSettings,
   Support,
-  Blackboard,
-  WorkspaceBlackboardRedirect,
   ProjectAgentDashboard,
   ProjectAgentLogs,
   ProjectAgentPatterns,
@@ -60,13 +57,9 @@ export function createProjectRouteElementsV2(): ReactNode {
           element={<ProjectPackageMarketRedirect />}
         />
         <Route
-          handle={{ pluginFeature: 'project-memories' }}
+          handle={{ pluginFeature: 'project-memories', signedPage: true }}
           path="memories/new"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <NewMemory />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route
           handle={{ pluginFeature: 'project-memories', signedPage: true }}
@@ -195,13 +188,9 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
-          handle={{ pluginFeature: 'project-blackboard' }}
+          handle={{ pluginFeature: 'project-blackboard', signedPage: true }}
           path="blackboard"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <Blackboard />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route
           handle={{ pluginFeature: 'project-playbooks', signedPage: true }}
@@ -219,13 +208,9 @@ export function createProjectRouteElementsV2(): ReactNode {
           element={<ProjectPackageMarketRedirect />}
         />
         <Route
-          handle={{ pluginFeature: 'project-workspaces' }}
+          handle={{ pluginFeature: 'project-workspaces', signedPage: true }}
           path="workspaces/:workspaceId"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <WorkspaceBlackboardRedirect />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route path="agent">
           <Route

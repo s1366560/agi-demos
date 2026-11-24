@@ -3,17 +3,6 @@ import { lazy, type ComponentType } from 'react';
 export const BackendStores = lazy(() =>
   import('./tenant/BackendStores').then((m) => ({ default: m.BackendStores }))
 );
-export const MemoryList = lazy(() =>
-  import('./project/MemoryList').then((m) => ({ default: m.MemoryList }))
-);
-export const NewMemory = lazy(() =>
-  import('./project/NewMemory').then((m) => ({ default: m.NewMemory }))
-);
-export const MemoryDetail = lazy(() =>
-  import('./project/MemoryDetail').then((m) => ({
-    default: m.MemoryDetail,
-  }))
-);
 export const MemoryGraph = lazy(() =>
   import('./project/MemoryGraph').then((m) => ({
     default: m.MemoryGraph,

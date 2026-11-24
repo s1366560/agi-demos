@@ -180,7 +180,7 @@ describe('full workbench access for signed routes', () => {
     );
     expect(hasFullWorkbenchRoute(path, scope, current, [])).toBe(false);
   });
-  it.each(['memories', 'memory/abc', 'workspaces', 'workspaces/new', 'cron-jobs', 'playbooks'])(
+  it.each(['memories', 'memory/abc', 'workspaces', 'workspaces/new', 'workspaces/w', 'blackboard', 'memories/new', 'cron-jobs', 'playbooks'])(
     'resolves the installed page even for a full-workbench bookmark at %s',
     (segment) => {
       expect(hasFullWorkbenchRoute('/tenant/t/project/p/' + segment, scope, current, routesWithout())).toBe(false);
