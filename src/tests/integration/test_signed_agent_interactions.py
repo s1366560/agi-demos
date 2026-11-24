@@ -187,7 +187,10 @@ def exercise_page(page, title, conversation, account, cdp):
     )
     expect(guest.get_by_text("interaction-check.txt", exact=True)).to_be_visible(timeout=30000)
     draft = guest.locator("textarea").last
-    draft.fill("Please acknowledge receipt of the attached fixture.")
+    draft.fill(
+        "Reply with the word RECEIVED to acknowledge the filename shown in this message. "
+        "Leave the attached file unopened. You do not need any tool to reply."
+    )
     draft.press("Enter")
     expect(draft).to_have_value("", timeout=60000)
     transcript = guest.locator(".chat-history-viewport")
