@@ -6,15 +6,21 @@ based on project-specific entity and edge type definitions stored in the databas
 """
 
 import logging
+from contextlib import nullcontext
 from datetime import datetime
 from typing import Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, Field, create_model
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session, SessionTransaction
 
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.adapters.secondary.persistence.graph_discovery_session import (
+    discovery_session,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     EdgeType,
     EdgeTypeMap,
@@ -820,11 +826,25 @@ async def save_discovered_edge_type_map(
         return map_id
 
 
+def _invalidate_discovered_schema(project_id: str, admitted: AsyncSession | None) -> None:
+    if admitted is None:
+        clear_schema_context_cache(project_id)
+    else:
+        # The caller still holds the graph lock; readers can see the old schema until commit.
+        def invalidate_on_exit(_session: Session, transaction: SessionTransaction) -> None:
+            if transaction.parent is None:
+                clear_schema_context_cache(project_id)
+
+        event.listen(admitted.sync_session, "after_transaction_end", invalidate_on_exit)
+
+
 async def save_discovered_types_batch(
     project_id: str,
     entity_types: list[dict[str, str]],
     edge_types: list[str],
     edge_type_maps: list[dict[str, str]],
+    *,
+    tenant_id: str | None = None,
 ) -> dict[str, int]:
     """
     Batch save discovered types to the database.
@@ -850,7 +870,11 @@ async def save_discovered_types_batch(
     edge_types_created = 0
     edge_type_maps_created = 0
 
-    async with async_session_factory() as session:
+    admitted = discovery_session(project_id, tenant_id)
+    async with (
+        nullcontext(admitted) if admitted is not None else async_session_factory() as session,
+        session.begin_nested() if admitted is not None else nullcontext(),
+    ):
         await require_legacy_schema(session, project_id)
         # Get existing entity types
         result = await session.execute(
@@ -948,11 +972,12 @@ async def save_discovered_types_batch(
             )
             existing_maps.add(map_key)
 
-        await session.commit()
+        if admitted is None:
+            await session.commit()
 
     # Clear cache if anything was created
     if entity_types_created or edge_types_created or edge_type_maps_created:
-        clear_schema_context_cache(project_id)
+        _invalidate_discovered_schema(project_id, admitted)
         logger.info(
             f"Batch saved discovered types for project {project_id}: "
             f"{entity_types_created} entity types, "

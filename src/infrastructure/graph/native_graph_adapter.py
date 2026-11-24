@@ -712,6 +712,7 @@ class NativeGraphAdapter(GraphStorePort):
             if project_id:
                 await self._save_discovered_types(
                     project_id=project_id,
+                    tenant_id=tenant_id,
                     entities=final_entities,
                     relationships=relationships,
                     existing_entity_types={ctx["entity_type_name"] for ctx in entity_types_context},
@@ -760,7 +761,9 @@ class NativeGraphAdapter(GraphStorePort):
             get_project_schema_context,
         )
 
-        return cast(dict[str, Any], await get_project_schema_context(project_id, persist_defaults=False))
+        return cast(
+            dict[str, Any], await get_project_schema_context(project_id, persist_defaults=False)
+        )
 
     @staticmethod
     def _resolve_mentioned_entities(
@@ -955,6 +958,7 @@ class NativeGraphAdapter(GraphStorePort):
         entities: list[EntityNode],
         relationships: list[EntityEdge],
         existing_entity_types: set[str],
+        tenant_id: str | None = None,
     ) -> None:
         """
         Save discovered entity types and edge types to PostgreSQL.
@@ -1025,6 +1029,7 @@ class NativeGraphAdapter(GraphStorePort):
             try:
                 result = await save_discovered_types_batch(
                     project_id=project_id,
+                    tenant_id=tenant_id,
                     entity_types=new_entity_types,
                     edge_types=list(new_edge_types),
                     edge_type_maps=new_edge_type_maps,
