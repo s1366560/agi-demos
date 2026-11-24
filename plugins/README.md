@@ -4,12 +4,12 @@
 
 | 业务包 | 已接入独立发布的能力 | 继续迁移的边界 |
 | --- | --- | --- |
-| [Agent](business/agent/README.md) | 同一个包拥有 ReAct 与 SessionProcessor 的实现、循环控制、云端流式对话、取消、P5 只读回放、Skill 校验、审阅 SubAgent 和会话执行统计 | 聊天传输、模型及实际工具调用仍通过已授权运行上下文 |
-| [Knowledge](business/knowledge/README.md) | 一次发布包含云端图投影和设备侧检索，设备单独授权 | 记忆写入、图存储、索引更新及检索管线 |
-| [Workspace](business/workspace/README.md) | 项目概览、获授权工作区详情、目录和 CSV 导出 | 工作区协作、成员管理和项目视图 |
-| [Automation](business/automation/README.md) | Asyncio 工作流引擎、签名工作流编辑、执行与项目剧本读取 | 外部事件消费、Webhook 和已授权的持久化任务执行上下文 |
+| [Agent](business/agent/README.md) | 同一个包拥有 ReAct 与 SessionProcessor 的实现、循环控制、会话重命名、云端流式对话、取消、P5 只读回放、Skill 校验、审阅 SubAgent 和会话执行统计 | 聊天传输、模型及实际工具调用仍通过已授权运行上下文 |
+| [Knowledge](business/knowledge/README.md) | 一次发布包含记忆列表、详情、创建与修订、概览插槽、云端图投影和设备侧检索，设备单独授权 | 图存储、索引更新及检索管线 |
+| [Workspace](business/workspace/README.md) | 项目概览、工作区创建、详情、改名、归档、目录和 CSV 导出 | 工作区协作、成员管理和项目视图 |
+| [Automation](business/automation/README.md) | Asyncio 工作流引擎、签名工作流编辑、保存、执行、定时作业编辑与项目剧本读取 | 外部事件消费、Webhook 和已授权的持久化任务执行上下文 |
 | [Environments](business/environments/README.md) | Sandbox 生命周期及 MCP 工具源码、隔离补丁计算、集群指标、项目 Sandbox 准备和按运行代授权终端 | 实例与部署所需的基础设施权限、Sandbox WebSocket 服务的配置 |
-| [Billing](business/billing/README.md) | 报价、项目发票开具及列表、共享 React 发票表、命令及迁移 | 全量账务流程和租户配额接口 |
+| [Billing](business/billing/README.md) | 报价、项目发票开具及列表、共享 React 发票表、租户用量和授权套餐变更 | 全量账务流程和租户配额接口 |
 
 [模型适配器](adapters/models)分别对接 OpenAI、DeepSeek 和 Cohere。[渠道适配器](adapters/channels/feishu)负责飞书。发布者可以独立更新和授权各适配器。增加业务工具时，先定位持有数据及规则的业务包。增加模型厂商或渠道时，先检查账号凭据、网络出口和可撤销权限是否需要独立安装。通用设备授权在宿主；现有 Computer Use 的原生实现仍在桌面 Sidecar。
 
@@ -63,6 +63,15 @@ memstack packages --tenant "$TENANT" --project "$PROJECT" list
 
 
 默认客户端从已签名的 `contributions.json` 读取路由与页面。开发业务功能时先找 `plugins/business/<包>/ui`。其中 `ui/web` 与 `ui/desktop` 也存放完整旧客户端仍在使用的视图和控制器。新增的共享页使用独立发布的 [页面 SDK](../sdk/memstack-plugin-sdk/src/pageRuntime.ts)。[Web 宿主](../web/src/projectPackages) 和 [桌面宿主](../agi-stack/apps/desktop/src/packageHost) 负责身份、作用域、页面装载和授权。
+
+跨业务小组件也由所属包签名发布。Workspace 概览声明 `slots: ["recent-memories@1"]`。Knowledge 的最近记忆页面声明 `contributes_to: "memstack-workspace/recent-memories@1"` 和空路由。两包在同一项目启用后，宿主将组件挂入独立 iframe，使用 Knowledge 的摘要及权限读取数据。更换 Knowledge 版本无需重新构建 Workspace。
+
+单独构建 Workspace 时，只需提供该包的发布输入和一个新的输出目录。带有 worker 的包另外传入对应的不可变 OCI 镜像引用，Knowledge 还需要设备 Wasm。
+
+```sh
+PYTHONPATH=.:sdk/memstack-plugin-sdk/src uv run python -m scripts.build_standard_packages \
+  --package workspace --key "$PUBLISHER_KEY" --out "$RELEASE_DIR"
+```
 
 验证默认业务时，在独立目录执行 `STANDARD_DIRECTORY="$QA_DIR" MEMSTACK_DEV_PROFILE=standard make dev`。使用该实例的 Web 地址和目录执行下列测试。测试会在该项目内创建发票、安装签名版本并回退。
 
