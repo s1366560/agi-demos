@@ -78,6 +78,7 @@ node_modules/
 web/node_modules/
 web/dist/
 web/dist-project-packages/
+web/dist-compat/
 web/build/
 web/playwright-report/
 web/test-results/

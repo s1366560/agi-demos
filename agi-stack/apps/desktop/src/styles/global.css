@@ -6,3 +6,5 @@
 @import './chrome.css';
 @import './base.css';
 @import '../app-shell.css';
+@import '@business/agent/ui/desktop/session/sessionReview.css';
+@import '@business/agent/ui/desktop/session/artifactLifecycle.css';

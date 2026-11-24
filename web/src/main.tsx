@@ -13,7 +13,7 @@ import {
 } from './plugins/webPluginGenerationV2';
 import { queryClient } from './services/client/queryClient';
 import { logger } from './utils/logger';
-import './index.css';
+import './compat.css';
 
 const rootElement = document.getElementById('root');
 

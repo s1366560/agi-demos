@@ -14,6 +14,8 @@ import './styles/tokens.css';
 import './styles/chrome.css';
 import './styles/base.css';
 import './app-shell.css';
+import '@business/agent/ui/desktop/session/sessionReview.css';
+import '@business/agent/ui/desktop/session/artifactLifecycle.css';
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
