@@ -36,12 +36,22 @@ def run_labels(page: Page, version: int) -> None:
     expect(frame.get_by_role("heading", name=f"Inventory labels {version}")).to_be_visible(
         timeout=25000
     )
-    for index, (button, target) in enumerate((("Cloud", "python"), ("Device", "desktop-sidecar"))):
-        frame.get_by_role("button", name=f"{button} label").click()
-        expect(frame.locator("output").nth(index)).to_contain_text(
+    checks = [("Cloud", "python"), ("Device", "desktop-sidecar")]
+    if os.getenv("MEMSTACK_QA_MARKET_WORKER") == "1":
+        checks.append(("Worker", "worker"))
+    for button, target in checks:
+        action = frame.get_by_role("button", name=f"{button} label")
+        action.click()
+        expect(action.locator("xpath=following-sibling::output[1]")).to_contain_text(
             f"{target}-{version}", timeout=15000
         )
-    page.go_back()
+    back = page.get_by_role(
+        "button", name=re.compile("^Return to market|^返回插件市场|^Back to market")
+    )
+    if back.is_visible():
+        back.click()
+    else:
+        page.go_back()
     expect(page.locator(".pm-spec")).to_be_visible(timeout=15000)
 
 
