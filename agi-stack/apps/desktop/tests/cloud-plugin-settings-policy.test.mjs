@@ -418,6 +418,25 @@ test('only verified npm archive resolution receives the larger JSON response bud
   );
 });
 
+test('only a digest-bound rich page can transfer larger signed resources', async () => {
+  const h = harness();
+  const fetch = h.dependencies.fetch;
+  const content = 'A'.repeat(2 * 1024 * 1024 + 1);
+  h.dependencies.fetch = (url, init) => new URL(url).pathname.endsWith('/ui')
+    ? Response.json({entry: {bytes_base64: content}}) : fetch(url, init);
+  const params = new URLSearchParams({
+    ...scope, target: 'desktop-renderer', expected_digest: 'sha256:' + 'a'.repeat(64),
+  });
+  const path = '/api/v1/platform-plugins/v2/optional-business/memstack-agent/ui?' + params;
+  const loaded = await executeVaultBoundCloudRequest(
+    {path: path + '&page_id=chat', method: 'GET'}, h.dependencies,
+  );
+  assert.equal(loaded.body.entry.bytes_base64.length, content.length);
+  await assert.rejects(executeVaultBoundCloudRequest(
+    {path, method: 'GET'}, h.dependencies,
+  ), /cloud response is too large/);
+});
+
 test('tenant releases admit the active tenant without borrowing a project or device grant', async () => {
   const base = '/api/v1/tenant-packages';
   const query = '?tenant_id=tenant-1';

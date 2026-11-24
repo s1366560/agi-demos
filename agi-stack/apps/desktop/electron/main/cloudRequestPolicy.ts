@@ -524,8 +524,12 @@ export async function executeVaultBoundCloudRequest(
   }
   const resolvingArchive = request.method === 'POST' &&
     request.path === '/api/v1/platform-plugins/v2/optional-business/npm/resolve';
+  const resourceUrl = new URL(request.path, 'https://cloud.invalid');
+  const loadingSignedPage = response.ok && request.method === 'GET' &&
+    /^\/api\/v1\/(?:platform-plugins\/v2\/optional-business|tenant-packages)\/[a-z0-9][a-z0-9._-]{0,127}\/ui$/u.test(resourceUrl.pathname) &&
+    resourceUrl.searchParams.has('page_id') && resourceUrl.searchParams.has('expected_digest');
   const body = await boundedJson(response, true, session.credential,
-    resolvingArchive ? 16 * 1024 * 1024 + 65536 : MAX_RESPONSE_BYTES);
+    resolvingArchive || loadingSignedPage ? 16 * 1024 * 1024 + 65536 : MAX_RESPONSE_BYTES);
   dependencies.signal?.throwIfAborted();
   if (fullDesktop && response.ok && runReview?.action === 'summary') {
     requireCloudRunSummaryScope(body, runReview.runId, context);
