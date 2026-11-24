@@ -50,7 +50,7 @@ vi.mock('@business/workspace/ui/web/tenant/WorkspaceSettings', () => ({
   WorkspaceSettingsPanel: () => <div>Workspace settings</div>,
 }));
 
-vi.mock('@/components/workspace/chat/ChatPanel', () => ({
+vi.mock('@business/workspace/ui/web/components/chat/ChatPanel', () => ({
   ChatPanel: () => <div>Chat panel</div>,
 }));
 

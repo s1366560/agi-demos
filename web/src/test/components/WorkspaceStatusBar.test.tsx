@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { WorkspaceStatusBar } from '@/components/workspace/WorkspaceStatusBar';
+import { WorkspaceStatusBar } from '@business/workspace/ui/web/components/WorkspaceStatusBar';
 
 describe('WorkspaceStatusBar', () => {
   it('renders nothing when given no slots', () => {

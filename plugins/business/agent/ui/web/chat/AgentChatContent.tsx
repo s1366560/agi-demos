@@ -88,7 +88,7 @@ import { ExecutionTargetBadge } from '@/components/execution-target/ExecutionTar
 import { WebComposerExecutionPlacement } from '@/components/execution-target/WebComposerExecutionPlacement';
 import { webComposerPlacement } from '@/components/execution-target/webExecutionPlacement';
 import { PluginSlotOutlet } from '@/components/plugins/PluginSlotOutlet';
-import { WorkspaceStatusBar } from '@/components/workspace/WorkspaceStatusBar';
+import { WorkspaceStatusBar } from '@business/workspace/ui/web/components/WorkspaceStatusBar';
 
 import { deriveAgentChatTenantId } from '@/components/agent/agentChatScope';
 import { ChatSearch } from '@/components/agent/chat/ChatSearch';
@@ -191,7 +191,7 @@ const SandboxSection = lazy(() =>
   import('@business/environments/ui/web/components/SandboxSection').then((module) => ({ default: module.SandboxSection }))
 );
 const WorkspaceGroupChatPanel = lazy(() =>
-  import('@/components/workspace/chat/WorkspaceGroupChatPanel').then((module) => ({
+  import('@business/workspace/ui/web/components/chat/WorkspaceGroupChatPanel').then((module) => ({
     default: module.WorkspaceGroupChatPanel,
   }))
 );

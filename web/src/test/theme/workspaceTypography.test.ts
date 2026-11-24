@@ -21,7 +21,7 @@ const SRC = resolve(__dirname, '../../');
 /** Agent Workspace surface: the page, its agent components, and its chrome. */
 const ROOTS = [
   'components/agent',
-  'components/workspace/WorkspaceStatusBar.tsx',
+  '../../plugins/business/workspace/ui/web/components/WorkspaceStatusBar.tsx',
   'components/layout/TenantChatSidebar.tsx',
   'components/layout/TenantHeader.tsx',
   'components/layout/NotificationDropdown.tsx',
