@@ -1,5 +1,7 @@
 export const cloudMemoriesEnUS = {
   'cloudMemories.title': 'Cloud memories',
+  'cloudMemories.reindex': 'Reindex',
+  'cloudMemories.reindexFailed': 'The memory could not be queued for indexing.',
   'cloudMemories.unavailable': 'Cloud memories are not available for the current trusted context.',
   'cloudMemories.new': 'New memory',
   'cloudMemories.view': 'View',
@@ -50,6 +52,8 @@ export const cloudMemoriesEnUS = {
 } as const;
 export const cloudMemoriesZhCN: Record<keyof typeof cloudMemoriesEnUS, string> = {
   'cloudMemories.title': '云端记忆',
+  'cloudMemories.reindex': '重新索引',
+  'cloudMemories.reindexFailed': '记忆未能加入索引队列。',
   'cloudMemories.unavailable': '当前可信上下文无法使用云端记忆。',
   'cloudMemories.new': '新建记忆',
   'cloudMemories.view': '查看',

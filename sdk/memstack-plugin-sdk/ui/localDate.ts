@@ -47,3 +47,9 @@ export function formatDateOnly(input: DateInput): string {
   if (!d) return '';
   return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+export function formatTimeOnly(input: DateInput): string {
+  const d = toDate(input);
+  if (!d) return '';
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

@@ -9,18 +9,14 @@
 
 import i18n from '@/i18n/config';
 
-import { pad, toDate, formatDateOnly, type DateInput } from '../../../sdk/memstack-plugin-sdk/ui/localDate';
+import { formatTimeOnly, pad, toDate, formatDateOnly, type DateInput } from '../../../sdk/memstack-plugin-sdk/ui/localDate';
 export { formatDateTime, formatDateTimeFull, formatDateOnly } from '../../../sdk/memstack-plugin-sdk/ui/localDate';
 
 /**
  * Format as "HH:mm" in local timezone.
  * For time-only displays.
  */
-export function formatTimeOnly(input: DateInput): string {
-  const d = toDate(input);
-  if (!d) return '';
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+export { formatTimeOnly } from '../../../sdk/memstack-plugin-sdk/ui/localDate';
 
 /**
  * Format as "HH:mm:ss" in local timezone.

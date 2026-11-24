@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useI18n } from '@desktop/i18n';
 import { CloudMemoryEditor } from './CloudMemoryEditor';
 import type { CloudMemoriesController, CloudMemoriesModel } from './cloudMemoriesController';
@@ -14,8 +15,28 @@ export function CloudMemoriesUnavailable() {
 export function CloudMemoriesPage({
   model,
   controller,
-}: Readonly<{ model: CloudMemoriesModel; controller: CloudMemoriesController }>) {
+  reindex,
+}: Readonly<{
+  model: CloudMemoriesModel;
+  controller: CloudMemoriesController;
+  reindex?: (id: string) => Promise<unknown>;
+}>) {
   const { t } = useI18n();
+  const [reindexing, setReindexing] = useState<string>();
+  const [indexError, setIndexError] = useState(false);
+  async function reindexMemory(id: string) {
+    if (!reindex || reindexing) return;
+    setIndexError(false);
+    setReindexing(id);
+    try {
+      await reindex(id);
+      await controller.loadPage(model.list?.page ?? 1);
+    } catch {
+      setIndexError(true);
+    } finally {
+      setReindexing(undefined);
+    }
+  }
   if (model.phase === 'unavailable') return <CloudMemoriesUnavailable />;
   const locked =
     ['saving', 'uncertain', 'loading'].includes(model.phase) || model.listState === 'loading';
@@ -45,6 +66,7 @@ export function CloudMemoriesPage({
       {model.listState === 'loading' ? <p role="status">{t('cloudMemories.loadingList')}</p> : null}
       {model.listState === 'error' ? <p role="alert">{t('cloudMemories.listFailed')}</p> : null}
       {list?.memories.length === 0 ? <p>{t('cloudMemories.empty')}</p> : null}
+      {indexError && <p role="alert">{t('cloudMemories.reindexFailed')}</p>}
       <ol>
         {list?.memories.map((memory) => (
           <li key={memory.id}>
@@ -74,6 +96,19 @@ export function CloudMemoriesPage({
                   {t('cloudMemories.edit')}
                 </button>
               ) : null}
+              {reindex && controller.canUpdate(memory) && (
+                <button
+                  type="button"
+                  disabled={
+                    locked ||
+                    !!reindexing ||
+                    ['PENDING', 'PROCESSING'].includes(memory.processingStatus.toUpperCase())
+                  }
+                  onClick={() => void reindexMemory(memory.id)}
+                >
+                  {t('cloudMemories.reindex')}
+                </button>
+              )}
               {controller.canDelete(memory) ? (
                 <button
                   type="button"

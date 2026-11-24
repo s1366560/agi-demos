@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from plugins.business.knowledge.backend.memory_maintenance import delete_memory, reindex_memory
 from plugins.business.knowledge.backend.package_memory_editor import save_memory
 from plugins.business.knowledge.backend.project_memory_operation import list_project_memories
 from src.infrastructure.adapters.primary.web.routers import memories
@@ -23,6 +24,8 @@ async def test_signed_editor_persists_and_pins_revisions(http, publisher, db_ses
     app.state.package_operations_v1 = {
         "app.knowledge.memories.read": list_project_memories,
         "app.knowledge.memories.write": save_memory,
+        "app.knowledge.memories.delete": delete_memory,
+        "app.knowledge.memories.reindex": reindex_memory,
     }
     graph = SimpleNamespace(ensure_episodic_node=AsyncMock())
     commands = SimpleNamespace(
@@ -43,6 +46,8 @@ async def test_signed_editor_persists_and_pins_revisions(http, publisher, db_ses
     body, digest = publisher[1](
         application_command={
             "read-memory": "app.knowledge.memories.read",
+            "delete-memory": "app.knowledge.memories.delete",
+            "reindex-memory": "app.knowledge.memories.reindex",
             "save-memory": "app.knowledge.memories.write",
         }
     )
@@ -56,6 +61,11 @@ async def test_signed_editor_persists_and_pins_revisions(http, publisher, db_ses
             json={**SCOPE, "expected_digest": digest, "command_id": command, "payload": payload},
             headers={"Authorization": "Bearer " + keys[role]},
         )
+
+    draft = {"title": "Draft", "content": "Private", "tags": [], "savedAt": "2026-11-24"}
+    assert (await invoke("save-memory", {"draft": draft})).json() == {"saved": True}
+    assert (await invoke("read-memory", {"draft": True})).json() == {"draft": draft}
+    assert (await invoke("save-memory", {"draft": draft}, "viewer")).status_code == 403
 
     initial = {"title": "First", "content": "Original", "change_id": str(uuid4()), "version": 0}
     assert (await invoke("save-memory", initial, "viewer")).status_code == 403
@@ -80,3 +90,14 @@ async def test_signed_editor_persists_and_pins_revisions(http, publisher, db_ses
     assert (await invoke("save-memory", edit)).status_code == 409
     inspected = await invoke("read-memory", {"id": record["id"]})
     assert inspected.json()["title"] == "Revised"
+    assert (await invoke("reindex-memory", {"id": "missing"})).status_code == 404
+    assert (await invoke("reindex-memory", {"id": record["id"]}, "viewer")).status_code == 403
+    deletion = {"id": record["id"], "version": 1, "change_id": str(uuid4())}
+    assert (await invoke("delete-memory", deletion)).status_code == 409
+    deletion["version"] = 2
+    assert (await invoke("delete-memory", deletion, "viewer")).status_code == 403
+    assert (await invoke("delete-memory", deletion)).json() == {
+        "deleted": True,
+        "memoryId": record["id"],
+    }
+    assert (await invoke("read-memory", {"id": record["id"]})).status_code == 404

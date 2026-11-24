@@ -42,6 +42,7 @@ async function mount(host: RichPageRuntime) {
   const labels: Record<string, string> = {
     ...(zh ? cloudMemoriesZhCN : cloudMemoriesEnUS),
     'common.refresh': zh ? '刷新' : 'Refresh',
+    'common.close': zh ? '关闭' : 'Close',
   };
   const language = {
     locale: zh ? ('zh-CN' as const) : ('en' as const),
@@ -58,7 +59,7 @@ async function mount(host: RichPageRuntime) {
     root.render(
       <I18nContext.Provider value={language}>
         <CloudMemoriesUnavailable />
-      </I18nContext.Provider>
+      </I18nContext.Provider>,
     );
     return;
   }
@@ -69,25 +70,39 @@ async function mount(host: RichPageRuntime) {
       let recordId: string;
       if (command.operation === 'get') recordId = command.id;
       else {
-        if (command.operation === 'delete') throw new Error('page_command_denied');
+        if (command.operation === 'delete') {
+          const result = await host.invoke(
+            'delete-memory',
+            {
+              id: command.id,
+              version: command.expectedRevision,
+              change_id: command.idempotencyKey,
+            },
+            { signal: options.signal },
+          );
+          return { operation: command.operation, result } as CloudMemoryResponse<typeof command>;
+        }
         const create = command.operation === 'create';
         const fields = create ? command.memory : command.patch;
         const saved = (await host.invoke(
           'save-memory',
           {
-            ...fields,
+            title: fields.title,
+            content: fields.content,
+            tags: fields.tags,
+            metadata: fields.metadata,
             ...(create ? {} : { id: command.id }),
             version: create ? 0 : command.expectedRevision,
             change_id: command.idempotencyKey,
           },
-          { signal: options.signal }
+          { signal: options.signal },
         )) as { id: string };
         recordId = saved.id;
       }
       const wire = await host.invoke(
         'read-memory',
         { id: recordId, detail: true },
-        { signal: options.signal }
+        { signal: options.signal },
       );
       return {
         operation: command.operation,
@@ -116,7 +131,7 @@ async function mount(host: RichPageRuntime) {
           response.command_capabilities,
           scope,
           memories,
-          actorId
+          actorId,
         );
         const capabilities =
           authenticated && context.commands.includes('save-memory')
@@ -124,7 +139,9 @@ async function mount(host: RichPageRuntime) {
                 ...authenticated,
                 objects: authenticated.objects.map((object) => ({
                   ...object,
-                  allowedActions: object.allowedActions.filter((action) => action === 'update'),
+                  allowedActions: object.allowedActions.filter(
+                    (action) => action === 'update' || context.commands.includes('delete-memory'),
+                  ),
                 })),
               }
             : null;
@@ -148,15 +165,35 @@ async function mount(host: RichPageRuntime) {
     const model = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
     useEffect(() => {
       controller.activate();
-      void controller.loadPage();
-      return () => controller.stop();
+      let active = true;
+      void controller.loadPage().then(() => {
+        if (!active) return;
+        if (context.pathname.endsWith('/memories/new')) controller.create();
+        else if (context.pathname.includes('/memory/')) {
+          void controller.open(decodeURIComponent(context.pathname.split('/').at(-1)!), 'view');
+        }
+      });
+      return () => {
+        active = false;
+        controller.stop();
+      };
     }, []);
-    return <CloudMemoriesPage model={model} controller={controller} />;
+    return (
+      <CloudMemoriesPage
+        model={model}
+        controller={controller}
+        reindex={
+          context.commands.includes('reindex-memory')
+            ? (id) => host.invoke('reindex-memory', { id })
+            : undefined
+        }
+      />
+    );
   }
   root.render(
     <I18nContext.Provider value={language}>
       <Page />
-    </I18nContext.Provider>
+    </I18nContext.Provider>,
   );
 }
 void mount(window.memstack);

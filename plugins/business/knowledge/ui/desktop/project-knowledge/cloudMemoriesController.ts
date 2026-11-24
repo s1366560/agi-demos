@@ -226,7 +226,7 @@ export function createCloudMemoriesController({
   const open = async (id: string, intent: 'view' | 'edit' | 'delete') => {
     if (stopped || !canView() || locked()) return;
     const row = model.list?.memories.find((memory) => memory.id === id);
-    if (!row || (intent !== 'view' && !rowAllowed(row, intent === 'edit' ? 'update' : 'delete')))
+    if (intent !== 'view' && (!row || !rowAllowed(row, intent === 'edit' ? 'update' : 'delete')))
       return;
     const request = begin();
     pending = null;
@@ -283,6 +283,14 @@ export function createCloudMemoriesController({
         draft: null,
         latest: null,
         notice: 'accepted',
+        ...(command.operation === 'delete' &&
+          model.list && {
+            list: {
+              ...model.list,
+              memories: model.list.memories.filter((memory) => memory.id !== command.id),
+              ...(model.list.total !== null && { total: Math.max(0, model.list.total - 1) }),
+            },
+          }),
       });
       const list = await readList(model.list?.page ?? 1, request);
       if (current(request)) emit({ list, listState: 'ready' });

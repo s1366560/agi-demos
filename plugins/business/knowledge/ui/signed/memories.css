@@ -1,6 +1,7 @@
 @import 'tailwindcss' source(none);
 @variant dark (&:where(.dark, .dark *));
 @source '../web/project/MemoryList.tsx';
+@source '../web/project/NewMemory.tsx';
 @source '../web/project/MemoryDetailView.tsx';
 @source '../web/project/EditMemoryModal.tsx';
 @source '../../../../../sdk/memstack-plugin-sdk/ui/Pagination.tsx';

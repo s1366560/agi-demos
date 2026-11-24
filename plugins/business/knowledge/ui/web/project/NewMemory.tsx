@@ -98,14 +98,28 @@ const getResponseDetail = (error: unknown): string | undefined => {
   return typeof error.response.data.detail === 'string' ? error.response.data.detail : undefined;
 };
 
-export const NewMemory: React.FC = () => {
+interface DraftStorage {
+  read(key: string): Promise<string | null>;
+  write(key: string, value: string): Promise<void>;
+}
+
+const browserDrafts: DraftStorage = {
+  async read(key) {
+    return window.localStorage.getItem(key);
+  },
+  async write(key, value) {
+    window.localStorage.setItem(key, value);
+  },
+};
+
+export const NewMemory: React.FC<{ drafts?: DraftStorage }> = ({ drafts = browserDrafts }) => {
   const { t } = useTranslation();
   const translate = useCallback(
     (key: string, fallback: string) => {
       const value = t(key, fallback);
       return value === key ? fallback : value;
     },
-    [t]
+    [t],
   );
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -131,27 +145,34 @@ export const NewMemory: React.FC = () => {
   useUnsavedChangesWarning(hasUnsavedContent);
 
   React.useEffect(() => {
-    try {
-      const rawDraft = window.localStorage.getItem(draftStorageKey);
-      if (!rawDraft) return;
+    let cancelled = false;
+    async function loadDraft() {
+      try {
+        const rawDraft = await drafts.read(draftStorageKey);
+        if (!rawDraft || cancelled) return;
 
-      const parsed = JSON.parse(rawDraft) as Partial<MemoryDraft>;
-      if (typeof parsed.title === 'string') {
-        setTitle(parsed.title);
+        const parsed = JSON.parse(rawDraft) as Partial<MemoryDraft>;
+        if (typeof parsed.title === 'string') {
+          setTitle(parsed.title);
+        }
+        if (typeof parsed.content === 'string') {
+          setContent(parsed.content);
+        }
+        if (Array.isArray(parsed.tags) && parsed.tags.every((tag) => typeof tag === 'string')) {
+          setTags(parsed.tags);
+        }
+        if (typeof parsed.savedAt === 'string') {
+          setDraftSavedAt(parsed.savedAt);
+        }
+      } catch (error) {
+        logger.warn('[NewMemory] Failed to load memory draft:', error);
       }
-      if (typeof parsed.content === 'string') {
-        setContent(parsed.content);
-      }
-      if (Array.isArray(parsed.tags) && parsed.tags.every((tag) => typeof tag === 'string')) {
-        setTags(parsed.tags);
-      }
-      if (typeof parsed.savedAt === 'string') {
-        setDraftSavedAt(parsed.savedAt);
-      }
-    } catch (error) {
-      logger.warn('[NewMemory] Failed to load memory draft:', error);
     }
-  }, [draftStorageKey]);
+    void loadDraft();
+    return () => {
+      cancelled = true;
+    };
+  }, [draftStorageKey, drafts]);
 
   const streamTaskStatus = useCallback(
     (taskId: string) => {
@@ -204,15 +225,15 @@ export const NewMemory: React.FC = () => {
           setError(
             t(
               'project.memories.new.error.taskUpdatesFailed',
-              'Failed to connect to task updates. Please check if the task completed.'
-            )
+              'Failed to connect to task updates. Please check if the task completed.',
+            ),
           );
           setIsSaving(false);
           setCurrentTask(null);
         },
       });
     },
-    [navigate, projectBasePath, t]
+    [navigate, projectBasePath, t],
   );
 
   const handleAddTag = (e: React.KeyboardEvent) => {
@@ -258,8 +279,8 @@ export const NewMemory: React.FC = () => {
       setError(
         t(
           'project.memories.new.error.aiOptimizeFailed',
-          'AI optimization failed. Please try again.'
-        )
+          'AI optimization failed. Please try again.',
+        ),
       );
     } finally {
       setIsOptimizing(false);
@@ -298,13 +319,13 @@ export const NewMemory: React.FC = () => {
       logger.error('[NewMemory] Failed to create memory:', err);
       setError(
         getResponseDetail(err) ??
-          t('project.memories.new.error.createFailed', 'Failed to create memory')
+          t('project.memories.new.error.createFailed', 'Failed to create memory'),
       );
       setIsSaving(false);
     }
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     const savedAt = new Date().toISOString();
     const draft: MemoryDraft = {
       title,
@@ -314,14 +335,14 @@ export const NewMemory: React.FC = () => {
     };
 
     try {
-      window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+      await drafts.write(draftStorageKey, JSON.stringify(draft));
       setDraftSavedAt(savedAt);
       setError(null);
       void message.success(t('project.memories.new.footer.draft_saved_toast', 'Draft saved'));
     } catch (error) {
       logger.error('[NewMemory] Failed to save memory draft:', error);
       setError(
-        t('project.memories.new.error.draftSaveFailed', 'Failed to save draft. Please try again.')
+        t('project.memories.new.error.draftSaveFailed', 'Failed to save draft. Please try again.'),
       );
     }
   };
@@ -358,7 +379,7 @@ export const NewMemory: React.FC = () => {
               void confirmAction({
                 title: t(
                   'project.memories.new.discard_unsaved_confirm',
-                  'Leave without saving? Unsaved content will be lost.'
+                  'Leave without saving? Unsaved content will be lost.',
                 ),
                 danger: true,
               }).then((confirmed) => {

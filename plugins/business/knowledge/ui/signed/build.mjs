@@ -13,6 +13,8 @@ await buildPackagePages({
   contribution: 'workers/graph_projection/contributions.json',
   entries: {
     memories: { web: 'MemoriesPage.tsx', 'desktop-renderer': 'DesktopMemoriesPage.tsx' },
+    'memory-editor': { web: 'MemoriesPage.tsx', 'desktop-renderer': 'DesktopMemoriesPage.tsx' },
+    'desktop-memory-editor': 'DesktopMemoriesPage.tsx',
     'memory-detail': 'MemoriesPage.tsx',
     entities: { web: 'EntitiesPage.tsx', 'desktop-renderer': 'DesktopEntitiesPage.tsx' },
   },
@@ -23,10 +25,14 @@ await buildPackagePages({
         const require = createRequire(import.meta.url);
         build.onResolve(
           { filter: /^(react|react-dom|react-i18next|react-router-dom|i18next)(\/.*)?$/ },
-          ({ path }) => ({ path: require.resolve(path) })
+          ({ path }) => ({ path: require.resolve(path) }),
         );
         const aliases = {
           '@business/knowledge/ui/web/services/knowledgeApi': './memoryApi.ts',
+          '@/components/agent/chat/MarkdownContent': './MarkdownPreview.tsx',
+          '@/hooks/useUnsavedChangesWarning':
+            '../../../../../web/src/hooks/useUnsavedChangesWarning.ts',
+          '@/services/taskStream': './indexTask.ts',
           '@/utils/date': '../../../../../sdk/memstack-plugin-sdk/ui/localDate.ts',
           '@/utils/logger': './logger.ts',
           '@/components/common': '../../../../../web/src/components/common/AppModal.tsx',
@@ -46,12 +52,21 @@ await buildPackagePages({
           '@desktop/i18n': '../../../../../agi-stack/apps/desktop/src/i18nContext.ts',
         };
         build.onResolve({ filter: /^(@business|@desktop|@)\// }, ({ path }) =>
-          aliases[path] ? { path: resolve(directory, aliases[path]) } : undefined
+          aliases[path] ? { path: resolve(directory, aliases[path]) } : undefined,
+        );
+        build.onResolve(
+          { filter: /^(\.\.\/services\/(taskStream|graphService))$/ },
+          ({ path }) => ({
+            path: resolve(
+              directory,
+              path.endsWith('taskStream') ? './indexTask.ts' : './optimize.ts',
+            ),
+          }),
         );
         build.onLoad({ filter: /(entities|memories)\.css$/ }, async ({ path }) => {
           const result = await postcss([tailwind({ base: directory, optimize: true })]).process(
             await readFile(path, 'utf8'),
-            { from: path }
+            { from: path },
           );
           return { contents: result.css, loader: 'css' };
         });

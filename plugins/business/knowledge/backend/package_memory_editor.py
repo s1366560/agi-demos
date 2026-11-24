@@ -66,6 +66,10 @@ async def read_memory(ctx: "PackageOperationContext", payload: dict[str, Any]) -
 async def save_memory(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
+    if set(payload) == {"draft"}:
+        from .memory_drafts import write_draft
+
+        return await write_draft(ctx, payload["draft"])
     edit = _Edit.model_validate(payload)
     scope = {"tenant_id": ctx.scope.tenant_id, "project_id": ctx.scope.project_id}
     body: dict[str, Any] = {"title": edit.title, "content": edit.content}
@@ -101,7 +105,10 @@ async def save_memory(
     result = response.json()
     if result["project_id"] != ctx.scope.project_id:
         raise HTTPException(502, _("Memory response scope mismatch"))
-    return {
+    saved = {
         key: result[key]
         for key in ("id", "title", "content", "version", "tags", "processing_status")
     }
+    if result.get("task_id"):
+        saved["task_id"] = result["task_id"]
+    return saved

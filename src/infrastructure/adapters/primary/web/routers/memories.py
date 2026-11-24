@@ -880,6 +880,7 @@ async def delete_memory(
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
     expected_revision: Annotated[str | None, Header(alias="X-Memory-Expected-Revision")] = None,
     project_id: str | None = None,
+    version: int | None = None,
 ) -> JSONResponse | Response:
     """Delete a memory from all storage systems (DB, Graphiti)."""
     db = memory_application.db
@@ -897,9 +898,12 @@ async def delete_memory(
     if admitted is not None:
         return admitted
     # 1. Get memory to check permissions and project_id
-    result = await db.execute(
-        refresh_select_statement(select(Memory).where(Memory.id == memory_id))
-    )
+    statement = select(Memory).where(Memory.id == memory_id)
+    if project_id:
+        statement = statement.where(Memory.project_id == project_id)
+    if version is not None:
+        statement = statement.with_for_update()
+    result = await db.execute(refresh_select_statement(statement))
     memory = result.scalar_one_or_none()
 
     if not memory:
@@ -909,6 +913,9 @@ async def delete_memory(
     if memory.author_id != current_user.id:
         if not await _has_project_admin_access(cast(Memory, memory), current_user, db):
             raise HTTPException(status_code=403, detail=_("Permission denied"))
+
+    if version is not None and version != memory.version:
+        raise HTTPException(409, _("Memory changed. Reload before editing again."))
 
     # 3. Delete from Graphiti/Neo4j using GraphitiAdapter
     # This ensures proper cleanup of orphaned entities and edges

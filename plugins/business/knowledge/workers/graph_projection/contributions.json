@@ -237,6 +237,42 @@
         "app.knowledge.entities.relationships"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "delete-memory",
+      "host_operation": "app.knowledge.memories.delete",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.memories.delete"
+      ],
+      "accepts_input": true
+    },
+    {
+      "id": "reindex-memory",
+      "host_operation": "app.knowledge.memories.reindex",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.memories.reindex"
+      ],
+      "accepts_input": true
+    },
+    {
+      "id": "index-status",
+      "host_operation": "app.knowledge.memories.index_status",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.memories.index_status"
+      ],
+      "accepts_input": true
+    },
+    {
+      "id": "optimize-content",
+      "host_operation": "app.knowledge.memories.optimize",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.memories.optimize"
+      ],
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -289,15 +325,21 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:bf7a01303cca78c5d3d214aad1ff4b2a72d60123b1003517fd0240fd9cd80bea"
+        "digest": "sha256:d4b1369e252280668424a841add816a72a01ec5c808145cab388a8046379b37d"
       },
       "commands": [
-        "list-memories"
+        "list-memories",
+        "read-memory",
+        "save-memory",
+        "reindex-memory",
+        "delete-memory",
+        "index-status",
+        "optimize-content"
       ],
       "workbench": true,
       "style": {
         "path": "ui/memories-web.css",
-        "digest": "sha256:ce6686f2fce34ca8697b5b326cbd3be213f6ab17bb0d69b8162f4d10b0d51314"
+        "digest": "sha256:5656722b83fd77b9b7e12a09c5b4dccf5c28efa5cca702a66193219b34c43ae4"
       },
       "query_params": [
         "q",
@@ -319,38 +361,21 @@
       ],
       "entry": {
         "path": "ui/memories-desktop.js",
-        "digest": "sha256:5039f32b72d9ec7f2256dd51d2ff08403f7579096ad81e065f8e8668967f3303"
+        "digest": "sha256:a413e1ecab41d22595ccfa34c2574d29556b28b9cdb53e75f9c1f0f516a7f01b"
       },
       "commands": [
         "list-memories",
         "read-memory",
-        "save-memory"
+        "save-memory",
+        "reindex-memory",
+        "delete-memory",
+        "index-status"
       ],
       "workbench": true,
       "style": {
         "path": "ui/memories-desktop.css",
         "digest": "sha256:c1edc7e2ecc71693746ee206afb07ca9deabae7b1b51886fda8a4a1f3eccf831"
       }
-    },
-    {
-      "id": "memory-editor",
-      "title": "Memory editor",
-      "routes": [
-        "/tenant/:tenantId/project/:projectId/memories/new",
-        "/project/:projectId/memories/new"
-      ],
-      "targets": [
-        "web",
-        "desktop-renderer"
-      ],
-      "entry": {
-        "path": "ui/editor.js",
-        "digest": "sha256:732f7b7e00cedbdbfee10b99af19d21be2dfc913a3e88b6d58f4083b2321be7e"
-      },
-      "commands": [
-        "read-memory",
-        "save-memory"
-      ]
     },
     {
       "id": "desktop-memory-editor",
@@ -363,13 +388,22 @@
         "desktop-renderer"
       ],
       "entry": {
-        "path": "ui/editor.js",
-        "digest": "sha256:732f7b7e00cedbdbfee10b99af19d21be2dfc913a3e88b6d58f4083b2321be7e"
+        "path": "ui/memories-desktop.js",
+        "digest": "sha256:a413e1ecab41d22595ccfa34c2574d29556b28b9cdb53e75f9c1f0f516a7f01b"
       },
       "commands": [
         "read-memory",
-        "save-memory"
-      ]
+        "save-memory",
+        "list-memories",
+        "reindex-memory",
+        "delete-memory",
+        "index-status"
+      ],
+      "style": {
+        "path": "ui/memories-desktop.css",
+        "digest": "sha256:c1edc7e2ecc71693746ee206afb07ca9deabae7b1b51886fda8a4a1f3eccf831"
+      },
+      "workbench": true
     },
     {
       "id": "memory-detail",
@@ -383,16 +417,21 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:bf7a01303cca78c5d3d214aad1ff4b2a72d60123b1003517fd0240fd9cd80bea"
+        "digest": "sha256:d4b1369e252280668424a841add816a72a01ec5c808145cab388a8046379b37d"
       },
       "commands": [
         "read-memory",
-        "save-memory"
+        "save-memory",
+        "list-memories",
+        "reindex-memory",
+        "delete-memory",
+        "index-status",
+        "optimize-content"
       ],
       "workbench": true,
       "style": {
         "path": "ui/memories-web.css",
-        "digest": "sha256:ce6686f2fce34ca8697b5b326cbd3be213f6ab17bb0d69b8162f4d10b0d51314"
+        "digest": "sha256:5656722b83fd77b9b7e12a09c5b4dccf5c28efa5cca702a66193219b34c43ae4"
       },
       "query_params": [
         "tab"
@@ -466,6 +505,63 @@
         "digest": "sha256:4963f133b58722910f16b03cb4de64b31660e178333c31775a9ca2276a69438f"
       },
       "workbench": true
+    },
+    {
+      "id": "memory-editor",
+      "title": "Memory editor",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/memories/new",
+        "/project/:projectId/memories/new"
+      ],
+      "targets": [
+        "web"
+      ],
+      "entry": {
+        "path": "ui/memories-web.js",
+        "digest": "sha256:d4b1369e252280668424a841add816a72a01ec5c808145cab388a8046379b37d"
+      },
+      "commands": [
+        "read-memory",
+        "save-memory",
+        "list-memories",
+        "reindex-memory",
+        "delete-memory",
+        "index-status",
+        "optimize-content"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/memories-web.css",
+        "digest": "sha256:5656722b83fd77b9b7e12a09c5b4dccf5c28efa5cca702a66193219b34c43ae4"
+      }
+    },
+    {
+      "id": "memory-editor",
+      "title": "Memory editor",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/memories/new",
+        "/project/:projectId/memories/new"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/memories-desktop.js",
+        "digest": "sha256:a413e1ecab41d22595ccfa34c2574d29556b28b9cdb53e75f9c1f0f516a7f01b"
+      },
+      "commands": [
+        "read-memory",
+        "save-memory",
+        "list-memories",
+        "reindex-memory",
+        "delete-memory",
+        "index-status"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/memories-desktop.css",
+        "digest": "sha256:c1edc7e2ecc71693746ee206afb07ca9deabae7b1b51886fda8a4a1f3eccf831"
+      }
     }
   ]
 }

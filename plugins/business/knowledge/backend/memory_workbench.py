@@ -61,4 +61,71 @@ async def query_memory_workbench(
         raise HTTPException(502, _("Memory response scope mismatch"))
     if "page" in payload:
         data["actor_id"] = ctx.user.id
+        if data.get("command_capabilities") is None:
+            data["command_capabilities"] = await _legacy_commands(ctx, rows)
     return data
+
+
+async def _legacy_commands(
+    ctx: "PackageOperationContext", rows: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.primary.web.routers.memories import (
+        _check_memory_edit_permission,
+        _get_memory_write_project,
+        _has_project_admin_access,
+    )
+    from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+        KnowledgeSyncEnrollmentModel,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import Memory
+
+    project_id = ctx.scope.project_id
+    enrollment = await ctx.db.scalar(
+        select(KnowledgeSyncEnrollmentModel).where(
+            KnowledgeSyncEnrollmentModel.project_id == project_id,
+            KnowledgeSyncEnrollmentModel.tenant_id == ctx.scope.tenant_id,
+        )
+    )
+    if enrollment is None or enrollment.enabled:
+        return None
+    try:
+        await _get_memory_write_project(project_id, ctx.user, ctx.db)
+    except HTTPException as err:
+        if err.status_code not in (403, 404):
+            raise
+        return None
+    objects = []
+    revisions = {row["id"]: row["version"] for row in rows}
+    records = await ctx.db.scalars(
+        select(Memory).where(
+            Memory.project_id == project_id,
+            Memory.id.in_(revisions),
+        )
+    )
+    for record in records:
+        if revisions.get(record.id) != record.version:
+            continue
+        actions = []
+        try:
+            await _check_memory_edit_permission(record, ctx.user, ctx.db)
+            actions.append("update")
+        except HTTPException as err:
+            if err.status_code != 403:
+                raise
+        if record.author_id == ctx.user.id or await _has_project_admin_access(
+            record, ctx.user, ctx.db
+        ):
+            actions.append("delete")
+        objects.append(
+            {"memory_id": record.id, "revision": record.version, "allowed_actions": actions}
+        )
+    return {
+        "protocol_version": 1,
+        "actor_id": ctx.user.id,
+        "tenant_id": ctx.scope.tenant_id,
+        "project_id": project_id,
+        "allowed_actions": ["create"],
+        "objects": objects,
+    }
