@@ -92,6 +92,7 @@ def fingerprint(artifacts: Path, targets: list[str]) -> dict[str, str]:
     for target, name, entry in [
         ("web", "web/dist", "index.html"),
         ("desktop", "agi-stack/apps/desktop/out", "main/index.js"),
+        ("desktop", "agi-stack/apps/desktop/node_modules/electron/dist", "version"),
     ]:
         if target not in targets:
             continue
@@ -261,6 +262,12 @@ def main() -> bool:
     args.artifacts = args.artifacts.resolve()
     args.logs.mkdir(parents=True, exist_ok=True)
     targets = args.target or ["web", "desktop"]
+    if "desktop" in targets:
+        desktop = args.artifacts / "agi-stack/apps/desktop"
+        if not (desktop / "node_modules/electron/dist/version").is_file():
+            subprocess.run(
+                ["corepack", "pnpm", "exec", "install-electron", "--no"], cwd=desktop, check=True
+            )
     if "web" in targets:
         index = (args.artifacts / "web/dist/index.html").read_bytes()
         served = httpx.get(args.origin.rstrip("/") + "/index.html")
