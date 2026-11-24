@@ -73,6 +73,7 @@ class RichPage:
     commands: tuple[str, ...]
     device_tools: tuple[str, ...]
     scope: str = "project"
+    workbench: bool = False
     home: bool = False
     slots: tuple[str, ...] = ()
     contributes_to: str | None = None
@@ -87,6 +88,7 @@ class RichPage:
     def descriptor(self) -> dict[str, object]:
         return {
             "id": self.id,
+            **({"workbench": True} if self.workbench else {}),
             **({"scope": self.scope} if self.scope == "tenant" else {}),
             "title": self.title,
             "routes": self.routes,
@@ -174,12 +176,16 @@ def _parse_page(value: object) -> RichPage:
         "entry",
         "style",
         "home",
+        "workbench",
         "slots",
         "query_params",
         "resources",
         "contributes_to",
     }:
         raise ValueError("unsupported rich page declaration")
+    workbench = value.get("workbench", False)
+    if not isinstance(workbench, bool):
+        raise ValueError("rich page workbench must be a boolean")
     home = value.get("home", False)
     if not isinstance(home, bool):
         raise ValueError("rich page home must be a boolean")
@@ -221,6 +227,7 @@ def _parse_page(value: object) -> RichPage:
         raise ValueError("tenant pages require tenant routes and cloud commands")
     return RichPage(
         scope=scope,
+        workbench=workbench,
         id=page_id,
         home=home,
         slots=slots,

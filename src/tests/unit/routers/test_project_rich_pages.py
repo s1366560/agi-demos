@@ -42,6 +42,7 @@ def page(script=b"app.mount(1)"):
         {"routes": ["/:id/:id"]},
         {"targets": []},
         {"home": "true"},
+        {"workbench": "true"},
         {"contributes_to": "unversioned"},
         {"routes": [], "contributes_to": "pkg/status@1", "slots": ["nested@1"]},
         {"routes": [], "contributes_to": "pkg/status@1", "home": True},
@@ -69,6 +70,18 @@ def test_signed_embedded_views_use_versioned_slots_and_have_no_navigation_route(
     assert owner.descriptor()["slots"] == ("recent@1",)
     assert widget.descriptor()["contributes_to"] == "memstack-workspace/recent@1"
     assert not widget.routes
+
+
+def test_workbench_layout_is_opt_in_per_target():
+    web, desktop = parse_rich_pages(
+        [
+            {**page(), "targets": ["web"], "workbench": True},
+            {**page(), "targets": ["desktop-renderer"]},
+        ],
+        {"ping"},
+    )
+    assert web.descriptor()["workbench"] is True
+    assert "workbench" not in desktop.descriptor()
 
 
 def test_home_is_declared_by_the_signed_page():

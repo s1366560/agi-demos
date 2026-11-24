@@ -6,6 +6,7 @@ export type PageScope = Readonly<{
   projectId: string | null;
 }>;
 export interface PackagePage {
+  readonly workbench?: boolean;
   readonly home?: boolean;
   readonly slots?: readonly string[];
   readonly contributes_to?: string;
@@ -20,6 +21,7 @@ interface Asset {
   readonly bytes_base64: string;
 }
 export interface RichPage {
+  readonly workbench?: boolean;
   readonly schema: "memstack.rich-page/1";
   readonly id: string;
   readonly title: string;
@@ -74,6 +76,7 @@ export async function verifyPageDocument(
 ) {
   if (
     page.schema !== "memstack.rich-page/1" ||
+    (page.workbench !== undefined && typeof page.workbench !== "boolean") ||
     page.id !== id ||
     page.target !== target ||
     page.release_digest !== digest ||
@@ -131,8 +134,9 @@ export async function verifyPageDocument(
     ? "data:"
     : "'none'";
   const guest = btoa(guestSource);
-  const baseStyle =
-    "<style>html{font:16px/1.5 system-ui;color-scheme:light dark}body{margin:0;padding:1.25rem}main{max-width:72rem;margin:auto}form,label{display:grid;gap:.5rem}form{gap:1rem;margin-bottom:1rem}input,textarea,select,button{max-width:100%;box-sizing:border-box;font:inherit;padding:.45rem}button{cursor:pointer}fieldset{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:start;padding:.4rem .65rem}</style>";
+  const baseStyle = page.workbench
+    ? "<style>html,body,#root{margin:0;width:100%;height:100%}html{font:16px/1.5 system-ui}*{box-sizing:border-box}</style>"
+    : "<style>html{font:16px/1.5 system-ui;color-scheme:light dark}body{margin:0;padding:1.25rem}main{max-width:72rem;margin:auto}form,label{display:grid;gap:.5rem}form{gap:1rem;margin-bottom:1rem}input,textarea,select,button{max-width:100%;box-sizing:border-box;font:inherit;padding:.45rem}button{cursor:pointer}fieldset{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:start;padding:.4rem .65rem}</style>";
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
     '<meta http-equiv="Content-Security-Policy" content="worker-src ' +

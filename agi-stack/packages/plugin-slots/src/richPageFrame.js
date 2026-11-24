@@ -10,7 +10,7 @@ window.addEventListener("message", function initialize(event) {
   window.removeEventListener("message", initialize);
   const host = event.ports[0];
   const guest = document.createElement("iframe");
-  guest.setAttribute("sandbox", "allow-scripts");
+  guest.setAttribute("sandbox", "allow-scripts allow-forms");
   guest.title = event.data.title;
   window.addEventListener("message", function connect(message) {
     if (

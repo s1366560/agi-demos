@@ -249,11 +249,16 @@ function PackageFrame(
       ref={frame}
       title={loaded.page.title}
       src={frameUrl}
-      sandbox="allow-scripts"
+      sandbox="allow-scripts allow-forms"
       onLoad={connect}
       data-release-digest={digest}
       data-page-ready={ready}
-      style={{ display: "block", width: "100%", minHeight: "65vh", border: 0 }}
+      style={{
+        display: "block",
+        width: "100%",
+        minHeight: loaded.page.workbench ? "calc(100dvh - 6rem)" : "65vh",
+        border: 0,
+      }}
     />
   );
 }
@@ -544,24 +549,25 @@ export function RichPackagePages(props: RichPackagePagesProps) {
         aria-label={zh ? "项目导航" : "Project navigation"}
       >
         {props.backToMarket}
-        {links.length > 0 && (
-          <label>
-            {zh ? "业务页面" : "Applications"}
-            <select
-              value={links.find(({ item }) => item === selected)?.path ?? ""}
-              onChange={(event) => props.navigate(event.target.value)}
-            >
-              <option value="" disabled>
-                {selected?.page.title ?? (zh ? "选择页面" : "Choose a page")}
-              </option>
-              {links.map(({ item, path }) => (
-                <option key={item.pluginId + "/" + item.page.id} value={path}>
-                  {item.page.title}
+        {links.length > 0 &&
+          (!selected?.page.workbench || props.management != null) && (
+            <label>
+              {zh ? "业务页面" : "Applications"}
+              <select
+                value={links.find(({ item }) => item === selected)?.path ?? ""}
+                onChange={(event) => props.navigate(event.target.value)}
+              >
+                <option value="" disabled>
+                  {selected?.page.title ?? (zh ? "选择页面" : "Choose a page")}
                 </option>
-              ))}
-            </select>
-          </label>
-        )}
+                {links.map(({ item, path }) => (
+                  <option key={item.pluginId + "/" + item.page.id} value={path}>
+                    {item.page.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         {props.management != null && (
           <button
             type="button"
@@ -582,6 +588,7 @@ export function RichPackagePages(props: RichPackagePagesProps) {
             projectId,
             selected.pluginId,
             selected.page.id,
+            props.locale,
             pathname,
           ])}
           {...props}
@@ -612,6 +619,7 @@ export function RichPackagePages(props: RichPackagePagesProps) {
             pathname,
             item.pluginId,
             item.page.id,
+            props.locale,
           ])}
           aria-label={item.page.title}
         >

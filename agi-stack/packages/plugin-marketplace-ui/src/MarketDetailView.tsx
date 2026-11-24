@@ -54,14 +54,12 @@ export function MarketDetailView(props: DetailProps) {
   const desc = localize(d.description, locale);
   const scope = packageScope(tenantId, projectId);
   const base = packageBase(projectId);
-  const activeLinks = (i?.pages ?? [])
-    .filter((page) => page.targets.includes(props.target))
-    .flatMap((page) => {
-      const path = page.routes
-        .map((route) => menuPath(route, { tenantId, projectId }))
-        .find(Boolean);
-      return path ? [{ id: page.id, path, title: page.title, home: page.home }] : [];
-    });
+  const installedPages = (i?.pages ?? []).filter((page) => page.targets.includes(props.target));
+  const previewPages = (release?.pages ?? []).filter((page) => page.targets.includes(props.target));
+  const activeLinks = installedPages.flatMap((page) => {
+    const path = page.routes.map((route) => menuPath(route, { tenantId, projectId })).find(Boolean);
+    return path ? [{ id: page.id, path, title: page.title, home: page.home }] : [];
+  });
   const home = activeLinks.find((link) => link.home) ?? activeLinks[0];
   const applicable = release && d.package_name && !d.source_error && !running;
   const actionLabel = !desired
@@ -233,11 +231,11 @@ export function MarketDetailView(props: DetailProps) {
             i.signed_slot_targets?.includes(props.target) &&
             props.declarativePage?.(i, d.can_execute === true)}
           <h3>{t.capabilities}</h3>
-          {active && !!i?.pages?.length && (
+          {active && installedPages.length > 0 && (
             <>
               <h4>{release && !running ? `${t.pages} · ${t.active} ${active}` : t.pages}</h4>
               <ul className="pm-page-list">
-                {i.pages.map((page) => {
+                {installedPages.map((page) => {
                   const link = activeLinks.find((item) => item.id === page.id);
                   return (
                     <li key={page.id}>
@@ -253,11 +251,11 @@ export function MarketDetailView(props: DetailProps) {
               </ul>
             </>
           )}
-          {release && !running && release.pages.length > 0 && (
+          {release && !running && previewPages.length > 0 && (
             <>
               <h4>{t.pages} · {t.release} {release.version}</h4>
               <ul className="pm-page-list">
-                {release.pages.map((page) => <li key={page.id}>{page.title}</li>)}
+                {previewPages.map((page) => <li key={page.id}>{page.title}</li>)}
               </ul>
             </>
           )}

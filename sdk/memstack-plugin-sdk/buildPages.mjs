@@ -12,6 +12,21 @@ function inside(root, path) {
   return file;
 }
 
+function pageBuilds(pages, entries) {
+  return Object.entries(entries).flatMap(([id, definition]) => {
+    const candidates = pages.filter(page => page.id === id);
+    if (typeof definition === 'string') {
+      if (candidates.length !== 1) throw new Error('Expected one page declaration for ' + id);
+      return [{ page: candidates[0], entry: definition }];
+    }
+    return Object.entries(definition).map(([target, entry]) => {
+      const page = candidates.find(item => item.targets.length === 1 && item.targets[0] === target);
+      if (!page) throw new Error('Missing target-specific page: ' + id + '/' + target);
+      return { page, entry };
+    });
+  });
+}
+
 /** Compile package-owned entry points and update their signed contribution descriptors. */
 export async function buildPackagePages({ root, sourceDirectory, entries, banner, contribution, plugins = [], resourceEntries = {} }) {
   const source = inside(root, sourceDirectory);
@@ -22,9 +37,7 @@ export async function buildPackagePages({ root, sourceDirectory, entries, banner
   const assetRoot = resolve(contractPath, '..');
   const contract = JSON.parse(await readFile(contractPath, 'utf8'));
   const outputs = new Map();
-  for (const [id, entry] of Object.entries(entries)) {
-    const page = contract.pages.find((item) => item.id === id);
-    if (!page) throw new Error('Unknown signed page: ' + id);
+  for (const { page, entry } of pageBuilds(contract.pages, entries)) {
     const destination = inside(assetRoot, page.entry.path);
     const { outputFiles } = await build({
       entryPoints: [inside(source, entry)], outfile: destination,

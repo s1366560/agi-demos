@@ -51,6 +51,15 @@
         channel.port1.postMessage(message);
       return;
     }
+    if (data?.type === "appearance") {
+      const root = document.documentElement;
+      root.classList.toggle("dark", data.dark);
+      root.classList.toggle("high-contrast", data.highContrast);
+      root.dataset.theme = data.dark ? "dark" : "light";
+      root.style.colorScheme = root.dataset.theme;
+      root.lang = data.lang;
+      return;
+    }
     const call = calls.get(data?.id);
     if (!call) return;
     if (data.type === "event") {

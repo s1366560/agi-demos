@@ -120,6 +120,11 @@ function copyAssets(destination) {
       statSync(source).isDirectory() || source.endsWith('.css') || source.endsWith('.mjs'),
   });
 }
+cpSync(
+  join(desktopRoot, '../../packages/plugin-marketplace-ui/src'),
+  join(compiledRoot, 'agi-stack/packages/plugin-marketplace-ui/src'),
+  { recursive: true, filter: (source) => statSync(source).isDirectory() || source.endsWith('.css') },
+);
 copyAssets(compiledDesktopRoot);
 // Vendor adapters use explicit relative node_modules paths from the real src directory.
 symlinkSync(join(desktopRoot, 'node_modules'), join(compiledDesktopRoot, 'node_modules'), 'dir');
@@ -130,7 +135,7 @@ symlinkSync(join(compiledRoot, 'plugins/business'), join(testNodeModules, '@busi
 const testFiles = discoverTestFiles(testsDirectory);
 assertTestInventoryComplete({ testsDirectory, testFiles });
 
-const run = spawnSync(process.execPath, ['--test', '--test-force-exit', ...testFiles], {
+const run = spawnSync(process.execPath, ['--import', join(testsDirectory, 'rawAssets.mjs'), '--test', '--test-force-exit', ...testFiles], {
   cwd: desktopRoot,
   env: {
     ...process.env,

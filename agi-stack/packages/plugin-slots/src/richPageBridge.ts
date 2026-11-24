@@ -147,7 +147,27 @@ export function connectPage(
     else void handle(event.data);
   };
   port.postMessage({ type: "ready" });
+  const root = typeof document !== "undefined" && document.documentElement;
+  const theme = () => {
+    if (root)
+      port.postMessage({
+        type: "appearance",
+        dark: root.dataset.theme === "dark" || root.classList.contains("dark"),
+        highContrast: root.classList.contains("high-contrast"),
+        lang: bridge.locale,
+      });
+  };
+  const observer =
+    page.workbench && root ? new MutationObserver(theme) : undefined;
+  if (observer && root) {
+    theme();
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme", "lang"],
+    });
+  }
   return () => {
+    observer?.disconnect();
     closed = true;
     for (const call of pending.values()) call.abort();
     pending.clear();

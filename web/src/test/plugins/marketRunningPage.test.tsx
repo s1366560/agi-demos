@@ -31,7 +31,10 @@ it('opens the installed route while a newer release is being reviewed', () => {
       installed_version: '1.0.0',
       running_version: '1.0.0',
       actual_digest: 'old',
-      pages: [{ ...page, routes: ['/project/:projectId/schedules'] }],
+      pages: [
+        { ...page, routes: ['/project/:projectId/schedules'] },
+        { ...page, title: 'Native schedules', targets: ['desktop-renderer'], routes: ['/native'] },
+      ],
     },
     release: {
       version: '2.0.0',
@@ -62,6 +65,7 @@ it('opens the installed route while a newer release is being reviewed', () => {
     />
   );
   fireEvent.click(screen.getByRole('button', { name: 'Project schedules' }));
+  expect(screen.queryByText('Native schedules')).toBeNull();
   expect(open).toHaveBeenCalledWith('/project/p/schedules');
   expect(screen.getByText('Schedule editor')).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Schedule editor' })).toBeNull();
