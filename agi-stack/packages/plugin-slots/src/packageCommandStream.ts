@@ -1,4 +1,8 @@
-export async function readPackageCommandStream(response: Response, onEvent: (value: unknown) => void): Promise<unknown> {
+export async function readPackageCommandStream(
+  response: Response,
+  onEvent: (value: unknown) => void,
+  onActivity?: () => void,
+): Promise<unknown> {
   if (!response.ok || !response.body || response.headers.get('Content-Type')?.split(';')[0] !== 'application/x-ndjson')
     throw new Error('package_stream_unavailable');
   const reader = response.body.getReader();
@@ -18,6 +22,7 @@ export async function readPackageCommandStream(response: Response, onEvent: (val
         if (record.type === 'error') throw new Error(typeof record.detail === 'string' ? record.detail : 'page_request_failed');
         if (record.type === 'progress') onEvent(record.data);
         else if (record.type !== 'keepalive') throw new Error('package_stream_invalid');
+        onActivity?.();
       }
       if (done) throw new Error('package_stream_incomplete');
       if (buffer.length > 1024 * 1024) throw new Error('package_stream_record_limit');

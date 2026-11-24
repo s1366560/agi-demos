@@ -172,7 +172,7 @@ const mcpAppGuestHost: McpAppGuestHost | null = fullDesktop ? new McpAppGuestHos
   },
   retireMount: input => mcpAppFrameHost!.unregister(input),
 }) : null;
-const cloudRequestExecutions = new CloudRequestExecutionRegistry({ timeoutMs: 30_000 });
+const cloudRequestExecutions = new CloudRequestExecutionRegistry({ timeoutMs: 30_000, maxPackageStreamMs: 300_000 });
 const qaProfileDirectory = configureQaProfile({
   app,
   requestedPath: process.env.AGISTACK_DESKTOP_QA_PROFILE_DIR,
@@ -917,6 +917,7 @@ async function executeDesktopCommand(
           fetch: (url, init) => net.fetch(url, init),
           refreshTrustedSession: (reason) => cloudSessionRefresher(reason),
           signal: lease.signal,
+          onPackageStreamActivity: lease.renewPackageStream,
           onPackageProgress: (data) => {
             authorizedCloudRequestOwner(event);
             event.senderFrame?.send('memstack:cloud-package-progress', { requestId: args?.requestId, data });

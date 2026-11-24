@@ -104,6 +104,7 @@ export type VaultBoundCloudRequestDependencies = Readonly<{
   ): Promise<CloudSessionRefreshOutcome>;
   refreshState?: CloudSessionRefreshState;
   onPackageProgress?(value: unknown): void;
+  onPackageStreamActivity?(): void;
   withContextSwitch?(
     operation: () => Promise<VaultBoundCloudRequestResult>,
   ): Promise<VaultBoundCloudRequestResult>;
@@ -111,11 +112,13 @@ export type VaultBoundCloudRequestDependencies = Readonly<{
 
 export type CloudRequestExecutionLease = Readonly<{
   signal: AbortSignal;
+  renewPackageStream(): void;
   release(): void;
 }>;
 
 export type CloudRequestExecutionRegistryOptions = Readonly<{
   timeoutMs: number;
+  maxPackageStreamMs?: number;
 }>;
 
 type AuthorizedEndpoint = Readonly<{
@@ -167,17 +170,23 @@ const MIME_TYPE = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/u;
 type CloudRequestExecution = Readonly<{
   ownerId: number;
   controller: AbortController;
-  timeout: ReturnType<typeof setTimeout>;
+  clearTimers(): void;
 }>;
 
 export class CloudRequestExecutionRegistry {
   readonly #timeoutMs: number;
+  readonly #maxPackageStreamMs: number;
   readonly #executions = new Map<string, CloudRequestExecution>();
 
   constructor(options: CloudRequestExecutionRegistryOptions) {
     if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1) {
       throw new Error('cloud request timeout is invalid');
     }
+    const streamLimit = options.maxPackageStreamMs ?? options.timeoutMs;
+    if (!Number.isSafeInteger(streamLimit) || streamLimit < options.timeoutMs) {
+      throw new Error('cloud package stream limit is invalid');
+    }
+    this.#maxPackageStreamMs = streamLimit;
     this.#timeoutMs = options.timeoutMs;
   }
 
@@ -189,25 +198,46 @@ export class CloudRequestExecutionRegistry {
     if (this.#executions.has(id)) throw new Error('cloud request id is already active');
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => {
+    const started = performance.now();
+    let hardTimer: ReturnType<typeof setTimeout> | undefined;
+    const expire = () => {
       const execution = this.#executions.get(id);
       if (!execution || execution.controller !== controller) return;
       this.#executions.delete(id);
+      execution.clearTimers();
       controller.abort(new Error('cloud request timed out'));
-    }, this.#timeoutMs);
-    const execution = Object.freeze({ ownerId, controller, timeout });
+    };
+    let idleTimer = setTimeout(expire, this.#timeoutMs);
+    const clearTimers = () => {
+      clearTimeout(idleTimer);
+      clearTimeout(hardTimer);
+    };
+    const execution = Object.freeze({ ownerId, controller, clearTimers });
     this.#executions.set(id, execution);
 
     let released = false;
     return Object.freeze({
       signal: controller.signal,
+      renewPackageStream: () => {
+        if (this.#executions.get(id) !== execution) return;
+        if (!hardTimer) {
+          const remaining = this.#maxPackageStreamMs - (performance.now() - started);
+          if (remaining <= 0) {
+            expire();
+            return;
+          }
+          hardTimer = setTimeout(expire, remaining);
+        }
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(expire, this.#timeoutMs);
+      },
       release: () => {
         if (released) return;
         released = true;
         const current = this.#executions.get(id);
         if (!current || current.controller !== controller) return;
         this.#executions.delete(id);
-        clearTimeout(current.timeout);
+        current.clearTimers();
       },
     });
   }
@@ -217,7 +247,7 @@ export class CloudRequestExecutionRegistry {
     const execution = this.#executions.get(id);
     if (!execution || execution.ownerId !== ownerId) return false;
     this.#executions.delete(id);
-    clearTimeout(execution.timeout);
+    execution.clearTimers();
     execution.controller.abort(new Error('cloud request was cancelled'));
     return true;
   }
@@ -227,7 +257,7 @@ export class CloudRequestExecutionRegistry {
     for (const [requestId, execution] of this.#executions) {
       if (execution.ownerId !== ownerId) continue;
       this.#executions.delete(requestId);
-      clearTimeout(execution.timeout);
+      execution.clearTimers();
       execution.controller.abort(new Error('cloud request owner was destroyed'));
       cancelled += 1;
     }
@@ -238,7 +268,7 @@ export class CloudRequestExecutionRegistry {
     let cancelled = 0;
     for (const [requestId, execution] of this.#executions) {
       this.#executions.delete(requestId);
-      clearTimeout(execution.timeout);
+      execution.clearTimers();
       execution.controller.abort(new Error('cloud request broker is shutting down'));
       cancelled += 1;
     }
@@ -464,7 +494,7 @@ export async function executeVaultBoundCloudRequest(
     const body = await readPackageCommandStream(response, value => {
       check(value);
       dependencies.onPackageProgress?.(value);
-    }).catch((error: unknown) => {
+    }, dependencies.onPackageStreamActivity).catch((error: unknown) => {
       check(error instanceof Error ? error.message : String(error));
       throw error;
     });

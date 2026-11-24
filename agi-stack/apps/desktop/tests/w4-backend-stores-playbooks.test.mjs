@@ -833,6 +833,79 @@ test('cloud request execution leases abort at the privileged-process deadline', 
   lease.release();
 });
 
+test('verified NDJSON progress and keepalive records renew a signed command stream', async () => {
+  const {
+    readPackageCommandStream,
+  } = require('/tmp/agistack-desktop-test-dist/packages/plugin-slots/src/packageCommandStream.js');
+  const response = new Response(
+    [
+      { type: 'keepalive' },
+      { type: 'progress', data: { type: 'accepted' } },
+      { type: 'result', data: { status: 'complete' } },
+    ]
+      .map((frame) => JSON.stringify(frame))
+      .join('\n'),
+    { headers: { 'Content-Type': 'application/x-ndjson' } },
+  );
+  const events = [];
+  let activity = 0;
+  const result = await readPackageCommandStream(
+    response,
+    (event) => events.push(event),
+    () => activity++,
+  );
+  assert.deepEqual(events, [{ type: 'accepted' }]);
+  assert.equal(activity, 2);
+  assert.deepEqual(result, { status: 'complete' });
+
+  const malformed = new Response('{"type":"invalid"}\n', {
+    headers: { 'Content-Type': 'application/x-ndjson' },
+  });
+  await assert.rejects(
+    readPackageCommandStream(
+      malformed,
+      () => {},
+      () => activity++,
+    ),
+    /package_stream_invalid/,
+  );
+  assert.equal(activity, 2);
+});
+
+test('signed package activity renews only its live request and remains bounded', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const registry = new CloudRequestExecutionRegistry({ timeoutMs: 100, maxPackageStreamMs: 250 });
+  const stream = registry.begin(1, 'signed-stream-request');
+  const ordinary = registry.begin(1, 'ordinary-request-id');
+  stream.renewPackageStream();
+  t.mock.timers.tick(80);
+  stream.renewPackageStream();
+  t.mock.timers.tick(80);
+  assert.equal(ordinary.signal.aborted, true);
+  assert.equal(stream.signal.aborted, false);
+  stream.renewPackageStream();
+  t.mock.timers.tick(80);
+  stream.renewPackageStream();
+  t.mock.timers.tick(20);
+  assert.equal(stream.signal.aborted, true);
+
+  const replacement = registry.begin(1, 'signed-stream-request');
+  t.mock.timers.tick(80);
+  stream.renewPackageStream();
+  t.mock.timers.tick(25);
+  assert.equal(replacement.signal.aborted, true);
+  const idle = registry.begin(1, 'inactive-stream-request');
+  idle.renewPackageStream();
+  t.mock.timers.tick(105);
+  assert.equal(idle.signal.aborted, true);
+
+  const cancelled = registry.begin(1, 'cancel-stream-request');
+  cancelled.renewPackageStream();
+  assert.equal(registry.cancel(1, 'cancel-stream-request'), true);
+  cancelled.renewPackageStream();
+  assert.equal(cancelled.signal.aborted, true);
+});
+
 test('renderer cloud broker propagates AbortSignal through an owner-scoped cancel command', async () => {
   const originalWindow = globalThis.window;
   const commands = [];
