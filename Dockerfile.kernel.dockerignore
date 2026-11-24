@@ -43,6 +43,7 @@
 !src/infrastructure/adapters/secondary/persistence/package_kernel_database.py
 !src/infrastructure/adapters/secondary/persistence/plugin_scope_columns_v2.py
 !src/infrastructure/adapters/secondary/persistence/project_plugin_installation.py
+!src/infrastructure/adapters/secondary/persistence/tenant_plugin_installation.py
 !src/infrastructure/adapters/secondary/persistence/platform_plugin_governance_repository.py
 !src/infrastructure/adapters/secondary/persistence/sql_api_key_repository.py
 !src/infrastructure/adapters/secondary/persistence/sql_user_repository.py

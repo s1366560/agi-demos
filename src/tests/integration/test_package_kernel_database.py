@@ -19,6 +19,7 @@ from src.cli.package_kernel_owner import provision_owner
 from src.infrastructure.adapters.secondary.persistence.package_kernel_database import (
     VERSION_TABLE,
     initialize_package_kernel_database,
+    package_kernel_metadata,
 )
 from src.tests.unit.routers import test_optional_business_http_v2 as project_fixtures
 
@@ -144,10 +145,9 @@ async def test_concurrent_standalone_start_owner_login_refresh_and_signed_comman
     caplog.set_level(logging.INFO, logger="plugin_audit")
     await asyncio.gather(*(initialize_package_kernel_database(database) for _ in range(3)))
     tables = await _tables(database)
-    assert len(tables) == 19 and VERSION_TABLE in tables
-    assert not {"invoices", "memories", "agent_run_authorities", "alembic_version"}.intersection(
-        tables
-    )
+    assert tables == set(package_kernel_metadata().tables) | {VERSION_TABLE}
+    assert {"tenant_plugin_installations", "tenant_plugin_releases"} <= tables
+    assert not {"invoices", "memories", "alembic_version"}.intersection(tables)
     async with database.connect() as connection:
         assert await connection.scalar(text("SELECT count(*) FROM users")) == 0
         assert (
@@ -162,7 +162,11 @@ async def test_concurrent_standalone_start_owner_login_refresh_and_signed_comman
     assert await _tables(database) == tables
 
     email, password, scope = await _first_owner(database)
-    settings = SimpleNamespace(secret_key=secrets.token_urlsafe(40), api_allowed_origins=[])
+    settings = SimpleNamespace(
+        secret_key=secrets.token_urlsafe(40),
+        api_allowed_origins=[],
+        package_application_runtime_url=None,
+    )
     monkeypatch.setattr(auth, "get_settings", lambda: settings)
     monkeypatch.setattr(package_kernel, "get_settings", lambda: settings)
     app = package_kernel.create_app()

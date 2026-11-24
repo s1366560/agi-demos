@@ -111,8 +111,7 @@
       "id": "account",
       "title": "Plans and invoices",
       "routes": [
-        "/billing",
-        "/tenant/:tenantId/billing"
+        "/billing"
       ],
       "targets": [
         "web",
@@ -120,7 +119,7 @@
       ],
       "entry": {
         "path": "ui/account.js",
-        "digest": "sha256:8de7780bef64207642b925b51d137e264eb9393e3a24e3037b90c73c42b9d5a0"
+        "digest": "sha256:7bfc950f17b52c42b042856aebcafe452b2790c2296ecff94e7c98004dc7c466"
       },
       "commands": [
         "quote-free",
@@ -130,6 +129,27 @@
         "change-plan"
       ],
       "device_tools": []
+    },
+    {
+      "id": "tenant-account",
+      "title": "Tenant billing",
+      "routes": [
+        "/tenant/:tenantId/billing"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/account.js",
+        "digest": "sha256:7bfc950f17b52c42b042856aebcafe452b2790c2296ecff94e7c98004dc7c466"
+      },
+      "commands": [
+        "tenant-account",
+        "change-plan"
+      ],
+      "device_tools": [],
+      "scope": "tenant"
     }
   ]
 }

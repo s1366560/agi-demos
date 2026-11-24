@@ -74,6 +74,7 @@ class Package:
     version: str
     archive: bytes
     market: MarketPresentation | None = None
+    scopes: tuple[str, ...] = ("project",)
 
     @property
     def selector(self) -> str:
@@ -103,15 +104,18 @@ def signed_package(
         )
     ):
         raise ValueError("Expected a signed project package with a matching business identity")
+    scopes = {"project"}
     targets = {a.target.value for a in signed.artifacts}
     for artifact in signed.artifacts:
         if artifact.path in {"targets/desktop-capability.json", "targets/desktop-sidecar.mspkg"}:
             targets.add("desktop-sidecar")
         if artifact.path == "contributions.json":
             contribution = json.loads(verified.artifacts[artifact.artifact_id])
+            if any(page.get("scope") == "tenant" for page in contribution.get("pages", [])):
+                scopes.add("tenant")
             targets.update(t for page in contribution.get("pages", []) for t in page["targets"])
     market = _market_presentation(metadata_directory / match[1] / "market.json", targets)
-    return Package(f"@memstack/{match[1]}", signed.version, raw, market)
+    return Package(f"@memstack/{match[1]}", signed.version, raw, market, tuple(sorted(scopes)))
 
 
 def tarball(package: Package) -> bytes:
@@ -119,6 +123,7 @@ def tarball(package: Package) -> bytes:
         "name": package.name,
         "version": package.version,
         "files": ["plugin.mspkg"],
+        **({"memstack": {"scopes": package.scopes}} if "tenant" in package.scopes else {}),
         "publishConfig": {"registry": ORIGIN},
     }
     if package.market:
@@ -127,7 +132,7 @@ def tarball(package: Package) -> bytes:
             {
                 "description": descriptions.get("en") or descriptions["zh"],
                 "keywords": ["memstack-plugin"],
-                "memstack": {"market": package.market},
+                "memstack": {"market": package.market, "scopes": package.scopes},
             }
         )
     stream = io.BytesIO()

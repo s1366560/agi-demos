@@ -10,6 +10,7 @@ from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBu
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
+    from src.host.operations.tenant_commands import TenantPackageContext
 
 
 def application_runtime_origin(value: str) -> str:
@@ -38,7 +39,7 @@ def _result(value: object) -> dict[str, Any]:
 
 async def forward_command(
     origin: str,
-    ctx: "PackageOperationContext",
+    ctx: "PackageOperationContext | TenantPackageContext",
     *,
     plugin: str,
     digest: str,
@@ -48,10 +49,14 @@ async def forward_command(
 ) -> dict[str, Any]:
     if "x-memstack-application-hop" in ctx.request.headers:
         raise OptionalBusinessError("runtime_unavailable", "Application routing loop")
-    path = "/api/v1/platform-plugins/v2/optional-business/" + quote(plugin, safe="") + "/commands"
+    from src.infrastructure.plugins.v2.signed_optional_business_v2 import ScopeBindingV2
+
+    project = isinstance(ctx.scope, ScopeBindingV2)
+    base = "/api/v1/platform-plugins/v2/optional-business" if project else "/api/v1/tenant-packages"
+    path = base + "/" + quote(plugin, safe="") + "/commands"
     body = {
         "tenant_id": ctx.scope.tenant_id,
-        "project_id": ctx.scope.project_id,
+        **({"project_id": ctx.scope.project_id} if isinstance(ctx.scope, ScopeBindingV2) else {}),
         "command_id": command,
         "expected_digest": digest,
         "payload": payload,

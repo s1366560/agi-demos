@@ -31,6 +31,7 @@ import src.infrastructure.adapters.secondary.persistence.project_plugin_installa
 import src.infrastructure.adapters.secondary.persistence.project_schema_models
 import src.infrastructure.adapters.secondary.persistence.subagent_owner_model_v2
 import src.infrastructure.adapters.secondary.persistence.subagent_run_snapshot_model_v2  # noqa: F401
+import src.infrastructure.adapters.secondary.persistence.tenant_plugin_installation
 from alembic import context
 
 # Import settings to get database URL

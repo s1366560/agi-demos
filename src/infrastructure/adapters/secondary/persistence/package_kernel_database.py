@@ -41,6 +41,10 @@ from src.infrastructure.adapters.secondary.persistence.project_plugin_installati
     ProjectPluginInstallation,
     ProjectPluginRelease,
 )
+from src.infrastructure.adapters.secondary.persistence.tenant_plugin_installation import (
+    TenantPluginInstallation,
+    TenantPluginRelease,
+)
 
 VERSION_TABLE = "package_kernel_alembic_version"
 
@@ -65,6 +69,8 @@ def package_kernel_metadata() -> MetaData:
         PlatformPluginPackageModel,
         ProjectPluginInstallation,
         ProjectPluginRelease,
+        TenantPluginInstallation,
+        TenantPluginRelease,
         PlatformPluginNamespaceRecordModelV2,
         DevicePluginGrant,
         Conversation,

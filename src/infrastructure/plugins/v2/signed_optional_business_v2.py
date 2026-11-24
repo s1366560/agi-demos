@@ -61,8 +61,12 @@ class OptionalBusinessError(RuntimeError):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ScopeBindingV2:
+class TenantBindingV2:
     tenant_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScopeBindingV2(TenantBindingV2):
     project_id: str
 
 
@@ -280,7 +284,7 @@ class SignedOptionalBusinessRuntimeV2:
     def invoke(
         self,
         plugin_id: str,
-        scope: ScopeBindingV2,
+        scope: TenantBindingV2,
         tool_name: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:

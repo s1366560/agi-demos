@@ -12,13 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.chat_adapter_scope import chat_adapter_pin
 from src.host.operations.project_package_audit import PackageAudit, project_operation
-from src.host.packages.project_installation_view import installation_view
+from src.host.packages.project_installation_view import installation_view, market_installation
+from src.host.packages.release_governance import check_catalog_release
 from src.host.packages.release_pin import AGENT_PACKAGE_PINS, AgentPackagePin as AgentPackagePin
 from src.host.packages.rich_pages import check_page_routes
 from src.host.runtime.package_call import admit_package_call
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentRunAuthorityModel,
-    PlatformPluginPackageModel,
     Project,
 )
 from src.infrastructure.adapters.secondary.persistence.project_plugin_installation import (
@@ -109,37 +109,7 @@ class ProjectPluginInstallationService:
 
     async def marketplace_item(self, plugin: str) -> dict[str, Any]:
         view = await self.projection(plugin)
-        if not view["package_recorded"]:
-            status = "uninstalled"
-        elif view["failure"]:
-            status = "failed"
-        elif view["runtime_phase"] == "active":
-            status = "enabled"
-        else:
-            status = "disabled"
-        return {
-            "id": f"project-package:{plugin}",
-            "source_id": "signed-v2",
-            "kind": view["kind"],
-            "targets": view["targets"],
-            "has_desktop_ui": view["has_desktop_ui"],
-            "commands": view["commands"],
-            "pages": view["pages"],
-            "name": plugin,
-            "plugin_id": plugin,
-            "version": view["installed_version"] or "",
-            "status": status,
-            "format": "v2",
-            "install_strategy": "signed-v2",
-            "capabilities": ["tools"] + (["ui"] if view["has_web_ui"] else []),
-            "required_credentials": [],
-            "error": view["failure"],
-            "running_version": view["running_version"],
-            "desired_revision": view["desired_revision"],
-            "actual_digest": view["actual_digest"],
-            "desired_digest": view["desired_digest"],
-            "scope": "project",
-        }
+        return market_installation(plugin, view, "project")
 
     async def _release(self, plugin: str, version: str) -> Release:
         release = await self.db.scalar(
@@ -154,40 +124,12 @@ class ProjectPluginInstallationService:
             raise OptionalBusinessError("not_recorded", "package version is unavailable")
         return release
 
-    async def _catalog_check(self, plugin: str, version: str, archive: bytes) -> None:
-        governance = (
-            await self.db.execute(
-                select(
-                    PlatformPluginPackageModel.revoked,
-                    PlatformPluginPackageModel.security_scan_status,
-                    PlatformPluginPackageModel.artifact_digest,
-                )
-                .where(
-                    PlatformPluginPackageModel.plugin_id == plugin,
-                    PlatformPluginPackageModel.version == version,
-                )
-                .execution_options(populate_existing=True)
-            )
-        ).one_or_none()
-        if governance is None:
-            return
-        if governance.revoked:
-            raise OptionalBusinessError("revoked", "this package version has been revoked")
-        if governance.security_scan_status == "failed":
-            raise OptionalBusinessError(
-                "scan_failed", "this package version failed its security scan"
-            )
-        if hashlib.sha256(archive).hexdigest() != governance.artifact_digest:
-            raise OptionalBusinessError(
-                "conflict", "release bytes differ from the marketplace version"
-            )
-
     async def inspect(self, raw: bytes) -> SignedPackageBytesV2:
         from src.infrastructure.plugins.v2.bundle_archive import declared_bundle_permissions_v2
 
         requested = await asyncio.to_thread(declared_bundle_permissions_v2, raw)
         package = await asyncio.to_thread(admit_package, raw, self.keys, requested, self.scope)
-        await self._catalog_check(package.plugin_id, package.version, raw)
+        await check_catalog_release(self.db, package.plugin_id, package.version, raw)
         return package
 
     async def record(
@@ -230,7 +172,7 @@ class ProjectPluginInstallationService:
                 raise OptionalBusinessError(
                     "conflict", "package selection changed, reload its state"
                 )
-            await self._catalog_check(package.plugin_id, package.version, raw)
+            await check_catalog_release(self.db, package.plugin_id, package.version, raw)
             release = await self.db.get(
                 Release, (self.scope.project_id, package.plugin_id, package.version)
             )
@@ -278,7 +220,7 @@ class ProjectPluginInstallationService:
                 release.version,
                 release.digest,
             )
-        await self._catalog_check(plugin, version, release.archive)
+        await check_catalog_release(self.db, plugin, version, release.archive)
         return await asyncio.to_thread(
             admit_package, release.archive, self.keys, frozenset(release.permissions), self.scope
         )

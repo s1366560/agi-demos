@@ -32,6 +32,7 @@ from src.host.transport.conversation_journal import router as journal_router
 from src.host.transport.local_run_upload import router as local_runs_router
 from src.host.transport.project_package_routes import project_package_router
 from src.host.transport.remote_local_run_upload import router as remote_local_runs_router
+from src.host.transport.tenant_packages import router as tenant_package_router
 from src.infrastructure.adapters.primary.web.routers.auth import router as auth_router
 from src.infrastructure.adapters.primary.web.routers.project_marketplace import (
     kernel_marketplace_router,
@@ -149,6 +150,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(device_grants_router)
     app.include_router(project_package_router)
+    app.include_router(tenant_package_router)
     app.include_router(project_package_scope_router)
     app.include_router(desktop_catalog_router)
     app.include_router(workspace_context_router)

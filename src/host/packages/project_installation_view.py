@@ -21,6 +21,9 @@ if TYPE_CHECKING:
     from src.infrastructure.adapters.secondary.persistence.project_plugin_installation import (
         ProjectPluginInstallation as Installation,
     )
+    from src.infrastructure.adapters.secondary.persistence.tenant_plugin_installation import (
+        TenantPluginInstallation,
+    )
     from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
         ScopeBindingV2,
         SignedPackageBytesV2,
@@ -51,6 +54,17 @@ async def installation_view(
         .tuples()
         .all()
     )
+    return await release_projection(plugin, state, digests, verified, scope_kind="project")
+
+
+async def release_projection(
+    plugin: str,
+    state: "Installation | TenantPluginInstallation | None",
+    digests: dict[str, str],
+    verified: "Callable[[str, str], Awaitable[SignedPackageBytesV2]]",
+    *,
+    scope_kind: str,
+) -> dict[str, Any]:
     active = state.active if state else None
     desired = state.desired if state else None
     failure = state.failure if state else None
@@ -85,7 +99,7 @@ async def installation_view(
             live = await verified(plugin, active)
             if desired == active:
                 kind, targets = live.kind, live.targets
-            renderer = renderer_projection(live)
+            renderer = renderer_projection(live, scope=scope_kind)
             commands = [
                 c.command_id
                 for c in live.contribution.commands
@@ -106,4 +120,38 @@ async def installation_view(
         "running_version": active,
         "commands": commands,
         **renderer,
+    }
+
+
+def market_installation(plugin: str, view: dict[str, Any], scope: str) -> dict[str, Any]:
+    if not view["package_recorded"]:
+        status = "uninstalled"
+    elif view["failure"]:
+        status = "failed"
+    elif view["runtime_phase"] == "active":
+        status = "enabled"
+    else:
+        status = "disabled"
+    return {
+        "id": f"{scope}-package:{plugin}",
+        "source_id": "signed-v2",
+        "kind": view["kind"],
+        "targets": view["targets"],
+        "has_desktop_ui": view["has_desktop_ui"],
+        "commands": view["commands"],
+        "pages": view["pages"],
+        "name": plugin,
+        "plugin_id": plugin,
+        "version": view["installed_version"] or "",
+        "status": status,
+        "format": "v2",
+        "install_strategy": "signed-v2",
+        "capabilities": ["tools"] + (["ui"] if view["has_web_ui"] else []),
+        "required_credentials": [],
+        "error": view["failure"],
+        "running_version": view["running_version"],
+        "desired_revision": view["desired_revision"],
+        "actual_digest": view["actual_digest"],
+        "desired_digest": view["desired_digest"],
+        "scope": scope,
     }

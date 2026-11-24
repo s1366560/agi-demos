@@ -48,7 +48,7 @@ async def _open_worker(
         yield worker
 
 
-async def _with_wasm[T](
+async def with_wasm_runtime[T](
     package: SignedPackageBytesV2, call: Callable[[SignedOptionalBusinessRuntimeV2], T]
 ) -> T:
     def execute() -> T:
@@ -70,7 +70,7 @@ async def _with_wasm[T](
 
 async def prepare_project_guest(package: SignedPackageBytesV2, scope: ScopeBindingV2) -> None:
     if package.worker is None:
-        await _with_wasm(package, lambda _: None)
+        await with_wasm_runtime(package, lambda _: None)
         return
     async with _open_worker(package, scope):
         pass
@@ -85,7 +85,7 @@ async def invoke_project_tool(
 ) -> dict[str, Any]:
     identify_signed_operation(package, tool=tool)
     if package.worker is None:
-        return await _with_wasm(
+        return await with_wasm_runtime(
             package, lambda runtime: runtime.session(package.plugin_id, scope).invoke(tool, payload)
         )
     selected = next((item for item in package.contribution.tools if item.name == tool), None)

@@ -52,6 +52,7 @@ class NpmListing:
     description: dict[str, str] = field(default_factory=dict)
     icon: str | None = None
     targets: tuple[str, ...] = ()
+    tenant_versions: tuple[str, ...] = ()
 
 
 def _listing(doc: dict[str, Any], name: str) -> NpmListing | None:
@@ -81,6 +82,13 @@ def _listing(doc: dict[str, Any], name: str) -> NpmListing | None:
         package_name=name,
         plugin_id=npm_plugin_id(name, versions[0]),
         versions=tuple(versions),
+        tenant_versions=tuple(
+            v
+            for v in versions
+            if isinstance(ns := releases[v].get("memstack"), dict)
+            and isinstance(ns.get("scopes"), list)
+            and "tenant" in ns["scopes"]
+        ),
         latest_version=latest,
         display_name=_localized(display.get("name"), 120),
         description=_localized(display.get("description"), 512),

@@ -1,6 +1,7 @@
 """Join an npm source to the selected project's durable installation state."""
 
-from typing import TYPE_CHECKING, Any, Literal
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from jsonschema.exceptions import SchemaError
 
@@ -10,10 +11,16 @@ from src.host.packages.rich_pages import renderer_projection
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
 if TYPE_CHECKING:
-    from src.host.packages.project_plugin_installation import ProjectPluginInstallationService
     from src.infrastructure.plugins.v2.signed_optional_business_v2 import SignedPackageBytesV2
 
 View = Literal["all", "installed", "updates"]
+
+
+class MarketService(Protocol):
+    async def projection(self, plugin: str) -> dict[str, Any]: ...
+    async def installed_ids(self) -> list[str]: ...
+    async def inspect(self, raw: bytes) -> "SignedPackageBytesV2": ...
+    async def reviewed_release(self, plugin: str, version: str) -> "SignedPackageBytesV2": ...
 
 
 def _source_label(registry: str | None) -> str | None:
@@ -24,10 +31,23 @@ def _source_label(registry: str | None) -> str | None:
 
 
 async def _source(
-    registry: str | None, name: str | None = None
+    registry: str | None, name: str | None = None, *, scope: str = "project"
 ) -> tuple[list[NpmListing], str | None]:
     try:
-        return await registry_listings(registry, name), None
+        listings = await registry_listings(registry, name)
+        if scope == "tenant":
+            listings = [
+                replace(
+                    row,
+                    versions=row.tenant_versions,
+                    latest_version=row.latest_version
+                    if row.latest_version in row.tenant_versions
+                    else row.tenant_versions[0],
+                )
+                for row in listings
+                if row.tenant_versions
+            ]
+        return listings, None
     except OptionalBusinessError as exc:
         if exc.code == "npm_not_found":
             return [], None
@@ -74,15 +94,16 @@ def _card(
 
 
 async def market_catalog(
-    service: "ProjectPluginInstallationService",
+    service: MarketService,
     registry: str | None,
     *,
     query: str,
     view: View,
     offset: int,
     limit: int,
+    scope: str = "project",
 ) -> dict[str, Any]:
-    source, error = await _source(registry)
+    source, error = await _source(registry, scope=scope)
     installed = {
         plugin: await service.projection(plugin) for plugin in await service.installed_ids()
     }
@@ -117,8 +138,8 @@ async def market_catalog(
     }
 
 
-def _release(package: "SignedPackageBytesV2") -> dict[str, Any]:
-    renderer = renderer_projection(package)
+def _release(package: "SignedPackageBytesV2", scope: str) -> dict[str, Any]:
+    renderer = renderer_projection(package, scope=scope)
     return {
         "version": package.version,
         "digest": package.digest,
@@ -139,40 +160,42 @@ def _release(package: "SignedPackageBytesV2") -> dict[str, Any]:
 
 
 async def _inspect_selection(
-    service: "ProjectPluginInstallationService",
+    service: MarketService,
     registry: str | None,
     source: NpmListing | None,
     plugin: str,
     version: str,
     recorded: set[str],
     current: "SignedPackageBytesV2 | None",
+    scope: str,
 ) -> dict[str, Any]:
     if source and version in source.versions:
         raw = await fetch_npm_archive(registry, source.package_name, version)
         package = await service.inspect(raw)
         if (package.plugin_id, package.version) != (plugin, version):
             raise ValueError("Signed plugin identity differs from the npm release")
-        return _release(package)
+        return _release(package, scope)
     if version not in recorded:
         raise OptionalBusinessError("npm_not_found", "This npm version is unavailable")
     if current and current.version == version:
-        return _release(current)
-    return _release(await service.reviewed_release(plugin, version))
+        return _release(current, scope)
+    return _release(await service.reviewed_release(plugin, version), scope)
 
 
 async def market_detail(
-    service: "ProjectPluginInstallationService",
+    service: MarketService,
     registry: str | None,
     *,
     plugin: str,
     name: str | None,
     version: str | None,
+    scope: str = "project",
 ) -> dict[str, Any]:
     if name and npm_plugin_id(name, version or "0.0.0") != plugin:
         raise ValueError("The npm name does not match the plugin identity")
     if version and not valid_version(version):
         raise ValueError("An exact npm version is required")
-    listings, error = await _source(registry, name)
+    listings, error = await _source(registry, name, scope=scope)
     source = next((item for item in listings if item.plugin_id == plugin), None)
     view = await service.projection(plugin)
     installed = view if view["package_recorded"] else None
@@ -209,7 +232,7 @@ async def market_detail(
     try:
         if selected:
             release = await _inspect_selection(
-                service, registry, source, plugin, selected, local, checked
+                service, registry, source, plugin, selected, local, checked, scope
             )
     except (ValueError, OptionalBusinessError, SchemaError, TypeError, KeyError) as exc:
         reason = str(exc)

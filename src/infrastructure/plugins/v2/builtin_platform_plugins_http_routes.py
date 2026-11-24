@@ -20,6 +20,7 @@ from src.host.identity.device_plugin_grants import (
     router as device_grants_router,
 )
 from src.host.transport.project_package_routes import project_package_router
+from src.host.transport.tenant_packages import router as tenant_package_router
 from src.infrastructure.adapters.primary.web.routers.platform_plugin_instances_v2 import (
     apply_plugin_instances_v2,
     get_plugin_instances_v2,
@@ -285,7 +286,7 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             status_code=route.status_code,
             tags=_PROTOCOL_V2_TAGS_V2,
         )
-        for router in (project_package_router, device_grants_router)
+        for router in (project_package_router, tenant_package_router, device_grants_router)
         for route in router.routes
         if isinstance(route, APIRoute)
     )

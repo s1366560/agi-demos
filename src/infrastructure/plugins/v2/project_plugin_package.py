@@ -31,6 +31,7 @@ from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
     OptionalBusinessError,
     ScopeBindingV2,
     SignedPackageBytesV2,
+    TenantBindingV2,
     declared_permissions,
     load_contribution_v2,
 )
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
 
 
 def admit_package(
-    raw: bytes, keys: tuple[str, ...], approved: frozenset[str], binding: ScopeBindingV2 | None
+    raw: bytes, keys: tuple[str, ...], approved: frozenset[str], binding: TenantBindingV2 | None
 ) -> SignedPackageBytesV2:
     from memstack_plugin_sdk.compatibility import DESCRIPTOR, require_compatible
     from memstack_plugin_sdk.rich_pages import validate_device_tools
@@ -279,7 +280,7 @@ def _executable(
     plugin: PluginManifestV2,
     module: PluginModuleV2,
     artifacts: dict[str, bytes],
-    binding: ScopeBindingV2 | None,
+    binding: TenantBindingV2 | None,
 ) -> tuple[bytes, "OciWorkerSpec | None"]:
     worker = plugin.runtime == RuntimeKindV2.MCP
     media = "application/vnd.memstack.mcp-oci-worker.v1+json" if worker else "application/wasm"
@@ -310,6 +311,9 @@ def _executable(
             )
         from src.infrastructure.plugins.v2.oci_mcp_worker import OciWorkerSpec
 
+        if not isinstance(binding, ScopeBindingV2):
+            # The descriptor is verified, but no project worker execution grant is minted.
+            return b"", OciWorkerSpec.parse(content)
         return b"", OciWorkerSpec.from_archive(archive, raw=content, scope=binding)
     if len(content) > 8 * 1024 * 1024 or not content.startswith(b"\0asm"):
         raise OptionalBusinessError("invalid_package", "expected a bounded binary Wasm guest")
@@ -368,7 +372,7 @@ def _check_schema(schema: dict[str, object]) -> None:
 
 
 def _bound_entry(
-    bundle: BundleManifestV2, plugin: PluginManifestV2, binding: ScopeBindingV2 | None
+    bundle: BundleManifestV2, plugin: PluginManifestV2, binding: TenantBindingV2 | None
 ) -> ProfileEntryV2:
     if len(bundle.layers) != 1:
         raise OptionalBusinessError("invalid_package", "project package requires one bundle layer")
@@ -393,16 +397,15 @@ def _bound_entry(
         raise OptionalBusinessError("invalid_package", "expected one enabled signed module entry")
     permitted_scopes = {ScopeV2(kind=ScopeKindV2.ROOT)}
     if binding is not None:
-        permitted_scopes.update(
-            (
-                ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=binding.tenant_id),
+        permitted_scopes.add(ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=binding.tenant_id))
+        if isinstance(binding, ScopeBindingV2):
+            permitted_scopes.add(
                 ScopeV2(
                     kind=ScopeKindV2.PROJECT,
                     tenant_id=binding.tenant_id,
                     project_id=binding.project_id,
-                ),
+                )
             )
-        )
     if layer.scope not in permitted_scopes or entry.scope not in permitted_scopes:
         raise OptionalBusinessError("forbidden", "package scope does not cover this project")
     return entry
