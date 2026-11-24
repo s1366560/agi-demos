@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
           ]),
     ],
     resolve: {
-      dedupe: ['@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm',
+      dedupe: ['docx-preview', 'xlsx', 'react-syntax-highlighter', '@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm',
         'react-router-dom',
         'chart.js',
         'react-chartjs-2',
@@ -62,6 +62,7 @@ export default defineConfig(({ mode }) => {
         'lucide-react',
       ],
       alias: {
+      '@copilotkit/a2ui-renderer/dist': path.resolve(__dirname, './node_modules/@copilotkit/a2ui-renderer/dist'),
         '@': path.resolve(__dirname, './src'),
         ...(!packageHost ? { '@business': path.resolve(__dirname, '../plugins/business') } : {}),
         '@agistack/plugin-slots': path.resolve(

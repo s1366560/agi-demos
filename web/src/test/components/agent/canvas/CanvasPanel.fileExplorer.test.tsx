@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CanvasPanel } from '@/components/agent/canvas/CanvasPanel';
+import { CanvasPanel } from '@business/agent/ui/web/canvas/CanvasPanel';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 import { artifactService, fetchArtifactResource } from '@/services/artifactService';
@@ -25,7 +25,7 @@ vi.mock('@/components/agent/canvas/A2UISurfaceRenderer', () => ({
   A2UISurfaceRenderer: () => null,
 }));
 
-vi.mock('@/components/agent/canvas/useSyntaxHighlighter', () => ({
+vi.mock('@business/agent/ui/web/canvas/useSyntaxHighlighter', () => ({
   useSyntaxHighlighter: () => null,
 }));
 

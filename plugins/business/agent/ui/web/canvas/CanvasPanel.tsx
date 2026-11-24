@@ -73,12 +73,12 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { StandardMCPAppRenderer } from '@/components/mcp-app/StandardMCPAppRenderer';
 import type { StandardMCPAppRendererHandle } from '@/components/mcp-app/StandardMCPAppRenderer';
 
-import { PluginSlotOutlet } from '../../plugins/PluginSlotOutlet';
-import { useMarkdownPlugins } from '../chat/markdownPlugins';
-import { safeMarkdownComponents } from '../chat/safeMarkdownComponents';
-import { MARKDOWN_PROSE_CLASSES } from '../styles';
+import { PluginSlotOutlet } from '@/components/plugins/PluginSlotOutlet';
+import { useMarkdownPlugins } from '@/components/agent/chat/markdownPlugins';
+import { safeMarkdownComponents } from '@/components/agent/chat/safeMarkdownComponents';
+import { MARKDOWN_PROSE_CLASSES } from '../chat/styles';
 
-import { A2UISurfaceRenderer } from './A2UISurfaceRenderer';
+import { A2UISurfaceRenderer } from '@/components/agent/canvas/A2UISurfaceRenderer';
 import { CanvasFileExplorer } from './CanvasFileExplorer';
 import { SelectionToolbar } from './SelectionToolbar';
 import { useSyntaxHighlighter } from './useSyntaxHighlighter';

@@ -29,6 +29,10 @@
         /* Path mapping */
         "baseUrl": ".",
         "paths": {
+            "docx-preview": ["node_modules/docx-preview"],
+            "xlsx": ["node_modules/xlsx"],
+            "@copilotkit/a2ui-renderer": ["node_modules/@copilotkit/a2ui-renderer/dist/index.d.cts"],
+            "@copilotkit/a2ui-renderer/dist/*": ["node_modules/@copilotkit/a2ui-renderer/dist/*"],
             "react-router-dom": ["node_modules/react-router-dom"],
             "@tanstack/react-query": ["node_modules/@tanstack/react-query"],
             "@tanstack/react-virtual": ["node_modules/@tanstack/react-virtual"],

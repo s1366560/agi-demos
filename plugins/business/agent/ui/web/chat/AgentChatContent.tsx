@@ -182,7 +182,7 @@ function resolveCurrentWorkspaceTaskId(
 }
 
 const CanvasPanel = lazy(() =>
-  import('@/components/agent/canvas/CanvasPanel').then((module) => ({ default: module.CanvasPanel }))
+  import('@business/agent/ui/web/canvas/CanvasPanel').then((module) => ({ default: module.CanvasPanel }))
 );
 const RightPanel = lazy(() =>
   import('@/components/agent/RightPanel').then((module) => ({ default: module.RightPanel }))

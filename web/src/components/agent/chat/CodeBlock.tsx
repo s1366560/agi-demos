@@ -2,7 +2,7 @@ import { memo, type ReactNode } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { CodeBlock as PackageCodeBlock } from '@business/agent/ui/web/chat/CodeBlock';
-import { useSyntaxHighlighter } from '../canvas/useSyntaxHighlighter';
+import { useSyntaxHighlighter } from '@business/agent/ui/web/canvas/useSyntaxHighlighter';
 import { MermaidBlock } from './MermaidBlock';
 
 function openInCanvas(text: string, language?: string) {

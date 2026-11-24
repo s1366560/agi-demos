@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CanvasPanel } from '@/components/agent/canvas/CanvasPanel';
+import { CanvasPanel } from '@business/agent/ui/web/canvas/CanvasPanel';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 
@@ -18,7 +18,7 @@ vi.mock('@/components/agent/canvas/A2UISurfaceRenderer', () => ({
   A2UISurfaceRenderer: () => null,
 }));
 
-vi.mock('@/components/agent/canvas/useSyntaxHighlighter', () => ({
+vi.mock('@business/agent/ui/web/canvas/useSyntaxHighlighter', () => ({
   useSyntaxHighlighter: () => null,
 }));
 

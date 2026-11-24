@@ -4,7 +4,7 @@ import {
   buildArtifactFileTree,
   buildSandboxFileTree,
   parseSandboxGlobPaths,
-} from '@/components/agent/canvas/canvasFileTreeModel';
+} from '@business/agent/ui/web/canvas/canvasFileTreeModel';
 
 import type { Artifact } from '@/types/agent';
 
