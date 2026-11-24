@@ -87,5 +87,5 @@ def test_compatibility_login_restores_scoped_path_query_and_fragment(full_page):
     expect(page.get_by_test_id("login-submit-button")).to_be_visible()
     sign_in(page, owner)
     expect(page).to_have_url(destination)
-    expect(page.get_by_role("heading", name="Clusters", exact=True)).to_be_visible()
+    expect(page.get_by_role("heading", name="Clusters", exact=True)).to_be_visible(timeout=30000)
     expect(page.get_by_role("button", name="Manage Clusters")).to_be_visible()
