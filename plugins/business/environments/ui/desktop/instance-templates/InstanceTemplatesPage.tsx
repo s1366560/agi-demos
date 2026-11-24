@@ -1,3 +1,4 @@
+import { instanceTemplatesEnUS, instanceTemplatesZhCN } from './locales/instanceTemplatesMessages';
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 
 import { useI18n } from '@desktop/i18n';
@@ -32,7 +33,7 @@ export function InstanceTemplatesPage({
   onPublish(templateId: string): Promise<void>;
   onClone(templateId: string, newName: string): Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(instanceTemplatesEnUS, instanceTemplatesZhCN);
   const [createOpen, setCreateOpen] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const loading = model.state === 'loading';
@@ -210,7 +211,7 @@ function TemplateFilters({
   disabled: boolean;
   onChange(query: InstanceTemplatesQuery): void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(instanceTemplatesEnUS, instanceTemplatesZhCN);
   return (
     <div className="instance-templates-filters">
       <label>
@@ -263,7 +264,7 @@ function TemplateTable({
   onClone(templateId: string, newName: string): Promise<void>;
   onError(reasonCode: string): void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(instanceTemplatesEnUS, instanceTemplatesZhCN);
   return (
     <div className="instance-templates-table-scroll">
       <table>
@@ -364,7 +365,7 @@ function DeleteControl({
   onDelete(templateId: string): Promise<void>;
   onError(reasonCode: string): void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(instanceTemplatesEnUS, instanceTemplatesZhCN);
   const [confirming, setConfirming] = useState(false);
   if (!confirming) {
     return (
@@ -411,7 +412,7 @@ function CreateTemplateDialog({
   onClose(): void;
   onCreate(input: InstanceTemplateCreateInput): Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(instanceTemplatesEnUS, instanceTemplatesZhCN);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [defaultConfig, setDefaultConfig] = useState('{}');
@@ -501,7 +502,7 @@ function TemplateDetailDialog({
   onClone(templateId: string, newName: string): Promise<void>;
   onError(reasonCode: string): void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(instanceTemplatesEnUS, instanceTemplatesZhCN);
   const template = model.selectedTemplate;
   return (
     <div className="instance-templates-dialog-backdrop">
@@ -612,7 +613,7 @@ function StateNotice({
   model,
   onRetry,
 }: Readonly<{ model: InstanceTemplatesModel; onRetry(): void }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(instanceTemplatesEnUS, instanceTemplatesZhCN);
   return (
     <div className="instance-templates-empty">
       <h3>{t(`instanceTemplates.state.${model.state}`)}</h3>

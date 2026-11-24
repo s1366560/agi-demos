@@ -1,3 +1,4 @@
+import { cloudMemoriesEnUS, cloudMemoriesZhCN } from './locales/cloudMemoriesMessages';
 import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import { useI18n } from '@desktop/i18n';
 import { useCloudMemoryRouteBinding } from '@desktop/features/project-knowledge/CloudMemoryRouteContext';
@@ -13,7 +14,7 @@ export function ProjectGraphMemoryPreview({
   contextRevision: number | null;
   memoryId: string;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(cloudMemoriesEnUS, cloudMemoriesZhCN);
   const binding = useCloudMemoryRouteBinding();
   const reader = useMemo(
     () => createProjectGraphMemoryReader({ binding, scope, contextRevision, memoryId }),

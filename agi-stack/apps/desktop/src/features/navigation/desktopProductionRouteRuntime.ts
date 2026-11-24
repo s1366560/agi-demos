@@ -15,10 +15,6 @@ import {
   type DesktopRuntimePoolOperationsV2,
 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import {
-  createDesktopRuntimeClustersClientV2,
-  type DesktopRuntimeClustersOperationsV2,
-} from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
-import {
   createDesktopRuntimeInstancesClientV2,
   type DesktopRuntimeInstancesOperationsV2,
 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
@@ -40,8 +36,6 @@ import type { RuntimePoolRouteBinding } from '@business/environments/ui/desktop/
 import { createRuntimePoolController } from '@business/environments/ui/desktop/runtime-pool/runtimePoolController';
 import type { RuntimeInstancesRouteBinding } from '@business/environments/ui/desktop/runtime-instances/runtimeInstancesRouteModule';
 import { createRuntimeInstancesController } from '@business/environments/ui/desktop/runtime-instances/runtimeInstancesController';
-import type { RuntimeClustersRouteBinding } from '@business/environments/ui/desktop/runtime-clusters/runtimeClustersRouteModule';
-import { createRuntimeClustersController } from '@business/environments/ui/desktop/runtime-clusters/runtimeClustersController';
 import type { RuntimeDeploymentsRouteBinding } from '@business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsRouteModule';
 import { createRuntimeDeploymentsController } from '@business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsController';
 import type { InstanceTemplatesRouteBinding } from '@business/environments/ui/desktop/instance-templates/instanceTemplatesRouteModule';
@@ -506,30 +500,6 @@ export function createRuntimeInstancesRouteBindingForRuntime(
   });
 }
 
-export function createRuntimeClustersRouteBindingForRuntime(
-  config: DesktopRuntimeConfig,
-  context: Readonly<{ tenantId: string }>,
-  runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2,
-): RuntimeClustersRouteBinding {
-  if (config.tenantId !== context.tenantId) {
-    throw new Error('runtime_clusters_runtime_scope_mismatch');
-  }
-  requireRuntimeClustersOperationsV2(runtimeClustersOperationsV2);
-  const scope = Object.freeze({
-    authority: config.mode,
-    tenantId: context.tenantId,
-  });
-  const client = createDesktopRuntimeClustersClientV2(runtimeClustersOperationsV2, config);
-  return Object.freeze({
-    controller: createRuntimeClustersController({
-      authority: config.mode,
-      client,
-      initialScope: scope,
-    }),
-    scope,
-  });
-}
-
 export function createRuntimeDeploymentsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string; instanceId?: string }>,
@@ -616,18 +586,6 @@ function requireRuntimePoolOperationsV2(operations: DesktopRuntimePoolOperations
     typeof operations.probeRuntimePool !== 'function'
   ) {
     throw new Error('desktop_runtime_pool_authority_required');
-  }
-}
-
-function requireRuntimeClustersOperationsV2(
-  operations: DesktopRuntimeClustersOperationsV2,
-): void {
-  if (
-    typeof operations?.listRuntimeClusters !== 'function' ||
-    typeof operations.getRuntimeClusterHealth !== 'function' ||
-    typeof operations.probeRuntimeClusters !== 'function'
-  ) {
-    throw new Error('desktop_runtime_clusters_authority_required');
   }
 }
 

@@ -1,3 +1,5 @@
+import { cloudMemoriesEnUS, cloudMemoriesZhCN } from '@business/knowledge/ui/desktop/project-knowledge/locales/cloudMemoriesMessages';
+import { I18nContext, useI18n } from '../../i18nContext';
 import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import type { DesktopRouteSurfaceProps } from '../navigation/desktopRouteModule';
 import {
@@ -9,6 +11,11 @@ import { CloudMemoriesPage, CloudMemoriesUnavailable } from '@business/knowledge
 import './CloudMemoriesPage.css';
 
 export function CloudMemoryRouteSurface({ context }: DesktopRouteSurfaceProps) {
+  const messages = useI18n(cloudMemoriesEnUS, cloudMemoriesZhCN);
+  return <I18nContext.Provider value={messages}><ScopedCloudMemories context={context} /></I18nContext.Provider>;
+}
+
+function ScopedCloudMemories({ context }: Pick<DesktopRouteSurfaceProps, 'context'>) {
   const binding = useCloudMemoryRouteBinding();
   if (
     !binding ||

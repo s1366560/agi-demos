@@ -1,3 +1,4 @@
+import { runtimeClustersEnUS, runtimeClustersZhCN } from './locales/runtimeClustersMessages';
 import type { ChangeEvent } from 'react';
 
 import { useI18n } from '@desktop/i18n';
@@ -25,7 +26,7 @@ export function RuntimeClustersPage({
   onOpenDetails?: ((id: string) => void) | undefined;
   onCloseHealth(): void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeClustersEnUS, runtimeClustersZhCN);
   const loading = model.state === 'loading';
   const pageCount = Math.max(1, Math.ceil(model.total / model.query.pageSize));
   const updateSearch = (event: ChangeEvent<HTMLInputElement>) => {
@@ -188,7 +189,7 @@ function ClusterTable({
   onInspectHealth(clusterId: string): Promise<void>;
   onOpenDetails?: ((id: string) => void) | undefined;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeClustersEnUS, runtimeClustersZhCN);
   return (
     <div className="runtime-clusters-table-scroll">
       <table>
@@ -238,7 +239,7 @@ function HealthDialog({
   model,
   onClose,
 }: Readonly<{ model: RuntimeClustersModel; onClose(): void }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeClustersEnUS, runtimeClustersZhCN);
   return (
     <div className="runtime-clusters-dialog-backdrop">
       <aside role="dialog" aria-modal="true" aria-labelledby="cluster-health-title">
@@ -300,7 +301,7 @@ function StateNotice({
   model,
   onRetry,
 }: Readonly<{ model: RuntimeClustersModel; onRetry(): void }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeClustersEnUS, runtimeClustersZhCN);
   return (
     <div className="runtime-clusters-empty">
       <h3>{t(`runtimeClusters.state.${model.state}`)}</h3>

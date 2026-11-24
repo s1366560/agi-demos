@@ -12,6 +12,7 @@
     ]
   },
   "include": [
+    "../../../plugins/business/environments/ui/desktop/runtime-clusters/runtimeClustersRouteModule.tsx",
     "../../../plugins/business/billing/ui/desktop/tenant-admin/tenantBillingController.ts",
     "../../../plugins/business/billing/ui/desktop/tenant-admin/tenantBillingRouteModule.tsx",
     "src/features/workspace/WorkspaceDiscussionReplies.tsx",

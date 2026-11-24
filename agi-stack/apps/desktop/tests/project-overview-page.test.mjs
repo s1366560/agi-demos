@@ -42,10 +42,6 @@ const globalStylesheet = readFileSync(
   new URL('../src/styles/tokens.css', import.meta.url),
   'utf8',
 );
-const i18nSource = readFileSync(
-  new URL('../src/i18n.tsx', import.meta.url),
-  'utf8',
-);
 const messagesSource = readFileSync(
   new URL(
     '../../../../plugins/business/workspace/ui/desktop/project/locales/projectOverviewMessages.ts',
@@ -215,6 +211,18 @@ test('Cloud presentation exposes project, stats, and latest memories', () => {
   assert.match(markup, /Storage/);
   assert.match(markup, /Graph nodes/);
   assert.match(markup, /Collaborators/);
+});
+
+test('original project overview resolves Chinese page messages inside a shell-only context', () => {
+  const { I18nContext } = require('/tmp/agistack-desktop-test-dist/src/i18nContext.js');
+  const model = buildProjectOverviewPresentation({ kind: 'cloud-ready', snapshot: cloudSnapshot });
+  const html = renderToStaticMarkup(
+    React.createElement(I18nContext.Provider, {
+      value: { locale: 'zh-CN', t: key => key, setLocale: () => {} },
+    }, React.createElement(ProjectOverviewPage, { model, onRetry: () => {} })),
+  );
+  assert.match(html, /最新记忆/);
+  assert.match(html, /云端权威/);
 });
 
 test('Cloud ready state keeps an explicit empty latest-memory collection', () => {
@@ -406,7 +414,6 @@ test('error retry is an explicit user action', () => {
 });
 
 test('page uses Desktop tokens, responsive layout, reduced motion, and bilingual i18n', () => {
-  assert.match(pageSource, /useI18n\(\)/);
   assert.doesNotMatch(pageSource, /antd|@\/pages|web\/src/);
   assert.match(stylesheet, /var\(--desktop-surface-3\)/);
   assert.match(stylesheet, /var\(--desktop-border\)/);
@@ -421,9 +428,6 @@ test('page uses Desktop tokens, responsive layout, reduced motion, and bilingual
   for (const token of referencedTokens) {
     assert.match(globalStylesheet, new RegExp(`${token}\\s*:`));
   }
-  assert.match(i18nSource, /import \{[\s\S]*projectOverviewEnUS,[\s\S]*projectOverviewZhCN/);
-  assert.match(i18nSource, /\.\.\.projectOverviewEnUS/);
-  assert.match(i18nSource, /\.\.\.projectOverviewZhCN/);
 
   for (const key of [
     'projectOverview.loading.title',

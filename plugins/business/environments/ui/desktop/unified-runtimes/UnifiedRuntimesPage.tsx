@@ -1,3 +1,4 @@
+import { unifiedRuntimesEnUS, unifiedRuntimesZhCN } from './locales/unifiedRuntimesMessages';
 import { useMemo, useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
@@ -15,7 +16,7 @@ export function UnifiedRuntimesPage({
   autoRefresh: boolean;
   onAutoRefreshChange: (enabled: boolean) => void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(unifiedRuntimesEnUS, unifiedRuntimesZhCN);
   const [search, setSearch] = useState('');
   const query = search.trim().toLocaleLowerCase();
   const rows = useMemo(
@@ -231,7 +232,7 @@ function AuthorityCard({
   state: UnifiedRuntimesModel['poolState'];
   reasonCode: string | null;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(unifiedRuntimesEnUS, unifiedRuntimesZhCN);
   return (
     <article data-state={state}>
       <span>{label}</span>

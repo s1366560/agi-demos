@@ -1,4 +1,3 @@
-import { searchEn, searchZh } from '@business/agent/ui/desktop/chat/searchMessages';
 import { audioSessionEnUS, audioSessionZhCN } from './features/settings/audioSessionMessages';
 import { timelineStepDetailsEnUS, timelineStepDetailsZhCN } from './features/session/timelineStepDetailsMessages';
 import { browserAuthEnUS, browserAuthZhCN } from './features/chat/browserAuthMessages';
@@ -16,17 +15,9 @@ import {
   I18nContext,
   type DesktopLocale,
   type I18nContextValue,
-  type TranslationValues,
+  interpolate,
 } from './i18nContext';
 
-import {
-  projectOverviewEnUS,
-  projectOverviewZhCN,
-} from '@business/workspace/ui/desktop/project/locales/projectOverviewMessages';
-import {
-  projectSupportEnUS,
-  projectSupportZhCN,
-} from '@business/workspace/ui/desktop/project-support/locales/projectSupportMessages';
 import {
   deadLetterQueueEnUS,
   deadLetterQueueZhCN,
@@ -43,30 +34,6 @@ import {
   invitationAcceptanceEnUS,
   invitationAcceptanceZhCN,
 } from './features/invitation-acceptance/locales/invitationAcceptanceMessages';
-import {
-  instanceTemplatesEnUS,
-  instanceTemplatesZhCN,
-} from '@business/environments/ui/desktop/instance-templates/locales/instanceTemplatesMessages';
-import {
-  runtimePoolEnUS,
-  runtimePoolZhCN,
-} from '@business/environments/ui/desktop/runtime-pool/locales/runtimePoolMessages';
-import {
-  runtimeInstancesEnUS,
-  runtimeInstancesZhCN,
-} from '@business/environments/ui/desktop/runtime-instances/locales/runtimeInstancesMessages';
-import {
-  runtimeClustersEnUS,
-  runtimeClustersZhCN,
-} from '@business/environments/ui/desktop/runtime-clusters/locales/runtimeClustersMessages';
-import {
-  runtimeDeploymentsEnUS,
-  runtimeDeploymentsZhCN,
-} from '@business/environments/ui/desktop/runtime-deployments/locales/runtimeDeploymentsMessages';
-import {
-  unifiedRuntimesEnUS,
-  unifiedRuntimesZhCN,
-} from '@business/environments/ui/desktop/unified-runtimes/locales/unifiedRuntimesMessages';
 import {
   nativeUnavailableRouteEnUS,
   nativeUnavailableRouteZhCN,
@@ -101,17 +68,9 @@ import {
 } from './features/tenant/locales/tenantProjectsMessages';
 import { tenantTasksEnUS, tenantTasksZhCN } from './features/tenant/locales/tenantTasksMessages';
 import {
-  tenantWorkspacesEnUS,
-  tenantWorkspacesZhCN,
-} from './features/tenant/locales/tenantWorkspacesMessages';
-import {
   nativeMemoriesEnUS,
   nativeMemoriesZhCN,
 } from './features/project-knowledge/locales/nativeMemoriesMessages';
-import {
-  cloudMemoriesEnUS,
-  cloudMemoriesZhCN,
-} from './features/project-knowledge/locales/cloudMemoriesMessages';
 
 import {
   nativeKnowledgeCloudConnectionEnUS,
@@ -132,30 +91,22 @@ const enUS: Record<string, string> = {
   ...nativeKnowledgeCommunityEnUS,
   ...nativeKnowledgeGraphEnUS,
   ...nativeKnowledgeCloudConnectionEnUS,
-  ...cloudMemoriesEnUS,
   ...projectGraphEnUS,
   ...deadLetterQueueEnUS,
   ...deviceApprovalEnUS,
   ...tenantCreationEnUS,
   ...invitationAcceptanceEnUS,
   ...desktopProductionRouterEnUS,
-  ...instanceTemplatesEnUS,
   ...nativeUnavailableRouteEnUS,
-  ...projectOverviewEnUS,
-  ...projectSupportEnUS,
-  ...runtimeClustersEnUS,
-  ...runtimeDeploymentsEnUS,
-  ...runtimeInstancesEnUS,
-  ...runtimePoolEnUS,
   ...tenantAdminEnUS,
-  ...unifiedRuntimesEnUS,
   ...tenantAnalyticsEnUS,
   ...tenantAgentDashboardEnUS,
   ...tenantAgentBindingsEnUS,
   ...tenantOverviewEnUS,
   ...tenantProjectsEnUS,
   ...tenantTasksEnUS,
-  ...tenantWorkspacesEnUS,
+  'projectSupport.title': 'Project Support',
+  'projectSupport.subtitle': 'Create and track support tickets owned by your account in this tenant.',
   'common.close': 'Close',
   'common.cancel': 'Cancel',
   'common.delete': 'Delete',
@@ -3602,7 +3553,6 @@ const enUS: Record<string, string> = {
   'chat.modelNotConfigured': 'No model configured',
   'chat.resetModelOverride': 'Reset',
   'chat.searchModels': 'Search models',
-  ...searchEn,
   'chat.noModelsFound': 'No matching models',
   'chat.switchingModel': 'Switching model…',
   'chat.selectedModelUnavailable': 'The selected model is no longer available in this workspace.',
@@ -4676,22 +4626,13 @@ const zhCN: Record<string, string> = {
   ...nativeKnowledgeCommunityZhCN,
   ...nativeKnowledgeGraphZhCN,
   ...nativeKnowledgeCloudConnectionZhCN,
-  ...cloudMemoriesZhCN,
   ...projectGraphZhCN,
   ...tenantCreationZhCN,
   ...invitationAcceptanceZhCN,
   ...deadLetterQueueZhCN,
   ...deviceApprovalZhCN,
   ...desktopProductionRouterZhCN,
-  ...instanceTemplatesZhCN,
   ...nativeUnavailableRouteZhCN,
-  ...projectOverviewZhCN,
-  ...projectSupportZhCN,
-  ...runtimeClustersZhCN,
-  ...runtimeDeploymentsZhCN,
-  ...runtimeInstancesZhCN,
-  ...runtimePoolZhCN,
-  ...unifiedRuntimesZhCN,
   ...tenantAnalyticsZhCN,
   ...tenantAgentDashboardZhCN,
   ...tenantAgentBindingsZhCN,
@@ -4699,7 +4640,8 @@ const zhCN: Record<string, string> = {
   ...tenantAdminZhCN,
   ...tenantProjectsZhCN,
   ...tenantTasksZhCN,
-  ...tenantWorkspacesZhCN,
+  'projectSupport.title': '项目支持',
+  'projectSupport.subtitle': '创建并跟踪当前账号在此租户下持有的支持工单。',
   'common.close': '关闭',
   'common.cancel': '取消',
   'common.delete': '删除',
@@ -7869,7 +7811,6 @@ const zhCN: Record<string, string> = {
   'chat.modelNotConfigured': '未配置模型',
   'chat.resetModelOverride': '重置',
   'chat.searchModels': '搜索模型',
-  ...searchZh,
   'chat.noModelsFound': '没有匹配的模型',
   'chat.switchingModel': '正在切换模型…',
   'chat.selectedModelUnavailable': '所选模型已无法在此工作空间中使用。',
@@ -8922,11 +8863,3 @@ function readStoredLocale(): string | null {
 }
 
 export { useI18n } from './i18nContext';
-
-function interpolate(value: string, values?: TranslationValues): string {
-  if (!values) return value;
-  return Object.entries(values).reduce(
-    (result, [key, replacement]) => result.replaceAll(`{${key}}`, String(replacement)),
-    value,
-  );
-}

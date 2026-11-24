@@ -91,7 +91,6 @@ import {
 import {
   createDeadLetterQueueRouteBindingForRuntime,
   createProjectOverviewRouteBindingForRuntime,
-  createRuntimeClustersRouteBindingForRuntime,
   createRuntimeDeploymentsRouteBindingForRuntime,
   createInstanceTemplatesRouteBindingForRuntime,
   createRuntimeInstancesRouteBindingForRuntime,
@@ -141,7 +140,6 @@ import { createProjectSupportRouteModuleLoader } from '@business/workspace/ui/de
 import { createProjectSupportController } from '@business/workspace/ui/desktop/project-support/projectSupportController';
 import { createDeadLetterQueueRouteModuleLoader } from '@business/automation/ui/desktop/governance/deadLetterQueueRouteModule';
 import { createInstanceTemplatesRouteModuleLoader } from '@business/environments/ui/desktop/instance-templates/instanceTemplatesRouteModule';
-import { createRuntimeClustersRouteModuleLoader } from '@business/environments/ui/desktop/runtime-clusters/runtimeClustersRouteModule';
 import { createRuntimeDeploymentsRouteModuleLoader } from '@business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsRouteModule';
 import { createRuntimeInstancesRouteModuleLoader } from '@business/environments/ui/desktop/runtime-instances/runtimeInstancesRouteModule';
 import { createRuntimePoolRouteModuleLoader } from '@business/environments/ui/desktop/runtime-pool/runtimePoolRouteModule';
@@ -272,7 +270,6 @@ import {
   type DesktopProjectBlackboardOperationsV2,
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
-import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
 import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
 import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
@@ -350,7 +347,6 @@ export type AppRouteRegistryRefs = {
   projectSupportOperationsV2: DesktopProjectSupportOperationsV2;
   backendStoresOperationsV2: DesktopBackendStoresOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
-  runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
   runtimeInstancesOperationsV2: DesktopRuntimeInstancesOperationsV2;
   runtimeDeploymentsOperationsV2: DesktopRuntimeDeploymentsOperationsV2;
   deadLetterQueueOperationsV2: DesktopDeadLetterQueueOperationsV2;
@@ -415,7 +411,6 @@ export type AppProjectAdministrationRouteRegistryRefs = Pick<
 export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   | 'configRef'
-  | 'runtimeClustersOperationsV2'
   | 'runtimeInstancesOperationsV2'
   | 'runtimeDeploymentsOperationsV2'
   | 'runtimePoolOperationsV2'
@@ -985,7 +980,6 @@ export function createAppRuntimeInfrastructureRouteRegistry(
 ) {
   const {
     configRef,
-    runtimeClustersOperationsV2,
     runtimeInstancesOperationsV2,
     runtimeDeploymentsOperationsV2,
     runtimePoolOperationsV2,
@@ -1011,14 +1005,7 @@ export function createAppRuntimeInfrastructureRouteRegistry(
             runtimeInstancesOperationsV2,
           ),
       }),
-      [TENANT_CLUSTERS_ROUTE_ID]: createRuntimeClustersRouteModuleLoader({
-        createBinding: (context) =>
-          createRuntimeClustersRouteBindingForRuntime(
-            configRef.current,
-            context,
-            runtimeClustersOperationsV2,
-          ),
-      }),
+      [TENANT_CLUSTERS_ROUTE_ID]: packageRoute(TENANT_CLUSTERS_ROUTE_ID, 'clusters', 'tenant'),
       [TENANT_DEPLOY_ROUTE_ID]: createRuntimeDeploymentsRouteModuleLoader({
         createBinding: (context) =>
           createRuntimeDeploymentsRouteBindingForRuntime(

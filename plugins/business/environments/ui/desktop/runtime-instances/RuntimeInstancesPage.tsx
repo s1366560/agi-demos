@@ -1,3 +1,4 @@
+import { runtimeInstancesEnUS, runtimeInstancesZhCN } from './locales/runtimeInstancesMessages';
 import type { ChangeEvent } from 'react';
 
 import { useI18n } from '@desktop/i18n';
@@ -21,7 +22,7 @@ export function RuntimeInstancesPage({
   onRestart(instanceId: string): Promise<void>;
   onDelete(instanceId: string): Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeInstancesEnUS, runtimeInstancesZhCN);
   const loading = model.state === 'loading';
   const canRestart = model.allowedActions.includes('restart');
   const canDelete = model.allowedActions.includes('delete');
@@ -213,7 +214,7 @@ function InstanceRow({
   onRestart(instanceId: string): Promise<void>;
   onDelete(instanceId: string): Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeInstancesEnUS, runtimeInstancesZhCN);
   return (
     <tr>
       <td>
@@ -288,7 +289,7 @@ function StateNotice({
   model,
   onRetry,
 }: Readonly<{ model: RuntimeInstancesModel; onRetry(): void }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeInstancesEnUS, runtimeInstancesZhCN);
   return (
     <div className="runtime-instances-empty">
       <h3>{t(`runtimeInstances.state.${model.state}`)}</h3>

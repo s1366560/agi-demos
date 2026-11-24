@@ -1,3 +1,4 @@
+import { projectSupportEnUS, projectSupportZhCN } from './locales/projectSupportMessages';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -30,7 +31,7 @@ export function ProjectSupportPage({
   controller: ProjectSupportController;
   onRetry: () => void;
 }>) {
-  const { locale, t } = useI18n();
+  const { locale, t } = useI18n(projectSupportEnUS, projectSupportZhCN);
   const [editorOpen, setEditorOpen] = useState(false);
   const createTriggerRef = useRef<HTMLButtonElement>(null);
   const closeEditor = () => {
@@ -211,7 +212,7 @@ function ProjectSupportEditor({
   onCancel: () => void;
   onSubmit: (input: ProjectSupportCreateInput) => Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectSupportEnUS, projectSupportZhCN);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [priority, setPriority] = useState<ProjectSupportPriority>('medium');
@@ -291,7 +292,7 @@ function ProjectSupportState({
   model: ProjectSupportViewModel;
   onRetry: () => void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectSupportEnUS, projectSupportZhCN);
   return (
     <section
       className="project-support-page project-support-state"

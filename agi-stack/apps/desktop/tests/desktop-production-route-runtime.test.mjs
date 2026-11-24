@@ -3,7 +3,6 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
-import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
 import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
 import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
@@ -12,7 +11,6 @@ const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
   createInstanceTemplatesRouteBindingForRuntime,
-  createRuntimeClustersRouteBindingForRuntime,
   createRuntimeDeploymentsRouteBindingForRuntime,
   createRuntimeInstancesRouteBindingForRuntime,
   createRuntimePoolRouteBindingForRuntime,
@@ -410,53 +408,6 @@ test('Runtime Instances binding rejects tenant scope drift before client authori
         tenantId: 'tenant-other',
       }),
     /runtime_instances_runtime_scope_mismatch/u,
-  );
-});
-
-test('Runtime Clusters binding preserves Cloud and Local tenant authority', async () => {
-  const cloud = createRuntimeClustersRouteBindingForRuntime(
-    runtimeConfig('cloud'),
-    { tenantId },
-    runtimeClustersOperationsV2Fixture(),
-  );
-  assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
-  assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
-
-  const local = createRuntimeClustersRouteBindingForRuntime(
-    runtimeConfig('local'),
-    { tenantId },
-    runtimeClustersOperationsV2Fixture(),
-  );
-  assert.deepEqual(local.scope, { authority: 'local', tenantId });
-  await local.controller.load(local.scope);
-  assert.equal(local.controller.getSnapshot().state, 'unavailable');
-  assert.equal(
-    local.controller.getSnapshot().reasonCode,
-    'cloud_cluster_control_not_applicable',
-  );
-});
-
-test('Runtime Clusters binding rejects tenant scope drift before client authority', () => {
-  assert.throws(
-    () =>
-      createRuntimeClustersRouteBindingForRuntime(
-        runtimeConfig('cloud'),
-        { tenantId: 'tenant-other' },
-        runtimeClustersOperationsV2Fixture(),
-      ),
-    /runtime_clusters_runtime_scope_mismatch/u,
-  );
-});
-
-test('Runtime Clusters binding requires the complete V2 operations facade', () => {
-  assert.throws(
-    () =>
-      createRuntimeClustersRouteBindingForRuntime(
-        runtimeConfig('cloud'),
-        { tenantId },
-        {},
-      ),
-    /desktop_runtime_clusters_authority_required/u,
   );
 });
 

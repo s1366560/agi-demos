@@ -1,3 +1,4 @@
+import { tenantWorkspacesEnUS, tenantWorkspacesZhCN } from '../tenant/tenantWorkspacesMessages';
 import { Button } from '@radix-ui/themes';
 
 import { useI18n } from '@desktop/i18n';
@@ -11,7 +12,7 @@ export function ProjectBlackboardPage({
   model: ProjectBlackboardViewModel;
   onRetry: () => void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(tenantWorkspacesEnUS, tenantWorkspacesZhCN);
   if (
     (model.state === 'ready' || model.state === 'degraded') &&
     model.collaborationClient !== null

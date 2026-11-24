@@ -1,3 +1,4 @@
+import { projectOverviewEnUS, projectOverviewZhCN } from './locales/projectOverviewMessages';
 import {
   BarChartIcon,
   ClockIcon,
@@ -24,7 +25,7 @@ type ProjectOverviewPageProps = Readonly<{
 }>;
 
 export function ProjectOverviewPage({ model, onRetry }: ProjectOverviewPageProps) {
-  const { locale, t } = useI18n();
+  const { locale, t } = useI18n(projectOverviewEnUS, projectOverviewZhCN);
 
   if (model.state !== 'ready' && model.state !== 'degraded') {
     return <ProjectOverviewState model={model} onRetry={onRetry} />;
@@ -99,7 +100,7 @@ function ProjectOverviewState({
   model,
   onRetry,
 }: Pick<ProjectOverviewPageProps, 'model' | 'onRetry'>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectOverviewEnUS, projectOverviewZhCN);
   const copy = stateCopy(model.state);
   const busy = model.state === 'loading' || model.state === 'scope_switch';
   const alert =
@@ -141,7 +142,7 @@ function ProjectOverviewState({
 }
 
 function AuthorityBadge({ authority }: Pick<ProjectOverviewPresentationModel, 'authority'>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectOverviewEnUS, projectOverviewZhCN);
   return (
     <span className="project-overview-authority" data-authority={authority}>
       {authority === 'cloud'
@@ -158,7 +159,7 @@ function SummaryField({
   field: ProjectOverviewSummaryField;
   locale: string;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectOverviewEnUS, projectOverviewZhCN);
   const available = field.availability === 'available' && field.value !== null;
 
   return (
@@ -190,7 +191,7 @@ function RecentItems({
   model: ProjectOverviewPresentationModel;
   locale: string;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectOverviewEnUS, projectOverviewZhCN);
   const local = model.recent.kind === 'knowledge_items';
   const titleKey = local
     ? 'projectOverview.local.recentKnowledgeItems'
@@ -263,7 +264,7 @@ function RecentItem({
   kind: ProjectOverviewPresentationModel['recent']['kind'];
   locale: string;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectOverviewEnUS, projectOverviewZhCN);
   return (
     <article className="project-overview-recent-item">
       <div className="project-overview-recent-item-copy">
@@ -297,7 +298,7 @@ function RecentItem({
 }
 
 function ReasonCode({ reasonCode }: Readonly<{ reasonCode: string | null }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectOverviewEnUS, projectOverviewZhCN);
   if (!reasonCode) return null;
   return (
     <span className="project-overview-reason">

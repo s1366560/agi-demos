@@ -1,3 +1,4 @@
+import { runtimePoolEnUS, runtimePoolZhCN } from './locales/runtimePoolMessages';
 import { useMemo, useState } from 'react';
 
 import { useI18n } from '@desktop/i18n';
@@ -39,7 +40,7 @@ export function RuntimePoolPage({
   autoRefresh: boolean;
   onAutoRefreshChange: (enabled: boolean) => void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimePoolEnUS, runtimePoolZhCN);
   const [search, setSearch] = useState('');
   const [pendingTerminate, setPendingTerminate] =
     useState<RuntimePoolInstance | null>(null);
@@ -314,7 +315,7 @@ function InstanceTable({
   controller: RuntimePoolController;
   onTerminate: (instance: RuntimePoolInstance) => void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimePoolEnUS, runtimePoolZhCN);
   return (
     <div className="runtime-pool-table-scroll">
       <table>
@@ -431,7 +432,7 @@ function ResourceNotice({
   reasonCode: string | null;
   onRetry: () => void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimePoolEnUS, runtimePoolZhCN);
   if (state === 'ready' || state === 'empty') return null;
   return (
     <div

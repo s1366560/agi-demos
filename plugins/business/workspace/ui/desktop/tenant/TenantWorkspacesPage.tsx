@@ -1,3 +1,4 @@
+import { tenantWorkspacesEnUS, tenantWorkspacesZhCN } from './tenantWorkspacesMessages';
 import {
   ExclamationTriangleIcon,
   MagnifyingGlassIcon,
@@ -24,7 +25,7 @@ export function TenantWorkspacesPage({
   controller: TenantWorkspacesController;
   onRetry: () => void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(tenantWorkspacesEnUS, tenantWorkspacesZhCN);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const createTriggerRef = useRef<HTMLButtonElement>(null);
@@ -127,7 +128,7 @@ function WorkspaceCreateDialog({
   onCancel: () => void;
   onSubmit: (input: TenantWorkspaceCreateInput) => Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(tenantWorkspacesEnUS, tenantWorkspacesZhCN);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   return (
@@ -188,7 +189,7 @@ function TenantWorkspacesState({
   model: TenantWorkspacesViewModel;
   onRetry: () => void;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(tenantWorkspacesEnUS, tenantWorkspacesZhCN);
   return (
     <section className="tenant-workspaces-state" data-state={model.state}>
       <h1>{t(`tenantWorkspaces.state.${model.state}.title`)}</h1>

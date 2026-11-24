@@ -1,3 +1,4 @@
+import { tenantWorkspacesEnUS, tenantWorkspacesZhCN } from '../tenant/tenantWorkspacesMessages';
 import { PlusIcon, ReloadIcon } from '@radix-ui/react-icons';
 import { Button, TextArea, TextField } from '@radix-ui/themes';
 import { useState } from 'react';
@@ -21,7 +22,7 @@ export function ProjectWorkspacesPage({
   onOpenBlackboard: (workspaceId: string) => void;
   extraActions?: React.ReactNode;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(tenantWorkspacesEnUS, tenantWorkspacesZhCN);
   const [createOpen, setCreateOpen] = useState(false);
   if (!['ready', 'degraded', 'empty'].includes(model.state)) {
     return (
@@ -95,7 +96,7 @@ function ProjectWorkspaceCreateDialog({
   onCancel: () => void;
   onSubmit: (input: ProjectWorkspaceCreateInput) => Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(tenantWorkspacesEnUS, tenantWorkspacesZhCN);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   return (

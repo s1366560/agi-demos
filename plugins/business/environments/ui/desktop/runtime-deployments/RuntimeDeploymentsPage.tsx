@@ -1,3 +1,4 @@
+import { runtimeDeploymentsEnUS, runtimeDeploymentsZhCN } from './locales/runtimeDeploymentsMessages';
 import { useI18n } from '@desktop/i18n';
 import type {
   RuntimeDeployment,
@@ -21,7 +22,7 @@ export function RuntimeDeploymentsPage({
   onCloseDetail(): void;
   onReconnectProgress(): Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeDeploymentsEnUS, runtimeDeploymentsZhCN);
   const pageCount = Math.max(
     1,
     Math.ceil(model.total / model.query.pageSize),
@@ -193,7 +194,7 @@ function DeploymentRow({
   deployment: RuntimeDeployment;
   onInspect(deploymentId: string): Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeDeploymentsEnUS, runtimeDeploymentsZhCN);
   return (
     <tr>
       <td>
@@ -234,7 +235,7 @@ function DeploymentDetail({
   onClose(): void;
   onReconnect(): Promise<void>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeDeploymentsEnUS, runtimeDeploymentsZhCN);
   return (
     <section
       className="runtime-deployments__detail"
@@ -314,7 +315,7 @@ function ResourceState({
   model,
   onRetry,
 }: Readonly<{ model: RuntimeDeploymentsModel; onRetry(): void }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(runtimeDeploymentsEnUS, runtimeDeploymentsZhCN);
   return (
     <section className="runtime-deployments__resource" role="status">
       <h3>{t(`runtimeDeployments.state.${model.state}`)}</h3>

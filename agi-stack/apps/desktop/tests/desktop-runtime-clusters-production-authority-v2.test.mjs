@@ -1,16 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-const routeRegistrySource = readFileSync(
-  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
-  'utf8',
-);
-const routeRuntimeSource = readFileSync(
-  new URL('../src/features/navigation/desktopProductionRouteRuntime.ts', import.meta.url),
-  'utf8',
-);
 const workbenchSource = readFileSync(
   new URL('../src/features/runtime/workbenchCapabilityClient.ts', import.meta.url),
   'utf8',
@@ -24,22 +17,20 @@ const projectionSource = readFileSync(
   'utf8',
 );
 
-test('Runtime Clusters route requires one stable V2 operations facade', () => {
-  assert.match(
-    appSource,
-    /const desktopRuntimeClustersOperationsV2 = useMemo\([\s\S]*createDesktopRuntimeClustersOperationsV2\([\s\S]*desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*\[\],?\s*\);/u,
+test('Runtime Clusters resolves the installed tenant page from full navigation', async () => {
+  const require = createRequire(import.meta.url);
+  require.extensions['.css'] = () => {};
+  const { createAppRuntimeInfrastructureRouteRegistry } = require(
+    '/tmp/agistack-desktop-test-dist/src/features/navigation/appRouteRegistry.js'
   );
-  assert.match(
-    appSource,
-    /runtimeClustersOperationsV2:\s*desktopRuntimeClustersOperationsV2/u,
-  );
-  assert.match(
-    routeRegistrySource,
-    /TENANT_CLUSTERS_ROUTE_ID[\s\S]*createRuntimeClustersRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*runtimeClustersOperationsV2/u,
-  );
-  assert.match(routeRuntimeSource, /createDesktopRuntimeClustersClientV2/u);
-  assert.doesNotMatch(routeRuntimeSource, /createRuntimeClustersClient/u);
-  assert.match(routeRuntimeSource, /desktop_runtime_clusters_authority_required/u);
+  const registry = createAppRuntimeInfrastructureRouteRegistry({ configRef: { current: { mode: 'cloud' } } });
+  const definition = registry.byId.get('tenant-tenant-clusters');
+  const module = await definition.loader();
+  assert.equal(module.localPolicy, 'cloud_only');
+  assert.equal(module.Surface({ context: {} }), null);
+  const page = module.Surface({ context: { tenantId: 't-1', projectId: 'p-1' } });
+  assert.equal(page.type.name, 'InstalledRoutePage');
+  assert.deepEqual(page.props, { tenantId: 't-1', projectId: null, segment: 'clusters' });
 });
 
 test('Workbench observes Runtime Clusters only through the V2 probe', () => {
