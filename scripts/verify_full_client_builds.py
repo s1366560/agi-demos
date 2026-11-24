@@ -10,7 +10,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DESKTOP = Path("agi-stack/apps/desktop")
 WEB = Path("web")
-SOURCES = (WEB, DESKTOP, Path("agi-stack/packages"), Path("shared"), Path("sdk"))
+SOURCES = (
+    WEB,
+    DESKTOP,
+    Path("agi-stack/packages"),
+    Path("shared"),
+    Path("sdk"),
+    Path("package.json"),
+    Path("pnpm-lock.yaml"),
+    Path("pnpm-workspace.yaml"),
+)
 
 
 def copy_client_sources(destination: Path) -> None:
@@ -36,9 +45,20 @@ def copy_client_sources(destination: Path) -> None:
             target.symlink_to(link)
         else:
             shutil.copyfile(source, target)
+    # Reinstall from each host's lockfile. Linking node_modules to the development
+    # checkout lets its absolute pnpm shims and transformed module caches leak in.
     for package in (Path("."), WEB, DESKTOP):
-        (destination / package / "node_modules").symlink_to(
-            ROOT / package / "node_modules", target_is_directory=True
+        subprocess.run(
+            [
+                "corepack",
+                "pnpm",
+                "install",
+                "--frozen-lockfile",
+                "--prefer-offline",
+                "--config.enableGlobalVirtualStore=false",
+            ],
+            cwd=destination / package,
+            check=True,
         )
 
 
