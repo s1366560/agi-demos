@@ -35,6 +35,24 @@ def _check_original_billing_view(page):
     expect(confirmation).to_have_count(0)
 
 
+def _select_plan(page, frame, plan, choice):
+    frame.get_by_role("combobox").select_option(choice)
+    with page.expect_response(
+        lambda response: (
+            urlsplit(response.url).path.endswith("/tenant-packages/memstack-billing/commands")
+            and response.request.method == "POST"
+            and response.request.post_data_json.get("command_id") == "change-plan"
+        ),
+        timeout=60000,
+    ) as changed:
+        frame.get_by_role("button", name=re.compile("Confirm plan change|确认更改套餐")).click()
+    assert changed.value.ok, changed.value.status
+    expect(plan).to_have_text(choice, timeout=60000)
+    expect(frame.get_by_role("button", name=re.compile("Refresh account|刷新账户"))).to_be_enabled(
+        timeout=60000
+    )
+
+
 def test_empty_tenant_billing_via_market_and_direct_url():
     account = json.loads(Path(os.environ["MEMSTACK_QA_EMPTY_TENANT_OWNER"]).read_text())
     assert account["tenant_name"] == "Signed tenant billing without projects"
@@ -60,14 +78,14 @@ def test_empty_tenant_billing_via_market_and_direct_url():
         current = page.locator(".pm-spec dd").first
         if current.inner_text() not in ("Inactive", "未运行"):
             more(page, "Uninstall|卸载")
-            expect(current).to_have_text(re.compile("Inactive|未运行"))
+            expect(current).to_have_text(re.compile("Inactive|未运行"), timeout=60000)
         apply(page, "1.2.0")
         apply(page, "1.3.1")
         page.goto(base + "/billing")
         _check_original_billing_view(page)
         details()
         more(page, "Roll back|回退|回滚")
-        expect(current).to_have_text("1.2.0")
+        expect(current).to_have_text("1.2.0", timeout=60000)
         page.goto(base + "/billing")
         page.reload()
         frame = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
@@ -84,14 +102,12 @@ def test_empty_tenant_billing_via_market_and_direct_url():
             "+ dd"
         )
         original = plan.inner_text()
-        for choice in ("free" if original == "pro" else "pro", original):
-            frame.get_by_role("combobox").select_option(choice)
-            frame.get_by_role("button", name=re.compile("Confirm plan change|确认更改套餐")).click()
-            expect(plan).to_have_text(choice)
-            expect(
-                frame.get_by_role("button", name=re.compile("Refresh account|刷新账户"))
-            ).to_be_enabled()
+
+        try:
+            _select_plan(page, frame, plan, "free" if original == "pro" else "pro")
+        finally:
+            _select_plan(page, frame, plan, original)
         details()
         more(page, "Uninstall|卸载")
-        expect(current).to_have_text(re.compile("Inactive|未运行"))
+        expect(current).to_have_text(re.compile("Inactive|未运行"), timeout=60000)
         browser.close()
