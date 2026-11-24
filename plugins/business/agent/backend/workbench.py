@@ -55,14 +55,38 @@ async def respond(
     return {key: result[key] for key in ("success", "authority_revision") if key in result}
 
 
+class TimelineReview(History):
+    view: Literal["workbench", "attachments"] = "workbench"
+
+
+def timeline_attachments(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    files = {}
+    for row in rows:
+        if row.get("type") != "user_message":
+            continue
+        entries = (row.get("metadata") or {}).get("fileMetadata")
+        if isinstance(entries, list):
+            files[row["id"]] = [
+                {key: file[key] for key in ("filename", "mime_type", "size_bytes")}
+                for file in entries
+                if isinstance(file, dict)
+                and isinstance(file.get("filename"), str)
+                and isinstance(file.get("mime_type"), str)
+                and isinstance(file.get("size_bytes"), int)
+            ]
+    return files
+
+
 async def interactions(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    data = History.model_validate(payload)
+    data = TimelineReview.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
     base = f"conversations/{data.conversation_id}"
-    query = data.model_dump(exclude={"conversation_id"}, exclude_none=True)
+    query = data.model_dump(exclude={"conversation_id", "view"}, exclude_none=True)
     timeline = await _canonical(ctx, "GET", base + "/messages", query=query)
+    if data.view == "attachments":
+        return {"attachments": timeline_attachments(timeline["timeline"])}
     pending = await _canonical(ctx, "GET", "hitl/" + base + "/pending")
     rows = []
     for row in timeline["timeline"]:

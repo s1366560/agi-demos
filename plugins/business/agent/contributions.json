@@ -392,7 +392,7 @@
       ],
       "entry": {
         "path": "ui/chat-web.js",
-        "digest": "sha256:ef73c2818cc4ad846e9151ce28d5540a2a210e77a878ffe102a92804f3a9430f"
+        "digest": "sha256:752b0ec4a0e3ac0a5380cc406430cab11c1d5e77e98fddad0286401a8eaa4202"
       },
       "commands": [
         "chat-list",
@@ -409,7 +409,7 @@
       "device_tools": [],
       "style": {
         "path": "ui/chat-web.css",
-        "digest": "sha256:2fdaee7a9b3862b9e0e8b72280ffe7fb2b6de4304ebea55ac27c3264fc1975b9"
+        "digest": "sha256:d56f97a39324fdf1b8e8ee553c555fc1986522ca424bdd9920a2d5aa228cb787"
       },
       "workbench": true
     },
@@ -428,7 +428,7 @@
       ],
       "entry": {
         "path": "ui/chat-desktop.js",
-        "digest": "sha256:10a5f0ed2e84b2b1eb57703ad6ea68299770aed44a008e0dd22c74fdca2fc854"
+        "digest": "sha256:ba37f51a0c052eaef2ef19219634a5b69eb0dafddcc41a84f724293d192b3da9"
       },
       "commands": [
         "chat-list",

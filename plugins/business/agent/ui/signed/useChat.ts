@@ -1,45 +1,45 @@
-import { uploadAttachment, type UploadedAttachment } from "./uploadAttachment";
-import { useEffect, useRef, useState } from "react";
+import type { MessageFile } from '../web/chat/MessageFileList';
+import { uploadAttachment, type UploadedAttachment } from './uploadAttachment';
+import { useEffect, useRef, useState } from 'react';
 import type {
   RichPageContext,
   RichPageRuntime,
-} from "../../../../../sdk/memstack-plugin-sdk/src/pageRuntime";
+} from '../../../../../sdk/memstack-plugin-sdk/src/pageRuntime';
 
-export type Target = "cloud" | "local";
+export type Target = 'cloud' | 'local';
 export interface Conversation {
   id: string;
   title: string;
   execution_target: Target;
 }
 export interface Message {
+  files?: MessageFile[];
   id: string;
-  role: "user_message" | "assistant_message";
+  role: 'user_message' | 'assistant_message';
   content: string;
 }
 type Cursor = { before_time_us: number; before_counter: number };
 type Run =
-  | { target: "cloud"; id: string; revision: number; conversation: string }
-  | { target: "local"; conversation: string; key: string };
+  | { target: 'cloud'; id: string; revision: number; conversation: string }
+  | { target: 'local'; conversation: string; key: string };
 const sdk = window.memstack;
 const command = <T>(
   name: string,
   payload: Record<string, unknown>,
-  options?: Parameters<RichPageRuntime["invoke"]>[2],
+  options?: Parameters<RichPageRuntime['invoke']>[2]
 ) => sdk.invoke(name, payload, options) as Promise<T>;
 
 export function useChat(scope: RichPageContext) {
-  const local = scope.platform === "desktop-renderer";
-  const hasDevice = local && scope.deviceTools.includes("local_chat");
+  const local = scope.platform === 'desktop-renderer';
+  const hasDevice = local && scope.deviceTools.includes('local_chat');
   const [list, setList] = useState<Conversation[]>([]);
-  const linked = scope.pathname.match(
-    /\/(?:agent-workspace|agent\/chat)\/([^/]+)\/?$/,
-  )?.[1];
-  const [selected, setSelected] = useState(linked ?? "");
+  const linked = scope.pathname.match(/\/(?:agent-workspace|agent\/chat)\/([^/]+)\/?$/)?.[1];
+  const [selected, setSelected] = useState(linked ?? '');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState('');
   const [files, setFiles] = useState<UploadedAttachment[]>([]);
-  const [target, setTarget] = useState<Target>(local ? "local" : "cloud");
-  const [error, setError] = useState("");
+  const [target, setTarget] = useState<Target>(local ? 'local' : 'cloud');
+  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [run, setRun] = useState<Run>();
@@ -48,52 +48,63 @@ export function useChat(scope: RichPageContext) {
   const locked = useRef(false),
     reading = useRef(false),
     revision = useRef(0);
-  const pending = useRef<{ id: string; text: string; key: string } | null>(
-    null,
-  );
-  const label = (en: string, zh: string) =>
-    scope.locale.startsWith("zh") ? zh : en;
+  const pending = useRef<{ id: string; text: string; key: string } | null>(null);
+  const label = (en: string, zh: string) => (scope.locale.startsWith('zh') ? zh : en);
   const selectedRow = list.find((row) => row.id === selected);
-  const writable =
-    !!selectedRow && (selectedRow.execution_target === "cloud" || hasDevice);
+  const writable = !!selectedRow && (selectedRow.execution_target === 'cloud' || hasDevice);
   function report(cause: unknown) {
     const message = cause instanceof Error ? cause.message : String(cause);
-    if (message.includes("device_local_workspace_required"))
+    if (message.includes('device_local_workspace_required'))
       setError(
         label(
-          "Choose a workspace in device settings before sending.",
-          "请先在设备设置中选择工作目录。",
-        ),
+          'Choose a workspace in device settings before sending.',
+          '请先在设备设置中选择工作目录。'
+        )
       );
     else if (
-      message.includes("device_plugin_installation_required") ||
-      message.includes("device_plugin_grant_")
+      message.includes('device_plugin_installation_required') ||
+      message.includes('device_plugin_grant_')
     )
       setError(
         label(
-          "Approve this Agent release in device settings. ",
-          "请在设备设置中批准当前 Agent 版本。",
-        ) + message,
+          'Approve this Agent release in device settings. ',
+          '请在设备设置中批准当前 Agent 版本。'
+        ) + message
       );
     else setError(message);
   }
-  const heading = label("New conversation", "新会话");
+  const heading = label('New conversation', '新会话');
 
-  async function read(id: string, before?: Cursor) {
+  async function read(
+    id: string,
+    before?: Cursor,
+    targetForRead = list.find((row) => row.id === id)?.execution_target
+  ) {
     const version = ++revision.current;
     setLoading(true);
     try {
-      const page = await command<{ messages: Message[]; before?: Cursor }>(
-        "chat-history",
-        {
-          conversation_id: id,
-          ...before,
-        },
-      );
+      const page = await command<{ messages: Message[]; before?: Cursor }>('chat-history', {
+        conversation_id: id,
+        ...before,
+      });
+      const renderingFiles =
+        targetForRead === 'cloud' &&
+        scope.commands.includes('chat-interactions') &&
+        page.messages.some((row) => row.role === 'user_message');
+      const recorded = renderingFiles
+        ? (
+            await command<{ attachments: Record<string, MessageFile[]> }>('chat-interactions', {
+              conversation_id: id,
+              ...before,
+              view: 'attachments',
+            })
+          ).attachments
+        : {};
       if (version !== revision.current) return;
       const rows = page.messages.map((row) => ({
         ...row,
         id: row.id ?? crypto.randomUUID(),
+        files: recorded[row.id] ?? [],
       }));
       setMessages((old) => (before ? [...rows, ...old] : rows));
       setCursor(page.before);
@@ -103,18 +114,14 @@ export function useChat(scope: RichPageContext) {
   }
   useEffect(() => {
     const controller = new AbortController();
-    void command<{ items: Conversation[] }>(
-      "chat-list",
-      {},
-      { signal: controller.signal },
-    )
+    void command<{ items: Conversation[] }>('chat-list', {}, { signal: controller.signal })
       .then(({ items }) => {
         if (controller.signal.aborted) return;
         setList(items);
         const id = linked || items[0]?.id;
         if (id) {
           setSelected(id);
-          return read(id);
+          return read(id, undefined, items.find((row) => row.id === id)?.execution_target);
         }
         setLoading(false);
       })
@@ -134,7 +141,7 @@ export function useChat(scope: RichPageContext) {
     if (locked.current) return;
     locked.current = true;
     setBusy(true);
-    setError("");
+    setError('');
     try {
       await action();
     } catch (e) {
@@ -145,9 +152,9 @@ export function useChat(scope: RichPageContext) {
     }
   }
   async function createRow() {
-    const row = await command<Conversation>("chat-create", {
+    const row = await command<Conversation>('chat-create', {
       title: heading,
-      ...(local && target === "local" ? { execution_target: "local" } : {}),
+      ...(local && target === 'local' ? { execution_target: 'local' } : {}),
     });
     revision.current++;
     setLoading(false);
@@ -166,24 +173,22 @@ export function useChat(scope: RichPageContext) {
   }
   function rename(title: string) {
     return perform(async () => {
-      const row = await command<{ title: string }>("chat-rename", {
+      const row = await command<{ title: string }>('chat-rename', {
         conversation_id: selected,
         title: title.trim(),
       });
       setList((old) =>
-        old.map((item) =>
-          item.id === selected ? { ...item, title: row.title } : item,
-        ),
+        old.map((item) => (item.id === selected ? { ...item, title: row.title } : item))
       );
     });
   }
   function attach(file: File) {
     return perform(async () => {
       const row = selectedRow ?? (await createRow());
-      if (row.execution_target !== "cloud")
-        throw new Error(label("Select a cloud conversation", "请选择云端会话"));
+      if (row.execution_target !== 'cloud')
+        throw new Error(label('Select a cloud conversation', '请选择云端会话'));
       const item = await uploadAttachment(row.id, file, (payload) =>
-        command("chat-upload", payload),
+        command('chat-upload', payload)
       );
       setFiles((old) => [...old, item]);
     });
@@ -193,30 +198,27 @@ export function useChat(scope: RichPageContext) {
       const text = (prompt ?? draft).trim();
       if (!text) return;
       const row = selectedRow ?? (await createRow());
-      if (row.execution_target === "local" && !hasDevice) {
+      if (row.execution_target === 'local' && !hasDevice) {
         throw new Error(
           label(
-            "Open the desktop app and approve this release to send to a device.",
-            "请在桌面应用批准当前版本后发送到本机。",
-          ),
+            'Open the desktop app and approve this release to send to a device.',
+            '请在桌面应用批准当前版本后发送到本机。'
+          )
         );
       }
       const conversation = row.id;
       try {
-        if (row.execution_target === "local") {
-          if (
-            pending.current?.id !== conversation ||
-            pending.current.text !== text
-          )
+        if (row.execution_target === 'local') {
+          if (pending.current?.id !== conversation || pending.current.text !== text)
             pending.current = {
               id: conversation,
               text,
               key: crypto.randomUUID(),
             };
           const key = pending.current.key;
-          setRun({ target: "local", conversation, key });
-          const result = (await sdk.device("local_chat", {
-            action: "execute",
+          setRun({ target: 'local', conversation, key });
+          const result = (await sdk.device('local_chat', {
+            action: 'execute',
             conversation_id: conversation,
             idempotency_key: key,
             message: text,
@@ -226,33 +228,23 @@ export function useChat(scope: RichPageContext) {
             status?: string;
             detail?: string;
           };
-          if (
-            result.executed ||
-            result.sync === "synced" ||
-            result.status === "cancelled"
-          ) {
+          if (result.executed || result.sync === 'synced' || result.status === 'cancelled') {
             pending.current = null;
-            setDraft("");
+            setDraft('');
           }
-          setError(
-            [result.status, result.sync, result.detail]
-              .filter(Boolean)
-              .join(" · "),
-          );
+          setError([result.status, result.sync, result.detail].filter(Boolean).join(' · '));
         } else {
           const id = crypto.randomUUID();
           setMessages((old) => [
             ...old,
-            { id: crypto.randomUUID(), role: "user_message", content: text },
+            { id: crypto.randomUUID(), role: 'user_message', content: text, files },
           ]);
           await command(
-            files.length ? "chat-attached-turn" : "chat-turn",
+            files.length ? 'chat-attached-turn' : 'chat-turn',
             {
               conversation_id: conversation,
               message: text,
-              ...(files.length
-                ? { attachment_ids: files.map((file) => file.id) }
-                : {}),
+              ...(files.length ? { attachment_ids: files.map((file) => file.id) } : {}),
               message_id: crypto.randomUUID(),
             },
             {
@@ -263,39 +255,30 @@ export function useChat(scope: RichPageContext) {
                   revision: number;
                   text: string;
                 };
-                if (event.type === "accepted") {
+                if (event.type === 'accepted') {
                   setRun({
-                    target: "cloud",
+                    target: 'cloud',
                     conversation,
                     id: event.run_id,
                     revision: event.revision,
                   });
-                  setDraft("");
+                  setDraft('');
                   setFiles([]);
                 }
-                if (
-                  event.type === "assistant_message" ||
-                  event.type === "text_delta"
-                ) {
+                if (event.type === 'assistant_message' || event.type === 'text_delta') {
                   setMessages((old) => {
                     const last = old.at(-1),
-                      base = last?.id === id ? last.content : "";
+                      base = last?.id === id ? last.content : '';
                     const next: Message = {
                       id,
-                      role: "assistant_message",
-                      content:
-                        event.type === "text_delta"
-                          ? base + event.text
-                          : event.text,
+                      role: 'assistant_message',
+                      content: event.type === 'text_delta' ? base + event.text : event.text,
                     };
-                    return [
-                      ...(last?.id === id ? old.slice(0, -1) : old),
-                      next,
-                    ];
+                    return [...(last?.id === id ? old.slice(0, -1) : old), next];
                   });
                 }
               },
-            },
+            }
           );
         }
       } catch (error) {
@@ -312,15 +295,15 @@ export function useChat(scope: RichPageContext) {
     if (!run || stopping) return;
     setStopping(true);
     try {
-      if (run.target === "cloud")
-        await command("chat-cancel", {
+      if (run.target === 'cloud')
+        await command('chat-cancel', {
           conversation_id: run.conversation,
           run_id: run.id,
           expected_revision: run.revision,
         });
       else
-        await sdk.device("local_chat", {
-          action: "stop",
+        await sdk.device('local_chat', {
+          action: 'stop',
           conversation_id: run.conversation,
           idempotency_key: run.key,
         });
@@ -344,11 +327,11 @@ export function useChat(scope: RichPageContext) {
   function choose(id: string) {
     if (!busy)
       void perform(async () => {
-        await sdk.navigate("/agent/chat/" + encodeURIComponent(id));
+        await sdk.navigate('/agent/chat/' + encodeURIComponent(id));
         setSelected(id);
         setMessages([]);
         setFiles([]);
-        setDraft("");
+        setDraft('');
         await read(id);
       });
   }
@@ -356,8 +339,7 @@ export function useChat(scope: RichPageContext) {
     label,
     files,
     attach,
-    removeFile: (id: string) =>
-      setFiles((old) => old.filter((file) => file.id !== id)),
+    removeFile: (id: string) => setFiles((old) => old.filter((file) => file.id !== id)),
     list,
     selected,
     selectedRow,

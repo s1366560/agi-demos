@@ -186,7 +186,7 @@ async def history(
         if result["has_more"]
         else None,
         "messages": [
-            {"role": row["type"], "content": row["content"]}
+            {"id": row["id"], "role": row["type"], "content": row["content"]}
             for row in result["timeline"]
             if row.get("type") in {"user_message", "assistant_message"}
             and isinstance(row.get("content"), str)

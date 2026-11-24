@@ -6,7 +6,7 @@ import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from time import time_ns
+from time import monotonic, sleep, time_ns
 from uuid import uuid4
 
 import httpx
@@ -180,6 +180,13 @@ def exercise_page(page, title, conversation, account, cdp):
         }
     )
     expect(guest.get_by_text("interaction-check.txt", exact=True)).to_be_visible(timeout=30000)
+    draft = guest.locator("textarea").last
+    draft.fill("Please acknowledge receipt of the attached fixture.")
+    draft.press("Enter")
+    expect(draft).to_have_value("", timeout=60000)
+    transcript = guest.locator(".chat-history-viewport")
+    expect(transcript.get_by_text("interaction-check.txt", exact=True)).to_be_visible(timeout=60000)
+    expect(draft).to_be_enabled(timeout=180000)
     with httpx.Client(base_url="http://127.0.0.1:8000/api/v1", timeout=30) as client:
         auth = client.post(
             "/auth/token", data={"username": account["email"], "password": account["password"]}
@@ -189,6 +196,23 @@ def exercise_page(page, title, conversation, account, cdp):
         requests = client.get(f"/agent/hitl/conversations/{conversation}/pending")
         requests.raise_for_status()
         assert requests.json()["requests"] == []
+        deadline = monotonic() + 120
+        while True:
+            messages = client.get(
+                f"/agent/conversations/{conversation}/messages",
+                params={"project_id": account["project_id"]},
+            )
+            messages.raise_for_status()
+            rows = messages.json()["timeline"]
+            files = [f for row in rows for f in (row.get("metadata") or {}).get("fileMetadata", [])]
+            if any(f.get("filename") == "interaction-check.txt" for f in files) and any(
+                row["type"] == "assistant_message" and row.get("content") for row in rows
+            ):
+                break
+            assert monotonic() < deadline, (
+                "Cloud turn did not persist both the original file and an assistant reply"
+            )
+            sleep(1)
 
 
 def test_installed_agent_interactions():
@@ -197,7 +221,7 @@ def test_installed_agent_interactions():
         pytest.skip("requires isolated local marketplace credentials")
     account = json.loads(Path(owner).read_bytes())
     title, conversation = create_fixture(account)
-    version = os.getenv("MEMSTACK_QA_INTERACTION_VERSION", "1.4.0")
+    version = os.getenv("MEMSTACK_QA_INTERACTION_VERSION", "1.4.1")
     cdp = os.getenv("MEMSTACK_QA_BUSINESS_MARKET_CDP")
     with sync_playwright() as pw:
         if cdp:
@@ -216,6 +240,9 @@ def test_installed_agent_interactions():
             browser = pw.chromium.launch()
             page = browser.new_page(locale="en-US")
             open_market(page, "full", "http://localhost:3000", account)
+        page.locator(".pm-spec, #pm-card-memstack-agent").first.wait_for(
+            state="visible", timeout=60000
+        )
         if not page.locator(".pm-spec").is_visible():
             page.locator("#pm-card-memstack-agent").click()
         installed = page.locator(".pm-spec dd").first
@@ -233,6 +260,9 @@ def test_installed_agent_interactions():
                 + "/plugins?projectId="
                 + account["project_id"]
             )
+        page.locator(".pm-spec, #pm-card-memstack-agent").first.wait_for(
+            state="visible", timeout=60000
+        )
         if not page.locator(".pm-spec").is_visible():
             page.locator("#pm-card-memstack-agent").click()
         more(page, "Roll back to|回退至")

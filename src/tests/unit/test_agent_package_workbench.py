@@ -97,3 +97,18 @@ async def test_rejects_invalid_part_coordinates_before_buffering(number, offset,
     with pytest.raises(OptionalBusinessError, match="Unexpected attachment chunk"):
         await attachment_parts.store_chunk(ctx, SimpleNamespace(size_bytes=3), step, redis, "key")
     redis.hexists.assert_not_awaited()
+
+
+def test_history_projects_only_public_attachment_metadata():
+    public = {"filename": "file.txt", "mime_type": "text/plain", "size_bytes": 4}
+    private = {**public, "sandbox_path": "/private/path", "object_key": "private-key"}
+    assert workbench.timeline_attachments(
+        [
+            {
+                "id": "u",
+                "type": "user_message",
+                "metadata": {"fileMetadata": [private, {"filename": "bad"}]},
+            },
+            {"id": "a", "type": "assistant_message", "metadata": {"fileMetadata": [private]}},
+        ]
+    ) == {"u": [public]}
