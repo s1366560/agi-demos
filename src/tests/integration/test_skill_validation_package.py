@@ -79,7 +79,7 @@ def skill_images(tmp_path_factory):
         _PACKAGE,
         directory,
         dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build"),
+        ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build", "node_modules"),
     )
     with disposable_worker_registry() as (publish, registry, _):
         first = publish(directory)

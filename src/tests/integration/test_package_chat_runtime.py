@@ -81,8 +81,9 @@ async def test_cloud_turn_and_p5_replay(
         headers={"authorization": "Bearer " + key},
     )
     path = "/api/v1/platform-plugins/v2/optional-business"
-    base = path + "/sample.notes"
+    base = path + "/memstack-agent"
     body, digest = publisher[1](
+        plugin_id="memstack-agent",
         application_command={k: "app.agent." + k for k in ("create", "history", "turn", "cancel")}
     )
 

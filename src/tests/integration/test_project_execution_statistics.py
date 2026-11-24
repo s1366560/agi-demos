@@ -60,7 +60,7 @@ def releases(tmp_path_factory):
         PACKAGE,
         folder,
         dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build"),
+        ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build", "node_modules"),
     )
     private = Ed25519PrivateKey.generate()
     public = private.public_key().public_bytes(
