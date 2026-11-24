@@ -1,4 +1,4 @@
-import { httpClient } from './client/httpClient';
+import { hostControlClient } from './client/hostControlClient';
 
 export interface SmtpConfigResponse {
   id: string;
@@ -28,13 +28,13 @@ export interface SmtpTestRequest {
 
 export const smtpService = {
   getConfig: (tenantId: string) =>
-    httpClient.get<SmtpConfigResponse | null>(`/tenants/${tenantId}/smtp-config`),
+    hostControlClient.get<SmtpConfigResponse | null>(`/tenants/${tenantId}/smtp-config`),
 
   upsertConfig: (tenantId: string, data: SmtpConfigCreate) =>
-    httpClient.put<SmtpConfigResponse>(`/tenants/${tenantId}/smtp-config`, data),
+    hostControlClient.put<SmtpConfigResponse>(`/tenants/${tenantId}/smtp-config`, data),
 
-  deleteConfig: (tenantId: string) => httpClient.delete(`/tenants/${tenantId}/smtp-config`),
+  deleteConfig: (tenantId: string) => hostControlClient.delete(`/tenants/${tenantId}/smtp-config`),
 
   testSmtp: (tenantId: string, data: SmtpTestRequest) =>
-    httpClient.post(`/tenants/${tenantId}/smtp-config/test`, data),
+    hostControlClient.post(`/tenants/${tenantId}/smtp-config/test`, data),
 };

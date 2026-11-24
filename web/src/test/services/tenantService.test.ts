@@ -8,7 +8,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { ApiError, ApiErrorType } from '../../services/client/ApiError';
+import { hostControlClient } from '../../services/client/hostControlClient';
 import { tenantService } from '../../services/tenantService';
+
+vi.mock('../../services/client/hostControlClient', () => ({
+  hostControlClient: { patch: vi.fn() },
+}));
 
 // Mock apiFetch
 vi.mock('../../services/client/urlUtils', () => ({
@@ -172,45 +177,21 @@ describe('tenantService', () => {
 
   describe('updateMemberRole', () => {
     it('should update member role', async () => {
-      const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockImplementationOnce(async (...args: any[]) =>
-        args[2](
-          {
-            ok: true,
-            status: 200,
-            statusText: 'OK',
-            json: async () => ({}),
-            headers: new Headers(),
-          } as Response,
-          {
-            signal: args[3]?.signal ?? new AbortController().signal,
-            check() {
-              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
-            },
-          }
-        )
-      );
-
       await tenantService.updateMemberRole('tenant-1', 'user-2', 'admin');
 
-      expect(apiFetch.patch).toHaveBeenCalledWith(
-        `/tenants/tenant-1/members/user-2`,
-        {
-          role: 'admin',
-        },
-        expect.any(Function)
-      );
+      expect(hostControlClient.patch).toHaveBeenCalledWith('/tenants/tenant-1/members/user-2', {
+        role: 'admin',
+      });
     });
 
     it('should propagate ApiError on failed update', async () => {
-      const { apiFetch } = await import('../../services/client/urlUtils');
       const mockError = new ApiError(
         ApiErrorType.AUTHORIZATION,
         'FORBIDDEN',
         'Failed to update role',
         403
       );
-      vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
+      vi.mocked(hostControlClient.patch).mockRejectedValueOnce(mockError);
 
       await expect(tenantService.updateMemberRole('tenant-1', 'user-2', 'admin')).rejects.toThrow(
         ApiError

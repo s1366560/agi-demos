@@ -25,6 +25,7 @@
  * ```
  */
 
+import { hostControlClient } from './client/hostControlClient';
 import { apiFetch } from './client/urlUtils';
 
 /**
@@ -162,7 +163,7 @@ export const tenantService = {
    * ```
    */
   updateMemberRole: async (tenantId: string, userId: string, role: string): Promise<void> => {
-    await apiFetch.patch(`/tenants/${tenantId}/members/${userId}`, { role }, () => undefined);
+    await hostControlClient.patch(`/tenants/${tenantId}/members/${userId}`, { role });
   },
 
   /**

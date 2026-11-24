@@ -1,4 +1,4 @@
-import { httpClient } from './client/httpClient';
+import { hostControlClient } from './client/hostControlClient';
 import { kernelHttpClient } from './client/kernelHttpClient';
 
 // ============================================================================
@@ -43,15 +43,15 @@ export interface CreateInvitationParams {
 
 export const invitationService = {
   create: (tenantId: string, params: CreateInvitationParams) =>
-    httpClient.post<Invitation>(`/tenants/${tenantId}/invitations`, params),
+    hostControlClient.post<Invitation>(`/tenants/${tenantId}/invitations`, params),
 
   listPending: (tenantId: string, limit = 50, offset = 0) =>
-    httpClient.get<InvitationListResponse>(`/tenants/${tenantId}/invitations`, {
+    hostControlClient.get<InvitationListResponse>(`/tenants/${tenantId}/invitations`, {
       params: { limit, offset },
     }),
 
   cancel: (tenantId: string, invitationId: string) =>
-    httpClient.delete(`/tenants/${tenantId}/invitations/${invitationId}`),
+    hostControlClient.delete(`/tenants/${tenantId}/invitations/${invitationId}`),
 
   verify: (token: string) =>
     // Public identity validation must also work before login establishes a generation.
@@ -62,6 +62,6 @@ export const invitationService = {
     if (displayName) {
       body.display_name = displayName;
     }
-    return httpClient.post<Invitation>(`/invitations/accept/${token}`, body);
+    return hostControlClient.post<Invitation>(`/invitations/accept/${token}`, body);
   },
 };

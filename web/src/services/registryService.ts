@@ -1,4 +1,4 @@
-import { httpClient } from './client/httpClient';
+import { hostControlClient } from './client/hostControlClient';
 
 const BASE_URL = '/tenants';
 
@@ -32,19 +32,19 @@ export interface TestConnectionResponse {
 
 export const registryService = {
   list: (tenantId: string) =>
-    httpClient.get<RegistryResponse[]>(`${BASE_URL}/${tenantId}/registries`),
+    hostControlClient.get<RegistryResponse[]>(`${BASE_URL}/${tenantId}/registries`),
 
   create: (tenantId: string, data: RegistryRequest) =>
-    httpClient.post<RegistryResponse>(`${BASE_URL}/${tenantId}/registries`, data),
+    hostControlClient.post<RegistryResponse>(`${BASE_URL}/${tenantId}/registries`, data),
 
   update: (tenantId: string, registryId: string, data: RegistryRequest) =>
-    httpClient.put<RegistryResponse>(`${BASE_URL}/${tenantId}/registries/${registryId}`, data),
+    hostControlClient.put<RegistryResponse>(`${BASE_URL}/${tenantId}/registries/${registryId}`, data),
 
   remove: (tenantId: string, registryId: string) =>
-    httpClient.delete(`${BASE_URL}/${tenantId}/registries/${registryId}`),
+    hostControlClient.delete(`${BASE_URL}/${tenantId}/registries/${registryId}`),
 
   testConnection: (tenantId: string, registryId: string) =>
-    httpClient.post<TestConnectionResponse>(
+    hostControlClient.post<TestConnectionResponse>(
       `${BASE_URL}/${tenantId}/registries/${registryId}/test`
     ),
 };
