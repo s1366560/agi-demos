@@ -16,7 +16,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
-import { EntityCard } from '../../../components/graph/EntityCard';
+import { EntityCard } from '@business/knowledge/ui/web/project/entities/EntityCard';
 
 // Mock useTranslation
 vi.mock('react-i18next', () => ({

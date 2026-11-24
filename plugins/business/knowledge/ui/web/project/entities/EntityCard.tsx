@@ -15,7 +15,8 @@ import React, { memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { formatDateOnly } from '@/utils/date';
+import { formatDateOnly } from '../../../../../../../sdk/memstack-plugin-sdk/ui/localDate';
+import { getEntityTypeColor } from './entityTypeColor';
 
 export interface Entity {
   uuid: string;
@@ -33,9 +34,6 @@ export interface EntityCardProps {
   /** Whether this entity is currently selected */
   isSelected?: boolean | undefined;
 }
-
-import { getEntityTypeColor } from '@business/knowledge/ui/web/project/entities/entityTypeColor';
-export { getEntityTypeColor };
 
 /**
  * Internal EntityCard component implementation

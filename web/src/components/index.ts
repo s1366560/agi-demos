@@ -14,7 +14,7 @@
  *   - @/components/common - ErrorBoundary, SkeletonLoader
  *   - @/components/agent - MessageArea, InputBar
  *   - @/components/shared - Modal components, UI components
- *   - @/components/graph - CytoscapeGraph, EntityCard
+ *   - @/components/graph - CytoscapeGraph
  *   - @/components/agent/layout - LayoutModeSelector
  *   - @/components/agent/chat - MarkdownContent, ChatSearch
  *   - @/components/agent/patterns - PatternList, PatternInspector
@@ -32,10 +32,4 @@ export { MessageArea, MessageBubble, InputBar, RightPanel, SandboxSection } from
 export { DeleteConfirmationModal, LanguageSwitcher, ThemeToggle } from './shared';
 
 // Graph components (knowledge graph visualization)
-export {
-  CytoscapeGraph,
-  EntityCard,
-  getEntityTypeColor,
-  type Entity,
-  type EntityCardProps,
-} from './graph';
+export { CytoscapeGraph } from './graph';

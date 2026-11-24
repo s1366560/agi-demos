@@ -3,12 +3,9 @@
  *
  * Components for knowledge graph visualization:
  * - CytoscapeGraph: Cytoscape.js-based graph renderer (refactored with composite pattern)
- * - EntityCard: Entity detail card component
  */
 
 export { CytoscapeGraph } from './CytoscapeGraph';
-export { EntityCard, getEntityTypeColor } from './EntityCard';
-export type { Entity, EntityCardProps } from './EntityCard';
 
 // Re-export types from refactored CytoscapeGraph
 export type {
