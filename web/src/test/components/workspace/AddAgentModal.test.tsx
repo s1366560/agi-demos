@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import { AddAgentModal } from '@/components/workspace/AddAgentModal';
+import { AddAgentModal } from '@business/workspace/ui/web/components/AddAgentModal';
 import { useDefinitions, useListDefinitions } from '@business/agent/ui/web/stores/agentDefinitions';
 import type { AgentDefinition } from '@/types/multiAgent';
 

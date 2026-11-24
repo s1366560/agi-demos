@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { InstancedMesh, CylinderGeometry, Color, Object3D, BufferGeometry, Mesh } from 'three';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 
-import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
+import { hexToPixel } from '@business/workspace/ui/web/components/hex/useHexLayout';
 
 import type { WorkspaceAgent, TopologyNode } from '@business/workspace/ui/web/types/workspace';
 

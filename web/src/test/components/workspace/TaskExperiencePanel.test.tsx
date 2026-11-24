@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
+import { TaskExperiencePanel } from '@business/workspace/ui/web/components/TaskExperiencePanel';
 import type { WorkspaceTask } from '@business/workspace/ui/web/types/workspace';
 
 import { render, screen } from '../../utils';

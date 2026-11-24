@@ -1,6 +1,6 @@
 import { Line } from '@react-three/drei';
 
-import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
+import { hexToPixel } from '@business/workspace/ui/web/components/hex/useHexLayout';
 
 import type { TopologyEdge } from '@business/workspace/ui/web/types/workspace';
 

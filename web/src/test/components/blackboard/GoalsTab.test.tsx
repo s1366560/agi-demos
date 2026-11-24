@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { GoalsTab } from '@business/workspace/ui/web/components/blackboard/tabs/GoalsTab';
 import { render, screen } from '@/test/utils';
 
-vi.mock('@/components/workspace/objectives/ObjectiveList', () => ({
+vi.mock('@business/workspace/ui/web/components/objectives/ObjectiveList', () => ({
   ObjectiveList: () => <div>Objective list</div>,
 }));
 
-vi.mock('@/components/workspace/TaskBoard', () => ({
+vi.mock('@business/workspace/ui/web/components/TaskBoard', () => ({
   TaskBoard: ({
     showAutonomyAction,
     tasks,

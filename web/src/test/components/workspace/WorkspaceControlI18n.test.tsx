@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ObjectiveCreateModal } from '@/components/workspace/objectives/ObjectiveCreateModal';
+import { ObjectiveCreateModal } from '@business/workspace/ui/web/components/objectives/ObjectiveCreateModal';
 
 import { render, screen } from '../../utils';
 

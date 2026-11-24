@@ -62,15 +62,15 @@ vi.mock('@business/workspace/ui/web/components/blackboard/tabs/ConversationRoste
   ConversationRosterSection: () => <div>Conversation roster section</div>,
 }));
 
-vi.mock('@/components/workspace/genes/GeneList', () => ({
+vi.mock('@business/workspace/ui/web/components/genes/GeneList', () => ({
   GeneList: () => <div>Gene list</div>,
 }));
 
-vi.mock('@/components/workspace/MemberPanel', () => ({
+vi.mock('@business/workspace/ui/web/components/MemberPanel', () => ({
   MemberPanel: () => <div>Member panel</div>,
 }));
 
-vi.mock('@/components/workspace/objectives/ObjectiveCreateModal', () => ({
+vi.mock('@business/workspace/ui/web/components/objectives/ObjectiveCreateModal', () => ({
   ObjectiveCreateModal: (props: { open: boolean }) => (
     <div data-testid="objective-create-modal" data-open={props.open}>
       {props.open ? 'ObjectiveCreateModal open' : null}
@@ -78,7 +78,7 @@ vi.mock('@/components/workspace/objectives/ObjectiveCreateModal', () => ({
   ),
 }));
 
-vi.mock('@/components/workspace/objectives/ObjectiveList', () => ({
+vi.mock('@business/workspace/ui/web/components/objectives/ObjectiveList', () => ({
   ObjectiveList: (props: { onCreate?: () => void }) => (
     <div>
       Objective list
@@ -91,11 +91,11 @@ vi.mock('@/components/workspace/objectives/ObjectiveList', () => ({
   ),
 }));
 
-vi.mock('@/components/workspace/presence/PresenceBar', () => ({
+vi.mock('@business/workspace/ui/web/components/presence/PresenceBar', () => ({
   PresenceBar: () => <div>Presence bar</div>,
 }));
 
-vi.mock('@/components/workspace/TaskBoard', () => ({
+vi.mock('@business/workspace/ui/web/components/TaskBoard', () => ({
   TaskBoard: () => <div>Task board</div>,
 }));
 

@@ -6,7 +6,7 @@ import { Space, Typography } from 'antd';
 
 import { useOnlineAgents, useOnlineUsers } from '@business/workspace/ui/web/stores/workspace';
 
-import { PresenceAvatar } from '@/components/workspace/presence/PresenceAvatar';
+import { PresenceAvatar } from '@business/workspace/ui/web/components/presence/PresenceAvatar';
 
 const { Text } = Typography;
 

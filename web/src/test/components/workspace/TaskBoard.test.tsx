@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from 'antd';
 
-import { TaskBoard } from '@/components/workspace/TaskBoard';
-import { buildTaskCreatePayload } from '@/components/workspace/taskBoardCreateModel';
+import { TaskBoard } from '@business/workspace/ui/web/components/TaskBoard';
+import { buildTaskCreatePayload } from '@business/workspace/ui/web/components/taskBoardCreateModel';
 import { workspaceAutonomyService, workspaceTaskService } from '@business/workspace/ui/web/services/workspaceService';
 import { render, screen, fireEvent } from '@/test/utils';
 

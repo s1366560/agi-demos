@@ -16,7 +16,7 @@ import { OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Vector3, DoubleSide } from 'three';
 
-import { generateGrid, hexToPixel } from '@/components/workspace/hex/useHexLayout';
+import { generateGrid, hexToPixel } from '@business/workspace/ui/web/components/hex/useHexLayout';
 
 import { AgentMesh } from './AgentMesh';
 import { CorridorMesh } from './CorridorMesh';

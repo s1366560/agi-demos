@@ -29,6 +29,9 @@
         /* Path mapping */
         "baseUrl": ".",
         "paths": {
+            "three": ["node_modules/@types/three"],
+            "three-mesh-bvh": ["node_modules/three-mesh-bvh"],
+            "@react-three/*": ["node_modules/@react-three/*"],
             "docx-preview": ["node_modules/docx-preview"],
             "xlsx": ["node_modules/xlsx"],
             "@copilotkit/a2ui-renderer": ["node_modules/@copilotkit/a2ui-renderer/dist/index.d.cts"],

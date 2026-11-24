@@ -4,7 +4,7 @@ import { Sphere } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { Vector3, Group, Mesh, MeshStandardMaterial } from 'three';
 
-import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
+import { hexToPixel } from '@business/workspace/ui/web/components/hex/useHexLayout';
 
 import type { WorkspaceAgent } from '@business/workspace/ui/web/types/workspace';
 

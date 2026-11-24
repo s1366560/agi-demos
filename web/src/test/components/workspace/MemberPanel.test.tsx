@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { App } from 'antd';
 
-import { MemberPanel } from '@/components/workspace/MemberPanel';
+import { MemberPanel } from '@business/workspace/ui/web/components/MemberPanel';
 import { render, screen } from '@/test/utils';
 
 vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
@@ -30,7 +30,7 @@ vi.spyOn(App, 'useApp').mockReturnValue({
   },
 } as unknown as ReturnType<typeof App.useApp>);
 
-vi.mock('@/components/workspace/AddAgentModal', () => ({
+vi.mock('@business/workspace/ui/web/components/AddAgentModal', () => ({
   AddAgentModal: () => null,
 }));
 

@@ -35,11 +35,11 @@ vi.mock('../../../components/agent/context/ContextDetailPanel', () => ({
   ContextDetailPanel: () => <div data-testid="context-detail-panel" />,
 }));
 
-vi.mock('../../../components/workspace/TaskBoard', () => ({
+vi.mock('@business/workspace/ui/web/components/TaskBoard', () => ({
   TaskBoard: () => <div data-testid="task-board" />,
 }));
 
-vi.mock('../../../components/workspace/MemberPanel', () => ({
+vi.mock('@business/workspace/ui/web/components/MemberPanel', () => ({
   MemberPanel: () => <div data-testid="member-panel" />,
 }));
 

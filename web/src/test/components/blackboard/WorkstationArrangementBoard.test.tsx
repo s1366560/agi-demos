@@ -42,12 +42,12 @@ vi.mock('@business/workspace/ui/web/stores/workspace', () => ({
 
 vi.mock('@/components/ui/lazyAntd', () => ({}));
 
-vi.mock('@/components/workspace/AddAgentModal', () => ({
+vi.mock('@business/workspace/ui/web/components/AddAgentModal', () => ({
   AddAgentModal: ({ open }: { open: boolean }) =>
     open ? <div data-testid="add-agent-modal">AddAgentModal</div> : null,
 }));
 
-vi.mock('@/components/workspace/hex3d/HexCanvas3D', () => ({
+vi.mock('@business/workspace/ui/web/components/hex3d/HexCanvas3D', () => ({
   HexCanvas3D: () => <div data-testid="hex-canvas-3d">HexCanvas3D</div>,
 }));
 

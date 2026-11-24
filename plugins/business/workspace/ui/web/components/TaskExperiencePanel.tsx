@@ -20,8 +20,8 @@ import { confirmAction } from '@/utils/confirmAction';
 import { formatDateTime } from '@/utils/date';
 import { formatTaskProjectionLabel } from '@/utils/workspaceTaskProjection';
 
-import { parseCanonicalStory } from '../agent/canonicalStory/canonicalStory';
-import { CanonicalStoryCard } from '../agent/canonicalStory/CanonicalStoryCard';
+import { parseCanonicalStory } from '@/components/agent/canonicalStory/canonicalStory';
+import { CanonicalStoryCard } from '@/components/agent/canonicalStory/CanonicalStoryCard';
 
 import type {
   TaskExecutionSession,

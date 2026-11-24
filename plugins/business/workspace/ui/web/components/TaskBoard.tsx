@@ -23,8 +23,8 @@ import {
   formatMetadataLabel,
   getRootGoalDisplayState,
   getTaskObservabilityState,
-} from '@/components/workspace/taskBoardSignals';
-import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
+} from '@business/workspace/ui/web/components/taskBoardSignals';
+import { TaskExperiencePanel } from '@business/workspace/ui/web/components/TaskExperiencePanel';
 
 import { buildTaskCreatePayload } from './taskBoardCreateModel';
 
