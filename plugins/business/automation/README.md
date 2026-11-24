@@ -22,7 +22,7 @@ python3 -c 'import json,sys; print(json.dumps({"schema":"memstack.mcp-oci-worker
 uv run --with ../../../sdk/memstack-plugin-sdk memstack-plugin-pack "$STAGE/package.json" --key "$SIGNING_KEY" --out automation.mspkg
 memstack packages --tenant "$TENANT" --project "$PROJECT" install --approve ui.slot --approve tools.execute --approve app.automation.playbooks.read \
   --approve app.automation.schedules.read --approve app.automation.schedules.write \
-  --approve app.automation.schedules.run automation.mspkg
+  --approve app.automation.schedules.run --approve storage.read --approve storage.write automation.mspkg
 ```
 
 From the repository root run the scheduler regressions under `src/tests/unit/infrastructure/scheduler`. Run `OCI_WORKER_DOCKER_TESTS=1 uv run pytest src/tests/integration/test_automation_schedule_package.py` to verify the signed worker through both full and minimal HTTP hosts.

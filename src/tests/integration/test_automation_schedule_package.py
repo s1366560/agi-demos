@@ -106,6 +106,8 @@ async def test_authorized_preview_uses_production_trigger(http, signed_automatio
             "approved_permissions": [
                 "ui.slot",
                 "tools.execute",
+                "storage.read",
+                "storage.write",
                 "app.automation.playbooks.read",
                 "app.automation.schedules.read",
                 "app.automation.schedules.write",
@@ -171,6 +173,8 @@ async def test_workflow_upgrade_and_rollback_restore_schedule_semantics(
             approved_permissions=[
                 "ui.slot",
                 "tools.execute",
+                "storage.read",
+                "storage.write",
                 "app.automation.playbooks.read",
                 "app.automation.schedules.read",
                 "app.automation.schedules.write",
@@ -203,3 +207,61 @@ async def test_workflow_upgrade_and_rollback_restore_schedule_semantics(
     await check_schedule("2.0.0", "2026-11-01T00:01:00+00:00")
     await post(path + "/rollback")
     await check_schedule("1.0.0", "2026-11-01T00:00:00+00:00")
+
+
+async def test_signed_workflow_revisions_survive_worker_upgrade(
+    http, signed_automation, monkeypatch
+):
+    client, credentials = http
+    public, registry, first, second = signed_automation
+    client._transport.app.state.plugin_marketplace_trusted_public_keys_v2 = (public,)
+    monkeypatch.setattr(get_settings(), "plugin_worker_allowed_registries", (registry,))
+    base = "/api/v1/platform-plugins/v2/optional-business"
+    plugin = "/memstack-automation"
+    scope = {"tenant_id": "t", "project_id": "p"}
+    headers = {"Authorization": "Bearer " + credentials["owner"]}
+
+    async def post(path, **inputs):
+        result = await client.post(base + path, json={**scope, **inputs}, headers=headers)
+        result.raise_for_status()
+        return result.json()
+
+    async def install(raw):
+        encoded = base64.b64encode(raw).decode()
+        review = await post("/inspect", archive_base64=encoded)
+        await post("/install", archive_base64=encoded, approved_permissions=review["permissions"])
+        await post(plugin + "/enable")
+        return review["digest"]
+
+    async def invoke(command, digest, **payload):
+        return await post(
+            plugin + "/commands", command_id=command, expected_digest=digest, payload=payload
+        )
+
+    digest = await install(first)
+    workflow_id = "0a" * 16
+    edit = {
+        "id": workflow_id,
+        "name": "Daily workflow",
+        "intervals": [60, 120],
+        "expected_revision": 0,
+    }
+    assert await invoke("save-workflow", digest, **edit) == {"saved": True, "revision": 1}
+    assert (await invoke("save-workflow", digest, **edit))["saved"]
+    assert not (await invoke("save-workflow", digest, **(edit | {"name": "Conflicting draft"})))[
+        "saved"
+    ]
+    edit |= {"expected_revision": 1, "name": "Updated workflow", "intervals": [90]}
+    assert (await invoke("save-workflow", digest, **edit))["revision"] == 2
+    digest = await install(second)
+    listing = await invoke("list-workflows", digest)
+    assert [(row["revision"], row["intervals"]) for row in listing["items"]] == [
+        (1, [60, 120]),
+        (2, [90]),
+    ]
+    start = "2026-11-01T00:00:00+00:00"
+    result = await invoke("execute-workflow", digest, id=workflow_id, revision=1, start=start)
+    assert [row["next_run_at"] for row in result["results"]] == [
+        "2026-11-01T00:01:00+00:00",
+        "2026-11-01T00:02:00+00:00",
+    ]

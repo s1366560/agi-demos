@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from triggers import next_scheduled_run
+from workflow import definitions
 from workflow.engine import AsyncioWorkflowEngine
 from workflow.tasks import TaskManager
 
@@ -55,13 +56,26 @@ def dispatch(method: str, params: dict[str, Any]) -> dict[str, Any]:
                 for tool in TOOLS
             ]
         }
-    if method == "tools/call" and params.get("name") == "run_schedule_workflow":
-        return {
-            "content": [],
-            "structuredContent": asyncio.run(run_schedule_workflow(params["arguments"]["steps"])),
-        }
-    if method == "tools/call" and params.get("name") == "next_scheduled_run":
-        return {"content": [], "structuredContent": next_scheduled_run(params["arguments"])}
+    if method == "tools/call":
+        args, name = params["arguments"], params["name"]
+        if name == "save_schedule_workflow":
+            result = definitions.save(args)
+        elif name == "list_schedule_workflows":
+            result = definitions.list_revisions(args)
+        elif name == "execute_schedule_workflow":
+            definition = definitions.load(args["id"], args["revision"])
+            steps = [
+                {"kind": "every", "config": {"interval_seconds": interval}, "start": args["start"]}
+                for interval in definition["intervals"]
+            ]
+            result = asyncio.run(run_schedule_workflow(steps))
+        elif name == "run_schedule_workflow":
+            result = asyncio.run(run_schedule_workflow(args["steps"]))
+        elif name == "next_scheduled_run":
+            result = next_scheduled_run(args)
+        else:
+            raise ValueError("unsupported operation")
+        return {"content": [], "structuredContent": result}
     raise ValueError("unsupported operation")
 
 

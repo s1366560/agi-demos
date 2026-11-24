@@ -1,59 +1,110 @@
-(() => {
+(async () => {
+  const api = window.memstack;
+  const {locale, commands} = await api.scope();
+  const label = (en, zh) => locale.startsWith('zh') ? zh : en;
+  const node = (tag, text) => Object.assign(document.createElement(tag), text === undefined ? {} : {textContent:text});
   const root = document.getElementById('root');
-  const zh = navigator.language.startsWith('zh');
-  const label = (en, cn) => zh ? cn : en;
-  const title = document.createElement('h1');
-  title.textContent = label('Schedule workflow', '调度工作流');
-  const form = document.createElement('form');
-  const steps = document.createElement('ol');
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.textContent = label('Add interval step', '添加间隔步骤');
-  function addStep() {
-    const step = document.createElement('li');
-    const field = document.createElement('label');
-    field.textContent = label('Interval in seconds', '间隔秒数');
-    const seconds = document.createElement('input');
-    Object.assign(seconds, {type: 'number', min: '1', max: '31536000', required: true, value: '60'});
-    field.append(seconds);
-    step.append(field);
-    steps.append(step);
-    add.disabled = steps.children.length >= 16;
+  const title = node('h1', label('Schedule workflow', '调度工作流'));
+  const editor = node('fieldset');
+  function field(parent, text, element) {
+    const caption = node('label', text);
+    caption.append(element);
+    parent.append(caption);
+    return element;
   }
-  add.onclick = addStep;
-  addStep();
-  const submit = document.createElement('button');
-  submit.textContent = label('Run workflow', '执行工作流');
-  const output = document.createElement('ol');
-  output.setAttribute('aria-live', 'polite');
-  submit.type = 'button';
-  form.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && event.target instanceof HTMLInputElement) {
-      event.preventDefault();
-      submit.click();
-    }
-  });
-  submit.onclick = async () => {
-    if (!form.reportValidity()) return;
-    submit.disabled = true;
+  const choice = field(editor, label('Saved revisions','已保存版本'),node('select'));
+  const name = field(editor, label('Workflow name','工作流名称'),Object.assign(node('input'),{maxLength:160,required:true}));
+  const steps = node('ol');
+  editor.append(steps);
+  const notice = node('p');
+  notice.setAttribute('role','status');
+  const output = node('ol');
+  output.setAttribute('aria-live','polite');
+  function button(text, callback) {
+    const action = node('button',text);
+    action.type = 'button';
+    action.onclick = async () => {
+      editor.disabled = true;
+      notice.textContent = '';
+      try { await callback(); } catch (error) { notice.textContent = String(error); }
+      finally { editor.disabled = false; }
+    };
+    editor.append(action);
+    return action;
+  }
+  let selected = null, newId = '', cursor = null;
+  const revisions = new Map();
+  function values() { return Array.from(steps.querySelectorAll('input'), input => input.valueAsNumber); }
+  function changed() {
+    add.disabled = steps.children.length >= 16;
+    runSaved.disabled = !selected || selected.name !== name.value || JSON.stringify(selected.intervals) !== JSON.stringify(values());
+    for (const remove of steps.querySelectorAll('button')) remove.disabled = steps.children.length <= 1;
+  }
+  function addStep(interval = 60) {
+    const step = node('li');
+    const control = Object.assign(node('input'),{type:'number',min:'1',max:'31536000',value:String(interval),required:true});
+    field(step,label('Interval in seconds','间隔秒数'),control);
+    control.oninput = changed;
+    const remove = node('button',label('Remove step','移除步骤'));
+    remove.type = 'button';
+    remove.onclick = () => {step.remove();changed();};
+    step.append(remove);
+    steps.append(step);
+  }
+  function select() {
+    selected = revisions.get(choice.value) ?? null;
+    newId = Array.from(crypto.getRandomValues(new Uint32Array(4)), x=>x.toString(16).padStart(8,'0')).join('');
+    name.value = selected?.name ?? '';
+    steps.replaceChildren();
+    for (const interval of selected?.intervals ?? [60]) addStep(interval);
     output.replaceChildren();
-    const start = new Date().toISOString();
-    try {
-      const result = await window.memstack.invoke('run-workflow', {
-        steps: Array.from(steps.querySelectorAll('input'), field =>
-          ({kind: 'every', config: {interval_seconds: field.valueAsNumber}, start})),
-      });
-      for (const step of result.results) {
-        const item = document.createElement('li');
-        item.textContent = step.next_run_at;
-        output.append(item);
-      }
-    } catch (error) {
-      output.textContent = String(error);
-    } finally {
-      submit.disabled = false;
+    notice.textContent = '';
+    changed();
+  }
+  function show(record) {
+    const key = record.id + ':' + record.revision;
+    if (!revisions.has(key)) choice.add(new Option(record.name + ' · v' + record.revision,key));
+    revisions.set(key,record);
+    return key;
+  }
+  async function load(reset) {
+    const page = await api.invoke('list-workflows', reset || !cursor ? {} : {after:cursor});
+    if (reset) {
+      revisions.clear();
+      choice.replaceChildren(new Option(label('New workflow','新建工作流'),''));
+      select();
     }
-  };
-  form.append(steps, add, submit);
-  root.append(title, form, output);
+    for (const item of page.items) show(item);
+    cursor = page.next_cursor;
+    more.disabled = !cursor;
+  }
+  const more = button(label('Load more revisions','载入更多版本'), () => load(false));
+  const add = button(label('Add interval step','添加间隔步骤'), () => {addStep();changed();});
+  const save = button(label('Save workflow','保存工作流'), async () => {
+    if (!name.reportValidity() || !Array.from(steps.querySelectorAll('input')).every(input => input.reportValidity())) return;
+    const draft = {id:selected?.id ?? newId, name:name.value, intervals:values()};
+    const result = await api.invoke('save-workflow',{...draft, expected_revision:selected?.revision ?? 0});
+    if (!result.saved) throw new Error(label('A newer revision exists. Reload saved revisions.','已有更新版本，请重新载入。'));
+    choice.value = show({...draft,revision:result.revision});
+    select();
+    notice.textContent = label('Saved revision ','已保存版本 ') + result.revision;
+  });
+  function render(result) {
+    output.replaceChildren(...result.results.map(step => node('li', step.next_run_at ?? label('No scheduled time','无计划时间'))));
+  }
+  button(label('Run workflow','执行工作流'), async () => {
+    if (!Array.from(steps.querySelectorAll('input')).every(input => input.reportValidity())) return;
+    const start = new Date().toISOString();
+    render(await api.invoke('run-workflow',{steps:values().map(interval=>({kind:'every',config:{interval_seconds:interval},start}))}));
+  });
+  const runSaved = button(label('Run saved revision','运行已保存版本'), async () => {
+    if (selected) render(await api.invoke('execute-workflow',{id:selected.id,revision:selected.revision,start:new Date().toISOString()}));
+  });
+  button(label('Reload saved revisions','重新载入版本'), () => load(true));
+  save.disabled = !commands.includes('save-workflow');
+  choice.onchange = select;
+  name.oninput = changed;
+  root.append(title,editor,notice,output);
+  select();
+  try { await load(true); } catch (error) { notice.textContent=String(error); }
 })();

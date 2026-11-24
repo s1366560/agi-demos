@@ -79,6 +79,27 @@ async def test_signed_schedules_edit_and_dispatch_once_with_revision_guard(
             }
             updated = await post(path, command_id="save-schedule", payload=edit)
             assert updated["revision"] > saved["revision"] and updated["interval_seconds"] == 300
+            once = {
+                "name": "One shot",
+                "enabled": False,
+                "description": "Meeting",
+                "trigger": {"kind": "at", "run_at": "2030-01-01T08:00:00+08:00"},
+                "idempotency_key": "create-once",
+            }
+            single = await post(path, command_id="save-schedule", payload=once)
+            assert single["schedule"]["config"]["run_at"].endswith("+08:00")
+            weekly = {
+                **once,
+                "job_id": single["id"],
+                "expected_revision": single["revision"],
+                "trigger": {"kind": "cron", "expr": "0 8 * * 1", "timezone": "Asia/Shanghai"},
+                "idempotency_key": "weekly-cron",
+            }
+            changed = await post(path, command_id="save-schedule", payload=weekly)
+            assert changed["schedule"]["config"] == {
+                "expr": "0 8 * * 1",
+                "timezone": "Asia/Shanghai",
+            }
             run = {
                 "job_id": saved["id"],
                 "expected_revision": updated["revision"],
@@ -87,6 +108,8 @@ async def test_signed_schedules_edit_and_dispatch_once_with_revision_guard(
             first = await post(path, command_id="run-schedule", payload=run)
             replay = await post(path, command_id="run-schedule", payload=run)
             assert first["run_id"] == replay["run_id"] and replay["duplicate"]
+            history = await post(path, command_id="list-schedules", payload={"job_id": saved["id"]})
+            assert history["total"] == 1 and history["items"][0]["id"] == first["run_id"]
             stale = await client.post(
                 base + path,
                 headers=headers,

@@ -1,9 +1,12 @@
 """Revision-bound project schedule editing and durable manual dispatch for signed pages."""
 
-from typing import TYPE_CHECKING, Annotated, Any
+from datetime import datetime
+from typing import TYPE_CHECKING, Annotated, Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.application.schemas.cron import (
     AutomationRunCommandV2,
@@ -29,6 +32,7 @@ type Identifier = Annotated[str, Field(min_length=1, max_length=255)]
 class PageQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     offset: int = Field(0, ge=0)
+    job_id: Identifier | None = None
 
 
 class Revision(BaseModel):
@@ -38,6 +42,47 @@ class Revision(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=255, pattern=r"^[!-~]+$")
 
 
+class Every(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["every"]
+    interval_seconds: int = Field(ge=1, le=31536000)
+
+
+class At(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["at"]
+    run_at: str = Field(min_length=1, max_length=64)
+
+    @field_validator("run_at")
+    @classmethod
+    def validate_instant(cls, value: str) -> str:
+        if datetime.fromisoformat(value).tzinfo is None:
+            raise ValueError("An explicit time zone is required")
+        return value
+
+
+class Cron(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["cron"]
+    expr: str = Field(min_length=1, max_length=256)
+    timezone: str = Field(min_length=1, max_length=128)
+
+    @field_validator("expr")
+    @classmethod
+    def validate_expression(cls, value: str) -> str:
+        CronTrigger.from_crontab(value, timezone="UTC")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("Unknown time zone") from exc
+        return value
+
+
 class ScheduleEdit(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     job_id: Identifier | None = None
@@ -45,7 +90,9 @@ class ScheduleEdit(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=255, pattern=r"^[!-~]+$")
     name: Identifier
     enabled: bool
-    interval_seconds: int = Field(ge=1, le=31536000)
+    interval_seconds: int | None = Field(None, ge=1, le=31536000)
+    trigger: Annotated[At | Every | Cron, Field(discriminator="kind")] | None = None
+    description: str | None = Field(None, max_length=1000)
 
 
 def _scope(ctx: "PackageOperationContext") -> ScopeV2:
@@ -63,6 +110,10 @@ def _row(job: CronJobResponse) -> dict[str, Any]:
         "name": job.name,
         "enabled": job.enabled,
         "revision": job.revision,
+        "description": job.description,
+        "schedule": job.schedule.model_dump(mode="json"),
+        "timezone": job.timezone,
+        "payload_kind": job.payload.kind.value,
         "interval_seconds": interval,
     }
 
@@ -73,6 +124,25 @@ async def schedules(
     query = PageQuery.model_validate(payload)
     project = ctx.scope.project_id
     async with cron_authority(ctx.request, ctx.user, ctx.db, project, _scope(ctx)) as authority:
+        if query.job_id:
+            runs = await cron.list_cron_job_runs(project, query.job_id, 32, query.offset, authority)
+            return {
+                "items": [
+                    run.model_dump(
+                        mode="json",
+                        include={
+                            "id",
+                            "status",
+                            "trigger_type",
+                            "started_at",
+                            "finished_at",
+                            "duration_ms",
+                        },
+                    )
+                    for run in runs.items
+                ],
+                "total": runs.total,
+            }
         result = await cron.list_cron_jobs(project, True, 32, query.offset, authority)
     return {"items": [_row(job) for job in result.items], "total": result.total}
 
@@ -84,12 +154,22 @@ async def save_schedule(
     project = ctx.scope.project_id
     if (edit.job_id is None) != (edit.expected_revision is None):
         raise HTTPException(422, _("A schedule edit requires its current revision"))
-    values = {
+    values: dict[str, Any] = {
         "name": edit.name,
         "enabled": edit.enabled,
-        "schedule": {"kind": "every", "config": {"interval_seconds": edit.interval_seconds}},
         "idempotency_key": edit.idempotency_key,
     }
+    if edit.description is not None:
+        values["description"] = edit.description
+    if edit.trigger and edit.interval_seconds is not None:
+        raise HTTPException(422, _("Specify only one schedule"))
+    trigger = edit.trigger
+    if edit.interval_seconds is not None:
+        trigger = Every(kind="every", interval_seconds=edit.interval_seconds)
+    if trigger:
+        values["schedule"] = {"kind": trigger.kind, "config": trigger.model_dump(exclude={"kind"})}
+    if edit.job_id is None and not trigger:
+        raise HTTPException(422, _("A schedule is required"))
     async with cron_authority(ctx.request, ctx.user, ctx.db, project, _scope(ctx)) as authority:
         if edit.job_id is None:
             create = CronJobCreate.model_validate(

@@ -107,3 +107,28 @@ async def test_unavailable_upstream_returns_scoped_failure(authority, monkeypatc
     )
     with pytest.raises(OptionalBusinessError, match="authority unavailable"):
         await ops.read_sandbox(ctx, {}, None)
+
+
+@pytest.mark.unit
+async def test_metrics_are_bound_to_the_current_project_and_sandbox(authority):
+    ctx, state, _, calls = authority
+    state.update(
+        cpu_percent=42.5,
+        memory_usage=1024,
+        memory_limit=4096,
+        pids=3,
+        collected_at="2026-11-24T07:00:00Z",
+    )
+    result = await ops.read_sandbox(ctx, {"metrics_for": "sandbox"}, None)
+    assert result["metrics"] == {
+        "cpu_percent": 42.5,
+        "memory_usage": 1024,
+        "memory_limit": 4096,
+        "pids": 3,
+        "collected_at": "2026-11-24T07:00:00Z",
+    }
+    assert calls == [("", "GET"), ("/stats", "GET")]
+    calls.clear()
+    with pytest.raises(OptionalBusinessError, match="selected sandbox has changed"):
+        await ops.read_sandbox(ctx, {"metrics_for": "retired"}, None)
+    assert calls == [("", "GET")]

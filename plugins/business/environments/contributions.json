@@ -151,7 +151,8 @@
       "permissions": [
         "app.environments.sandbox.read"
       ],
-      "payload": {}
+      "payload": {},
+      "accepts_input": true
     },
     {
       "id": "prepare-sandbox",
@@ -188,6 +189,28 @@
   ],
   "pages": [
     {
+      "id": "sandbox",
+      "title": "Project sandbox",
+      "routes": [
+        "/environments/sandbox",
+        "/tenant/:tenantId/project/:projectId/sandbox"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/sandbox.js",
+        "digest": "sha256:ecccf897bab222c728edb84ea23849e8b99281c43de1c9ae761453e6c390e972"
+      },
+      "commands": [
+        "sandbox-status",
+        "prepare-sandbox",
+        "authorize-run-terminal"
+      ],
+      "device_tools": []
+    },
+    {
       "id": "patch",
       "title": "Sandbox patch preview",
       "routes": [
@@ -203,28 +226,6 @@
       },
       "commands": [
         "patch-text"
-      ],
-      "device_tools": []
-    },
-    {
-      "id": "sandbox",
-      "title": "Project sandbox",
-      "routes": [
-        "/environments/sandbox",
-        "/tenant/:tenantId/project/:projectId/sandbox"
-      ],
-      "targets": [
-        "web",
-        "desktop-renderer"
-      ],
-      "entry": {
-        "path": "ui/sandbox.js",
-        "digest": "sha256:49c7f018c86e99b334f7e7174e50dc88d16d3f0230e82f8f03c920b6e248fab1"
-      },
-      "commands": [
-        "sandbox-status",
-        "prepare-sandbox",
-        "authorize-run-terminal"
       ],
       "device_tools": []
     }

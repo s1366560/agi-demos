@@ -46,6 +46,25 @@ class _Sandbox(BaseModel):
     tenant_id: str
     status: str
     is_healthy: bool
+    created_at: str | None = None
+    last_accessed_at: str | None = None
+
+
+class _Stats(BaseModel):
+    project_id: str
+    sandbox_id: str
+    cpu_percent: float
+    memory_usage: int
+    memory_limit: int
+    disk_usage: int | None = None
+    network_rx_bytes: int | None = None
+    network_tx_bytes: int | None = None
+    pids: int
+    collected_at: str
+
+
+class _Read(_Input):
+    metrics_for: Annotated[str, Field(min_length=1, max_length=256)] | None = None
 
 
 class _Grant(BaseModel):
@@ -116,13 +135,26 @@ def _sandbox(ctx: "PackageOperationContext", value: dict[str, Any] | None) -> di
         raise OptionalBusinessError("runtime_unavailable", "Invalid sandbox state") from exc
     if (sandbox.tenant_id, sandbox.project_id) != (ctx.scope.tenant_id, ctx.scope.project_id):
         raise OptionalBusinessError("forbidden", "Sandbox scope mismatch")
-    return sandbox.model_dump(include={"sandbox_id", "status", "is_healthy"})
+    return sandbox.model_dump(exclude={"project_id", "tenant_id"}, exclude_none=True)
 
 
 async def read_sandbox(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
-    _Input.model_validate(payload)
+    query = _Read.model_validate(payload)
+    if query.metrics_for:
+        sandbox = _sandbox(ctx, await _request(ctx, "GET", "", absent_ok=True))
+        if not sandbox or sandbox["sandbox_id"] != query.metrics_for:
+            raise OptionalBusinessError("conflict", "The selected sandbox has changed")
+        try:
+            stats = _Stats.model_validate(await _request(ctx, "GET", "/stats"))
+        except ValidationError as exc:
+            raise OptionalBusinessError("runtime_unavailable", "Invalid sandbox metrics") from exc
+        if (stats.project_id, stats.sandbox_id) != (ctx.scope.project_id, query.metrics_for):
+            raise OptionalBusinessError("forbidden", "Sandbox metrics scope mismatch")
+        return {
+            "metrics": stats.model_dump(exclude={"project_id", "sandbox_id"}, exclude_none=True)
+        }
     capability = await _capability(ctx)
     return {
         "sandbox": _sandbox(ctx, await _request(ctx, "GET", "", absent_ok=True)),
