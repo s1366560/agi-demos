@@ -6,6 +6,8 @@ import re
 import pytest
 from playwright.sync_api import Page, expect, sync_playwright
 
+from src.tests.integration.marketplace_browser import apply, more
+
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
@@ -13,19 +15,6 @@ pytestmark = [
         reason="requires the signed two-release inventory fixture and a disposable native project",
     ),
 ]
-
-
-def apply(page: Page, version: str) -> None:
-    page.locator(".pm-spec select").select_option(version)
-    actions = page.locator(".pm-detail-actions")
-    action = actions.get_by_role(
-        "button", name=re.compile("^(Install|安装|Update to|更新至|切换版本|Switch version)")
-    )
-    action.click()
-    dialog = page.locator("dialog.pm-dialog")
-    expect(dialog).to_contain_text(version)
-    dialog.locator(".pm-actions button").last.click()
-    expect(page.locator(".pm-spec dd").first).to_have_text(version, timeout=30000)
 
 
 def approve_device(page: Page) -> None:
@@ -54,13 +43,6 @@ def run_labels(page: Page, version: int) -> None:
         )
     page.go_back()
     expect(page.locator(".pm-spec")).to_be_visible(timeout=15000)
-
-
-def more(page: Page, action: str) -> None:
-    menu = page.locator(".pm-detail-actions details")
-    menu.locator("summary").click()
-    menu.get_by_role("button", name=re.compile(action)).click()
-    page.locator("dialog.pm-dialog .pm-actions button").last.click()
 
 
 def test_native_project_marketplace_lifecycle() -> None:
