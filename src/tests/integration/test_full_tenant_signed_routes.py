@@ -74,3 +74,56 @@ def test_tenant_bookmark_opens_installed_original(package, version, route, searc
                     else:
                         apply(page, previous)
             browser.close()
+
+
+def test_original_palette_and_user_selected_compatibility_bookmark():
+    account = json.loads(Path(os.environ["MEMSTACK_QA_EMPTY_TENANT_OWNER"]).read_text())
+    origin = os.getenv("MEMSTACK_QA_VERTICAL_ORIGIN", "http://localhost:3000")
+    assert urlsplit(origin).hostname in ("localhost", "127.0.0.1", "::1")
+    tenant = account["tenant_id"]
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page()
+        page.set_default_timeout(60000)
+
+        def sign_in():
+            page.get_by_test_id("email-input").fill(account["email"])
+            page.get_by_test_id("password-input").fill(account["password"])
+            page.get_by_test_id("login-submit-button").click()
+            expect(page.get_by_test_id("login-submit-button")).to_have_count(0, timeout=60000)
+
+        page.goto(origin + "/login")
+        sign_in()
+        page.goto(f"{origin}/tenant/{tenant}/plugins")
+        expect(page.locator("#pm-card-memstack-automation")).to_be_visible()
+        page.keyboard.press("Control+k")
+        dialog = page.get_by_role("dialog")
+        combo = dialog.get_by_role("combobox")
+        expect(combo).to_be_focused()
+        options = dialog.get_by_role("option")
+        audit = options.filter(has_text=re.compile("审计|audit", re.I)).first
+        expect(audit).to_be_visible()
+        combo.fill(audit.inner_text().splitlines()[0])
+        expect(options.first).to_be_visible()
+        combo.press("Escape")
+        expect(dialog).to_have_count(0)
+
+        bookmark = f"/tenant/{tenant}/decision-records?view=recent#details"
+        compat = os.getenv("MEMSTACK_QA_COMPAT_ORIGIN", f"http://{urlsplit(origin).hostname}:3001")
+        assert urlsplit(compat).hostname in ("localhost", "127.0.0.1", "::1")
+        compat_requests = []
+        page.on(
+            "request",
+            lambda req: compat_requests.append(req.url)
+            if req.url.startswith(compat + "/")
+            else None,
+        )
+        page.goto(origin + bookmark)
+        link = page.locator(f'a[href^="{compat}/"]')
+        expect(link).to_have_attribute("href", compat + bookmark)
+        assert not compat_requests
+        link.click()
+        sign_in()
+        page.wait_for_url(compat + bookmark, timeout=90000)
+        browser.close()
