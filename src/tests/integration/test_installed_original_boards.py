@@ -180,6 +180,11 @@ def test_web_editor_reindex_and_delete_memory():
         with page.expect_response(accepted("reindex-memory"), timeout=60000) as indexing:
             retry.click()
         assert indexing.value.ok, indexing.value.status
+        completed = guest.get_by_text("Completed", exact=True).first
+        expect(completed).to_be_visible(timeout=120000)
+        # A reload reads the persisted memory and its revision through the installed package.
+        page.reload()
+        expect(completed).to_be_visible(timeout=60000)
         guest.get_by_role("button", name="Delete", exact=True).click()
         with page.expect_response(accepted("delete-memory"), timeout=60000) as removed:
             guest.get_by_role("dialog").get_by_role("button", name="Delete", exact=True).click()
