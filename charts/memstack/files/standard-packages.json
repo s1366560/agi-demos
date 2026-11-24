@@ -50,6 +50,8 @@
     "permissions": [
       "tools.execute",
       "ui.slot",
+      "app.automation.patterns.read",
+      "app.automation.patterns.delete",
       "app.automation.playbooks.read",
       "app.automation.schedules.read",
       "app.automation.schedules.write",

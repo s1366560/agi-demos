@@ -488,6 +488,24 @@
       ],
       "payload": {},
       "accepts_input": true
+    },
+    {
+      "id": "list-patterns",
+      "host_operation": "app.automation.patterns.read",
+      "permissions": [
+        "app.automation.patterns.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "delete-pattern",
+      "host_operation": "app.automation.patterns.delete",
+      "permissions": [
+        "app.automation.patterns.delete"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -567,6 +585,31 @@
         "save-schedule",
         "run-schedule",
         "delete-schedule"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "workflow-patterns",
+      "title": "Workflow patterns",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/patterns"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workflow-patterns.js",
+        "digest": "sha256:fe949eea74e24a25d672cd1a85fd09636db7d3af9978f54b6aec6f2962085c84"
+      },
+      "style": {
+        "path": "ui/workflow-patterns.css",
+        "digest": "sha256:4b6990f64595fa2308b8364dad8a1604eab1159cded28825822cbbd4af68c521"
+      },
+      "commands": [
+        "list-patterns",
+        "delete-pattern"
       ],
       "device_tools": []
     }

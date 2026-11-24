@@ -1,0 +1,8 @@
+@import 'tailwindcss' source(none);
+@source '../web/tenant/WorkflowPatternsView.tsx';
+@source '../web/tenant/patterns';
+@theme {
+  --color-primary: #3456a0;
+  --color-surface-dark: #151a24;
+  --color-border-dark: #343a47;
+}

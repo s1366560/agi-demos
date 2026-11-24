@@ -313,5 +313,33 @@
       "avgSuccessRate": "平均成功率",
       "deprecated": "已弃用的模式"
     }
+  },
+  "common": {
+    "cancel": "取消",
+    "delete": "删除",
+    "refresh": "刷新",
+    "retry": "重试",
+    "close": "关闭",
+    "save": "保存"
+  },
+  "agent": {
+    "patternList": {
+      "status": {
+        "preferred": "优先",
+        "active": "活跃",
+        "deprecated": "已弃用",
+        "unclassified": "未分类"
+      },
+      "columns": {
+        "status": "状态",
+        "patternName": "模式名称",
+        "usage": "使用量",
+        "successRate": "成功率"
+      },
+      "deletePattern": "删除模式",
+      "deleteAria": "删除 {{name}}",
+      "empty": "未找到模式",
+      "tableLabel": "模式表格"
+    }
   }
 }

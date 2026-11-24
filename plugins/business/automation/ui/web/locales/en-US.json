@@ -313,5 +313,33 @@
       "avgSuccessRate": "Avg. Success Rate",
       "deprecated": "Deprecated Patterns"
     }
+  },
+  "common": {
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "close": "Close",
+    "save": "Save"
+  },
+  "agent": {
+    "patternList": {
+      "status": {
+        "preferred": "Preferred",
+        "active": "Active",
+        "deprecated": "Deprecated",
+        "unclassified": "Unclassified"
+      },
+      "columns": {
+        "status": "Status",
+        "patternName": "Pattern Name",
+        "usage": "Usage",
+        "successRate": "Success Rate"
+      },
+      "deletePattern": "Delete pattern",
+      "deleteAria": "Delete {{name}}",
+      "empty": "No patterns found",
+      "tableLabel": "Pattern table"
+    }
   }
 }

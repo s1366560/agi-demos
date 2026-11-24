@@ -45,6 +45,7 @@ vi.mock('antd', () => ({
   App: {
     useApp: () => ({ message: lazyMessage }),
   },
+  Skeleton: Object.assign(() => null, {Button: () => null}),
   Modal: {
     confirm: modalConfirm,
   },
@@ -59,11 +60,11 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   },
 }));
 
-vi.mock('@/components/agent/patterns/PatternStats', () => ({
+vi.mock('@business/automation/ui/web/tenant/patterns/PatternStats', () => ({
   PatternStats: () => <div data-testid="pattern-stats" />,
 }));
 
-vi.mock('@/components/agent/patterns/PatternList', () => ({
+vi.mock('@business/automation/ui/web/tenant/patterns/PatternList', () => ({
   PatternList: ({
     patterns,
     onDeprecate,
@@ -81,7 +82,7 @@ vi.mock('@/components/agent/patterns/PatternList', () => ({
   ),
 }));
 
-vi.mock('@/components/agent/patterns/PatternInspector', () => ({
+vi.mock('@business/automation/ui/web/tenant/patterns/PatternInspector', () => ({
   PatternInspector: ({ onDeprecate }: { onDeprecate: () => void; children?: ReactNode }) => (
     <button type="button" onClick={onDeprecate}>
       inspect-delete
