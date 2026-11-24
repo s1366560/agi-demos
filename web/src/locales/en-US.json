@@ -902,6 +902,8 @@
       }
     },
     "pluginHub": {
+      "installationScope": "Installation scope",
+      "tenantScope": "Tenant",
       "openFullWorkbench": "Open full workbench",
       "backToMarket": "Back to plugin marketplace",
       "integrationSettings": "Integrations and credentials",

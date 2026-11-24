@@ -4,7 +4,8 @@ import { MarketDialog } from './MarketDialog';
 import { marketName, localize, Mark, MarketStatus, PackageIcon, platforms } from './marketIcons';
 import type { MarketText } from './pluginMarketText';
 import {
-  MARKET_BASE,
+  packageBase,
+  packageScope,
   type Installation,
   type MarketDetail,
   type PluginMarketProps,
@@ -51,7 +52,8 @@ export function MarketDetailView(props: DetailProps) {
   const manages = props.canManage !== false && d.can_manage;
   const label = marketName(d, locale);
   const desc = localize(d.description, locale);
-  const scope = { tenant_id: tenantId, project_id: projectId };
+  const scope = packageScope(tenantId, projectId);
+  const base = packageBase(projectId);
   const activeLinks = (i?.pages ?? [])
     .filter((page) => page.targets.includes(props.target))
     .flatMap((page) => {
@@ -86,7 +88,7 @@ export function MarketDetailView(props: DetailProps) {
     const expected_revision = snapshot.desired_revision;
     let response: Installation;
     if (review.action === 'apply' && candidate && snapshot.package_name) {
-      response = await props.transport<Installation>(MARKET_BASE + '/npm/apply', {
+      response = await props.transport<Installation>(base + '/npm/apply', {
         method: 'POST',
         body: {
           ...scope,
@@ -99,7 +101,7 @@ export function MarketDetailView(props: DetailProps) {
       });
     } else {
       response = await props.transport<Installation>(
-        MARKET_BASE + '/' + encodeURIComponent(d.plugin_id) + '/' + review.action,
+        base + '/' + encodeURIComponent(d.plugin_id) + '/' + review.action,
         {
           method: 'POST',
           body: { ...scope, expected_revision },
@@ -328,6 +330,7 @@ export function MarketDetailView(props: DetailProps) {
           onConfirm={submit}
         >
           <strong>{label}</strong>
+          <p>{t.scopeLabel} · {projectId ?? tenantId}</p>
           {review.action === 'apply' && candidate && (
             <>
               <p className="pm-release-line">

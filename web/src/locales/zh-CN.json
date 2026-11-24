@@ -1085,6 +1085,8 @@
       }
     },
     "pluginHub": {
+      "installationScope": "安装范围",
+      "tenantScope": "整个租户",
       "openFullWorkbench": "打开完整工作台",
       "backToMarket": "返回插件市场",
       "integrationSettings": "集成与凭据设置",

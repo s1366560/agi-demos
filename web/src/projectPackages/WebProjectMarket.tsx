@@ -9,7 +9,7 @@ import type { MarketplaceTransport } from '../../../agi-stack/packages/plugin-ma
 
 interface Props {
   tenantId: string;
-  projectId: string;
+  projectId: string | null;
   transport: MarketplaceTransport;
   canManage?: boolean;
   scopeParams: Record<string, string>;

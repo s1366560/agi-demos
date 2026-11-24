@@ -56,7 +56,7 @@ export interface MarketDetail extends CatalogItem {
 }
 export interface PluginMarketProps {
   tenantId: string;
-  projectId: string;
+  projectId: string | null;
   target: PageTarget;
   canManage?: boolean;
   transport: MarketplaceTransport;
@@ -74,3 +74,13 @@ export interface PluginMarketProps {
   onChanged?(): void;
 }
 export const MARKET_BASE = '/api/v1/platform-plugins/v2/optional-business';
+
+export const TENANT_MARKET_BASE = '/api/v1/tenant-packages';
+
+export function packageBase(projectId: string | null) {
+  return projectId === null ? TENANT_MARKET_BASE : MARKET_BASE;
+}
+
+export function packageScope(tenantId: string, projectId: string | null): Record<string, string> {
+  return projectId === null ? { tenant_id: tenantId } : { tenant_id: tenantId, project_id: projectId };
+}

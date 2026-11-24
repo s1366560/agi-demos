@@ -277,6 +277,7 @@
     "subtitleVoluntary": "为您的账户设置一个新密码。"
   },
   "projectPackages": {
+    "selectTenant": "选择租户",
     "title": "项目工作区",
     "manage": "管理插件",
     "project": "项目",
@@ -287,6 +288,7 @@
   },
   "tenant": {
     "pluginHub": {
+      "tenantScope": "租户插件",
       "optionalBusiness": {
         "title": "签名可选业务",
         "pluginId": "插件标识",

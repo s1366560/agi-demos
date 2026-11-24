@@ -15,7 +15,8 @@ export function useWebPackageSession(token: string | null) {
       if (
         !token ||
         getAuthToken() !== token ||
-        !path.startsWith('/api/v1/platform-plugins/v2/optional-business/')
+        (!path.startsWith('/api/v1/platform-plugins/v2/optional-business/') &&
+          !path.startsWith('/api/v1/tenant-packages/'))
       ) {
         throw new Error('page_scope_expired');
       }

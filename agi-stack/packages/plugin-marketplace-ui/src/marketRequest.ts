@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import type { MarketplaceTransport } from './client';
-import { MARKET_BASE } from './pluginMarketTypes';
 
 /** A result belongs only to the URL + revision that initiated it. */
 export function useMarketRequest<T>(
@@ -17,7 +16,7 @@ export function useMarketRequest<T>(
   useEffect(() => {
     if (!path) return;
     const controller = new AbortController();
-    void transport<T>(MARKET_BASE + path, { signal: controller.signal }).then(
+    void transport<T>(path, { signal: controller.signal }).then(
       (data) => {
         if (!controller.signal.aborted) setResult({ path, revision, data });
       },

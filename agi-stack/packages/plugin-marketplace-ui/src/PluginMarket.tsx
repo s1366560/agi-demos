@@ -6,7 +6,8 @@ import { marketName, localize, Mark, MarketStatus, PackageIcon, platforms } from
 import { errorText, fileBase64, useMarketRequest } from './marketRequest';
 import { marketText } from './pluginMarketText';
 import {
-  MARKET_BASE,
+  packageBase,
+  packageScope,
   type Catalog,
   type Installation,
   type MarketDetail,
@@ -48,7 +49,7 @@ export function PluginMarket(props: PluginMarketProps) {
 }
 function ScopedMarket(props: PluginMarketProps) {
   const { tenantId, projectId, pluginId, transport, locale } = props;
-  const t = marketText(locale);
+  const t = marketText(locale, projectId === null);
   const [query, setQuery] = useState('');
   const [view, setView] = useState<MarketView>('all');
   const [offset, setOffset] = useState(0);
@@ -66,7 +67,8 @@ function ScopedMarket(props: PluginMarketProps) {
   const file = useRef<HTMLInputElement>(null);
   const current = useRef(true);
   const importSeq = useRef(0);
-  const scope = { tenant_id: tenantId, project_id: projectId };
+  const scope = packageScope(tenantId, projectId);
+  const base = packageBase(projectId);
   const [search, setSearch] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -84,7 +86,7 @@ function ScopedMarket(props: PluginMarketProps) {
   const reload = () => setRevision((n) => n + 1);
   const catalog = useMarketRequest<Catalog>(
     transport,
-    '/npm/catalog?' +
+    base + '/npm/catalog?' +
       new URLSearchParams({
         ...scope,
         q: search,
@@ -96,7 +98,7 @@ function ScopedMarket(props: PluginMarketProps) {
   );
   const selectedVersion = versionChoice?.plugin === pluginId ? versionChoice.version : '';
   const detailPath = pluginId
-    ? '/npm/detail?' +
+    ? base + '/npm/detail?' +
       new URLSearchParams({
         ...scope,
         plugin_id: pluginId,
@@ -137,14 +139,14 @@ function ScopedMarket(props: PluginMarketProps) {
       const raw = await getFile();
       if (!raw || !stillHere()) return;
       const candidate = await transport<Omit<Review, 'archive_base64' | 'revision'>>(
-        MARKET_BASE + '/inspect',
+        base + '/inspect',
         {
           method: 'POST',
           body: { ...scope, archive_base64: raw },
         }
       );
       const state = await transport<Installation>(
-        MARKET_BASE +
+        base +
           '/' +
           encodeURIComponent(candidate.plugin_id) +
           '?' +
@@ -170,7 +172,7 @@ function ScopedMarket(props: PluginMarketProps) {
   }
   async function installFile() {
     if (!review || !manage) return;
-    const state = await transport<{ desired_revision: number }>(MARKET_BASE + '/install', {
+    const state = await transport<{ desired_revision: number }>(base + '/install', {
       method: 'POST',
       body: {
         ...scope,
@@ -180,7 +182,7 @@ function ScopedMarket(props: PluginMarketProps) {
         expected_revision: review.revision,
       },
     });
-    const pluginPath = MARKET_BASE + '/' + encodeURIComponent(review.plugin_id);
+    const pluginPath = base + '/' + encodeURIComponent(review.plugin_id);
     await transport(pluginPath + '/enable', {
       method: 'POST',
       body: { ...scope, expected_revision: state.desired_revision },
@@ -430,6 +432,7 @@ function ScopedMarket(props: PluginMarketProps) {
         >
           <p>
             <strong>{review.plugin_id}</strong> · {review.version}
+            <span> · {t.scopeLabel} {projectId ?? tenantId}</span>
           </p>
           <h4>{t.permissions}</h4>
           {review.permissions.length ? (

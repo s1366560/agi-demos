@@ -3,7 +3,6 @@ import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
 import { projectAPI } from '@/services/api';
@@ -25,7 +24,6 @@ export function PluginHub() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tenant = useTenantStore((state) => state.currentTenant);
-  const current = useProjectStore((state) => state.currentProject);
   const tenantId = routeTenant || tenant?.id;
   const token = useSyncExternalStore(subscribeCloudIdentity, getAuthToken);
   const session = useWebPackageSession(token);
@@ -68,9 +66,8 @@ export function PluginHub() {
   const error = scopedListing?.error;
   const options = (scopedListing?.projects ?? []).filter((p) => p.tenant_id === tenantId);
   const requested = params.get('projectId');
-  const selected = requested
-    ? options.find((p) => p.id === requested)
-    : (options.find((p) => p.id === current?.id) ?? options[0]);
+  const selected = options.find((project) => project.id === requested);
+  const projectId = selected?.id ?? null;
   const settings = params.get('settings') === 'integrations';
   const businessPage = params.get('marketPage');
 
@@ -93,17 +90,20 @@ export function PluginHub() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         {!settings && (
           <label className="flex flex-wrap items-center gap-2">
-            {t('nav.project')}
+            {t('tenant.pluginHub.installationScope')}
             <select
               className="rounded border px-2 py-1"
               value={selected?.id ?? ''}
               onChange={(e) => {
-                change({ projectId: e.target.value, marketPage: null, marketPlugin: null });
+                change({
+                  projectId: e.target.value || null,
+                  marketPage: null,
+                  marketPlugin: null,
+                  optionalPlugin: null,
+                });
               }}
             >
-              {!selected && (
-                <option value="">{t('tenant.pluginHub.selectProjectPlaceholder')}</option>
-              )}
+              <option value="">{t('tenant.pluginHub.tenantScope')}</option>
               {options.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -131,7 +131,7 @@ export function PluginHub() {
         <Suspense fallback={<p role="status">{t('common.loading')}</p>}>
           <IntegrationSettings />
         </Suspense>
-      ) : error ? (
+      ) : error && requested ? (
         <p role="alert">
           {error}{' '}
           <button
@@ -143,11 +143,11 @@ export function PluginHub() {
             {t('common.retry')}
           </button>
         </p>
-      ) : tenantId && selected ? (
+      ) : tenantId && (!requested || selected) ? (
         businessPage ? (
           <RichPackagePages
-            key={JSON.stringify([tenantId, selected.id])}
-            scope={{ tenantId, projectId: selected.id }}
+            key={JSON.stringify([tenantId, projectId])}
+            scope={{ tenantId, projectId }}
             target="web"
             locale={i18n.language}
             pathname={businessPage}
@@ -159,14 +159,14 @@ export function PluginHub() {
           />
         ) : (
           <WebProjectMarket
-            key={JSON.stringify([tenantId, selected.id])}
+            key={JSON.stringify([tenantId, projectId])}
             tenantId={tenantId}
-            projectId={selected.id}
+            projectId={projectId}
             transport={session.transport}
-            scopeParams={{ projectId: selected.id }}
+            scopeParams={projectId ? { projectId } : {}}
             onOpen={(path) => {
               const plugin = params.get('marketPlugin') ?? params.get('optionalPlugin');
-              if (plugin) void navigate(businessLocation(path, tenantId, selected.id, plugin));
+              if (plugin) void navigate(businessLocation(path, tenantId, projectId, plugin));
             }}
           />
         )

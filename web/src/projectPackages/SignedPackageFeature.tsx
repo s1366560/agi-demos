@@ -10,7 +10,8 @@ import {
 } from '@/components/plugins/SignedBusinessMount';
 
 import {
-  MARKET_BASE,
+  packageBase,
+  packageScope,
   type Installation,
 } from '../../../agi-stack/packages/plugin-marketplace-ui/src/pluginMarketTypes';
 
@@ -28,7 +29,7 @@ export function SignedPackageFeature({
   canExecute: boolean;
   transport: MarketplaceTransport;
   tenantId: string;
-  projectId: string;
+  projectId: string | null;
 }) {
   const { t } = useTranslation();
   const [document, setDocument] = useState<SignedBusinessDocumentV2 | null>(null);
@@ -37,13 +38,12 @@ export function SignedPackageFeature({
   const [busy, setBusy] = useState(false);
   const command = useRef<AbortController | null>(null);
   const digest = installation.actual_digest;
-  const base = MARKET_BASE + '/' + encodeURIComponent(installation.plugin_id);
+  const base = packageBase(projectId) + '/' + encodeURIComponent(installation.plugin_id);
   useEffect(() => {
     if (!digest) return;
     const controller = new AbortController();
     const query = new URLSearchParams({
-      tenant_id: tenantId,
-      project_id: projectId,
+      ...packageScope(tenantId, projectId),
       expected_digest: digest,
       target: 'web',
     });
@@ -77,8 +77,7 @@ export function SignedPackageFeature({
         method: 'POST',
         signal: controller.signal,
         body: {
-          tenant_id: tenantId,
-          project_id: projectId,
+          ...packageScope(tenantId, projectId),
           expected_digest: digest,
           command_id: id,
           ...(payload === undefined ? {} : { payload }),

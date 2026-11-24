@@ -277,6 +277,7 @@
     "subtitleVoluntary": "Choose a new password for your account."
   },
   "projectPackages": {
+    "selectTenant": "Select tenant",
     "title": "Project workspace",
     "manage": "Manage plugins",
     "project": "Project",
@@ -287,6 +288,7 @@
   },
   "tenant": {
     "pluginHub": {
+      "tenantScope": "Tenant plugins",
       "optionalBusiness": {
         "title": "Signed optional business",
         "pluginId": "Plugin id",

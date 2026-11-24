@@ -79,6 +79,7 @@ const en = {
   unknown: 'Unknown',
   selectVersion: 'Select version',
   switchVersion: 'Switch version',
+  scopeLabel: 'Project',
   localOnly: 'Project installation',
 };
 const zh: typeof en = {
@@ -162,9 +163,24 @@ const zh: typeof en = {
   unknown: '未知',
   selectVersion: '选择版本',
   switchVersion: '切换版本',
+  scopeLabel: '项目',
   localOnly: '项目安装记录',
 };
 export type MarketText = typeof en;
-export function marketText(locale: string | undefined) {
-  return (locale ?? navigator.language).toLowerCase().startsWith('zh') ? zh : en;
+export function marketText(locale: string | undefined, tenant = false): MarketText {
+  const chinese = (locale ?? navigator.language).toLowerCase().startsWith('zh');
+  const text = chinese ? zh : en;
+  if (!tenant) return text;
+  return { ...text, ...(chinese ? {
+    scopeLabel: '租户', localOnly: '租户安装记录', noneInstalled: '此租户尚未安装插件',
+    retention: '租户数据会保留。以下入口和操作将从当前租户移除。',
+    disabledNote: '可以在此租户重新启用插件。', retentionEmpty: '租户数据会保留。插件将从此租户移除。',
+    readOnly: '租户管理员可以管理此插件。',
+  } : {
+    scopeLabel: 'Tenant', localOnly: 'Tenant installation', noneInstalled: 'No plugins installed in this tenant',
+    retention: 'Tenant data is retained. These contributions will be removed from this tenant.',
+    disabledNote: 'The plugin can be enabled again in this tenant.',
+    retentionEmpty: 'Tenant data is retained. The plugin will be removed from this tenant.',
+    readOnly: 'A tenant administrator can manage this plugin.',
+  }) };
 }
