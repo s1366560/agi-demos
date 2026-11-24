@@ -345,10 +345,11 @@ def _ui_files(
             )
         parse_bound_slot_ui(json.loads(data), ui.slot, commands, input_commands)
         files[ui.path] = data
-    for page in contribution.pages:
-        for asset in page.assets:
-            path = "pages/" + asset.path
-            files[path] = asset.verify(artifacts.get(path, b""))
+    # Several deep links can share a large workbench entry. PageAsset identity includes
+    # both its path and its signed digest, so conflicting declarations still fail.
+    for asset in dict.fromkeys(asset for page in contribution.pages for asset in page.assets):
+        path = "pages/" + asset.path
+        files[path] = asset.verify(artifacts.get(path, b""))
     return files
 
 

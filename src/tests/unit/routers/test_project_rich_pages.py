@@ -98,6 +98,33 @@ def test_home_is_declared_by_the_signed_page():
     assert "home" not in existing.descriptor()
 
 
+def test_shared_workbench_entry_is_verified_once_and_mismatched_alias_is_rejected(monkeypatch):
+    from types import SimpleNamespace
+
+    from memstack_plugin_sdk.rich_pages import PageAsset
+
+    from src.infrastructure.plugins.v2.project_plugin_package import _ui_files
+
+    raw = b"start()"
+    shared = PageAsset(**asset("app.js", raw))
+    other = PageAsset(**asset("app.js", b"changed()"))
+    checked = []
+    verify = PageAsset.verify
+
+    def observe(self, content):
+        checked.append(self)
+        return verify(self, content)
+
+    monkeypatch.setattr(PageAsset, "verify", observe)
+    pages = [SimpleNamespace(assets=(shared,)), SimpleNamespace(assets=(shared,))]
+    contribution = SimpleNamespace(commands=(), ui=(), pages=pages)
+    assert _ui_files(contribution, {"pages/app.js": raw}) == {"pages/app.js": raw}
+    assert checked == [shared]
+    pages.append(SimpleNamespace(assets=(other,)))
+    with pytest.raises(ValueError, match="signed digest"):
+        _ui_files(contribution, {"pages/app.js": raw})
+
+
 def test_sdk_stages_declared_assets_and_checks_digests(tmp_path):
     from memstack_plugin_sdk.pack import stage_contribution
 
