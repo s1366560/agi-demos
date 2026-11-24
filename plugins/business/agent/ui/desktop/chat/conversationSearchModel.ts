@@ -1,4 +1,11 @@
-import type { AgentTimelineItem } from '@desktop/types';
+export interface SearchableTimelineItem {
+  id: string;
+  type: string;
+  content?: string | null | undefined;
+  toolName?: string | null | undefined;
+  toolInput?: unknown;
+  toolOutput?: unknown;
+}
 
 export type ConversationSearchMatch = {
   eventId: string;
@@ -9,7 +16,7 @@ export type ConversationSearchMatch = {
 export type ConversationSearchDirection = 'next' | 'previous';
 
 export function conversationSearchMatches(
-  items: readonly AgentTimelineItem[],
+  items: readonly SearchableTimelineItem[],
   rawQuery: string,
 ): ConversationSearchMatch[] {
   const query = rawQuery.trim().toLocaleLowerCase();
@@ -50,7 +57,7 @@ export function resolveConversationSearchIndex(
   return Math.min(Math.max(Math.trunc(fallbackIndex), 0), matches.length - 1);
 }
 
-function conversationSearchText(item: AgentTimelineItem): string {
+function conversationSearchText(item: SearchableTimelineItem): string {
   if (
     item.type === 'user_message' ||
     item.type === 'assistant_message' ||

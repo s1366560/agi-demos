@@ -32,13 +32,14 @@ const readOptionalSource = (path) => {
   return existsSync(url) ? readFileSync(url, 'utf8') : '';
 };
 
+const messageFrameSource=readFileSync(new URL('../../../../plugins/business/agent/ui/desktop/chat/TranscriptMessageFrame.tsx', import.meta.url),'utf8');
 const chatSource = [
   'features/chat/ChatPanel.tsx',
   'features/chat/ChatTimeline.tsx',
   'features/chat/ChatTranscript.tsx',
   'features/chat/chatTimelinePresentation.tsx',
-].map(readSource).join('\n');
-const chatTranscriptSource = readSource('features/chat/ChatTranscript.tsx');
+].map(readSource).concat(messageFrameSource).join('\n');
+const chatTranscriptSource = readSource('features/chat/ChatTranscript.tsx') + messageFrameSource;
 const chatStyles = readSource('features/chat/ChatPanel.css');
 const duplicateDisclosureStyles = readSource(
   'features/chat/AssistantDuplicateDisclosure.css',

@@ -1,9 +1,10 @@
+import { SessionWelcome } from '@business/agent/ui/desktop/chat/SessionWelcome';
+import { TranscriptMessageFrame } from '@business/agent/ui/desktop/chat/TranscriptMessageFrame';
 import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
 import { workspaceImagePreviewClient } from './structuredImagePreviewOwnerModel';
 import { isValidElement, memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import {
-  ActivityLogIcon,
   ChatBubbleIcon,
   CopyIcon,
   DrawingPinIcon,
@@ -41,15 +42,7 @@ import { useMarkdownMathPlugins } from './useMarkdownMathPlugins';
 
 export function SessionEmptyState() {
   const { t } = useI18n();
-  return (
-    <div className="chat-empty-state session-conversation-empty" role="status">
-      <span aria-hidden="true">
-        <ActivityLogIcon />
-      </span>
-      <strong>{t('session.emptyTitle')}</strong>
-      <p>{t('session.emptyDescription')}</p>
-    </div>
-  );
+  return <SessionWelcome title={t('session.emptyTitle')} description={t('session.emptyDescription')} />;
 }
 
 // Memoized on message identity (stable in `dataset.messages`): any ChatPanel
@@ -149,31 +142,9 @@ export function NarrativeMessageFrame({
   retryDisabled?: boolean;
   children: ReactNode;
 }) {
-  return (
-    <article
-      className={`message transcript-message session-thread-message ${className} ${kind}${
-        streaming ? ' is-streaming' : ''
-      }${isPinned ? ' is-pinned' : ''}`}
-      data-timeline-anchor-id={timelineItemId}
-      tabIndex={-1}
-      data-has-identity={Boolean(label || badge)}
-    >
-      <div className="session-message-body">
-        <header className="transcript-meta">
-          <span className="session-message-identity">
-            {label ? (
-              <strong className="session-message-label" title={label}>
-                {label}
-              </strong>
-            ) : null}
-            {badge ? <span className="session-message-badge">{badge}</span> : null}
-            {time ? (
-              <time className="session-message-time" title={time}>
-                <span>{time}</span>
-              </time>
-            ) : null}
-          </span>
-          <MessageActionMenu
+  return <TranscriptMessageFrame kind={kind} label={label} time={time} badge={badge}
+    className={className} timelineItemId={timelineItemId} streaming={streaming} isPinned={isPinned}
+    actions={<MessageActionMenu
             content={content}
             kind={kind}
             streaming={streaming}
@@ -185,14 +156,9 @@ export function NarrativeMessageFrame({
             onPin={onPin}
             onSaveTemplate={onSaveTemplate}
             retryDisabled={retryDisabled}
-          />
-        </header>
-        <div className="session-message-surface">
-          {children}
-        </div>
-      </div>
-    </article>
-  );
+          />}>
+    {children}
+  </TranscriptMessageFrame>;
 }
 
 const MARKDOWN_COMPONENTS: Components = {

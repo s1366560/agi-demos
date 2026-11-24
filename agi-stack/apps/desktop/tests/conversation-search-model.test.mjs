@@ -16,14 +16,14 @@ const chatPanelSource = readFileSync(
   'utf8',
 );
 const conversationSearchSource = readFileSync(
-  new URL('../src/features/chat/ConversationSearch.tsx', import.meta.url),
+  new URL('../../../../plugins/business/agent/ui/desktop/chat/ConversationSearch.tsx', import.meta.url),
   'utf8',
 );
 const chatPanelStyles = readFileSync(
   new URL('../src/features/chat/ChatPanel.css', import.meta.url),
   'utf8',
 );
-const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+const i18nSource = readFileSync(new URL('../../../../plugins/business/agent/ui/desktop/chat/searchMessages.ts', import.meta.url), 'utf8');
 
 test('conversation search matches one row per structured Web timeline event', () => {
   const items = [

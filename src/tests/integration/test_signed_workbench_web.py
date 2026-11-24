@@ -44,9 +44,10 @@ def test_installed_workbench_page_and_rollback(plugin, title):
 
         details()
         active = page.locator(".pm-spec dd").first
-        if active.inner_text() != "1.1.0":
-            apply(page, "1.1.0")
-        apply(page, "1.2.0")
+        previous_version, version = ("1.2.0", "1.3.1") if plugin == "agent" else ("1.1.0", "1.2.0")
+        if active.inner_text() != previous_version:
+            apply(page, previous_version)
+        apply(page, version)
         button = page.locator(".pm-page-list button").filter(has_text=re.compile(title, re.I))
         guest = page.frame_locator("iframe[data-page-ready=true]").first.frame_locator("iframe")
 
@@ -59,9 +60,11 @@ def test_installed_workbench_page_and_rollback(plugin, title):
 
         if plugin == "agent":
             button.click()
-            expect(guest.locator(".agent-transcript")).to_be_visible(timeout=20000)
+            expect(guest.locator(".chat-history-viewport")).to_be_visible(timeout=20000)
             with page.expect_response(operation("chat-create")) as created:
-                guest.get_by_role("button", name=re.compile("New conversation|新会话")).click()
+                guest.locator("aside").get_by_role(
+                    "button", name=re.compile("New conversation|新会话")
+                ).click()
             assert created.value.ok, (created.value.status, created.value.json().get("detail"))
             expect(guest.locator("input")).to_have_value(re.compile("New conversation|新会话"))
         else:
@@ -84,7 +87,7 @@ def test_installed_workbench_page_and_rollback(plugin, title):
         ) as rollback:
             more(page, "Roll back to|回退至")
         assert rollback.value.ok
-        expect(active).to_have_text("1.1.0", timeout=60000)
+        expect(active).to_have_text(previous_version, timeout=60000)
         if plugin == "knowledge":
             expect(button).to_have_count(0)
         else:
@@ -93,6 +96,7 @@ def test_installed_workbench_page_and_rollback(plugin, title):
             )
             expect(
                 guest.get_by_role("button", name=re.compile("New conversation|新会话"))
-            ).to_be_visible()
-            expect(guest.locator(".agent-transcript")).to_have_count(0)
+            ).to_be_visible(timeout=30000)
+            expect(guest.locator(".agent-transcript")).to_be_visible()
+            expect(guest.locator(".chat-history-viewport")).to_have_count(0)
         browser.close()

@@ -1,3 +1,4 @@
+import { searchEn, searchZh } from '@business/agent/ui/desktop/chat/searchMessages';
 import { audioSessionEnUS, audioSessionZhCN } from './features/settings/audioSessionMessages';
 import { timelineStepDetailsEnUS, timelineStepDetailsZhCN } from './features/session/timelineStepDetailsMessages';
 import { browserAuthEnUS, browserAuthZhCN } from './features/chat/browserAuthMessages';
@@ -3601,13 +3602,7 @@ const enUS: Record<string, string> = {
   'chat.modelNotConfigured': 'No model configured',
   'chat.resetModelOverride': 'Reset',
   'chat.searchModels': 'Search models',
-  'chat.search.label': 'Search conversation',
-  'chat.search.placeholder': 'Search in conversation…',
-  'chat.search.resultCount': '{current}/{total}',
-  'chat.search.noResults': '0 results',
-  'chat.search.previousResult': 'Previous result',
-  'chat.search.nextResult': 'Next result',
-  'chat.search.close': 'Close search',
+  ...searchEn,
   'chat.noModelsFound': 'No matching models',
   'chat.switchingModel': 'Switching model…',
   'chat.selectedModelUnavailable': 'The selected model is no longer available in this workspace.',
@@ -7874,13 +7869,7 @@ const zhCN: Record<string, string> = {
   'chat.modelNotConfigured': '未配置模型',
   'chat.resetModelOverride': '重置',
   'chat.searchModels': '搜索模型',
-  'chat.search.label': '搜索会话',
-  'chat.search.placeholder': '在会话中搜索…',
-  'chat.search.resultCount': '{current}/{total}',
-  'chat.search.noResults': '0 个结果',
-  'chat.search.previousResult': '上一个结果',
-  'chat.search.nextResult': '下一个结果',
-  'chat.search.close': '关闭搜索',
+  ...searchZh,
   'chat.noModelsFound': '没有匹配的模型',
   'chat.switchingModel': '正在切换模型…',
   'chat.selectedModelUnavailable': '所选模型已无法在此工作空间中使用。',

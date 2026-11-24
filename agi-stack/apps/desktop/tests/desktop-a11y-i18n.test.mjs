@@ -14,7 +14,7 @@ const runtimeSource = readSource('features/runtime/RuntimeConfigPanel.tsx');
 const chatPanelCssSource = readSource('features/chat/ChatPanel.css');
 const chatPanelSource = readSource('features/chat/ChatPanel.tsx');
 const chatTimelineSource = readSource('features/chat/ChatTimeline.tsx');
-const chatTranscriptSource = readSource('features/chat/ChatTranscript.tsx');
+const chatTranscriptSource = readFileSync(new URL('../../../../plugins/business/agent/ui/desktop/chat/TranscriptMessageFrame.tsx', import.meta.url), 'utf8');
 const i18nSource = readSource('i18n.tsx');
 
 test('session canvas implements an arrow-key navigable tab pattern', () => {

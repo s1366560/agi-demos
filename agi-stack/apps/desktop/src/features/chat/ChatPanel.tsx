@@ -1,3 +1,4 @@
+import { ChatDraftInput } from '@business/agent/ui/desktop/chat/ChatDraftInput';
 import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { ConversationToolbarItem } from './ConversationToolbar';
 import { ExecutionTargetBadge } from '../session/ExecutionTargetBadge';
@@ -21,7 +22,6 @@ import {
   Heading,
   ScrollArea,
   Text,
-  TextArea,
 } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
@@ -2846,9 +2846,8 @@ function ChatComposer({
             ))}
           </div>
         ) : null}
-        <TextArea
+        <ChatDraftInput
           ref={composerInputRef}
-          className="chat-composer-input"
           value={input}
           disabled={disabled}
           onChange={(event) => setInput(event.target.value)}

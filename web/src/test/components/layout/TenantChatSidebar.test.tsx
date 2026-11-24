@@ -144,6 +144,7 @@ vi.mock('@/utils/date', () => ({
 }));
 
 vi.mock('antd', () => ({
+  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
   App: {
     useApp: () => ({
       message: {

@@ -1,3 +1,5 @@
+import { UserBubble, UserAvatar } from '@business/agent/ui/web/chat/UserBubble';
+import { AssistantBubble } from '@business/agent/ui/web/chat/AssistantBubble';
 /**
  * MessageBubble - Modern message bubble component
  *
@@ -35,7 +37,6 @@ import {
   Loader2,
   PanelRight,
   RefreshCw,
-  User,
   Wrench,
   XCircle,
 } from 'lucide-react';
@@ -952,17 +953,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(
                 </div>
               )}
 
-              <div
-                className={
-                  isForced
-                    ? 'bg-slate-50/80 dark:bg-slate-800/70 rounded-lg rounded-br-sm px-4 py-2'
-                    : 'bg-slate-50/80 dark:bg-slate-800/70 border border-slate-200/40 dark:border-slate-700/40 rounded-lg rounded-br-sm px-4 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.02)]'
-                }
-              >
-                <p className="text-sm leading-[1.5] whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
-                  {content}
-                </p>
-              </div>
+              <UserBubble content={content} isForced={isForced} />
               {/* Action bar - appears on hover at top-right */}
               <div className="absolute -top-3 right-2 z-10">
                 <MessageActionBar
@@ -984,9 +975,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(
               )}
             </div>
           </div>
-          <div className="w-8 h-8 rounded-lg bg-slate-100/80 dark:bg-slate-800/70 ring-1 ring-slate-200/45 dark:ring-slate-700/45 flex items-center justify-center flex-shrink-0">
-            <User size={16} className="text-slate-500 dark:text-slate-400" />
-          </div>
+          <UserAvatar />
         </div>
         {/* Attachment row: below bubble, aligned under bubble (offset by avatar width) */}
         {hasFiles && (
@@ -1038,34 +1027,18 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
     if (!content && !isStreaming && !executionSummary && completionArtifacts.length === 0)
       return null;
     return (
-      <div className="group flex items-start gap-3 pb-1">
-        <div className={ASSISTANT_AVATAR_CLASSES}>
-          <Bot size={18} className="text-primary" />
-        </div>
-        <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-          {timestamp ? (
-            <div className="mb-1 flex pl-1">
-              <MessageTime timestamp={timestamp} />
-            </div>
-          ) : null}
-          <div className="relative">
-            <div className={ASSISTANT_BUBBLE_CLASSES}>
-              <ExecutionSummaryPanel summary={executionSummary} />
-              <div className={MARKDOWN_PROSE_CLASSES}>
-                {content ? (
-                  <ReactMarkdown
-                    remarkPlugins={remarkPlugins}
-                    rehypePlugins={rehypePlugins}
-                    components={ASSISTANT_COMPONENTS}
-                  >
-                    {markdownContent}
-                  </ReactMarkdown>
-                ) : null}
+      <>
+        <AssistantBubble
+          timestamp={
+            timestamp ? (
+              <div className="mb-1 flex pl-1">
+                <MessageTime timestamp={timestamp} />
               </div>
-              <ArtifactReferenceList artifacts={completionArtifacts} />
-            </div>
-            {/* Action bar - appears on hover at top-right */}
-            {!isStreaming && content && (
+            ) : null
+          }
+          actions={
+            !isStreaming &&
+            content && (
               <div className="absolute -top-3 right-2 z-10">
                 <MessageActionBar
                   role="assistant"
@@ -1079,9 +1052,23 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
                   }}
                 />
               </div>
-            )}
+            )
+          }
+        >
+          <ExecutionSummaryPanel summary={executionSummary} />
+          <div className={MARKDOWN_PROSE_CLASSES}>
+            {content ? (
+              <ReactMarkdown
+                remarkPlugins={remarkPlugins}
+                rehypePlugins={rehypePlugins}
+                components={ASSISTANT_COMPONENTS}
+              >
+                {markdownContent}
+              </ReactMarkdown>
+            ) : null}
           </div>
-        </div>
+          <ArtifactReferenceList artifacts={completionArtifacts} />
+        </AssistantBubble>
         {showSaveTemplate && (
           <SaveTemplateModal
             content={content || ''}
@@ -1092,7 +1079,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
             onSave={handleSaveTemplate}
           />
         )}
-      </div>
+      </>
     );
   }
 );

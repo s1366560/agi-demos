@@ -1,6 +1,0 @@
-.agent-transcript { height: 44vh; min-height: 12rem; overflow: auto; overflow-anchor: none; }
-.agent-transcript ol { padding: 0; list-style: none; }
-.agent-transcript li { margin-block: .5rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-.agent-transcript [data-role="assistant_message"] { white-space: normal; }
-.agent-transcript pre { white-space: pre; overflow: auto; }
-.agent-transcript [data-role="user_message"] { padding: .6rem; background: color-mix(in srgb, currentColor 8%, transparent); }

@@ -35,11 +35,11 @@ if (['?upgrade', '?drain'].includes(location.search)) {
 const billing = location.search === '?billing';
 const sandbox = location.search.startsWith('?sandbox');
 const source = chat
-  ? (await import('../../../plugins/business/agent/ui/chat.js?raw')).default
+  ? (target === 'web' ? (await import('../../../plugins/business/agent/ui/chat-web.js?raw')).default : (await import('../../../plugins/business/agent/ui/chat-desktop.js?raw')).default)
   : sandbox
     ? (await import('../../../plugins/business/environments/ui/sandbox.js?raw')).default
     : billing
-      ? (await import('../../../plugins/business/billing/ui/account.js?raw')).default
+      ? (await import('../../../plugins/business/billing/ui/web-billing.js?raw')).default
       : `
 (async () => {
  const scope = await memstack.scope();
@@ -74,7 +74,7 @@ const transport: MarketplaceTransport = async <T,>(
     return {
       ...descriptor,
       schema: 'memstack.rich-page/1',
-      navigation_routes: [route, '/project/:projectId/details/:id'],
+      navigation_routes: [route, '/agent/chat/:conversationId', '/project/:projectId/details/:id'],
       release_digest: digest,
       target,
       commands: chat

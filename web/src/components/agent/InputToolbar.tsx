@@ -1,8 +1,9 @@
+import { SendControl } from '@business/agent/ui/web/chat/SendControl';
 import { memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Send, Square, MicOff, PhoneOff } from 'lucide-react';
+import { MicOff, PhoneOff } from 'lucide-react';
 
 import type { ActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
 
@@ -186,39 +187,12 @@ export const InputToolbar = memo<InputToolbarProps>(
             </LazyTooltip>
           )}
 
-          {isStreaming ? (
-            <LazyButton
-              type="primary"
-              danger
-              size="small"
-              icon={<Square size={14} className="fill-current" />}
-              onClick={() => {
-                onAbort();
-              }}
-              className="flex h-8 items-center gap-1.5 rounded-lg px-3 shadow-sm"
-            >
-              {t('agent.inputBar.stop', 'Stop')}
-            </LazyButton>
-          ) : (
-            <LazyButton
-              type="primary"
-              size="small"
-              icon={<Send size={14} />}
-              onClick={handleSend}
-              disabled={!canSend}
-              aria-label={t('agent.inputBar.send', 'Send message')}
-              data-testid="send-button"
-              className={`
-                rounded-lg flex items-center gap-1.5 h-8 px-2 min-[1280px]:px-3
-                bg-primary hover:bg-primary-600
-                shadow-sm
-                disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed
-                transition-colors duration-200
-              `}
-            >
-              <span className="hidden min-[1280px]:inline">{t('agent.inputBar.send', 'Send')}</span>
-            </LazyButton>
-          )}
+          <SendControl
+            isStreaming={isStreaming}
+            canSend={canSend}
+            handleSend={handleSend}
+            onAbort={onAbort}
+          />
           {/* I3: plugin composer actions mount after the send control. */}
           <PluginSlotOutlet
             kind="composer_action"

@@ -179,13 +179,16 @@ test('signed Agent page keeps local replay read-only on Web and routes cloud tur
   await page.goto('/e2e/fixtures/rich-package-host.html?chat-web');
   const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
   await expect(guest.getByText('Saved local')).toBeVisible();
-  await expect(guest.getByRole('button', { name: 'Send to device' })).toBeDisabled();
-  await expect(guest.getByLabel('Message', { exact: true })).toHaveAttribute('readonly', '');
+  await expect(guest.getByText('Local conversations are read-only on the web.')).toBeVisible();
+  await expect(guest.locator('textarea')).toHaveCount(0);
   await expect(guest.getByLabel('New conversation location')).toBeHidden();
-  await guest.getByLabel('Conversation', { exact: true }).selectOption('cloud');
+  await guest.getByRole('link', {name: 'Cloud conversation'}).click();
   await expect(guest.getByText('Saved cloud')).toBeVisible();
-  await guest.getByLabel('Message', { exact: true }).fill('hello cloud');
-  await guest.getByRole('button', { name: 'Send to cloud' }).click();
+  await expect(guest.getByRole('table').getByText('signed')).toBeVisible();
+  await expect(guest.locator('pre').getByText('const value = 1;', {exact:false})).toBeVisible();
+  await expect(guest.getByText('ts', {exact:true})).toBeVisible();
+  await guest.locator('textarea').fill('hello cloud');
+  await guest.getByTestId('send-button').click();
   await expect(page.locator('#host-log')).toContainText('"command_id":"chat-turn"');
   await expect(page.locator('#host-log')).not.toContainText('local_chat');
 });
@@ -195,12 +198,17 @@ test('desktop Agent page binds execute and stop to the same local turn and repla
 }) => {
   await page.goto('/e2e/fixtures/rich-package-host.html?chat-desktop');
   const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
-  await expect(guest.getByLabel('New conversation location')).toHaveValue('local');
+  await expect(guest.getByRole('combobox')).toHaveText('Local');
+  await guest.getByRole('button', { name: 'Search conversation' }).click();
+  await guest.getByRole('searchbox').fill('Saved local');
+  await expect(guest.getByRole('search')).toContainText('1/1');
+  await expect(guest.locator('.chat-search-highlight')).toContainText('Saved local');
+  await guest.getByRole('button', { name: 'Close search' }).click();
   await guest.getByRole('button', { name: 'New conversation', exact: true }).click();
   await expect(guest.getByText('Saved new')).toBeVisible();
-  await guest.getByLabel('Message', { exact: true }).fill('hello device');
-  await guest.getByRole('button', { name: 'Send to device' }).click();
-  await guest.getByRole('button', { name: 'Cancel run' }).click();
+  await guest.locator('textarea').fill('hello device');
+  await guest.getByRole('button', { name: 'Send message' }).click();
+  await guest.getByRole('button', { name: 'Stop' }).click();
   await expect(guest.getByText('Device turn cancelled')).toBeVisible();
   const [create, execute, stop] = JSON.parse(await page.locator('#host-log').innerText());
   expect(create.input.execution_target).toBe('local');
@@ -226,11 +234,11 @@ test('desktop Agent page preserves the draft and retry key when device settings 
   await page.goto('/e2e/fixtures/rich-package-host.html?chat-denied');
   const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
   await expect(guest.getByText('Saved local')).toBeVisible();
-  await guest.getByLabel('Message', { exact: true }).fill('private draft');
-  await guest.getByRole('button', { name: 'Send to device' }).click();
-  await expect(guest.getByRole('status')).toContainText('Choose a workspace in device settings');
-  await expect(guest.getByLabel('Message', { exact: true })).toHaveValue('private draft');
-  await guest.getByRole('button', { name: 'Send to device' }).click();
+  await guest.locator('textarea').fill('private draft');
+  await guest.getByRole('button', { name: 'Send message' }).click();
+  await expect(guest.getByRole('alert')).toContainText('Choose a workspace in device settings');
+  await expect(guest.locator('textarea')).toHaveValue('private draft');
+  await guest.getByRole('button', { name: 'Send message' }).click();
   await expect
     .poll(async () => JSON.parse(await page.locator('#host-log').innerText()).length)
     .toBe(2);
@@ -244,12 +252,12 @@ test('desktop Agent page surfaces a revoked release grant and retains the draft'
   await page.goto('/e2e/fixtures/rich-package-host.html?chat-revoked');
   const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
   await expect(guest.getByText('Saved local')).toBeVisible();
-  await guest.getByLabel('Message', { exact: true }).fill('retry when approved');
-  await guest.getByRole('button', { name: 'Send to device' }).click();
-  await expect(guest.getByRole('status')).toHaveText(
+  await guest.locator('textarea').fill('retry when approved');
+  await guest.getByRole('button', { name: 'Send message' }).click();
+  await expect(guest.getByRole('alert')).toHaveText(
     'Approve this Agent release in device settings. device_plugin_grant_revoked'
   );
-  await expect(guest.getByLabel('Message', { exact: true })).toHaveValue('retry when approved');
+  await expect(guest.locator('textarea')).toHaveValue('retry when approved');
   await expect(page.locator('#host-log')).not.toContainText('chat-turn');
 });
 

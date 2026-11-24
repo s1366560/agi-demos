@@ -37,7 +37,9 @@ export function agentChatRuntime(log: HTMLElement, deviceError: string | undefin
       return row;
     }
     if (name === 'chat-history') {
-      return { messages: [{ content: completed || 'Saved ' + String(input.conversation_id) }] };
+      const messages = [{ role: 'assistant_message', content: completed || 'Saved ' + String(input.conversation_id) }];
+      if(input.conversation_id === 'cloud')messages.push({role:'assistant_message',content:'| Name | Value |\n| --- | --- |\n| signed | code |\n\n```ts\nconst value = 1;\nconsole.log(value);\n```'});
+      return {messages};
     }
     throw new Error('Unexpected chat fixture command');
   }

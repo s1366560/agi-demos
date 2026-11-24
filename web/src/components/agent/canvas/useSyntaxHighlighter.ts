@@ -1,18 +1,6 @@
 import { useState, useEffect } from 'react';
-import type { ComponentType, CSSProperties, ReactNode } from 'react';
-
-interface SyntaxHighlighterProps {
-  style?: Record<string, unknown> | undefined;
-  language?: string | undefined;
-  PreTag?: string | undefined;
-  customStyle?: CSSProperties | undefined;
-  children?: ReactNode | undefined;
-}
-
-export interface SyntaxHighlighterBundle {
-  SyntaxHighlighter: ComponentType<SyntaxHighlighterProps>;
-  theme: Record<string, unknown>;
-}
+import type { SyntaxHighlighterBundle } from '@business/agent/ui/web/chat/syntaxHighlighterTypes';
+export type { SyntaxHighlighterBundle } from '@business/agent/ui/web/chat/syntaxHighlighterTypes';
 
 // Lazy-loaded syntax highlighter singleton (hljs — more reliable than Prism with Vite)
 let _SyntaxHighlighter: SyntaxHighlighterBundle['SyntaxHighlighter'] | null = null;

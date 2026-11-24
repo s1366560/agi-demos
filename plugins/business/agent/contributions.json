@@ -352,12 +352,43 @@
         "/agent/chat/:conversationId"
       ],
       "targets": [
-        "web",
+        "web"
+      ],
+      "entry": {
+        "path": "ui/chat-web.js",
+        "digest": "sha256:8bfc9e2c75fdbf3b585a3af92ef1939c0ba85237f37b1621ea573c6044b8ef99"
+      },
+      "commands": [
+        "chat-list",
+        "chat-create",
+        "chat-history",
+        "chat-turn",
+        "chat-cancel",
+        "chat-rename"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/chat-web.css",
+        "digest": "sha256:efea2b5af8a2c2b91d4c59713936ae06439bb871f77199159abc25b63783dd54"
+      },
+      "workbench": true
+    },
+    {
+      "id": "chat",
+      "home": true,
+      "title": "Agent chat",
+      "routes": [
+        "/agent/chat",
+        "/tenant/:tenantId/agent-workspace",
+        "/tenant/:tenantId/agent-workspace/:conversationId",
+        "/agent/chat/:conversationId"
+      ],
+      "targets": [
         "desktop-renderer"
       ],
       "entry": {
-        "path": "ui/chat.js",
-        "digest": "sha256:23fbfee3586affe3fe14c933cc90fa61dce1f2bee51b612834d40e700c4d7e93"
+        "path": "ui/chat-desktop.js",
+        "digest": "sha256:7e406f89f4a952713e10c09ae88672494f90a29b5fdbd34360048f44a87965f7"
       },
       "commands": [
         "chat-list",
@@ -370,16 +401,11 @@
       "device_tools": [
         "local_chat"
       ],
-      "resources": [
-        {
-          "path": "ui/transcript.js",
-          "digest": "sha256:90a3a23374c23c2cc6a95d22ab9d52454c5e4e70be419ef704bbc0c52ce8000e"
-        }
-      ],
       "style": {
-        "path": "ui/chat.css",
-        "digest": "sha256:ae12539eb0a74174976a98889c7d164f40a7864ef860562faaf3120bbce8d9c1"
-      }
+        "path": "ui/chat-desktop.css",
+        "digest": "sha256:a5f2fed05a3936d0ccae13bb4a80273531670447ad272a87c17fad9463e121e8"
+      },
+      "workbench": true
     }
   ]
 }

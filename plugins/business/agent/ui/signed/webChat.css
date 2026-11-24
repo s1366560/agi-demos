@@ -1,0 +1,30 @@
+@import 'tailwindcss' source(none);
+@source './WebChatPage.tsx';
+@source '../web/chat';
+@custom-variant dark (&:where(.dark, .dark *));
+@theme {
+  --color-primary: #262626;
+  --color-primary-600: #171717;
+  --color-content-tertiary: #64748b;
+  --tracking-label: 0.06em;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+.chat-history-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overflow-anchor: none;
+  padding: 1rem;
+}
+.chat-history-viewport > div {
+  max-width: 64rem;
+  margin-inline: auto;
+}
+.chat-history-viewport [data-timeline-anchor-id] {
+  margin-block: 0.875rem;
+}
