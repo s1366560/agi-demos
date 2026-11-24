@@ -5,7 +5,7 @@ const { radioThrowState } = vi.hoisted(() => ({
   radioThrowState: { enabled: true },
 }));
 
-vi.mock('@/components/agent/canvas/A2UIRadio', () => ({
+vi.mock('@business/agent/ui/web/canvas/A2UIRadio', () => ({
   A2UIRadio: () => {
     if (radioThrowState.enabled) {
       throw new Error('mock radio render failure');
@@ -15,7 +15,7 @@ vi.mock('@/components/agent/canvas/A2UIRadio', () => ({
 }));
 
 import { A2UISurfaceRenderer } from '@/components/agent/canvas/A2UISurfaceRenderer';
-import { ComponentRegistry } from '@/components/agent/canvas/a2uiInternals';
+import { ComponentRegistry } from '@business/agent/ui/web/canvas/a2uiInternals';
 
 describe('A2UISurfaceRenderer subtree isolation', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;

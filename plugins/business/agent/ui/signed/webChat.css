@@ -1,6 +1,9 @@
 @import 'tailwindcss' source(none);
 @source './WebChatPage.tsx';
 @source '../web/chat';
+@source '../web/canvas';
+@source '../web/hitl';
+@source './InteractionPanel.tsx';
 @custom-variant dark (&:where(.dark, .dark *));
 @theme {
   --color-primary: #262626;

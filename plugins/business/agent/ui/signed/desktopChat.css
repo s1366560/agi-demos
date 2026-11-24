@@ -1,6 +1,12 @@
-@import '@radix-ui/themes/styles.css';
-@import '../../../../../agi-stack/apps/desktop/src/styles/tokens.css';
-@import '../desktop/chat/ChatPanel.css';
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "@radix-ui/themes/styles.css";
+@import "../../../../../agi-stack/apps/desktop/src/styles/tokens.css";
+@import "../desktop/chat/ChatPanel.css";
+@source "../web/hitl";
+@source "../web/canvas";
+@source "../web/chat/AttachmentChip.tsx";
+@source "./InteractionPanel.tsx";
 html,
 body,
 #root {

@@ -6,9 +6,9 @@ const { getDataSpy, resolvePathSpy } = vi.hoisted(() => ({
   resolvePathSpy: vi.fn((path: string) => (path.startsWith('/') ? path : `/${path}`)),
 }));
 
-vi.mock('@/components/agent/canvas/a2uiInternals', async () => {
-  const actual = await vi.importActual<typeof import('@/components/agent/canvas/a2uiInternals')>(
-    '@/components/agent/canvas/a2uiInternals'
+vi.mock('@business/agent/ui/web/canvas/a2uiInternals', async () => {
+  const actual = await vi.importActual<typeof import('@business/agent/ui/web/canvas/a2uiInternals')>(
+    '@business/agent/ui/web/canvas/a2uiInternals'
   );
   return {
     ...actual,

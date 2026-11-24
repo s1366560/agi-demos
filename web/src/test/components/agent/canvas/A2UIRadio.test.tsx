@@ -22,9 +22,9 @@ const { a2uiState, dispatchSpy, getDataSpy, resolvePathSpy, setDataSpy } = vi.ho
   setDataSpy: vi.fn(),
 }));
 
-vi.mock('@/components/agent/canvas/a2uiInternals', async () => {
-  const actual = await vi.importActual<typeof import('@/components/agent/canvas/a2uiInternals')>(
-    '@/components/agent/canvas/a2uiInternals'
+vi.mock('@business/agent/ui/web/canvas/a2uiInternals', async () => {
+  const actual = await vi.importActual<typeof import('@business/agent/ui/web/canvas/a2uiInternals')>(
+    '@business/agent/ui/web/canvas/a2uiInternals'
   );
   const React = await vi.importActual<typeof import('react')>('react');
   return {
@@ -43,7 +43,7 @@ vi.mock('@/components/agent/canvas/a2uiInternals', async () => {
 
 import { ensureMemStackA2UIRegistry } from '@/components/agent/canvas/A2UIMemStackRegistry';
 import { A2UIRadio } from '@/components/agent/canvas/A2UIRadio';
-import { ComponentRegistry } from '@/components/agent/canvas/a2uiInternals';
+import { ComponentRegistry } from '@business/agent/ui/web/canvas/a2uiInternals';
 
 describe('A2UIRadio', () => {
   const node = {

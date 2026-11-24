@@ -7,7 +7,7 @@ const { viewerSpy, respondToA2UIActionSpy, viewerThrowState } = vi.hoisted(() =>
   viewerThrowState: { enabled: false },
 }));
 
-vi.mock('@/components/agent/canvas/MemStackA2UIViewer', () => ({
+vi.mock('@business/agent/ui/web/canvas/MemStackA2UIViewer', () => ({
   MemStackA2UIViewer: (props: unknown) => {
     viewerSpy(props);
     if (viewerThrowState.enabled) {

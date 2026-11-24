@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { mountTranscriptViewport } from '../../../../../agi-stack/packages/plugin-slots/src/ui/transcriptViewport';
-import type { Chat, Message } from './useChat';
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { mountTranscriptViewport } from "../../../../../agi-stack/packages/plugin-slots/src/ui/transcriptViewport";
+import type { Chat, Message } from "./useChat";
 
-export function Answer({ text, components }: { text: string; components?: Components }) {
+export function Answer({
+  text,
+  components,
+}: {
+  text: string;
+  components?: Components;
+}) {
   return (
     <ReactMarkdown
       skipHtml
@@ -25,16 +31,23 @@ export function Transcript({
   render,
   welcome,
   search,
+  children,
 }: {
+  children?: ReactNode;
   chat: Chat;
   render: (message: Message) => ReactNode;
   welcome: ReactNode;
   search?: (
-    navigate: (id: string, located: (element: HTMLElement) => void) => () => void,
+    navigate: (
+      id: string,
+      located: (element: HTMLElement) => void,
+    ) => () => void,
   ) => ReactNode;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
-  const controller = useRef<ReturnType<typeof mountTranscriptViewport> | null>(null);
+  const controller = useRef<ReturnType<typeof mountTranscriptViewport> | null>(
+    null,
+  );
   const loadOlder = useRef(chat.older);
   loadOlder.current = chat.older;
   const [following, setFollowing] = useState(true);
@@ -56,12 +69,20 @@ export function Transcript({
   }, [chat.messages]);
   return (
     <>
-      {search?.((id, located) => controller.current?.navigate(id, located) ?? (() => {}))}
-      <div className="chat-history-viewport" ref={viewport} tabIndex={0} aria-busy={chat.loading}>
+      {search?.(
+        (id, located) =>
+          controller.current?.navigate(id, located) ?? (() => {}),
+      )}
+      <div
+        className="chat-history-viewport"
+        ref={viewport}
+        tabIndex={0}
+        aria-busy={chat.loading}
+      >
         <div>
           {chat.cursor && (
             <button onClick={() => void chat.older()}>
-              {chat.label('Load older messages', '加载更早消息')}
+              {chat.label("Load older messages", "加载更早消息")}
             </button>
           )}
           {chat.messages.length
@@ -71,11 +92,12 @@ export function Transcript({
                 </div>
               ))
             : !chat.loading && welcome}
+          {children}
         </div>
       </div>
       {!following && (
         <button onClick={() => controller.current?.followLatest()}>
-          {chat.label('Jump to latest', '跳至最新')}
+          {chat.label("Jump to latest", "跳至最新")}
         </button>
       )}
     </>

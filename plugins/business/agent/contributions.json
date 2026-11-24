@@ -305,6 +305,42 @@
       "permissions": [
         "app.agent.rename"
       ]
+    },
+    {
+      "id": "chat-interactions",
+      "host_operation": "app.agent.interactions",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.interactions"
+      ]
+    },
+    {
+      "id": "chat-respond",
+      "host_operation": "app.agent.respond",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.respond"
+      ]
+    },
+    {
+      "id": "chat-upload",
+      "host_operation": "app.agent.attachments",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.attachments"
+      ]
+    },
+    {
+      "id": "chat-attached-turn",
+      "host_operation": "app.agent.attachments.turn",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.attachments.turn"
+      ]
     }
   ],
   "ui": [
@@ -356,7 +392,7 @@
       ],
       "entry": {
         "path": "ui/chat-web.js",
-        "digest": "sha256:8bfc9e2c75fdbf3b585a3af92ef1939c0ba85237f37b1621ea573c6044b8ef99"
+        "digest": "sha256:ef73c2818cc4ad846e9151ce28d5540a2a210e77a878ffe102a92804f3a9430f"
       },
       "commands": [
         "chat-list",
@@ -364,12 +400,16 @@
         "chat-history",
         "chat-turn",
         "chat-cancel",
-        "chat-rename"
+        "chat-rename",
+        "chat-interactions",
+        "chat-respond",
+        "chat-upload",
+        "chat-attached-turn"
       ],
       "device_tools": [],
       "style": {
         "path": "ui/chat-web.css",
-        "digest": "sha256:efea2b5af8a2c2b91d4c59713936ae06439bb871f77199159abc25b63783dd54"
+        "digest": "sha256:2fdaee7a9b3862b9e0e8b72280ffe7fb2b6de4304ebea55ac27c3264fc1975b9"
       },
       "workbench": true
     },
@@ -388,7 +428,7 @@
       ],
       "entry": {
         "path": "ui/chat-desktop.js",
-        "digest": "sha256:7e406f89f4a952713e10c09ae88672494f90a29b5fdbd34360048f44a87965f7"
+        "digest": "sha256:10a5f0ed2e84b2b1eb57703ad6ea68299770aed44a008e0dd22c74fdca2fc854"
       },
       "commands": [
         "chat-list",
@@ -396,14 +436,18 @@
         "chat-history",
         "chat-turn",
         "chat-cancel",
-        "chat-rename"
+        "chat-rename",
+        "chat-interactions",
+        "chat-respond",
+        "chat-upload",
+        "chat-attached-turn"
       ],
       "device_tools": [
         "local_chat"
       ],
       "style": {
         "path": "ui/chat-desktop.css",
-        "digest": "sha256:a5f2fed05a3936d0ccae13bb4a80273531670447ad272a87c17fad9463e121e8"
+        "digest": "sha256:13a682109dc57396afea2b7a089a632d3c0174a33d09f813f372c0fe11c7996b"
       },
       "workbench": true
     }

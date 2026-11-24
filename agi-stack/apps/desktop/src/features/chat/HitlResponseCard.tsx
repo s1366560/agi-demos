@@ -1,3 +1,4 @@
+import {ClarificationForm} from '@business/agent/ui/desktop/chat/ClarificationForm';
 import { useEffect, useState } from 'react';
 import {
   CheckCircledIcon,
@@ -863,43 +864,10 @@ export function HitlResponseCard({
       ) : null}
 
       {!answered && hitlType === 'clarification' ? (
-        <div className="timeline-detail-block">
-          {options.length ? (
-            <Flex gap="2" wrap="wrap">
-              {options.map((option) => (
-                <Button
-                  size="1"
-                  variant="soft"
-                  disabled={responseDisabled || !requestId || busy}
-                  title={option.description}
-                  key={option.value}
-                  onClick={() => void submit({ answer: option.value })}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </Flex>
-          ) : null}
-          {allowCustom ? (
-            <>
-              <TextArea
-                size="1"
-                value={answer}
-                disabled={responseDisabled || busy}
-                placeholder={t('chat.enterAnswer')}
-                onChange={(event) => setAnswer(event.currentTarget.value)}
-              />
-              <Button
-                size="1"
-                disabled={responseDisabled || !requestId || busy || !answer.trim()}
-                loading={busy}
-                onClick={() => void submit({ answer: answer.trim() })}
-              >
-                {t('chat.submitResponse')}
-              </Button>
-            </>
-          ) : null}
-        </div>
+        <ClarificationForm options={options} disabled={responseDisabled || !requestId} busy={busy}
+          allowCustom={allowCustom} answer={answer} setAnswer={setAnswer} submit={value=>void submit({answer:value})}
+          placeholder={t('chat.enterAnswer')} submitLabel={t('chat.submitResponse')}/>
+
       ) : null}
 
       {!answered && hitlType === 'a2ui_action' ? (

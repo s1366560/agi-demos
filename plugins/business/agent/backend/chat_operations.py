@@ -197,7 +197,15 @@ async def history(
 async def turn(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    data = Turn.model_validate(payload)
+    return await _turn(ctx, Turn.model_validate(payload), progress)
+
+
+async def _turn(
+    ctx: "PackageOperationContext",
+    data: Turn,
+    progress: "Progress | None",
+    files: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     await _own_conversation(ctx, data.conversation_id)
     placements = await latest_execution_placements(
         ctx.db,
@@ -215,7 +223,13 @@ async def turn(
         raise OptionalBusinessError(
             "forbidden", "Local conversations support read-only cloud replay"
         )
-    return await stream_turn(ctx, data.model_dump(), progress)
+    message = data.model_dump()
+    if files:
+        message["attachment_ids"] = [file["id"] for file in files]
+        message["file_metadata"] = [
+            {key: value for key, value in file.items() if key != "id"} for file in files
+        ]
+    return await stream_turn(ctx, message, progress)
 
 
 async def cancel(
