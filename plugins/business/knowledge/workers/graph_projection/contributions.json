@@ -285,25 +285,59 @@
         "/tenant/:tenantId/project/:projectId/memories"
       ],
       "targets": [
-        "web",
-        "desktop-renderer"
+        "web"
       ],
       "entry": {
-        "path": "ui/memories.js",
-        "digest": "sha256:1442f40f91f16205f89dd61e150b27a6f8de1626cec852b4b11e5c5081ca7ea2"
+        "path": "ui/memories-web.js",
+        "digest": "sha256:bf7a01303cca78c5d3d214aad1ff4b2a72d60123b1003517fd0240fd9cd80bea"
       },
       "commands": [
         "list-memories"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/memories-web.css",
+        "digest": "sha256:ce6686f2fce34ca8697b5b326cbd3be213f6ab17bb0d69b8162f4d10b0d51314"
+      },
+      "query_params": [
+        "q",
+        "type",
+        "page",
+        "page_size"
       ]
+    },
+    {
+      "id": "memories",
+      "title": "Project memories",
+      "routes": [
+        "/memories",
+        "/project/:projectId/memories",
+        "/tenant/:tenantId/project/:projectId/memories"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/memories-desktop.js",
+        "digest": "sha256:5039f32b72d9ec7f2256dd51d2ff08403f7579096ad81e065f8e8668967f3303"
+      },
+      "commands": [
+        "list-memories",
+        "read-memory",
+        "save-memory"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/memories-desktop.css",
+        "digest": "sha256:c1edc7e2ecc71693746ee206afb07ca9deabae7b1b51886fda8a4a1f3eccf831"
+      }
     },
     {
       "id": "memory-editor",
       "title": "Memory editor",
       "routes": [
         "/tenant/:tenantId/project/:projectId/memories/new",
-        "/tenant/:tenantId/project/:projectId/memory/:memoryId",
-        "/project/:projectId/memories/new",
-        "/project/:projectId/memory/:memoryId"
+        "/project/:projectId/memories/new"
       ],
       "targets": [
         "web",
@@ -316,6 +350,52 @@
       "commands": [
         "read-memory",
         "save-memory"
+      ]
+    },
+    {
+      "id": "desktop-memory-editor",
+      "title": "Memory editor",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/memory/:memoryId",
+        "/project/:projectId/memory/:memoryId"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/editor.js",
+        "digest": "sha256:732f7b7e00cedbdbfee10b99af19d21be2dfc913a3e88b6d58f4083b2321be7e"
+      },
+      "commands": [
+        "read-memory",
+        "save-memory"
+      ]
+    },
+    {
+      "id": "memory-detail",
+      "title": "Memory details",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/memory/:memoryId",
+        "/project/:projectId/memory/:memoryId"
+      ],
+      "targets": [
+        "web"
+      ],
+      "entry": {
+        "path": "ui/memories-web.js",
+        "digest": "sha256:bf7a01303cca78c5d3d214aad1ff4b2a72d60123b1003517fd0240fd9cd80bea"
+      },
+      "commands": [
+        "read-memory",
+        "save-memory"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/memories-web.css",
+        "digest": "sha256:ce6686f2fce34ca8697b5b326cbd3be213f6ab17bb0d69b8162f4d10b0d51314"
+      },
+      "query_params": [
+        "tab"
       ]
     },
     {
@@ -359,11 +439,11 @@
       ],
       "entry": {
         "path": "ui/entities.js",
-        "digest": "sha256:2995bd1a3104abe8415877dfb69a345f3a32c6d1116f6bed2840e02e282d3689"
+        "digest": "sha256:e338e6602bfcd73b48a1697152d69a1295323fd7da605c582ff809cc439dacd1"
       },
       "style": {
         "path": "ui/entities.css",
-        "digest": "sha256:77f077e778aa4e3adc48b520447f32e64a14e6a8b1898c8e2e065477fba00fb3"
+        "digest": "sha256:df041cb2ba6b9db5ed3fc210718e75391bf0f68c3967b95ca5931f0130cb2dc9"
       },
       "workbench": true
     },

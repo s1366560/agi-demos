@@ -28,6 +28,8 @@ class _Edit(BaseModel):
     version: int = Field(ge=0, le=2147483647)
     title: str = Field(min_length=1, max_length=500)
     content: str = Field(min_length=1, max_length=32768)
+    tags: list[str] | None = Field(default=None, max_length=100)
+    metadata: dict[str, Any] | None = None
     change_id: str = Field(min_length=36, max_length=36)
 
     @model_validator(mode="after")
@@ -67,6 +69,10 @@ async def save_memory(
     edit = _Edit.model_validate(payload)
     scope = {"tenant_id": ctx.scope.tenant_id, "project_id": ctx.scope.project_id}
     body: dict[str, Any] = {"title": edit.title, "content": edit.content}
+    if edit.tags is not None:
+        body["tags"] = edit.tags
+    if edit.metadata is not None:
+        body["metadata"] = edit.metadata
     if edit.id:
         await _require_memory(ctx, edit.id)
         body["version"] = edit.version

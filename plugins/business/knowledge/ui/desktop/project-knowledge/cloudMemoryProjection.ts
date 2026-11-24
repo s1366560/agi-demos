@@ -5,8 +5,8 @@ import {
   projectKnowledgeError,
   requireNonnegativeInteger,
   requireText,
-  type ProjectKnowledgeScope,
-} from './projectKnowledgeClient';
+} from './projectKnowledgeValues';
+import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
 
 export function parseMemoryV2(payload: unknown, scope: ProjectKnowledgeScope): ProjectMemory {
   if (!isRecord(payload)) {

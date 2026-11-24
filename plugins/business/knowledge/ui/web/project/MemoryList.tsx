@@ -374,6 +374,7 @@ interface MemoryListActions {
 }
 
 interface MemoryListContextType {
+  recordMaintenance: boolean;
   state: MemoryListState;
   actions: MemoryListActions;
   projectId: string;
@@ -399,10 +400,14 @@ const useMemoryListContextOptional = (): MemoryListContextType | null => {
 // ============================================================================
 
 interface MemoryListProps {
+  recordMaintenance?: boolean;
   className?: string | undefined;
 }
 
-const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
+const MemoryListInternal: React.FC<MemoryListProps> = ({
+  className = '',
+  recordMaintenance = true,
+}) => {
   const { projectId } = useParams<{ projectId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const texts = useMemoryListTexts();
@@ -478,7 +483,15 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
         setIsLoading(false);
       }
     }
-  }, [contentTypeFilter, debouncedSearch, page, pageSize, projectId, texts.fetchFailed, texts.untitled]);
+  }, [
+    contentTypeFilter,
+    debouncedSearch,
+    page,
+    pageSize,
+    projectId,
+    texts.fetchFailed,
+    texts.untitled,
+  ]);
 
   useEffect(() => {
     setPage(1);
@@ -600,7 +613,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   }
 
   return (
-    <MemoryListContext.Provider value={{ state, actions, projectId }}>
+    <MemoryListContext.Provider value={{ state, actions, projectId, recordMaintenance }}>
       <div className={className || 'mx-auto flex w-full max-w-none flex-col gap-5'}>
         <MemoryList.Header />
         <div className="overflow-hidden rounded-md bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.10)] dark:bg-surface-dark dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]">
@@ -1013,7 +1026,8 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
     const actions = context?.actions;
     const { projectBasePath } = useProjectBasePath();
     const texts = useMemoryListTexts();
-    const onDelete = propOnDelete ?? actions?.confirmDelete;
+    const onDelete =
+      propOnDelete ?? (context?.recordMaintenance ? actions?.confirmDelete : undefined);
     const progress = state?.taskProgress[memory.id]?.progress;
     const TypeIcon =
       memory.content_type === 'image'
@@ -1084,7 +1098,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
         </td>
         <td className="w-[110px] px-5 py-2 text-right">
           <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-            {actions && (
+            {actions && context?.recordMaintenance && (
               <button
                 type="button"
                 onClick={() => {

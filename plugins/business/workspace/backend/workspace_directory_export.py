@@ -75,20 +75,32 @@ async def _authorized_page(
 class DirectoryQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     offset: int = Field(default=0, ge=0)
-    limit: int = Field(default=8, ge=1, le=8)
+    limit: int = Field(default=8, ge=1, le=100)
+    cards: bool = False
 
 
 async def read_directory_operation(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
+    from .directory_cards import Card, SummaryQuery, directory_card, directory_summary
+
     try:
+        if "summary_for" in payload:
+            return await directory_summary(ctx, SummaryQuery.model_validate(payload))
         query = DirectoryQuery.model_validate(payload)
+        if not query.cards and query.limit > 8:
+            raise HTTPException(422, _("The export page size is limited to 8 workspaces"))
     except ValidationError as exc:
         raise HTTPException(422, _("Invalid workspace directory query")) from exc
-    upstream = await _request_core(ctx, query=urlencode(query.model_dump()).encode())
+    upstream = await _request_core(
+        ctx, query=urlencode(query.model_dump(exclude={"cards"})).encode()
+    )
     try:
         if upstream.status_code != 200:
             raise HTTPException(upstream.status_code, _("Workspace directory unavailable"))
+        if query.cards:
+            cards = TypeAdapter(list[Card]).validate_json(await _body(upstream))
+            return {"rows": [directory_card(card, ctx.scope) for card in cards]}
         return {"rows": await _authorized_page(upstream, ctx.scope)}
     finally:
         await upstream.aclose()

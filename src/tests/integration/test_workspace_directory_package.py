@@ -325,6 +325,13 @@ async def _verify_directory_command(api, base, actor, visible):
     directory_result = await directory(actor, {"limit": 1})
     assert directory_result.is_success, directory_result.text
     assert directory_result.json()["rows"][0]["id"] == visible
+    cards = await directory(actor, {"cards": True, "limit": 100})
+    assert cards.is_success, cards.text
+    assert cards.json()["rows"][0]["id"] == visible
+    assert "metadata-is-not" not in cards.text
+    sources = await directory(actor, {"summary_for": visible})
+    assert sources.is_success, sources.text
+    assert set(sources.json()) == {"tasks", "plan", "objectives"}
     assert "metadata-is-not" not in directory_result.text
     assert (await directory(actor, {"user_id": "viewer"})).status_code == 422
 

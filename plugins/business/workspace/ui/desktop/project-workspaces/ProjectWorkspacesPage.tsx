@@ -13,11 +13,13 @@ export function ProjectWorkspacesPage({
   controller,
   onRetry,
   onOpenBlackboard,
+  extraActions,
 }: Readonly<{
   model: ProjectWorkspacesViewModel;
   controller: ProjectWorkspacesController;
   onRetry: () => void;
   onOpenBlackboard: (workspaceId: string) => void;
+  extraActions?: React.ReactNode;
 }>) {
   const { t } = useI18n();
   const [createOpen, setCreateOpen] = useState(false);
@@ -44,6 +46,7 @@ export function ProjectWorkspacesPage({
           <h1>{t('tenantWorkspaces.title')}</h1>
           <p>{t('tenantWorkspaces.subtitle')}</p>
         </div>
+        {extraActions}
         {model.allowedActions.includes('create') ? (
           <Button color="gray" onClick={() => setCreateOpen(true)}>
             <PlusIcon />
@@ -105,7 +108,7 @@ function ProjectWorkspaceCreateDialog({
           event.preventDefault();
           if (!name.trim()) return;
           void onSubmit({ name: name.trim(), description: description.trim() }).catch(
-            () => undefined,
+            () => undefined
           );
         }}
       >
@@ -116,10 +119,7 @@ function ProjectWorkspaceCreateDialog({
         </label>
         <label>
           <span>{t('tenantWorkspaces.editor.description')}</span>
-          <TextArea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
+          <TextArea value={description} onChange={(event) => setDescription(event.target.value)} />
         </label>
         <div>
           <Button type="button" color="gray" variant="soft" onClick={onCancel}>

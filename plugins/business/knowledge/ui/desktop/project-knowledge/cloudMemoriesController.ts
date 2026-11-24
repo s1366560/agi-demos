@@ -14,7 +14,7 @@ import {
   cloudMemoryRowAction,
   validCloudMemoryUiAuthority,
   type CloudMemoryUiAuthority,
-} from '@desktop/features/project-knowledge/cloudMemoryUiAuthority';
+} from './cloudMemoryUiAuthority';
 
 type Draft = Readonly<{ title: string; content: string }>;
 type Intent = 'view' | 'edit' | 'delete' | 'create';
@@ -103,7 +103,7 @@ export function createCloudMemoriesController({
         client &&
         permissionsCurrent &&
         model.listState === 'ready' &&
-        cloudMemoryUiCapabilities(authority, model.list)?.allowedActions.includes('create'),
+        cloudMemoryUiCapabilities(authority, model.list)?.allowedActions.includes('create')
       ),
     });
     [...listeners].forEach((listener) => listener());
@@ -131,7 +131,7 @@ export function createCloudMemoriesController({
       client &&
       permissionsCurrent &&
       model.listState === 'ready' &&
-      cloudMemoryRowAction(cloudMemoryUiCapabilities(authority, model.list), record, action),
+      cloudMemoryRowAction(cloudMemoryUiCapabilities(authority, model.list), record, action)
     );
   const canView = () =>
     !stopped && valid && Boolean(client) && authority.allowedActions.includes('view');
@@ -217,7 +217,7 @@ export function createCloudMemoriesController({
     const response = await client!.execute(
       authority.scope,
       { operation: 'get', id },
-      options(request.signal),
+      options(request.signal)
     );
     if (!current(request)) throw Error('request_cancelled');
     checkRecord(response.result, id);

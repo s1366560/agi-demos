@@ -1,5 +1,12 @@
-import { DesktopApiError, desktopApiCredential, desktopLaunchCapability } from '@desktop/api/client';
-import { desktopApiAuthenticationAvailable, desktopApiFetch } from '@desktop/api/cloudRequestBroker';
+import {
+  DesktopApiError,
+  desktopApiCredential,
+  desktopLaunchCapability,
+} from '@desktop/api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '@desktop/api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '@desktop/types';
 
 export type ProjectKnowledgeAuthority = 'cloud' | 'local';
@@ -38,7 +45,7 @@ const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 export function requireProjectKnowledgeScope(
   config: DesktopRuntimeConfig,
   scope: ProjectKnowledgeScope,
-  localReasonCode: string,
+  localReasonCode: string
 ): ProjectKnowledgeScope {
   const tenantId = requireIdentifier(scope.tenantId, 'project_knowledge_tenant_scope_invalid');
   const projectId = requireIdentifier(scope.projectId, 'project_knowledge_project_scope_invalid');
@@ -60,7 +67,7 @@ export function requireProjectKnowledgeScope(
 export async function observeProjectKnowledgeScope(
   config: DesktopRuntimeConfig,
   scope: ProjectKnowledgeScope,
-  options?: ProjectKnowledgeReadOptions,
+  options?: ProjectKnowledgeReadOptions
 ): Promise<number> {
   const payload = await requestProjectKnowledgeJson(config, '/api/v1/workspace-context', options);
   if (!isRecord(payload) || !isRecord(payload.context)) {
@@ -76,7 +83,7 @@ export async function observeProjectKnowledgeScope(
 export async function requestProjectKnowledgeJson(
   config: DesktopRuntimeConfig,
   path: string,
-  options: RequestOptions = {},
+  options: RequestOptions = {}
 ): Promise<unknown> {
   const response = await request(config, path, options);
   const payload = await boundedPayload(response);
@@ -90,7 +97,7 @@ export async function requestProjectKnowledgeJson(
 export async function requestProjectKnowledgeNoContent(
   config: DesktopRuntimeConfig,
   path: string,
-  options: RequestOptions,
+  options: RequestOptions
 ): Promise<void> {
   const response = await request(config, path, options);
   const payload = await boundedPayload(response);
@@ -100,7 +107,7 @@ export async function requestProjectKnowledgeNoContent(
 async function request(
   config: DesktopRuntimeConfig,
   path: string,
-  options: RequestOptions,
+  options: RequestOptions
 ): Promise<Response> {
   const headers = new Headers({ Accept: 'application/json' });
   const credential = desktopApiCredential(config);
@@ -147,7 +154,7 @@ function applyMutationHeaders(headers: Headers, input: ProjectKnowledgeMutationH
 }
 
 async function boundedPayload(
-  response: Response,
+  response: Response
 ): Promise<Readonly<{ isJson: boolean; value: unknown }>> {
   const declaredLength = Number(response.headers.get('content-length') ?? '0');
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
@@ -170,7 +177,7 @@ async function boundedPayload(
 
 function responseError(
   status: number,
-  payload: Readonly<{ isJson: boolean; value: unknown }>,
+  payload: Readonly<{ isJson: boolean; value: unknown }>
 ): DesktopApiError {
   const value = payload.value;
   const detail = isRecord(value) ? value.detail : null;
@@ -188,41 +195,10 @@ function structuredReason(value: unknown): string | null {
   return typeof value === 'string' && value && value === value.trim() ? value : null;
 }
 
-export function projectKnowledgeError(reasonCode: string, status = 502): DesktopApiError {
-  return new DesktopApiError(reasonCode, status, { reason_code: reasonCode });
-}
-
-export function requireIdentifier(value: unknown, reasonCode: string): string {
-  if (typeof value !== 'string' || !value || value !== value.trim()) {
-    throw projectKnowledgeError(reasonCode, 422);
-  }
-  return value;
-}
-
-export function requireText(value: unknown, reasonCode: string): string {
-  if (typeof value !== 'string') throw projectKnowledgeError(reasonCode);
-  return value;
-}
-
-export function optionalText(value: unknown, reasonCode: string): string | null {
-  if (value === undefined || value === null) return null;
-  return requireText(value, reasonCode);
-}
-
-export function requireNonnegativeInteger(value: unknown, reasonCode: string): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-    throw projectKnowledgeError(reasonCode);
-  }
-  return value;
-}
-
-export function requireFiniteNumber(value: unknown, reasonCode: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw projectKnowledgeError(reasonCode);
-  }
-  return value;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
+export * from './projectKnowledgeValues';
+import {
+  projectKnowledgeError,
+  requireIdentifier,
+  requireNonnegativeInteger,
+  isRecord,
+} from './projectKnowledgeValues';

@@ -31,7 +31,7 @@ function snapshot(scope, page, total = 101) {
 }
 function pageComponent() {
   const source = readFileSync(
-    new URL('../../../../plugins/business/knowledge/ui/desktop/project-knowledge/ProjectKnowledgePage.tsx', import.meta.url),
+    new URL('../../../../plugins/business/knowledge/ui/desktop/project-knowledge/ProjectKnowledgeView.tsx', import.meta.url),
     'utf8',
   );
   const module = { exports: {} };
@@ -47,11 +47,11 @@ function pageComponent() {
       },
     }).outputText,
   )(
-    (name) => (name.endsWith('/i18n') ? { useI18n: () => ({ t: (key) => key }) } : require(name)),
+    require,
     module,
     module.exports,
   );
-  return module.exports.ProjectKnowledgePage;
+  return (props) => module.exports.ProjectKnowledgeView({ ...props, t: (key) => key });
 }
 function buttons(element) {
   if (Array.isArray(element)) return element.flatMap(buttons);

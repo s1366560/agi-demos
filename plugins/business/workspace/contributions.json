@@ -193,12 +193,68 @@
         "/tenant/:tenantId/project/:projectId/workspaces"
       ],
       "targets": [
+        "web"
+      ],
+      "entry": {
+        "path": "ui/workspaces-web.js",
+        "digest": "sha256:2631c23a5dc5f9ddb72226c1305378bf1cea480ecd4ac914ca3dc21a5a08b246"
+      },
+      "commands": [
+        "list-directory"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/workspaces-web.css",
+        "digest": "sha256:05d000975c016ebfd45585ef70db794a5ffceb247860244e4f4e7565cd8ab098"
+      },
+      "workbench": true,
+      "query_params": [
+        "q",
+        "page"
+      ]
+    },
+    {
+      "id": "directory",
+      "title": "Workspace directory",
+      "routes": [
+        "/workspaces",
+        "/tenant/:tenantId/project/:projectId/workspaces"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workspaces-desktop.js",
+        "digest": "sha256:6de5f2df5787397853ea2911f38bb0f1302ed0e4aea695205c806ca49f1653b8"
+      },
+      "commands": [
+        "list-directory",
+        "create-workspace"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/workspaces-desktop.css",
+        "digest": "sha256:05983bd31a7aba243a4492b9e6924a80b8e8aed874417d503068e5552678b389"
+      },
+      "workbench": true,
+      "query_params": [
+        "q",
+        "page"
+      ]
+    },
+    {
+      "id": "directory-export",
+      "title": "Workspace CSV export",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/workspaces/export"
+      ],
+      "targets": [
         "web",
         "desktop-renderer"
       ],
       "entry": {
         "path": "ui/directory.js",
-        "digest": "sha256:b39e16bcaf7600f409b41aa0c4d8e79cc37f655c14ed33ef00c453be8b403ab6"
+        "digest": "sha256:0e9eb4915cf7ac964f21ce9d826df5bba80b0d6ed5db5de1ec1cc20c30508195"
       },
       "commands": [
         "export-csv",
@@ -275,7 +331,7 @@
       ],
       "entry": {
         "path": "ui/workspace-create-web.js",
-        "digest": "sha256:247ec573ecaecb4e1782a175abb06e1c7ae9294a566e887d9d21d7c1832dda64"
+        "digest": "sha256:4e01d974e07fc8ecb17012f2e37fa586b4c5e7603dacbef1e02c1fdf925e2585"
       },
       "commands": [
         "create-workspace"
