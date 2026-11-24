@@ -1,4 +1,3 @@
-import { DesktopApiError } from '@desktop/api/client';
 import {
   RUNTIME_CLUSTERS_CLOUD_ACTIONS,
   RUNTIME_CLUSTERS_CLOUD_REASON,
@@ -382,13 +381,13 @@ function classifyError(
   resourceState: RuntimeClustersResourceState;
   reasonCode: string;
 }> {
-  if (error instanceof DesktopApiError && error.status === 403) {
+  if (error instanceof Error && 'status' in error && error.status === 403) {
     return Object.freeze({
       resourceState: 'forbidden',
       reasonCode: 'runtime_clusters_forbidden',
     });
   }
-  if (error instanceof DesktopApiError && error.status === 409) {
+  if (error instanceof Error && 'status' in error && error.status === 409) {
     return Object.freeze({
       resourceState: 'conflict',
       reasonCode: 'runtime_clusters_conflict',

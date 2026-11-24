@@ -180,6 +180,24 @@
       ],
       "payload": {},
       "accepts_input": true
+    },
+    {
+      "id": "write-cluster",
+      "host_operation": "app.environments.clusters.write",
+      "permissions": [
+        "app.environments.clusters.write"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "delete-cluster",
+      "host_operation": "app.environments.clusters.delete",
+      "permissions": [
+        "app.environments.clusters.delete"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -252,7 +270,7 @@
       ],
       "entry": {
         "path": "ui/inventory.js",
-        "digest": "sha256:de1ef365a610475d5c05d95f46edc9aabe77f3f2844cc66400a317e83af55d1d"
+        "digest": "sha256:8a2a35efc5a42756e7a0033b8b175f72739f1417457382deff27c5cb72d20bee"
       },
       "commands": [
         "environment-inventory"
@@ -265,7 +283,71 @@
       "scope": "tenant",
       "routes": [
         "/tenant/:tenantId/environments/clusters",
-        "/tenant/:tenantId/environments/clusters/:resourceId"
+        "/tenant/:tenantId/clusters"
+      ],
+      "targets": [
+        "web"
+      ],
+      "entry": {
+        "path": "ui/clusters-web.js",
+        "digest": "sha256:8d7a285f3c2199c45de0f6d956a09dc93bd539eae89c6af9c6f5860a4399ee78"
+      },
+      "commands": [
+        "environment-inventory",
+        "write-cluster",
+        "delete-cluster"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "page",
+        "page_size",
+        "search",
+        "status"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/clusters-web.css",
+        "digest": "sha256:0e8c64cbc37d3ceb39aee8663667118e350268f040fe77925425e97c8966d68c"
+      }
+    },
+    {
+      "id": "tenant-clusters",
+      "title": "Clusters",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/environments/clusters",
+        "/tenant/:tenantId/clusters"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/clusters-desktop.js",
+        "digest": "sha256:cc2aff76b4e94670247507c976f2c7d4c879715d9a919ca9ae9436a75a47e521"
+      },
+      "commands": [
+        "environment-inventory"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "page",
+        "page_size",
+        "search",
+        "status"
+      ],
+      "style": {
+        "path": "ui/clusters-desktop.css",
+        "digest": "sha256:565347ec032ff0793862e31518503031f519850942f33f8d7c8329c264a028fa"
+      },
+      "workbench": true
+    },
+    {
+      "id": "cluster-details",
+      "title": "Cluster details",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/environments/clusters/:clusterId",
+        "/tenant/:tenantId/clusters/:clusterId"
       ],
       "targets": [
         "web",
@@ -273,7 +355,7 @@
       ],
       "entry": {
         "path": "ui/inventory.js",
-        "digest": "sha256:de1ef365a610475d5c05d95f46edc9aabe77f3f2844cc66400a317e83af55d1d"
+        "digest": "sha256:8a2a35efc5a42756e7a0033b8b175f72739f1417457382deff27c5cb72d20bee"
       },
       "commands": [
         "environment-inventory"

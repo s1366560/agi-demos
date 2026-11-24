@@ -8,23 +8,15 @@ The full-client Cron form, store, jobs API, event, webhook and playbook clients 
 
 ## Publish
 
-From this directory build the worker, sign the package with the immutable image digest, and approve the resulting release for your project.
+From the repository root, build the package pages and sign the release using the published worker image's immutable digest. Set `IMAGE` to the full image reference and `OUT` to a new output directory.
 
 ```sh
-docker buildx build --push -t "$IMAGE:$VERSION" --metadata-file "$METADATA" .
-DIGEST=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["containerimage.digest"])' "$METADATA")
-STAGE=$(mktemp -d)
-cp contributions.json "$STAGE/"
-mkdir "$STAGE/ui"
-cp ui/settings.json ui/workflow.js ui/playbooks.js ui/schedules.js "$STAGE/ui/"
-python3 -c 'import json,sys; print(json.dumps({**json.load(open("package.json")), "version": sys.argv[1]}))' "$VERSION" > "$STAGE/package.json"
-python3 -c 'import json,sys; print(json.dumps({"schema":"memstack.mcp-oci-worker/1","image":sys.argv[1],"entrypoint":"/app/schedule-worker"}))' "$IMAGE@$DIGEST" > "$STAGE/worker.json"
-uv run --with ../../../sdk/memstack-plugin-sdk memstack-plugin-pack "$STAGE/package.json" --key "$SIGNING_KEY" --out automation.mspkg
-memstack packages --tenant "$TENANT" --project "$PROJECT" install --approve ui.slot --approve tools.execute --approve app.automation.playbooks.read \
-  --approve app.automation.schedules.read --approve app.automation.schedules.write \
-  --approve app.automation.schedules.run --approve storage.read --approve storage.write automation.mspkg
+corepack pnpm --dir plugins/business/automation/ui/signed install --frozen-lockfile
+node plugins/business/automation/ui/signed/build.mjs
+PYTHONPATH=.:sdk/memstack-plugin-sdk/src uv run python -m scripts.build_standard_packages \
+  --package automation --automation-image "$IMAGE" --key "$SIGNING_KEY" --out "$OUT"
 ```
 
 From the repository root run the scheduler regressions under `src/tests/unit/infrastructure/scheduler`. Run `OCI_WORKER_DOCKER_TESTS=1 uv run pytest src/tests/integration/test_automation_schedule_package.py` to verify the signed worker through both full and minimal HTTP hosts.
 
-The shared Playbooks page uses the signed `list-playbooks` command. The application runtime reads the authenticated project membership and the generation-bound playbook repository. Schedule previews run in the package worker independently of that runtime.
+The signed Playbooks pages render the original Web library and desktop project view using the `list-playbooks` and `list-verdicts` commands. The application runtime reads the authenticated project membership and the generation-bound playbook repository. Schedule previews run in the package worker independently of that runtime.

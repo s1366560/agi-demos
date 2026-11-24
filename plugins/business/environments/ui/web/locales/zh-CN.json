@@ -814,5 +814,12 @@
       "stop": "停止",
       "start": "启动"
     }
+  },
+  "common": {
+    "retry": "重试",
+    "refresh": "刷新",
+    "actions": {
+      "viewAll": "查看全部"
+    }
   }
 }

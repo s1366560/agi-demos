@@ -14,6 +14,7 @@ export function RuntimeClustersPage({
   onQueryChange,
   onFiltersChange,
   onInspectHealth,
+  onOpenDetails,
   onCloseHealth,
 }: Readonly<{
   model: RuntimeClustersModel;
@@ -21,6 +22,7 @@ export function RuntimeClustersPage({
   onQueryChange(query: RuntimeClustersQuery): void;
   onFiltersChange(query: RuntimeClustersQuery): void;
   onInspectHealth(clusterId: string): Promise<void>;
+  onOpenDetails?: ((id: string) => void) | undefined;
   onCloseHealth(): void;
 }>) {
   const { t } = useI18n();
@@ -131,6 +133,7 @@ export function RuntimeClustersPage({
             clusters={model.visibleClusters}
             loading={model.healthState === 'loading'}
             selectedClusterId={model.selectedClusterId}
+            onOpenDetails={onOpenDetails}
             onInspectHealth={onInspectHealth}
           />
         )}
@@ -177,11 +180,13 @@ function ClusterTable({
   loading,
   selectedClusterId,
   onInspectHealth,
+  onOpenDetails,
 }: Readonly<{
   clusters: readonly RuntimeClusterSummary[];
   loading: boolean;
   selectedClusterId: string | null;
   onInspectHealth(clusterId: string): Promise<void>;
+  onOpenDetails?: ((id: string) => void) | undefined;
 }>) {
   const { t } = useI18n();
   return (
@@ -200,7 +205,7 @@ function ClusterTable({
           {clusters.map((cluster) => (
             <tr key={cluster.id}>
               <td>
-                <strong>{cluster.name}</strong>
+                <strong>{onOpenDetails ? <button type="button" onClick={() => onOpenDetails(cluster.id)}>{cluster.name}</button> : cluster.name}</strong>
                 <code>{cluster.id}</code>
               </td>
               <td>{cluster.computeProvider}</td>

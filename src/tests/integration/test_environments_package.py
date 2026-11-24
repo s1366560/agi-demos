@@ -105,6 +105,8 @@ async def test_environment_worker_through_project_http(http, environment_release
                 "ui.slot",
                 "tools.execute",
                 "app.environments.inventory.read",
+                "app.environments.clusters.write",
+                "app.environments.clusters.delete",
                 "app.environments.sandbox.read",
                 "app.environments.sandbox.prepare",
                 "app.environments.terminal.authorize",

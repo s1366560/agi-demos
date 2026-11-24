@@ -8,25 +8,13 @@ The signed tool takes numeric node counts, CPU readings and memory readings. It 
 
 ## Release the Environments worker
 
-Build and push the worker image from this directory. Use the digest returned by your registry as `IMAGE` (registry/repository@sha256:digest). With the publisher SDK installed, stage the pinned worker descriptor and sign the archive:
+From the repository root, build the package pages and sign the release using the published worker image's immutable digest. Set `IMAGE` to the full image reference and `OUT` to a new output directory.
 
 ```sh
-stage=$(mktemp -d)
-cp package.json contributions.json "$stage/"
-mkdir "$stage/ui"
-cp ui/settings.json ui/patch.js ui/sandbox.js "$stage/ui/"
-python - "$IMAGE" "$stage/worker.json" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-Path(sys.argv[2]).write_text(json.dumps({
-    "schema": "memstack.mcp-oci-worker/1",
-    "image": sys.argv[1],
-    "entrypoint": "/app/worker",
-}))
-PY
-memstack-plugin-pack "$stage/package.json" --key "$SIGNING_KEY" --out "$stage/environments.mspkg"
+corepack pnpm --dir plugins/business/environments/ui/signed install --frozen-lockfile
+node plugins/business/environments/ui/signed/build.mjs
+PYTHONPATH=.:sdk/memstack-plugin-sdk/src uv run python -m scripts.build_standard_packages \
+  --package environments --environments-image "$IMAGE" --key "$SIGNING_KEY" --out "$OUT"
 ```
 
 Install the archive through the project package API after approving the tool, page, sandbox and terminal permissions shown by package inspection and enable the release. The host must trust the signer and allow the worker registry. Tests for the projection and application services live in `tests/`. The signed install and container execution test lives in `src/tests/integration/test_environments_package.py`.

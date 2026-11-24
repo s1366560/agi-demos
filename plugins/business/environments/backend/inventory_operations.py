@@ -26,10 +26,12 @@ class InventoryQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     kind: Literal["instances", "clusters"]
     id: Annotated[str, Field(min_length=1, max_length=128)] | None = None
+    health: bool = False
+    page_size: int = Field(20, ge=1, le=100)
     page: int = Field(1, ge=1, le=1000000)
 
 
-def _project(row: InstanceResponse | ClusterResponse, tenant: str) -> dict[str, Any]:
+def project_inventory_row(row: InstanceResponse | ClusterResponse, tenant: str) -> dict[str, Any]:
     if row.tenant_id != tenant:
         raise OptionalBusinessError("forbidden", "Environment belongs to another tenant")
     fields = {
@@ -58,7 +60,7 @@ def _project(row: InstanceResponse | ClusterResponse, tenant: str) -> dict[str, 
             }
         )
     else:
-        fields.add("last_health_check")
+        fields.update({"last_health_check", "proxy_endpoint"})
     return row.model_dump(mode="json", include=fields, exclude_none=True)
 
 
@@ -68,23 +70,37 @@ async def inventory(
     query = InventoryQuery.model_validate(payload)
     tenant = ctx.scope.tenant_id
     await require_tenant_access(ctx.db, ctx.user, tenant)
+    if query.health and (not query.id or query.kind != "clusters"):
+        raise OptionalBusinessError("invalid_request", "Cluster health requires a cluster ID")
     if query.kind == "instances":
         async with asynccontextmanager(instance_application_authority_dependency_v2)(
             ctx.request, ctx.user, tenant, ctx.db
         ) as authority:
             if query.id:
-                return {"item": _project(await instances.get_instance(query.id, authority), tenant)}
-            result = await instances.list_instances(query.page, 20, authority)
+                return {
+                    "item": project_inventory_row(
+                        await instances.get_instance(query.id, authority), tenant
+                    )
+                }
+            result = await instances.list_instances(query.page, query.page_size, authority)
             return {
-                "items": [_project(row, tenant) for row in result.instances],
+                "items": [project_inventory_row(row, tenant) for row in result.instances],
                 "total": result.total,
             }
     async with asynccontextmanager(cluster_application_authority_dependency_v2)(
         ctx.request, ctx.user, tenant, ctx.db
     ) as cluster_authority:
+        if query.health and query.id:
+            health = await clusters.get_cluster_health(query.id, cluster_authority)
+            return {"health": health.model_dump(mode="json")}
         if query.id:
             return {
-                "item": _project(await clusters.get_cluster(query.id, cluster_authority), tenant)
+                "item": project_inventory_row(
+                    await clusters.get_cluster(query.id, cluster_authority), tenant
+                )
             }
-        rows = await clusters.list_clusters(query.page, 20, cluster_authority)
-        return {"items": [_project(row, tenant) for row in rows.clusters], "total": rows.total}
+        rows = await clusters.list_clusters(query.page, query.page_size, cluster_authority)
+        return {
+            "items": [project_inventory_row(row, tenant) for row in rows.clusters],
+            "total": rows.total,
+        }

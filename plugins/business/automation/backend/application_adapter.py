@@ -7,7 +7,7 @@ from src.host.operations.deployment_adapters import ApplicationAdapter, provide_
 from src.infrastructure.plugins.v2.runtime_context import ContextV2
 
 from .pattern_operations import PATTERN_OPERATIONS
-from .playbook_operation import read_playbooks
+from .playbook_operation import read_playbooks, read_verdicts
 from .schedule_operations import SCHEDULE_OPERATIONS
 
 
@@ -17,6 +17,6 @@ def apply(ctx: ContextV2, _config: Mapping[str, Any]) -> None:
         ApplicationAdapter(
             plugin_id="memstack-automation",
             tenant=PATTERN_OPERATIONS,
-            project={**SCHEDULE_OPERATIONS, "app.automation.playbooks.read": read_playbooks},
+            project={**SCHEDULE_OPERATIONS, "app.automation.playbooks.read": read_playbooks, "app.automation.verdicts.read": read_verdicts},
         ),
     )

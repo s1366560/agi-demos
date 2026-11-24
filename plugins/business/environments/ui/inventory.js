@@ -3,8 +3,9 @@
   const zh = locale.startsWith('zh');
   const label = (en, cn) => zh ? cn : en;
   const parts = pathname.split('/');
-  const kind = parts[4];
-  const id = parts[5] ? decodeURIComponent(parts[5]) : null;
+  const index = parts[3] === 'environments' ? 4 : 3;
+  const kind = parts[index];
+  const id = parts[index + 1] ? decodeURIComponent(parts[index + 1]) : null;
   const base = '/tenant/' + encodeURIComponent(tenantId) + '/environments/' + kind;
   const title = kind === 'clusters' ? label('Clusters', '集群') : label('Instances', '实例');
   function node(tag, value) {

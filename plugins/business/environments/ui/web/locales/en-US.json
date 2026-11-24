@@ -814,5 +814,12 @@
       "stop": "Stop",
       "start": "Start"
     }
+  },
+  "common": {
+    "retry": "Retry",
+    "refresh": "Refresh",
+    "actions": {
+      "viewAll": "View All"
+    }
   }
 }

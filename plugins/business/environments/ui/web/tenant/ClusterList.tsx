@@ -49,7 +49,9 @@ interface FormValues {
   provider_config?: string;
 }
 
-export const ClusterList: FC = () => {
+export const ClusterList: FC<{
+  loadEditableCluster?: (id: string) => Promise<ClusterResponse>;
+}> = ({ loadEditableCluster }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -146,7 +148,16 @@ export const ClusterList: FC = () => {
     setIsModalVisible(true);
   };
 
-  const handleEdit = (cluster: ClusterResponse) => {
+  const handleEdit = async (row: ClusterResponse) => {
+    let cluster = row;
+    if (loadEditableCluster) {
+      try {
+        cluster = await loadEditableCluster(row.id);
+      } catch (error) {
+        void message.error(error instanceof Error ? error.message : String(error));
+        return;
+      }
+    }
     setEditingCluster(cluster);
     form.setFieldsValue({
       name: cluster.name,

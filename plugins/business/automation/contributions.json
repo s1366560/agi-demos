@@ -506,6 +506,14 @@
       ],
       "payload": {},
       "accepts_input": true
+    },
+    {
+      "id": "list-verdicts",
+      "host_operation": "app.automation.verdicts.read",
+      "permissions": [
+        "app.automation.verdicts.read"
+      ],
+      "payload": {}
     }
   ],
   "ui": [
@@ -553,17 +561,43 @@
         "/tenant/:tenantId/project/:projectId/playbooks"
       ],
       "targets": [
-        "web",
+        "web"
+      ],
+      "entry": {
+        "path": "ui/playbooks-web.js",
+        "digest": "sha256:348d056bfaa9d33320f5e619e4a2eb3b453e35e190694c4eb405572c9afe5d49"
+      },
+      "commands": [
+        "list-playbooks",
+        "list-verdicts"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/playbooks-web.css",
+        "digest": "sha256:37bcb83a78e3be3ba5622e81964c6176580fe2595ef32470da3935434d720522"
+      },
+      "workbench": true
+    },
+    {
+      "id": "playbooks",
+      "title": "Project playbooks",
+      "routes": [
+        "/playbooks",
+        "/tenant/:tenantId/project/:projectId/playbooks"
+      ],
+      "targets": [
         "desktop-renderer"
       ],
       "entry": {
-        "path": "ui/playbooks.js",
-        "digest": "sha256:6c66ad31d1be41a671d51e8105291ca7f22e8e224ad46c4054aea7230b0c15ae"
+        "path": "ui/playbooks-desktop.js",
+        "digest": "sha256:b5e019c97c8edf2baed7d5853641a15c18308fa599d0b6a0de10228b6fa59693"
       },
       "commands": [
-        "list-playbooks"
+        "list-playbooks",
+        "list-verdicts"
       ],
-      "device_tools": []
+      "device_tools": [],
+      "workbench": true
     },
     {
       "id": "schedules",
