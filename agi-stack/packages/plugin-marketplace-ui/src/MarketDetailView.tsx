@@ -86,17 +86,42 @@ export function MarketDetailView(props: DetailProps) {
     const expected_revision = snapshot.desired_revision;
     let response: Installation;
     if (review.action === 'apply' && candidate && snapshot.package_name) {
-      response = await props.transport<Installation>(base + '/npm/apply', {
-        method: 'POST',
-        body: {
-          ...scope,
-          package_name: snapshot.package_name,
-          version: candidate.version,
-          expected_digest: candidate.digest,
-          expected_revision,
-          approved_permissions: candidate.permissions,
-        },
-      });
+      try {
+        response = await props.transport<Installation>(base + "/npm/apply", {
+          method: "POST",
+          body: {
+            ...scope,
+            package_name: snapshot.package_name,
+            version: candidate.version,
+            expected_digest: candidate.digest,
+            expected_revision,
+            approved_permissions: candidate.permissions,
+          },
+        });
+      } catch (error) {
+        // The server can commit a release before the desktop transport times out.
+        // Reconcile the selected scope without submitting a second installation.
+        const current = await props
+          .transport<Installation>(
+            base +
+              "/" +
+              encodeURIComponent(snapshot.plugin_id) +
+              "?" +
+              new URLSearchParams(scope),
+            {},
+          )
+          .catch(() => null);
+        if (
+          !current ||
+          current.plugin_id !== snapshot.plugin_id ||
+          current.desired_revision <= expected_revision ||
+          current.running_version !== candidate.version ||
+          current.installed_version !== candidate.version ||
+          current.actual_digest !== candidate.digest
+        )
+          throw error;
+        response = current;
+      }
     } else {
       response = await props.transport<Installation>(
         base + '/' + encodeURIComponent(d.plugin_id) + '/' + review.action,
