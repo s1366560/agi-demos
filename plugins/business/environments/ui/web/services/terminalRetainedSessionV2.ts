@@ -10,6 +10,7 @@ import { createWebSocketAuthProtocols, createWebSocketUrl } from '@/services/cli
 
 export interface TerminalRetainedSessionOptionsV2 {
   readonly sandboxId: string;
+  readonly openSocket?: (() => WebSocket) | undefined;
   readonly projectId?: string | undefined;
   readonly sessionId?: string | undefined;
   readonly onConnect: (sessionId: string) => void;
@@ -79,7 +80,7 @@ export class TerminalRetainedSessionV2 {
   connect(): Promise<void> {
     if (!this.active) return Promise.reject(aborted());
     if (this.task) return this.ready.promise;
-    this.token = getAuthToken() ?? '';
+    if (!this.options.openSocket) this.token = getAuthToken() ?? '';
     this.task = runWebOperationV2(
       async (operation) => {
         this.operation = operation;
@@ -90,7 +91,7 @@ export class TerminalRetainedSessionV2 {
         operation.signal.addEventListener('abort', retire, { once: true });
         try {
           this.check();
-          if (!this.token) throw new Error('No auth token available');
+          if (!this.options.openSocket && !this.token) throw new Error('No auth token available');
           if (!this.options.sandboxId) throw new Error('Terminal sandbox is required');
           const cleanup = this.options.onAdmitted?.(operation);
           if (cleanup) {
@@ -183,7 +184,7 @@ export class TerminalRetainedSessionV2 {
     const path = this.options.projectId
       ? `/projects/${encodeURIComponent(this.options.projectId)}/sandbox/terminal/proxy/ws`
       : `/terminal/${encodeURIComponent(this.options.sandboxId)}/ws`;
-    const socket = new WebSocket(
+    const socket = this.options.openSocket?.() ?? new WebSocket(
       createWebSocketUrl(path, this.sessionId ? { session_id: this.sessionId } : undefined),
       createWebSocketAuthProtocols(this.token)
     );

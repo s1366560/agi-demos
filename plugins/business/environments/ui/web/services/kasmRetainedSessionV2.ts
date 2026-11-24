@@ -20,6 +20,7 @@ export interface KasmRetainedSessionOptionsV2 {
   projectId: string;
   sandboxId: string;
   wsUrl: string;
+  openSocket?: () => WebSocket;
   createAttempt(
     socket: WebSocket,
     operation: WebOperationContextV2,
@@ -83,7 +84,7 @@ export class KasmRetainedSessionV2 {
   connect(): Promise<void> {
     if (!this.active) return Promise.reject(retired());
     if (this.task) return this.ready.promise;
-    this.token = getAuthToken() ?? '';
+    if (!this.options.openSocket) this.token = getAuthToken() ?? '';
     this.task = runWebOperationV2(
       async (operation) => {
         this.operation = operation;
@@ -94,7 +95,7 @@ export class KasmRetainedSessionV2 {
           this.check();
           if (!this.options.projectId || !this.options.sandboxId)
             throw new Error('Desktop project and sandbox are required');
-          if (!this.token) throw new Error('No auth token available');
+          if (!this.options.openSocket && !this.token) throw new Error('No auth token available');
           this.cleanup = this.options.onAdmitted?.(operation) ?? undefined;
           if (!this.active) this.disposeResources();
           this.check();
@@ -166,7 +167,7 @@ export class KasmRetainedSessionV2 {
   }
   private createAttempt(operation: WebOperationContextV2): Attempt {
     this.check();
-    const socket = new WebSocket(this.options.wsUrl, buildDesktopWebSocketProtocols(this.token));
+    const socket = this.options.openSocket?.() ?? new WebSocket(this.options.wsUrl, buildDesktopWebSocketProtocols(this.token));
     const attempt: Attempt = {
       socket,
       controller: new AbortController(),

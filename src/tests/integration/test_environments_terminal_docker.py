@@ -21,6 +21,7 @@ from websockets.asyncio.client import connect
 
 import docker
 from alembic import command
+from plugins.business.environments.backend.interaction_channel import project_terminal
 from plugins.business.environments.backend.package_sandbox_operations import SANDBOX_OPERATIONS
 from src.configuration.config import get_settings
 from src.host.identity.initial_owner import create_initial_owner
@@ -191,7 +192,6 @@ async def _shell_round_trip(origin, path, key, grant):
                     break
 
 
-
 async def _check_signed_grant(client, commands_url, scope, run):
     # Docker reports Running before ttyd starts listening. Only retry that transient error.
     async with asyncio.timeout(60):
@@ -223,6 +223,37 @@ async def _check_signed_grant(client, commands_url, scope, run):
     )
 
 
+async def _check_signed_shell(post, commands, run):
+    handle = await post(
+        commands,
+        command_id="authorize-run-terminal",
+        payload={**run, "open_channel": True},
+    )
+    assert set(handle) == {"channel"}
+
+    async def transfer(action, **data):
+        return await post(
+            commands,
+            command_id="project-terminal",
+            payload={**handle, "action": action, **data},
+        )
+
+    try:
+        await transfer(
+            "write",
+            data=json.dumps({"type": "input", "data": "printf '%d\\n' $((357*439))\r"}),
+        )
+        output = ""
+        async with asyncio.timeout(20):
+            while "156723" not in output:
+                frame = await transfer("read")
+                if frame.get("message"):
+                    output += json.loads(frame["message"]).get("data", "")
+        await transfer("write", data=json.dumps({"type": "input", "data": "exit\r"}))
+    finally:
+        await transfer("close")
+
+
 async def test_signed_command_authorizes_run_and_host_can_use_ttyd(
     rust_authority,
     environment_release,  # noqa: F811
@@ -252,7 +283,10 @@ async def test_signed_command_authorizes_run_and_host_can_use_ttyd(
             app.include_router(project_package_router)
             app.dependency_overrides[get_db] = database
             app.state.plugin_marketplace_trusted_public_keys_v2 = (public,)
-            app.state.package_operations_v1 = SANDBOX_OPERATIONS
+            app.state.package_operations_v1 = {
+                **SANDBOX_OPERATIONS,
+                "app.environments.terminal.interact": project_terminal,
+            }
             headers = {"Authorization": "Bearer " + key}
             scope = {"tenant_id": tenant, "project_id": project}
             authority_path = f"/api/v1/projects/{project}/sandbox"
@@ -295,6 +329,7 @@ async def test_signed_command_authorizes_run_and_host_can_use_ttyd(
                     )
                     assert wrong.status_code == 409
                     await _check_signed_grant(client, package + commands, scope, run)
+                    await _check_signed_shell(post, commands, run)
                     # The shell is a separate trusted-client action: it obtains its own private handle.
                     private = await rust.post(authority_path + "/terminal/sessions", json=run)
                     private.raise_for_status()

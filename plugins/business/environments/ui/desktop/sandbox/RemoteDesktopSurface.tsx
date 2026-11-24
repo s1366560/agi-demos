@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   EnterFullScreenIcon,
@@ -20,6 +21,7 @@ import './RemoteDesktopSurface.css';
 type RemoteDesktopSurfaceProps = {
   capability: SandboxRuntimeCapability;
   session: RemoteDesktopSession | null;
+  viewer?: { state: 'loading' | 'ready' | 'error'; content: ReactNode } | undefined;
   sessionRevision: number;
   status: RemoteDesktopLoadStatus;
   reasonCode: string | null;
@@ -42,6 +44,7 @@ export function RemoteDesktopSurface({
   capability,
   session,
   sessionRevision,
+  viewer,
   status,
   reasonCode,
   resolution,
@@ -56,8 +59,10 @@ export function RemoteDesktopSurface({
   }, [onStop]);
   const containerRef = useRef<HTMLDivElement>(null);
   const retryAttemptRef = useRef(0);
-  const [frameStatus, setFrameStatus] =
+  const [nativeFrameStatus, setFrameStatus] =
     useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const frameStatus = viewer?.state ?? nativeFrameStatus;
+  const active = Boolean(session || viewer);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const exitFullscreen = useCallback(async () => {
@@ -133,7 +138,7 @@ export function RemoteDesktopSurface({
 
   const changeResolution = (nextResolution: RemoteDesktopResolution) => {
     onResolutionChange(nextResolution);
-    if (session) {
+    if (active) {
       retryAttemptRef.current = 0;
       setFrameStatus('loading');
       void onReconnect(nextResolution);
@@ -191,17 +196,17 @@ export function RemoteDesktopSurface({
             size="1"
             variant="soft"
             disabled={status === 'starting'}
-            onClick={session ? reconnect : () => void onStart()}
+            onClick={active ? reconnect : () => void onStart()}
           >
             <ReloadIcon />
-            {session
+            {active
               ? t('sandbox.remoteDesktopReconnect')
               : t('sandbox.remoteDesktopStart')}
           </Button>
           <Button
             size="1"
             variant="soft"
-            disabled={!session}
+            disabled={!active}
             aria-label={
               isFullscreen
                 ? t('sandbox.remoteDesktopExitFullscreen')
@@ -238,7 +243,9 @@ export function RemoteDesktopSurface({
         </Text>
       ) : null}
 
-      {session ? (
+      {viewer ? (
+        <div className="remote-desktop-surface__frame">{viewer.content}</div>
+      ) : session ? (
         <div className="remote-desktop-surface__frame">
           {frameStatus === 'loading' ? (
             <Text size="2" role="status">

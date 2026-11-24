@@ -14,7 +14,11 @@ from src.domain.model.plugins.chat_adapter_scope import chat_adapter_pin
 from src.host.operations.project_package_audit import PackageAudit, project_operation
 from src.host.packages.project_installation_view import installation_view, market_installation
 from src.host.packages.release_governance import check_catalog_release
-from src.host.packages.release_pin import AGENT_PACKAGE_PINS, AgentPackagePin as AgentPackagePin
+from src.host.packages.release_pin import (
+    ACTIVE_APPLICATION_PIN,
+    AGENT_PACKAGE_PINS,
+    AgentPackagePin as AgentPackagePin,
+)
 from src.host.packages.rich_pages import check_page_routes
 from src.host.runtime.package_call import admit_package_call
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -592,7 +596,11 @@ class ProjectPluginInstallationService:
             ):
                 if check_access:
                     await check_access()
-                result = await operation(package)
+                token = ACTIVE_APPLICATION_PIN.set(pin)
+                try:
+                    result = await operation(package)
+                finally:
+                    ACTIVE_APPLICATION_PIN.reset(token)
                 if check_access:
                     await check_access()
                 await self.pinned_package(pin)

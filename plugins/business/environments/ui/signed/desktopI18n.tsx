@@ -1,3 +1,4 @@
+import interaction from './desktopInteractionMessages.json';
 import { createContext, useContext } from 'react';
 import {
   runtimeClustersEnUS,
@@ -7,7 +8,7 @@ import {
 export const DesktopLocale = createContext('en');
 export function useI18n() {
   const zh = useContext(DesktopLocale).startsWith('zh');
-  const table = zh ? runtimeClustersZhCN : runtimeClustersEnUS;
+  const table: Record<string, string> = zh ? {...runtimeClustersZhCN,...interaction.zh} : {...runtimeClustersEnUS,...interaction.en};
   const common: Record<string, string> = zh
     ? { 'common.close': '关闭', 'common.refresh': '刷新', 'common.retry': '重试' }
     : { 'common.close': 'Close', 'common.refresh': 'Refresh', 'common.retry': 'Retry' };

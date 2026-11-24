@@ -850,7 +850,11 @@
       "sandboxActionFailed": "Sandbox action failed",
       "sandboxProfile": "Sandbox profile",
       "sandboxPrepare": "Prepare sandbox",
-      "sandboxRuntimeAccess": "Metrics and terminal access"
+      "sandboxRuntimeAccess": "Metrics and terminal access",
+      "sandboxConnect": "Terminal and remote desktop",
+      "terminalLabel": "Terminal",
+      "desktopLabel": "Remote desktop",
+      "sandboxNotProvisioned": "Prepare the project sandbox first"
     }
   }
 }

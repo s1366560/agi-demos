@@ -850,7 +850,11 @@
       "sandboxActionFailed": "沙箱操作失败",
       "sandboxProfile": "沙箱配置",
       "sandboxPrepare": "准备沙箱",
-      "sandboxRuntimeAccess": "资源指标与终端授权"
+      "sandboxRuntimeAccess": "资源指标与终端授权",
+      "sandboxConnect": "终端与远程桌面",
+      "terminalLabel": "终端",
+      "desktopLabel": "远程桌面",
+      "sandboxNotProvisioned": "请先准备项目沙箱"
     }
   }
 }

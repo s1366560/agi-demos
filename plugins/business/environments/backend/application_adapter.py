@@ -7,6 +7,7 @@ from src.host.operations.deployment_adapters import ApplicationAdapter, provide_
 from src.infrastructure.plugins.v2.runtime_context import ContextV2
 
 from .cluster_operations import delete_cluster, write_cluster
+from .interaction_channel import project_desktop, project_terminal
 from .inventory_operations import inventory
 from .package_sandbox_operations import SANDBOX_OPERATIONS
 
@@ -21,6 +22,10 @@ def apply(ctx: ContextV2, _config: Mapping[str, Any]) -> None:
                 "app.environments.clusters.write": write_cluster,
                 "app.environments.clusters.delete": delete_cluster,
             },
-            project=SANDBOX_OPERATIONS,
+            project={
+                **SANDBOX_OPERATIONS,
+                "app.environments.terminal.interact": project_terminal,
+                "app.environments.desktop.interact": project_desktop,
+            },
         ),
     )

@@ -68,7 +68,7 @@ vi.mock('../../../../vendor/kasmvnc/core/rfb.js', () => ({
     }
   },
 }));
-vi.mock('../../../../services/kasmRetainedSessionV2', () => ({
+vi.mock('@business/environments/ui/web/services/kasmRetainedSessionV2', () => ({
   KasmRetainedSessionV2: class {
     options: any;
     controller = new AbortController();

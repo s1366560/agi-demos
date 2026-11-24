@@ -30,6 +30,10 @@ class _Run(_Input):
     expected_run_revision: Annotated[int, Field(ge=1, le=2147483647)]
 
 
+class _RunAuthorization(_Run):
+    open_channel: bool = False
+
+
 class _Capability(BaseModel):
     contract_version: Literal[2]
     availability: Literal["available", "unavailable", "degraded"]
@@ -73,6 +77,11 @@ class _Grant(BaseModel):
     run_id: str
     run_revision: int
     expires_at: str
+
+
+class _PrivateGrant(_Grant):
+    session_id: Annotated[str, Field(pattern=r"^[a-zA-Z0-9_-]{1,128}$")]
+    resume_token: Annotated[str, Field(pattern=r"^[a-zA-Z0-9_-]{20,256}$")]
 
 
 async def _request(
@@ -192,16 +201,17 @@ async def terminate_sandbox(
 async def authorize_terminal(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
-    run = _Run.model_validate(payload)
+    run = _RunAuthorization.model_validate(payload)
     capability = await _capability(ctx)
     if capability.availability != "available":
         raise OptionalBusinessError(
             "runtime_unavailable", capability.reason_code or "terminal_authority_unavailable"
         )
     try:
-        grant = _Grant.model_validate(
-            await _request(ctx, "POST", "/terminal/sessions", run.model_dump())
+        response = await _request(
+            ctx, "POST", "/terminal/sessions", run.model_dump(exclude={"open_channel"})
         )
+        grant = (_PrivateGrant if run.open_channel else _Grant).model_validate(response)
     except ValidationError as exc:
         raise OptionalBusinessError(
             "runtime_unavailable", "Invalid terminal authorization"
@@ -212,6 +222,10 @@ async def authorize_terminal(
         run.expected_run_revision,
     ):
         raise OptionalBusinessError("forbidden", "Terminal grant scope mismatch")
+    if isinstance(grant, _PrivateGrant):
+        from .interaction_channel import open_run_terminal
+
+        return await open_run_terminal(ctx, grant.session_id, grant.resume_token)
     return grant.model_dump()
 
 

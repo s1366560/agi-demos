@@ -22,6 +22,7 @@ import { TerminalRetainedSessionV2 } from '../../services/terminalRetainedSessio
 
 interface TerminalImplProps {
   sandboxId: string;
+  openSocket?: (() => WebSocket) | undefined;
   projectId?: string | undefined;
   sessionId?: string | undefined;
   onConnect: (sessionId: string) => void;
@@ -82,6 +83,7 @@ const TERMINAL_FALLBACKS: Record<string, string> = {
 };
 
 export function TerminalImpl({
+  openSocket,
   sandboxId,
   projectId,
   sessionId,
@@ -123,6 +125,7 @@ export function TerminalImpl({
     const captured = callbacks.current;
     let terminal: Terminal | undefined;
     const session = new TerminalRetainedSessionV2({
+      openSocket,
       sandboxId,
       ...(projectId ? { projectId } : {}),
       ...(captured.sessionId ? { sessionId: captured.sessionId } : {}),
@@ -235,7 +238,7 @@ export function TerminalImpl({
         console.warn('Terminal cleanup failed');
       });
     };
-  }, [sandboxId, projectId]);
+  }, [sandboxId, projectId, openSocket]);
 
   useEffect(() => {
     const view = viewRef.current;

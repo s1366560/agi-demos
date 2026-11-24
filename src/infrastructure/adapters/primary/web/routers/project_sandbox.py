@@ -3610,6 +3610,7 @@ async def proxy_project_terminal_websocket(
     websocket: WebSocket,
     project_id: str,
     session_id: str | None = None,
+    ephemeral: bool = False,
     current_user: User = Depends(get_current_user_from_desktop_proxy),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
@@ -3700,7 +3701,8 @@ async def proxy_project_terminal_websocket(
             with contextlib.suppress(asyncio.CancelledError):
                 await output_task
 
-        # Don't close session on disconnect - allow reconnection
+        if ephemeral and not session_id and session is not None:
+            await proxy.close_session(session.session_id)
         with contextlib.suppress(Exception):
             await websocket.close()
 

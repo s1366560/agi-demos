@@ -13,7 +13,7 @@ import {
   WebOperationAdmissionV2,
   installWebOperationAdmissionV2,
 } from '@/plugins/webOperationAdmissionV2';
-import { KasmRetainedSessionV2 } from '@/services/kasmRetainedSessionV2';
+import { KasmRetainedSessionV2 } from '@business/environments/ui/web/services/kasmRetainedSessionV2';
 import RFB from '@/vendor/kasmvnc/core/rfb.js';
 
 // Only browser device boundaries are simulated: RFB, Websock, service and Loader are real.

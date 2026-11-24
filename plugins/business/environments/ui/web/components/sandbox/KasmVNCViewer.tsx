@@ -31,7 +31,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-import { KasmRetainedSessionV2, type KasmAttemptContextV2 } from '@/services/kasmRetainedSessionV2';
+import { KasmRetainedSessionV2, type KasmAttemptContextV2 } from '../../services/kasmRetainedSessionV2';
 
 import {
   getWebOperationAvailabilityV2,
@@ -67,6 +67,7 @@ export interface KasmVNCViewerProps {
   sandboxId: string;
   /** WebSocket URL to the KasmVNC proxy endpoint */
   wsUrl: string;
+  openSocket?: (() => WebSocket) | undefined;
   /** Current resolution */
   resolution?: string | undefined;
   /** Whether audio is enabled */
@@ -89,6 +90,7 @@ export function KasmVNCViewer({
   projectId,
   sandboxId,
   wsUrl,
+  openSocket,
   resolution = 'auto',
   audioEnabled = false,
   dynamicResize = true,
@@ -177,6 +179,7 @@ export function KasmVNCViewer({
       projectId,
       sandboxId,
       wsUrl,
+      ...(openSocket ? { openSocket } : {}),
       onAdmitted() {
         const fullscreenTarget = containerRef.current;
         return async () => {
@@ -348,6 +351,7 @@ export function KasmVNCViewer({
     projectId,
     sandboxId,
     wsUrl,
+    openSocket,
     availability.owner,
     availability.available,
     retryNonce,

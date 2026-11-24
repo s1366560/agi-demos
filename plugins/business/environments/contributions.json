@@ -214,6 +214,24 @@
         "app.environments.sandbox.terminate"
       ],
       "payload": {}
+    },
+    {
+      "id": "project-terminal",
+      "host_operation": "app.environments.terminal.interact",
+      "permissions": [
+        "app.environments.terminal.interact"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "project-desktop",
+      "host_operation": "app.environments.desktop.interact",
+      "permissions": [
+        "app.environments.desktop.interact"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -244,7 +262,7 @@
       ],
       "entry": {
         "path": "ui/project-sandbox.js",
-        "digest": "sha256:442e1a13536d4c513d4f4fa8f01b0a947f15d94d1f7224c2474afa8363f80fab"
+        "digest": "sha256:0cfaa3a45c1d63713d333a8d9b7033243680f630656aa06caf0ef00ea03a7e5e"
       },
       "commands": [
         "sandbox-status",
@@ -312,7 +330,7 @@
       ],
       "entry": {
         "path": "ui/clusters-web.js",
-        "digest": "sha256:7d34776433527d29a218473f16ee5181875112f450b85cfc1b3e88dc3699ea2e"
+        "digest": "sha256:d86622ee4fc9a7ead6a5b148f6d6ad10e011073e44f6d22db5eac298df9444f0"
       },
       "commands": [
         "environment-inventory",
@@ -345,7 +363,7 @@
       ],
       "entry": {
         "path": "ui/clusters-desktop.js",
-        "digest": "sha256:cc2aff76b4e94670247507c976f2c7d4c879715d9a919ca9ae9436a75a47e521"
+        "digest": "sha256:bf2e2e85eb6b845f31fd5e3f12507c3d53bbb9f7f11a81e51e135ae49be8b8c5"
       },
       "commands": [
         "environment-inventory"
@@ -397,7 +415,7 @@
       ],
       "entry": {
         "path": "ui/sandbox.js",
-        "digest": "sha256:ecccf897bab222c728edb84ea23849e8b99281c43de1c9ae761453e6c390e972"
+        "digest": "sha256:a687d849a36dc123d949b58108b68c7062379f137e8c409db0865d03ed3113aa"
       },
       "commands": [
         "sandbox-status",
@@ -405,6 +423,38 @@
         "authorize-run-terminal"
       ],
       "device_tools": []
+    },
+    {
+      "id": "sandbox-interaction",
+      "title": "Terminal and remote desktop",
+      "routes": [
+        "/environments/sandbox/connect",
+        "/tenant/:tenantId/project/:projectId/sandbox/connect"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "workbench": true,
+      "entry": {
+        "path": "ui/interaction.js",
+        "digest": "sha256:df65785746a86648449cdec0aca416450699f273aae8e10988b35bfde1913b09"
+      },
+      "style": {
+        "path": "ui/interaction.css",
+        "digest": "sha256:379c6be7aedcc5d0400469fd280cdee798939ef25a02adbf6a52ae385491320c"
+      },
+      "commands": [
+        "sandbox-status",
+        "project-terminal",
+        "project-desktop",
+        "authorize-run-terminal"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "run_id",
+        "revision"
+      ]
     }
   ]
 }

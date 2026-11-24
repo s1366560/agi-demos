@@ -77,6 +77,9 @@ function SandboxActions({ refresh, pathname }: { refresh: () => Promise<void>; p
       >
         {t('project.settings.sandboxRuntimeAccess')}
       </button>
+      <button type="button" className={secondaryButtonClass} onClick={() => void host.navigate(pathname + '/connect')}>
+        {t('project.settings.sandboxConnect')}
+      </button>
       {error && <p role="alert">{error}</p>}
     </div>
   );

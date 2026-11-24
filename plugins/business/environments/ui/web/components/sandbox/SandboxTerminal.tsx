@@ -38,6 +38,7 @@ import '@xterm/xterm/css/xterm.css';
 export interface SandboxTerminalProps {
   /** Sandbox container ID */
   sandboxId: string;
+  openSocket?: (() => WebSocket) | undefined;
   /** Project ID for project-scoped WebSocket */
   projectId?: string | undefined;
   /** Optional existing session ID to reconnect */
@@ -84,6 +85,7 @@ export function SandboxTerminal(props: SandboxTerminalProps) {
 }
 
 function TerminalSession({
+  openSocket,
   sandboxId,
   projectId,
   sessionId: initialSessionId,
@@ -271,6 +273,7 @@ function TerminalSession({
           }
         >
           <TerminalImpl
+            openSocket={openSocket}
             key={reconnectNonce}
             sandboxId={sandboxId}
             projectId={projectId}

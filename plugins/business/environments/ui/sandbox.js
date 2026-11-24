@@ -44,7 +44,7 @@
   }
   const run = input(text('Run ID', '运行 ID'), 'text');
   const revision = input(text('Current run revision', '当前运行修订号'), 'number');
-  const authorize = element('button', text('Request terminal authorization', '申请终端授权'));
+  const authorize = element('button', text('Open authorized run terminal', '打开已授权运行终端'));
   const availability = element('p');
   const result = element('output');
   terminal.append(authorize, result);
@@ -102,8 +102,8 @@
   action(authorize, async () => {
     result.textContent = '';
     if (!run.reportValidity() || !revision.reportValidity()) return;
-    const grant = await api.invoke('authorize-run-terminal', { run_id: run.value, expected_run_revision: revision.valueAsNumber });
-    result.textContent = text('Authorized through ', '授权有效至 ') + grant.expires_at;
+    const query = new URLSearchParams({run_id: run.value, revision: String(revision.valueAsNumber)});
+    await api.navigate(scope.pathname.replace(/\/runtime$/, '/connect') + '?' + query);
   });
   try { await load(); }
   catch (error) { notice.textContent = String(error); }

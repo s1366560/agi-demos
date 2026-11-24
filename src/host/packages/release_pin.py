@@ -1,5 +1,6 @@
 """A release and permission epoch fixed at project operation admission."""
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from pydantic import TypeAdapter
@@ -19,3 +20,7 @@ class AgentPackagePin:
 
 
 AGENT_PACKAGE_PINS = TypeAdapter(tuple[AgentPackagePin, ...])
+
+ACTIVE_APPLICATION_PIN: ContextVar[AgentPackagePin | None] = ContextVar(
+    "active_application_pin", default=None
+)
