@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { RichPackagePages } from "../../../../packages/plugin-marketplace-ui/src/RichPackagePages";
 import { useI18n } from "../i18nContext";
+import { devicePageCall } from "./device";
 import { transport, streamCommand } from "./transport";
 
 export function InstalledRoutePage({
@@ -18,16 +19,22 @@ export function InstalledRoutePage({
   const prefix = projectId
     ? base + "/project/" + encodeURIComponent(projectId)
     : base;
-  const [pathname, navigate] = useState(prefix + "/" + segment);
+  const [page, setPage] = useState<{ pathname: string; pluginId?: string }>({
+    pathname: prefix + "/" + segment,
+  });
   return (
     <RichPackagePages
       scope={{ tenantId, projectId }}
       target="desktop-renderer"
       locale={locale}
-      pathname={pathname}
+      pathname={page.pathname}
+      pluginId={page.pluginId}
+      invokeDevice={projectId ? devicePageCall(tenantId, projectId) : undefined}
       transport={transport}
       streamCommand={streamCommand}
-      navigate={navigate}
+      navigate={(pathname, options) => {
+        setPage({ pathname, pluginId: options?.pluginId ?? page.pluginId });
+      }}
       backToMarket={
         <a
           href={

@@ -493,11 +493,11 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
 test('App binds both typed route modules without browser handoff or DesktopApiClient expansion', () => {
   assert.match(
     registrySource,
-    /\[PROJECT_WORKSPACES_ROUTE_ID\]:\s*createProjectWorkspacesRouteModuleLoader\(/,
+    /\[PROJECT_WORKSPACES_ROUTE_ID\]:\s*packageRoute\(PROJECT_WORKSPACES_ROUTE_ID,/,
   );
   assert.match(
     registrySource,
-    /\[PROJECT_BLACKBOARD_ROUTE_ID\]:\s*createProjectBlackboardRouteModuleLoader\(/,
+    /\[PROJECT_BLACKBOARD_ROUTE_ID\]:\s*packageRoute\(PROJECT_BLACKBOARD_ROUTE_ID,/,
   );
   assert.match(registrySource, /createProjectWorkspacesV2Client\(/);
   assert.match(registrySource, /desktopWorkspaceCatalogOperationsV2/u);

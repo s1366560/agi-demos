@@ -722,26 +722,29 @@ export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledge
           });
         },
       }),
-      [PROJECT_MEMORIES_ROUTE_ID]: createProjectMemoriesRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          return Object.freeze({
-            controller: createProjectMemoriesController({
+      [PROJECT_MEMORIES_ROUTE_ID]: packageRoute(PROJECT_MEMORIES_ROUTE_ID, 'memories', 'project', {
+        isLocal: () => configRef.current.mode === 'local',
+        load: createProjectMemoriesRouteModuleLoader({
+          createBinding: (context) => {
+            const currentConfig = configRef.current;
+            const scope = Object.freeze({
               authority: currentConfig.mode,
-              client: createDesktopProjectMemoriesClientV2(
-                projectMemoriesOperationsV2,
-                currentConfig,
-              ),
-              initialScope: scope,
-            }),
-            scope,
-          });
-        },
+              tenantId: context.tenantId,
+              projectId: context.projectId,
+            });
+            return Object.freeze({
+              controller: createProjectMemoriesController({
+                authority: currentConfig.mode,
+                client: createDesktopProjectMemoriesClientV2(
+                  projectMemoriesOperationsV2,
+                  currentConfig,
+                ),
+                initialScope: scope,
+              }),
+              scope,
+            });
+          },
+        }),
       }),
       [PROJECT_ENTITIES_ROUTE_ID]: createProjectEntitiesRouteModuleLoader({
         createBinding: (context) => {
@@ -947,8 +950,11 @@ export function createAppProjectAdministrationRouteRegistry(
           });
         },
       }),
-      [PROJECT_CRON_JOBS_ROUTE_ID]: createProjectCronJobsRouteModuleLoader({
-        createBinding: (context) => projectCronJobsRouteBindingProviderV2.resolve(context),
+      [PROJECT_CRON_JOBS_ROUTE_ID]: packageRoute(PROJECT_CRON_JOBS_ROUTE_ID, 'cron-jobs', 'project', {
+        isLocal: () => configRef.current.mode === 'local',
+        load: createProjectCronJobsRouteModuleLoader({
+          createBinding: (context) => projectCronJobsRouteBindingProviderV2.resolve(context),
+        }),
       }),
       [PROJECT_SETTINGS_ROUTE_ID]: createProjectSettingsRouteModuleLoader({
         createBinding: (context) => {
@@ -1075,59 +1081,65 @@ export function createAppProjectWorkspaceRouteRegistry(
             projectOverviewOperationsV2,
           ),
       }),
-      [PROJECT_WORKSPACES_ROUTE_ID]: createProjectWorkspacesRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          const client = createProjectWorkspacesV2Client(currentConfig, {
-            catalogOperations: desktopWorkspaceCatalogOperationsV2,
-            lifecycleOperations: desktopWorkspaceLifecycleOperationsV2,
-          });
-          return Object.freeze({
-            controller: createProjectWorkspacesController({
+      [PROJECT_WORKSPACES_ROUTE_ID]: packageRoute(PROJECT_WORKSPACES_ROUTE_ID, 'workspaces', 'project', {
+        isLocal: () => configRef.current.mode === 'local',
+        load: createProjectWorkspacesRouteModuleLoader({
+          createBinding: (context) => {
+            const currentConfig = configRef.current;
+            const scope = Object.freeze({
               authority: currentConfig.mode,
-              client,
-              initialScope: scope,
-            }),
-            scope,
-            openBlackboard: (workspaceId: string) =>
-              desktopProductionRouteNavigation.openPath(
-                buildProjectBlackboardCanonicalPath({
-                  tenantId: context.tenantId,
-                  projectId: context.projectId,
-                  workspaceId,
-                }),
-              ),
-          });
-        },
+              tenantId: context.tenantId,
+              projectId: context.projectId,
+            });
+            const client = createProjectWorkspacesV2Client(currentConfig, {
+              catalogOperations: desktopWorkspaceCatalogOperationsV2,
+              lifecycleOperations: desktopWorkspaceLifecycleOperationsV2,
+            });
+            return Object.freeze({
+              controller: createProjectWorkspacesController({
+                authority: currentConfig.mode,
+                client,
+                initialScope: scope,
+              }),
+              scope,
+              openBlackboard: (workspaceId: string) =>
+                desktopProductionRouteNavigation.openPath(
+                  buildProjectBlackboardCanonicalPath({
+                    tenantId: context.tenantId,
+                    projectId: context.projectId,
+                    workspaceId,
+                  }),
+                ),
+            });
+          },
+        }),
       }),
-      [PROJECT_BLACKBOARD_ROUTE_ID]: createProjectBlackboardRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-            workspaceId: context.workspaceId,
-          });
-          const client = createProjectBlackboardV2Client(
-            currentConfig,
-            projectBlackboardOperationsV2,
-          );
-          return Object.freeze({
-            controller: createProjectBlackboardController({
+      [PROJECT_BLACKBOARD_ROUTE_ID]: packageRoute(PROJECT_BLACKBOARD_ROUTE_ID, 'blackboard', 'project', {
+        isLocal: () => configRef.current.mode === 'local',
+        load: createProjectBlackboardRouteModuleLoader({
+          createBinding: (context) => {
+            const currentConfig = configRef.current;
+            const scope = Object.freeze({
               authority: currentConfig.mode,
-              client,
-              collaborationClient: projectBlackboardCollaborationClientV2,
-              initialScope: scope,
-            }),
-            scope,
-          });
-        },
+              tenantId: context.tenantId,
+              projectId: context.projectId,
+              workspaceId: context.workspaceId,
+            });
+            const client = createProjectBlackboardV2Client(
+              currentConfig,
+              projectBlackboardOperationsV2,
+            );
+            return Object.freeze({
+              controller: createProjectBlackboardController({
+                authority: currentConfig.mode,
+                client,
+                collaborationClient: projectBlackboardCollaborationClientV2,
+                initialScope: scope,
+              }),
+              scope,
+            });
+          },
+        }),
       }),
     }),
   });
