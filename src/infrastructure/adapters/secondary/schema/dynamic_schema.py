@@ -875,7 +875,7 @@ async def save_discovered_types_batch(
         nullcontext(admitted) if admitted is not None else async_session_factory() as session,
         session.begin_nested() if admitted is not None else nullcontext(),
     ):
-        await require_legacy_schema(session, project_id)
+        await require_legacy_schema(session, project_id, graph_tenant=tenant_id)
         # Get existing entity types
         result = await session.execute(
             refresh_select_statement(

@@ -88,7 +88,9 @@ async def test_discovered_schema_uses_outer_graph_transaction(
     monkeypatch.setattr(dynamic_schema, "clear_schema_context_cache", invalidated.append)
     query = select(EntityType.name).where(EntityType.name == "DiscoveryReceipt")
     async with sessions() as lease:
-        await lease.scalar(select(Project.id).where(Project.id == project).with_for_update())
+        await lease.scalar(
+            select(Project.id).where(Project.id == project).with_for_update(key_share=True)
+        )
         with bind_discovery(lease, project=project, tenant=tenant):
             with pytest.raises(KnowledgeSyncError):
                 discovery_session(project, "another-tenant")
@@ -111,6 +113,16 @@ async def test_discovered_schema_uses_outer_graph_transaction(
             assert result["entity_types_created"] == 1
             async with sessions() as reader:
                 assert await reader.scalar(query) is None
+                # Independent memory/journal writes may need a foreign key on the project.
+                async with asyncio.timeout(3):
+                    assert (
+                        await reader.scalar(
+                            select(Project.id)
+                            .where(Project.id == project)
+                            .with_for_update(read=True, key_share=True)
+                        )
+                        == project
+                    )
             assert invalidated == []
         assert discovery_session(project, tenant) is None
         if commit:
