@@ -37,7 +37,11 @@ def _open(page, entry):
 
 
 def _back(page, package):
-    page.get_by_text(re.compile(r"^(返回插件市场|Back to (plugin )?marketplace)$")).click()
+    back = page.get_by_text(re.compile(r"^(返回插件市场|Back to (plugin )?marketplace)$"))
+    back.scroll_into_view_if_needed()
+    expect(back).to_be_in_viewport(ratio=1)
+    back.focus()
+    back.press("Enter")
     return _details(page, package)
 
 
@@ -64,7 +68,9 @@ def _edit_schedule(frame, scope):
     row = frame.get_by_role("row").filter(has_text=name)
     expect(row).to_be_visible(timeout=60000)
     row.get_by_role("button", name=re.compile("History|历史|记录")).click()
-    frame.get_by_role("dialog").locator(".ant-drawer-close").click()
+    history = frame.get_by_role("dialog", name=re.compile("Run History|运行历史|执行历史", re.I))
+    history.get_by_role("button", name=re.compile("Close|关闭")).click()
+    expect(history).not_to_be_visible()
     row.get_by_role("button", name=re.compile("Delete|删除")).click()
     frame.locator(".ant-popconfirm-buttons .ant-btn-primary").click()
     expect(row).to_have_count(0, timeout=60000)
