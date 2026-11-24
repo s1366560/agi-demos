@@ -233,25 +233,31 @@ export function MarketDetailView(props: DetailProps) {
             i.signed_slot_targets?.includes(props.target) &&
             props.declarativePage?.(i, d.can_execute === true)}
           <h3>{t.capabilities}</h3>
-          {!!(release?.pages ?? i?.pages)?.length && (
+          {active && !!i?.pages?.length && (
             <>
-              <h4>{t.pages}</h4>
+              <h4>{release && !running ? `${t.pages} · ${t.active} ${active}` : t.pages}</h4>
               <ul className="pm-page-list">
-                {(release?.pages ?? i?.pages ?? []).map((page) => {
+                {i.pages.map((page) => {
                   const link = activeLinks.find((item) => item.id === page.id);
                   return (
                     <li key={page.id}>
-                      {link && (!release || running) ? (
+                      {link ? (
                         <button type="button" onClick={() => props.onOpen(link.path)}>
                           {page.title}
                           <Mark name="arrow" size={14} />
                         </button>
-                      ) : (
-                        page.title
-                      )}
+                      ) : page.title}
                     </li>
                   );
                 })}
+              </ul>
+            </>
+          )}
+          {release && !running && release.pages.length > 0 && (
+            <>
+              <h4>{t.pages} · {t.release} {release.version}</h4>
+              <ul className="pm-page-list">
+                {release.pages.map((page) => <li key={page.id}>{page.title}</li>)}
               </ul>
             </>
           )}
