@@ -484,7 +484,7 @@ import {
   latestConversationRuntimeModelEvent,
   projectRuntimeModelOptions,
 } from './features/settings/workspaceRuntimeProviderModel';
-import type { NewTaskResumeDraft } from '@business/agent/ui/desktop/task/NewTaskFlow';
+import type { NewTaskResumeDraft } from './features/task/newTaskFlowContract';
 import {
   createDesktopNewThreadComposerCatalogClientProviderV2,
 } from './features/task/desktopNewThreadComposerCatalogClientProviderV2';

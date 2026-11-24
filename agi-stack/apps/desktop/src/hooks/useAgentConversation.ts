@@ -16,7 +16,7 @@ import type { ExecutionSendDecision } from '../features/chat/executionPlacementM
 import type { AgentTaskSignal } from '../features/chat/agentTaskSignalModel';
 import {
   type NewTaskResumeDraft,
-} from '@business/agent/ui/desktop/task/NewTaskFlow';
+} from '../features/task/newTaskFlowContract';
 import type {
   DesktopNewThreadCreationOperationsV2,
 } from '../plugins/desktopNewThreadCreationAuthorityModuleV2';

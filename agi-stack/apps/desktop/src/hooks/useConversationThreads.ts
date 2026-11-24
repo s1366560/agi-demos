@@ -15,7 +15,7 @@ import {
   type NewTaskAgentTurnInput,
   type NewTaskResumeDraft,
   type NewTaskSession,
-} from '@business/agent/ui/desktop/task/NewTaskFlow';
+} from '../features/task/newTaskFlowContract';
 import {
   type NewThreadComposerInput,
 } from '../features/task/NewThreadComposer';

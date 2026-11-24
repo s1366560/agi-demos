@@ -10,8 +10,6 @@ import {
 import { isTaskSessionIdempotencyConflictError } from '@desktop/api/client';
 import { useI18n } from '@desktop/i18n';
 import type {
-  AgentConversation,
-  AgentInputFileMetadata,
   AgentPlanApprovalCapability,
   AgentPlanTask,
   DesktopExecutionEnvironmentKind,
@@ -83,39 +81,15 @@ import type { DesktopNewTaskFlowOperationsV2 } from '@desktop/plugins/desktopNew
 import '@desktop/features/task/NewTaskFlow.css';
 import '@desktop/features/task/NewTaskPlanReview.css';
 
+import type { NewTaskAgentTurnInput, NewTaskResumeDraft, NewTaskSession } from '@desktop/features/task/newTaskFlowContract';
+export type { NewTaskAgentTurnInput, NewTaskResumeDraft, NewTaskSession } from '@desktop/features/task/newTaskFlowContract';
+
 type NewTaskFlowPhase = 'define' | 'planning' | 'review' | 'launching';
 
 type TaskSessionConflictRecovery = {
   fingerprint: string;
   workspaceSelection: string;
   existingWorkspace: WorkspaceSummary | null;
-};
-
-export type NewTaskSession = {
-  workspace: WorkspaceSummary;
-  conversation: AgentConversation;
-  config: DesktopRuntimeConfig;
-};
-
-export type NewTaskAgentTurnInput = {
-  displayContent?: string;
-  config: DesktopRuntimeConfig;
-  conversationId: string;
-  projectId: string;
-  message: string;
-  messageId: string;
-  agentId?: string;
-  forcedSkillName?: string;
-  subAgentId?: string;
-  mentions?: string[];
-  fileMetadata?: AgentInputFileMetadata[];
-  appModelContext?: Record<string, unknown>;
-};
-
-export type NewTaskResumeDraft = {
-  session: NewTaskSession;
-  definition: NewTaskDefinition;
-  tasks: AgentPlanTask[];
 };
 
 type NewTaskFlowProps = {
