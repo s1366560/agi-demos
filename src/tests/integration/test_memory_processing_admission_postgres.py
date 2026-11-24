@@ -372,3 +372,53 @@ async def test_completion_cas_miss_does_not_publish_success(processing, monkeypa
         task = await db.get(TaskLog, "task")
         assert task.status == "FAILED"
         assert task.result is None
+
+
+@pytest.mark.parametrize("enrolled", [False, True])
+@pytest.mark.parametrize("succeeds", [False, True])
+async def test_discovery_is_dispatched_after_successful_graph_admission(
+    processing, enrolled, succeeds
+):
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.secondary.persistence.graph_discovery_session import (
+        persist_after_graph_commit,
+    )
+    from src.infrastructure.adapters.secondary.persistence.memory_processing_admission import (
+        derived_graph_write,
+        legacy_graph_write,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import Project
+
+    sessions, scope, _ = processing
+    if enrolled:
+        async with sessions.begin() as session:
+            await SqlKnowledgeSyncEnrollment(session).bootstrap(scope)
+    saved = []
+
+    async def save():
+        async with sessions.begin() as session:
+            saved.append(
+                await session.scalar(
+                    select(Project.id)
+                    .where(Project.id == scope.project_id)
+                    .with_for_update(nowait=True)
+                )
+            )
+
+    admission = derived_graph_write if enrolled else legacy_graph_write
+
+    async def process():
+        async with admission(sessions, project_id=scope.project_id, tenant_id=scope.tenant_id):
+            await persist_after_graph_commit(scope.project_id, scope.tenant_id, save)
+            assert saved == []
+            if not succeeds:
+                raise RuntimeError("graph failed")
+
+    async with asyncio.timeout(5):
+        if succeeds:
+            await process()
+        else:
+            with pytest.raises(RuntimeError, match="graph failed"):
+                await process()
+    assert saved == ([scope.project_id] if succeeds else [])

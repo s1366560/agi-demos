@@ -1,44 +1,59 @@
-"""Bind schema discovery to the transaction that admitted an episode."""
+"""Collect schema discovery until the graph admission has committed and released its fence."""
 
 from asyncio import Task, current_task
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 
 
-@dataclass(frozen=True)
-class _Admission:
+@dataclass(kw_only=True)
+class _Discovery:
+    project: str
+    tenant: str
     session: AsyncSession
     transaction: AsyncSessionTransaction
     task: Task[object] | None
-    project: str
-    tenant: str
+    writes: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
+
+    async def persist(self) -> None:
+        for write in self.writes:
+            await write()
 
 
-_admission: ContextVar[_Admission | None] = ContextVar("graph_schema_admission", default=None)
+_admission: ContextVar[_Discovery | None] = ContextVar("graph_schema_admission", default=None)
 
 
 @contextmanager
-def bind_discovery(session: AsyncSession, *, project: str, tenant: str) -> Iterator[None]:
+def bind_discovery(session: AsyncSession, *, project: str, tenant: str) -> Iterator[_Discovery]:
     transaction = session.get_transaction()
     if transaction is None:
         raise RuntimeError("Graph discovery requires an active transaction")
-    token = _admission.set(_Admission(session, transaction, current_task(), project, tenant))
+    discovery = _Discovery(
+        project=project,
+        tenant=tenant,
+        session=session,
+        transaction=transaction,
+        task=current_task(),
+    )
+    token = _admission.set(discovery)
     try:
-        yield
+        yield discovery
     finally:
         _admission.reset(token)
 
 
-def discovery_session(project: str, tenant: str | None) -> AsyncSession | None:
+async def persist_after_graph_commit(
+    project: str, tenant: str | None, write: Callable[[], Awaitable[None]]
+) -> None:
     admission = _admission.get()
     if admission is None:
-        return None
+        await write()
+        return
     if (
         (project, tenant) != (admission.project, admission.tenant)
         or current_task() is not admission.task
@@ -46,4 +61,4 @@ def discovery_session(project: str, tenant: str | None) -> AsyncSession | None:
         or not admission.transaction.is_active
     ):
         raise KnowledgeSyncError("knowledge_sync_forbidden")
-    return admission.session
+    admission.writes.append(write)

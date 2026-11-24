@@ -9,7 +9,7 @@ from sqlalchemy import select
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.infrastructure.adapters.secondary.persistence.graph_discovery_session import (
     bind_discovery,
-    discovery_session,
+    persist_after_graph_commit,
 )
 from src.infrastructure.adapters.secondary.persistence.models import EntityType, Project
 from src.infrastructure.adapters.secondary.schema import dynamic_schema
@@ -78,7 +78,7 @@ async def test_seed_fences_schema_activation_in_both_orders(schema_command_pg):
 
 
 @pytest.mark.parametrize("commit", [True, False])
-async def test_discovered_schema_uses_outer_graph_transaction(
+async def test_discovered_schema_runs_after_the_graph_transaction(
     schema_command_pg, monkeypatch, commit
 ):
     _, sessions = schema_command_pg
@@ -87,34 +87,33 @@ async def test_discovered_schema_uses_outer_graph_transaction(
     invalidated = []
     monkeypatch.setattr(dynamic_schema, "clear_schema_context_cache", invalidated.append)
     query = select(EntityType.name).where(EntityType.name == "DiscoveryReceipt")
-    async with sessions() as lease:
-        await lease.scalar(
-            select(Project.id).where(Project.id == project).with_for_update(key_share=True)
+
+    async def persist():
+        result = await dynamic_schema.save_discovered_types_batch(
+            project_id=project,
+            tenant_id=tenant,
+            entity_types=[{"name": "DiscoveryReceipt", "description": "Receipt"}],
+            edge_types=[],
+            edge_type_maps=[],
         )
-        with bind_discovery(lease, project=project, tenant=tenant):
-            with pytest.raises(KnowledgeSyncError):
-                discovery_session(project, "another-tenant")
-            with pytest.raises(KnowledgeSyncError):
-                discovery_session("another-project", tenant)
+        assert result["entity_types_created"] == 1
 
-            async def detached():
-                return discovery_session(project, tenant)
-
-            with pytest.raises(KnowledgeSyncError):
-                await asyncio.create_task(detached())
-            async with asyncio.timeout(5):
-                result = await dynamic_schema.save_discovered_types_batch(
-                    project_id=project,
-                    tenant_id=tenant,
-                    entity_types=[{"name": "DiscoveryReceipt", "description": "Receipt"}],
-                    edge_types=[],
-                    edge_type_maps=[],
-                )
-            assert result["entity_types_created"] == 1
-            async with sessions() as reader:
-                assert await reader.scalar(query) is None
-                # Independent memory/journal writes may need a foreign key on the project.
-                async with asyncio.timeout(3):
+    async with asyncio.timeout(5):
+        async with sessions() as lease:
+            await lease.scalar(
+                select(Project.id).where(Project.id == project).with_for_update(key_share=True)
+            )
+            with bind_discovery(lease, project=project, tenant=tenant) as discovery:
+                with pytest.raises(KnowledgeSyncError):
+                    await persist_after_graph_commit(project, "another-tenant", persist)
+                with pytest.raises(KnowledgeSyncError):
+                    await persist_after_graph_commit("another-project", tenant, persist)
+                with pytest.raises(KnowledgeSyncError):
+                    await asyncio.create_task(persist_after_graph_commit(project, tenant, persist))
+                await persist_after_graph_commit(project, tenant, persist)
+                async with sessions() as reader:
+                    assert await reader.scalar(query) is None
+                    # The journal's foreign keys can still coexist with the graph fence.
                     assert (
                         await reader.scalar(
                             select(Project.id)
@@ -123,32 +122,47 @@ async def test_discovered_schema_uses_outer_graph_transaction(
                         )
                         == project
                     )
-            assert invalidated == []
-        assert discovery_session(project, tenant) is None
+                assert invalidated == []
+            if commit:
+                await lease.commit()
+            else:
+                await lease.rollback()
         if commit:
-            await lease.commit()
-        else:
-            await lease.rollback()
-    async with sessions() as reader:
-        assert await reader.scalar(query) == ("DiscoveryReceipt" if commit else None)
-    assert invalidated == [project]
+            await discovery.persist()
+        async with sessions() as reader:
+            assert await reader.scalar(query) == ("DiscoveryReceipt" if commit else None)
+    assert invalidated == ([project] if commit else [])
 
 
-async def test_graph_admission_preserves_active_schema_authority(schema_command_pg):
+@pytest.mark.parametrize("changed", ["enrollment", "tenant"])
+async def test_discovery_revalidates_scope_and_schema_after_admission(
+    schema_command_pg, monkeypatch, changed
+):
     _, sessions = schema_command_pg
-    await activated(sessions)
+    monkeypatch.setattr(dynamic_schema, "async_session_factory", sessions)
+    project, tenant = SCOPE.project_id, SCOPE.tenant_id
+
+    async def persist():
+        await dynamic_schema.save_discovered_types_batch(
+            project_id=project,
+            tenant_id=tenant if changed == "enrollment" else "another-tenant",
+            entity_types=[{"name": "Disallowed", "description": ""}],
+            edge_types=[],
+            edge_type_maps=[],
+        )
+
     async with sessions.begin() as lease:
         await lease.scalar(
-            select(Project.id).where(Project.id == SCOPE.project_id).with_for_update(key_share=True)
+            select(Project.id).where(Project.id == project).with_for_update(key_share=True)
         )
-        with bind_discovery(lease, project=SCOPE.project_id, tenant=SCOPE.tenant_id):
-            async with asyncio.timeout(5):
-                with pytest.raises(SchemaCommandRequiredV2):
-                    await dynamic_schema.save_discovered_types_batch(
-                        project_id=SCOPE.project_id,
-                        tenant_id=SCOPE.tenant_id,
-                        entity_types=[{"name": "Disallowed", "description": ""}],
-                        edge_types=[],
-                        edge_type_maps=[],
-                    )
-        assert not await lease.scalar(select(EntityType.id).where(EntityType.name == "Disallowed"))
+        with bind_discovery(lease, project=project, tenant=tenant) as discovery:
+            await persist_after_graph_commit(project, tenant, persist)
+    if changed == "enrollment":
+        await activated(sessions)
+    async with asyncio.timeout(5):
+        with pytest.raises(
+            SchemaCommandRequiredV2 if changed == "enrollment" else KnowledgeSyncError
+        ):
+            await discovery.persist()
+    async with sessions() as reader:
+        assert not await reader.scalar(select(EntityType.id).where(EntityType.name == "Disallowed"))
