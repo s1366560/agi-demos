@@ -10,7 +10,10 @@ The device saves the verified package in its application store.
 ## Signed device packages
 
 Open **Settings → Plugins → Signed packages on this device**. Configure trusted publisher public keys
-using `AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE` before launching the app. Select a signed
+using `AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE` before launching the app. For checkout-local
+development, `make -C agi-stack run-desktop` also reads an operator-provisioned
+`.cache/desktop-dev/publisher-trust.json` with `schema_version: 1` and a `public_keys_pem`
+array of trusted Ed25519 public keys. An explicit environment setting takes precedence. Select a signed
 `.mspkg` with a `desktop-sidecar` Wasm target. The page shows the device ID, credential fingerprint,
 active host generation, verified package digest and requested permissions. A project manager can
 approve installation and invocation for their selected account for 24 hours. A project member can

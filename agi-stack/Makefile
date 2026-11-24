@@ -160,6 +160,12 @@ include $(dir $(lastword $(MAKEFILE_LIST)))../scripts/dev/profile.mk
 AGISTACK_DESKTOP_PROFILE ?= $(if $(filter full,$(MEMSTACK_DEV_PROFILE)),full,thin)
 AGISTACK_WEB_CONTROL_PLANE_ORIGIN ?= http://localhost:3000
 AGISTACK_DESKTOP_GRANTS_API_BASE ?= http://127.0.0.1:8000
+# A checkout operator may provision device publisher trust separately from cloud signing trust.
+DESKTOP_DEV_TRUST := $(MEMSTACK_DEV_ROOT)/.cache/desktop-dev/publisher-trust.json
+ifneq ($(wildcard $(DESKTOP_DEV_TRUST)),)
+AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE ?= $(DESKTOP_DEV_TRUST)
+export AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE
+endif
 export AGISTACK_DESKTOP_PROFILE AGISTACK_WEB_CONTROL_PLANE_ORIGIN AGISTACK_DESKTOP_GRANTS_API_BASE
 endif
 

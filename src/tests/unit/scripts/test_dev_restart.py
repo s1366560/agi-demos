@@ -107,6 +107,7 @@ def test_full_start_retains_image_reuse_and_workspace_health():
         (True, True, ["MEMSTACK_DEV_PROFILE=full"], "full"),
         (True, False, ["AGISTACK_DESKTOP_PROFILE=thin"], "thin"),
         (False, False, ["AGISTACK_DESKTOP_PROFILE=full"], "full"),
+        (True, False, ["AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE=/operator/trust.json"], "full"),
     ],
 )
 def test_native_dev_matches_root_profile(
@@ -117,13 +118,17 @@ def test_native_dev_matches_root_profile(
         "AGISTACK_DESKTOP_PROFILE",
         "AGISTACK_DESKTOP_GRANTS_API_BASE",
         "AGISTACK_WEB_CONTROL_PLANE_ORIGIN",
+        "AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE",
         "STANDARD_DIRECTORY",
     ):
         monkeypatch.delenv(variable, raising=False)
     desktop = tmp_path / "agi-stack"
     desktop.mkdir()
+    provisioned = tmp_path / ".cache" / "desktop-dev" / "publisher-trust.json"
     if has_env:
         (tmp_path / ".env").touch()
+        provisioned.parent.mkdir(parents=True)
+        provisioned.touch()
     if standard_owner:
         standard = tmp_path / ".memstack" / "standard"
         standard.mkdir(parents=True)
@@ -133,7 +138,7 @@ def test_native_dev_matches_root_profile(
         f"include {ROOT / 'agi-stack' / 'Makefile'}\n"
         "run-desktop:\n"
         '\t@echo "$$AGISTACK_DESKTOP_PROFILE $$AGISTACK_WEB_CONTROL_PLANE_ORIGIN '
-        '$$AGISTACK_DESKTOP_GRANTS_API_BASE"\n'
+        '$$AGISTACK_DESKTOP_GRANTS_API_BASE $$AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE"\n'
     )
     result = subprocess.run(
         ["make", "--no-print-directory", "run-desktop", *overrides],
@@ -142,8 +147,9 @@ def test_native_dev_matches_root_profile(
         capture_output=True,
         text=True,
     )
-    assert result.stdout.strip().split() == [
-        expected,
-        "http://localhost:3000",
-        "http://127.0.0.1:8000",
-    ]
+    expected_values = [expected, "http://localhost:3000", "http://127.0.0.1:8000"]
+    if "AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE=/operator/trust.json" in overrides:
+        expected_values.append("/operator/trust.json")
+    elif provisioned.exists():
+        expected_values.append(str(provisioned))
+    assert result.stdout.strip().split() == expected_values
