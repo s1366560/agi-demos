@@ -366,7 +366,23 @@ async def _ensure_default_types_initialized(project_id: str) -> None:
     _initialized_projects.add(project_id)
 
 
-async def get_project_schema_context(project_id: str | None = None) -> SchemaContext:
+def _extend_schema_defaults(types: list[EntityType]) -> None:
+    """Supply defaults for read-only extraction without writing under a graph lease."""
+    existing = {row.name for row in types}
+    types.extend(
+        EntityType(
+            name=row["entity_type_name"],
+            description=row["entity_type_description"],
+            source="system",
+        )
+        for row in DEFAULT_ENTITY_TYPES_CONTEXT
+        if row["entity_type_name"] not in existing
+    )
+
+
+async def get_project_schema_context(
+    project_id: str | None = None, *, persist_defaults: bool = True
+) -> SchemaContext:
     """
     Get schema context for a project in Graphiti-compatible format.
 
@@ -418,7 +434,8 @@ async def get_project_schema_context(project_id: str | None = None) -> SchemaCon
 
     # Initialize default types in database (first time only)
     try:
-        await _ensure_default_types_initialized(project_id)
+        if persist_defaults:
+            await _ensure_default_types_initialized(project_id)
     except SchemaCommandRequiredV2:
         async with async_session_factory() as session:
             active = await active_schema_snapshot(session, project_id)
@@ -444,6 +461,9 @@ async def get_project_schema_context(project_id: str | None = None) -> SchemaCon
         )
         db_entity_types = list(result.scalars().all())
 
+        if not persist_defaults:
+            _extend_schema_defaults(db_entity_types)
+
         # Assign IDs based on order (defaults first, then custom)
         # Sort: system types first, then by name for consistency
         db_entity_types.sort(key=lambda et: (0 if et.source == "system" else 1, et.name))
@@ -466,10 +486,9 @@ async def get_project_schema_context(project_id: str | None = None) -> SchemaCon
         )
         for em in result.scalars().all():
             key = (em.source_type, em.target_type)
-            if key not in edge_type_map:
-                edge_type_map[key] = []
-            if em.edge_type not in edge_type_map[key]:
-                edge_type_map[key].append(em.edge_type)
+            mapped_types = edge_type_map.setdefault(key, [])
+            if em.edge_type not in mapped_types:
+                mapped_types.append(em.edge_type)
 
     # Build ID/name mappings
     entity_type_id_to_name = {
@@ -488,7 +507,7 @@ async def get_project_schema_context(project_id: str | None = None) -> SchemaCon
 
     context = await _prefer_active_context(project_id, context)
     # Active snapshots must never enter the legacy TTL cache.
-    if "project_schema_document" not in context:
+    if persist_defaults and "project_schema_document" not in context:
         _set_cached_schema_context(project_id, context)
     logger.debug(
         f"Loaded schema context for project {project_id}: "

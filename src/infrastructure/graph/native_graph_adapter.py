@@ -760,7 +760,7 @@ class NativeGraphAdapter(GraphStorePort):
             get_project_schema_context,
         )
 
-        return cast(dict[str, Any], await get_project_schema_context(project_id))
+        return cast(dict[str, Any], await get_project_schema_context(project_id, persist_defaults=False))
 
     @staticmethod
     def _resolve_mentioned_entities(
