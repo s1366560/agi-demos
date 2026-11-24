@@ -7,8 +7,8 @@ import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 
 import { useWorkspaceActions } from '../../stores/workspace';
 
-import { AddAgentModal } from '@/components/workspace/AddAgentModal';
-import { hexDistance, generateGrid } from '@/components/workspace/hex/useHexLayout';
+import { AddAgentModal } from '@business/workspace/ui/web/components/AddAgentModal';
+import { hexDistance, generateGrid } from '@business/workspace/ui/web/components/hex/useHexLayout';
 
 import { ArrangementActionDrawer } from './ArrangementActionDrawer';
 import { ArrangementHexGrid } from './ArrangementHexGrid';
@@ -39,7 +39,7 @@ import type {
 } from './arrangementUtils';
 
 const HexCanvas3D = lazy(() =>
-  import('@/components/workspace/hex3d/HexCanvas3D').then((module) => ({
+  import('@business/workspace/ui/web/components/hex3d/HexCanvas3D').then((module) => ({
     default: module.HexCanvas3D,
   }))
 );

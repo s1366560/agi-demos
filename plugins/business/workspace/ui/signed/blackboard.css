@@ -1,0 +1,4 @@
+@import './workspaceCreate.css';
+@source '../web/project/Blackboard.tsx';
+@source '../web/components';
+@source '../web/tenant/WorkspaceSettings.tsx';

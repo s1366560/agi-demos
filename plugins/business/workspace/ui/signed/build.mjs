@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -11,6 +12,7 @@ await buildPackagePages({
   root: fileURLToPath(new URL('../../', import.meta.url)),
   sourceDirectory: 'ui/signed',
   entries: {
+    ...Object.fromEntries(['detail','settings','workspace-members','workspace-posts','workspace-tasks'].map(id=>[id,{ web: 'BlackboardPage.tsx', 'desktop-renderer': 'DesktopBoardPage.tsx' }])),
     directory: { web: 'WebDirectoryPage.tsx', 'desktop-renderer': 'DesktopDirectoryPage.tsx' },
     create: { web: 'WebCreatePage.tsx', 'desktop-renderer': 'DesktopCreatePage.tsx' },
   },
@@ -18,12 +20,27 @@ await buildPackagePages({
     {
       name: 'package-tailwind',
       setup(build) {
+        build.initialOptions.define = {
+          ...build.initialOptions.define,
+          'import.meta.env.DEV': 'false',
+        };
         const require = createRequire(import.meta.url);
         build.onResolve(
-          { filter: /^(react|react-dom|react-i18next|react-router-dom|i18next)(\/.*)?$/ },
-          ({ path }) => ({ path: require.resolve(path) })
+          {
+            filter:
+              /^(react|react-dom|react-i18next|react-router-dom|i18next|@tanstack\/react-virtual|zustand)(\/.*)?$/,
+          },
+          ({ path }) => ({ path: require.resolve(path) }),
         );
         const sources = {
+          '@/services/client/httpClient': './blackboardTransport.ts',
+          '@/utils/logger': './logger.ts',
+          '@/services/agentService': './externalCapabilities.ts',
+          '@business/environments/ui/web/services/geneMarketService': './externalCapabilities.ts',
+          '@/i18n/config': './boardLocale.ts',
+          '@/utils/confirmAction': '../../../../../sdk/memstack-plugin-sdk/ui/confirmAction.ts',
+          '@/services/unifiedEventService': './boardRefresh.ts',
+          '@/services/client/urlUtils': './blackboardTransport.ts',
           '@/utils/objectiveProgress': '../../../../../web/src/utils/objectiveProgress.ts',
           '@/utils/workspaceTaskProjection':
             '../../../../../web/src/utils/workspaceTaskProjection.ts',
@@ -31,16 +48,37 @@ await buildPackagePages({
           '@desktop/i18n': '../../../../../agi-stack/apps/desktop/src/i18nContext.ts',
           '@desktop/api/client': '../../../../../agi-stack/apps/desktop/src/api/desktopApiError.ts',
         };
-        build.onResolve({ filter: /^(@desktop\/|@\/)/ }, ({ path }) =>
-          sources[path] ? { path: resolve(directory, sources[path]) } : undefined
+        build.onResolve({ filter: /^(@business\/|@desktop\/|@\/)/ }, ({ path }) =>
+          sources[path] ? { path: resolve(directory, sources[path]) } : undefined,
         );
-        build.onLoad({ filter: /workspace(Create|Directory)\.css$/ }, async ({ path }) => {
-          const result = await postcss([tailwind({ base: directory, optimize: true })]).process(
-            await readFile(path, 'utf8'),
-            { from: path }
-          );
-          return { contents: result.css, loader: 'css' };
+        build.onResolve({ filter: /^\.\/RosterControls$/ }, () => ({
+          path: resolve(directory, './ConversationRoster.tsx'),
+        }));
+        build.onResolve({ filter: /^\.\.\/hooks\/useBlackboardSSE$/ }, () => ({
+          path: resolve(directory, './boardRefresh.ts'),
+        }));
+        build.onResolve({ filter: /^(@\/|@business\/|@desktop\/)/ }, ({ path }) => {
+          const file = path.startsWith('@business/')
+            ? resolve(directory, '../../..', path.slice(10))
+            : path.startsWith('@desktop/')
+              ? resolve(directory, '../../../../../agi-stack/apps/desktop/src', path.slice(9))
+              : resolve(directory, '../../../../../web/src', path.slice(2));
+          for (const suffix of ['', '.ts', '.tsx', '.css', '/index.ts', '/index.tsx']) {
+            if (existsSync(file + suffix) && !(!suffix && !file.match(/\.(css|json)$/)))
+              return { path: file + suffix };
+          }
         });
+        build.onResolve({ filter: /^\.\/openPlanPreview$/ }, () => ({ path: resolve(directory, './externalCapabilities.ts') }));
+        build.onLoad(
+          { filter: /(blackboard|workspace(Create|Directory))\.css$/ },
+          async ({ path }) => {
+            const result = await postcss([tailwind({ base: directory, optimize: true })]).process(
+              await readFile(path, 'utf8'),
+              { from: path },
+            );
+            return { contents: result.css, loader: 'css' };
+          },
+        );
       },
     },
   ],

@@ -21,7 +21,7 @@ import {
   hasPendingLeaderAdjudication,
 } from '@/utils/workspaceTaskProjection';
 
-import { PresenceBar } from '@/components/workspace/presence/PresenceBar';
+import { PresenceBar } from '@business/workspace/ui/web/components/presence/PresenceBar';
 
 import { DerivedSurfaceBadge } from '../DerivedSurfaceBadge';
 import { EmptyState } from '../EmptyState';

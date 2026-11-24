@@ -3,6 +3,7 @@
 import csv
 import io
 import json
+from collections.abc import AsyncIterable
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 from urllib.parse import quote, urlencode
 from uuid import UUID
@@ -137,6 +138,8 @@ async def _request_core(
     child: tuple[str, ...] = (),
     task_route: bool = False,
     data: dict[str, Any] | None = None,
+    upload: AsyncIterable[bytes] | None = None,
+    content_type: str = "application/json",
     request_id: UUID | None = None,
     expected_revision: int | None = None,
 ) -> WorkspaceCoreProxyResponse:
@@ -163,9 +166,11 @@ async def _request_core(
         ("X-MemStack-User-Is-Superuser", "true" if ctx.user.is_superuser else "false"),
     ]
     if request_id is not None:
-        headers.extend([("Idempotency-Key", str(request_id)), ("Content-Type", "application/json")])
+        headers.extend([("Idempotency-Key", str(request_id)), ("Content-Type", content_type)])
     if expected_revision is not None:
-        headers.append(("If-Match", str(expected_revision)))
+        headers.extend(
+            [("If-Match", str(expected_revision)), ("X-Expected-Revision", str(expected_revision))]
+        )
     if method == "POST":
         headers.append(("X-MemStack-User-Email", ctx.user.email))
         if membership := await project_membership_header(ctx.db, ctx.user.id, project):
@@ -176,7 +181,11 @@ async def _request_core(
             method=method,
             path=path,
             query=query,
-            body=json.dumps(data).encode() if data is not None else b"",
+            body=upload
+            if upload is not None
+            else json.dumps(data).encode()
+            if data is not None
+            else b"",
             headers=headers,
         )
     except (RuntimeError, TypeError, WorkspaceCoreClientError) as exc:
@@ -330,6 +339,8 @@ async def export_workspace_directory(
                 "tools.execute",
                 "ui.slot",
                 "app.workspace.directory.read",
+                "app.workspace.blackboard.read",
+                "app.workspace.blackboard.write",
                 "app.workspace.detail.read",
                 "app.workspace.create",
                 "app.workspace.settings.update",

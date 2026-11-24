@@ -10,11 +10,11 @@ import { useWorkspaceActions } from '../../stores/workspace';
 
 import { WorkspaceSettingsPanel } from '../../tenant/WorkspaceSettings';
 
-import { GeneEditorModal, type GenePayload } from '@/components/workspace/genes/GeneEditorModal';
-import { GeneImportModal } from '@/components/workspace/genes/GeneImportModal';
-import { GeneList } from '@/components/workspace/genes/GeneList';
-import { MemberPanel } from '@/components/workspace/MemberPanel';
-import { ObjectiveCreateModal } from '@/components/workspace/objectives/ObjectiveCreateModal';
+import { GeneEditorModal, type GenePayload } from '@business/workspace/ui/web/components/genes/GeneEditorModal';
+import { GeneImportModal } from '@business/workspace/ui/web/components/genes/GeneImportModal';
+import { GeneList } from '@business/workspace/ui/web/components/genes/GeneList';
+import { MemberPanel } from '@business/workspace/ui/web/components/MemberPanel';
+import { ObjectiveCreateModal } from '@business/workspace/ui/web/components/objectives/ObjectiveCreateModal';
 
 import { BLACKBOARD_TAB_META } from './blackboardSurfaceContract';
 import { BlackboardTabBar } from './BlackboardTabBar';

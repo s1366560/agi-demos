@@ -11,7 +11,7 @@ import type {
   WorkspaceCollaborationClient,
   WorkspaceCollaborationSurface,
   WorkspaceSurfaceState,
-} from '@desktop/features/workspace/workspaceCollaborationClient';
+} from './workspaceCollaborationClient';
 import {
   WORKSPACE_COLLABORATION_TABS,
   beginWorkspaceSurfaceLoad,
@@ -23,7 +23,7 @@ import {
   selectWorkspaceCollaborationTab,
   type WorkspaceAuthorityInvalidation,
   type WorkspaceCollaborationCanvasState,
-} from '@desktop/features/workspace/workspaceCollaborationModel';
+} from './workspaceCollaborationModel';
 import {
   WorkspaceCollaborationCollection as Collection,
   WorkspaceCollaborationEmptyState as EmptyState,
@@ -40,13 +40,13 @@ import {
   type WorkspaceCollaborationReadonlySurfaceProps as ReadonlySurfaceProps,
   type WorkspaceCollaborationSurfaceProps as SurfaceProps,
   type WorkspaceCollaborationTranslate as Translate,
-} from '@desktop/features/workspace/WorkspaceCollaborationSurfacePrimitives';
-import { workspaceCollaborationFailureReason } from '@desktop/features/workspace/workspaceCollaborationFailureReason';
+} from './WorkspaceCollaborationSurfacePrimitives';
+import { workspaceCollaborationFailureReason } from './workspaceCollaborationFailureReason';
 import {
   WorkspaceDiscussionReplies,
   workspaceDiscussionAuthor,
-} from '@desktop/features/workspace/WorkspaceDiscussionReplies';
-import '@desktop/features/workspace/WorkspaceCollaborationCanvas.css';
+} from './WorkspaceDiscussionReplies';
+import './WorkspaceCollaborationCanvas.css';
 
 export type WorkspaceCollaborationCanvasProps = {
   workspaceId: string;

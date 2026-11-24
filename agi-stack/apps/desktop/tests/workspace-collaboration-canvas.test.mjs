@@ -11,7 +11,7 @@ const {
   invalidateWorkspaceSurfaceAuthority,
   resolveWorkspaceSurfaceLoad,
 } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceCollaborationModel.js',
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/workspaceCollaborationModel.js',
 );
 const canvasSource = readFileSync(
   new URL('../../../../plugins/business/workspace/ui/desktop/workspace/WorkspaceCollaborationCanvas.tsx', import.meta.url),
@@ -19,14 +19,14 @@ const canvasSource = readFileSync(
 );
 const primitiveSource = readFileSync(
   new URL(
-    '../src/features/workspace/WorkspaceCollaborationSurfacePrimitives.tsx',
+    '../../../../plugins/business/workspace/ui/desktop/workspace/WorkspaceCollaborationSurfacePrimitives.tsx',
     import.meta.url,
   ),
   'utf8',
 );
 const componentSource = `${canvasSource}\n${primitiveSource}`;
 const cssSource = readFileSync(
-  new URL('../src/features/workspace/WorkspaceCollaborationCanvas.css', import.meta.url),
+  new URL('../../../../plugins/business/workspace/ui/desktop/workspace/WorkspaceCollaborationCanvas.css', import.meta.url),
   'utf8',
 );
 

@@ -47,7 +47,7 @@ async function mount() {
         <WorkspaceCreateView
           createWorkspace={createWorkspace}
           onCreated={(id) =>
-            void host.navigate(directory + '/' + encodeURIComponent(id) + '/posts')
+            void host.navigate(directory + '/' + encodeURIComponent(id))
           }
           onBack={() => void host.navigate(directory)}
           confirmDiscard={(title) =>

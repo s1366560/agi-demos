@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { confirmAction } from '@/utils/confirmAction';
 
-import type { ObjectiveFormValues } from '@/components/workspace/objectives/ObjectiveCreateModal';
+import type { ObjectiveFormValues } from '@business/workspace/ui/web/components/objectives/ObjectiveCreateModal';
 
 import type { BlackboardPost, CyberObjectiveType } from '../../types/workspace';
 

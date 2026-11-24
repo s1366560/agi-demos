@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const { workspaceCollaborationFailureReason } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceCollaborationFailureReason.js',
+  '/tmp/agistack-desktop-test-dist/plugins/business/workspace/ui/desktop/workspace/workspaceCollaborationFailureReason.js',
 );
 test('preserves the structured upstream rejection instead of reporting a refetch failure', () => {
   assert.equal(workspaceCollaborationFailureReason({

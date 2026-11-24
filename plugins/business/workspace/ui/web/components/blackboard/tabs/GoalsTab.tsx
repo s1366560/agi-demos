@@ -8,8 +8,8 @@ import { Zap } from 'lucide-react';
 import { workspaceAutonomyService } from '../../../services/workspaceService';
 
 import { buildBlackboardTaskBoardTasks } from '../blackboardUtils';
-import { ObjectiveList } from '@/components/workspace/objectives/ObjectiveList';
-import { TaskBoard } from '@/components/workspace/TaskBoard';
+import { ObjectiveList } from '@business/workspace/ui/web/components/objectives/ObjectiveList';
+import { TaskBoard } from '@business/workspace/ui/web/components/TaskBoard';
 
 import type {
   CyberObjective,

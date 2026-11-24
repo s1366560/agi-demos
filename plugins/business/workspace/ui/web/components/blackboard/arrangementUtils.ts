@@ -1,4 +1,4 @@
-import { hexDistance } from '@/components/workspace/hex/useHexLayout';
+import { hexDistance } from '@business/workspace/ui/web/components/hex/useHexLayout';
 
 import type { TopologyEdge, TopologyNode, WorkspaceAgent, WorkspaceTask } from '../../types/workspace';
 

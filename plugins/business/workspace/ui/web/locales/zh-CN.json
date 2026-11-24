@@ -1,5 +1,6 @@
 {
   "blackboard": {
+    "agentPageUnavailable": "当前项目无法打开 Agent 工作台。",
     "title": "中央黑板",
     "dashboardEyebrow": "工作区看板",
     "liveSync": "实时同步",

@@ -26,8 +26,7 @@ import {
   Zap,
 } from 'lucide-react';
 
-import { apiFetch } from '@/services/client/urlUtils';
-import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
+import { openPlanPreview } from './openPlanPreview';
 import {
   workspaceAutonomyService,
   workspacePlanService,
@@ -43,7 +42,7 @@ import {
   buildWorkspaceExecutionDag,
   workspaceDagDimmedNodeIds,
 } from '@/components/executionDag/workspaceExecutionDagModel';
-import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
+import { TaskExperiencePanel } from '@business/workspace/ui/web/components/TaskExperiencePanel';
 
 import { EmptyState } from '../EmptyState';
 import { StatBadge } from '../StatBadge';
@@ -1555,41 +1554,12 @@ export function PlanRunSnapshotSection({
   };
 
   const openPreview = async (previewUrl: string, serviceId?: string) => {
-    const previewWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
-    if (previewWindow) {
-      previewWindow.opener = null;
-    }
-
     setPreviewOpeningUrl(previewUrl);
     setActionError(null);
     setActionMessage(null);
     try {
-      let launchUrl = previewUrl;
-      if (projectId && serviceId) {
-        const session = await projectSandboxService.createHttpServicePreviewSession(
-          projectId,
-          serviceId
-        );
-        launchUrl = session.preview_url;
-      }
-
-      const isSandboxProxyUrl =
-        launchUrl.startsWith('/api/v1/projects/') && launchUrl.includes('/sandbox/http-services/');
-      if (isSandboxProxyUrl && !serviceId) {
-        await apiFetch.get(launchUrl, () => undefined, {
-          credentials: 'include',
-        });
-      }
-
-      if (previewWindow) {
-        previewWindow.location.replace(launchUrl);
-      } else {
-        window.open(launchUrl, '_blank', 'noopener,noreferrer');
-      }
+      await openPlanPreview(previewUrl,projectId,serviceId);
     } catch (err) {
-      if (previewWindow) {
-        previewWindow.close();
-      }
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setPreviewOpeningUrl(null);

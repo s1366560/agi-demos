@@ -92,7 +92,7 @@ async function mount() {
           controller={controller}
           onRetry={retry}
           onOpenBlackboard={(id) =>
-            void host.navigate(base + '/' + encodeURIComponent(id) + '/posts')
+            void host.navigate(base + '/' + encodeURIComponent(id))
           }
           extraActions={
             <Button

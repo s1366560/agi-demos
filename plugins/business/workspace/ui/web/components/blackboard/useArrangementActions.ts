@@ -6,7 +6,7 @@ import { App } from 'antd';
 
 import { confirmAction } from '@/utils/confirmAction';
 
-import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
+import { hexToPixel } from '@business/workspace/ui/web/components/hex/useHexLayout';
 
 import {
   coordKey,

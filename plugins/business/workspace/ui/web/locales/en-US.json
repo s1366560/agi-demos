@@ -1,5 +1,6 @@
 {
   "blackboard": {
+    "agentPageUnavailable": "The Agent page is unavailable in this project.",
     "title": "Blackboard",
     "dashboardEyebrow": "Workspace dashboard",
     "liveSync": "Live sync",

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
-import { hexDistance } from '@/components/workspace/hex/useHexLayout';
+import { hexDistance } from '@business/workspace/ui/web/components/hex/useHexLayout';
 
 import {
   coordKey,

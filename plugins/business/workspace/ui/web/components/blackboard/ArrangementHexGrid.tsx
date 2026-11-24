@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { hexToPixel, getHexCorners } from '@/components/workspace/hex/useHexLayout';
+import { hexToPixel, getHexCorners } from '@business/workspace/ui/web/components/hex/useHexLayout';
 
 import {
   coordKey,

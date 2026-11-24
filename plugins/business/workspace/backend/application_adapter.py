@@ -6,6 +6,7 @@ from typing import Any
 from src.host.operations.deployment_adapters import ApplicationAdapter, provide_application_adapter
 from src.infrastructure.plugins.v2.runtime_context import ContextV2
 
+from .blackboard_surface import change_surface, read_surface
 from .collaboration import WORKSPACE_COLLABORATION_OPERATIONS
 from .workspace_directory_export import (
     create_workspace_operation,
@@ -22,6 +23,8 @@ def apply(ctx: ContextV2, _config: Mapping[str, Any]) -> None:
             plugin_id="memstack-workspace",
             project={
                 **WORKSPACE_COLLABORATION_OPERATIONS,
+                "app.workspace.blackboard.read": read_surface,
+                "app.workspace.blackboard.write": change_surface,
                 "app.workspace.create": create_workspace_operation,
                 "app.workspace.settings.update": update_workspace_operation,
                 "app.workspace.directory.read": read_directory_operation,

@@ -18,9 +18,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { useWorkspaceConversations } from '@/hooks/useWorkspaceConversations';
 
-import { ConversationModePanel } from '@/components/agent/ConversationModePanel';
-import { ConversationParticipantsPanel } from '@/components/agent/ConversationParticipantsPanel';
-import { HITLCenterPanel } from '@/components/agent/HITLCenterPanel';
+import { RosterControls } from './RosterControls';
 import { HostedProjectionBadge } from '../HostedProjectionBadge';
 
 export interface ConversationRosterSectionProps {
@@ -145,26 +143,7 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
                 </button>
                 {isOpen && (
                   <div className="space-y-4 border-t border-border px-3 py-3">
-                    <section data-testid={`roster-mode-${c.id}`}>
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                        {t('blackboard.rosters.section.mode', { defaultValue: 'Mode' })}
-                      </div>
-                      <ConversationModePanel conversationId={c.id} projectId={projectId} />
-                    </section>
-                    <section data-testid={`roster-participants-${c.id}`}>
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                        {t('blackboard.rosters.section.participants', {
-                          defaultValue: 'Participants',
-                        })}
-                      </div>
-                      <ConversationParticipantsPanel conversationId={c.id} />
-                    </section>
-                    <section data-testid={`roster-hitl-${c.id}`}>
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                        {t('blackboard.rosters.section.hitl', { defaultValue: 'HITL Center' })}
-                      </div>
-                      <HITLCenterPanel conversationId={c.id} />
-                    </section>
+                    <RosterControls conversationId={c.id} projectId={projectId} />
                   </div>
                 )}
               </li>
