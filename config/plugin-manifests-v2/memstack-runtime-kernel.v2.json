@@ -10298,7 +10298,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:3ccbad48543ef240be84fb89f0964f4fba0c1174128290650dca27553df9ec9e",
+        "digest": "sha256:ca1c586a070c506bc7caf1f91567cb63f451cd17ba6e467642386a0e4f786575",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_platform_plugins_http_routes.py"
       }
     },
@@ -14987,6 +14987,204 @@
       "artifact": {
         "digest": "sha256:1a6ba87f15c323325130373d305e97dafe2025b7f7aa75f99206bfa7fc722557",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_cloud_knowledge_sync_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/agent",
+      "entrypoint": "plugins.business.agent.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-agent",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:8f0fca0bd5f717517f49b5be97078ee6a6e9b695e8e5d4d73b7429fd90cd712b",
+      "artifact": {
+        "digest": "sha256:70ea3f3e1d6fa4b5666f857d36b665e79e1cf214b781e569a6c42d3d4da4a2ea",
+        "source": "repo+python://plugins/business/agent/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/automation",
+      "entrypoint": "plugins.business.automation.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-automation",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:8277ed5bbfbcd4cd2dc438259bcc27e71848bb4eba45427051bfb18b63ff9cdb",
+      "artifact": {
+        "digest": "sha256:a304668e114bcefd83ed3912dab3dd06647e62b4baff48aca0ef3ee3324d9c41",
+        "source": "repo+python://plugins/business/automation/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/billing",
+      "entrypoint": "plugins.business.billing.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-billing",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:2d2b42d18ac50f8e6a8cd3bc4153a2be30c99fec1ed40a565283b88302e8ed67",
+      "artifact": {
+        "digest": "sha256:c6963ceec5e9e567802a12327a2a20d97dc7aa779f440408154a785b36c394b8",
+        "source": "repo+python://plugins/business/billing/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/environments",
+      "entrypoint": "plugins.business.environments.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-environments",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:e2ae5c4f558cce5a3cb94163f7297676138945d7d836cad6b526b5db206c332c",
+      "artifact": {
+        "digest": "sha256:5f7d57d7ff77d8c40e82b612d479549f27826575e1cea8ae90f28d4fb854fcb6",
+        "source": "repo+python://plugins/business/environments/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/knowledge",
+      "entrypoint": "plugins.business.knowledge.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-knowledge",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:0bd5af327f1f3f424ba2339e5e0ad72472dd85e4f8f8c64e013d00fcf76264d3",
+      "artifact": {
+        "digest": "sha256:c08f64ace10b48e9b4b11fac788ea91a0ba344453eb1a9dad94deda5b075011c",
+        "source": "repo+python://plugins/business/knowledge/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/workspace",
+      "entrypoint": "plugins.business.workspace.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-workspace",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5393a4faba76802a3e0b95c2f4cab052573449b11eda0a55c31479b167c4ec5e",
+      "artifact": {
+        "digest": "sha256:63a4456d77094856711bd7b4d0ea072eb8288450d796a1ea2d74395fac3f8461",
+        "source": "repo+python://plugins/business/workspace/backend/application_adapter.py"
       }
     }
   ],

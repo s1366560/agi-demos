@@ -39,6 +39,12 @@ class PackageOperationContext:
         command: str,
         supplied_payload: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        if resolver := getattr(
+            self.request.app.state, "resolve_package_application_operation", None
+        ):
+            handler = resolver(plugin, name, self.scope)
+            with application_actor_scope(self.user.id, self.scope.tenant_id):
+                return await handler(self, payload, progress)
         operations: dict[str, Operation] = getattr(
             self.request.app.state, "package_operations_v1", {}
         )

@@ -301,7 +301,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         assert entry["enabled"] is True
         assert entry["config"] == {"autostart": True}
         assert entry["scope"]["kind"] == "root"
-    assert len(entries) == 578
+    assert len(entries) == 584
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",

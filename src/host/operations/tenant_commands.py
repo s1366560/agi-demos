@@ -47,6 +47,12 @@ async def tenant_command(
         identify_signed_operation(pkg, command=command_id)
         inputs = dict(c.payload) if payload is None else payload
         if c.host_operation:
+            if resolver := getattr(
+                ctx.request.app.state, "resolve_package_application_operation", None
+            ):
+                handler = resolver(pkg.plugin_id, c.host_operation, ctx.scope)
+                with application_actor_scope(ctx.user.id, ctx.scope.tenant_id):
+                    return await handler(ctx, inputs, None)
             operations = getattr(ctx.request.app.state, "tenant_package_operations_v1", {})
             if c.host_operation in operations:
                 with application_actor_scope(ctx.user.id, ctx.scope.tenant_id):
