@@ -10,7 +10,12 @@ from uuid import uuid4
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from src.tests.integration.marketplace_browser import apply, more
+from src.tests.integration.marketplace_browser import (
+    apply,
+    business_release,
+    install_previous,
+    more,
+)
 from src.tests.integration.test_signed_directory_memory_views import (
     _guest,
     _native_market,
@@ -19,7 +24,7 @@ from src.tests.integration.test_signed_directory_memory_views import (
 )
 
 pytestmark = pytest.mark.integration
-RELEASES = {"workspace": "1.5.4", "knowledge": "1.5.3"}
+RELEASES = {name: business_release(name) for name in ("workspace", "knowledge")}
 
 
 def _client(playwright, client):
@@ -53,22 +58,7 @@ def test_restore_original_release(client, package, previous, entry):
         page = _client(pw, client)
         card = page.locator(f"#pm-card-memstack-{package}")
         card.click()
-        expect(page.locator(".pm-spec dd").first).to_be_visible(timeout=60000)
-        if page.locator(".pm-detail-actions details").is_visible():
-            menu = page.locator(".pm-detail-actions details")
-            menu.locator("summary").click()
-            uninstall = menu.get_by_role("button", name=re.compile("Uninstall|卸载"))
-            if uninstall.is_visible():
-                uninstall.click()
-                page.locator("dialog.pm-dialog .pm-actions button").last.click()
-                expect(
-                    page.locator(".pm-detail-actions").get_by_role(
-                        "button", name=re.compile("^(Install|安装)")
-                    )
-                ).to_be_visible(timeout=60000)
-            else:
-                menu.locator("summary").click()
-        apply(page, previous)
+        install_previous(page, previous)
         button = page.locator(".pm-page-list").get_by_role("button", name=entry, exact=True)
         detail_hash = urlsplit(page.url).fragment
         apply(page, RELEASES[package])
@@ -251,3 +241,39 @@ def test_web_opens_installed_agent_from_original_board():
         expect(page.locator('iframe[title="Agent chat"][data-page-ready=true]')).to_be_visible(
             timeout=60000
         )
+
+
+def test_web_graph_loads_through_installed_original_controls():
+    with sync_playwright() as pw:
+        page = _client(pw, "web")
+        _page_button(page, "knowledge", RELEASES["knowledge"], "Knowledge graph").click()
+        view = _guest(page).get_by_test_id("memory-graph-page")
+        expect(view).to_be_visible(timeout=60000)
+        with page.expect_response(
+            lambda response: response.url.endswith("/commands")
+            and response.request.method == "POST"
+            and response.request.post_data_json.get("command_id") == "read-graph",
+            timeout=60000,
+        ) as pending:
+            view.get_by_role("button", name="Reload Data").click()
+        response = pending.value
+        assert response.ok, response.status
+        graph = response.json()
+        assert isinstance(graph["nodes"], list) and isinstance(graph["edges"], list)
+
+
+def test_native_graph_refreshes_installed_original_projection():
+    with sync_playwright() as pw:
+        page = _client(pw, "desktop")
+        _page_button(page, "knowledge", RELEASES["knowledge"], "Knowledge graph").click()
+        view = _guest(page).locator(".project-graph-page")
+        expect(
+            view.get_by_role("heading", name=re.compile("Knowledge graph|知识图谱"))
+        ).to_be_visible(timeout=60000)
+        counts = view.locator(".project-graph-summary strong")
+        expect(counts).to_have_count(2, timeout=60000)
+        refresh = view.get_by_role("button", name=re.compile("^(Refresh|刷新)$"))
+        refresh.click()
+        expect(refresh).to_be_enabled(timeout=60000)
+        expect(counts.first).to_have_text(re.compile(r"^\d+$"))
+        expect(counts.last).to_have_text(re.compile(r"^\d+$"))

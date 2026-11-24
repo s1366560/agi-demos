@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from src.tests.integration.marketplace_browser import apply, more
+from src.tests.integration.marketplace_browser import apply, business_release, more
 
 pytestmark = [
     pytest.mark.integration,
@@ -80,7 +80,7 @@ def test_empty_tenant_billing_via_market_and_direct_url():
             more(page, "Uninstall|卸载")
             expect(current).to_have_text(re.compile("Inactive|未运行"), timeout=60000)
         apply(page, "1.2.0")
-        apply(page, "1.3.1")
+        apply(page, business_release("billing"))
         page.goto(base + "/billing")
         _check_original_billing_view(page)
         details()

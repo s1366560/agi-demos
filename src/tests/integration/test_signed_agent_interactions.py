@@ -13,7 +13,13 @@ import httpx
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from src.tests.integration.marketplace_browser import apply, more, open_market
+from src.tests.integration.marketplace_browser import (
+    apply,
+    business_release,
+    install_previous,
+    more,
+    open_market,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -221,8 +227,9 @@ def test_installed_agent_interactions():
         pytest.skip("requires isolated local marketplace credentials")
     account = json.loads(Path(owner).read_bytes())
     title, conversation = create_fixture(account)
-    version = os.getenv("MEMSTACK_QA_INTERACTION_VERSION", "1.4.1")
+    version = os.getenv("MEMSTACK_QA_INTERACTION_VERSION", business_release("agent"))
     cdp = os.getenv("MEMSTACK_QA_BUSINESS_MARKET_CDP")
+    origin = os.getenv("MEMSTACK_QA_MARKET_FULL_ORIGIN", "http://localhost:3000")
     with sync_playwright() as pw:
         if cdp:
             browser = pw.chromium.connect_over_cdp(cdp)
@@ -239,15 +246,14 @@ def test_installed_agent_interactions():
         else:
             browser = pw.chromium.launch()
             page = browser.new_page(locale="en-US")
-            open_market(page, "full", "http://localhost:3000", account)
+            open_market(page, "full", origin, account)
         page.locator(".pm-spec, #pm-card-memstack-agent").first.wait_for(
             state="visible", timeout=60000
         )
         if not page.locator(".pm-spec").is_visible():
             page.locator("#pm-card-memstack-agent").click()
         installed = page.locator(".pm-spec dd").first
-        if installed.inner_text() != "1.3.1":
-            apply(page, "1.3.1")
+        install_previous(page, "1.3.1")
         apply(page, version)
         page.locator(".pm-page-list").get_by_role("button", name="Agent chat", exact=True).click()
         exercise_page(page, title, conversation, account, cdp)
@@ -255,7 +261,8 @@ def test_installed_agent_interactions():
             page.get_by_role("button", name=re.compile("返回插件市场|Back to marketplace")).click()
         else:
             page.goto(
-                "http://localhost:3000/tenant/"
+                origin
+                + "/tenant/"
                 + account["tenant_id"]
                 + "/plugins?projectId="
                 + account["project_id"]
@@ -267,3 +274,4 @@ def test_installed_agent_interactions():
             page.locator("#pm-card-memstack-agent").click()
         more(page, "Roll back to|回退至")
         expect(installed).to_have_text("1.3.1", timeout=30000)
+        apply(page, version)

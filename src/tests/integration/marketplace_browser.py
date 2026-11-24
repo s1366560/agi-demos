@@ -1,9 +1,18 @@
 """Drive a reviewed release change through the shared desktop and Web marketplace."""
 
+import json
+import os
 import re
+from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout, expect
+
+
+def business_release(package: str) -> str:
+    root = Path(__file__).resolve().parents[3]
+    manifest = root / "plugins" / "business" / package / "package.json"
+    return json.loads(manifest.read_bytes())["version"]
 
 
 def apply(page: Page, version: str) -> None:
@@ -15,7 +24,8 @@ def apply(page: Page, version: str) -> None:
     action.click()
     dialog = page.locator("dialog.pm-dialog")
     expect(dialog).to_contain_text(version)
-    dialog.locator(".pm-actions button").last.click()
+    confirm(page)
+
     expect(page.locator(".pm-spec dd").first).to_have_text(version, timeout=120000)
 
 
@@ -23,7 +33,34 @@ def more(page: Page, action: str) -> None:
     menu = page.locator(".pm-detail-actions details")
     menu.locator("summary").click()
     menu.get_by_role("button", name=re.compile(action)).click()
-    page.locator("dialog.pm-dialog .pm-actions button").last.click()
+    confirm(page)
+
+
+def confirm(page: Page) -> None:
+    dialog = page.locator("dialog.pm-dialog")
+    scope = os.getenv("MEMSTACK_QA_EXPECT_MARKET_SCOPE")
+    if scope:
+        expect(dialog).to_contain_text(scope)
+    dialog.locator(".pm-actions button").last.click()
+
+
+def install_previous(page: Page, previous: str) -> None:
+    active = page.locator(".pm-spec dd").first
+    expect(active).to_be_visible(timeout=90000)
+    menu = page.locator(".pm-detail-actions details")
+    menu.locator("summary").click()
+    uninstall = menu.get_by_role("button", name=re.compile("Uninstall|卸载"))
+    if uninstall.is_visible():
+        uninstall.click()
+        confirm(page)
+        expect(
+            page.locator(".pm-detail-actions").get_by_role(
+                "button", name=re.compile("^(Install|安装)")
+            )
+        ).to_be_visible(timeout=90000)
+    else:
+        menu.locator("summary").click()
+    apply(page, previous)
 
 
 def is_catalog(response):

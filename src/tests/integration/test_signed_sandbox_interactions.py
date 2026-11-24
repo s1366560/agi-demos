@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from src.tests.integration.marketplace_browser import apply, more, open_market
+from src.tests.integration.marketplace_browser import (
+    apply,
+    business_release,
+    install_previous,
+    more,
+    open_market,
+)
 
 pytestmark = [
     pytest.mark.integration,
@@ -67,7 +73,12 @@ def test_installed_terminal_and_remote_desktop(client):
             )
         else:
             page = pw.chromium.launch().new_page(locale="en-US")
-            open_market(page, "full", "http://127.0.0.1:3000", owner)
+            open_market(
+                page,
+                "full",
+                os.getenv("MEMSTACK_QA_MARKET_FULL_ORIGIN", "http://127.0.0.1:3000"),
+                owner,
+            )
         page.set_default_timeout(60000)
 
         def details(*, returning=False):
@@ -106,10 +117,11 @@ def test_installed_terminal_and_remote_desktop(client):
                 "button", name="Terminal and remote desktop", exact=True
             )
 
-        current = os.getenv("MEMSTACK_INTERACTIVE_SANDBOX_VERSION", "1.5.3")
+        current = os.getenv(
+            "MEMSTACK_INTERACTIVE_SANDBOX_VERSION", business_release("environments")
+        )
         details()
-        if page.locator(".pm-spec dd").first.inner_text() != "1.4.0":
-            apply(page, "1.4.0")
+        install_previous(page, "1.4.0")
         expect(entry()).to_have_count(0)
         apply(page, current)
         entry().click()
