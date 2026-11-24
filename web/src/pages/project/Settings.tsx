@@ -29,11 +29,8 @@ import {
   Settings as SettingsIcon,
   Save,
   Trash2,
-  RefreshCw,
   AlertCircle,
   Loader2,
-  Power,
-  RotateCcw,
   Database,
   Network,
   Server,
@@ -44,13 +41,17 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 
 import { useWebFeatureEnabledV2 } from '@/routes/v2/webFeatureAuthorityV2';
-import { formatDateTime } from '@/utils/date';
+import {
+  SettingsSection,
+  panelClass,
+  secondaryButtonClass,
+} from '../../../../sdk/memstack-plugin-sdk/ui/SettingsSection';
+import { ProjectSandboxSettings } from '@business/environments/ui/web/project/ProjectSandboxSettings';
 
 import { PluginSlotOutlet } from '../../components/plugins/PluginSlotOutlet';
 import { projectAPI } from '../../services/api';
 import { projectSandboxService } from '@business/environments/ui/web/services/projectSandboxService';
 import { useProjectStore } from '../../stores/project';
-import { confirmAction } from '../../utils/confirmAction';
 import { logger } from '../../utils/logger';
 
 import type {
@@ -64,7 +65,6 @@ import type {
   ProjectSettingsNoProjectProps,
   ProjectSettingsProps,
 } from './settings/types';
-import type { ProjectSandbox } from '@business/environments/ui/web/types/sandbox';
 
 interface ProjectSettingsError {
   response?: { data?: { detail?: string | undefined } | undefined } | undefined;
@@ -76,70 +76,16 @@ const getProjectSettingsErrorMessage = (error: unknown, fallback: string) => {
   return err.response?.data?.detail ?? err.message ?? fallback;
 };
 
-const panelClass =
-  'rounded-md bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)] dark:bg-slate-950 dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]';
-
 const fieldClass =
   'h-9 w-full rounded border border-gray-200 bg-white px-3 text-sm text-gray-950 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-900 focus:ring-2 focus:ring-gray-950/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-300 dark:focus:ring-white/10';
 
 const textareaClass = `${fieldClass} h-auto min-h-24 py-2 resize-none`;
-
-const secondaryButtonClass =
-  'inline-flex min-h-9 items-center justify-center gap-2 rounded border border-gray-200 bg-white px-3 text-sm font-medium text-gray-900 transition-colors hover:border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-900';
 
 const primaryButtonClass =
   'inline-flex min-h-9 items-center justify-center gap-2 rounded bg-gray-950 px-3 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-slate-200';
 
 const dangerButtonClass =
   'inline-flex min-h-9 items-center justify-center gap-2 rounded bg-red-600 px-3 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50';
-
-interface SettingsSectionProps {
-  id?: string;
-  icon: React.ReactNode;
-  title: string;
-  aside?: React.ReactNode;
-  children: React.ReactNode;
-  tone?: 'default' | 'danger';
-}
-
-const SettingsSection: React.FC<SettingsSectionProps> = ({
-  id,
-  icon,
-  title,
-  aside,
-  children,
-  tone = 'default',
-}) => (
-  <section
-    id={id}
-    className={`${panelClass} overflow-hidden ${
-      tone === 'danger' ? 'shadow-[0_0_0_1px_rgba(220,38,38,0.22)]' : ''
-    }`}
-  >
-    <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-center gap-3">
-        <div
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded border ${
-            tone === 'danger'
-              ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300'
-              : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-          }`}
-        >
-          {icon}
-        </div>
-        <h2
-          className={`truncate text-base font-semibold ${
-            tone === 'danger' ? 'text-red-900 dark:text-red-200' : 'text-gray-950 dark:text-white'
-          }`}
-        >
-          {title}
-        </h2>
-      </div>
-      {aside}
-    </div>
-    <div className="p-5">{children}</div>
-  </section>
-);
 
 interface FieldProps {
   label: string;
@@ -613,202 +559,9 @@ const NoProject: React.FC<ProjectSettingsNoProjectProps> = () => {
 NoProject.displayName = 'ProjectSettings.NoProject';
 
 // Sandbox Sub-Component
-const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
-  const { t } = useTranslation();
-  const [sandboxInfo, setSandboxInfo] = useState<ProjectSandbox | null>(null);
-  const [stats, setStats] = useState<{
-    cpu_percent?: number;
-    memory_used_mb?: number;
-    memory_limit_mb?: number;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-
-  const fetchSandboxInfo = useCallback(async () => {
-    try {
-      setLoading(true);
-      const info = await projectSandboxService.getProjectSandbox(projectId);
-      setSandboxInfo(info);
-      // Only fetch stats if sandbox is running
-      if (info?.status === 'running') {
-        try {
-          const statsData = await projectSandboxService.getStats(projectId);
-          setStats(statsData);
-        } catch {
-          setStats(null);
-        }
-      } else {
-        setStats(null);
-      }
-    } catch {
-      setSandboxInfo(null);
-      setStats(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void fetchSandboxInfo();
-  }, [fetchSandboxInfo]);
-
-  const handleRestart = useCallback(async () => {
-    setActionLoading(true);
-    try {
-      await projectSandboxService.restartSandbox(projectId);
-      void antdMessage.success(t('project.settings.sandboxRestartSuccess', 'Sandbox restarted'));
-      await fetchSandboxInfo();
-    } catch (error) {
-      logger.error('[ProjectSettings] Failed to restart sandbox:', error);
-      void antdMessage.error(t('project.settings.sandboxActionFailed', 'Sandbox action failed'));
-    } finally {
-      setActionLoading(false);
-    }
-  }, [projectId, fetchSandboxInfo, t]);
-
-  const handleTerminate = useCallback(async () => {
-    if (
-      !(await confirmAction({
-        title: t('project.settings.sandboxTerminateConfirm', 'Terminate sandbox?'),
-        content: t(
-          'project.settings.sandboxTerminateConfirmDesc',
-          'This stops the running sandbox environment. Unsaved work inside it may be lost.'
-        ),
-        danger: true,
-      }))
-    ) {
-      return;
-    }
-    setActionLoading(true);
-    try {
-      await projectSandboxService.terminateSandbox(projectId);
-      void antdMessage.success(t('project.settings.sandboxTerminateSuccess', 'Sandbox terminated'));
-      await fetchSandboxInfo();
-    } catch (error) {
-      logger.error('[ProjectSettings] Failed to terminate sandbox:', error);
-      void antdMessage.error(t('project.settings.sandboxActionFailed', 'Sandbox action failed'));
-    } finally {
-      setActionLoading(false);
-    }
-  }, [projectId, fetchSandboxInfo, t]);
-
-  const statusColor =
-    sandboxInfo?.status === 'running'
-      ? 'text-green-600 dark:text-green-400'
-      : sandboxInfo?.status === 'terminated'
-        ? 'text-content-tertiary'
-        : sandboxInfo?.status === 'error'
-          ? 'text-red-600 dark:text-red-400'
-          : 'text-yellow-600 dark:text-yellow-400';
-
-  return (
-    <SettingsSection
-      id="sandbox"
-      icon={<Server className="h-4 w-4" />}
-      title={t('project.settings.sandboxSectionTitle')}
-    >
-      {loading ? (
-        <div className="text-sm text-gray-400">{t('project.settings.sandboxLoading')}</div>
-      ) : !sandboxInfo ? (
-        <div className="text-sm text-gray-500 dark:text-slate-400">
-          {t('project.settings.sandboxEmpty')}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Status Row */}
-          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/70">
-              <span className="block text-xs text-gray-500 dark:text-slate-400">
-                {t('project.settings.sandboxStatusLabel')}:
-              </span>
-              <span className={`font-medium ${statusColor}`}>{sandboxInfo.status}</span>
-            </div>
-            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/70">
-              <span className="block text-xs text-gray-500 dark:text-slate-400">
-                {t('project.settings.sandboxIdLabel')}:
-              </span>
-              <span className="break-all font-mono text-xs text-gray-600 dark:text-slate-300">
-                {sandboxInfo.sandbox_id ? sandboxInfo.sandbox_id.slice(0, 12) + '…' : '-'}
-              </span>
-            </div>
-          </div>
-
-          {/* Last Accessed */}
-          {sandboxInfo.last_accessed_at && (
-            <div className="text-sm">
-              <span className="text-gray-500 dark:text-slate-400">
-                {t('project.settings.sandboxLastAccessed')}:
-              </span>{' '}
-              <span className="text-gray-700 dark:text-slate-300">
-                {formatDateTime(sandboxInfo.last_accessed_at)}
-              </span>
-            </div>
-          )}
-
-          {/* Resource Stats (only when running) */}
-          {stats && (
-            <div className="grid grid-cols-1 gap-3 rounded border border-gray-200 bg-gray-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/70 sm:grid-cols-2">
-              <div>
-                <span className="text-gray-500 dark:text-slate-400">
-                  {t('project.settings.sandboxCpuLabel')}:
-                </span>{' '}
-                <span className="text-gray-700 dark:text-slate-300">
-                  {stats.cpu_percent?.toFixed(1) ?? '-'}%
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-slate-400">
-                  {t('project.settings.sandboxMemoryLabel')}:
-                </span>{' '}
-                <span className="text-gray-700 dark:text-slate-300">
-                  {stats.memory_used_mb?.toFixed(0) ?? '-'} /{' '}
-                  {stats.memory_limit_mb?.toFixed(0) ?? '-'} MB
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                void handleRestart();
-              }}
-              disabled={actionLoading || sandboxInfo.status === 'terminated'}
-              className={`${secondaryButtonClass} flex-1 sm:flex-none`}
-            >
-              <RotateCcw className="h-4 w-4" />
-              {t('project.settings.sandboxRestart')}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void handleTerminate();
-              }}
-              disabled={actionLoading || sandboxInfo.status === 'terminated'}
-              className="inline-flex min-h-9 flex-1 items-center justify-center gap-2 rounded border border-red-200 bg-white px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/70 dark:bg-slate-950 dark:text-red-400 dark:hover:bg-red-950/30 sm:flex-none"
-            >
-              <Power className="h-4 w-4" />
-              {t('project.settings.sandboxTerminate')}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void fetchSandboxInfo();
-              }}
-              disabled={actionLoading}
-              className={`${secondaryButtonClass} flex-1 sm:flex-none`}
-            >
-              <RefreshCw className="h-4 w-4" />
-              {t('common.refresh')}
-            </button>
-          </div>
-        </div>
-      )}
-    </SettingsSection>
-  );
-};
+const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => (
+  <ProjectSandboxSettings projectId={projectId} client={projectSandboxService} />
+);
 Sandbox.displayName = 'ProjectSettings.Sandbox';
 
 // ============================================================================

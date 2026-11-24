@@ -198,6 +198,22 @@
       ],
       "payload": {},
       "accepts_input": true
+    },
+    {
+      "id": "restart-sandbox",
+      "host_operation": "app.environments.sandbox.restart",
+      "permissions": [
+        "app.environments.sandbox.restart"
+      ],
+      "payload": {}
+    },
+    {
+      "id": "terminate-sandbox",
+      "host_operation": "app.environments.sandbox.terminate",
+      "permissions": [
+        "app.environments.sandbox.terminate"
+      ],
+      "payload": {}
     }
   ],
   "ui": [
@@ -227,15 +243,21 @@
         "desktop-renderer"
       ],
       "entry": {
-        "path": "ui/sandbox.js",
-        "digest": "sha256:ecccf897bab222c728edb84ea23849e8b99281c43de1c9ae761453e6c390e972"
+        "path": "ui/project-sandbox.js",
+        "digest": "sha256:442e1a13536d4c513d4f4fa8f01b0a947f15d94d1f7224c2474afa8363f80fab"
       },
       "commands": [
         "sandbox-status",
         "prepare-sandbox",
-        "authorize-run-terminal"
+        "restart-sandbox",
+        "terminate-sandbox"
       ],
-      "device_tools": []
+      "device_tools": [],
+      "style": {
+        "path": "ui/project-sandbox.css",
+        "digest": "sha256:32faeeabbde32ad30a128a55be1a9f793a9f25440596566d637f244b83790ce2"
+      },
+      "workbench": true
     },
     {
       "id": "patch",
@@ -290,7 +312,7 @@
       ],
       "entry": {
         "path": "ui/clusters-web.js",
-        "digest": "sha256:8d7a285f3c2199c45de0f6d956a09dc93bd539eae89c6af9c6f5860a4399ee78"
+        "digest": "sha256:7d34776433527d29a218473f16ee5181875112f450b85cfc1b3e88dc3699ea2e"
       },
       "commands": [
         "environment-inventory",
@@ -359,6 +381,28 @@
       },
       "commands": [
         "environment-inventory"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "sandbox-runtime",
+      "title": "Sandbox runtime access",
+      "routes": [
+        "/environments/sandbox/runtime",
+        "/tenant/:tenantId/project/:projectId/sandbox/runtime"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/sandbox.js",
+        "digest": "sha256:ecccf897bab222c728edb84ea23849e8b99281c43de1c9ae761453e6c390e972"
+      },
+      "commands": [
+        "sandbox-status",
+        "prepare-sandbox",
+        "authorize-run-terminal"
       ],
       "device_tools": []
     }

@@ -821,5 +821,36 @@
     "actions": {
       "viewAll": "View All"
     }
+  },
+  "project": {
+    "settings": {
+      "sandboxTitle": "Sandbox Configuration",
+      "sandboxDesc": "Configure the sandbox environment for this project",
+      "sandboxProvider": "Sandbox Provider",
+      "sandboxTimeout": "Timeout (seconds)",
+      "sandboxResourceLimit": "Resource Limit",
+      "sandboxMemory": "Memory (MB)",
+      "sandboxCPU": "CPU Cores",
+      "sandboxSave": "Save",
+      "sandboxSectionTitle": "Sandbox",
+      "sandboxDescription": "Sandboxes provide isolated execution environments for tools and code. They are automatically created on first use and destroyed after idle timeout.",
+      "sandboxLoading": "Loading sandbox status…",
+      "sandboxEmpty": "No sandbox provisioned. A sandbox will be created automatically when tools are first used.",
+      "sandboxStatusLabel": "Status",
+      "sandboxIdLabel": "ID",
+      "sandboxLastAccessed": "Last accessed",
+      "sandboxCpuLabel": "CPU",
+      "sandboxMemoryLabel": "Memory",
+      "sandboxRestart": "Restart",
+      "sandboxTerminate": "Terminate",
+      "sandboxTerminateConfirm": "Terminate sandbox?",
+      "sandboxTerminateConfirmDesc": "This stops the running sandbox environment. Unsaved work inside it may be lost.",
+      "sandboxRestartSuccess": "Sandbox restarted",
+      "sandboxTerminateSuccess": "Sandbox terminated",
+      "sandboxActionFailed": "Sandbox action failed",
+      "sandboxProfile": "Sandbox profile",
+      "sandboxPrepare": "Prepare sandbox",
+      "sandboxRuntimeAccess": "Metrics and terminal access"
+    }
   }
 }

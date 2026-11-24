@@ -821,5 +821,36 @@
     "actions": {
       "viewAll": "查看全部"
     }
+  },
+  "project": {
+    "settings": {
+      "sandboxTitle": "沙盒配置",
+      "sandboxDesc": "配置此项目的沙盒环境",
+      "sandboxProvider": "沙盒提供商",
+      "sandboxTimeout": "超时（秒）",
+      "sandboxResourceLimit": "资源限制",
+      "sandboxMemory": "内存（MB）",
+      "sandboxCPU": "CPU 核数",
+      "sandboxSave": "保存",
+      "sandboxSectionTitle": "沙盒",
+      "sandboxDescription": "沙盒为工具和代码提供隔离执行环境。首次使用时会自动创建，并在空闲超时后销毁。",
+      "sandboxLoading": "正在加载沙盒状态…",
+      "sandboxEmpty": "尚未配置沙盒。首次使用工具时会自动创建沙盒。",
+      "sandboxStatusLabel": "状态",
+      "sandboxIdLabel": "ID",
+      "sandboxLastAccessed": "上次访问",
+      "sandboxCpuLabel": "CPU",
+      "sandboxMemoryLabel": "内存",
+      "sandboxRestart": "重启",
+      "sandboxTerminate": "终止",
+      "sandboxTerminateConfirm": "确定终止沙箱吗？",
+      "sandboxTerminateConfirmDesc": "这将停止正在运行的沙箱环境，其中未保存的工作可能会丢失。",
+      "sandboxRestartSuccess": "沙箱已重启",
+      "sandboxTerminateSuccess": "沙箱已终止",
+      "sandboxActionFailed": "沙箱操作失败",
+      "sandboxProfile": "沙箱配置",
+      "sandboxPrepare": "准备沙箱",
+      "sandboxRuntimeAccess": "资源指标与终端授权"
+    }
   }
 }

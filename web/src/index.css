@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @source '../../plugins/business/*/ui/web';
+@source '../../sdk/memstack-plugin-sdk/ui/SettingsSection.tsx';
 
 @variant dark (&:where(.dark, .dark *));
 

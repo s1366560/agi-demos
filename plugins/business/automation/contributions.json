@@ -611,8 +611,8 @@
         "desktop-renderer"
       ],
       "entry": {
-        "path": "ui/schedules.js",
-        "digest": "sha256:f3c9d7c5dac4ed3d6bbcfb558067ff60e9d418a24d7d97673226ce8e917ddd78"
+        "path": "ui/cron-jobs.js",
+        "digest": "sha256:da83b012d44ac8b449e2ed6d9cb4f5a13594fd952e9d1b473f347e1d63aa6f62"
       },
       "commands": [
         "list-schedules",
@@ -620,7 +620,12 @@
         "run-schedule",
         "delete-schedule"
       ],
-      "device_tools": []
+      "device_tools": [],
+      "style": {
+        "path": "ui/cron-jobs.css",
+        "digest": "sha256:ef35c7694c610c1a629ca7ccd179cef2a0d741df0e37057b98e41d47925b1468"
+      },
+      "workbench": true
     },
     {
       "id": "workflow-patterns",

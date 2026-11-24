@@ -46,7 +46,6 @@ if TYPE_CHECKING:
         ProjectSandboxRepository,
     )
     from src.domain.ports.services.distributed_lock_port import DistributedLockPort
-    from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
     from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
         MCPSandboxAdapter,
     )
@@ -1136,6 +1135,9 @@ class ProjectSandboxLifecycleService:
             from plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager import (
                 SandboxMCPServerManager,
             )
+            from plugins.business.environments.backend.sandbox.unified_sandbox_service import (
+                UnifiedSandboxService,
+            )
             from src.application.services.mcp_app_service import MCPAppService
             from src.application.services.mcp_runtime_service import MCPRuntimeService
             from src.infrastructure.adapters.secondary.persistence.database import (
@@ -1153,6 +1155,9 @@ class ProjectSandboxLifecycleService:
             from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
                 SqlProjectRepository,
             )
+            from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+                SqlProjectSandboxRepository,
+            )
             from src.infrastructure.mcp.resource_resolver import MCPAppResourceResolver
 
             async with async_session_factory() as session:
@@ -1165,7 +1170,19 @@ class ProjectSandboxLifecycleService:
                     resource_resolver=resource_resolver,
                 )
                 manager = SandboxMCPServerManager(
-                    sandbox_resource=cast("SandboxResourcePort", self),
+                    sandbox_resource=UnifiedSandboxService(
+                        repository=SqlProjectSandboxRepository(session, commit_on_write=False),
+                        sandbox_adapter=self._adapter,
+                        distributed_lock=self._distributed_lock,
+                        default_profile=self._default_profile,
+                        health_check_interval_seconds=self._health_check_interval,
+                        auto_recover=self._auto_recover,
+                        memory_limit_override=self._memory_limit_override,
+                        cpu_limit_override=self._cpu_limit_override,
+                        host_source_volume=self._host_source_volume,
+                        host_memstack_volume=self._host_memstack_volume,
+                        host_docker_socket_volume=self._host_docker_socket_volume,
+                    ),
                     app_service=app_service,
                 )
                 runtime = MCPRuntimeService(

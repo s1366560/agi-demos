@@ -169,6 +169,26 @@ async def prepare_sandbox(
     return {"sandbox": _sandbox(ctx, await _request(ctx, "POST", "", data.model_dump()))}
 
 
+async def restart_sandbox(
+    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+) -> dict[str, Any]:
+    _Input.model_validate(payload)
+    response = await _request(ctx, "POST", "/restart")
+    if not response or response.get("success") is not True:
+        raise OptionalBusinessError("runtime_unavailable", "Sandbox restart failed")
+    return {"success": True}
+
+
+async def terminate_sandbox(
+    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+) -> dict[str, Any]:
+    _Input.model_validate(payload)
+    response = await _request(ctx, "DELETE", "")
+    if not response or response.get("success") is not True:
+        raise OptionalBusinessError("runtime_unavailable", "Sandbox termination failed")
+    return {"success": True}
+
+
 async def authorize_terminal(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
@@ -198,5 +218,7 @@ async def authorize_terminal(
 SANDBOX_OPERATIONS: dict[str, "Operation"] = {
     "app.environments.sandbox.read": read_sandbox,
     "app.environments.sandbox.prepare": prepare_sandbox,
+    "app.environments.sandbox.restart": restart_sandbox,
+    "app.environments.sandbox.terminate": terminate_sandbox,
     "app.environments.terminal.authorize": authorize_terminal,
 }

@@ -9,6 +9,7 @@ await buildPackagePages({
   root: local('../../'),
   sourceDirectory: 'ui/signed',
   entries: {
+    sandbox: 'ProjectSandboxPage.tsx',
     'tenant-clusters': { web: 'ClustersWeb.tsx', 'desktop-renderer': 'ClustersDesktop.tsx' },
   },
   plugins: [
@@ -19,7 +20,7 @@ await buildPackagePages({
           ...build.initialOptions.define,
           'import.meta.env.DEV': 'false',
         };
-        build.onLoad({ filter: /clusters-web\.css$/ }, async ({ path }) => {
+        build.onLoad({ filter: /(?:clusters-web|project-sandbox)\.css$/ }, async ({ path }) => {
           const result = await postcss([tailwind({ base: local('.'), optimize: true })]).process(
             await readFile(path, 'utf8'),
             { from: path }

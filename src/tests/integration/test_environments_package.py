@@ -109,6 +109,8 @@ async def test_environment_worker_through_project_http(http, environment_release
                 "app.environments.clusters.delete",
                 "app.environments.sandbox.read",
                 "app.environments.sandbox.prepare",
+                "app.environments.sandbox.restart",
+                "app.environments.sandbox.terminate",
                 "app.environments.terminal.authorize",
             ],
         },

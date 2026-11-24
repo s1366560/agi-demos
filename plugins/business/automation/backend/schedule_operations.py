@@ -32,6 +32,9 @@ type Identifier = Annotated[str, Field(min_length=1, max_length=255)]
 class PageQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     offset: int = Field(0, ge=0)
+    limit: int = Field(32, ge=1, le=100)
+    include_disabled: bool = True
+    view: Literal["workbench", "capabilities", "job"] | None = None
     job_id: Identifier | None = None
 
 
@@ -102,7 +105,8 @@ class ScheduleEdit(BaseModel):
     action: JobAction | None = None
     delete_after_run: bool | None = None
     conversation_mode: Literal["fresh", "reuse"] | None = None
-    delivery_kind: Literal["none", "announce"] | None = None
+    delivery_kind: Literal["none", "announce", "webhook"] | None = None
+    stagger_seconds: int | None = Field(None, ge=0)
     timeout_seconds: int | None = Field(None, ge=1)
     max_retries: int | None = Field(None, ge=0)
 
@@ -138,14 +142,34 @@ def _row(job: CronJobResponse) -> dict[str, Any]:
     }
 
 
+def _workbench_job(job: CronJobResponse) -> dict[str, Any]:
+    # Retain the original editor fields and keep provider and delivery credentials in the authority.
+    public = job.model_dump(mode="json", exclude={"payload", "delivery", "state"})
+    key = "message" if job.payload.kind.value == "agent_turn" else "content"
+    public.update(
+        payload={"kind": job.payload.kind.value, "config": {key: job.payload.config.get(key)}},
+        delivery={"kind": job.delivery.kind.value, "config": {}},
+        state={},
+    )
+    return public
+
+
 async def schedules(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
     query = PageQuery.model_validate(payload)
     project = ctx.scope.project_id
     async with cron_authority(ctx.request, ctx.user, ctx.db, project, _scope(ctx)) as authority:
+        if query.view == "capabilities":
+            return (await cron.get_cron_job_capabilities(project, authority)).model_dump()
+        if query.view == "job":
+            if not query.job_id:
+                raise HTTPException(422, _("A schedule ID is required"))
+            return _workbench_job(await cron.get_cron_job(project, query.job_id, authority))
         if query.job_id:
-            runs = await cron.list_cron_job_runs(project, query.job_id, 32, query.offset, authority)
+            runs = await cron.list_cron_job_runs(
+                project, query.job_id, query.limit, query.offset, authority
+            )
             return {
                 "items": [
                     run.model_dump(
@@ -157,14 +181,18 @@ async def schedules(
                             "started_at",
                             "finished_at",
                             "duration_ms",
+                            *(("error_message",) if query.view == "workbench" else ()),
                         },
                     )
                     for run in runs.items
                 ],
                 "total": runs.total,
             }
-        result = await cron.list_cron_jobs(project, True, 32, query.offset, authority)
-    return {"items": [_row(job) for job in result.items], "total": result.total}
+        result = await cron.list_cron_jobs(
+            project, query.include_disabled, query.limit, query.offset, authority
+        )
+    project_row = _workbench_job if query.view == "workbench" else _row
+    return {"items": [project_row(job) for job in result.items], "total": result.total}
 
 
 async def save_schedule(
@@ -185,6 +213,7 @@ async def save_schedule(
                 "description",
                 "delete_after_run",
                 "conversation_mode",
+                "stagger_seconds",
                 "timeout_seconds",
                 "max_retries",
             },
@@ -215,10 +244,11 @@ async def save_schedule(
             )
             job = await cron.create_cron_job(project, create, authority)
         else:
-            if edit.action:
+            if edit.action or edit.delivery_kind:
                 previous = await authority.services.cron_jobs.get_job(edit.job_id)
                 if (
-                    previous
+                    edit.action
+                    and previous
                     and previous.project_id == project
                     and previous.payload.kind.value == edit.action.kind
                 ):
@@ -226,6 +256,12 @@ async def save_schedule(
                         **previous.payload.config,
                         **values["payload"]["config"],
                     }
+                if (
+                    previous
+                    and previous.project_id == project
+                    and previous.delivery.kind.value == edit.delivery_kind
+                ):
+                    values["delivery"]["config"] = dict(previous.delivery.config)
             update = CronJobUpdate.model_validate(
                 {**values, "expected_revision": edit.expected_revision}
             )

@@ -132,3 +132,54 @@ async def test_metrics_are_bound_to_the_current_project_and_sandbox(authority):
     with pytest.raises(OptionalBusinessError, match="selected sandbox has changed"):
         await ops.read_sandbox(ctx, {"metrics_for": "retired"}, None)
     assert calls == [("", "GET")]
+
+
+@pytest.mark.unit
+async def test_restart_terminate_use_only_the_current_project_authority(monkeypatch):
+    ctx = SimpleNamespace(scope=SimpleNamespace(project_id="p", tenant_id="t"))
+    call = AsyncMock(return_value={"success": True, "sandbox": {"endpoint": "private"}})
+    monkeypatch.setattr(ops, "_request", call)
+    for handler, method, suffix in [
+        (ops.restart_sandbox, "POST", "/restart"),
+        (ops.terminate_sandbox, "DELETE", ""),
+    ]:
+        with pytest.raises(ValidationError):
+            await handler(ctx, {"project_id": "another"}, None)
+        assert await handler(ctx, {}, None) == {"success": True}
+        call.assert_awaited_with(ctx, method, suffix)
+    call.return_value = {"success": False}
+    with pytest.raises(OptionalBusinessError, match="termination failed"):
+        await ops.terminate_sandbox(ctx, {}, None)
+
+
+@pytest.mark.unit
+async def test_restart_reconciliation_uses_its_own_sandbox_repository(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from plugins.business.environments.backend.sandbox.project_sandbox_lifecycle_service import (
+        ProjectSandboxLifecycleService,
+    )
+    from src.application.services.mcp_runtime_service import MCPRuntimeService
+    from src.infrastructure.adapters.secondary.persistence import database
+
+    background_db = AsyncMock(spec=AsyncSession)
+
+    @asynccontextmanager
+    async def sessions():
+        yield background_db
+
+    repositories = []
+
+    async def reconcile(runtime, *, project_id, tenant_id):
+        repositories.append(runtime._sandbox_manager._sandbox_resource._repository)
+        assert project_id == "p" and tenant_id == "t"
+
+    monkeypatch.setattr(database, "async_session_factory", sessions)
+    monkeypatch.setattr(MCPRuntimeService, "reconcile_project", reconcile)
+    request_repository = object()
+    service = ProjectSandboxLifecycleService(request_repository, object())
+    await service._reinstall_mcp_servers("p", "t")
+    assert len(repositories) == 1 and repositories[0]._session is background_db
+    background_db.commit.assert_awaited_once()
