@@ -48,7 +48,7 @@ export function DesktopPackageWorkbench({
             const scope = workbench.route.projectId ? 'project' : 'tenant';
             const query = new URLSearchParams({
               marketScope: scope,
-              marketPlugin: workbench.route.pluginId,
+              marketPlugin: options?.pluginId ?? workbench.route.pluginId,
               marketPage: path,
             });
             const hash = '#/tenant/' + encodeURIComponent(tenant) + '/plugins?' + query;

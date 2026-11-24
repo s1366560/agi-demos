@@ -81,6 +81,7 @@
         if (!Object.hasOwn(resources, path)) throw new Error("page_resource_unavailable");
         return resources[path];
       },
+      openPage: (pluginId, pageId) => request("openPage", { pluginId, pageId }),
       navigate: (path, options) => request("navigate", { path, replace: options?.replace === true }),
       invoke: (name, payload, options = {}) =>
         request(

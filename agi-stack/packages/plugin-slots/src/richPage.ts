@@ -28,6 +28,7 @@ export interface RichPage {
   readonly routes: readonly string[];
   readonly query_params?: readonly string[];
   readonly resources?: readonly Asset[];
+  readonly page_links?: readonly string[];
   readonly navigation_routes?: readonly string[];
   readonly release_digest: string;
   readonly target: PageTarget;
@@ -86,6 +87,7 @@ export async function verifyPageDocument(
     (page.resources !== undefined &&
       (!Array.isArray(page.resources) || page.resources.length > 64)) ||
     (page.query_params !== undefined && !isStringList(page.query_params)) ||
+    (page.page_links !== undefined && !isStringList(page.page_links)) ||
     (page.navigation_routes !== undefined &&
       !isStringList(page.navigation_routes))
   )

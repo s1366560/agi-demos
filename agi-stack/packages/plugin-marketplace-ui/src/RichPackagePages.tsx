@@ -59,7 +59,10 @@ export interface RichPackagePagesProps {
 }
 
 type Item = { pluginId: string; digest: string; page: PackagePage };
-type Selected = RichPackagePagesProps & { item: Item };
+type Selected = RichPackagePagesProps & {
+  item: Item;
+  openPage(pluginId: string, pageId: string): void;
+};
 
 function PackageFrame(
   props: Selected & { retired: boolean; onPending(count: number): void },
@@ -198,6 +201,7 @@ function PackageFrame(
             dispose.current?.();
           }
         },
+        openPage: (pluginId, pageId) => current.current.openPage(pluginId, pageId),
         navigate: (newPath, options) =>
           current.current.navigate(newPath, options),
         invoke(name, payload, signal, progress) {
@@ -422,6 +426,11 @@ function PageRelease(props: Selected) {
 }
 
 export function RichPackagePages(props: RichPackagePagesProps) {
+  const { tenantId, projectId } = props.scope;
+  return <ScopedPackagePages key={JSON.stringify([tenantId, projectId, props.target])} {...props} />;
+}
+
+function ScopedPackagePages(props: RichPackagePagesProps) {
   const { scope, target, transport, revision = 0 } = props;
   const { pathname } = splitPageLocation(props.pathname);
   const [items, setItems] = useState<Item[]>([]);
@@ -498,6 +507,12 @@ export function RichPackagePages(props: RichPackagePagesProps) {
         bestRank = rank;
       }
     }
+  }
+  function openPage(pluginId: string, pageId: string) {
+    const targetPage = items.find((item) => item.pluginId === pluginId && item.page.id === pageId);
+    const path = targetPage?.page.routes.map((route) => menuPath(route, scope)).find(Boolean);
+    if (!path) throw new Error("page_destination_unavailable");
+    props.navigate(path, { pluginId });
   }
   const links = navigable.flatMap((item) => {
     const path = item.page.routes
@@ -592,6 +607,7 @@ export function RichPackagePages(props: RichPackagePagesProps) {
             pathname,
           ])}
           {...props}
+          openPage={openPage}
           item={selected}
         />
       ) : (
@@ -626,6 +642,7 @@ export function RichPackagePages(props: RichPackagePagesProps) {
           <RoutedPageRelease
             {...props}
             item={item}
+            openPage={openPage}
             onStatus={() => {}}
             navigate={(path, options) =>
               props.navigate(path, { ...options, pluginId: item.pluginId })

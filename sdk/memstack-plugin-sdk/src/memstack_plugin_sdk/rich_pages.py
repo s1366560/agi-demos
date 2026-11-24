@@ -19,6 +19,7 @@ _RESOURCE_TYPES = {
 }
 _RENDERERS = {"web", "desktop-renderer"}
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+_PAGE_LINK = re.compile(r"[a-z][a-z0-9.-]{0,127}/" + _IDENTIFIER.pattern)
 _SLOT = re.compile(r"[a-z][a-z0-9-]{0,63}@[1-9][0-9]{0,3}")
 _SLOT_REFERENCE = re.compile(r"[a-z][a-z0-9.-]{0,127}/" + _SLOT.pattern)
 _ROUTE = re.compile(r"(?:/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*|:[A-Za-z][A-Za-z0-9_]*))+")
@@ -80,6 +81,7 @@ class RichPage:
 
     resources: tuple[PageAsset, ...] = ()
     query_params: tuple[str, ...] = ()
+    page_links: tuple[str, ...] = ()
 
     @property
     def assets(self) -> tuple[PageAsset, ...]:
@@ -94,6 +96,7 @@ class RichPage:
             "routes": self.routes,
             "targets": sorted(self.targets),
             **({"query_params": self.query_params} if self.query_params else {}),
+            **({"page_links": self.page_links} if self.page_links else {}),
             **({"slots": self.slots} if self.slots else {}),
             **({"contributes_to": self.contributes_to} if self.contributes_to else {}),
             **({"home": True} if self.home else {}),
@@ -179,6 +182,7 @@ def _parse_page(value: object) -> RichPage:
         "workbench",
         "slots",
         "query_params",
+        "page_links",
         "resources",
         "contributes_to",
     }:
@@ -232,6 +236,7 @@ def _parse_page(value: object) -> RichPage:
         home=home,
         slots=slots,
         resources=_resources(value.get("resources", [])),
+        page_links=_strings(value.get("page_links", []), _PAGE_LINK),
         query_params=_strings(value.get("query_params", []), _IDENTIFIER),
         contributes_to=destination,
         title=title,

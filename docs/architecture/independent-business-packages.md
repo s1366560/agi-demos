@@ -100,6 +100,8 @@ Web 和 Electron 默认从当前项目已启用的发布版本读取页面贡献
 
 包作者在归档中提供独立构建的 JavaScript IIFE 及可选 CSS。页面可通过 `window.memstack.scope()` 读取项目、语言、目标及获批操作。使用 `invoke(command)` 调用无参命令，使用 `invoke(command, payload, {signal, onEvent})` 接收进度、取消调用。桌面可通过 `device(tool, payload)` 请求设备授权范围内的操作。用户凭据、设备证明和本机路径由宿主管理。[页面 SDK 类型](../../sdk/memstack-plugin-sdk/src/pageRuntime.ts) · [Billing 共享页面源码](../../plugins/business/billing/ui/shared/WebBillingPage.tsx)
 
+页面可以调用 `navigate(path)` 打开本包声明的路由。要打开其他包的页面，在发起页声明 `"page_links": ["memstack-agent/chat"]`，再调用 `window.memstack.openPage("memstack-agent", "chat")`。宿主从当前项目或租户在本端已安装的版本解析目标地址。目标未安装时返回 `page_destination_unavailable`，调用方可以在原页面显示原因。
+
 独立启动默认桌面客户端使用 `make -C agi-stack run-desktop`。完整旧客户端仍可通过显式 full 配置构建，供迁移中的旧页面使用。固定宿主的浏览器回归在宿主构建后签发未知包，检查深链接、版本切换和回退。[未知包发行与宿主集成测试](../../src/tests/integration/test_package_kernel_image.py) · [六包业务页面验收](../../src/tests/integration/test_standard_project_pages.py)
 
 需要应用数据的页面声明具名命令及对应权限，如项目目录、剧本、会话回放或运行终端。完整 API 使用已有的业务授权接口。最小 API 可通过 `PACKAGE_APPLICATION_RUNTIME_URL` 连接同一云身份及发布库的可信运行时。接收端再次核验用户、项目、命令及归档摘要。纯计算、本地检索和发票 worker 可在各自已声明目标独立执行。会话及工作区历史沿用 P5 云端记录。终端授权还需要项目对应的运行服务及有效 run revision。[云端能力转发](../../src/host/operations/remote_application_commands.py) · [终端运行授权](../../plugins/business/environments/README.md#project-sandbox-and-run-terminal)

@@ -68,12 +68,21 @@ const transport: MarketplaceTransport = async <T,>(
 ): Promise<T> => {
   if (path.includes('/?'))
     return {
-      items: [{ plugin_id: 'qa', actual_digest: digest, status: 'enabled', pages: [descriptor] }],
+      items: [
+        { plugin_id: 'qa', actual_digest: digest, status: 'enabled', pages: [descriptor] },
+        ...(location.search === '?page-links' ? [{
+          plugin_id: 'boards',
+          actual_digest: digest,
+          status: 'enabled',
+          pages: [{ ...descriptor, id: 'overview', routes: ['/project/:projectId/board'] }],
+        }] : []),
+      ],
     } as T;
   if (path.includes('/ui?'))
     return {
       ...descriptor,
       schema: 'memstack.rich-page/1',
+      page_links: ['boards/overview', 'uninstalled/overview'],
       navigation_routes: [route, '/agent/chat/:conversationId', '/project/:projectId/details/:id'],
       release_digest: digest,
       target,

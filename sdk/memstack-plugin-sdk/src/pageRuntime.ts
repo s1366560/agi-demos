@@ -21,6 +21,7 @@ export interface RichPageRuntime {
   assetUrl(path: string): string;
   scope(): Promise<RichPageContext>;
   getContext(): Promise<RichPageContext>;
+  openPage(pluginId: string, pageId: string): Promise<void>;
   navigate(path: string, options?: { replace?: boolean }): Promise<void>;
   invoke(
     command: string,

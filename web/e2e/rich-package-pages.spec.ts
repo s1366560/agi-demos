@@ -173,6 +173,20 @@ test('a page navigates to a signed sibling only within the authenticated project
   ).toBe('page_navigation_denied');
 });
 
+test('a signed page link opens only the declared installed destination in its own scope', async ({ page }) => {
+  await page.goto('/e2e/fixtures/rich-package-host.html?page-links');
+  const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
+  const body = guest.locator('body');
+  await body.evaluate(() => window.memstack.openPage('boards', 'overview'));
+  await expect(page.locator('#host-log')).toHaveText('/project/p/board');
+  expect(await body.evaluate(() =>
+    window.memstack.openPage('uninstalled', 'overview').catch((e) => e.message)
+  )).toBe('page_destination_unavailable');
+  expect(await body.evaluate(() =>
+    window.memstack.openPage('boards', 'settings').catch((e) => e.message)
+  )).toBe('page_navigation_denied');
+});
+
 test('signed Agent page keeps local replay read-only on Web and routes cloud turns to the cloud', async ({
   page,
 }) => {

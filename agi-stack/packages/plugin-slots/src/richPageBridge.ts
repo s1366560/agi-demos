@@ -16,6 +16,7 @@ export interface PageBridge {
   status(loaded: boolean): void;
   isRetired?(): boolean;
   pendingChanged?(count: number): void;
+  openPage?(pluginId: string, pageId: string): void;
   navigate(path: string, options?: { replace?: boolean }): void;
   invoke: Operation;
   device?: Operation | undefined;
@@ -73,6 +74,14 @@ export function connectPage(
           commands: page.commands,
           deviceTools: page.device_tools,
         };
+      } else if (message.method === "openPage") {
+        const { pluginId, pageId } = message;
+        if (
+          typeof pluginId !== "string" || typeof pageId !== "string" ||
+          pluginId.includes("/") || pageId.includes("/") ||
+          !page.page_links?.includes(pluginId + "/" + pageId) || !bridge.openPage
+        ) throw new Error("page_navigation_denied");
+        bridge.openPage(pluginId, pageId);
       } else if (message.method === "navigate") {
         const path = message.path;
         if (

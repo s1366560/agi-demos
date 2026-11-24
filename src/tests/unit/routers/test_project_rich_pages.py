@@ -43,6 +43,8 @@ def page(script=b"app.mount(1)"):
         {"targets": []},
         {"home": "true"},
         {"workbench": "true"},
+        {"page_links": ["other/../page"]},
+        {"page_links": ["other/page", "other/page"]},
         {"contributes_to": "unversioned"},
         {"routes": [], "contributes_to": "pkg/status@1", "slots": ["nested@1"]},
         {"routes": [], "contributes_to": "pkg/status@1", "home": True},
@@ -82,6 +84,11 @@ def test_workbench_layout_is_opt_in_per_target():
     )
     assert web.descriptor()["workbench"] is True
     assert "workbench" not in desktop.descriptor()
+
+
+def test_link_destination_is_bound_to_a_package_and_page():
+    (declared,) = parse_rich_pages([{**page(), "page_links": ["other/page"]}], {"ping"})
+    assert declared.descriptor()["page_links"] == ("other/page",)
 
 
 def test_home_is_declared_by_the_signed_page():
