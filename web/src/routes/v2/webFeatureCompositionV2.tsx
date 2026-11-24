@@ -96,6 +96,9 @@ export function hasFullWorkbenchRoute(
   const matches = matchRoutes(navigationRouteObjects, pathname);
   const leaf = matches?.at(-1);
   if (!matches || !leaf || matches.some(({ route }) => route.path?.includes('*'))) return false;
+  const handle: unknown = leaf.route.handle;
+  if (handle && typeof handle === 'object' && 'signedPage' in handle && handle.signedPage === true)
+    return false;
   const { tenantId, projectId } = leaf.params;
   if ((tenantId && tenantId !== scope.tenant) || (projectId && projectId !== scope.project)) {
     return false;

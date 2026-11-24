@@ -1,7 +1,8 @@
+import { scopedPageLocation } from '../../../agi-stack/packages/plugin-slots/src/pageLocation';
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { cloudIdentity } from '@/services/client/cloudIdentity';
 import { kernelHttpClient } from '@/services/client/kernelHttpClient';
@@ -18,6 +19,7 @@ import { RichPackagePages } from '../../../agi-stack/packages/plugin-marketplace
 import { matchingPageProjects } from './routeScope';
 import { projectSessionClient } from './sessionClient';
 import { useWebPackageSession } from './useWebPackageSession';
+import { TenantPackagePicker } from './TenantPackagePicker';
 import { WebProjectMarket } from './WebProjectMarket';
 
 import type { User } from '@/types/memory';
@@ -138,11 +140,12 @@ function ProjectPicker({ token }: { token: string }) {
     );
   if (!loaded) return <p role="status">{t('common.loading')}</p>;
   const { projects } = loaded;
-  if (!projects.length) return <p role="status">{t('projectPackages.noAccess')}</p>;
+
   const matches = matchingPageProjects(projects, location.pathname, params);
   const selected = matches.length === 1 ? matches[0] : undefined;
   return (
     <>
+      <Link to="/plugins?packageScope=tenant">{t('tenant.pluginHub.tenantScope')}</Link>
       <label className="package-project">
         {t('projectPackages.project')}
         <select
@@ -180,19 +183,13 @@ function ProjectPicker({ token }: { token: string }) {
             scope={{ tenantId: selected.tenant_id, projectId: selected.project_id }}
             target="web"
             revision={catalogRevision}
-            pathname={location.pathname}
+            pathname={location.pathname + location.search + location.hash}
             transport={session.transport}
             streamCommand={session.stream}
             managementLabel={t('projectPackages.manage')}
             navigate={(path, options) => {
               void navigate(
-                {
-                  pathname: path,
-                  search: new URLSearchParams({
-                    tenant: selected.tenant_id,
-                    project: selected.project_id,
-                  }).toString(),
-                },
+                scopedPageLocation(path, { tenant: selected.tenant_id, project: selected.project_id }),
                 options
               );
             }}
@@ -231,6 +228,7 @@ function ProjectPicker({ token }: { token: string }) {
 
 export function ProjectPackagesApp() {
   const { t, i18n } = useTranslation();
+  const [params] = useSearchParams();
   const token = useSyncExternalStore(subscribeCloudIdentity, getAuthToken);
   const [identity, setIdentity] = useState<{ token: string; user: User } | null>(null);
   const user = identity?.token === token ? identity.user : null;
@@ -302,7 +300,7 @@ export function ProjectPackagesApp() {
       ) : user.must_change_password ? (
         <Credentials change refresh={refreshIdentity} />
       ) : (
-        <ProjectPicker key={token} token={token} />
+        params.get('packageScope') === 'tenant' ? <TenantPackagePicker key={token} token={token} /> : <ProjectPicker key={token} token={token} />
       )}
     </main>
   );

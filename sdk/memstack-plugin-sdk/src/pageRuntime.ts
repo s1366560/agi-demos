@@ -1,11 +1,13 @@
 /** Capabilities available to a signed rich-page IIFE inside its isolated document. */
 export interface RichPageContext {
   readonly tenantId: string;
-  readonly projectId: string;
+  readonly projectId: string | null;
   readonly target: "web" | "desktop-renderer";
   readonly platform: "web" | "desktop-renderer";
   readonly locale: string;
   readonly pathname: string;
+  readonly search: string;
+  readonly hash: string;
   readonly commands: readonly string[];
   readonly deviceTools: readonly string[];
 }
@@ -16,9 +18,10 @@ export interface RichPageCallOptions {
 }
 
 export interface RichPageRuntime {
+  assetUrl(path: string): string;
   scope(): Promise<RichPageContext>;
   getContext(): Promise<RichPageContext>;
-  navigate(path: string): Promise<void>;
+  navigate(path: string, options?: { replace?: boolean }): Promise<void>;
   invoke(
     command: string,
     payload?: Record<string, unknown>,

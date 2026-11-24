@@ -17,7 +17,9 @@ if TYPE_CHECKING:
     from src.infrastructure.plugins.v2.signed_optional_business_v2 import SignedPackageBytesV2
 
 
-def renderer_projection(package: "SignedPackageBytesV2 | None" = None) -> dict[str, object]:
+def renderer_projection(
+    package: "SignedPackageBytesV2 | None" = None, *, scope: str = "project"
+) -> dict[str, object]:
     if package is None or "ui.slot" not in package.approved_permissions:
         return {
             "pages": [],
@@ -25,9 +27,11 @@ def renderer_projection(package: "SignedPackageBytesV2 | None" = None) -> dict[s
             "has_desktop_ui": False,
             "has_web_ui": False,
         }
-    pages = package.contribution.pages
+    pages = tuple(page for page in package.contribution.pages if page.scope == scope)
     slots = [
-        target for target in ("web", "desktop-renderer") if package.page_slot(target) is not None
+        target
+        for target in ("web", "desktop-renderer")
+        if scope == "project" and package.page_slot(target) is not None
     ]
     targets = {target for page in pages for target in page.targets}.union(slots)
     return {
@@ -39,14 +43,19 @@ def renderer_projection(package: "SignedPackageBytesV2 | None" = None) -> dict[s
 
 
 def rich_page_resource(
-    package: "SignedPackageBytesV2", page_id: str, target: str
+    package: "SignedPackageBytesV2", page_id: str, target: str, *, scope: str = "project"
 ) -> dict[str, object]:
     from memstack_plugin_sdk.rich_pages import RICH_PAGE_SCHEMA
 
     if "ui.slot" not in package.approved_permissions:
         raise OptionalBusinessError("forbidden", "page is not approved for this package")
     page = next(
-        (p for p in package.contribution.pages if p.id == page_id and target in p.targets), None
+        (
+            p
+            for p in package.contribution.pages
+            if p.id == page_id and target in p.targets and p.scope == scope
+        ),
+        None,
     )
     if page is None:
         raise OptionalBusinessError("page_not_found", "page is unavailable for this target")
@@ -67,12 +76,13 @@ def rich_page_resource(
         "navigation_routes": [
             route
             for sibling in package.contribution.pages
-            if target in sibling.targets
+            if target in sibling.targets and sibling.scope == scope
             for route in sibling.routes
         ],
         "commands": page.commands,
         "device_tools": page.device_tools,
         "entry": resource(page.entry),
+        **({"resources": [resource(item) for item in page.resources]} if page.resources else {}),
         **({"style": resource(page.style)} if page.style else {}),
     }
 
@@ -82,7 +92,7 @@ async def check_page_routes(
 ) -> None:
     from memstack_plugin_sdk.rich_pages import route_bindings
 
-    routes = route_bindings(candidate.contribution.pages)
+    routes = route_bindings(tuple(p for p in candidate.contribution.pages if p.scope == "project"))
     if not routes:
         return
     siblings = await service.db.scalars(
@@ -100,5 +110,7 @@ async def check_page_routes(
             raise OptionalBusinessError(
                 "conflict", f"cannot verify active page routes of {plugin_id}"
             ) from error
-        if routes & route_bindings(active.contribution.pages):
+        if routes & route_bindings(
+            tuple(p for p in active.contribution.pages if p.scope == "project")
+        ):
             raise OptionalBusinessError("conflict", f"page route already provided by {plugin_id}")

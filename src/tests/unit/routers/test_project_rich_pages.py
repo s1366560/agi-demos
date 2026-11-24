@@ -352,3 +352,32 @@ async def test_route_ownership_survives_an_unreadable_enabled_sibling():
     service.db.scalars.return_value = ["unreadable.release"]
     with pytest.raises(OptionalBusinessError, match="cannot verify active page routes"):
         await check_page_routes(service, candidate)
+
+
+def test_worker_and_binary_assets_are_staged_and_digest_checked(tmp_path):
+    from memstack_plugin_sdk.pack import stage_contribution
+
+    source, destination = tmp_path / "package", tmp_path / "archive"
+    source.mkdir()
+    files = {
+        "app.js": b"app.mount(1)",
+        "app.css": b"main{padding:1em}",
+        "layout.worker.js": b"self.postMessage(1)",
+        "font.woff2": b"wOF2\xff\x00",
+    }
+    descriptor = {
+        **page(),
+        "commands": [],
+        "query_params": ["filter"],
+        "resources": [asset(name, files[name]) for name in ("layout.worker.js", "font.woff2")],
+    }
+    for path, data in files.items():
+        (source / path).write_bytes(data)
+    (source / "contributions.json").write_text(
+        json.dumps({"schema": "memstack.plugin.contributions/1", "pages": [descriptor]})
+    )
+    stage_contribution(source, destination)
+    assert (destination / "font.woff2").read_bytes() == files["font.woff2"]
+    (source / "layout.worker.js").write_bytes(b"another worker")
+    with pytest.raises(ValueError, match="digest"):
+        stage_contribution(source, destination)

@@ -210,6 +210,33 @@
         "app.knowledge.memories.write"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "list-entities",
+      "host_operation": "app.knowledge.entities.list",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.entities.list"
+      ],
+      "accepts_input": true
+    },
+    {
+      "id": "entity-types",
+      "host_operation": "app.knowledge.entities.types",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.entities.types"
+      ],
+      "accepts_input": true
+    },
+    {
+      "id": "entity-relationships",
+      "host_operation": "app.knowledge.entities.relationships",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.entities.relationships"
+      ],
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -306,6 +333,38 @@
       "entry": {
         "path": "ui/recent.js",
         "digest": "sha256:f8814a574dc653d2df696d7008a2d287f13d8e56fcf9a4f2bf533d7f5018c95c"
+      }
+    },
+    {
+      "id": "entities",
+      "title": "Graph entities",
+      "routes": [
+        "/entities",
+        "/project/:projectId/entities",
+        "/tenant/:tenantId/project/:projectId/entities"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "list-entities",
+        "entity-types",
+        "entity-relationships"
+      ],
+      "query_params": [
+        "page",
+        "type",
+        "q",
+        "sort"
+      ],
+      "entry": {
+        "path": "ui/entities.js",
+        "digest": "sha256:2995bd1a3104abe8415877dfb69a345f3a32c6d1116f6bed2840e02e282d3689"
+      },
+      "style": {
+        "path": "ui/entities.css",
+        "digest": "sha256:6d3027ad7aac3118513908ffcf859d1d6a781d085746e6f9ddc1ea2207dd0a51"
       }
     }
   ]

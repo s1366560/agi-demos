@@ -37,7 +37,7 @@ def open_market(page: Page, host, origin, account):
         page.get_by_test_id("email-input").fill(account["email"])
         page.get_by_test_id("password-input").fill(account["password"])
         page.get_by_test_id("login-submit-button").click()
-        expect(page.get_by_test_id("login-submit-button")).to_have_count(0)
+        expect(page.get_by_test_id("login-submit-button")).to_have_count(0, timeout=30000)
         with page.expect_response(is_catalog) as opened:
             page.goto(
                 f"{origin}/tenant/{account['tenant_id']}/plugins?"

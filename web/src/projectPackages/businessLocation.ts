@@ -1,12 +1,16 @@
 export function businessLocation(
   pathname: string,
   tenant: string,
-  project: string,
+  project: string | null,
   plugin: string
 ) {
   return {
     pathname,
-    search: new URLSearchParams({ tenant, project, businessPackage: plugin }).toString(),
+    search: new URLSearchParams({
+      tenant,
+      ...(project ? { project } : { packageScope: 'tenant' }),
+      businessPackage: plugin,
+    }).toString(),
   };
 }
 
@@ -55,4 +59,20 @@ export function businessRouteScope(path: string, query: URLSearchParams, current
   return tenant && project && (plugin || pathProject || scopedTenant)
     ? { tenant, project, plugin }
     : null;
+}
+
+/** A bookmark may select a tenant release before the user selects any project. */
+export function tenantPageScope(path: string, query: URLSearchParams) {
+  const [, root, owner, section] = path.split('/');
+  if (root !== 'tenant' || !owner || !section || section === 'project') return null;
+  if (
+    ['projects', 'users', 'plugins', 'org-settings', 'settings', 'profile', 'audit-logs'].includes(
+      section
+    )
+  )
+    return null;
+  if (['tenant', 'businessPackage', 'packageScope'].some((key) => query.getAll(key).length > 1))
+    return null;
+  if (query.has('project') || (query.has('tenant') && query.get('tenant') !== owner)) return null;
+  return owner;
 }

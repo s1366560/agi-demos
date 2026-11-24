@@ -8,6 +8,15 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 RICH_PAGE_SCHEMA = "memstack.rich-page/1"
+_RESOURCE_TYPES = {
+    ".js": "application/javascript",
+    ".css": "text/css",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".jpg": "image/jpeg",
+}
 _RENDERERS = {"web", "desktop-renderer"}
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 _SLOT = re.compile(r"[a-z][a-z0-9-]{0,63}@[1-9][0-9]{0,3}")
@@ -48,7 +57,8 @@ class PageAsset:
             raise ValueError("page asset is empty or exceeds 8 MiB")
         if self.digest != "sha256:" + hashlib.sha256(raw).hexdigest():
             raise ValueError("page asset differs from its signed digest")
-        raw.decode("utf-8")
+        if self.path.endswith((".js", ".css")):
+            raw.decode("utf-8")
         return raw
 
 
@@ -62,27 +72,33 @@ class RichPage:
     style: PageAsset | None
     commands: tuple[str, ...]
     device_tools: tuple[str, ...]
+    scope: str = "project"
     home: bool = False
     slots: tuple[str, ...] = ()
     contributes_to: str | None = None
 
+    resources: tuple[PageAsset, ...] = ()
+    query_params: tuple[str, ...] = ()
+
     @property
     def assets(self) -> tuple[PageAsset, ...]:
-        return (self.entry, self.style) if self.style else (self.entry,)
+        return (self.entry, *((self.style,) if self.style else ()), *self.resources)
 
     def descriptor(self) -> dict[str, object]:
         return {
             "id": self.id,
+            **({"scope": self.scope} if self.scope == "tenant" else {}),
             "title": self.title,
             "routes": self.routes,
             "targets": sorted(self.targets),
+            **({"query_params": self.query_params} if self.query_params else {}),
             **({"slots": self.slots} if self.slots else {}),
             **({"contributes_to": self.contributes_to} if self.contributes_to else {}),
             **({"home": True} if self.home else {}),
         }
 
 
-def _asset(value: object, suffix: str) -> PageAsset:
+def _asset(value: object, suffix: str | None) -> PageAsset:
     if not isinstance(value, dict) or value.keys() != {"path", "digest"}:
         raise ValueError("expected a page asset path and digest")
     path = value["path"]
@@ -94,12 +110,21 @@ def _asset(value: object, suffix: str) -> PageAsset:
         relative.is_absolute()
         or relative.as_posix() != path
         or ".." in relative.parts
-        or relative.suffix != suffix
+        or (relative.suffix != suffix if suffix else relative.suffix not in _RESOURCE_TYPES)
     ):
         raise ValueError("invalid page asset path or type")
     if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
         raise ValueError("invalid page asset digest")
     return PageAsset(path, digest)
+
+
+def _resources(value: object) -> tuple[PageAsset, ...]:
+    if not isinstance(value, list) or len(value) > 64:
+        raise ValueError("expected up to 64 page resources")
+    assets = tuple(_asset(item, None) for item in value)
+    if len({asset.path for asset in assets}) != len(assets):
+        raise ValueError("duplicate page resource")
+    return assets
 
 
 def _strings(value: object, pattern: re.Pattern[str]) -> tuple[str, ...]:
@@ -145,10 +170,13 @@ def _parse_page(value: object) -> RichPage:
         "targets",
         "commands",
         "device_tools",
+        "scope",
         "entry",
         "style",
         "home",
         "slots",
+        "query_params",
+        "resources",
         "contributes_to",
     }:
         raise ValueError("unsupported rich page declaration")
@@ -176,10 +204,28 @@ def _parse_page(value: object) -> RichPage:
         raise ValueError("rich pages require routes and supported renderer targets")
     for route in routes:
         _check_route(route)
+    scope = value.get("scope", "project")
+    if scope not in ("tenant", "project"):
+        raise ValueError("unsupported rich page scope")
+    if scope == "tenant" and (
+        not routes
+        or any(
+            not route.startswith("/tenant/:tenantId/") or ":projectId" in route.split("/")
+            for route in routes
+        )
+        or value.get("device_tools")
+        or slots
+        or destination
+        or home
+    ):
+        raise ValueError("tenant pages require tenant routes and cloud commands")
     return RichPage(
+        scope=scope,
         id=page_id,
         home=home,
         slots=slots,
+        resources=_resources(value.get("resources", [])),
+        query_params=_strings(value.get("query_params", []), _IDENTIFIER),
         contributes_to=destination,
         title=title,
         routes=routes,

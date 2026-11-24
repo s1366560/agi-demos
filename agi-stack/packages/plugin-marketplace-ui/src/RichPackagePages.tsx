@@ -1,17 +1,25 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { connectPage } from '../../plugin-slots/src/richPageBridge';
-import { menuPath, routeRank, verifyPageDocument } from '../../plugin-slots/src/richPage';
+import {
+  pageSearch,
+  splitPageLocation,
+} from "../../plugin-slots/src/pageLocation";
+import { connectPage } from "../../plugin-slots/src/richPageBridge";
+import {
+  menuPath,
+  routeRank,
+  verifyPageDocument,
+} from "../../plugin-slots/src/richPage";
 import type {
   DevicePageCall,
   PackagePage,
   PageScope,
   PageTarget,
   RichPage,
-} from '../../plugin-slots/src/richPage';
-import type { MarketplaceTransport } from './client';
+} from "../../plugin-slots/src/richPage";
+import type { MarketplaceTransport } from "./client";
 
-const BASE = '/api/v1/platform-plugins/v2/optional-business';
+import { packageBase, packageScope } from "./pluginMarketTypes";
 type Release = {
   plugin_id: string;
   actual_digest: string | null;
@@ -23,7 +31,10 @@ export interface RichPackagePagesProps {
   target: PageTarget;
   transport: MarketplaceTransport;
   pathname: string;
-  navigate(path: string, options?: { replace?: boolean; pluginId?: string }): void;
+  navigate(
+    path: string,
+    options?: { replace?: boolean; pluginId?: string },
+  ): void;
   management?: ReactNode;
   pluginId?: string;
   unmatched?: ReactNode;
@@ -34,7 +45,7 @@ export interface RichPackagePagesProps {
     path: string,
     body: Record<string, unknown>,
     signal: AbortSignal,
-    onEvent: (value: unknown) => void
+    onEvent: (value: unknown) => void,
   ) => Promise<unknown>;
   revision?: number;
   locale?: string;
@@ -50,7 +61,9 @@ export interface RichPackagePagesProps {
 type Item = { pluginId: string; digest: string; page: PackagePage };
 type Selected = RichPackagePagesProps & { item: Item };
 
-function PackageFrame(props: Selected & { retired: boolean; onPending(count: number): void }) {
+function PackageFrame(
+  props: Selected & { retired: boolean; onPending(count: number): void },
+) {
   const {
     transport,
     target,
@@ -65,8 +78,10 @@ function PackageFrame(props: Selected & { retired: boolean; onPending(count: num
   current.current = props;
   const frame = useRef<HTMLIFrameElement>(null);
   const dispose = useRef<(() => void) | undefined>(undefined);
-  const [loaded, setLoaded] = useState<{ page: RichPage; html: string } | null>(null);
-  const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState<{ page: RichPage; html: string } | null>(
+    null,
+  );
+  const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   useEffect(() => {
     if (ready && !props.retired && !error) {
@@ -76,15 +91,21 @@ function PackageFrame(props: Selected & { retired: boolean; onPending(count: num
   useEffect(() => {
     const controller = new AbortController();
     const query = new URLSearchParams({
-      tenant_id: tenantId,
-      project_id: projectId,
+      ...packageScope(tenantId, projectId),
       expected_digest: digest,
       target,
       page_id: id,
     });
-    void transport<RichPage>(BASE + '/' + encodeURIComponent(pluginId) + '/ui?' + query, {
-      signal: controller.signal,
-    })
+    void transport<RichPage>(
+      packageBase(projectId) +
+        "/" +
+        encodeURIComponent(pluginId) +
+        "/ui?" +
+        query,
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (page) => ({
         page,
         html: await verifyPageDocument(page, target, digest, id),
@@ -94,7 +115,8 @@ function PackageFrame(props: Selected & { retired: boolean; onPending(count: num
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
-        const reason = cause instanceof Error ? cause.message : 'page_load_failed';
+        const reason =
+          cause instanceof Error ? cause.message : "page_load_failed";
         setError(reason);
         current.current.onStatus?.({
           pluginId,
@@ -119,13 +141,13 @@ function PackageFrame(props: Selected & { retired: boolean; onPending(count: num
     let alive = true;
     const watchdog = setTimeout(() => {
       if (!alive) return;
-      setError('page_runtime_unavailable');
+      setError("page_runtime_unavailable");
       current.current.onStatus?.({
         pluginId,
         digest,
         pageId: id,
         ready: false,
-        error: 'page_runtime_unavailable',
+        error: "page_runtime_unavailable",
       });
       dispose.current?.();
     }, 15000);
@@ -136,14 +158,28 @@ function PackageFrame(props: Selected & { retired: boolean; onPending(count: num
       host.port1.close();
     };
     host.port1.onmessage = (event) => {
-      if (!alive || close || event.data !== 'memstack.page.connect' || event.ports.length !== 1)
+      if (
+        !alive ||
+        close ||
+        event.data !== "memstack.page.connect" ||
+        event.ports.length !== 1
+      )
         return;
-      const path = BASE + '/' + encodeURIComponent(pluginId) + '/commands';
+      const path =
+        packageBase(projectId) +
+        "/" +
+        encodeURIComponent(pluginId) +
+        "/commands";
       close = connectPage(event.ports[0]!, page, {
         scope: { tenantId, projectId },
         target,
-        pathname: current.current.pathname,
-        locale: current.current.locale || document.documentElement.lang || navigator.language,
+        get pathname() {
+          return current.current.pathname;
+        },
+        locale:
+          current.current.locale ||
+          document.documentElement.lang ||
+          navigator.language,
         isRetired: () => current.current.retired,
         pendingChanged: (count) => current.current.onPending(count),
         status(loaded) {
@@ -151,32 +187,37 @@ function PackageFrame(props: Selected & { retired: boolean; onPending(count: num
           if (loaded) {
             setReady(true);
           } else {
-            setError('page_execution_failed');
+            setError("page_execution_failed");
             current.current.onStatus?.({
               pluginId,
               digest,
               pageId: id,
               ready: false,
-              error: 'page_execution_failed',
+              error: "page_execution_failed",
             });
             dispose.current?.();
           }
         },
-        navigate: (newPath) => current.current.navigate(newPath),
+        navigate: (newPath, options) =>
+          current.current.navigate(newPath, options),
         invoke(name, payload, signal, progress) {
           const body = {
-            tenant_id: tenantId,
-            project_id: projectId,
+            ...packageScope(tenantId, projectId),
             expected_digest: digest,
             command_id: name,
             ...(payload === undefined ? {} : { payload }),
           };
           if (progress) {
             if (!current.current.streamCommand)
-              return Promise.reject(new Error('package_stream_unavailable'));
-            return current.current.streamCommand(path + '?stream=true', body, signal, progress);
+              return Promise.reject(new Error("package_stream_unavailable"));
+            return current.current.streamCommand(
+              path + "?stream=true",
+              body,
+              signal,
+              progress,
+            );
           }
-          return transport(path, { method: 'POST', body, signal });
+          return transport(path, { method: "POST", body, signal });
         },
         device: (name, payload, signal) =>
           current.current.invokeDevice?.({
@@ -185,21 +226,23 @@ function PackageFrame(props: Selected & { retired: boolean; onPending(count: num
             tool: name,
             payload: payload ?? {},
             signal,
-          }) ?? Promise.reject(new Error('device_grant_unavailable')),
+          }) ?? Promise.reject(new Error("device_grant_unavailable")),
       });
       host.port1.close();
     };
     frame.current.contentWindow.postMessage(
-      { type: 'memstack.page.open', title: page.title, document: html },
-      '*',
-      [host.port2]
+      { type: "memstack.page.open", title: page.title, document: html },
+      "*",
+      [host.port2],
     );
   }
   if (error) return <p role="alert">{error}</p>;
   if (!loaded) return null;
   const frameUrl = new URL(
-    target === 'web' ? '/memstack-package-frame.html' : './memstack-package-frame.html',
-    location.href
+    target === "web"
+      ? "/memstack-package-frame.html"
+      : "./memstack-package-frame.html",
+    location.href,
   ).href;
   return (
     <iframe
@@ -210,7 +253,7 @@ function PackageFrame(props: Selected & { retired: boolean; onPending(count: num
       onLoad={connect}
       data-release-digest={digest}
       data-page-ready={ready}
-      style={{ display: 'block', width: '100%', minHeight: '65vh', border: 0 }}
+      style={{ display: "block", width: "100%", minHeight: "65vh", border: 0 }}
     />
   );
 }
@@ -232,28 +275,28 @@ function PageDiagnostics({
   actual?: string | undefined;
   error?: string | undefined;
 }) {
-  const zh = locale.startsWith('zh');
+  const zh = locale.startsWith("zh");
   return (
     <details>
-      <summary>{zh ? '页面诊断' : 'Page diagnostics'}</summary>
-      <dl style={{ overflowWrap: 'anywhere' }}>
-        <dt>{zh ? '运行端' : 'Renderer'}</dt>
+      <summary>{zh ? "页面诊断" : "Page diagnostics"}</summary>
+      <dl style={{ overflowWrap: "anywhere" }}>
+        <dt>{zh ? "运行端" : "Renderer"}</dt>
         <dd>{target}</dd>
-        <dt>{zh ? '插件页面' : 'Package page'}</dt>
+        <dt>{zh ? "插件页面" : "Package page"}</dt>
         <dd>
           {plugin} / {page}
         </dd>
-        <dt>{zh ? '项目选择的摘要' : 'Selected digest'}</dt>
+        <dt>{zh ? "项目选择的摘要" : "Selected digest"}</dt>
         <dd>
           <code>{selected}</code>
         </dd>
-        <dt>{zh ? '实际装载的摘要' : 'Loaded digest'}</dt>
+        <dt>{zh ? "实际装载的摘要" : "Loaded digest"}</dt>
         <dd>
-          <code>{actual ?? (zh ? '尚未装载' : 'Not loaded')}</code>
+          <code>{actual ?? (zh ? "尚未装载" : "Not loaded")}</code>
         </dd>
         {error && (
           <>
-            <dt>{zh ? '装载错误' : 'Load error'}</dt>
+            <dt>{zh ? "装载错误" : "Load error"}</dt>
             <dd>{error}</dd>
           </>
         )}
@@ -263,6 +306,32 @@ function PageDiagnostics({
 }
 
 /** Preserve the last verified frame while a new release is loading in the same scope. */
+/** A guest replacing its own filters already holds the new view and keyboard focus. */
+function RoutedPageRelease(props: Selected) {
+  const { pathname, search, hash } = splitPageLocation(props.pathname);
+  const address = pathname + pageSearch(search) + hash;
+  const requested = useRef<string | null>(null);
+  const [view, setView] = useState({ address, generation: 0 });
+  if (view.address !== address) {
+    const acknowledged = requested.current === address;
+    requested.current = null;
+    setView({ address, generation: view.generation + (acknowledged ? 0 : 1) });
+  }
+  return (
+    <PageRelease
+      key={view.generation}
+      {...props}
+      navigate={(path, options) => {
+        const next = splitPageLocation(path);
+        if (options?.replace && next.pathname === pathname)
+          requested.current =
+            next.pathname + pageSearch(next.search) + next.hash;
+        props.navigate(path, options);
+      }}
+    />
+  );
+}
+
 function PageRelease(props: Selected) {
   const { item } = props;
   const [active, setActive] = useState<Item | null>(null);
@@ -276,7 +345,8 @@ function PageRelease(props: Selected) {
   const visible = active?.digest ?? item.digest;
   const releases = [
     ...draining.filter(
-      (previous) => previous.digest !== item.digest && previous.digest !== visible
+      (previous) =>
+        previous.digest !== item.digest && previous.digest !== visible,
     ),
     ...(preparing ? [active, item] : [item]),
   ];
@@ -295,8 +365,10 @@ function PageRelease(props: Selected) {
                 pending.current.delete(release.digest);
                 setDraining((previous) =>
                   previous.some((entry) => entry.digest === release.digest)
-                    ? previous.filter((entry) => entry.digest !== release.digest)
-                    : previous
+                    ? previous.filter(
+                        (entry) => entry.digest !== release.digest,
+                      )
+                    : previous,
                 );
               }
             }}
@@ -304,9 +376,15 @@ function PageRelease(props: Selected) {
               props.onStatus?.(status);
               if (status.digest !== item.digest) return;
               if (status.ready) {
-                if (active && active.digest !== item.digest && pending.current.has(active.digest)) {
+                if (
+                  active &&
+                  active.digest !== item.digest &&
+                  pending.current.has(active.digest)
+                ) {
                   setDraining((previous) => [
-                    ...previous.filter((entry) => entry.digest !== active.digest),
+                    ...previous.filter(
+                      (entry) => entry.digest !== active.digest,
+                    ),
                     active,
                   ]);
                 }
@@ -320,10 +398,14 @@ function PageRelease(props: Selected) {
           />
         </div>
       ))}
-      {preparing && failure?.digest === item.digest && <p role="alert">{failure.reason}</p>}
+      {preparing && failure?.digest === item.digest && (
+        <p role="alert">{failure.reason}</p>
+      )}
       <PageDiagnostics
         target={props.target}
-        locale={props.locale || document.documentElement.lang || navigator.language}
+        locale={
+          props.locale || document.documentElement.lang || navigator.language
+        }
         plugin={item.pluginId}
         page={item.page.id}
         selected={item.digest}
@@ -335,10 +417,11 @@ function PageRelease(props: Selected) {
 }
 
 export function RichPackagePages(props: RichPackagePagesProps) {
-  const { scope, target, transport, pathname, revision = 0 } = props;
+  const { scope, target, transport, revision = 0 } = props;
+  const { pathname } = splitPageLocation(props.pathname);
   const [items, setItems] = useState<Item[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const { tenantId, projectId } = scope;
   useEffect(() => {
     let live = true;
@@ -348,16 +431,19 @@ export function RichPackagePages(props: RichPackagePagesProps) {
       controller = new AbortController();
       try {
         const query = new URLSearchParams({
-          tenant_id: tenantId,
-          project_id: projectId,
+          ...packageScope(tenantId, projectId),
         });
-        const data = await transport<{ items: Release[] }>(BASE + '/?' + query, {
-          signal: controller.signal,
-        });
+        const data = await transport<{ items: Release[] }>(
+          packageBase(projectId) + "/?" + query,
+          {
+            signal: controller.signal,
+          },
+        );
         if (!live) return;
         setItems(
           data.items.flatMap((release) =>
-            release.actual_digest && (release.status === 'enabled' || release.status === 'failed')
+            release.actual_digest &&
+            (release.status === "enabled" || release.status === "failed")
               ? (release.pages ?? [])
                   .filter((page) => page.targets.includes(target))
                   .map((page) => ({
@@ -365,15 +451,17 @@ export function RichPackagePages(props: RichPackagePagesProps) {
                     digest: release.actual_digest!,
                     page,
                   }))
-              : []
-          )
+              : [],
+          ),
         );
         setLoaded(true);
-        setError('');
+        setError("");
       } catch (cause) {
         if (live) {
           setItems([]);
-          setError(cause instanceof Error ? cause.message : 'page_catalog_failed');
+          setError(
+            cause instanceof Error ? cause.message : "page_catalog_failed",
+          );
         }
       } finally {
         controller = null;
@@ -381,20 +469,22 @@ export function RichPackagePages(props: RichPackagePagesProps) {
     };
     void refresh();
     const poll = setInterval(() => {
-      if (document.visibilityState !== 'hidden') void refresh();
+      if (document.visibilityState !== "hidden") void refresh();
     }, 5000);
-    window.addEventListener('focus', refresh);
+    window.addEventListener("focus", refresh);
     return () => {
       live = false;
       controller?.abort();
       clearInterval(poll);
-      window.removeEventListener('focus', refresh);
+      window.removeEventListener("focus", refresh);
     };
   }, [transport, tenantId, projectId, target, revision]);
 
   let bestRank: string | null = null;
   let selected: Item | undefined;
-  const navigable = props.pluginId ? items.filter((i) => i.pluginId === props.pluginId) : items;
+  const navigable = props.pluginId
+    ? items.filter((i) => i.pluginId === props.pluginId)
+    : items;
   for (const item of navigable) {
     for (const route of item.page.routes) {
       const rank = routeRank(route, pathname, scope);
@@ -405,43 +495,67 @@ export function RichPackagePages(props: RichPackagePagesProps) {
     }
   }
   const links = navigable.flatMap((item) => {
-    const path = item.page.routes.map((route) => menuPath(route, scope)).find(Boolean);
+    const path = item.page.routes
+      .map((route) => menuPath(route, scope))
+      .find(Boolean);
     return path ? [{ item, path }] : [];
   });
   const home = (links.find(({ item }) => item.page.home) ?? links[0])?.path;
-  const atHome = ['/', '/index.html', ''].includes(pathname);
-  const atManagement = ['/plugins', '/plugins/', '/project-packages.html'].includes(pathname);
-  const zh = (props.locale || document.documentElement.lang || navigator.language).startsWith('zh');
-  const managementLabel = props.managementLabel ?? (zh ? '管理插件' : 'Manage plugins');
+  const atHome = ["/", "/index.html", ""].includes(pathname);
+  const atManagement = [
+    "/plugins",
+    "/plugins/",
+    "/project-packages.html",
+  ].includes(pathname);
+  const zh = (
+    props.locale ||
+    document.documentElement.lang ||
+    navigator.language
+  ).startsWith("zh");
+  const managementLabel =
+    props.managementLabel ?? (zh ? "管理插件" : "Manage plugins");
   useEffect(() => {
     if (atHome && home) props.navigate(home, { replace: true });
   }, [atHome, home, props.navigate]);
 
   if (props.unmatched !== undefined && !selected && (loaded || error)) {
-    if (error && props.pluginId) return <><p role="alert">{error}</p>{props.unmatched}</>;
+    if (error && props.pluginId)
+      return (
+        <>
+          <p role="alert">{error}</p>
+          {props.unmatched}
+        </>
+      );
     return props.unmatched;
   }
-  const slots = new Set(selected?.page.slots?.map((name) => selected.pluginId + '/' + name));
-  const embedded = items.filter((i) => i.page.contributes_to && slots.has(i.page.contributes_to));
+  const slots = new Set(
+    selected?.page.slots?.map((name) => selected.pluginId + "/" + name),
+  );
+  const embedded = items.filter(
+    (i) => i.page.contributes_to && slots.has(i.page.contributes_to),
+  );
   return (
-    <div className="project-business-pages" data-testid="project-business-pages">
+    <div
+      className="project-business-pages"
+      data-testid="project-business-pages"
+    >
       <nav
         className="project-business-navigation"
-        aria-label={zh ? '项目导航' : 'Project navigation'}
+        aria-label={zh ? "项目导航" : "Project navigation"}
       >
         {props.backToMarket}
         {links.length > 0 && (
           <label>
-            {zh ? '业务页面' : 'Applications'}
+            {zh ? "业务页面" : "Applications"}
             <select
-              value={links.find(({ item }) => item === selected)?.path ?? ''}
+              value={links.find(({ item }) => item === selected)?.path ?? ""}
               onChange={(event) => props.navigate(event.target.value)}
             >
               <option value="" disabled>
-                {selected?.page.title ?? (zh ? '选择页面' : 'Choose a page')}
+                {selected?.page.title ?? (zh ? "选择页面" : "Choose a page")}
               </option>
               {links.map(({ item, path }) => (
-                <option key={item.pluginId + '/' + item.page.id} value={path}>
+                <option key={item.pluginId + "/" + item.page.id} value={path}>
                   {item.page.title}
                 </option>
               ))}
@@ -451,8 +565,8 @@ export function RichPackagePages(props: RichPackagePagesProps) {
         {props.management != null && (
           <button
             type="button"
-            aria-current={atManagement ? 'page' : undefined}
-            onClick={() => props.navigate('/plugins')}
+            aria-current={atManagement ? "page" : undefined}
+            onClick={() => props.navigate("/plugins")}
           >
             {managementLabel}
           </button>
@@ -462,37 +576,52 @@ export function RichPackagePages(props: RichPackagePagesProps) {
       {atManagement ? (
         props.management
       ) : selected ? (
-        <PageRelease
-          key={JSON.stringify([tenantId, projectId, selected.pluginId, selected.page.id, pathname])}
+        <RoutedPageRelease
+          key={JSON.stringify([
+            tenantId,
+            projectId,
+            selected.pluginId,
+            selected.page.id,
+            pathname,
+          ])}
           {...props}
           item={selected}
         />
       ) : (
         !error &&
         (!loaded || (atHome && home) ? (
-          <p role="status">{zh ? '正在加载…' : 'Loading…'}</p>
+          <p role="status">{zh ? "正在加载…" : "Loading…"}</p>
         ) : (
           <p role="status">
             {atHome
               ? zh
-                ? '此项目尚无可打开的业务页面。'
-                : 'This project has no available application pages.'
+                ? "此项目尚无可打开的业务页面。"
+                : "This project has no available application pages."
               : zh
-                ? '此页面在当前项目中不可用。'
-                : 'This page is unavailable in this project.'}
+                ? "此页面在当前项目中不可用。"
+                : "This page is unavailable in this project."}
           </p>
         ))
       )}
       {embedded.map((item) => (
         <section
-          key={JSON.stringify([tenantId, projectId, selected?.pluginId, pathname, item.pluginId, item.page.id])}
+          key={JSON.stringify([
+            tenantId,
+            projectId,
+            selected?.pluginId,
+            pathname,
+            item.pluginId,
+            item.page.id,
+          ])}
           aria-label={item.page.title}
         >
-          <PageRelease
+          <RoutedPageRelease
             {...props}
             item={item}
             onStatus={() => {}}
-            navigate={(path) => props.navigate(path, { pluginId: item.pluginId })}
+            navigate={(path, options) =>
+              props.navigate(path, { ...options, pluginId: item.pluginId })
+            }
           />
         </section>
       ))}

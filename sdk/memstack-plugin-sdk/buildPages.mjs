@@ -13,27 +13,30 @@ function inside(root, path) {
 }
 
 /** Compile package-owned entry points and update their signed contribution descriptors. */
-export async function buildPackagePages({ root, sourceDirectory, entries, banner }) {
+export async function buildPackagePages({ root, sourceDirectory, entries, banner, contribution, plugins = [], resourceEntries = {} }) {
   const source = inside(root, sourceDirectory);
   const require = createRequire(join(source, 'package.json'));
   const { build } = require('esbuild');
   const descriptor = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
-  const contractPath = inside(root, descriptor.contribution ?? 'contributions.json');
+  const contractPath = inside(root, contribution ?? descriptor.contribution ?? 'contributions.json');
+  const assetRoot = resolve(contractPath, '..');
   const contract = JSON.parse(await readFile(contractPath, 'utf8'));
   const outputs = new Map();
   for (const [id, entry] of Object.entries(entries)) {
     const page = contract.pages.find((item) => item.id === id);
     if (!page) throw new Error('Unknown signed page: ' + id);
-    const destination = inside(root, page.entry.path);
+    const destination = inside(assetRoot, page.entry.path);
     const { outputFiles } = await build({
       entryPoints: [inside(source, entry)], outfile: destination,
+      nodePaths: [join(source, 'node_modules')], plugins,
+      tsconfigRaw: { compilerOptions: { jsx: 'react-jsx' } },
       bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', minify: true,
       define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'inline',
       ...(banner ? { banner } : {}), write: false,
     });
     for (const file of outputFiles) {
       const asset = file.path === destination ? page.entry : page.style;
-      if (!asset || inside(root, asset.path) !== file.path) {
+      if (!asset || inside(assetRoot, asset.path) !== file.path) {
         throw new Error('Page emits an undeclared asset: ' + file.path);
       }
       const digest = 'sha256:' + createHash('sha256').update(file.contents).digest('hex');
@@ -44,11 +47,35 @@ export async function buildPackagePages({ root, sourceDirectory, entries, banner
       outputs.set(file.path, { digest, contents: file.contents });
     }
   }
+  const declared = new Set(contract.pages.flatMap((page) =>
+    (page.resources ?? []).map((resource) => resource.path)));
+  for (const [path, input] of Object.entries(resourceEntries)) {
+    if (!declared.has(path)) throw new Error('Undeclared page resource: ' + path);
+    const destination = inside(assetRoot, path);
+    let contents = await readFile(inside(source, input));
+    if (path.endsWith('.js')) {
+      const { outputFiles } = await build({
+        entryPoints: [inside(source, input)], outfile: destination, bundle: true,
+        format: path.endsWith('.worker.js') ? 'iife' : 'esm', platform: 'browser',
+        nodePaths: [join(source, 'node_modules')], jsx: 'automatic', minify: true,
+        tsconfigRaw: { compilerOptions: { jsx: 'react-jsx' } },
+        define: { 'process.env.NODE_ENV': '"production"' }, write: false,
+      });
+      if (outputFiles.length !== 1) throw new Error('Expected one resource: ' + path);
+      contents = outputFiles[0].contents;
+    }
+    if (outputs.has(destination)) throw new Error('Conflicting resource: ' + path);
+    const digest = 'sha256:' + createHash('sha256').update(contents).digest('hex');
+    outputs.set(destination, { digest, contents });
+  }
   // Shared entries, e.g. overview and detail, must resolve to the same bytes.
   for (const page of contract.pages) {
-    for (const asset of [page.entry, page.style].filter(Boolean)) {
-      const output = outputs.get(inside(root, asset.path));
-      if (output) asset.digest = output.digest;
+    for (const asset of [page.entry, page.style, ...(page.resources ?? [])].filter(Boolean)) {
+      const path = inside(assetRoot, asset.path);
+      const output = outputs.get(path);
+      // Hand-authored scripts and styles are already at their final destination.
+      asset.digest = output?.digest ?? 'sha256:' + createHash('sha256')
+        .update(await readFile(path)).digest('hex');
     }
   }
   for (const [file, { contents }] of outputs) await writeFile(file, contents);

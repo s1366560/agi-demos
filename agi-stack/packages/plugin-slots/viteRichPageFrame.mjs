@@ -10,7 +10,7 @@ const bootstrap = readFileSync(
 const hash = createHash("sha256").update(bootstrap).digest("base64");
 const policy =
   "default-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; " +
-  "connect-src 'none'; object-src 'none'; worker-src 'none'; img-src data:; font-src data:; " +
+  "connect-src 'none'; object-src 'none'; worker-src data:; img-src data:; font-src data:; " +
   "style-src 'unsafe-inline' data:; script-src 'sha256-" +
   hash +
   "' data:";

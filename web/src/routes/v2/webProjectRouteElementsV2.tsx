@@ -1,6 +1,6 @@
 import { Suspense, type ReactNode } from 'react';
 
-import { Navigate, Route } from 'react-router-dom';
+import { Navigate, Route, useParams } from 'react-router-dom';
 
 import { SchemaLayout } from '../../layouts/SchemaLayout';
 
@@ -10,7 +10,6 @@ import {
   NewMemory,
   MemoryDetail,
   MemoryGraph,
-  EntitiesList,
   CommunitiesList,
   EnhancedSearch,
   Maintenance,
@@ -33,6 +32,20 @@ import {
 } from './webDefaultRouteComponentsV2';
 import { WebRoutePageLoaderV2 as PageLoader } from './WebRoutePageLoaderV2';
 import { LegacyTenantConversationRedirect, ProjectChannelsRedirect } from './webRouteRedirectsV2';
+
+function ProjectPackageMarketRedirect() {
+  const { tenantId, projectId } = useParams();
+  if (!tenantId || !projectId) return null;
+  return (
+    <Navigate
+      replace
+      to={{
+        pathname: '/tenant/' + encodeURIComponent(tenantId) + '/plugins',
+        search: new URLSearchParams({ projectId }).toString(),
+      }}
+    />
+  );
+}
 
 export function createProjectRouteElementsV2(): ReactNode {
   return (
@@ -84,13 +97,9 @@ export function createProjectRouteElementsV2(): ReactNode {
           }
         />
         <Route
-          handle={{ pluginFeature: 'project-entities' }}
+          handle={{ pluginFeature: 'project-entities', signedPage: true }}
           path="entities"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <EntitiesList />
-            </Suspense>
-          }
+          element={<ProjectPackageMarketRedirect />}
         />
         <Route
           handle={{ pluginFeature: 'project-communities' }}

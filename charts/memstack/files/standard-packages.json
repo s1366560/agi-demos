@@ -22,7 +22,10 @@
       "ui.slot",
       "graph.projection.compute",
       "app.knowledge.memories.read",
-      "app.knowledge.memories.write"
+      "app.knowledge.memories.write",
+      "app.knowledge.entities.list",
+      "app.knowledge.entities.types",
+      "app.knowledge.entities.relationships"
     ]
   },
   {
@@ -33,7 +36,13 @@
       "app.workspace.directory.read",
       "app.workspace.detail.read",
       "app.workspace.create",
-      "app.workspace.settings.update"
+      "app.workspace.settings.update",
+      "app.workspace.members.read",
+      "app.workspace.members.write",
+      "app.workspace.posts.read",
+      "app.workspace.posts.write",
+      "app.workspace.tasks.read",
+      "app.workspace.tasks.write"
     ]
   },
   {
@@ -45,6 +54,7 @@
       "app.automation.schedules.read",
       "app.automation.schedules.write",
       "app.automation.schedules.run",
+      "app.automation.schedules.delete",
       "storage.read",
       "storage.write"
     ]
@@ -54,6 +64,7 @@
     "permissions": [
       "tools.execute",
       "ui.slot",
+      "app.environments.inventory.read",
       "app.environments.sandbox.read",
       "app.environments.sandbox.prepare",
       "app.environments.terminal.authorize"

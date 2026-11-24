@@ -62,12 +62,17 @@
     if (data.type === "result") call.resolve(data.value);
     else call.reject(new Error(data.error || "page_request_failed"));
   };
+  const resources = JSON.parse(document.getElementById("memstack-resources")?.textContent || "{}");
   const scope = () => request("scope");
   Object.defineProperty(window, "memstack", {
     value: Object.freeze({
       scope,
       getContext: scope,
-      navigate: (path) => request("navigate", { path }),
+      assetUrl(path) {
+        if (!Object.hasOwn(resources, path)) throw new Error("page_resource_unavailable");
+        return resources[path];
+      },
+      navigate: (path, options) => request("navigate", { path, replace: options?.replace === true }),
       invoke: (name, payload, options = {}) =>
         request(
           "invoke",

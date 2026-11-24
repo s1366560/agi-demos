@@ -348,6 +348,22 @@ class TestGraphRouter:
         assert kwargs["project_id"] == test_project_db.id
         assert kwargs["is_superuser"] is False
 
+    async def test_signed_scope_hides_other_project_entities_from_admin(
+        self, test_db: AsyncSession, test_project_db: Project, test_user: User
+    ) -> None:
+        store = _store()
+        store.get_entity = AsyncMock(return_value={"uuid": "entity-1", "project_id": "other"})
+        test_user.is_superuser = True
+        with pytest.raises(HTTPException) as error:
+            await get_entity_relationships(
+                entity_id="entity-1",
+                project_id=test_project_db.id,
+                current_user=test_user,
+                graph_application=_application(store, test_db),
+            )
+        assert error.value.status_code == 404
+        store.get_entity_relationships.assert_not_awaited()
+
     @pytest.mark.asyncio
     async def test_get_entity_relationships_maps_rows_to_response(
         self,

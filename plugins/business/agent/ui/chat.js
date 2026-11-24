@@ -1,6 +1,8 @@
 (async () => {
   const sdk = window.memstack;
   const ctx = await sdk.getContext();
+  const { mountTranscriptViewport, renderAnswer, releaseAnswers } =
+    await import(sdk.assetUrl('ui/transcript.js'));
   const t = (en, zh) => ctx.locale.startsWith('zh') ? zh : en;
   const desktop = ctx.platform === 'desktop-renderer';
   const hasLocalChat = desktop && ctx.deviceTools.includes('local_chat');
@@ -25,6 +27,13 @@
   const older = element('button', t('Earlier messages', '更早的消息'));
   older.hidden = true;
   const transcript = element('ol');
+  const viewport = element('div');
+  viewport.className = 'agent-transcript';
+  viewport.tabIndex = 0;
+  viewport.setAttribute('role', 'region');
+  viewport.setAttribute('aria-label', t('Conversation history', '会话历史'));
+  viewport.append(transcript);
+  const latest = element('button', t('Jump to latest', '跳至最新'));
   const draft = element('textarea');
   draft.setAttribute('aria-label', t('Message', '消息'));
   draft.maxLength = 32000;
@@ -34,15 +43,27 @@
   const status = element('p');
   status.setAttribute('role', 'status');
   root.append(element('h1', t('Agent chat', '智能体对话')), select, newTarget, create, title, rename, refresh,
-    older, transcript, placement, draft, send, stop, status);
+    older, viewport, latest, placement, draft, send, stop, status);
 
   let active = false;
   let stopping = false;
   let run;
   let pendingDevice;
   let historyVersion = 0;
+  let displayedConversation;
   let before;
-  const link = ctx.pathname.match(/\/agent-workspace\/([^/]+)\/?$/);
+  let paging = false;
+  const scroll = mountTranscriptViewport(viewport, following => { latest.hidden = following; }, () => {
+    if (before && !paging) void earlier();
+  });
+  latest.onclick = () => scroll.followLatest();
+  window.addEventListener('pagehide', () => { scroll.dispose(); releaseAnswers(); }, { once: true });
+  async function earlier() {
+    if (paging || !before) return;
+    paging = true;
+    try { await history(true); } catch (error) { report(error); } finally { paging = false; }
+  }
+  const link = ctx.pathname.match(/\/(?:agent-workspace|agent\/chat)\/([^/]+)\/?$/);
   const target = () => select.selectedOptions[0]?.dataset.target;
   function controls() {
     const local = target() === 'local';
@@ -66,16 +87,31 @@
   }
   async function history(previous = false) {
     const version = ++historyVersion;
-    if (!previous) { transcript.replaceChildren(); before = undefined; }
+    if (displayedConversation !== select.value) {
+      releaseAnswers();
+      transcript.replaceChildren();
+      displayedConversation = select.value;
+      scroll.followLatest();
+    }
+    if (!previous) before = undefined;
     older.hidden = true;
     if (!previous) title.value = select.selectedOptions[0]?.text ?? '';
     controls();
     if (!select.value) return;
     const result = await sdk.invoke('chat-history', {conversation_id: select.value, ...(previous ? before : {})});
     if (version !== historyVersion) return;
-    const messages = result.messages.map(row => element('li', row.content));
+    if (!previous) releaseAnswers();
+    const messages = result.messages.map(row => {
+      const li = element('li');
+      li.dataset.timelineAnchorId = row.id ?? crypto.randomUUID();
+      li.dataset.role = row.role;
+      if (row.role === 'assistant_message') renderAnswer(li, row.content);
+      else li.textContent = row.content;
+      return li;
+    });
     if (previous) transcript.prepend(...messages);
-    else transcript.append(...messages);
+    else transcript.replaceChildren(...messages);
+    scroll.schedule();
     before = result.before;
     older.hidden = !before;
   }
@@ -127,8 +163,9 @@
     } catch (error) { report(error); }
     finally { active = false; controls(); }
   };
-  older.onclick = () => history(true).catch(report);
-  refresh.onclick = select.onchange = () => { status.textContent = ''; controls(); history().catch(report); };
+  older.onclick = earlier;
+  select.onchange = () => sdk.navigate('/agent/chat/' + encodeURIComponent(select.value)).catch(report);
+  refresh.onclick = () => { status.textContent = ''; controls(); history().catch(report); };
   draft.oninput = controls;
 
   stop.onclick = async () => {
@@ -163,15 +200,21 @@
   }
   async function cloudTurn(conversation, text) {
     const answer = element('li');
+    answer.dataset.timelineAnchorId = crypto.randomUUID();
+    let answerText = '';
     transcript.append(element('li', text), answer);
+    scroll.schedule();
     await sdk.invoke('chat-turn', {conversation_id: conversation, message: text, message_id: crypto.randomUUID()}, {
       onEvent(event) {
         if (event.type === 'accepted') {
           run = { target: 'cloud', conversation_id: conversation, run_id: event.run_id, revision: event.revision };
           draft.value = '';
           controls();
-        } else if (event.type === 'text_delta') answer.textContent += event.text;
-        else if (event.type === 'assistant_message') answer.textContent = event.text;
+        } else if (event.type === 'text_delta' || event.type === 'assistant_message') {
+          answerText = event.type === 'text_delta' ? answerText + event.text : event.text;
+          renderAnswer(answer, answerText);
+          scroll.schedule();
+        }
       },
     });
     await history();

@@ -19,11 +19,6 @@ export const MemoryGraph = lazy(() =>
     default: m.MemoryGraph,
   }))
 );
-export const EntitiesList = lazy(() =>
-  import('./project/EntitiesList').then((m) => ({
-    default: m.EntitiesList,
-  }))
-);
 export const CommunitiesList = lazy(() =>
   import('./project/CommunitiesList').then((m) => ({
     default: m.CommunitiesList as ComponentType,

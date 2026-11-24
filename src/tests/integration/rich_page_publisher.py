@@ -14,7 +14,9 @@ from memstack_plugin_sdk.pack import build
 from wasmtime import wat2wasm
 
 
-def publish_page(directory: Path, plugin: str, revision: int, key: Ed25519PrivateKey) -> bytes:
+def publish_page(
+    directory: Path, plugin: str, revision: int, key: Ed25519PrivateKey, *, worker: bool = False
+) -> bytes:
     directory.mkdir(parents=True)
     descriptor = {
         "plugin_id": plugin,
@@ -62,6 +64,23 @@ def publish_page(directory: Path, plugin: str, revision: int, key: Ed25519Privat
     add('Device label', () => host.device('device_label', {}));
   }
 })();""".replace("TITLE", json.dumps(title)).encode()
+    resources = []
+    if worker:
+        code = f"self.onmessage = () => self.postMessage('worker-{revision}');".encode()
+        (directory / "labels.worker.js").write_bytes(code)
+        resources.append(
+            {"path": "labels.worker.js", "digest": "sha256:" + hashlib.sha256(code).hexdigest()}
+        )
+        script = script.replace(
+            b"  add('Cloud label'",
+            b"""  add('Worker label', () => new Promise((resolve, reject) => {
+    const worker = new Worker(host.assetUrl('labels.worker.js'));
+    worker.onmessage = event => { worker.terminate(); resolve(event.data); };
+    worker.onerror = () => { worker.terminate(); reject(new Error('worker_failed')); };
+    worker.postMessage(null);
+  }));
+  add('Cloud label'""",
+        )
     (directory / "labels.js").write_bytes(script)
     document = {
         "schema": "memstack.plugin.contributions/1",
@@ -90,6 +109,7 @@ def publish_page(directory: Path, plugin: str, revision: int, key: Ed25519Privat
                 "targets": ["web", "desktop-renderer"],
                 "commands": ["get-label"],
                 "device_tools": ["device_label"],
+                **({"resources": resources} if resources else {}),
                 "entry": {
                     "path": "labels.js",
                     "digest": "sha256:" + hashlib.sha256(script).hexdigest(),
@@ -112,6 +132,7 @@ def main() -> None:
     from scripts.dev.npm_registry import STATE, distribute, signed_package
 
     parser = argparse.ArgumentParser(description=main.__doc__)
+    parser.add_argument("--worker", action="store_true")
     parser.add_argument("--slug", default="inventory-market-qa")
     parser.add_argument("--publisher-directory", type=Path, default=Path(".memstack/standard"))
     parser.add_argument("--registry-state", type=Path, default=STATE)
@@ -142,7 +163,9 @@ def main() -> None:
         for revision in (1, 2):
             archive = root / f"{revision}.mspkg"
             archive.write_bytes(
-                publish_page(root / str(revision), "memstack-" + args.slug, revision, key)
+                publish_page(
+                    root / str(revision), "memstack-" + args.slug, revision, key, worker=args.worker
+                )
             )
             packages.append(signed_package(archive, public, root))
         distribute("publish", packages, args.registry_state)

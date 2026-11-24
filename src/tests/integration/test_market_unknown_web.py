@@ -44,7 +44,17 @@ def cloud_label(
         frame.get_by_role("button", name="Cloud label").click()
     assert call.value.ok
     assert call.value.request.post_data_json["expected_digest"] == expected_digest
-    expect(frame.locator("output").first).to_contain_text(f"python-{revision}")
+    expect(
+        frame.get_by_role("button", name="Cloud label").locator(
+            "xpath=following-sibling::output[1]"
+        )
+    ).to_contain_text(f"python-{revision}")
+    if os.getenv("MEMSTACK_QA_MARKET_WORKER") == "1":
+        worker = frame.get_by_role("button", name="Worker label")
+        worker.click()
+        expect(worker.locator("xpath=following-sibling::output[1]")).to_contain_text(
+            f"worker-{revision}"
+        )
     expect(frame.get_by_role("button", name="Device label")).to_have_count(0)
     if snapshot:
         page.screenshot(path=snapshot)

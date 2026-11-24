@@ -174,6 +174,7 @@ describe('full workbench access for signed routes', () => {
 
   it('links a matching full route only when its feature and parent authority are enabled', () => {
     expect(hasFullWorkbenchRoute(path, scope, null, routesWithout())).toBe(true);
+    expect(hasFullWorkbenchRoute('/tenant/t/project/p/entities', scope, current, routesWithout())).toBe(false);
     expect(hasFullWorkbenchRoute(path, scope, current, routesWithout('project-workspaces'))).toBe(
       false
     );
