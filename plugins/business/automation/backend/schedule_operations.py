@@ -83,6 +83,12 @@ class Cron(BaseModel):
         return value
 
 
+class JobAction(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["system_event", "agent_turn"]
+    text: str = Field(min_length=1, max_length=32768)
+
+
 class ScheduleEdit(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     job_id: Identifier | None = None
@@ -93,6 +99,12 @@ class ScheduleEdit(BaseModel):
     interval_seconds: int | None = Field(None, ge=1, le=31536000)
     trigger: Annotated[At | Every | Cron, Field(discriminator="kind")] | None = None
     description: str | None = Field(None, max_length=1000)
+    action: JobAction | None = None
+    delete_after_run: bool | None = None
+    conversation_mode: Literal["fresh", "reuse"] | None = None
+    delivery_kind: Literal["none", "announce"] | None = None
+    timeout_seconds: int | None = Field(None, ge=1)
+    max_retries: int | None = Field(None, ge=0)
 
 
 def _scope(ctx: "PackageOperationContext") -> ScopeV2:
@@ -114,6 +126,14 @@ def _row(job: CronJobResponse) -> dict[str, Any]:
         "schedule": job.schedule.model_dump(mode="json"),
         "timezone": job.timezone,
         "payload_kind": job.payload.kind.value,
+        "action_text": job.payload.config.get(
+            "message" if job.payload.kind.value == "agent_turn" else "content"
+        ),
+        "delivery_kind": job.delivery.kind.value,
+        "delete_after_run": job.delete_after_run,
+        "conversation_mode": job.conversation_mode.value,
+        "timeout_seconds": job.timeout_seconds,
+        "max_retries": job.max_retries,
         "interval_seconds": interval,
     }
 
@@ -159,8 +179,23 @@ async def save_schedule(
         "enabled": edit.enabled,
         "idempotency_key": edit.idempotency_key,
     }
-    if edit.description is not None:
-        values["description"] = edit.description
+    values.update(
+        edit.model_dump(
+            include={
+                "description",
+                "delete_after_run",
+                "conversation_mode",
+                "timeout_seconds",
+                "max_retries",
+            },
+            exclude_none=True,
+        )
+    )
+    if edit.action:
+        field = "message" if edit.action.kind == "agent_turn" else "content"
+        values["payload"] = {"kind": edit.action.kind, "config": {field: edit.action.text}}
+    if edit.delivery_kind:
+        values["delivery"] = {"kind": edit.delivery_kind, "config": {}}
     if edit.trigger and edit.interval_seconds is not None:
         raise HTTPException(422, _("Specify only one schedule"))
     trigger = edit.trigger
@@ -174,12 +209,23 @@ async def save_schedule(
         if edit.job_id is None:
             create = CronJobCreate.model_validate(
                 {
-                    **values,
                     "payload": {"kind": "system_event", "config": {"content": edit.name}},
+                    **values,
                 }
             )
             job = await cron.create_cron_job(project, create, authority)
         else:
+            if edit.action:
+                previous = await authority.services.cron_jobs.get_job(edit.job_id)
+                if (
+                    previous
+                    and previous.project_id == project
+                    and previous.payload.kind.value == edit.action.kind
+                ):
+                    values["payload"]["config"] = {
+                        **previous.payload.config,
+                        **values["payload"]["config"],
+                    }
             update = CronJobUpdate.model_validate(
                 {**values, "expected_revision": edit.expected_revision}
             )
@@ -204,8 +250,21 @@ async def run_schedule(
     )
 
 
+async def delete_schedule(
+    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+) -> dict[str, Any]:
+    edit = Revision.model_validate(payload)
+    project = ctx.scope.project_id
+    async with cron_authority(ctx.request, ctx.user, ctx.db, project, _scope(ctx)) as authority:
+        await cron.delete_cron_job(
+            project, edit.job_id, edit.expected_revision, edit.idempotency_key, authority
+        )
+    return {"id": edit.job_id}
+
+
 SCHEDULE_OPERATIONS: dict[str, "Operation"] = {
     "app.automation.schedules.read": schedules,
     "app.automation.schedules.write": save_schedule,
     "app.automation.schedules.run": run_schedule,
+    "app.automation.schedules.delete": delete_schedule,
 }

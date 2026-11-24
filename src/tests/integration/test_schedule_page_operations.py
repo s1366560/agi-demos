@@ -26,6 +26,45 @@ pytestmark = [
 ROOT = Path(__file__).resolve().parents[3]
 
 
+async def verify_one_shot_edit_and_delete(post, path):
+    once = {
+        "name": "One shot",
+        "enabled": False,
+        "description": "Meeting",
+        "action": {"kind": "agent_turn", "text": "Summarize the meeting"},
+        "conversation_mode": "fresh",
+        "delivery_kind": "none",
+        "max_retries": 0,
+        "trigger": {"kind": "at", "run_at": "2030-01-01T08:00:00+08:00"},
+        "idempotency_key": "create-once",
+    }
+    single = await post(path, command_id="save-schedule", payload=once)
+    assert (
+        single["action_text"] == "Summarize the meeting" and single["conversation_mode"] == "fresh"
+    )
+    assert single["schedule"]["config"]["run_at"].endswith("+08:00")
+    weekly = {
+        **once,
+        "job_id": single["id"],
+        "expected_revision": single["revision"],
+        "trigger": {"kind": "cron", "expr": "0 8 * * 1", "timezone": "Asia/Shanghai"},
+        "idempotency_key": "weekly-cron",
+    }
+    changed = await post(path, command_id="save-schedule", payload=weekly)
+    assert changed["schedule"]["config"] == {
+        "expr": "0 8 * * 1",
+        "timezone": "Asia/Shanghai",
+    }
+    delete = {
+        "job_id": single["id"],
+        "expected_revision": changed["revision"],
+        "idempotency_key": "delete-weekly",
+    }
+    await post(path, command_id="delete-schedule", payload=delete)
+    remaining = await post(path, command_id="list-schedules", payload={})
+    assert single["id"] not in {row["id"] for row in remaining["items"]}
+
+
 async def test_signed_schedules_edit_and_dispatch_once_with_revision_guard(
     http, signed_automation, monkeypatch
 ):
@@ -50,13 +89,14 @@ async def test_signed_schedules_edit_and_dispatch_once_with_revision_guard(
     plugin = "/memstack-automation"
     await post(plugin + "/enable")
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-    await host.bootstrap(
+    publication = await host.bootstrap(
         profile_path=ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
         manifest_paths=(ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
         generation=1,
         version=1,
     )
     try:
+        assert publication.accepted, publication.receipt
         async with pin_generation_v2(host):
             inputs = {
                 "name": "Weekly sync",
@@ -79,27 +119,7 @@ async def test_signed_schedules_edit_and_dispatch_once_with_revision_guard(
             }
             updated = await post(path, command_id="save-schedule", payload=edit)
             assert updated["revision"] > saved["revision"] and updated["interval_seconds"] == 300
-            once = {
-                "name": "One shot",
-                "enabled": False,
-                "description": "Meeting",
-                "trigger": {"kind": "at", "run_at": "2030-01-01T08:00:00+08:00"},
-                "idempotency_key": "create-once",
-            }
-            single = await post(path, command_id="save-schedule", payload=once)
-            assert single["schedule"]["config"]["run_at"].endswith("+08:00")
-            weekly = {
-                **once,
-                "job_id": single["id"],
-                "expected_revision": single["revision"],
-                "trigger": {"kind": "cron", "expr": "0 8 * * 1", "timezone": "Asia/Shanghai"},
-                "idempotency_key": "weekly-cron",
-            }
-            changed = await post(path, command_id="save-schedule", payload=weekly)
-            assert changed["schedule"]["config"] == {
-                "expr": "0 8 * * 1",
-                "timezone": "Asia/Shanghai",
-            }
+            await verify_one_shot_edit_and_delete(post, path)
             run = {
                 "job_id": saved["id"],
                 "expected_revision": updated["revision"],

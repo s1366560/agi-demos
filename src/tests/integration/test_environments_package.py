@@ -104,6 +104,7 @@ async def test_environment_worker_through_project_http(http, environment_release
             "approved_permissions": [
                 "ui.slot",
                 "tools.execute",
+                "app.environments.inventory.read",
                 "app.environments.sandbox.read",
                 "app.environments.sandbox.prepare",
                 "app.environments.terminal.authorize",

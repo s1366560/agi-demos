@@ -171,6 +171,15 @@
       ],
       "payload": {},
       "accepts_input": true
+    },
+    {
+      "id": "environment-inventory",
+      "host_operation": "app.environments.inventory.read",
+      "permissions": [
+        "app.environments.inventory.read"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -226,6 +235,48 @@
       },
       "commands": [
         "patch-text"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "tenant-instances",
+      "title": "Instances",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/environments/instances",
+        "/tenant/:tenantId/environments/instances/:resourceId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/inventory.js",
+        "digest": "sha256:de1ef365a610475d5c05d95f46edc9aabe77f3f2844cc66400a317e83af55d1d"
+      },
+      "commands": [
+        "environment-inventory"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "tenant-clusters",
+      "title": "Clusters",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/environments/clusters",
+        "/tenant/:tenantId/environments/clusters/:resourceId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/inventory.js",
+        "digest": "sha256:de1ef365a610475d5c05d95f46edc9aabe77f3f2844cc66400a317e83af55d1d"
+      },
+      "commands": [
+        "environment-inventory"
       ],
       "device_tools": []
     }

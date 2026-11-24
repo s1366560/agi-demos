@@ -112,6 +112,7 @@ async def test_authorized_preview_uses_production_trigger(http, signed_automatio
                 "app.automation.schedules.read",
                 "app.automation.schedules.write",
                 "app.automation.schedules.run",
+                "app.automation.schedules.delete",
             ],
             "archive_base64": base64.b64encode(raw).decode(),
         },
@@ -179,6 +180,7 @@ async def test_workflow_upgrade_and_rollback_restore_schedule_semantics(
                 "app.automation.schedules.read",
                 "app.automation.schedules.write",
                 "app.automation.schedules.run",
+                "app.automation.schedules.delete",
             ],
         )
         await post(path + "/enable")
