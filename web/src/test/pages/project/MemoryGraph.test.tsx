@@ -6,7 +6,7 @@ import { MemoryGraph } from '@business/knowledge/ui/web/project/MemoryGraph';
 import { render, screen, fireEvent } from '../../utils';
 
 // Mock CytoscapeGraph component
-vi.mock('../../../components/graph/CytoscapeGraph', () => {
+vi.mock('@business/knowledge/ui/web/graph/CytoscapeGraph', () => {
   const MockCytoscapeGraph = ({ children }: any) => (
     <div data-testid="cytoscape-graph">{children}</div>
   );

@@ -1,4 +1,4 @@
-import { projectKnowledgeError } from './projectKnowledgeClient';
+import { projectKnowledgeError } from './projectKnowledgeValues';
 
 /** Only properties emitted by the graph store; graph element IDs and UUIDs stay distinct. */
 export const GRAPH_NODE_PROVENANCE_KEYS = Object.freeze([

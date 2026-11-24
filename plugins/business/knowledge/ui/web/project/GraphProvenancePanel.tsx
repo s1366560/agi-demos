@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { graphService } from '../services/graphService';
 import type { GraphNode } from '../services/graphService';
 
-import type { GraphSnapshot, NodeData, EdgeData } from '@/components/graph/CytoscapeGraph/types';
+import type { GraphSnapshot, NodeData, EdgeData } from '../graph/CytoscapeGraph/types';
 
 import { graphSourceUuids, requireGraphSource } from './graphProvenance';
 

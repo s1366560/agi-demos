@@ -111,8 +111,8 @@ vi.mock('@business/knowledge/ui/web/services/graphService', () => ({
   graphService,
 }));
 
-import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph';
-import type { GraphConfig, NodeData } from '@/components/graph/CytoscapeGraph/types';
+import { CytoscapeGraph } from '@business/knowledge/ui/web/graph/CytoscapeGraph';
+import type { GraphConfig, NodeData } from '@business/knowledge/ui/web/graph/CytoscapeGraph/types';
 
 import { useThemeStore } from '../../mocks/themeStore';
 import { render, screen, fireEvent, waitFor } from '../../utils';

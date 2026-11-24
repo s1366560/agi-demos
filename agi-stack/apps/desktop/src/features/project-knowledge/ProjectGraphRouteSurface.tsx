@@ -1,9 +1,10 @@
+import { projectGraphEnUS, projectGraphZhCN } from '@business/knowledge/ui/desktop/project-knowledge/locales/projectGraphMessages';
 import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import type { DesktopRouteSurfaceProps } from '../navigation/desktopRouteModule';
 import type { ProjectGraphRouteBinding, ProjectGraphRouteContext } from './projectGraphRouteModule';
 import { ProjectGraphPage } from '@business/knowledge/ui/desktop/project-knowledge/ProjectGraphPage';
 import { useI18n } from '../../i18n';
-import './ProjectGraphPage.css';
+import '@business/knowledge/ui/desktop/project-knowledge/ProjectGraphPage.css';
 
 export function createProjectGraphRouteSurface(
   createBinding: (context: ProjectGraphRouteContext) => ProjectGraphRouteBinding,
@@ -55,7 +56,7 @@ function GraphBinding({ binding }: Readonly<{ binding: ProjectGraphRouteBinding 
   return <ProjectGraphPage model={model} controller={controller} />;
 }
 function Unavailable({ reason }: Readonly<{ reason: string }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectGraphEnUS, projectGraphZhCN);
   return (
     <section className="project-graph-page" data-reason-code={reason}>
       <h1>{t('projectGraph.title')}</h1>

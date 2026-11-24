@@ -1,6 +1,6 @@
 import type { GraphData, GraphNode } from '../services/graphService';
 
-import type { EdgeData, GraphSnapshot, NodeData } from '@/components/graph/CytoscapeGraph/types';
+import type { EdgeData, GraphSnapshot, NodeData } from '../graph/CytoscapeGraph/types';
 
 export type GraphSelection = { kind: 'node'; data: NodeData } | { kind: 'edge'; data: EdgeData };
 

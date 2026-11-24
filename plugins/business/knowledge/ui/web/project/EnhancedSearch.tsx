@@ -34,7 +34,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 
 import { AlertCircle, Maximize, Network } from 'lucide-react';
 
-import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph/index';
+import { CytoscapeGraph } from '../graph/CytoscapeGraph/index';
 
 import { graphService } from '../services/graphService';
 import { useProjectStore } from '@/stores/project';

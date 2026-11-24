@@ -1,0 +1,2 @@
+# Cytoscape embeds third-party WebGL shader sources verbatim in its compiled bundle.
+/graph-web.js -whitespace linguist-generated=true

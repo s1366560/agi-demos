@@ -8,7 +8,6 @@ import {
   nativeKnowledgeCommunityEnUS,
   nativeKnowledgeCommunityZhCN,
 } from './features/project-knowledge/locales/nativeKnowledgeCommunityMessages';
-import { projectGraphEnUS, projectGraphZhCN } from './features/project-knowledge/locales/projectGraphMessages';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import {
@@ -91,7 +90,6 @@ const enUS: Record<string, string> = {
   ...nativeKnowledgeCommunityEnUS,
   ...nativeKnowledgeGraphEnUS,
   ...nativeKnowledgeCloudConnectionEnUS,
-  ...projectGraphEnUS,
   ...deadLetterQueueEnUS,
   ...deviceApprovalEnUS,
   ...tenantCreationEnUS,
@@ -4626,7 +4624,6 @@ const zhCN: Record<string, string> = {
   ...nativeKnowledgeCommunityZhCN,
   ...nativeKnowledgeGraphZhCN,
   ...nativeKnowledgeCloudConnectionZhCN,
-  ...projectGraphZhCN,
   ...tenantCreationZhCN,
   ...invitationAcceptanceZhCN,
   ...deadLetterQueueZhCN,

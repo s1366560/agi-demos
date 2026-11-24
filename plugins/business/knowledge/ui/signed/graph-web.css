@@ -1,0 +1,6 @@
+@import 'tailwindcss' source(none);
+@source '../web/graph';
+@source '../web/project/MemoryGraph.tsx';
+@source '../web/project/GraphProvenancePanel.tsx';
+@source '../../../../../web/src/components/shared/ui/StateDisplay.tsx';
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));

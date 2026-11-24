@@ -44,7 +44,7 @@ vi.mock('../../../stores/project', () => ({
   useProjectStore: mockUseProjectStore,
 }));
 
-vi.mock('@/components/graph/CytoscapeGraph', () => ({
+vi.mock('@business/knowledge/ui/web/graph/CytoscapeGraph', () => ({
   CytoscapeGraph: ({
     projectId,
     tenantId,

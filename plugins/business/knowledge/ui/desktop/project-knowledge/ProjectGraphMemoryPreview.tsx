@@ -1,3 +1,4 @@
+import { projectGraphEnUS, projectGraphZhCN } from './locales/projectGraphMessages';
 import { cloudMemoriesEnUS, cloudMemoriesZhCN } from './locales/cloudMemoriesMessages';
 import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import { useI18n } from '@desktop/i18n';
@@ -14,7 +15,8 @@ export function ProjectGraphMemoryPreview({
   contextRevision: number | null;
   memoryId: string;
 }>) {
-  const { t } = useI18n(cloudMemoriesEnUS, cloudMemoriesZhCN);
+  const { t } = useI18n(projectGraphEnUS, projectGraphZhCN);
+  const { t: memoryText } = useI18n(cloudMemoriesEnUS, cloudMemoriesZhCN);
   const binding = useCloudMemoryRouteBinding();
   const reader = useMemo(
     () => createProjectGraphMemoryReader({ binding, scope, contextRevision, memoryId }),
@@ -46,7 +48,7 @@ export function ProjectGraphMemoryPreview({
         <article>
           <h5>{model.memory.title}</h5>
           <p>
-            {t('cloudMemories.revision')}: {model.memory.version}
+            {memoryText('cloudMemories.revision')}: {model.memory.version}
           </p>
           <div className="project-graph-content">{model.memory.content}</div>
         </article>

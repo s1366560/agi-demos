@@ -330,7 +330,15 @@ async def verify_memory_page(http, base, binding, digest):
         params={**binding, "page_id": "memories", "target": "web", "expected_digest": digest},
     )
     assert page.is_success, page.text
-    assert page.json()["commands"] == ["list-memories"]
+    assert set(page.json()["commands"]) == {
+        "list-memories",
+        "read-memory",
+        "save-memory",
+        "reindex-memory",
+        "delete-memory",
+        "index-status",
+        "optimize-content",
+    }
     read = await http.post(
         f"{base}/{PLUGIN}/commands",
         json={
@@ -370,6 +378,8 @@ async def test_episode_projection_runs_once_across_worker_loss_upgrade_and_withd
                         "app.knowledge.entities.list",
                         "app.knowledge.entities.types",
                         "app.knowledge.entities.relationships",
+                        "app.knowledge.graph.read",
+                        "app.knowledge.graph.subgraph",
                     }
                 ),
             },

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphProvenancePanel } from '@business/knowledge/ui/web/project/GraphProvenancePanel';
 import { graphSourceUuids, requireGraphSource } from '@business/knowledge/ui/web/project/graphProvenance';
 import { graphService } from '@business/knowledge/ui/web/services/graphService';
-import type { GraphSnapshot } from '../../../components/graph/CytoscapeGraph/types';
+import type { GraphSnapshot } from '@business/knowledge/ui/web/graph/CytoscapeGraph/types';
 import { render, screen, fireEvent, waitFor } from '../../utils';
 
 vi.mock('@business/knowledge/ui/web/services/graphService', () => ({ graphService: { getSubgraph: vi.fn() } }));

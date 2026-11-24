@@ -29,6 +29,7 @@
         /* Path mapping */
         "baseUrl": ".",
         "paths": {
+            "cytoscape": ["node_modules/cytoscape"],
             "three": ["node_modules/@types/three"],
             "three-mesh-bvh": ["node_modules/three-mesh-bvh"],
             "@react-three/*": ["node_modules/@react-three/*"],

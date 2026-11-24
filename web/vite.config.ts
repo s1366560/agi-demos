@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
           ]),
     ],
     resolve: {
-      dedupe: ['three', 'three-mesh-bvh', '@react-three/drei', '@react-three/fiber', 'docx-preview', 'xlsx', 'react-syntax-highlighter', '@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm',
+      dedupe: ['cytoscape', 'three', 'three-mesh-bvh', '@react-three/drei', '@react-three/fiber', 'docx-preview', 'xlsx', 'react-syntax-highlighter', '@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm',
         'react-router-dom',
         'chart.js',
         'react-chartjs-2',

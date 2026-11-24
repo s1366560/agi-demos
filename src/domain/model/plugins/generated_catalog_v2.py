@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:a81c87b7633ffa0aa38863cd88a184de3c4d990200149a6475a331b921ffb6'
-    '51","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:3dec94c918cce00359240def774cdb89acffed63c411c19cdca12c11940b08'
+    '88","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -3681,8 +3681,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '3cb94163f7297676138945d7d836cad6b526b5db206c332c","entrypoint":"plugins.business.environ'
     'ments.backend.application_adapter:apply","module_ref":"builtin://memstack/package-applic'
     'ation/environments","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targ'
-    'ets":["python"]},{"artifact_digest":"sha256:377211cd0cc9cf6769e8b51a33b48f21e30992077234'
-    'c51c72ed2fecc17fd640","artifact_source":"repo+python://plugins/business/knowledge/backen'
+    'ets":["python"]},{"artifact_digest":"sha256:74af1940f123d1e499027bf046a47d01de2e216b4f64'
+    'bfce00eb047b341f6659","artifact_source":"repo+python://plugins/business/knowledge/backen'
     'd/application_adapter.py","contract":{"config_schema":{"$schema":"https://json-schema.or'
     'g/draft/2020-12/schema","additionalProperties":false,"properties":{},"type":"object"},"e'
     'vents":{"emits":[],"handles":[]},"services":{"provides":[{"service":"service:package-app'
@@ -4846,7 +4846,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:a81c87b7633ffa0aa38863cd88a184de3c4d990200149a6475a331b921ffb651"
+    "sha256:3dec94c918cce00359240def774cdb89acffed63c411c19cdca12c11940b0888"
 )
 # fmt: on
 

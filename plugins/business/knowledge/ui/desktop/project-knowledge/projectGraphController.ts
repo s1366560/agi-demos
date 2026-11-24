@@ -1,5 +1,5 @@
 import type { ProjectKnowledgeAuthority, ProjectKnowledgeScope } from './projectKnowledgeClient';
-import { projectKnowledgeError } from './projectKnowledgeClient';
+import { projectKnowledgeError } from './projectKnowledgeValues';
 import { PROJECT_GRAPH_LOCAL_REASON, type ProjectGraphClient } from './projectGraphClient';
 import {
   buildProjectGraphPresentation,

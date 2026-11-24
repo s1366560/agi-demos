@@ -273,6 +273,24 @@
         "app.knowledge.memories.optimize"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "read-graph",
+      "host_operation": "app.knowledge.graph.read",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.graph.read"
+      ],
+      "accepts_input": true
+    },
+    {
+      "id": "read-subgraph",
+      "host_operation": "app.knowledge.graph.subgraph",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.graph.subgraph"
+      ],
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -294,8 +312,7 @@
       "id": "knowledge",
       "title": "Knowledge",
       "routes": [
-        "/knowledge",
-        "/tenant/:tenantId/project/:projectId/graph"
+        "/knowledge"
       ],
       "targets": [
         "web",
@@ -313,6 +330,56 @@
       ]
     },
     {
+      "id": "graph",
+      "title": "Knowledge graph",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/graph",
+        "/project/:projectId/graph"
+      ],
+      "targets": [
+        "web"
+      ],
+      "entry": {
+        "path": "ui/graph-web.js",
+        "digest": "sha256:59db36fe901368add142196fb10f36498f68370b14d7c2c7966e49b248785647"
+      },
+      "style": {
+        "path": "ui/graph-web.css",
+        "digest": "sha256:f73eb440984bed852ee30b4858bd3f43d1da30a33fdcf226a32ccedeb19eaf57"
+      },
+      "commands": [
+        "read-graph",
+        "read-subgraph"
+      ],
+      "workbench": true
+    },
+    {
+      "id": "graph",
+      "title": "Knowledge graph",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/graph",
+        "/project/:projectId/graph"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/graph-desktop.js",
+        "digest": "sha256:0f0df8ebaae817c5a18e02aba36fe8da4d5303860b96244d815229e4edd44e77"
+      },
+      "style": {
+        "path": "ui/graph-desktop.css",
+        "digest": "sha256:b451b1ea0dd4caf3d2ad3b2d7fc47e226f11fc255cc31df65d6fe7cae029a9a5"
+      },
+      "commands": [
+        "read-graph",
+        "read-subgraph",
+        "list-memories",
+        "read-memory"
+      ],
+      "workbench": true
+    },
+    {
       "id": "memories",
       "title": "Project memories",
       "routes": [
@@ -325,7 +392,7 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:d4b1369e252280668424a841add816a72a01ec5c808145cab388a8046379b37d"
+        "digest": "sha256:751e804537951277cb3fab1f01a96642d2241f90f5be3d1725a686fca32f8ef2"
       },
       "commands": [
         "list-memories",
@@ -361,7 +428,7 @@
       ],
       "entry": {
         "path": "ui/memories-desktop.js",
-        "digest": "sha256:a60ccdf2a383c56fdafab638ca3ce3f02e6f019754dfac074b76b5c27910e104"
+        "digest": "sha256:6974f9509cd046d6fd1e157566c44050302af59bf86b41dc943538ab8fe0c17e"
       },
       "commands": [
         "list-memories",
@@ -389,7 +456,7 @@
       ],
       "entry": {
         "path": "ui/memories-desktop.js",
-        "digest": "sha256:a60ccdf2a383c56fdafab638ca3ce3f02e6f019754dfac074b76b5c27910e104"
+        "digest": "sha256:6974f9509cd046d6fd1e157566c44050302af59bf86b41dc943538ab8fe0c17e"
       },
       "commands": [
         "read-memory",
@@ -417,7 +484,7 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:d4b1369e252280668424a841add816a72a01ec5c808145cab388a8046379b37d"
+        "digest": "sha256:751e804537951277cb3fab1f01a96642d2241f90f5be3d1725a686fca32f8ef2"
       },
       "commands": [
         "read-memory",
@@ -518,7 +585,7 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:d4b1369e252280668424a841add816a72a01ec5c808145cab388a8046379b37d"
+        "digest": "sha256:751e804537951277cb3fab1f01a96642d2241f90f5be3d1725a686fca32f8ef2"
       },
       "commands": [
         "read-memory",
@@ -547,7 +614,7 @@
       ],
       "entry": {
         "path": "ui/memories-desktop.js",
-        "digest": "sha256:a60ccdf2a383c56fdafab638ca3ce3f02e6f019754dfac074b76b5c27910e104"
+        "digest": "sha256:6974f9509cd046d6fd1e157566c44050302af59bf86b41dc943538ab8fe0c17e"
       },
       "commands": [
         "read-memory",

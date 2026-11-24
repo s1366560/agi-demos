@@ -12,6 +12,7 @@ await buildPackagePages({
   sourceDirectory: 'ui/signed',
   contribution: 'workers/graph_projection/contributions.json',
   entries: {
+    graph: { web: 'GraphPage.tsx', 'desktop-renderer': 'DesktopGraphPage.tsx' },
     memories: { web: 'MemoriesPage.tsx', 'desktop-renderer': 'DesktopMemoriesPage.tsx' },
     'memory-editor': { web: 'MemoriesPage.tsx', 'desktop-renderer': 'DesktopMemoriesPage.tsx' },
     'desktop-memory-editor': 'DesktopMemoriesPage.tsx',
@@ -34,6 +35,9 @@ await buildPackagePages({
             '../../../../../web/src/hooks/useUnsavedChangesWarning.ts',
           '@/services/taskStream': './indexTask.ts',
           '@/utils/date': '../../../../../sdk/memstack-plugin-sdk/ui/localDate.ts',
+          '@/stores/theme': './graphAppearance.ts',
+          '@/components/shared/ui/StateDisplay': '../../../../../web/src/components/shared/ui/StateDisplay.tsx',
+          '@business/knowledge/ui/web/services/graphService': './graphApi.ts',
           '@/utils/logger': './logger.ts',
           '@/components/common': '../../../../../web/src/components/common/AppModal.tsx',
           '@/components/common/index': '../../../../../web/src/components/common/AppModal.tsx',
@@ -49,6 +53,9 @@ await buildPackagePages({
           '@/hooks/useThemeColor': './appearance.ts',
           '@desktop/api/desktopApiError':
             '../../../../../agi-stack/apps/desktop/src/api/desktopApiError.ts',
+          '@desktop/features/project-knowledge/CloudMemoryRouteContext': '../../../../../agi-stack/apps/desktop/src/features/project-knowledge/CloudMemoryRouteContext.tsx',
+          '@desktop/features/project-knowledge/projectGraphMemoryReader': '../../../../../agi-stack/apps/desktop/src/features/project-knowledge/projectGraphMemoryReader.ts',
+          '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryUiAuthority': '../desktop/project-knowledge/cloudMemoryUiAuthority.ts',
           '@desktop/i18n': '../../../../../agi-stack/apps/desktop/src/i18nContext.ts',
         };
         build.onResolve({ filter: /^(@business|@desktop|@)\// }, ({ path }) =>
@@ -59,11 +66,11 @@ await buildPackagePages({
           ({ path }) => ({
             path: resolve(
               directory,
-              path.endsWith('taskStream') ? './indexTask.ts' : './optimize.ts',
+              path.endsWith('taskStream') ? './indexTask.ts' : './graphApi.ts',
             ),
           }),
         );
-        build.onLoad({ filter: /(entities|memories)\.css$/ }, async ({ path }) => {
+        build.onLoad({ filter: /(entities|memories|graph-web)\.css$/ }, async ({ path }) => {
           const result = await postcss([tailwind({ base: directory, optimize: true })]).process(
             await readFile(path, 'utf8'),
             { from: path },

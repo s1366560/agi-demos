@@ -1,3 +1,4 @@
+import { projectGraphEnUS, projectGraphZhCN } from './locales/projectGraphMessages';
 import { useMemo, useState } from 'react';
 import { useI18n } from '@desktop/i18n';
 import type { ProjectGraphController } from './projectGraphController';
@@ -13,7 +14,7 @@ export function ProjectGraphPage({
   model: ProjectGraphViewModel;
   controller: ProjectGraphController;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectGraphEnUS, projectGraphZhCN);
   const [filter, setFilter] = useState('');
   const nodes = model.nodes ?? [];
   const edges = model.edges ?? [];
@@ -251,7 +252,7 @@ function ProjectGraphSourceDetails({
   source,
   model,
 }: Readonly<{ source: ProjectGraphNode; model: ProjectGraphViewModel }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(projectGraphEnUS, projectGraphZhCN);
   return (
     <article className="project-graph-source">
       <h3>{source.name}</h3>

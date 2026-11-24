@@ -15150,7 +15150,7 @@
       },
       "contract_digest": "sha256:0bd5af327f1f3f424ba2339e5e0ad72472dd85e4f8f8c64e013d00fcf76264d3",
       "artifact": {
-        "digest": "sha256:377211cd0cc9cf6769e8b51a33b48f21e30992077234c51c72ed2fecc17fd640",
+        "digest": "sha256:74af1940f123d1e499027bf046a47d01de2e216b4f64bfce00eb047b341f6659",
         "source": "repo+python://plugins/business/knowledge/backend/application_adapter.py"
       }
     },

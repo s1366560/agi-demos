@@ -33,7 +33,9 @@
       "app.knowledge.memories.delete",
       "app.knowledge.memories.reindex",
       "app.knowledge.memories.optimize",
-      "app.knowledge.memories.index_status"
+      "app.knowledge.memories.index_status",
+      "app.knowledge.graph.read",
+      "app.knowledge.graph.subgraph"
     ]
   },
   {

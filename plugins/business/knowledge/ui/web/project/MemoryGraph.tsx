@@ -5,9 +5,9 @@ import { useParams } from 'react-router-dom';
 
 import { Building2, Fingerprint, X } from 'lucide-react';
 
-import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph/index';
-import { getNodeConnectionCount } from '@/components/graph/CytoscapeGraph/nodeDetails';
-import type { NodeData, EdgeData, GraphSnapshot } from '@/components/graph/CytoscapeGraph/types';
+import { CytoscapeGraph } from '../graph/CytoscapeGraph/index';
+import { getNodeConnectionCount } from '../graph/CytoscapeGraph/nodeDetails';
+import type { NodeData, EdgeData, GraphSnapshot } from '../graph/CytoscapeGraph/types';
 
 import { GraphProvenancePanel } from './GraphProvenancePanel';
 
