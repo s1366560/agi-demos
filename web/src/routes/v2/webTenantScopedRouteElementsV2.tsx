@@ -6,7 +6,6 @@ import {
   TenantOverview,
   TaskDashboard,
   WorkspaceList,
-  WorkspaceCreate,
   AgentDashboard,
   AgentWorkspace,
   ProjectList,
@@ -100,13 +99,9 @@ export function createTenantScopedRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-workspaces' }}
+        handle={{ pluginFeature: 'tenant-workspaces', signedPage: true }}
         path=":tenantId/workspaces/new"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <WorkspaceCreate />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback projectOwned />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-agents' }}

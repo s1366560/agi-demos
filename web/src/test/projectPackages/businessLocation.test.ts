@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { businessLocation, businessRouteScope } from '../../projectPackages/businessLocation';
+import { businessLocation, businessRouteScope, tenantPageScope } from '../../projectPackages/businessLocation';
 
 const project = { id: 'p', tenant_id: 't' };
 describe('business page links', () => {
+  it('lets the tenant redirect resolve an unscoped workspace creation bookmark', () => {
+    const query = new URLSearchParams();
+    expect(tenantPageScope('/tenant/workspaces/new', query)).toBeNull();
+    expect(businessRouteScope('/tenant/workspaces/new', query, project)).toBeNull();
+  });
   it('restores signed pages from their own URL, including unknown plugins', () => {
     const link = businessLocation('/boards', 't', 'p', 'board-package');
     expect(businessRouteScope(link.pathname, new URLSearchParams(link.search))).toEqual({

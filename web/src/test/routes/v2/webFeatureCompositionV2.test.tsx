@@ -196,7 +196,7 @@ describe('full workbench access for signed routes', () => {
     ]) {
       expect(hasFullWorkbenchRoute(url, scope, current, artifacts)).toBe(false);
     }
-    expect(hasFullWorkbenchRoute('/tenant/t/workspaces/new', scope, current, artifacts)).toBe(true);
+    expect(hasFullWorkbenchRoute('/tenant/t/workspaces/new', scope, current, artifacts)).toBe(false);
     expect(
       hasFullWorkbenchRoute(
         '/tenant/t/workspaces/new',

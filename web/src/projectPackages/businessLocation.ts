@@ -17,6 +17,7 @@ export function businessLocation(
 type Project = { id: string; tenant_id: string };
 
 export function businessRouteScope(path: string, query: URLSearchParams, current?: Project | null) {
+  if (path === '/tenant/workspaces/new') return null;
   const [, root, owner, section, scopedProject] = path.split('/');
   const plugin = query.get('businessPackage');
   if (
@@ -63,6 +64,7 @@ export function businessRouteScope(path: string, query: URLSearchParams, current
 
 /** A bookmark may select a tenant release before the user selects any project. */
 export function tenantPageScope(path: string, query: URLSearchParams) {
+  if (path === '/tenant/workspaces/new') return null;
   const [, root, owner, section] = path.split('/');
   if (root !== 'tenant' || !owner || !section || section === 'project') return null;
   if (

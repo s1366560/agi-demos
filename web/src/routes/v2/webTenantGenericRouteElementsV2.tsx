@@ -18,7 +18,6 @@ import {
   WorkflowPatterns,
   TaskDashboard,
   WorkspaceList,
-  WorkspaceCreate,
   AgentDashboard,
   AgentWorkspace,
   SubAgentList,
@@ -232,13 +231,9 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-workspaces' }}
+        handle={{ pluginFeature: 'tenant-workspaces', signedPage: true }}
         path="workspaces/new"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <WorkspaceCreate />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback projectOwned />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-agents' }}

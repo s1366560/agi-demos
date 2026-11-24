@@ -8,11 +8,6 @@ export const TaskDashboard = lazy(() =>
 export const WorkspaceList = lazy(() =>
   import('./tenant/WorkspaceList').then((m) => ({ default: m.WorkspaceList }))
 );
-export const WorkspaceCreate = lazy(() =>
-  import('./tenant/WorkspaceCreate').then((m) => ({
-    default: m.WorkspaceCreate,
-  }))
-);
 export const TenantOverview = lazy(() =>
   import('./tenant/TenantOverview').then((m) => ({
     default: m.TenantOverview,
