@@ -1,10 +1,8 @@
 import type {
   AgentCapabilityMode,
   AgentConversation,
-  DesktopRuntimeConfig,
   PlanSnapshot,
   ProjectSummary,
-  RuntimeDataset,
   WorkspaceAgentBinding,
   WorkspaceAuthorityCollection,
   WorkspaceAuthorityStatus,
@@ -162,44 +160,6 @@ export function workspaceSandboxStatusPresentation(
   };
 }
 
-export function beginWorkspaceRuntimeTransition(dataset: RuntimeDataset): RuntimeDataset {
-  return {
-    ...dataset,
-    messages: [],
-    tasks: [],
-    plan: null,
-    workspaceMembers: unavailableAuthorityCollection(),
-    workspaceAgents: unavailableAuthorityCollection(),
-  };
-}
-
-export function beginDesktopRuntimeScopeTransition(
-  dataset: RuntimeDataset,
-  previousConfig: DesktopRuntimeConfig,
-  nextConfig: DesktopRuntimeConfig,
-): RuntimeDataset {
-  if (!sameProjectRuntimeScope(previousConfig, nextConfig)) {
-    return {
-      workspaces: [],
-      workspacesByProject: {},
-      conversationsByWorkspace: {},
-      nodeState: { projects: {}, workspaces: {} },
-      messages: [],
-      tasks: [],
-      plan: null,
-      workspaceMembers: unavailableAuthorityCollection(),
-      workspaceAgents: unavailableAuthorityCollection(),
-      sandbox: null,
-      myWork: [],
-      myWorkError: null,
-    };
-  }
-  if (previousConfig.workspaceId !== nextConfig.workspaceId) {
-    return beginWorkspaceRuntimeTransition(dataset);
-  }
-  return dataset;
-}
-
 export function buildWorkspaceOverviewModel({
   workspace,
   project,
@@ -242,10 +202,6 @@ export function buildWorkspaceOverviewModel({
     recentSessions: sessions.slice(0, 5),
     recentActivity: readRecentActivity(stats?.recent_activity),
   };
-}
-
-function unavailableAuthorityCollection<T>(): WorkspaceAuthorityCollection<T> {
-  return { status: 'unavailable', items: [], error: null };
 }
 
 function agentBindingName(agent: WorkspaceAgentBinding): string {
@@ -310,18 +266,4 @@ function stringValue(value: unknown): string | null {
 
 function numberValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-function sameProjectRuntimeScope(
-  previousConfig: DesktopRuntimeConfig,
-  nextConfig: DesktopRuntimeConfig,
-): boolean {
-  return (
-    previousConfig.mode === nextConfig.mode &&
-    previousConfig.apiBaseUrl === nextConfig.apiBaseUrl &&
-    previousConfig.apiKey === nextConfig.apiKey &&
-    previousConfig.localApiToken === nextConfig.localApiToken &&
-    previousConfig.tenantId === nextConfig.tenantId &&
-    previousConfig.projectId === nextConfig.projectId
-  );
 }

@@ -295,7 +295,7 @@ import {
   applyConversationTitleUpdate,
   readConversationTitleStreamEvent,
 } from './features/chat/conversationTitleEventModel';
-import { compactConversationTitle } from '@business/agent/ui/desktop/chat/conversationTitleModel';
+import { compactWindowTitle } from './features/chrome/compactWindowTitle';
 import { coalesceStreamingTextEvents } from './features/chat/streamingTextEventModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
 import { localLlmUnconfiguredFromProviders } from './features/chat/localLlmReadinessModel';
@@ -537,7 +537,7 @@ import {
   workspaceSettingsScopeIsCurrent,
 } from './features/workspace/workspaceSettingsModel';
 import type { WorkspaceSettingsScope } from './features/workspace/workspaceSettingsModel';
-import { beginDesktopRuntimeScopeTransition } from '@business/workspace/ui/desktop/workspace/workspaceOverviewModel';
+import { beginDesktopRuntimeScopeTransition } from './features/runtime/runtimeScopeTransition';
 import {
   UNBOUND_CONVERSATIONS_KEY,
   beginWorkspaceConversationRequest,
@@ -6038,7 +6038,7 @@ export function App() {
   );
   const hasWorkspaceScope = Boolean(config.workspaceId.trim());
   const hasProjectScope = Boolean(config.projectId.trim());
-  const sessionTitle = compactConversationTitle(
+  const sessionTitle = compactWindowTitle(
     selectedConversation?.title ??
       selectedWorkspace?.name ??
       selectedWorkspace?.title ??
@@ -7384,7 +7384,7 @@ export function App() {
       timelineState: selectedConversation ? sessionTimeline : null,
       agentTaskSignals,
       workflowCounts: chatWorkflowCounts,
-      sessionTitle: compactConversationTitle(
+      sessionTitle: compactWindowTitle(
         selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined),
       ),
       scopeLabel: selectedConversation

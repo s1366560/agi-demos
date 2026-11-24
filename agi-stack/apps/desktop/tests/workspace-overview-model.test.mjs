@@ -6,6 +6,8 @@ const require = createRequire(import.meta.url);
 const {
   beginDesktopRuntimeScopeTransition,
   beginWorkspaceRuntimeTransition,
+} = require('/tmp/agistack-desktop-test-dist/src/features/runtime/runtimeScopeTransition.js');
+const {
   buildWorkspaceOverviewModel,
   workspaceKnowledgeIsAvailable,
   workspaceSandboxStatusPresentation,
