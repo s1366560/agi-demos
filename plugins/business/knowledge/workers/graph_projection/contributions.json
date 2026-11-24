@@ -361,7 +361,7 @@
       ],
       "entry": {
         "path": "ui/memories-desktop.js",
-        "digest": "sha256:a413e1ecab41d22595ccfa34c2574d29556b28b9cdb53e75f9c1f0f516a7f01b"
+        "digest": "sha256:a60ccdf2a383c56fdafab638ca3ce3f02e6f019754dfac074b76b5c27910e104"
       },
       "commands": [
         "list-memories",
@@ -389,7 +389,7 @@
       ],
       "entry": {
         "path": "ui/memories-desktop.js",
-        "digest": "sha256:a413e1ecab41d22595ccfa34c2574d29556b28b9cdb53e75f9c1f0f516a7f01b"
+        "digest": "sha256:a60ccdf2a383c56fdafab638ca3ce3f02e6f019754dfac074b76b5c27910e104"
       },
       "commands": [
         "read-memory",
@@ -547,7 +547,7 @@
       ],
       "entry": {
         "path": "ui/memories-desktop.js",
-        "digest": "sha256:a413e1ecab41d22595ccfa34c2574d29556b28b9cdb53e75f9c1f0f516a7f01b"
+        "digest": "sha256:a60ccdf2a383c56fdafab638ca3ce3f02e6f019754dfac074b76b5c27910e104"
       },
       "commands": [
         "read-memory",

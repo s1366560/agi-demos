@@ -39,7 +39,9 @@ export function CloudMemoriesPage({
   }
   if (model.phase === 'unavailable') return <CloudMemoriesUnavailable />;
   const locked =
-    ['saving', 'uncertain', 'loading'].includes(model.phase) || model.listState === 'loading';
+    !!reindexing ||
+    ['saving', 'uncertain', 'loading'].includes(model.phase) ||
+    model.listState === 'loading';
   const list = model.list;
   const lastPage =
     list?.total === null
@@ -101,7 +103,6 @@ export function CloudMemoriesPage({
                   type="button"
                   disabled={
                     locked ||
-                    !!reindexing ||
                     ['PENDING', 'PROCESSING'].includes(memory.processingStatus.toUpperCase())
                   }
                   onClick={() => void reindexMemory(memory.id)}
@@ -144,7 +145,7 @@ export function CloudMemoriesPage({
           </button>
         </nav>
       ) : null}
-      <CloudMemoryEditor model={model} controller={controller} />
+      <CloudMemoryEditor model={model} controller={controller} busy={!!reindexing} />
     </section>
   );
 }

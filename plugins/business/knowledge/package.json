@@ -1,6 +1,6 @@
 {
   "plugin_id": "memstack-knowledge",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "kind": "business",
   "targets": {
     "python": "workers/graph_projection/plugin.json",

@@ -4,12 +4,17 @@ import type { CloudMemoriesController, CloudMemoriesModel } from './cloudMemorie
 export function CloudMemoryEditor({
   model,
   controller,
-}: Readonly<{ model: CloudMemoriesModel; controller: CloudMemoriesController }>) {
+  busy = false,
+}: Readonly<{
+  model: CloudMemoriesModel;
+  controller: CloudMemoriesController;
+  busy?: boolean;
+}>) {
   const { t } = useI18n();
   const locked = ['saving', 'uncertain', 'loading'].includes(model.phase);
   const editable = ['creating', 'editing'].includes(model.phase);
   return (
-    <section className="cloud-memory-editor" aria-label={t('cloudMemories.editor')}>
+    <section className="cloud-memory-editor" aria-label={t('cloudMemories.editor')} inert={busy}>
       {model.phase === 'loading' ? <p role="status">{t('cloudMemories.loadingDetail')}</p> : null}
       {model.record ? (
         <>
