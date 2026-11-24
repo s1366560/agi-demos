@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from plugins.business.billing.backend import http as billing_router
 from src.infrastructure.plugins.v2.billing_services import BillingInvalidPlanV2
+from src.infrastructure.plugins.wasm_host import WasmHostError
 
 if TYPE_CHECKING:
     from plugins.business.billing.backend.authority import (
@@ -76,7 +77,13 @@ async def test_billing_upgrade_commits_authority_session_once() -> None:
     db.commit.assert_awaited_once_with()
 
 
-async def test_billing_upgrade_failure_does_not_commit_authority_session() -> None:
+@pytest.mark.parametrize(
+    ("failure", "expected"),
+    [(BillingInvalidPlanV2(), 400), (WasmHostError("wasm wall-clock deadline exceeded"), 503)],
+)
+async def test_billing_upgrade_failure_does_not_commit_authority_session(
+    failure: Exception, expected: int
+) -> None:
     class InvalidBillingService(_BillingService):
         async def upgrade_plan(
             self,
@@ -85,7 +92,7 @@ async def test_billing_upgrade_failure_does_not_commit_authority_session() -> No
             tenant_id: str,
             plan_data: dict[str, Any],
         ) -> dict[str, Any]:
-            raise BillingInvalidPlanV2
+            raise failure
 
     db = SimpleNamespace(commit=AsyncMock())
     authority = _authority(InvalidBillingService(), db=db)
@@ -97,5 +104,5 @@ async def test_billing_upgrade_failure_does_not_commit_authority_session() -> No
             authority,
         )
 
-    assert error.value.status_code == 400
+    assert error.value.status_code == expected
     db.commit.assert_not_awaited()

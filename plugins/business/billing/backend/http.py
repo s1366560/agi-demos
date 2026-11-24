@@ -16,6 +16,7 @@ from src.infrastructure.plugins.v2.billing_services import (
     BillingOwnerAccessDeniedV2,
     BillingTenantNotFoundV2,
 )
+from src.infrastructure.plugins.wasm_host import WasmHostError
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["billing"])
 
@@ -80,6 +81,10 @@ async def upgrade_plan(
         ) from exc
     except BillingTenantNotFoundV2 as exc:
         raise HTTPException(status_code=404, detail=_("Tenant not found")) from exc
+    except WasmHostError as exc:
+        raise HTTPException(
+            status_code=503, detail=_("Billing quota calculation is unavailable. Please try again.")
+        ) from exc
     except BillingInvalidPlanV2 as exc:
         raise HTTPException(status_code=400, detail=_("Invalid billing plan")) from exc
 
