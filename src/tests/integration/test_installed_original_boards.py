@@ -258,8 +258,10 @@ def test_web_graph_loads_through_installed_original_controls():
             view.get_by_role("button", name="Reload Data").click()
         response = pending.value
         assert response.ok, response.status
-        graph = response.json()
-        assert isinstance(graph["nodes"], list) and isinstance(graph["edges"], list)
+        elements = response.json()["elements"]
+        assert isinstance(elements["nodes"], list) and isinstance(elements["edges"], list)
+        nodes = view.get_by_role("table", name="Graph nodes")
+        expect(nodes.locator("tbody tr")).to_have_count(len(elements["nodes"]))
 
 
 def test_native_graph_refreshes_installed_original_projection():
