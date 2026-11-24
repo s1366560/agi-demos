@@ -23,8 +23,6 @@ from src.tests.integration.test_knowledge_sync_postgres import pg_sync, pytestma
 async def processing(pg_sync, monkeypatch):  # noqa: F811
     sessions, scope = pg_sync
     async with sessions() as session:
-        connection = await session.connection()
-        await connection.run_sync(lambda sync: TaskLog.__table__.create(sync))
         session.add(
             Memory(
                 id="memory",
