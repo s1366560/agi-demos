@@ -270,9 +270,26 @@ test('Desktop renders structured multi-call sources as one accessible aggregated
 test('Desktop renders structured user attachments through the real narrative timeline', () => {
   assert.match(chatSource, /<MessageAttachments item=\{item\} \/>/);
   assert.match(attachmentSource, /timelineMessageAttachments\(item\)/);
-  assert.match(attachmentSource, /data-testid="message-attachment"/);
-  assert.match(attachmentSource, /aria-label=\{t\('composer\.attachments'\)\}/);
-  assert.match(attachmentSource, /<FileIcon \/>/);
+  const { createElement } = require('react');
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const { MessageAttachments } = require(
+    '/tmp/agistack-desktop-test-dist/src/features/chat/MessageAttachments.js',
+  );
+  const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
+  const item = {
+    metadata: { fileMetadata: [
+      { filename: 'archive.bin', mime_type: 'application/octet-stream', size_bytes: 2048 },
+      { filename: 'invalid.bin', size_bytes: -1 },
+    ] },
+  };
+  const rendered = renderToStaticMarkup(createElement(I18nProvider, null,
+    createElement(MessageAttachments, { item }),
+  ));
+  assert.match(rendered, /data-testid="message-attachment"/);
+  assert.match(rendered, /aria-label="Attachments"/);
+  assert.match(rendered, /archive\.bin/);
+  assert.match(rendered, /2\.0 KB/);
+  assert.doesNotMatch(rendered, /invalid\.bin/);
   assert.match(chatStyles, /\.message-attachments/);
   assert.match(chatStyles, /\.message-attachment-name/);
   assert.match(attachmentQaSource, /<AgentTimeline/);
