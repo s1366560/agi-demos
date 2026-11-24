@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:b161e48beaf511c70170a29122077fa0e44561af105e278487765078082aff'
-    'fc","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:a81c87b7633ffa0aa38863cd88a184de3c4d990200149a6475a331b921ffb6'
+    '51","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -3645,7 +3645,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rypoint":"src.infrastructure.plugins.v2.admin_dlq_services:_apply_admin_dlq_provider_v2"'
     ',"module_ref":"builtin://memstack/messaging/admin-dlq-provider","plugin_id":"memstack-ru'
     'ntime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:'
-    '70ea3f3e1d6fa4b5666f857d36b665e79e1cf214b781e569a6c42d3d4da4a2ea","artifact_source":"rep'
+    '0bbb78cb69496c8d1c60302074e9dd127503d328682f4c37469d9e2c1683bd76","artifact_source":"rep'
     'o+python://plugins/business/agent/backend/application_adapter.py","contract":{"config_sc'
     'hema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":f'
     'alse,"properties":{},"type":"object"},"events":{"emits":[],"handles":[]},"services":{"pr'
@@ -3672,7 +3672,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'e30c99fec1ed40a565283b88302e8ed67","entrypoint":"plugins.business.billing.backend.applic'
     'ation_adapter:apply","module_ref":"builtin://memstack/package-application/billing","plug'
     'in_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifa'
-    'ct_digest":"sha256:96d96874d17f67a88c9bb37fb091c1a19a263dd7b0101ba431084f99b104aa8c","ar'
+    'ct_digest":"sha256:3a3db1e3b38b78439cc3b507acaac2c583c66b0c0eeaa976fb03b92ee766f61a","ar'
     'tifact_source":"repo+python://plugins/business/environments/backend/application_adapter.'
     'py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema'
     '","additionalProperties":false,"properties":{},"type":"object"},"events":{"emits":[],"ha'
@@ -3681,8 +3681,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '3cb94163f7297676138945d7d836cad6b526b5db206c332c","entrypoint":"plugins.business.environ'
     'ments.backend.application_adapter:apply","module_ref":"builtin://memstack/package-applic'
     'ation/environments","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targ'
-    'ets":["python"]},{"artifact_digest":"sha256:c08f64ace10b48e9b4b11fac788ea91a0ba344453eb1'
-    'a9dad94deda5b075011c","artifact_source":"repo+python://plugins/business/knowledge/backen'
+    'ets":["python"]},{"artifact_digest":"sha256:377211cd0cc9cf6769e8b51a33b48f21e30992077234'
+    'c51c72ed2fecc17fd640","artifact_source":"repo+python://plugins/business/knowledge/backen'
     'd/application_adapter.py","contract":{"config_schema":{"$schema":"https://json-schema.or'
     'g/draft/2020-12/schema","additionalProperties":false,"properties":{},"type":"object"},"e'
     'vents":{"emits":[],"handles":[]},"services":{"provides":[{"service":"service:package-app'
@@ -3690,8 +3690,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '56:0bd5af327f1f3f424ba2339e5e0ad72472dd85e4f8f8c64e013d00fcf76264d3","entrypoint":"plugi'
     'ns.business.knowledge.backend.application_adapter:apply","module_ref":"builtin://memstac'
     'k/package-application/knowledge","plugin_id":"memstack-runtime-kernel","plugin_version":'
-    '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:63a4456d77094856711bd7b4d0ea072'
-    'eb8288450d796a1ea2d74395fac3f8461","artifact_source":"repo+python://plugins/business/wor'
+    '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:ef020a2bfc72f2529c8711bf1a634d1'
+    '7b37fabe3086d2077cb10dbdec3fd89c8","artifact_source":"repo+python://plugins/business/wor'
     'kspace/backend/application_adapter.py","contract":{"config_schema":{"$schema":"https://j'
     'son-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{},"type"'
     ':"object"},"events":{"emits":[],"handles":[]},"services":{"provides":[{"service":"servic'
@@ -4846,7 +4846,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:b161e48beaf511c70170a29122077fa0e44561af105e278487765078082afffc"
+    "sha256:a81c87b7633ffa0aa38863cd88a184de3c4d990200149a6475a331b921ffb651"
 )
 # fmt: on
 

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:b161e48beaf511c70170a29122077fa0e44561af105e27848776507808',
-  '2afffc","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:a81c87b7633ffa0aa38863cd88a184de3c4d990200149a6475a331b921',
+  'ffb651","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -3835,8 +3835,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'e3a7c3","entrypoint":"src.infrastructure.plugins.v2.admin_dlq_services:_apply_admin_',
   'dlq_provider_v2","module_ref":"builtin://memstack/messaging/admin-dlq-provider","plu',
   'gin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"a',
-  'rtifact_digest":"sha256:70ea3f3e1d6fa4b5666f857d36b665e79e1cf214b781e569a6c42d3d4da4',
-  'a2ea","artifact_source":"repo+python://plugins/business/agent/backend/application_ad',
+  'rtifact_digest":"sha256:0bbb78cb69496c8d1c60302074e9dd127503d328682f4c37469d9e2c1683',
+  'bd76","artifact_source":"repo+python://plugins/business/agent/backend/application_ad',
   'apter.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020',
   '-12/schema","additionalProperties":false,"properties":{},"type":"object"},"events":{',
   '"emits":[],"handles":[]},"services":{"provides":[{"service":"service:package-applica',
@@ -3863,8 +3863,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'a256:2d2b42d18ac50f8e6a8cd3bc4153a2be30c99fec1ed40a565283b88302e8ed67","entrypoint":',
   '"plugins.business.billing.backend.application_adapter:apply","module_ref":"builtin:/',
   '/memstack/package-application/billing","plugin_id":"memstack-runtime-kernel","plugin',
-  '_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:96d96874d17f67a88',
-  'c9bb37fb091c1a19a263dd7b0101ba431084f99b104aa8c","artifact_source":"repo+python://pl',
+  '_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:3a3db1e3b38b78439',
+  'cc3b507acaac2c583c66b0c0eeaa976fb03b92ee766f61a","artifact_source":"repo+python://pl',
   'ugins/business/environments/backend/application_adapter.py","contract":{"config_sche',
   'ma":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties"',
   ':false,"properties":{},"type":"object"},"events":{"emits":[],"handles":[]},"services',
@@ -3873,8 +3873,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '7676138945d7d836cad6b526b5db206c332c","entrypoint":"plugins.business.environments.ba',
   'ckend.application_adapter:apply","module_ref":"builtin://memstack/package-applicatio',
   'n/environments","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targ',
-  'ets":["python"]},{"artifact_digest":"sha256:c08f64ace10b48e9b4b11fac788ea91a0ba34445',
-  '3eb1a9dad94deda5b075011c","artifact_source":"repo+python://plugins/business/knowledg',
+  'ets":["python"]},{"artifact_digest":"sha256:377211cd0cc9cf6769e8b51a33b48f21e3099207',
+  '7234c51c72ed2fecc17fd640","artifact_source":"repo+python://plugins/business/knowledg',
   'e/backend/application_adapter.py","contract":{"config_schema":{"$schema":"https://js',
   'on-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{},"ty',
   'pe":"object"},"events":{"emits":[],"handles":[]},"services":{"provides":[{"service":',
@@ -3883,7 +3883,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '76264d3","entrypoint":"plugins.business.knowledge.backend.application_adapter:apply"',
   ',"module_ref":"builtin://memstack/package-application/knowledge","plugin_id":"memsta',
   'ck-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest"',
-  ':"sha256:63a4456d77094856711bd7b4d0ea072eb8288450d796a1ea2d74395fac3f8461","artifact',
+  ':"sha256:ef020a2bfc72f2529c8711bf1a634d17b37fabe3086d2077cb10dbdec3fd89c8","artifact',
   '_source":"repo+python://plugins/business/workspace/backend/application_adapter.py","',
   'contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema"',
   ',"additionalProperties":false,"properties":{},"type":"object"},"events":{"emits":[],',
@@ -5099,4 +5099,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:b161e48beaf511c70170a29122077fa0e44561af105e278487765078082afffc' as const;
+  'sha256:a81c87b7633ffa0aa38863cd88a184de3c4d990200149a6475a331b921ffb651' as const;

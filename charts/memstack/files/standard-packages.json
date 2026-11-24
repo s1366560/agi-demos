@@ -12,7 +12,11 @@
       "app.agent.turn",
       "app.agent.cancel",
       "app.agent.rename",
-      "device.local-chat"
+      "device.local-chat",
+      "app.agent.interactions",
+      "app.agent.respond",
+      "app.agent.attachments",
+      "app.agent.attachments.turn"
     ]
   },
   {
@@ -25,7 +29,11 @@
       "app.knowledge.memories.write",
       "app.knowledge.entities.list",
       "app.knowledge.entities.types",
-      "app.knowledge.entities.relationships"
+      "app.knowledge.entities.relationships",
+      "app.knowledge.memories.delete",
+      "app.knowledge.memories.reindex",
+      "app.knowledge.memories.optimize",
+      "app.knowledge.memories.index_status"
     ]
   },
   {
@@ -42,7 +50,9 @@
       "app.workspace.posts.read",
       "app.workspace.posts.write",
       "app.workspace.tasks.read",
-      "app.workspace.tasks.write"
+      "app.workspace.tasks.write",
+      "app.workspace.blackboard.read",
+      "app.workspace.blackboard.write"
     ]
   },
   {
@@ -74,7 +84,9 @@
       "app.environments.clusters.write",
       "app.environments.clusters.delete",
       "app.environments.sandbox.restart",
-      "app.environments.sandbox.terminate"
+      "app.environments.sandbox.terminate",
+      "app.environments.desktop.interact",
+      "app.environments.terminal.interact"
     ]
   },
   {

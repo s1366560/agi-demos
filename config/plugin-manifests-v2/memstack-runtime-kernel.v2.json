@@ -15018,7 +15018,7 @@
       },
       "contract_digest": "sha256:8f0fca0bd5f717517f49b5be97078ee6a6e9b695e8e5d4d73b7429fd90cd712b",
       "artifact": {
-        "digest": "sha256:70ea3f3e1d6fa4b5666f857d36b665e79e1cf214b781e569a6c42d3d4da4a2ea",
+        "digest": "sha256:0bbb78cb69496c8d1c60302074e9dd127503d328682f4c37469d9e2c1683bd76",
         "source": "repo+python://plugins/business/agent/backend/application_adapter.py"
       }
     },
@@ -15117,7 +15117,7 @@
       },
       "contract_digest": "sha256:e2ae5c4f558cce5a3cb94163f7297676138945d7d836cad6b526b5db206c332c",
       "artifact": {
-        "digest": "sha256:96d96874d17f67a88c9bb37fb091c1a19a263dd7b0101ba431084f99b104aa8c",
+        "digest": "sha256:3a3db1e3b38b78439cc3b507acaac2c583c66b0c0eeaa976fb03b92ee766f61a",
         "source": "repo+python://plugins/business/environments/backend/application_adapter.py"
       }
     },
@@ -15150,7 +15150,7 @@
       },
       "contract_digest": "sha256:0bd5af327f1f3f424ba2339e5e0ad72472dd85e4f8f8c64e013d00fcf76264d3",
       "artifact": {
-        "digest": "sha256:c08f64ace10b48e9b4b11fac788ea91a0ba344453eb1a9dad94deda5b075011c",
+        "digest": "sha256:377211cd0cc9cf6769e8b51a33b48f21e30992077234c51c72ed2fecc17fd640",
         "source": "repo+python://plugins/business/knowledge/backend/application_adapter.py"
       }
     },
@@ -15183,7 +15183,7 @@
       },
       "contract_digest": "sha256:5393a4faba76802a3e0b95c2f4cab052573449b11eda0a55c31479b167c4ec5e",
       "artifact": {
-        "digest": "sha256:63a4456d77094856711bd7b4d0ea072eb8288450d796a1ea2d74395fac3f8461",
+        "digest": "sha256:ef020a2bfc72f2529c8711bf1a634d17b37fabe3086d2077cb10dbdec3fd89c8",
         "source": "repo+python://plugins/business/workspace/backend/application_adapter.py"
       }
     }
