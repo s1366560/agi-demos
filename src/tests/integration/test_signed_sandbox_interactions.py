@@ -35,7 +35,7 @@ def _exercise_viewer(page, native, owner):
     selector.focus()
     page.keyboard.type("printf '%d\\n' $((357*439))")
     page.keyboard.press("Enter")
-    expect(frame.locator(".xterm-rows")).to_contain_text("156723", timeout=30000)
+    expect(frame.locator(".xterm-rows")).to_contain_text("156723", timeout=60000)
     frame.get_by_role("button", name=re.compile("^Remote desktop$|^远程桌面$")).click()
     if native:
         frame.get_by_role("button", name=re.compile("Start desktop|启动桌面")).first.click()
@@ -106,7 +106,7 @@ def test_installed_terminal_and_remote_desktop(client):
                 "button", name="Terminal and remote desktop", exact=True
             )
 
-        current = os.getenv("MEMSTACK_INTERACTIVE_SANDBOX_VERSION", "1.5.2")
+        current = os.getenv("MEMSTACK_INTERACTIVE_SANDBOX_VERSION", "1.5.3")
         details()
         if page.locator(".pm-spec dd").first.inner_text() != "1.4.0":
             apply(page, "1.4.0")

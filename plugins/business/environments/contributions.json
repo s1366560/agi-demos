@@ -438,7 +438,7 @@
       "workbench": true,
       "entry": {
         "path": "ui/interaction.js",
-        "digest": "sha256:df65785746a86648449cdec0aca416450699f273aae8e10988b35bfde1913b09"
+        "digest": "sha256:659eb08fb7035de6c83d6fa45bfaf947a7990e94d463093cb3694ae311ba5513"
       },
       "style": {
         "path": "ui/interaction.css",

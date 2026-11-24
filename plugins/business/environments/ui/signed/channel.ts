@@ -13,6 +13,7 @@ export class SandboxChannel extends EventTarget {
   private abort = new AbortController();
   private writes = Promise.resolve();
   private backlog = 0;
+  private pendingInput: { text: string; size: number } | undefined;
 
   constructor(
     private command: Command,
@@ -67,8 +68,24 @@ export class SandboxChannel extends EventTarget {
       return;
     }
     this.backlog += size;
+    const terminal =
+      this.command === 'project-terminal' && typeof data === 'string' ? JSON.parse(data) : null;
+    const input =
+      terminal?.type === 'input' && typeof terminal.data === 'string' ? terminal.data : null;
+    if (
+      input !== null &&
+      this.pendingInput &&
+      this.pendingInput.text.length + input.length <= 4000
+    ) {
+      this.pendingInput.text += input;
+      this.pendingInput.size += size;
+      return;
+    }
+    const batch = input !== null ? { text: input, size } : undefined;
+    this.pendingInput = batch;
     this.writes = this.writes
       .then(async () => {
+        if (this.pendingInput === batch) this.pendingInput = undefined;
         const write = (text: string) =>
           window.memstack.invoke(
             this.command,
@@ -84,12 +101,14 @@ export class SandboxChannel extends EventTarget {
             await write(btoa(String.fromCharCode(...bytes.subarray(i, i + 24 * 1024))));
           }
         } else {
-          await write(data as string);
+          await write(
+            batch ? JSON.stringify({ type: 'input', data: batch.text }) : (data as string)
+          );
         }
       })
       .catch(() => this.fail())
       .finally(() => {
-        this.backlog -= size;
+        this.backlog -= batch?.size ?? size;
       });
   }
 
