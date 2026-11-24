@@ -508,7 +508,7 @@
       ],
       "entry": {
         "path": "ui/workflow.js",
-        "digest": "sha256:d7de303dd76c2446b986dadf0b5c2248963e1f11a4fef605964d7e43dc34a872"
+        "digest": "sha256:b937a7bd28df6ce40d885d3976eaf677514434f332b413ff0e68283584218025"
       },
       "commands": [
         "run-workflow",

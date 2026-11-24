@@ -106,5 +106,7 @@
   name.oninput = changed;
   root.append(title,editor,notice,output);
   select();
+  editor.disabled = true;
   try { await load(true); } catch (error) { notice.textContent=String(error); }
+  finally { editor.disabled = false; }
 })();
