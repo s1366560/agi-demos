@@ -58,6 +58,11 @@ def _native(pw, owner, scope):
 
 def _edit_schedule(frame, scope):
     assert frame.locator("html").evaluate("async()=> (await memstack.scope()).projectId") == scope
+    # The signed Ant page supplies its own reading surface even in a dark Electron window.
+    expect(frame.locator("body")).not_to_have_css("background-color", "rgba(0, 0, 0, 0)")
+    expect(
+        frame.get_by_role("heading", name=re.compile("Scheduled Tasks|定时任务"))
+    ).to_be_visible()
     frame.get_by_role("button", name=re.compile("Create Job|创建任务|新建任务")).click()
     form = frame.get_by_role("dialog")
     name = "Signed UI schedule " + uuid4().hex[:9]
