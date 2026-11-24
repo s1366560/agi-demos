@@ -120,8 +120,10 @@ async def _request_core(
     *,
     workspace: str | None = None,
     query: bytes = b"",
-    method: Literal["GET", "PATCH", "POST"] = "GET",
+    method: Literal["GET", "PATCH", "POST", "DELETE"] = "GET",
     read_authority: bool = False,
+    child: tuple[str, ...] = (),
+    task_route: bool = False,
     data: dict[str, Any] | None = None,
     request_id: UUID | None = None,
     expected_revision: int | None = None,
@@ -136,6 +138,10 @@ async def _request_core(
     path = f"/api/v1/tenants/{quote(tenant, safe='')}/projects/{quote(project, safe='')}/workspaces"
     if workspace:
         path += "/" + quote(workspace, safe="")
+    if task_route:
+        path = "/api/v1/workspaces/" + quote(workspace or "", safe="")
+    if child:
+        path += "/" + "/".join(quote(segment, safe="") for segment in child)
     if read_authority:
         path += "/collaboration/authority"
     headers = [
@@ -315,6 +321,12 @@ async def export_workspace_directory(
                 "app.workspace.detail.read",
                 "app.workspace.create",
                 "app.workspace.settings.update",
+                "app.workspace.members.read",
+                "app.workspace.members.write",
+                "app.workspace.posts.read",
+                "app.workspace.posts.write",
+                "app.workspace.tasks.read",
+                "app.workspace.tasks.write",
             }:
                 raise ValueError("workspace exporters only accept isolated computation")
             parts: list[str] = []

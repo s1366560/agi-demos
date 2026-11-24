@@ -114,6 +114,60 @@
       ],
       "payload": {},
       "accepts_input": true
+    },
+    {
+      "id": "list-members",
+      "host_operation": "app.workspace.members.read",
+      "permissions": [
+        "app.workspace.members.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "change-members",
+      "host_operation": "app.workspace.members.write",
+      "permissions": [
+        "app.workspace.members.write"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "list-posts",
+      "host_operation": "app.workspace.posts.read",
+      "permissions": [
+        "app.workspace.posts.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "change-posts",
+      "host_operation": "app.workspace.posts.write",
+      "permissions": [
+        "app.workspace.posts.write"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "list-tasks",
+      "host_operation": "app.workspace.tasks.read",
+      "permissions": [
+        "app.workspace.tasks.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "change-tasks",
+      "host_operation": "app.workspace.tasks.write",
+      "permissions": [
+        "app.workspace.tasks.write"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -172,7 +226,7 @@
       ],
       "entry": {
         "path": "ui/overview.js",
-        "digest": "sha256:e2d308e641f4566c4862be37ffd9e80e83997fafb3e19926c0fc9432988fe4f5"
+        "digest": "sha256:d9a76f49cad76cf1703843d6f41c7e94bc50d703579cbe3488a956d0e12559e5"
       },
       "device_tools": [],
       "style": {
@@ -199,7 +253,7 @@
       ],
       "entry": {
         "path": "ui/overview.js",
-        "digest": "sha256:e2d308e641f4566c4862be37ffd9e80e83997fafb3e19926c0fc9432988fe4f5"
+        "digest": "sha256:d9a76f49cad76cf1703843d6f41c7e94bc50d703579cbe3488a956d0e12559e5"
       },
       "device_tools": [],
       "style": {
@@ -257,6 +311,81 @@
         "path": "ui/directory.css",
         "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
       }
+    },
+    {
+      "id": "workspace-members",
+      "title": "Workspace members",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/members"
+      ],
+      "entry": {
+        "path": "ui/collaboration.js",
+        "digest": "sha256:701e106a62c5f5283575fde7d18cbafa9772ae45c2349c9cdde87ad426bd4931"
+      },
+      "style": {
+        "path": "ui/directory.css",
+        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
+      },
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "read-workspace",
+        "list-members",
+        "change-members"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "workspace-posts",
+      "title": "Blackboard posts",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/posts"
+      ],
+      "entry": {
+        "path": "ui/collaboration.js",
+        "digest": "sha256:701e106a62c5f5283575fde7d18cbafa9772ae45c2349c9cdde87ad426bd4931"
+      },
+      "style": {
+        "path": "ui/directory.css",
+        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
+      },
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "read-workspace",
+        "list-posts",
+        "change-posts"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "workspace-tasks",
+      "title": "Workspace tasks",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/tasks"
+      ],
+      "entry": {
+        "path": "ui/collaboration.js",
+        "digest": "sha256:701e106a62c5f5283575fde7d18cbafa9772ae45c2349c9cdde87ad426bd4931"
+      },
+      "style": {
+        "path": "ui/directory.css",
+        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
+      },
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "read-workspace",
+        "list-tasks",
+        "change-tasks"
+      ],
+      "device_tools": []
     }
   ]
 }

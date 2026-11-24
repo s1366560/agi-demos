@@ -2,7 +2,7 @@
 
 The legacy Web directory, task queue client, task state, blackboard hooks and collaboration views live together under [ui/web](ui/web). The desktop directory, overview, support and blackboard controllers live alongside their pages under [ui/desktop](ui/desktop). The signed project directory uses the scoped application capability and package worker described below.
 
-Workspace Core owns membership, task and collaboration transactions. The independently installable Workspace package contributes the directory, workspace creation, project overview, workspace details, general settings and CSV export. Code under `backend/` authorizes and projects the request. `src/lib.rs` formats the CSV in a Wasm guest. Run `uv run pytest plugins/business/workspace/tests` for the boundary tests.
+Workspace Core owns membership, task and collaboration transactions. The independently installable Workspace package contributes the directory, workspace creation, project overview, workspace details, general settings, member management, blackboard posts, task editing and CSV export. Code under `backend/` authorizes and projects the request. `src/lib.rs` formats the CSV in a Wasm guest. Run `uv run pytest plugins/business/workspace/tests` for the boundary tests.
 
 ## Directory CSV export
 
@@ -24,7 +24,10 @@ uv run --with ../../../sdk/memstack-plugin-sdk memstack-plugin-pack package.json
 memstack packages --tenant "$TENANT_ID" --project "$PROJECT_ID" install \
   --approve ui.slot --approve tools.execute --approve app.workspace.directory.read \
   --approve app.workspace.detail.read --approve app.workspace.create \
-  --approve app.workspace.settings.update directory.mspkg
+  --approve app.workspace.settings.update \
+  --approve app.workspace.members.read --approve app.workspace.members.write \
+  --approve app.workspace.posts.read --approve app.workspace.posts.write \
+  --approve app.workspace.tasks.read --approve app.workspace.tasks.write directory.mspkg
 ```
 
 Configure the API's trusted publisher via `PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES`. The API needs its usual Workspace Core and project-package connections. The exporter uses `tools.execute`. Its optional Web and desktop settings page uses `ui.slot` and invokes the same signed command.

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 import docker
 from alembic import command
+from plugins.business.workspace.backend.collaboration import WORKSPACE_COLLABORATION_OPERATIONS
 from plugins.business.workspace.backend.workspace_directory_export import (
     create_workspace_operation,
     read_directory_operation,
@@ -180,6 +181,7 @@ async def _project_host(http, db_session, core, public, monkeypatch):
     )[0]
     app.state.workspace_core_client = core
     app.state.package_operations_v1 = {
+        **WORKSPACE_COLLABORATION_OPERATIONS,
         "app.workspace.create": create_workspace_operation,
         "app.workspace.settings.update": update_workspace_operation,
         "app.workspace.directory.read": read_directory_operation,
@@ -244,6 +246,7 @@ async def test_directory_exports_only_actual_core_memberships(  # noqa: PLR0915
                     "tenant_id": "t",
                     "project_id": "p",
                     "approved_permissions": [
+                        *WORKSPACE_COLLABORATION_OPERATIONS,
                         "ui.slot",
                         "tools.execute",
                         "app.workspace.directory.read",
@@ -402,6 +405,21 @@ async def _verify_workspace_writes(api, base, actor, viewer, other):
         403,
         404,
     )
+    for topic in ("members", "posts", "tasks"):
+        wrong_scope = await invoke("list-" + topic, {"workspace_id": other})
+        assert wrong_scope.status_code in (403, 404)
+        forbidden = await invoke(
+            "change-" + topic,
+            {
+                "workspace_id": identity,
+                "action": "delete",
+                "id": "any",
+                "request_id": str(uuid4()),
+                "expected_revision": 0,
+            },
+            viewer,
+        )
+        assert forbidden.status_code in (403, 404)
     updated = await invoke("update-workspace", change)
     assert updated.is_success, updated.text
     stale = await invoke(
@@ -447,6 +465,15 @@ async def test_signed_workspace_forms_persist_in_workspace_core(
     )
     installed.raise_for_status()
     (await api.post(f"{base}/{PACKAGE}/enable", json=scope, headers=actor)).raise_for_status()
+
+    # Visiting Workspace Core as this project principal populates its membership projection.
+    # Member administration below still runs as the workspace owner.
+    viewer_context = await api.post(
+        "/api/v1/tenants/t/projects/p/workspaces",
+        headers={"Authorization": "Bearer " + keys["viewer"], "X-Tenant-Id": "t"},
+        json={"name": "Viewer onboarding"},
+    )
+    assert viewer_context.status_code in (201, 403), viewer_context.text
 
     password = secrets.token_urlsafe(24)
     owner = await db_session.get(User, "owner")
@@ -496,6 +523,7 @@ async def _edit_workspace_in_browser(page, expect):
     response = await pending.value
     assert response.ok, (response.status, await response.text())
     await expect(guest.get_by_role("heading", name="Shared planning")).to_be_visible()
+    await _check_workspace_collaboration(page, guest, expect)
     await guest.get_by_role("link", name="Workspace settings").click()
     await guest.get_by_label("Workspace name").fill("Release council")
     await guest.get_by_label("Archived", exact=True).check()
@@ -506,3 +534,53 @@ async def _edit_workspace_in_browser(page, expect):
     await guest.get_by_role("link", name="Project overview").click()
     await guest.get_by_role("link", name="Directory and CSV export").click()
     await expect(guest.get_by_role("link", name="Release council")).to_be_visible()
+
+
+async def _check_workspace_collaboration(page, guest, expect):
+    observations = []
+
+    def observe(response):
+        if response.request.method == "POST" and "/commands" in response.url:
+            observations.append(
+                (response.request.post_data_json.get("command_id"), response.status)
+            )
+
+    page.on("response", observe)
+    for section, value, label in [
+        ("Blackboard posts", "First announcement", "Title"),
+        ("Tasks", "Follow up", "Title"),
+        ("Members", "viewer", "User ID"),
+    ]:
+        await guest.get_by_role("link", name=section, exact=True).click()
+        await guest.get_by_label(label).fill(value)
+        if section == "Blackboard posts":
+            await guest.get_by_label("Content").fill("Shared release notes")
+            await guest.get_by_label("Pinned").check()
+        async with page.expect_response(
+            lambda r: "/commands" in r.url and "change-" in (r.request.post_data or "")
+        ) as saved:
+            await guest.get_by_role("button", name="Add", exact=True).click()
+        response = await saved.value
+        assert response.ok, (section, response.status, await response.text())
+        row = guest.get_by_role("listitem").filter(has_text=value)
+        try:
+            await expect(row).to_be_visible()
+        except AssertionError as exc:
+            raise AssertionError(
+                (section, observations[-15:], await guest.locator("body").inner_text())
+            ) from exc
+        await page.reload()
+        await expect(row).to_be_visible()
+        await row.get_by_role("button", name="Edit").click()
+        if section == "Members":
+            await guest.get_by_label("Role").select_option("editor")
+        else:
+            await guest.get_by_label(label).fill(value + " updated")
+            if section == "Tasks":
+                await guest.get_by_label("Status").select_option("in_progress")
+        await guest.get_by_role("button", name="Save").click()
+        await expect(row).to_contain_text("editor" if section == "Members" else "updated")
+        await row.get_by_role("button", name="Remove").click()
+        await row.get_by_role("button", name="Confirm removal").click()
+        await expect(row).to_have_count(0)
+        await guest.get_by_role("link", name="Workspace details").click()

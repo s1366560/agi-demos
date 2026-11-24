@@ -34,6 +34,9 @@
         [t('Archived', '已归档'), info.is_archived ? t('Yes','是') : t('No','否')],
       ]) fields.append(node('dt', label), node('dd', value));
       root.append(fields, link(t('Workspace settings', '工作区设置'), base + '/workspaces/' + encodeURIComponent(info.id) + '/settings'));
+      for (const [path, title] of [['members', t('Members', '成员')], ['posts', t('Blackboard posts', '黑板帖子')], ['tasks', t('Tasks', '任务')]]) {
+        root.append(link(title, base + '/workspaces/' + encodeURIComponent(info.id) + '/' + path));
+      }
       return;
     }
     root.append(node('h1', t('Project overview', '项目概览')), node('p', scope.projectId),
