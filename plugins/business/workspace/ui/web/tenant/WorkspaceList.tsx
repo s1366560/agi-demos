@@ -27,7 +27,7 @@ import {
   getSandboxCodeRoot,
   getWorkspaceCollaborationMode,
   getWorkspaceUseCase,
-} from '@/utils/workspaceConfig';
+} from '../workspaceConfig';
 
 
 import {

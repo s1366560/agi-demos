@@ -24,7 +24,7 @@ def build_upgrade_pair(package, base, old, new, *, signer=None, page_title=None)
     if "wasm32-unknown-unknown" not in targets.splitlines():
         pytest.skip("publisher build requires the wasm32-unknown-unknown standard library")
     root = base / "release"
-    shutil.copytree(package, root, ignore=shutil.ignore_patterns("target", "__pycache__"))
+    shutil.copytree(package, root, ignore=shutil.ignore_patterns("target", "__pycache__", "node_modules"))
     metadata = root / "package.json" if (root / "package.json").is_file() else root / "plugin.json"
     original = build(metadata, key)
     code = root / "src/lib.rs"

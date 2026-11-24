@@ -18,7 +18,7 @@ import {
   isIsolatedSandboxCodeRoot,
   normaliseSandboxCodeRoot,
   workspaceTypeForUseCase,
-} from '@/utils/workspaceConfig';
+} from '../workspaceConfig';
 
 import { Spinner } from '@/components/common/Spinner';
 import { AutonomySection } from '@/components/workspace/settings/AutonomySection';

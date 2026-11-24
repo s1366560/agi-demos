@@ -515,13 +515,14 @@ async def test_signed_workspace_forms_persist_in_workspace_core(
 async def _edit_workspace_in_browser(page, expect):
     guest = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
     await guest.get_by_label("Workspace name").fill("Shared planning")
-    await guest.get_by_label("Description").fill("Coordinate the release milestones")
-    await guest.get_by_label("Use case").select_option("research")
-    await guest.get_by_label("Collaboration mode").select_option("multi_agent_shared")
+    await guest.locator("#workspace-description-input").fill("Coordinate the release milestones")
+    await guest.get_by_role("radio", name="Research", exact=False).click()
+    await guest.get_by_role("radio", name="Shared team", exact=False).click()
     async with page.expect_response(lambda r: "/commands" in r.url) as pending:
-        await guest.get_by_role("button", name="Create workspace").click()
+        await guest.locator('button[form="workspace-create-form"]').click()
     response = await pending.value
     assert response.ok, (response.status, await response.text())
+    await guest.get_by_role("link", name="Workspace details").click()
     await expect(guest.get_by_role("heading", name="Shared planning")).to_be_visible()
     await _check_workspace_collaboration(page, guest, expect)
     await guest.get_by_role("link", name="Workspace settings").click()

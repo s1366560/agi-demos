@@ -11,7 +11,7 @@ import type {
   WorkspaceSourceControlProvider,
   WorkspaceType,
   WorkspaceUseCase,
-} from '@business/workspace/ui/web/types/workspace';
+} from './types/workspace';
 
 export const DEFAULT_WORKSPACE_USE_CASE: WorkspaceUseCase = 'general';
 export const DEFAULT_COLLABORATION_MODE: WorkspaceCollaborationMode = 'multi_agent_shared';

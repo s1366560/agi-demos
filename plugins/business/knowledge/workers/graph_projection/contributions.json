@@ -344,8 +344,7 @@
         "/tenant/:tenantId/project/:projectId/entities"
       ],
       "targets": [
-        "web",
-        "desktop-renderer"
+        "web"
       ],
       "commands": [
         "list-entities",
@@ -364,8 +363,29 @@
       },
       "style": {
         "path": "ui/entities.css",
-        "digest": "sha256:6d3027ad7aac3118513908ffcf859d1d6a781d085746e6f9ddc1ea2207dd0a51"
-      }
+        "digest": "sha256:77f077e778aa4e3adc48b520447f32e64a14e6a8b1898c8e2e065477fba00fb3"
+      },
+      "workbench": true
+    },
+    {
+      "id": "entities",
+      "title": "Graph entities",
+      "routes": [
+        "/entities",
+        "/project/:projectId/entities",
+        "/tenant/:tenantId/project/:projectId/entities"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "commands": [
+        "list-entities"
+      ],
+      "entry": {
+        "path": "ui/entities-desktop.js",
+        "digest": "sha256:4963f133b58722910f16b03cb4de64b31660e178333c31775a9ca2276a69438f"
+      },
+      "workbench": true
     }
   ]
 }

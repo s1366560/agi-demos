@@ -9,7 +9,7 @@ await buildPackagePages({
   root: fileURLToPath(new URL('../../', import.meta.url)),
   sourceDirectory: 'ui/signed',
   contribution: 'workers/graph_projection/contributions.json',
-  entries: { entities: 'EntitiesPage.tsx' },
+  entries: { entities: {web: 'EntitiesPage.tsx', 'desktop-renderer': 'DesktopEntitiesPage.tsx'} },
   plugins: [{
     name: 'package-tailwind',
     setup(build) {

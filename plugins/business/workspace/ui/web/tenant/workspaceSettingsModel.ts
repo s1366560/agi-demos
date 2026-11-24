@@ -17,7 +17,7 @@ import {
   normaliseSandboxCodeRoot,
   normaliseWorkspaceSourceControlConfig,
   workspaceTypeForUseCase,
-} from '@/utils/workspaceConfig';
+} from '../workspaceConfig';
 
 import type {
   Workspace,

@@ -271,21 +271,47 @@
         "/tenant/workspaces/new"
       ],
       "targets": [
-        "web",
-        "desktop-renderer"
+        "web"
       ],
       "entry": {
-        "path": "ui/workspaceForm.js",
-        "digest": "sha256:df4335c492916ca178fd50d27c82dbbaa5f62947b1034b9b5f3095aafa1fce94"
+        "path": "ui/workspace-create-web.js",
+        "digest": "sha256:247ec573ecaecb4e1782a175abb06e1c7ae9294a566e887d9d21d7c1832dda64"
       },
       "commands": [
         "create-workspace"
       ],
       "device_tools": [],
       "style": {
-        "path": "ui/directory.css",
-        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
-      }
+        "path": "ui/workspace-create-web.css",
+        "digest": "sha256:4ab38188dbf00b35acd443c86b6443d055c4c7534a2abf620f793aaf3c5ee5db"
+      },
+      "workbench": true
+    },
+    {
+      "id": "create",
+      "title": "Create workspace",
+      "routes": [
+        "/workspaces/new",
+        "/tenant/:tenantId/project/:projectId/workspaces/new",
+        "/tenant/:tenantId/workspaces/new",
+        "/tenant/workspaces/new"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workspace-create-desktop.js",
+        "digest": "sha256:31158f264f67cb2dfc2e0eb8f67da6aa4652bd44f7055987189eeb8cfb0d1fdb"
+      },
+      "commands": [
+        "create-workspace"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/workspace-create-desktop.css",
+        "digest": "sha256:00fc0c857a71263a389982d222eae4b67b27362b290a99a096aff9fc492f3342"
+      },
+      "workbench": true
     },
     {
       "id": "settings",
@@ -300,7 +326,7 @@
       ],
       "entry": {
         "path": "ui/workspaceForm.js",
-        "digest": "sha256:df4335c492916ca178fd50d27c82dbbaa5f62947b1034b9b5f3095aafa1fce94"
+        "digest": "sha256:8ac4ccc968509be88e51413289e49113489e5c1fee8e17f35ea73c1aebb7fec5"
       },
       "commands": [
         "read-workspace",

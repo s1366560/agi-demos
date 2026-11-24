@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const dialogSource = readFileSync(
-  new URL('../src/features/workspace/WorkspaceCreateDialog.tsx', import.meta.url),
+  new URL('../../../../plugins/business/workspace/ui/desktop/workspace/WorkspaceCreateDialog.tsx', import.meta.url),
   'utf8',
 );
 const sidebarSource = readFileSync(
