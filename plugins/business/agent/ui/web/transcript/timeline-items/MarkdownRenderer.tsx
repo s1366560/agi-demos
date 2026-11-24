@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 
 import remarkGfm from 'remark-gfm';
 
-import { safeMarkdownComponents } from '../chat/safeMarkdownComponents';
+import { safeMarkdownComponents } from '@/components/agent/chat/safeMarkdownComponents';
 
 // Lazy load math-only markdown extras to reduce initial bundle size.
 const LazyMarkdownRenderer = lazy(async () => {

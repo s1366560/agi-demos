@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { SubAgentDetailPanel } from '../../../../components/agent/timeline/SubAgentDetailPanel';
+import { SubAgentDetailPanel } from '@business/agent/ui/web/transcript/timeline/SubAgentDetailPanel';
 
 describe('SubAgentDetailPanel', () => {
   const mockOnClose = vi.fn();

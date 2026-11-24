@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   estimateGroupedItemHeight,
   estimateMarkdownHeight,
-} from '../../../../components/agent/message/heightEstimation';
+} from '@business/agent/ui/web/transcript/message/heightEstimation';
 
 describe('heightEstimation', () => {
   it('estimates text_end rows from fullText instead of the default row height', () => {

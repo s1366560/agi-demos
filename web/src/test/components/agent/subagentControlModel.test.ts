@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { latestSubagentRunRevision } from '@/components/agent/timeline/subagentControlModel';
+import { latestSubagentRunRevision } from '@business/agent/ui/web/transcript/timeline/subagentControlModel';
 
 describe('latestSubagentRunRevision', () => {
   it('reads only structured revision fields from the latest lifecycle event', () => {

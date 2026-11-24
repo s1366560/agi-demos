@@ -6,7 +6,7 @@
  */
 
 // Re-export formatDuration from shared utils
-export { formatDuration } from '../../../utils/date';
+export { formatDuration } from '@/utils/date';
 
 export const formatTokens = (count: number): string => {
   if (count < 1000) return String(count);

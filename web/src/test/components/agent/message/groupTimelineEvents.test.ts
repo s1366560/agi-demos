@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { groupTimelineEvents } from '../../../../components/agent/message/groupTimelineEvents';
+import { groupTimelineEvents } from '@business/agent/ui/web/transcript/message/groupTimelineEvents';
 
 import type { ActEvent, TimelineEvent } from '../../../../types/agent';
 

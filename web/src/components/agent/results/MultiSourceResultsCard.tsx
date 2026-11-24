@@ -21,7 +21,7 @@ import {
   type SourceGroup,
 } from './normalizeSources';
 
-import type { TimelineStep } from '../timeline/ExecutionTimeline';
+import type { TimelineStep } from '@business/agent/ui/web/transcript/timeline/ExecutionTimeline';
 import type { TFunction } from 'i18next';
 
 interface MultiSourceResultsCardProps {

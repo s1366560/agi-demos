@@ -1,9 +1,9 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useMCPAppOpen } from '@/components/agent/timeline/useMCPAppOpen';
+import { useMCPAppOpen } from '@business/agent/ui/web/transcript/timeline/useMCPAppOpen';
 
-import type { TimelineStep } from '@/components/agent/timeline/ExecutionTimeline';
+import type { TimelineStep } from '@business/agent/ui/web/transcript/timeline/ExecutionTimeline';
 
 const openTab = vi.fn();
 const setActiveTab = vi.fn();

@@ -9,8 +9,8 @@ import { Suspense } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { formatDateTime, formatDistanceToNow, formatTimeOnly } from '../../../utils/date';
-import { getOptionDescriptionText, getOptionLabelText } from '../../../utils/hitlOptionDisplay';
+import { formatDateTime, formatDistanceToNow, formatTimeOnly } from '@/utils/date';
+import { getOptionDescriptionText, getOptionLabelText } from '@/utils/hitlOptionDisplay';
 
 import { MarkdownRenderer } from './MarkdownRenderer';
 

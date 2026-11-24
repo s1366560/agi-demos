@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { useStreamingStore } from '@business/agent/ui/web/stores/agent/streamingStore';
 
-import { MessageArea } from '../../../components/agent/MessageArea';
+import { MessageArea } from '@business/agent/ui/web/transcript/MessageArea';
 
 const virtualizerMock = vi.hoisted(() => ({
   measureElement: vi.fn(),
@@ -54,7 +54,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 }));
 
 // Mock the dependencies
-vi.mock('../../../components/agent/MessageBubble', () => ({
+vi.mock('@business/agent/ui/web/transcript/MessageBubble', () => ({
   MessageBubble: ({ event, isStreaming }: any) => (
     <div data-testid={`message-${event.id || 'unknown'}`} data-streaming={isStreaming}>
       {event.content || 'Test message'}

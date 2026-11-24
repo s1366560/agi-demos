@@ -5,8 +5,8 @@
  */
 
 // Primary Agent Chat Components (Modern Design)
-export { MessageArea } from './MessageArea';
-export { MessageBubble } from './MessageBubble';
+export { MessageArea } from '@business/agent/ui/web/transcript/MessageArea';
+export { MessageBubble } from '@business/agent/ui/web/transcript/MessageBubble';
 export { InputBar } from './InputBar';
 export { RightPanel } from './RightPanel';
 export { SandboxSection } from '@business/environments/ui/web/components/SandboxSection';

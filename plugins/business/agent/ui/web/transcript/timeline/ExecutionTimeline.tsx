@@ -25,8 +25,8 @@ import {
   AppWindow,
 } from 'lucide-react';
 
-import { formatDuration } from '../../../utils/date';
-import { MultiSourceResultsCard } from '../results/MultiSourceResultsCard';
+import { formatDuration } from '@/utils/date';
+import { MultiSourceResultsCard } from '@/components/agent/results/MultiSourceResultsCard';
 import { AgentToolStepCard } from '../timeline-items/AgentToolCards';
 import { isAgentTool } from '../timeline-items/agentToolNames';
 

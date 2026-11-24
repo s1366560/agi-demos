@@ -50,7 +50,7 @@ import { usePinnedEventIds, useAgentHITLStore } from '@business/agent/ui/web/sto
 import { useAgentPermissionModeStore } from '@business/agent/ui/web/stores/agent/permissionModeStore';
 import { filterAutomaticPermissionEvents } from '@business/agent/ui/web/stores/agent/timelineUtils';
 
-import { SuggestionChips } from './chat/SuggestionChips';
+import { SuggestionChips } from '@/components/agent/chat/SuggestionChips';
 import { ConversationSummaryCardWrapper } from './message/ConversationSummaryCardWrapper';
 import { groupTimelineEvents } from './message/groupTimelineEvents';
 import { estimateGroupedItemHeight } from './message/heightEstimation';
@@ -77,14 +77,14 @@ import { useMessageAreaKeyboard } from './message/useMessageAreaKeyboard';
 import { useMessageAreaScroll } from './message/useMessageAreaScroll';
 import { useTurnCollapse } from './message/useTurnCollapse';
 import { MessageBubble } from './MessageBubble';
-import { MESSAGE_MAX_WIDTH_CLASSES, WIDE_MESSAGE_MAX_WIDTH_CLASSES } from './styles';
+import { MESSAGE_MAX_WIDTH_CLASSES, WIDE_MESSAGE_MAX_WIDTH_CLASSES } from '@/components/agent/styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 import { JitContextCard } from './timeline/JitContextCard';
 import { MemoryCapturedStep } from './timeline/MemoryRecalledStep';
 import { SubAgentTimeline } from './timeline/SubAgentTimeline';
 
 import type { DisplayItem } from './message/turnFolding';
-import type { TimelineEvent } from '../../types/agent';
+import type { TimelineEvent } from '@/types/agent';
 
 // Import and re-export types from separate file
 export type {

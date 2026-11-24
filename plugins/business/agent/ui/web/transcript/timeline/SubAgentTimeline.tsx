@@ -55,7 +55,7 @@ import {
   ERROR_PATTERNS,
 } from './subagentUtils';
 
-import type { TimelineEvent } from '../../../types/agent';
+import type { TimelineEvent } from '@/types/agent';
 
 export interface SubAgentGroup {
   kind: 'subagent';

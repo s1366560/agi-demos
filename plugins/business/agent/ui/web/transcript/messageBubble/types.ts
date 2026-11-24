@@ -10,7 +10,7 @@ import type {
   ObserveEvent,
   ArtifactCreatedEvent,
   ArtifactReference,
-} from '../../../types/agent';
+} from '@/types/agent';
 
 // Re-export commonly used types
 export type { TimelineEvent, ActEvent, ObserveEvent, ArtifactCreatedEvent };

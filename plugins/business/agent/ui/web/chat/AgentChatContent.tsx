@@ -101,7 +101,7 @@ import { EmptyState } from '@/components/agent/EmptyState';
 import { EvidenceBundleDrawer } from '@/components/agent/evidence/EvidenceBundleDrawer';
 import { InputBar } from '@/components/agent/InputBar';
 import { LayoutModeSelector } from '@/components/agent/layout/LayoutModeSelector';
-import { MessageArea } from '@/components/agent/MessageArea';
+import { MessageArea } from '../transcript/MessageArea';
 import { ProjectAgentStatusBar } from '@/components/agent/ProjectAgentStatusBar';
 import { Resizer } from '@/components/agent/Resizer';
 import { RunReviewDrawer } from '@/components/agent/review/RunReviewDrawer';

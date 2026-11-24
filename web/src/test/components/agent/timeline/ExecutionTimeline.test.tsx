@@ -3,13 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import '@testing-library/jest-dom/vitest';
 
-import { ExecutionTimeline } from '../../../../components/agent/timeline/ExecutionTimeline';
+import { ExecutionTimeline } from '@business/agent/ui/web/transcript/timeline/ExecutionTimeline';
 
 vi.mock('../../../../components/agent/results/MultiSourceResultsCard', () => ({
   MultiSourceResultsCard: () => null,
 }));
 
-vi.mock('../../../../components/agent/timeline/useMCPAppOpen', () => ({
+vi.mock('@business/agent/ui/web/transcript/timeline/useMCPAppOpen', () => ({
   useMCPAppOpen: () => () => undefined,
 }));
 

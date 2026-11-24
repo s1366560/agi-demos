@@ -20,15 +20,15 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 
-import { fetchArtifactResource } from '../../../services/artifactService';
-import { type CanvasContentType, useCanvasStore } from '../../../stores/canvasStore';
-import { useLayoutModeStore } from '../../../stores/layoutMode';
+import { fetchArtifactResource } from '@/services/artifactService';
+import { type CanvasContentType, useCanvasStore } from '@/stores/canvasStore';
+import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@business/environments/ui/web/stores/sandbox';
-import { isOfficeMimeType, isOfficeExtension } from '../../../utils/filePreview';
+import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
 
 import { TimeBadge } from './shared';
 
-import type { ArtifactCreatedEvent } from '../../../types/agent';
+import type { ArtifactCreatedEvent } from '@/types/agent';
 
 interface ArtifactCreatedItemProps {
   event: ArtifactCreatedEvent & { error?: string | undefined };

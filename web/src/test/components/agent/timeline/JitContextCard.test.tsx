@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { JitContextCard } from '../../../../components/agent/timeline/JitContextCard';
-import { MemoryCapturedStep } from '../../../../components/agent/timeline/MemoryRecalledStep';
+import { JitContextCard } from '@business/agent/ui/web/transcript/timeline/JitContextCard';
+import { MemoryCapturedStep } from '@business/agent/ui/web/transcript/timeline/MemoryRecalledStep';
 
 import type {
   MemoryCapturedTimelineEvent,

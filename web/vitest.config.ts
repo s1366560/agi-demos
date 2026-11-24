@@ -19,7 +19,7 @@ function katexCssPlugin() {
 export default defineConfig({
   plugins: [katexCssPlugin(), react()],
   resolve: {
-    dedupe: ['three', 'three-mesh-bvh', '@react-three/drei', '@react-three/fiber', 'docx-preview', 'xlsx', 'react-syntax-highlighter', '@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm', 'react-router-dom', 'chart.js', 'react-chartjs-2', 'i18next', 'react-markdown', 'use-debounce', 'uuid', 'zustand', '@tanstack/react-query', '@tanstack/react-virtual', 'react-i18next', 'antd', 'lucide-react', 'vitest'],
+    dedupe: ['three', 'three-mesh-bvh', '@react-three/drei', '@react-three/fiber', 'docx-preview', 'xlsx', 'react-syntax-highlighter', '@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm', 'react-router-dom', 'chart.js', 'react-chartjs-2', 'i18next', 'react-markdown', 'remark-gfm', 'remark-math', 'rehype-katex', 'katex', 'use-debounce', 'uuid', 'zustand', '@tanstack/react-query', '@tanstack/react-virtual', 'react-i18next', 'antd', 'lucide-react', 'vitest'],
     alias: {
       '@copilotkit/a2ui-renderer/dist': path.resolve(__dirname, './node_modules/@copilotkit/a2ui-renderer/dist'),
       '@': path.resolve(__dirname, './src'),

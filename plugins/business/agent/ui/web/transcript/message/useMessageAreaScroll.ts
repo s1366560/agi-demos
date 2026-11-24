@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { isNearBottom } from './markers';
 
-import type { TimelineEvent } from '../../../types/agent';
+import type { TimelineEvent } from '@/types/agent';
 
 // ========================================
 // Types

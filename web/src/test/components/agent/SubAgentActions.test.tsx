@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { agentService } from '@/services/agentService';
 
-import { SubAgentActions } from '@/components/agent/timeline/SubAgentActions';
+import { SubAgentActions } from '@business/agent/ui/web/transcript/timeline/SubAgentActions';
 
 vi.mock('@/services/agentService', () => ({
   agentService: {

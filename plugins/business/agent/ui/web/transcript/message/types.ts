@@ -4,7 +4,7 @@
  * Defines the type system for the compound MessageArea component.
  */
 
-import type { TimelineEvent } from '../../../types/agent';
+import type { TimelineEvent } from '@/types/agent';
 
 // ========================================
 // Domain Types (re-exported for convenience)

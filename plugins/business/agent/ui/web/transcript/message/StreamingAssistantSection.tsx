@@ -18,15 +18,15 @@ import {
   useStreamingThought,
   useIsThinkingStreaming,
 } from '@business/agent/ui/web/stores/agent/streamingStore';
-import { useMarkdownPlugins } from '../chat/markdownPlugins';
-import { safeMarkdownComponents } from '../chat/safeMarkdownComponents';
-import { ThinkingBlock } from '../chat/ThinkingBlock';
+import { useMarkdownPlugins } from '@/components/agent/chat/markdownPlugins';
+import { safeMarkdownComponents } from '@/components/agent/chat/safeMarkdownComponents';
+import { ThinkingBlock } from '@/components/agent/chat/ThinkingBlock';
 import {
   ASSISTANT_AVATAR_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,
   MARKDOWN_PROSE_CLASSES,
   MESSAGE_MAX_WIDTH_CLASSES,
-} from '../styles';
+} from '@/components/agent/styles';
 
 import { StreamingToolPreparation } from './StreamingToolPreparation';
 

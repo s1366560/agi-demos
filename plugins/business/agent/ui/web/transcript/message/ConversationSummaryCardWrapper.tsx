@@ -5,7 +5,7 @@
 import { memo } from 'react';
 
 import { useConversationsStore } from '@business/agent/ui/web/stores/agent/conversationsStore';
-import { ConversationSummaryCard } from '../chat/ConversationSummaryCard';
+import { ConversationSummaryCard } from '@/components/agent/chat/ConversationSummaryCard';
 
 export const ConversationSummaryCardWrapper: React.FC<{
   conversationId?: string | null | undefined;

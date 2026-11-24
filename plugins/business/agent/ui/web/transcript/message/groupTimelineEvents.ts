@@ -4,9 +4,9 @@
  * SubAgent events are grouped into SubAgentGroup blocks.
  */
 
-import { getPersistedToolStatus } from '../../../utils/toolCallTimeline';
+import { getPersistedToolStatus } from '@/utils/toolCallTimeline';
 
-import type { TimelineEvent, ObserveEvent, ActEvent } from '../../../types/agent';
+import type { TimelineEvent, ObserveEvent, ActEvent } from '@/types/agent';
 import type { TimelineStep } from '../timeline/ExecutionTimeline';
 import type { SubAgentGroup } from '../timeline/SubAgentTimeline';
 

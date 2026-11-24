@@ -8,7 +8,7 @@
 import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
-import { MessageArea } from '../../../components/agent/MessageArea';
+import { MessageArea } from '@business/agent/ui/web/transcript/MessageArea';
 
 import type { TimelineEvent } from '../../../types/agent';
 
@@ -28,7 +28,7 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }));
 
-vi.mock('../../../components/agent/MessageBubble', () => ({
+vi.mock('@business/agent/ui/web/transcript/MessageBubble', () => ({
   MessageBubble: ({ event }: { event: { id?: string; content?: string } }) => (
     <div data-testid={`message-${event.id || 'unknown'}`}>{event.content || 'message'}</div>
   ),

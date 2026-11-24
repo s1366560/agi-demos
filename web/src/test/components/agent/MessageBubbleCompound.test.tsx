@@ -61,7 +61,7 @@ vi.mock('@/components/ui/lazyAntd', () => ({
 }));
 
 // Import from the MessageBubble.tsx file directly
-import { MessageBubble } from '../../../components/agent/MessageBubble';
+import { MessageBubble } from '@business/agent/ui/web/transcript/MessageBubble';
 
 // Mock timeline events
 const mockUserEvent: any = {

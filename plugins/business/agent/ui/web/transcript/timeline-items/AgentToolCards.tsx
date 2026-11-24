@@ -15,12 +15,12 @@ import {
   Check,
 } from 'lucide-react';
 
-import { AgentSection } from '../chat/MessageStream';
-import { getPersistedToolStatus } from '../../../utils/toolCallTimeline';
+import { AgentSection } from '@/components/agent/chat/MessageStream';
+import { getPersistedToolStatus } from '@/utils/toolCallTimeline';
 
 import { TimeBadge } from './shared';
 
-import type { ActEvent, ObserveEvent } from '../../../types/agent';
+import type { ActEvent, ObserveEvent } from '@/types/agent';
 
 interface StatusBadgeProps {
   status: 'running' | 'success' | 'error' | 'cancelled';

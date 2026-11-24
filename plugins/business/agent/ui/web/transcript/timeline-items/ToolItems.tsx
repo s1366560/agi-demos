@@ -4,13 +4,13 @@
 
 import { memo } from 'react';
 
-import { AgentSection, ToolExecutionCardDisplay } from '../chat/MessageStream';
+import { AgentSection, ToolExecutionCardDisplay } from '@/components/agent/chat/MessageStream';
 
 import { AgentToolCard } from './AgentToolCards';
 import { isAgentTool } from './agentToolNames';
 import { TimeBadge } from './shared';
 
-import type { ActEvent, ObserveEvent, TimelineEvent } from '../../../types/agent';
+import type { ActEvent, ObserveEvent, TimelineEvent } from '@/types/agent';
 
 /**
  * Find matching observe event for an act event

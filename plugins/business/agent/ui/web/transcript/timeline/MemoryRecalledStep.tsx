@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Database } from 'lucide-react';
 
-import type { MemoryCapturedTimelineEvent } from '../../../types/agent';
+import type { MemoryCapturedTimelineEvent } from '@/types/agent';
 
 interface MemoryCapturedStepProps {
   event: MemoryCapturedTimelineEvent;

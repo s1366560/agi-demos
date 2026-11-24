@@ -3,7 +3,7 @@ import type React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MessageArea } from '@/components/agent/MessageArea';
+import { MessageArea } from '@business/agent/ui/web/transcript/MessageArea';
 import { AgentSwitcher } from '@/components/agent/AgentSwitcher';
 import { InputToolbar } from '@/components/agent/InputToolbar';
 import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
@@ -29,17 +29,17 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }));
 
-vi.mock('@/components/agent/MessageBubble', () => ({
+vi.mock('@business/agent/ui/web/transcript/MessageBubble', () => ({
   MessageBubble: ({ event }: { event: { content?: string } }) => (
     <div data-testid="message-bubble">{event.content || 'message'}</div>
   ),
 }));
 
-vi.mock('@/components/agent/timeline/ExecutionTimeline', () => ({
+vi.mock('@business/agent/ui/web/transcript/timeline/ExecutionTimeline', () => ({
   ExecutionTimeline: () => <div data-testid="execution-timeline" />,
 }));
 
-vi.mock('@/components/agent/timeline/SubAgentTimeline', () => ({
+vi.mock('@business/agent/ui/web/transcript/timeline/SubAgentTimeline', () => ({
   SubAgentTimeline: () => <div data-testid="subagent-timeline" />,
 }));
 
@@ -49,11 +49,11 @@ vi.mock('@/components/agent/chat/ThinkingBlock', () => ({
   ),
 }));
 
-vi.mock('@/components/agent/message/ConversationSummaryCardWrapper', () => ({
+vi.mock('@business/agent/ui/web/transcript/message/ConversationSummaryCardWrapper', () => ({
   ConversationSummaryCardWrapper: () => null,
 }));
 
-vi.mock('@/components/agent/message/StreamingToolPreparation', () => ({
+vi.mock('@business/agent/ui/web/transcript/message/StreamingToolPreparation', () => ({
   StreamingToolPreparation: () => <div data-testid="streaming-tool-prep" />,
 }));
 

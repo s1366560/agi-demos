@@ -61,19 +61,19 @@ import {
   resolveSandboxArtifactUrl,
 } from '@business/environments/ui/web/utils/sandboxArtifactPath';
 
-import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
-import { useMarkdownPlugins } from '../chat/markdownPlugins';
-import { MessageActionBar } from '../chat/MessageActionBar';
-import { safeMarkdownComponents } from '../chat/safeMarkdownComponents';
-import { SaveTemplateModal } from '../chat/SaveTemplateModal';
-import { InlineHITLCard } from '../InlineHITLCard';
+import { CodeBlock as SharedCodeBlock } from '@/components/agent/chat/CodeBlock';
+import { useMarkdownPlugins } from '@/components/agent/chat/markdownPlugins';
+import { MessageActionBar } from '@/components/agent/chat/MessageActionBar';
+import { safeMarkdownComponents } from '@/components/agent/chat/safeMarkdownComponents';
+import { SaveTemplateModal } from '@/components/agent/chat/SaveTemplateModal';
+import { InlineHITLCard } from '@/components/agent/InlineHITLCard';
 import {
   ASSISTANT_AVATAR_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,
   MARKDOWN_PROSE_CLASSES,
   MESSAGE_MAX_WIDTH_CLASSES,
   WIDE_MESSAGE_MAX_WIDTH_CLASSES,
-} from '../styles';
+} from '@/components/agent/styles';
 
 import { getErrorMessage } from '@/types/common';
 
@@ -102,7 +102,7 @@ import type {
   PermissionAskedTimelineEvent,
   PermissionRequestedTimelineEvent,
   TimelineEvent,
-} from '../../../types/agent';
+} from '@/types/agent';
 
 // ========================================
 // Utilities

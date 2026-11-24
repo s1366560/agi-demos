@@ -22,7 +22,7 @@ import { ChevronDown, ChevronRight, Copy, Database, Pin, PinOff } from 'lucide-r
 
 import { useJitContextPins } from './useJitContextPins';
 
-import type { MemoryRecalledTimelineEvent } from '../../../types/agent';
+import type { MemoryRecalledTimelineEvent } from '@/types/agent';
 
 interface JitContextCardProps {
   event: MemoryRecalledTimelineEvent;

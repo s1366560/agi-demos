@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
         'chart.js',
         'react-chartjs-2',
         'i18next',
-        'react-markdown',
+        'react-markdown', 'remark-gfm', 'remark-math', 'rehype-katex', 'katex',
         'use-debounce',
         'uuid',
         'zustand',
