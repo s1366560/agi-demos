@@ -85,12 +85,16 @@ def file_digest(path: Path) -> bytes:
         return hashlib.file_digest(data, "sha256").digest()
 
 
-def fingerprint(artifacts: Path) -> dict[str, str]:
-    result = {"sidecar": file_digest(SIDECAR).hex(), "workspace_core": file_digest(CORE).hex()}
-    for name, entry in [
-        ("web/dist", "index.html"),
-        ("agi-stack/apps/desktop/out", "main/index.js"),
+def fingerprint(artifacts: Path, targets: list[str]) -> dict[str, str]:
+    result = {}
+    if "desktop" in targets:
+        result.update(sidecar=file_digest(SIDECAR).hex(), workspace_core=file_digest(CORE).hex())
+    for target, name, entry in [
+        ("web", "web/dist", "index.html"),
+        ("desktop", "agi-stack/apps/desktop/out", "main/index.js"),
     ]:
+        if target not in targets:
+            continue
         root = artifacts / name
         if not (root / entry).is_file():
             raise RuntimeError(f"Full host is missing {root / entry}")
@@ -256,22 +260,24 @@ def main() -> bool:
         parser.error("Use a local static Web host")
     args.artifacts = args.artifacts.resolve()
     args.logs.mkdir(parents=True, exist_ok=True)
-    index = (args.artifacts / "web/dist/index.html").read_bytes()
-    served = httpx.get(args.origin.rstrip("/") + "/index.html")
-    served.raise_for_status()
-    if served.content != index:
-        raise RuntimeError("The Web server must serve the supplied static build")
-    initial = fingerprint(args.artifacts)
+    targets = args.target or ["web", "desktop"]
+    if "web" in targets:
+        index = (args.artifacts / "web/dist/index.html").read_bytes()
+        served = httpx.get(args.origin.rstrip("/") + "/index.html")
+        served.raise_for_status()
+        if served.content != index:
+            raise RuntimeError("The Web server must serve the supplied static build")
+    initial = fingerprint(args.artifacts, targets)
     accounts = json.loads(args.accounts.read_bytes())
     failures = []
     for package in args.package or PACKAGES:
-        for target in args.target or ["web", "desktop"]:
+        for target in targets:
             try:
                 run(package, target, args, accounts)
             except Exception as exc:
                 print(f"{package} {target}: {type(exc).__name__}: {exc}", flush=True)
                 failures.append((package, target))
-    if fingerprint(args.artifacts) != initial:
+    if fingerprint(args.artifacts, targets) != initial:
         raise RuntimeError("Host binaries changed during acceptance")
     print("Fixed hosts SHA-256", json.dumps(initial, sort_keys=True), flush=True)
     return bool(failures)
