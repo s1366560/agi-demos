@@ -1828,6 +1828,9 @@ async def get_project_sandbox_stats(
         # Get stats from the adapter (pass project_id as fallback for container lookup)
         stats = await adapter.get_sandbox_stats(info.sandbox_id, project_id=project_id)
 
+        if not stats:
+            raise HTTPException(status_code=503, detail=_("Sandbox metrics are unavailable"))
+
         # Calculate uptime if we have creation time
         uptime_seconds = None
         if info.created_at:
@@ -1848,7 +1851,7 @@ async def get_project_sandbox_stats(
             memory_percent=stats.get("memory_percent", 0.0),
             network_rx_bytes=stats.get("network_rx_bytes"),
             network_tx_bytes=stats.get("network_tx_bytes"),
-            disk_usage=stats.get("disk_read_bytes"),  # Use disk read as usage proxy
+            disk_usage=stats.get("disk_usage"),
             disk_limit=None,
             disk_percent=None,
             pids=stats.get("pids", 0),

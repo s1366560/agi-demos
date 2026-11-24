@@ -738,6 +738,25 @@ def test_project_sandbox_stats_missing_sandbox_is_sanitized(
 
 
 @pytest.mark.unit
+def test_stats_distinguish_unavailable_container_from_idle_container(
+    sandbox_http_client: TestClient,
+) -> None:
+    service = SimpleNamespace(get_project_sandbox=AsyncMock(return_value=_sandbox_info()))
+    adapter = SimpleNamespace(
+        get_sandbox_stats=AsyncMock(side_effect=[{}, {"cpu_percent": 0, "disk_read_bytes": 517}])
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = lambda: service
+    sandbox_http_client.app.dependency_overrides[router_mod.get_sandbox_adapter] = lambda: adapter
+
+    url = "/api/v1/projects/proj-1/sandbox/stats"
+    assert sandbox_http_client.get(url).status_code == 503
+    response = sandbox_http_client.get(url)
+    assert response.status_code == 200
+    assert response.json()["cpu_percent"] == 0
+    assert response.json()["disk_usage"] is None
+
+
+@pytest.mark.unit
 def test_project_sandbox_stats_error_log_omits_ids_and_exception_text(
     sandbox_http_client: TestClient,
     caplog: pytest.LogCaptureFixture,
