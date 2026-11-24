@@ -36,6 +36,7 @@ vi.mock('../../../routes/v2/webDefaultRouteComponentsV2', async (original) => ({
 
 import {
   composeWebRouteArtifactsV2,
+  hasFullWorkbenchRoute,
   createWebFeatureArtifactsV2,
   WEB_FEATURE_IDS_V2,
   WEB_CORE_ROUTE_ARTIFACT_ID_V2,
@@ -163,5 +164,39 @@ describe('Web feature composition', () => {
         'webhooks',
       ])
     );
+  });
+});
+
+describe('full workbench access for signed routes', () => {
+  const scope = { tenant: 't', project: 'p' };
+  const current = { id: 'p', tenant_id: 't' };
+  const path = '/tenant/t/project/p/workspaces/new';
+
+  it('links a matching full route only when its feature and parent authority are enabled', () => {
+    expect(hasFullWorkbenchRoute(path, scope, null, routesWithout())).toBe(true);
+    expect(hasFullWorkbenchRoute(path, scope, current, routesWithout('project-workspaces'))).toBe(
+      false
+    );
+    expect(hasFullWorkbenchRoute(path, scope, current, [])).toBe(false);
+  });
+  it('rejects unknown paths, wildcard redirects and unrelated project scopes', () => {
+    const artifacts = routesWithout();
+    for (const url of [
+      '/tenant/t/project/p/workspaces/w/settings',
+      '/project/p/unknown',
+      '/labels',
+      '/tenant/t/project/other/workspaces/new',
+    ]) {
+      expect(hasFullWorkbenchRoute(url, scope, current, artifacts)).toBe(false);
+    }
+    expect(hasFullWorkbenchRoute('/tenant/t/workspaces/new', scope, current, artifacts)).toBe(true);
+    expect(
+      hasFullWorkbenchRoute(
+        '/tenant/t/workspaces/new',
+        scope,
+        { ...current, id: 'other' },
+        artifacts
+      )
+    ).toBe(false);
   });
 });

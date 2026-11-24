@@ -902,6 +902,7 @@
       }
     },
     "pluginHub": {
+      "openFullWorkbench": "Open full workbench",
       "backToMarket": "Back to plugin marketplace",
       "integrationSettings": "Integrations and credentials",
       "title": "Plugin Hub",

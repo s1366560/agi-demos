@@ -86,6 +86,40 @@ export function createWebFeatureArtifactsV2(): readonly (
   ]);
 }
 
+/** Match the current full-client route generation before linking out of a signed page. */
+export function hasFullWorkbenchRoute(
+  pathname: string,
+  scope: { tenant: string; project: string },
+  currentProject: { id: string; tenant_id: string } | null,
+  artifacts: readonly WebRouteArtifactV2[]
+): boolean {
+  const matches = matchRoutes(navigationRouteObjects, pathname);
+  const leaf = matches?.at(-1);
+  if (!matches || !leaf || matches.some(({ route }) => route.path?.includes('*'))) return false;
+  const { tenantId, projectId } = leaf.params;
+  if ((tenantId && tenantId !== scope.tenant) || (projectId && projectId !== scope.project)) {
+    return false;
+  }
+  // Tenant-only legacy pages resolve the project from the active client store.
+  if (
+    !projectId &&
+    (currentProject?.id !== scope.project || currentProject.tenant_id !== scope.tenant)
+  ) {
+    return false;
+  }
+  const owners = matches.flatMap(({ route }) => {
+    const owner = featureOwner(route.handle);
+    return owner ? [owner] : [];
+  });
+  if (!owners.length) return false;
+  if (artifacts.some(({ id }) => id === 'web.routes.default-business.v1')) return true;
+  const active = new Set(artifacts.map(({ featureId }) => featureId));
+  return (
+    artifacts.some(({ id }) => id === WEB_CORE_ROUTE_ARTIFACT_ID_V2) &&
+    owners.every((owner) => active.has(owner))
+  );
+}
+
 /** Compose one guard/layout tree so changing an unrelated feature preserves mounted pages. */
 export function composeWebRouteArtifactsV2(artifacts: readonly WebRouteArtifactV2[]): ReactNode {
   if (artifacts.some(({ id }) => id === 'web.routes.default-business.v1')) {

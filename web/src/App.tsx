@@ -5,13 +5,19 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import './i18n/config';
 import { Login } from './pages/Login';
-import { ProjectBusinessRoute } from './projectPackages/ProjectBusinessRoute';
 import { WebPluginBootstrapBoundaryV2 } from './plugins/WebPluginBootstrapBoundaryV2';
 import { WebPluginGenerationHostV2 } from './plugins/WebPluginGenerationHostV2';
 import { createWebRendererAppCompositionPortV2 } from './plugins/webRendererAppCompositionV2';
 import { WebRendererAuthenticatedShellV2 } from './plugins/WebRendererAuthenticatedShellV2';
+import {
+  ProjectBusinessRoute,
+  type FullWorkbenchMatcher,
+} from './projectPackages/ProjectBusinessRoute';
 import { LoginRedirect, RedirectToLogin } from './routes/v2/webCoreRouteRedirectsV2';
-import { composeWebRouteArtifactsV2 } from './routes/v2/webFeatureCompositionV2';
+import {
+  composeWebRouteArtifactsV2,
+  hasFullWorkbenchRoute,
+} from './routes/v2/webFeatureCompositionV2';
 import { WebNavigationAuthorityProviderV2 } from './routes/v2/WebNavigationAuthorityV2';
 import { WebRouteAuthorityProviderV2 } from './routes/v2/WebRouteAuthorityV2';
 import { WebRoutePageLoaderV2 as PageLoader } from './routes/v2/WebRoutePageLoaderV2';
@@ -43,9 +49,21 @@ const DeviceApprove = lazy(() =>
 );
 const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
 
-function BusinessRoutes({ enabled, children }: { enabled: boolean; children: ReactNode }) {
+function BusinessRoutes({
+  enabled,
+  children,
+  matchesFullRoute,
+}: {
+  enabled: boolean;
+  children: ReactNode;
+  matchesFullRoute: FullWorkbenchMatcher;
+}) {
   const routes = <Routes>{children}</Routes>;
-  return enabled ? <ProjectBusinessRoute>{routes}</ProjectBusinessRoute> : routes;
+  return enabled ? (
+    <ProjectBusinessRoute matchesFullRoute={matchesFullRoute}>{routes}</ProjectBusinessRoute>
+  ) : (
+    routes
+  );
 }
 
 function App() {
@@ -65,7 +83,13 @@ function App() {
               {({ routeArtifacts, status }) => (
                 <WebNavigationAuthorityProviderV2 enabled={isAuthenticated}>
                   <WebUiSlotAuthorityProviderV2 enabled={isAuthenticated}>
-                    <BusinessRoutes enabled={isAuthenticated && !mustChangePassword}>
+                    <BusinessRoutes
+                      enabled={isAuthenticated && !mustChangePassword}
+                      matchesFullRoute={(pathname, scope, current) =>
+                        status === 'ready' &&
+                        hasFullWorkbenchRoute(pathname, scope, current, routeArtifacts)
+                      }
+                    >
                       <Route
                         path="/login"
                         element={!isAuthenticated ? <Login /> : <LoginRedirect />}
