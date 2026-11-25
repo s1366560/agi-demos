@@ -815,6 +815,7 @@ jobs:
           python-version: '3.12.13'
       - uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
         with:
+          version: '0.12.13' # Match Dockerfile.kernel and its locked dependency groups.
           enable-cache: true
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0

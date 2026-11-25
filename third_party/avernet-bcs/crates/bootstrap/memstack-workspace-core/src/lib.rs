@@ -1238,7 +1238,7 @@ mod tests {
         assert_eq!(payload["implemented_route_count"], 95);
         assert_eq!(
             payload["implemented_contract_sha256"],
-            "a0d6fb2d3ae01d30e767c184b29f07544cb33d86b9c55ee04391cb7f40117c30"
+            "56278e246fbb5ce4221c7b2ec4c088449ae6a70623946cfcfa6551e6c4d5a89e"
         );
         assert_eq!(
             payload["implemented_route_keys_sha256"],
@@ -1400,7 +1400,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn public_member_list_fails_closed_when_the_principal_identity_is_missing()
+    async fn public_member_list_preserves_members_without_an_email_projection()
     -> Result<(), Box<dyn std::error::Error>> {
         let request = Request::builder()
             .uri(
@@ -1412,10 +1412,11 @@ mod tests {
             .body(Body::empty())?;
 
         let response = workspace_router(contract_state()?).oneshot(request).await?;
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status(), StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await?;
         let payload: serde_json::Value = serde_json::from_slice(&body)?;
-        assert_eq!(payload["detail"], "Workspace Core is unavailable");
+        assert_eq!(payload[0]["user_id"], "user-1");
+        assert_eq!(payload[0].get("user_email"), Some(&serde_json::Value::Null));
         Ok(())
     }
 

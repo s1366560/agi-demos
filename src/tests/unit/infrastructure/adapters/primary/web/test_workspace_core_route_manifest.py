@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[7]
 GENERATOR_PATH = REPO_ROOT / "scripts/workspace-core/generate-route-manifest.py"
 MANIFEST_PATH = REPO_ROOT / "docs/architecture/workspace-core-route-manifest.json"
 
-EXPECTED_CONTRACT_SHA256 = "a0d6fb2d3ae01d30e767c184b29f07544cb33d86b9c55ee04391cb7f40117c30"
+EXPECTED_CONTRACT_SHA256 = "56278e246fbb5ce4221c7b2ec4c088449ae6a70623946cfcfa6551e6c4d5a89e"
 EXPECTED_MODULE_COUNTS = {
     "src.infrastructure.adapters.primary.web.routers.blackboard": 19,
     "src.infrastructure.adapters.primary.web.routers.cyber_genes": 5,
