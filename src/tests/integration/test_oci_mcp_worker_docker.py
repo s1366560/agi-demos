@@ -130,9 +130,9 @@ def disposable_worker_registry():
             assert not any("error" in event for event in events), [
                 e.get("error") for e in events if "error" in e
             ]
-            digest = next(
-                event["aux"]["Digest"] for event in events if "Digest" in event.get("aux", {})
-            )
+            # Registry inspection works with both Docker image stores, including push
+            # implementations that omit the optional aux event from the progress stream.
+            digest = engine.images.get_registry_data(repo + ":latest").id
             image = f"{repo}@{digest}"
             engine.images.remove(repo + ":latest")
             return image

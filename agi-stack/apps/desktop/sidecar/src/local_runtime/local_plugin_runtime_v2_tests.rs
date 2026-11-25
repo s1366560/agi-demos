@@ -14,6 +14,8 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::json;
 use tower::ServiceExt;
+// A real signed tool turn can include multiple Wasm invocations and durable checkpoint writes.
+const SIGNED_TURN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 const MARKER: &str =
     "(module (func (export \"score\") (param i32) (result i32) i32.const 20260914))";
 const TOKEN: &str = "local-plugin-runtime-test-session";

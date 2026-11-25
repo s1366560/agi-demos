@@ -90,7 +90,7 @@ def plugin_contract_digest_v2(contract: PluginContractV2) -> str:
     return f"sha256:{hashlib.sha256(canonical_json_v2(payload)).hexdigest()}"
 
 
-_PARSED_SNAPSHOTS: OrderedDict[str, tuple[bytes, ProfileSnapshotV2]] = OrderedDict()
+_PARSED_SNAPSHOTS: OrderedDict[str, bytes] = OrderedDict()
 _PARSED_SNAPSHOT_LIMIT = 32
 
 
@@ -110,9 +110,9 @@ def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
     body = _snapshot_canonical(payload)
     expected_from_body = hashlib.sha256(body).hexdigest()
     if isinstance(digest, str) and (cached := _PARSED_SNAPSHOTS.get(digest)) is not None:
-        if digest == expected_from_body and cached[0] == body:
+        if digest == expected_from_body and cached == body:
             _PARSED_SNAPSHOTS.move_to_end(digest)
-            return cached[1]
+            return _snapshot_from_payload({**json.loads(body), "digest": digest})
     _validate_schema("ProfileSnapshotV2", payload)
     _validate_snapshot_semantics(payload)
     if payload["digest"] != expected_from_body:
@@ -120,12 +120,12 @@ def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
             "digest_mismatch",
             f"snapshot digest mismatch: expected {expected_from_body}",
         )
-    snapshot = _snapshot_from_payload(payload)
-    _PARSED_SNAPSHOTS[expected_from_body] = (body, snapshot)
+    # Keep only immutable verified bytes. Snapshot config and schema mappings belong to callers.
+    _PARSED_SNAPSHOTS[expected_from_body] = body
     _PARSED_SNAPSHOTS.move_to_end(expected_from_body)
     while len(_PARSED_SNAPSHOTS) > _PARSED_SNAPSHOT_LIMIT:
         _PARSED_SNAPSHOTS.popitem(last=False)
-    return snapshot
+    return _snapshot_from_payload({**json.loads(body), "digest": expected_from_body})
 
 
 def parse_plugin_manifest_v2(payload: object) -> PluginManifestV2:
@@ -291,9 +291,9 @@ def build_profile_snapshot_v2(
     canonical = canonical_json_v2(payload)
     digest = hashlib.sha256(canonical).hexdigest()
     cached = _PARSED_SNAPSHOTS.get(digest)
-    if cached is not None and cached[0] == canonical:
+    if cached == canonical:
         _PARSED_SNAPSHOTS.move_to_end(digest)
-        return cached[1]
+        return _snapshot_from_payload({**payload, "digest": digest})
     payload["digest"] = digest
     return parse_profile_snapshot_v2(payload)
 

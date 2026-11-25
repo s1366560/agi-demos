@@ -477,8 +477,8 @@ class TestReActAgentBackgroundExecutor:
 @pytest.mark.unit
 class TestReActAgentWorkspaceDelegation:
     @pytest.fixture(autouse=True)
-    def _allow_stream_without_a_database_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """These tests pin an operation but do not persist a plan or chat run."""
+    def _admit_workspace_test_turn(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Workspace delegation runs against a pinned chat turn with no installed packages."""
 
         async def _prepare(*_args: object, **_kwargs: object) -> None:
             return None
@@ -489,7 +489,11 @@ class TestReActAgentWorkspaceDelegation:
         )
         monkeypatch.setattr(
             "src.application.services.chat_run_tool_permission_v2.current_chat_run_guard_v2",
-            lambda: None,
+            lambda: SimpleNamespace(run_id="test-run", sessions=None),
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.core.project_package_tools.bind_project_packages",
+            AsyncMock(return_value=SimpleNamespace(skills={}, subagents={})),
         )
         monkeypatch.setattr(
             "src.application.services.approved_run_tool_permission_v2.prepare_approved_run_guard_v2",

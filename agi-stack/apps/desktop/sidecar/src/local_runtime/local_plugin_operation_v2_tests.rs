@@ -674,7 +674,7 @@ async fn native_plan_request_advertises_and_executes_signed_plugin(
         let (status,body)=request(&state,"POST",&format!("/api/v1/agent/conversations/{id}/messages"),json!({"project_id":"desktop-client","message":"Call signed marker","message_id":"http-plugin-plan-message"})).await;
         assert_eq!(status, StatusCode::OK, "{body}");
     }
-    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+    tokio::time::timeout(SIGNED_TURN_TIMEOUT, async {
         loop {
             if state
                 .session_store
@@ -689,7 +689,7 @@ async fn native_plan_request_advertises_and_executes_signed_plugin(
         }
     })
     .await
-    .unwrap();
+    .expect("signed tool turn did not publish its assistant message");
     assert!(llm
         .0
         .lock()

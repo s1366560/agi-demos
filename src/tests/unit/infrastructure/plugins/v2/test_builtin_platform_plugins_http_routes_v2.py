@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from fastapi.routing import APIRoute
 
-from src.application.schemas.device_plugin_grants import DeviceAdmissionView, DeviceGrantView
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateResponseV2,
     PlatformPluginDataPlaneCredentialIssuedResponseV2,
@@ -18,6 +18,9 @@ from src.application.schemas.platform_plugins import (
 )
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.host.identity.device_plugin_grants import router as device_grants_router
+from src.host.transport.project_package_routes import project_package_router
+from src.host.transport.tenant_packages import router as tenant_package_router
 from src.infrastructure.plugins.v2 import builtin_platform_plugins_http_routes as subject
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 
@@ -125,107 +128,11 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
             "republish_last_ready_v2",
             PlatformPluginPublicationReadinessResponseV2,
         ),
-        (
-            f"{v2}/optional-business/inspect",
-            ("POST",),
-            "inspect_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/install",
-            ("POST",),
-            "install_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}",
-            ("GET",),
-            "projection_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/enable",
-            ("POST",),
-            "enable_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/disable",
-            ("POST",),
-            "disable_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/uninstall",
-            ("POST",),
-            "uninstall_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/purge",
-            ("POST",),
-            "purge_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/rollback",
-            ("POST",),
-            "rollback_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/invoke",
-            ("POST",),
-            "invoke_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/commands",
-            ("POST",),
-            "command_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/storage/{{item_key}}",
-            ("PUT",),
-            "put_optional_business_storage_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/storage/{{item_key}}",
-            ("GET",),
-            "get_optional_business_storage_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/ui",
-            ("GET",),
-            "ui_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            "/api/v1/projects/{project_id}/device-plugin-grants/authority",
-            ("GET",),
-            "device_package_authority",
-            dict[str, bool],
-        ),
-        (
-            "/api/v1/projects/{project_id}/device-plugin-grants/",
-            ("POST",),
-            "approve_device_package",
-            DeviceGrantView,
-        ),
-        (
-            "/api/v1/projects/{project_id}/device-plugin-grants/check",
-            ("POST",),
-            "check_device_package",
-            DeviceAdmissionView,
-        ),
-        (
-            "/api/v1/projects/{project_id}/device-plugin-grants/{grant_id}",
-            ("DELETE",),
-            "revoke_device_package",
-            None,
+        *(
+            (route.path, tuple(sorted(route.methods)), route.name, route.response_model)
+            for router in (project_package_router, tenant_package_router, device_grants_router)
+            for route in router.routes
+            if isinstance(route, APIRoute)
         ),
         (
             prefix,

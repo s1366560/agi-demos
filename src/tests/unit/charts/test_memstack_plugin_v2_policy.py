@@ -56,7 +56,7 @@ def test_production_chart_declares_finite_required_v2_roster() -> None:
 
 
 @pytest.mark.skipif(_HELM is None, reason="helm is not installed")
-def test_helm_rejects_production_without_explicit_v2_roster() -> None:
+def test_helm_rejects_full_runtime_production_without_explicit_v2_roster() -> None:
     assert _HELM is not None
     result = subprocess.run(
         [
@@ -66,6 +66,8 @@ def test_helm_rejects_production_without_explicit_v2_roster() -> None:
             str(_CHART),
             "--set-string",
             "config.environment=production",
+            "--set",
+            "api.packageKernel=false",
             "--set-string",
             "config.pluginV2RequiredDataPlaneIds=",
         ],
