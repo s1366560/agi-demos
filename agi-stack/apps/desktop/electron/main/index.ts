@@ -960,7 +960,7 @@ async function executeDesktopCommand(
             ? request as { path?: unknown; method?: unknown; body?: unknown }
             : {};
           const requestBody = record.body && typeof record.body === 'object'
-            ? record.body as { tenant_id?: unknown; project_id?: unknown }
+            ? record.body as { tenant_id?: unknown; project_id?: unknown; command_id?: unknown }
             : null;
           const requestScope = requestBody
             ? {
@@ -973,6 +973,7 @@ async function executeDesktopCommand(
             method: typeof record.method === 'string' ? record.method : 'GET',
             status: typeof result.status === 'number' ? result.status : 0,
             body: redactQaValue(result.body ?? null),
+            ...(typeof requestBody?.command_id === 'string' ? { command_id: requestBody.command_id } : {}),
             ...(requestScope ? { request_scope: requestScope } : {}),
           });
         }
