@@ -169,6 +169,8 @@ jobs:
         run: bash scripts/avernet-bcs/cargo.sh build -p memstack-workspace-core --bin memstack-workspace-core
 
       - name: Build Electron main and preload
+        env:
+          AGISTACK_DESKTOP_PROFILE: compat
         working-directory: agi-stack/apps/desktop
         run: corepack pnpm exec electron-vite build
 

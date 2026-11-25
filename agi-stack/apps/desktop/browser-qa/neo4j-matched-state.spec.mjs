@@ -13,7 +13,7 @@ const desktopAppRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:8000";
 
 function desktopElectronArgs() {
-  const args = [desktopAppRoot];
+  const args = [resolve(desktopAppRoot, "out-compat/main/index.js")];
   const userDataDir = process.env.AGISTACK_DESKTOP_QA_USER_DATA_DIR;
   if (userDataDir) args.push(`--user-data-dir=${userDataDir}`);
   if (process.env.CI === "true" && process.platform === "linux") {
