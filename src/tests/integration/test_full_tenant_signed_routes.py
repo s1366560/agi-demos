@@ -5,6 +5,7 @@ import os
 import re
 from pathlib import Path
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import pytest
 from playwright.sync_api import expect, sync_playwright
@@ -24,7 +25,7 @@ pytestmark = [
     ("package", "version", "route", "search_label"),
     [
         ("automation", business_release("automation"), "patterns", "Search patterns|搜索模式"),
-        ("environments", "1.5.3", "clusters", "Search clusters|搜索集群"),
+        ("environments", business_release("environments"), "clusters", "Search clusters|搜索集群"),
     ],
 )
 def test_tenant_bookmark_opens_installed_original(package, version, route, search_label):
@@ -62,6 +63,26 @@ def test_tenant_bookmark_opens_installed_original(package, version, route, searc
                 expect(search).to_be_visible(timeout=60000)
                 search.fill("qa-missing-item")
                 expect(search).to_have_value("qa-missing-item")
+            if package == "environments":
+                bookmark = tenant + "/org-settings/clusters?qa=readonly#node"
+                page.goto(bookmark)
+                expect(
+                    page.get_by_role("link", name=re.compile("Clusters|集群")).last
+                ).to_be_visible()
+                panel = page.frame_locator('iframe[title="Organization clusters"]').frame_locator(
+                    "iframe"
+                )
+                panel.get_by_role("button", name=re.compile("Manage Clusters|管理集群")).click()
+                expect(
+                    page.frame_locator('iframe[title="Clusters"]')
+                    .frame_locator("iframe")
+                    .get_by_placeholder(re.compile(search_label))
+                ).to_be_visible()
+                page.go_back()
+                expect(page).to_have_url(bookmark)
+                _open_runtime_template(page, tenant)
+            if package == "automation":
+                _open_tenant_activity(page, tenant)
         finally:
             if previous != version:
                 current = market()
@@ -74,6 +95,63 @@ def test_tenant_bookmark_opens_installed_original(package, version, route, searc
                     else:
                         apply(page, previous)
             browser.close()
+
+
+def _open_runtime_template(page, tenant):
+    frame = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
+    page.goto(tenant + "/deploy")
+    expect(frame.get_by_text(re.compile("Deploy Records|部署记录")).first).to_be_visible()
+    with page.expect_response(
+        lambda response: response.url.endswith("/commands")
+        and response.request.post_data_json.get("command_id") == "read-runtime-pool"
+        and response.request.post_data_json["payload"].get("resource") == "status"
+    ) as pool:
+        page.goto(tenant + "/pool")
+    assert pool.value.ok, pool.value.status
+    expect(frame.locator(".ant-statistic").first).to_be_visible()
+    listing = tenant + "/instance-templates"
+    page.goto(listing)
+    name = "Signed QA " + uuid4().hex[:12]
+    frame.get_by_role("button", name=re.compile("Create Template|创建模板")).click()
+    dialog = frame.get_by_role("dialog")
+    dialog.get_by_label(re.compile("Template Name|模板名称")).fill(name)
+    dialog.locator("button.ant-btn-primary").click()
+    view = frame.get_by_role("button", name=re.compile(rf"(View|查看) {name}"))
+    expect(view).to_be_visible()
+    try:
+        view.click()
+        deploy = frame.get_by_role("button", name=re.compile("Deploy from Template|从模板部署"))
+        expect(deploy).to_be_visible()
+        template_id = urlsplit(page.url).path.rsplit("/", 1)[-1]
+        deploy.click()
+        expect(page).to_have_url(
+            re.compile(re.escape(tenant + "/instances/create?templateId=" + template_id) + r"(&|$)")
+        )
+        expect(frame.locator("input[value='" + name + " Instance']")).to_be_visible()
+        page.go_back()
+        expect(deploy).to_be_visible()
+    finally:
+        page.goto(listing)
+        frame.get_by_role("button", name=re.compile(rf"(Delete|删除) {name}")).click()
+        frame.locator(".ant-popconfirm-buttons .ant-btn-primary").click()
+        expect(view).to_have_count(0)
+
+
+def _open_tenant_activity(page, tenant):
+    for path, command in (("events", "read-events"), ("webhooks", "list-webhooks")):
+        with page.expect_response(
+            lambda response: response.url.endswith("/commands")
+            and response.request.post_data_json.get("command_id") == command
+        ) as operation:
+            page.goto(f"{tenant}/{path}")
+        assert operation.value.ok, operation.value.status
+        frame = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
+        if path == "events":
+            frame.get_by_role("combobox", name=re.compile("Filter by type|按类型过滤")).click()
+            expect(frame.locator(".ant-select-dropdown")).to_be_visible()
+        else:
+            frame.get_by_role("button", name=re.compile("Create Webhook|创建Webhook")).click()
+            expect(frame.get_by_role("dialog").get_by_label("URL")).to_be_visible()
 
 
 def test_original_palette_and_user_selected_compatibility_bookmark():

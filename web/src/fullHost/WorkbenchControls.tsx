@@ -28,12 +28,13 @@ export function FullSidebar(props: TenantChatSidebarProps) {
 
 export function FullPalette(props: CommandPaletteProps) {
   const items = useHeaderItems();
-  const { canCreate, conversations } = useSignedSidebar();
+  const { canCreate, conversations, navigation } = useSignedSidebar();
   return (
     <CommandPaletteView
       {...props}
       navigationItems={items}
       agentWorkspaceEnabled={canCreate}
+      rowLink={navigation?.link}
       conversations={conversations}
     />
   );

@@ -569,7 +569,7 @@ async def test_official_billing_settings_page_and_action_use_same_signed_release
     assert (await client.post(base + "/enable", json=scope, headers=headers)).status_code == 200
     projection = (await client.get(base, params=scope, headers=headers)).json()
     assert projection["has_web_ui"] and projection["has_desktop_ui"]
-    assert projection["commands"] == ["quote-pro", "tenant-account", "change-plan"]
+    assert projection["commands"] == ["quote-pro", "tenant-account", "change-plan", "billing-details"]
     pinned = {**scope, "expected_digest": preview["digest"]}
     for target in ["web", "desktop-renderer"]:
         view = (

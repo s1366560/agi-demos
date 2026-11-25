@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:3dec94c918cce00359240def774cdb89acffed63c411c19cdca12c11940b08",
-    "88\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:ea14c107c684486402a0487a204104d05fd9e903499fbb52a82a1f67ca4c20",
+    "44\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -3642,7 +3642,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "rypoint\":\"src.infrastructure.plugins.v2.admin_dlq_services:_apply_admin_dlq_provider_v2\"",
     ",\"module_ref\":\"builtin://memstack/messaging/admin-dlq-provider\",\"plugin_id\":\"memstack-ru",
     "ntime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:",
-    "0bbb78cb69496c8d1c60302074e9dd127503d328682f4c37469d9e2c1683bd76\",\"artifact_source\":\"rep",
+    "8833511623023cf69dd272dcf256a27be0c04cf50b3f07051d36fe2da43732b7\",\"artifact_source\":\"rep",
     "o+python://plugins/business/agent/backend/application_adapter.py\",\"contract\":{\"config_sc",
     "hema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":f",
     "alse,\"properties\":{},\"type\":\"object\"},\"events\":{\"emits\":[],\"handles\":[]},\"services\":{\"pr",
@@ -3650,8 +3650,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "quires\":[]}},\"contract_digest\":\"sha256:8f0fca0bd5f717517f49b5be97078ee6a6e9b695e8e5d4d73",
     "b7429fd90cd712b\",\"entrypoint\":\"plugins.business.agent.backend.application_adapter:apply\"",
     ",\"module_ref\":\"builtin://memstack/package-application/agent\",\"plugin_id\":\"memstack-runti",
-    "me-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:9e2",
-    "67f2481869fff2beeafb27a0c5af4b3d1b187a4c5a3b073c326382df653a0\",\"artifact_source\":\"repo+p",
+    "me-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:989",
+    "669fe070fda2f2b74b2344af08e1110ef13ccd284b347d56672e8280676a5\",\"artifact_source\":\"repo+p",
     "ython://plugins/business/automation/backend/application_adapter.py\",\"contract\":{\"config_",
     "schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\"",
     ":false,\"properties\":{},\"type\":\"object\"},\"events\":{\"emits\":[],\"handles\":[]},\"services\":{\"",
@@ -3669,7 +3669,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "e30c99fec1ed40a565283b88302e8ed67\",\"entrypoint\":\"plugins.business.billing.backend.applic",
     "ation_adapter:apply\",\"module_ref\":\"builtin://memstack/package-application/billing\",\"plug",
     "in_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifa",
-    "ct_digest\":\"sha256:3a3db1e3b38b78439cc3b507acaac2c583c66b0c0eeaa976fb03b92ee766f61a\",\"ar",
+    "ct_digest\":\"sha256:0324637acab14f6073b5be78b8e1ab9a2074ebfd3e0ff69168718788e1a3730e\",\"ar",
     "tifact_source\":\"repo+python://plugins/business/environments/backend/application_adapter.",
     "py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema",
     "\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"events\":{\"emits\":[],\"ha",
@@ -3678,8 +3678,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "3cb94163f7297676138945d7d836cad6b526b5db206c332c\",\"entrypoint\":\"plugins.business.environ",
     "ments.backend.application_adapter:apply\",\"module_ref\":\"builtin://memstack/package-applic",
     "ation/environments\",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targ",
-    "ets\":[\"python\"]},{\"artifact_digest\":\"sha256:74af1940f123d1e499027bf046a47d01de2e216b4f64",
-    "bfce00eb047b341f6659\",\"artifact_source\":\"repo+python://plugins/business/knowledge/backen",
+    "ets\":[\"python\"]},{\"artifact_digest\":\"sha256:12df21553dc7d0a0aa4bc8c8fee90556117b270b451e",
+    "ae039781e438c5b71821\",\"artifact_source\":\"repo+python://plugins/business/knowledge/backen",
     "d/application_adapter.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.or",
     "g/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"e",
     "vents\":{\"emits\":[],\"handles\":[]},\"services\":{\"provides\":[{\"service\":\"service:package-app",
@@ -3687,8 +3687,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "56:0bd5af327f1f3f424ba2339e5e0ad72472dd85e4f8f8c64e013d00fcf76264d3\",\"entrypoint\":\"plugi",
     "ns.business.knowledge.backend.application_adapter:apply\",\"module_ref\":\"builtin://memstac",
     "k/package-application/knowledge\",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":",
-    "\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:ef020a2bfc72f2529c8711bf1a634d1",
-    "7b37fabe3086d2077cb10dbdec3fd89c8\",\"artifact_source\":\"repo+python://plugins/business/wor",
+    "\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:44b004d8ea703a03c29ebf042bd74df",
+    "acf64809a49547a46fc5bfb451b439f21\",\"artifact_source\":\"repo+python://plugins/business/wor",
     "kspace/backend/application_adapter.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://j",
     "son-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\"",
     ":\"object\"},\"events\":{\"emits\":[],\"handles\":[]},\"services\":{\"provides\":[{\"service\":\"servic",
@@ -4843,4 +4843,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "rsion\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:3dec94c918cce00359240def774cdb89acffed63c411c19cdca12c11940b0888";
+    "sha256:ea14c107c684486402a0487a204104d05fd9e903499fbb52a82a1f67ca4c2044";

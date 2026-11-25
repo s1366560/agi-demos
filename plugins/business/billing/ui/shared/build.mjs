@@ -9,7 +9,7 @@ await buildPackagePages({
   root: fileURLToPath(new URL('../../', import.meta.url)),
   sourceDirectory: 'ui/shared',
   entries: {
-    'tenant-account': { web: 'WebBillingPage.tsx', 'desktop-renderer': 'DesktopBillingPage.tsx' },
+    'tenant-account': 'WebBillingPage.tsx',
   },
   plugins: [{
     name: 'billing-original-views',

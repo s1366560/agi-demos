@@ -31,6 +31,7 @@ export function syncBlackboardWorkspaceSearchParams(
   }
 
   const nextSearchParams = new URLSearchParams(searchParams);
+  if (currentQueryWorkspaceId !== options.selectedWorkspaceId) nextSearchParams.delete('taskId');
   nextSearchParams.set('workspaceId', options.selectedWorkspaceId);
   nextSearchParams.delete('open');
   return nextSearchParams;

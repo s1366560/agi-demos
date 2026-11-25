@@ -302,6 +302,7 @@ fn signed_subagent_boundary(
     .unwrap()
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn production_subagent_factory_delegates_real_signed_read_plugin_through_approved_parent() {
     use agistack_adapters_mem::ScriptedLlm;
@@ -396,6 +397,7 @@ async fn production_subagent_factory_delegates_real_signed_read_plugin_through_a
     .await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn production_subagent_factory_rejects_real_signed_plugin_with_mismatched_selection() {
     use agistack_adapters_mem::ScriptedLlm;
@@ -494,14 +496,17 @@ async fn production_subagent_factory_rejects_real_signed_plugin_with_mismatched_
         .any(|row| row.tool_name == name));
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn authenticated_plan_http_request_advertises_and_executes_signed_plugin() {
     native_plan_request_advertises_and_executes_signed_plugin(false, false).await;
 }
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn authenticated_plan_websocket_request_advertises_and_executes_signed_plugin() {
     native_plan_request_advertises_and_executes_signed_plugin(true, false).await;
 }
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn unbound_native_http_and_websocket_discover_load_skill_then_call_real_plugin() {
     native_plan_request_advertises_and_executes_signed_plugin(false, true).await;

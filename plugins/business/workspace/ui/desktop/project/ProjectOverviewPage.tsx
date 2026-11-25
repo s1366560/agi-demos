@@ -22,9 +22,10 @@ import './ProjectOverviewPage.css';
 type ProjectOverviewPageProps = Readonly<{
   model: ProjectOverviewPresentationModel;
   onRetry: () => void;
+  showRecent?: boolean;
 }>;
 
-export function ProjectOverviewPage({ model, onRetry }: ProjectOverviewPageProps) {
+export function ProjectOverviewPage({ model, onRetry, showRecent = true }: ProjectOverviewPageProps) {
   const { locale, t } = useI18n(projectOverviewEnUS, projectOverviewZhCN);
 
   if (model.state !== 'ready' && model.state !== 'degraded') {
@@ -91,7 +92,7 @@ export function ProjectOverviewPage({ model, onRetry }: ProjectOverviewPageProps
         </div>
       </section>
 
-      <RecentItems model={model} locale={locale} />
+      {showRecent && <RecentItems model={model} locale={locale} />}
     </section>
   );
 }

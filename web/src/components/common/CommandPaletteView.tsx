@@ -66,6 +66,7 @@ function scoreItem(label: string, query: string): number {
 export const CommandPaletteView: React.FC<
   CommandPaletteProps & {
     navigationItems: readonly { id: string; label: string; path: string; relativePath: string }[];
+    rowLink?: ((id?: string, group?: string | null) => string | null) | undefined;
     agentWorkspaceEnabled: boolean;
     conversations: readonly {
       id: string;
@@ -79,6 +80,7 @@ export const CommandPaletteView: React.FC<
   navigationItems,
   conversations,
   agentWorkspaceEnabled,
+  rowLink,
   open,
   onClose,
   tenantId,
@@ -145,7 +147,8 @@ export const CommandPaletteView: React.FC<
         icon: MessageSquarePlus,
         group: t('commandPalette.groups.actions', { defaultValue: 'Actions' }),
         action: () => {
-          void navigate(buildAgentWorkspacePath({ tenantId, projectId }));
+          const path = rowLink ? rowLink() : buildAgentWorkspacePath({ tenantId, projectId });
+          if (path) void navigate(path);
           close();
         },
       },
@@ -206,7 +209,7 @@ export const CommandPaletteView: React.FC<
     }
 
     // Recent conversations group
-    const recentConvs = agentWorkspaceEnabled ? conversations.slice(0, 8) : [];
+    const recentConvs = agentWorkspaceEnabled || rowLink ? conversations.slice(0, 8) : [];
     for (const conv of recentConvs) {
       items.push({
         id: `conv-${conv.id}`,
@@ -217,14 +220,15 @@ export const CommandPaletteView: React.FC<
           defaultValue: 'Recent conversations',
         }),
         action: () => {
-          void navigate(
-            buildAgentWorkspacePath({
-              tenantId,
-              conversationId: conv.id,
-              projectId: conv.project_id,
-              workspaceId: conv.workspace_id,
-            })
-          );
+          const path = rowLink
+            ? rowLink(conv.id, conv.workspace_id)
+            : buildAgentWorkspacePath({
+                tenantId,
+                conversationId: conv.id,
+                projectId: conv.project_id,
+                workspaceId: conv.workspace_id,
+              });
+          if (path) void navigate(path);
           close();
         },
       });
@@ -238,6 +242,7 @@ export const CommandPaletteView: React.FC<
     close,
     navigationItems,
     agentWorkspaceEnabled,
+    rowLink,
     conversations,
     computedTheme,
     setTheme,

@@ -1,5 +1,5 @@
 import type { CSSProperties, FC, ReactNode } from 'react';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -43,45 +43,23 @@ export const SplitPaneLayout: FC<SplitPaneLayoutProps> = ({
   statusBar,
 }) => {
   const { t } = useTranslation();
-  const handleSplitDrag = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startX = e.clientX;
-      const startRatio = splitRatio;
-      const containerWidth =
-        (e.currentTarget as HTMLElement).parentElement?.offsetWidth || window.innerWidth;
+  const drag = useRef<{ pointer: number; x: number; ratio: number; width: number } | null>(null);
 
-      let animationFrameId: number | null = null;
+  function beginResize(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || drag.current) return;
+    const width = event.currentTarget.parentElement?.offsetWidth;
+    if (!width) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { pointer: event.pointerId, x: event.clientX, ratio: splitRatio, width };
+  }
 
-      const onMove = (ev: MouseEvent) => {
-        if (animationFrameId !== null) {
-          cancelAnimationFrame(animationFrameId);
-        }
-        animationFrameId = requestAnimationFrame(() => {
-          const delta = ev.clientX - startX;
-          const newRatio = Math.max(
-            minRatio,
-            Math.min(maxRatio, startRatio + delta / containerWidth)
-          );
-          onSplitRatioChange(newRatio);
-        });
-      };
-      const onUp = () => {
-        if (animationFrameId !== null) {
-          cancelAnimationFrame(animationFrameId);
-        }
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      };
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    },
-    [splitRatio, onSplitRatioChange, minRatio, maxRatio]
-  );
+  function resize(event: React.PointerEvent<HTMLDivElement>) {
+    const start = drag.current;
+    if (!start || start.pointer !== event.pointerId) return;
+    const ratio = start.ratio + (event.clientX - start.x) / start.width;
+    onSplitRatioChange(Math.min(maxRatio, Math.max(minRatio, ratio)));
+  }
 
   const handleSplitKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -142,7 +120,12 @@ export const SplitPaneLayout: FC<SplitPaneLayoutProps> = ({
           tabIndex={0}
           aria-label={t('agent.layout.resizePanels', { defaultValue: 'Resize panels' })}
           onKeyDown={handleSplitKeyDown}
-          onMouseDown={handleSplitDrag}
+          style={{ touchAction: 'none' }}
+          onPointerDown={beginResize}
+          onPointerMove={resize}
+          onLostPointerCapture={() => {
+            drag.current = null;
+          }}
         >
           <div
             className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-300/70 transition-colors dark:bg-slate-600/70 ${handleIndicatorHover}`}

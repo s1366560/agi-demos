@@ -522,6 +522,8 @@ def load_contribution_v2(payload: dict[str, Any]) -> ContributionDocument:
 
 def declared_permissions(contribution: ContributionDocument) -> frozenset[str]:
     declared: set[str] = {"ui.slot"} if contribution.pages else set()
+    if any(page.voice_authorization for page in contribution.pages):
+        declared.add("ui.media.microphone")
     for tool in contribution.tools:
         declared |= tool.permissions
     for skill in contribution.skills:

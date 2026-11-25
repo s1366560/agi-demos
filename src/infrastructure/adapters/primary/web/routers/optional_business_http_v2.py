@@ -59,7 +59,7 @@ class OptionalBusinessArchiveV2(BaseModel):
 class OptionalBusinessInstallV2(OptionalBusinessArchiveV2):
     expected_revision: int | None = Field(None, ge=0, strict=True)
     expected_digest: str | None = Field(None, pattern="^sha256:[a-f0-9]{64}$")
-    approved_permissions: list[str] = Field(max_length=32)
+    approved_permissions: list[str] = Field(max_length=100)
 
 
 class OptionalBusinessScopeV2(BaseModel):

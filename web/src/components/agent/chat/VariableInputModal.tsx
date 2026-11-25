@@ -9,7 +9,7 @@ import { useState, memo, useMemo, useCallback, useEffect, useId, useRef } from '
 
 import { useTranslation } from 'react-i18next';
 
-import { AppModal } from '@/components/common';
+import { AppModal } from '../../common/AppModal';
 
 interface TemplateVariable {
   name: string;

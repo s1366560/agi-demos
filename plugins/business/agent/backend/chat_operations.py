@@ -1,5 +1,6 @@
 """Scoped application capabilities backed by the canonical Agent HTTP and WS authorities."""
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Annotated, Any
 
 import httpx
@@ -7,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from src.host.operations.device_conversations import (
+    ConversationId,
+    ConversationList,
     ConversationRename,
     DeviceConversationCreate,
     create_owned,
@@ -34,7 +37,7 @@ class _Input(BaseModel):
 
 
 class ConversationInput(_Input):
-    conversation_id: Identifier
+    conversation_id: ConversationId
 
 
 class History(ConversationInput):
@@ -44,6 +47,7 @@ class History(ConversationInput):
 
 class Turn(ConversationInput):
     message_id: Identifier
+    forced_skill_name: str | None = Field(default=None, min_length=1, max_length=255)
     message: str = Field(min_length=1, max_length=32000)
 
 
@@ -70,8 +74,21 @@ async def _canonical(
     method: str,
     path: str,
     *,
+    project_route: bool = False,
     body: dict[str, Any] | None = None,
-    query: dict[str, int] | None = None,
+    query: Mapping[str, int | str] | None = None,
+) -> dict[str, Any]:
+    base = f"/api/v1/projects/{ctx.scope.project_id}/" if project_route else "/api/v1/agent/"
+    return await _canonical_http(ctx, method, base + path, body=body, query=query)
+
+
+async def _canonical_http(
+    ctx: "PackageOperationContext",
+    method: str,
+    path: str,
+    *,
+    body: dict[str, Any] | None = None,
+    query: Mapping[str, int | str] | None = None,
 ) -> dict[str, Any]:
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=ctx.request.app),
@@ -80,7 +97,7 @@ async def _canonical(
     ) as client:
         reply = await client.request(
             method,
-            "/api/v1/agent/" + path,
+            path,
             params={"project_id": ctx.scope.project_id, **(query or {})},
             json=body,
         )
@@ -95,16 +112,107 @@ async def _canonical(
     return result
 
 
+async def visible_skills(
+    ctx: "PackageOperationContext", *, limit: int, search: str | None = None
+) -> list[dict[str, Any]]:
+    result = await _canonical_http(
+        ctx,
+        "GET",
+        "/api/v1/skills/",
+        query={
+            "tenant_id": ctx.scope.tenant_id,
+            "status": "active",
+            "limit": limit,
+            **({"search": search} if search else {}),
+        },
+    )
+    return [
+        {key: item[key] for key in ("id", "name", "description", "scope")}
+        for item in result["skills"]
+        if item.get("status") == "active"
+        and item.get("project_id") in (None, ctx.scope.project_id)
+        and (item.get("scope") == "system" or item.get("tenant_id") == ctx.scope.tenant_id)
+    ]
+
+
 def _conversation(row: dict[str, Any]) -> dict[str, Any]:
     return {key: row[key] for key in ("id", "title", "execution_target")}
+
+
+class WorkbenchList(ConversationList):
+    workbench: bool = False
+    limit: int | None = Field(default=None, ge=1, le=100)
+
+
+async def _conversation_page(
+    ctx: "PackageOperationContext", filters: WorkbenchList
+) -> list[dict[str, Any]]:
+    query: dict[str, str | int] = {}
+    if filters.limit is not None:
+        query["limit"] = filters.limit
+    if filters.workspace_id:
+        query["workspace_id"] = filters.workspace_id
+    if not filters.workbench or filters.workspace_id:
+        result = await _canonical(ctx, "GET", "conversations", query=query)
+        return result["items"]
+
+    # The Web workbench initially loads two pages. The unbound list owns its
+    # ordering and duplicates, then grouped rows contribute previously unseen IDs.
+    query["limit"] = filters.limit or 10
+    unbound = await _canonical(ctx, "GET", "conversations", query={**query, "unbound_only": "true"})
+    grouped = await _canonical(
+        ctx, "GET", "conversations", query={**query, "group_by_workspace": "true"}
+    )
+    items = list(unbound["items"])
+    seen = {row["id"] for row in items}
+    for row in grouped["items"]:
+        if row["id"] not in seen:
+            seen.add(row["id"])
+            items.append(row)
+    return items
 
 
 async def list_conversations(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    _Input.model_validate(payload)
-    result = await _canonical(ctx, "GET", "conversations")
-    items = [_conversation(row) for row in result["items"]]
+    filters = WorkbenchList.model_validate(payload)
+    page = await _conversation_page(ctx, filters)
+    if filters.conversation_id and all(row["id"] != filters.conversation_id for row in page):
+        await _own_conversation(ctx, filters.conversation_id)
+        selected = await _canonical(ctx, "GET", f"conversations/{filters.conversation_id}")
+        if filters.workspace_id and selected.get("workspace_id") != filters.workspace_id:
+            raise OptionalBusinessError("forbidden", "conversation unavailable for this workspace")
+        page.insert(0, selected)
+    items: list[dict[str, Any]] = []
+    for row in page:
+        metadata = row.get("metadata") or {}
+        items.append(
+            {
+                **_conversation(row),
+                **{
+                    key: row[key]
+                    for key in (
+                        "workspace_id",
+                        "workspace_name",
+                        "linked_workspace_task_id",
+                        "created_at",
+                        "updated_at",
+                    )
+                    if row.get(key)
+                },
+                "sidebar_active": row.get("status") == "active",
+                "sidebar_hidden": bool(
+                    row.get("parent_conversation_id")
+                    or metadata.get("spawned_by_agent_id")
+                    or metadata.get("spawned_agent_id")
+                ),
+                **(
+                    {"sidebar_role": metadata["workspace_role"]}
+                    if isinstance(metadata.get("workspace_role"), str)
+                    else {}
+                ),
+            }
+        )
     local_ids = set(
         await ctx.db.scalars(
             select(Conversation.id).where(
@@ -133,7 +241,15 @@ async def create(
             ctx,
             "POST",
             "conversations",
-            body={"title": data.title, "project_id": ctx.scope.project_id},
+            body={
+                "title": data.title,
+                "project_id": ctx.scope.project_id,
+                **(
+                    {"workspace_id": data.workspace_id, "agent_config": {"capability_mode": "work"}}
+                    if data.workspace_id
+                    else {}
+                ),
+            },
         )
     )
 
@@ -186,7 +302,16 @@ async def history(
         if result["has_more"]
         else None,
         "messages": [
-            {"id": row["id"], "role": row["type"], "content": row["content"]}
+            {
+                "id": row["id"],
+                "role": row["type"],
+                "content": row["content"],
+                **{
+                    key: row[key]
+                    for key in ("timestamp", "eventTimeUs")
+                    if isinstance(row.get(key), int)
+                },
+            }
             for row in result["timeline"]
             if row.get("type") in {"user_message", "assistant_message"}
             and isinstance(row.get("content"), str)
@@ -223,7 +348,11 @@ async def _turn(
         raise OptionalBusinessError(
             "forbidden", "Local conversations support read-only cloud replay"
         )
-    message = data.model_dump()
+    if data.forced_skill_name is not None:
+        skills = await visible_skills(ctx, limit=500, search=data.forced_skill_name)
+        if not any(skill["name"] == data.forced_skill_name for skill in skills):
+            raise OptionalBusinessError("forbidden", "Skill unavailable for this project")
+    message = data.model_dump(exclude_none=True)
     if files:
         message["attachment_ids"] = [file["id"] for file in files]
         message["file_metadata"] = [

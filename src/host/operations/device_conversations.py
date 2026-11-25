@@ -1,6 +1,6 @@
 """Cloud-owned journals for device-executed turns, shared by signed Agent pages."""
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,15 +18,26 @@ if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
 
 
+type ConversationId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_:-]{1,128}$")]
+type WorkspaceId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")]
+
+
+class ConversationList(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    workspace_id: WorkspaceId | None = None
+    conversation_id: ConversationId | None = None
+
+
 class DeviceConversationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     title: str = Field(min_length=1, max_length=500)
     execution_target: Literal["cloud", "local"] = "cloud"
+    workspace_id: WorkspaceId | None = None
 
 
 class ConversationRename(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
-    conversation_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    conversation_id: ConversationId
     title: str = Field(min_length=1, max_length=500)
 
 
@@ -45,11 +56,25 @@ def _owned(ctx: "PackageOperationContext") -> tuple[Any, ...]:
     )
 
 
+async def _require_workspace(ctx: "PackageOperationContext", workspace_id: str) -> None:
+    from src.infrastructure.adapters.primary.web.workspace_authority import require_workspace_scope
+
+    await require_workspace_scope(
+        ctx.request,
+        tenant_id=ctx.scope.tenant_id,
+        project_id=ctx.scope.project_id,
+        workspace_id=workspace_id,
+        user_id=ctx.user.id,
+        is_superuser=ctx.user.is_superuser,
+    )
+
+
 async def list_owned(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
-    if payload:
-        raise ValueError("Conversation listing accepts no inputs")
+    filters = ConversationList.model_validate(payload)
+    if filters.workspace_id:
+        await _require_workspace(ctx, filters.workspace_id)
     placement = (
         select(AgentRunAuthorityModel.execution_target)
         .where(AgentRunAuthorityModel.conversation_id == Conversation.id)
@@ -57,18 +82,19 @@ async def list_owned(
         .limit(1)
         .scalar_subquery()
     )
-    query = (
-        select(Conversation, placement)
-        .where(*_owned(ctx))
-        .order_by(Conversation.created_at.desc(), Conversation.id.desc())
-        .limit(100)
-    )
+    query = select(Conversation, placement).where(*_owned(ctx))
+    if filters.workspace_id:
+        query = query.where(Conversation.workspace_id == filters.workspace_id)
+    if filters.conversation_id:
+        query = query.order_by((Conversation.id == filters.conversation_id).desc())
+    query = query.order_by(Conversation.created_at.desc(), Conversation.id.desc()).limit(100)
     rows = await ctx.db.execute(refresh_select_statement(query))
     return {
         "items": [
             {
                 "id": row.id,
                 "title": row.title,
+                **({"workspace_id": row.workspace_id} if row.workspace_id else {}),
                 "execution_target": target
                 or (row.meta.get("execution_target", "cloud") if row.meta else "cloud"),
             }
@@ -81,8 +107,11 @@ async def create_owned(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
     body = DeviceConversationCreate.model_validate(payload)
+    if body.workspace_id:
+        await _require_workspace(ctx, body.workspace_id)
     row = Conversation(
         id=str(uuid4()),
+        workspace_id=body.workspace_id,
         project_id=ctx.scope.project_id,
         tenant_id=ctx.scope.tenant_id,
         user_id=ctx.user.id,
@@ -91,7 +120,12 @@ async def create_owned(
     )
     ctx.db.add(row)
     await ctx.db.commit()
-    return {"id": row.id, "title": body.title, "execution_target": body.execution_target}
+    return {
+        "id": row.id,
+        "title": body.title,
+        "execution_target": body.execution_target,
+        **({"workspace_id": row.workspace_id} if row.workspace_id else {}),
+    }
 
 
 async def rename_owned(
@@ -133,14 +167,24 @@ async def local_history(
         )
     ).all()
     page = list(reversed(latest[:100]))
-    messages: list[dict[str, str]] = []
+    messages: list[dict[str, str | int]] = []
     for row in page:
         data = row.event_data
         text = data.get("content")
         if not isinstance(text, str) and isinstance(data.get("payload"), dict):
             text = data["payload"].get("text", data["payload"].get("content"))
         if isinstance(text, str):
-            messages.append({"role": row.event_type, "content": text})
+            messages.append(
+                {
+                    "id": row.id,
+                    "role": row.event_type,
+                    "content": text,
+                    "eventTimeUs": row.event_time_us,
+                    "timestamp": row.event_time_us // 1000
+                    if row.event_time_us
+                    else int(row.created_at.timestamp() * 1000),
+                }
+            )
     return {
         "messages": messages,
         "before": {"before_time_us": page[0].event_time_us, "before_counter": page[0].event_counter}

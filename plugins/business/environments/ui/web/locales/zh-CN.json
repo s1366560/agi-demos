@@ -647,6 +647,36 @@
       "publishSuccess": "模板发布成功",
       "publishConfirmTitle": "发布 {{name}}？",
       "deleteConfirmTitle": "删除 {{name}}？"
+    },
+    "orgSettings": {
+      "clusters": {
+        "title": "集群概览",
+        "description": "组织集群概览",
+        "manage": "管理集群",
+        "viewDetails": "查看详情",
+        "addCluster": "添加集群",
+        "noClusters": "未配置集群",
+        "nodes": "节点",
+        "cpu": "CPU",
+        "memory": "内存",
+        "endpoint": "端点",
+        "stats": {
+          "total": "总数",
+          "active": "活跃",
+          "maintenance": "维护中",
+          "error": "异常"
+        },
+        "health": "健康",
+        "status": "状态",
+        "loadFailed": "加载集群失败",
+        "statusLabels": {
+          "active": "活跃",
+          "maintenance": "维护中",
+          "error": "异常",
+          "inactive": "未激活",
+          "unknown": "未知"
+        }
+      }
     }
   },
   "admin": {

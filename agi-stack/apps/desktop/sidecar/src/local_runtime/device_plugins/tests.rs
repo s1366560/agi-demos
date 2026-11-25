@@ -8,11 +8,17 @@ use agistack_plugin_host::{
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use sha2::{Digest, Sha256};
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
+use tokio::sync::Notify;
+
+const GRANT_ID: &str = "6b28ce7b-d3c4-43cc-a618-a5c625002358";
 
 #[allow(dead_code)]
 #[path = "../../../../../../crates/plugin-host/tests/support/signed_wasm_runtime.rs"]
@@ -21,6 +27,9 @@ mod fixture;
 #[derive(Default)]
 struct Remote {
     binding: Mutex<Option<Value>>,
+    hold_next_check: AtomicBool,
+    checking: Notify,
+    resume: Notify,
     user: Mutex<String>,
 }
 async fn me(State(remote): State<Arc<Remote>>) -> Json<Value> {
@@ -43,8 +52,16 @@ async fn check(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, StatusCode> {
     assert_eq!(headers["authorization"], "Bearer fixture-session");
-    let lock = remote.binding.lock().unwrap();
-    let binding = lock.as_ref().ok_or(StatusCode::FORBIDDEN)?;
+    let binding = remote
+        .binding
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or(StatusCode::FORBIDDEN)?;
+    if body["permission"] == "invoke" && remote.hold_next_check.swap(false, Ordering::SeqCst) {
+        remote.checking.notify_one();
+        remote.resume.notified().await;
+    }
     assert_eq!(
         binding["device_fingerprint"],
         format!(
@@ -56,12 +73,12 @@ async fn check(
     assert_eq!(binding["generation_id"], body["generation_id"]);
     assert_eq!(binding["bundle_digest"], body["bundle_digest"]);
     if body["permission"] == "invoke" {
-        assert_eq!(body["grant_id"], "grant-current");
+        assert_eq!(body["grant_id"], GRANT_ID);
     }
-    let mut response = binding.clone();
+    let mut response = binding;
     for (key, value) in [
         ("allowed", json!(true)),
-        ("grant_id", json!("grant-current")),
+        ("grant_id", json!(GRANT_ID)),
         ("permission", body["permission"].clone()),
         ("tenant_id", json!("tenant")),
         ("project_id", json!("project")),
@@ -131,6 +148,25 @@ async fn publisher_signed_knowledge_guest_at_abi_boundary() {
     .await;
 }
 
+#[tokio::test]
+#[ignore = "requires the published Environments archive and public key"]
+async fn published_environments_cloud_http_routes_require_approved_device_grant() {
+    let root =
+        std::path::PathBuf::from(std::env::var_os("MEMSTACK_ENVIRONMENTS_HTTP_RELEASE").unwrap());
+    let key = TrustedEd25519KeyV2::from_spki_pem(
+        &std::fs::read_to_string(root.join("public.pem")).unwrap(),
+    )
+    .unwrap();
+    exercise_device_package(
+        std::fs::read(root.join("environments.mspkg")).unwrap(),
+        key,
+        json!({"project_id":"project","method":"POST","path":"sandbox/proxy-auth-cookie"}),
+        json!({"status":200,"body":{"ok":true}}),
+        None,
+    )
+    .await;
+}
+
 async fn exercise_device_package(
     bytes: Vec<u8>,
     key: TrustedEd25519KeyV2,
@@ -138,11 +174,32 @@ async fn exercise_device_package(
     expected: Value,
     incompatible: Option<Vec<u8>>,
 ) {
+    let advertised = packages::inspect(&bytes, std::slice::from_ref(&key)).unwrap();
+    let project_selection = (advertised.reference().bundle_id == "memstack-environments")
+        .then(|| advertised.reference().clone());
+    let project_plugin = project_selection.as_ref().map(|s| s.bundle_id.clone());
     let mut state = native_state(key).await;
+    Arc::get_mut(&mut state).unwrap().profile = crate::sidecar_profile::SidecarProfile::Full;
     let root = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+    let workspace = root.join("workspace");
+    std::fs::create_dir_all(&workspace).unwrap();
+    *state.workspace_root.lock().unwrap() = workspace.clone();
     let transfers = root.join("device-plugin-transfers");
     std::fs::create_dir_all(&transfers).unwrap();
     Arc::get_mut(&mut state).unwrap().app_data_dir = Some(root.clone());
+    // A trusted publisher can still ship a guest with a wrong executable ABI.
+    let (_, _, broken, candidate_key, _) = fixture::signed_fixture_with_bytes(
+        r#"(module (func (export "unexpected") (param i32) (result i32) i32.const 0))"#,
+        |_| {},
+    );
+    Arc::get_mut(&mut state)
+        .unwrap()
+        .local_plugin_signing_keys
+        .as_mut()
+        .unwrap()
+        .push(candidate_key);
+    let broken_id = uuid::Uuid::new_v4().to_string();
+    std::fs::write(transfers.join(&broken_id), broken).unwrap();
     let archive = uuid::Uuid::new_v4().to_string();
     std::fs::write(transfers.join(archive.to_string()), bytes).unwrap();
     let remote = Arc::new(Remote::default());
@@ -150,9 +207,17 @@ async fn exercise_device_package(
     let app=Router::new().route("/api/v1/auth/me",get(me))
         .route("/api/v1/projects/project",get(||async{Json(json!({"id":"project","tenant_id":"tenant"}))}))
         .route("/api/v1/workspace-context",get(||async{Json(json!({"context":{"tenant_id":"tenant","project_id":"project","revision":1},"membership_role":"owner"}))}))
+        .route("/api/v1/projects/project/device-plugin-grants/selection",get(move || {
+            let reference = project_selection.clone();
+            async move { Json(reference.map(|r|json!({"plugin_id":r.bundle_id,"generation_id":format!("p{}", "1".repeat(63)),"digest":r.digest}))) }
+        }))
         .route("/api/v1/projects/project/device-plugin-grants/authority",get(|| async {Json(json!({"can_manage":true}))}))
         .route("/api/v1/projects/project/device-plugin-grants/",post(approve))
         .route("/api/v1/projects/project/device-plugin-grants/check",post(check))
+        .route(&format!("/api/v1/projects/project/device-plugin-grants/{GRANT_ID}"), delete(|State(remote): State<Arc<Remote>>| async move {
+            remote.binding.lock().unwrap().take();
+            StatusCode::NO_CONTENT
+        }))
         .with_state(remote.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -173,11 +238,26 @@ async fn exercise_device_package(
             persist_across_restart: true,
         })
         .unwrap();
+    state
+        .platform_plugin_authority_v2
+        .install_trusted_sessions(broker.clone());
+    let http = |bearer: &str, method: &str, path: &str| {
+        use tower::ServiceExt;
+        super::super::local_router(state.clone()).oneshot(
+            axum::http::Request::builder()
+                .method(method)
+                .uri(path)
+                .header("x-agistack-launch", &state.api_token)
+                .header("authorization", format!("Bearer {bearer}"))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+    };
     let call = |op: Value, token: &Value| {
         operation(
             &state,
             &broker,
-            json!({"tenant_id":"tenant","project_id":"project","context_token":token,"operation":op}),
+            json!({"tenant_id":"tenant","project_id":"project","plugin_id":project_plugin,"context_token":token,"operation":op}),
         )
     };
     let catalog = call(json!({"action":"list"}), &Value::Null).await.unwrap();
@@ -197,7 +277,74 @@ async fn exercise_device_package(
     assert!(call(import.clone(), token).await.is_err());
     let mut import = import;
     import["approve_for_day"] = true.into();
-    let installed = call(import, token).await.unwrap();
+    if preview["workspace"].is_object() {
+        assert!(call(import.clone(), token).await.is_err());
+        import["workspace_token"] = preview["workspace"]["token"].clone();
+    }
+    let installed = call(import.clone(), token).await.unwrap();
+    import["archive_id"] = json!(broken_id);
+    let error = call(import, token).await.unwrap_err();
+    if project_plugin.is_some() {
+        assert_eq!(error, "device_plugin_selection_changed");
+        assert_eq!(
+            http(
+                "wrong",
+                "POST",
+                "/api/v1/projects/project/sandbox/proxy-auth-cookie"
+            )
+            .await
+            .unwrap()
+            .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let response = http(
+            "fixture-session",
+            "POST",
+            "/api/v1/projects/project/sandbox/proxy-auth-cookie",
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&bytes).unwrap(),
+            json!({"ok":true})
+        );
+    } else {
+        assert!(error.contains("signed WASM ABI"), "{error}");
+    }
+    if preview["workspace"].is_object() {
+        let bytes = vec![33_u8; 128 * 1024];
+        std::fs::write(workspace.join("download.txt"), &bytes).unwrap();
+        let path =
+            "/api/v1/projects/project/sandbox/files/download?path=%2Fworkspace%2Fdownload.txt";
+        let reply = http("fixture-session", "GET", path).await.unwrap();
+        assert_eq!(reply.status(), StatusCode::OK);
+        assert_eq!(
+            axum::body::to_bytes(reply.into_body(), 256 * 1024)
+                .await
+                .unwrap()
+                .as_ref(),
+            bytes
+        );
+        let mut file = json!({"action":"invoke","grant_id":installed["grant_id"],"reference":preview["reference"],"tool":installed["tools"][0],"input":{"project_id":"project","method":"GET","path":"sandbox/files/download","query":"path=%2Fworkspace%2Fdownload.txt"}});
+        let file_result = call(file.clone(), token).await.unwrap();
+        assert_eq!(file_result["status"], 200);
+        assert_eq!(
+            file_result["body_base64"],
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes)
+        );
+        file["input"]["project_id"] = json!("other");
+        assert!(call(file, token).await.is_err());
+        *state.workspace_root.lock().unwrap() = root.clone();
+        assert_eq!(
+            http("fixture-session", "GET", path).await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+        *state.workspace_root.lock().unwrap() = workspace.clone();
+    }
     let invoke = json!({"action":"invoke","reference":preview["reference"],"grant_id":installed["grant_id"],"tool":installed["tools"][0],"input":input});
     let output = call(invoke.clone(), token).await.unwrap();
     // The legacy score ABI also includes package attribution in its result metadata.
@@ -224,7 +371,37 @@ async fn exercise_device_package(
     );
     assert_eq!(live["installations"][0]["grant_status"], "approved");
     assert!(live["installations"][0]["last_invoked_at"].is_string());
-    remote.binding.lock().unwrap().take();
+    remote.hold_next_check.store(true, Ordering::SeqCst);
+    let revoke_during_call = async {
+        remote.checking.notified().await;
+        let revoked = call(
+            json!({"action":"revoke","reference":installed["reference"],"grant_id":GRANT_ID}),
+            token,
+        )
+        .await
+        .unwrap();
+        assert_eq!(revoked["revoked"], true);
+        remote.resume.notify_one();
+    };
+    let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        tokio::join!(call(invoke.clone(), token), revoke_during_call)
+    })
+    .await
+    .expect("revocation must not wait for a running guest");
+    assert!(result.is_err());
+    if project_plugin.is_some() {
+        assert_eq!(
+            http(
+                "fixture-session",
+                "POST",
+                "/api/v1/projects/project/sandbox/proxy-auth-cookie"
+            )
+            .await
+            .unwrap()
+            .status(),
+            StatusCode::FORBIDDEN
+        );
+    }
     assert!(call(invoke.clone(), token).await.is_err());
     *remote.user.lock().unwrap() = "switched".into();
     let other = call(json!({"action":"list"}), &Value::Null).await.unwrap();

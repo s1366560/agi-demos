@@ -1,3 +1,4 @@
+import { MessageTime } from '../../chat/MessageTime';
 import { UserBubble, UserAvatar } from '@business/agent/ui/web/chat/UserBubble';
 import { AssistantBubble } from '@business/agent/ui/web/chat/AssistantBubble';
 /**
@@ -50,7 +51,6 @@ import { useCurrentTenant } from '@/stores/tenant';
 import { artifactService, fetchArtifactResource } from '@/services/artifactService';
 
 import { useLocaleNumberFormat } from '@/i18n/formatters';
-import { formatDateTime, formatTimeOnly } from '@/utils/date';
 import { normalizeExecutionSummary } from '@/utils/executionSummary';
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
 import { formatFileSize, formatDurationMs } from '@/utils/format';
@@ -161,31 +161,6 @@ const TEXT_FILE_EXTENSIONS = new Set([
   'sql',
   'log',
 ]);
-
-const MessageTime: React.FC<{
-  timestamp?: number | undefined;
-  className?: string | undefined;
-}> = ({ timestamp, className = '' }) => {
-  if (!timestamp) {
-    return null;
-  }
-
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return (
-    <time
-      dateTime={date.toISOString()}
-      title={formatDateTime(timestamp)}
-      className={`inline-flex flex-shrink-0 items-center gap-1 text-2xs leading-none text-content-tertiary ${className}`}
-    >
-      <Clock size={11} aria-hidden="true" />
-      <span>{formatTimeOnly(timestamp)}</span>
-    </time>
-  );
-};
 
 function getFileNameFromPath(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;

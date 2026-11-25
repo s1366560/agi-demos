@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
+from .sidebar import parse_sidebar
+
 RICH_PAGE_SCHEMA = "memstack.rich-page/1"
 _RESOURCE_TYPES = {
     ".js": "application/javascript",
@@ -77,11 +79,16 @@ class RichPage:
     workbench: bool = False
     home: bool = False
     slots: tuple[str, ...] = ()
+    anchored_slots: tuple[tuple[str, str], ...] = ()
     contributes_to: str | None = None
 
     resources: tuple[PageAsset, ...] = ()
     query_params: tuple[str, ...] = ()
     page_links: tuple[str, ...] = ()
+
+    sidebar: dict[str, object] | None = None
+    navigation_actions: tuple[str, ...] = ()
+    voice_authorization: str | None = None
 
     @property
     def assets(self) -> tuple[PageAsset, ...]:
@@ -90,6 +97,13 @@ class RichPage:
     def descriptor(self) -> dict[str, object]:
         return {
             "id": self.id,
+            **(
+                {"voice_authorization": self.voice_authorization}
+                if self.voice_authorization
+                else {}
+            ),
+            **({"sidebar": self.sidebar} if self.sidebar else {}),
+            **({"navigation_actions": self.navigation_actions} if self.navigation_actions else {}),
             **({"workbench": True} if self.workbench else {}),
             **({"scope": self.scope} if self.scope == "tenant" else {}),
             "title": self.title,
@@ -97,6 +111,7 @@ class RichPage:
             "targets": sorted(self.targets),
             **({"query_params": self.query_params} if self.query_params else {}),
             **({"page_links": self.page_links} if self.page_links else {}),
+            **({"anchored_slots": dict(self.anchored_slots)} if self.anchored_slots else {}),
             **({"slots": self.slots} if self.slots else {}),
             **({"contributes_to": self.contributes_to} if self.contributes_to else {}),
             **({"home": True} if self.home else {}),
@@ -154,9 +169,12 @@ def _check_route(route: str) -> None:
         if len(parts) == 2 and parts[1] == scope_param:
             raise ValueError("page route overlaps a host scope selector")
     if root == "tenant":
-        if parts[1].lower() in _TENANT_HOST_SECTIONS or (
-            len(parts) >= 3
-            and (parts[2].lower() in _TENANT_HOST_SECTIONS or parts[2].startswith(":"))
+        if route != "/tenant/:tenantId/org-settings/clusters" and (
+            parts[1].lower() in _TENANT_HOST_SECTIONS
+            or (
+                len(parts) >= 3
+                and (parts[2].lower() in _TENANT_HOST_SECTIONS or parts[2].startswith(":"))
+            )
         ):
             raise ValueError("page route overlaps tenant administration")
         if len(parts) >= 3 and parts[2].lower() == "project":
@@ -167,7 +185,35 @@ def _check_route(route: str) -> None:
         raise ValueError("duplicate route parameter")
 
 
-def _parse_page(value: object) -> RichPage:
+def _anchored_slots(
+    anchors: object, slots: tuple[str, ...], routes: tuple[str, ...], scope: object
+) -> tuple[tuple[str, str], ...]:
+    if (
+        not isinstance(anchors, dict)
+        or len(anchors) > 8
+        or any(
+            not isinstance(name, str)
+            or not _SLOT.fullmatch(name)
+            or name in slots
+            or not isinstance(link, str)
+            or not _PAGE_LINK.fullmatch(link)
+            for name, link in anchors.items()
+        )
+    ):
+        raise ValueError("invalid anchored slots")
+    if anchors and (not routes or scope == "tenant"):
+        raise ValueError("anchored slots require a routed project page")
+    return tuple(anchors.items())
+
+
+def _page_flag(value: dict[str, object], name: str) -> bool:
+    flag = value.get(name, False)
+    if not isinstance(flag, bool):
+        raise ValueError(f"rich page {name} must be a boolean")
+    return flag
+
+
+def _parse_page(value: object, commands: set[str]) -> RichPage:
     if not isinstance(value, dict) or value.keys() - {
         "id",
         "title",
@@ -181,18 +227,18 @@ def _parse_page(value: object) -> RichPage:
         "home",
         "workbench",
         "slots",
+        "anchored_slots",
         "query_params",
         "page_links",
         "resources",
         "contributes_to",
+        "sidebar",
+        "navigation_actions",
+        "voice_authorization",
     }:
         raise ValueError("unsupported rich page declaration")
-    workbench = value.get("workbench", False)
-    if not isinstance(workbench, bool):
-        raise ValueError("rich page workbench must be a boolean")
-    home = value.get("home", False)
-    if not isinstance(home, bool):
-        raise ValueError("rich page home must be a boolean")
+    workbench = _page_flag(value, "workbench")
+    home = _page_flag(value, "home")
     page_id, title = value.get("id"), value.get("title")
     if not isinstance(page_id, str) or not _IDENTIFIER.fullmatch(page_id):
         raise ValueError("invalid page identifier")
@@ -201,6 +247,7 @@ def _parse_page(value: object) -> RichPage:
     routes = _strings(value.get("routes"), _ROUTE)
     targets = frozenset(_strings(value.get("targets"), _IDENTIFIER))
     slots = _strings(value.get("slots", []), _SLOT)
+    anchors = _anchored_slots(value.get("anchored_slots", {}), slots, routes, value.get("scope"))
     destination = value.get("contributes_to")
     if destination is not None and (
         not isinstance(destination, str)
@@ -229,12 +276,31 @@ def _parse_page(value: object) -> RichPage:
         or home
     ):
         raise ValueError("tenant pages require tenant routes and cloud commands")
+    navigation_actions = _strings(value.get("navigation_actions", []), _IDENTIFIER)
+    if navigation_actions and (
+        not routes or not set(navigation_actions) <= {"primary-create", "group-create"}
+    ):
+        raise ValueError("unsupported shell navigation action")
+    page_commands = _strings(value.get("commands", []), _IDENTIFIER)
+    voice = value.get("voice_authorization")
+    if voice is not None and (
+        not isinstance(voice, str)
+        or voice not in commands
+        or voice not in page_commands
+        or scope != "project"
+        or not routes
+    ):
+        raise ValueError("voice requires a routed project page and an authorized command")
     return RichPage(
+        voice_authorization=voice,
+        navigation_actions=navigation_actions,
+        sidebar=parse_sidebar(value.get("sidebar", {}), commands, routes),
         scope=scope,
         workbench=workbench,
         id=page_id,
         home=home,
         slots=slots,
+        anchored_slots=anchors,
         resources=_resources(value.get("resources", [])),
         page_links=_strings(value.get("page_links", []), _PAGE_LINK),
         query_params=_strings(value.get("query_params", []), _IDENTIFIER),
@@ -244,7 +310,7 @@ def _parse_page(value: object) -> RichPage:
         targets=targets,
         entry=_asset(value.get("entry"), ".js"),
         style=_asset(value["style"], ".css") if "style" in value else None,
-        commands=_strings(value.get("commands", []), _IDENTIFIER),
+        commands=page_commands,
         device_tools=_strings(value.get("device_tools", []), _IDENTIFIER),
     )
 
@@ -261,7 +327,7 @@ def route_bindings(pages: tuple[RichPage, ...]) -> set[tuple[str, str]]:
 def parse_rich_pages(value: object, commands: set[str]) -> tuple[RichPage, ...]:
     if not isinstance(value, list):
         raise ValueError("pages must be a list")
-    pages = tuple(_parse_page(item) for item in value)
+    pages = tuple(_parse_page(item, commands) for item in value)
     if any(not set(page.commands) <= commands for page in pages):
         raise ValueError("page refers to an undeclared command")
     ids = [(target, page.id) for page in pages for target in page.targets]

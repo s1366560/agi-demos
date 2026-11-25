@@ -23,3 +23,8 @@ export function useThemeColors<K extends string>(tokens: Record<K, string>): Rec
     [tokens, version]
   );
 }
+
+export function useThemeColor(token: string): string {
+  const tokens = useMemo(() => ({ value: token }), [token]);
+  return useThemeColors(tokens).value;
+}

@@ -2,7 +2,8 @@
 
 import asyncio
 import json
-from contextlib import suppress
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
@@ -26,9 +27,10 @@ def _project_message(event: dict[str, Any], run_id: str) -> dict[str, Any] | Non
     return None
 
 
-async def stream_turn(
-    ctx: "PackageOperationContext", data: dict[str, Any], progress: "Progress | None"
-) -> dict[str, Any]:
+@asynccontextmanager
+async def _actor_socket(
+    ctx: "PackageOperationContext",
+) -> AsyncIterator[tuple[asyncio.Task[None], "asyncio.Queue[Message]", "asyncio.Queue[Message]"]]:
     scope: Scope = {
         "type": "websocket",
         "asgi": {"version": "3.0", "spec_version": "2.3"},
@@ -50,11 +52,44 @@ async def stream_turn(
     incoming.put_nowait({"type": "websocket.connect"})
     socket = asyncio.create_task(ctx.request.app(scope, incoming.get, outgoing.put))
     try:
-        return await _read_turn(ctx, data, progress, socket, incoming, outgoing)
+        yield socket, incoming, outgoing
     finally:
         incoming.put_nowait({"type": "websocket.disconnect", "code": 1000})
         with suppress(TimeoutError):
             await asyncio.wait_for(socket, 3)
+
+
+async def stream_turn(
+    ctx: "PackageOperationContext", data: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    async with _actor_socket(ctx) as (socket, incoming, outgoing):
+        return await _read_turn(ctx, data, progress, socket, incoming, outgoing)
+
+
+async def call_actor_control(ctx: "PackageOperationContext", action: str) -> str:
+    if action not in {"stop_agent", "restart_agent"}:
+        raise OptionalBusinessError("forbidden", "Unsupported actor action")
+    async with _actor_socket(ctx) as (socket, incoming, outgoing):
+        connected = await _next_event(socket, outgoing)
+        if (
+            connected.get("type") != "connected"
+            or connected.get("data", {}).get("user_id") != ctx.user.id
+        ):
+            raise OptionalBusinessError("forbidden", "Agent socket identity mismatch")
+        frame = {"type": action, "project_id": ctx.scope.project_id}
+        incoming.put_nowait({"type": "websocket.receive", "text": json.dumps(frame)})
+        while True:
+            event = await _next_event(socket, outgoing)
+            if (
+                event.get("type") == "agent_lifecycle_ack"
+                and event.get("action") == action
+                and event.get("project_id") == ctx.scope.project_id
+            ):
+                if event.get("status") == "not_found":
+                    raise OptionalBusinessError("conflict", "Project actor no longer exists")
+                if event.get("status") not in ("restarted", "stopping"):
+                    raise OptionalBusinessError("apply_failed", "Unexpected actor response")
+                return event["status"]
 
 
 async def _read_turn(

@@ -1,13 +1,15 @@
+import { SelectedSkillChip } from '@business/agent/ui/web/chat/SelectedSkillChip';
 import { useState, useRef, useCallback, useEffect, useSyncExternalStore, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { message } from 'antd';
+import { AgentComposerCard, AgentDraftSurface } from '@business/agent/ui/web/chat/AgentComposerCard';
 import { ChatDraftInput } from '@business/agent/ui/web/chat/ChatDraftInput';
 import {
   X,
   Upload,
-  Zap,
+
   ListChecks,
   Workflow,
 } from 'lucide-react';
@@ -654,27 +656,10 @@ export const InputBar = memo<InputBarProps>(
 
         {/* Main input card */}
         {/* biome-ignore lint/a11y/noStaticElementInteractions: drag-drop target has no semantic interactive role */}
-        <section
-          data-tour="input-bar"
-          onDragEnter={handleDragEnter}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDropWithFeedback}
-          className={`
-            flex-1 flex flex-col min-h-0 min-w-0 rounded-md border relative
-            bg-white dark:bg-slate-800
-            transition-[border-color,box-shadow] duration-200 ease-out
-            ${
-              isDragging
-                ? 'border-primary/55 ring-2 ring-primary/15 shadow-[0_1px_5px_rgba(0,112,243,0.08)]'
-                : isPlanMode
-                  ? 'border-primary/40 ring-2 ring-primary/10 shadow-[0_1px_4px_rgba(0,112,243,0.06)]'
-                  : isFocused
-                    ? 'border-primary/25 shadow-[0_1px_4px_rgba(0,112,243,0.045)] ring-2 ring-primary/5'
-                    : 'border-slate-200/45 dark:border-slate-700/45 shadow-[0_1px_3px_rgba(15,23,42,0.035)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
-            }
-            ${disabled ? 'opacity-60 pointer-events-none' : ''}
-          `}
+        <AgentComposerCard
+          isFocused={isFocused} isDragging={isDragging} isPlanMode={isPlanMode} disabled={disabled}
+          onDragEnter={handleDragEnter} onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave} onDrop={handleDropWithFeedback}
         >
           {/* Plan Mode pill (integrated into the composer card) */}
           {isPlanMode && (
@@ -816,10 +801,7 @@ export const InputBar = memo<InputBarProps>(
           )}
 
           {/* Text Area */}
-          <div
-            data-testid="chat-input-body"
-            className="relative flex min-h-0 min-w-0 flex-1 px-3 py-2 sm:px-4 overflow-visible"
-          >
+          <AgentDraftSurface controls={<>
             <SlashCommandDropdown
               ref={slashDropdownRef}
               query={slashQuery}
@@ -868,33 +850,8 @@ export const InputBar = memo<InputBarProps>(
                 onSelectedIndexChange={setMentionSelectedIndex}
               />
             )}
-            <div
-              data-testid="chat-input-surface"
-              className="
-                flex h-full min-h-11 w-full min-w-0 flex-wrap content-start items-start gap-1.5 px-2 py-1.5
-              "
-            >
-              {selectedSkill && (
-                <div className="inline-flex max-w-full shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/5 px-2 py-1 text-xs font-medium text-primary dark:border-primary/30 dark:bg-primary/10">
-                  <Zap size={12} />
-                  <span className="max-w-[12rem] truncate">/{selectedSkill.name}</span>
-                  <button
-                    type="button"
-                    onClick={handleRemoveSkill}
-                    aria-label={t('agent.inputBar.removeSelectedSkill', {
-                      name: selectedSkill.name,
-                      defaultValue: 'Remove /{{name}} skill',
-                    })}
-                    title={t('agent.inputBar.removeSelectedSkill', {
-                      name: selectedSkill.name,
-                      defaultValue: 'Remove /{{name}} skill',
-                    })}
-                    className="-mr-0.5 rounded-md p-0.5 transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  >
-                    <X size={10} />
-                  </button>
-                </div>
-              )}
+          </>}>
+              {selectedSkill && <SelectedSkillChip name={selectedSkill.name} remove={handleRemoveSkill}/>}
               {selectedSubAgent && (
                 <div className="inline-flex max-w-full shrink-0 items-center gap-1 rounded border border-purple-500/20 bg-purple-500/5 px-2 py-1 text-xs font-medium text-purple-600 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-400">
                   <Workflow size={12} />
@@ -937,8 +894,7 @@ export const InputBar = memo<InputBarProps>(
                   "Ask me anything, or type '/' for commands…"
                 )}
               />
-            </div>
-          </div>
+          </AgentDraftSurface>
 
           {/* Toolbar */}
           <InputToolbar
@@ -1001,7 +957,7 @@ export const InputBar = memo<InputBarProps>(
               }}
             />
           )}
-        </section>
+        </AgentComposerCard>
       </div>
     );
   }

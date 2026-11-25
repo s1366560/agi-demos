@@ -1,3 +1,6 @@
 @import 'tailwindcss' source(none);
 @source '../web/tenant/ClusterList.tsx';
 @source '../web/tenant/utils/ClusterFormFields.tsx';
+@source '../web/tenant/org-settings/OrgClustersView.tsx';
+@source '../web/tenant/ClusterDetail.tsx';
+@source '../web/admin/PoolDashboard.tsx';

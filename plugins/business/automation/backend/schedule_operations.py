@@ -19,6 +19,8 @@ from src.infrastructure.adapters.primary.web.cron_application_authority_v2 impor
 from src.infrastructure.adapters.primary.web.routers import cron
 from src.infrastructure.i18n import gettext as _
 
+from .schedule_conversations import require_schedule_conversation, schedule_conversations
+
 if TYPE_CHECKING:
     from src.host.operations.application_commands import (
         Operation,
@@ -43,6 +45,10 @@ class Revision(BaseModel):
     job_id: Identifier
     expected_revision: int = Field(ge=1)
     idempotency_key: str = Field(min_length=1, max_length=255, pattern=r"^[!-~]+$")
+
+
+class RunRevision(Revision):
+    conversation_id: Identifier | None = None
 
 
 class Every(BaseModel):
@@ -104,6 +110,8 @@ class ScheduleEdit(BaseModel):
     description: str | None = Field(None, max_length=1000)
     action: JobAction | None = None
     delete_after_run: bool | None = None
+    timezone: str | None = Field(None, min_length=1, max_length=128)
+    conversation_id: Identifier | None = None
     conversation_mode: Literal["fresh", "reuse"] | None = None
     delivery_kind: Literal["none", "announce", "webhook"] | None = None
     stagger_seconds: int | None = Field(None, ge=0)
@@ -181,7 +189,11 @@ async def schedules(
                             "started_at",
                             "finished_at",
                             "duration_ms",
-                            *(("error_message",) if query.view == "workbench" else ()),
+                            *(
+                                ("error_message", "conversation_id", "job_id", "project_id")
+                                if query.view == "workbench"
+                                else ()
+                            ),
                         },
                     )
                     for run in runs.items
@@ -195,13 +207,7 @@ async def schedules(
     return {"items": [project_row(job) for job in result.items], "total": result.total}
 
 
-async def save_schedule(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
-    edit = ScheduleEdit.model_validate(payload)
-    project = ctx.scope.project_id
-    if (edit.job_id is None) != (edit.expected_revision is None):
-        raise HTTPException(422, _("A schedule edit requires its current revision"))
+def _edit_fields(edit: ScheduleEdit) -> dict[str, Any]:
     values: dict[str, Any] = {
         "name": edit.name,
         "enabled": edit.enabled,
@@ -213,6 +219,8 @@ async def save_schedule(
                 "description",
                 "delete_after_run",
                 "conversation_mode",
+                "timezone",
+                "conversation_id",
                 "stagger_seconds",
                 "timeout_seconds",
                 "max_retries",
@@ -220,6 +228,8 @@ async def save_schedule(
             exclude_none=True,
         )
     )
+    if edit.timezone:
+        Cron.validate_timezone(edit.timezone)
     if edit.action:
         field = "message" if edit.action.kind == "agent_turn" else "content"
         values["payload"] = {"kind": edit.action.kind, "config": {field: edit.action.text}}
@@ -234,6 +244,19 @@ async def save_schedule(
         values["schedule"] = {"kind": trigger.kind, "config": trigger.model_dump(exclude={"kind"})}
     if edit.job_id is None and not trigger:
         raise HTTPException(422, _("A schedule is required"))
+    return values
+
+
+async def save_schedule(
+    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+) -> dict[str, Any]:
+    edit = ScheduleEdit.model_validate(payload)
+    project = ctx.scope.project_id
+    if (edit.job_id is None) != (edit.expected_revision is None):
+        raise HTTPException(422, _("A schedule edit requires its current revision"))
+    if edit.conversation_id:
+        await require_schedule_conversation(ctx, edit.conversation_id)
+    values = _edit_fields(edit)
     async with cron_authority(ctx.request, ctx.user, ctx.db, project, _scope(ctx)) as authority:
         if edit.job_id is None:
             create = CronJobCreate.model_validate(
@@ -272,17 +295,21 @@ async def save_schedule(
 async def run_schedule(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
-    run = Revision.model_validate(payload)
+    run = RunRevision.model_validate(payload)
+    if run.conversation_id:
+        await require_schedule_conversation(ctx, run.conversation_id)
     project = ctx.scope.project_id
     body = AutomationRunCommandV2(
         contract_version=2,
+        conversation_id=run.conversation_id,
         expected_revision=run.expected_revision,
         idempotency_key=run.idempotency_key,
     )
     async with cron_authority(ctx.request, ctx.user, ctx.db, project, _scope(ctx)) as authority:
         receipt = await cron.trigger_manual_run(project, run.job_id, body, authority)
     return receipt.model_dump(
-        mode="json", include={"run_id", "job_id", "job_revision", "status", "duplicate"}
+        mode="json",
+        include={"receipt_id", "run_id", "job_id", "job_revision", "status", "duplicate"},
     )
 
 
@@ -300,6 +327,7 @@ async def delete_schedule(
 
 SCHEDULE_OPERATIONS: dict[str, "Operation"] = {
     "app.automation.schedules.read": schedules,
+    "app.automation.conversations.read": schedule_conversations,
     "app.automation.schedules.write": save_schedule,
     "app.automation.schedules.run": run_schedule,
     "app.automation.schedules.delete": delete_schedule,

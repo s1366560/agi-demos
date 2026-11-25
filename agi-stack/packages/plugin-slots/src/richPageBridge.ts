@@ -16,8 +16,16 @@ export interface PageBridge {
   status(loaded: boolean): void;
   isRetired?(): boolean;
   pendingChanged?(count: number): void;
-  openPage?(pluginId: string, pageId: string): void;
+  pointerCapture?(active: boolean): void;
+  anchorSlot?(name: string, target: string, rect: number[] | null, search: string): void;
+  reviewDevice?(signal: AbortSignal): Promise<void>;
+  openPage?(pluginId: string, pageId: string, destination?: string): void;
   navigate(path: string, options?: { replace?: boolean }): void;
+  voice?: {
+    start(mode: "dictation" | "voice", conversation: string, signal: AbortSignal, emit: (event: unknown) => void): Promise<void>;
+    mute(id: string, muted: boolean): void;
+  };
+  saveCsv?(text: string, signal: AbortSignal): Promise<void>;
   invoke: Operation;
   device?: Operation | undefined;
 }
@@ -72,16 +80,45 @@ export function connectPage(
           platform: bridge.target,
           locale: bridge.locale,
           commands: page.commands,
-          deviceTools: page.device_tools,
+          voiceAvailable: !!(page.voice_authorization && bridge.voice && bridge.scope.projectId),
+          deviceTools: bridge.target === "desktop-renderer" && bridge.device ? page.device_tools : [],
         };
+      } else if (message.method === "anchorSlot") {
+        const { name, rect, search = "" } = message;
+        if (typeof name !== "string" || !page.anchored_slots ||
+            !Object.hasOwn(page.anchored_slots, name) || !bridge.anchorSlot ||
+            typeof search !== "string" || search.length > 2048 ||
+            (search !== "" && !search.startsWith("?")) ||
+            (rect !== null && (!Array.isArray(rect) || rect.length !== 4 ||
+              !rect.every(value => typeof value === "number" && Number.isFinite(value)) ||
+              rect[2] < 0 || rect[3] < 0))) throw new Error("page_slot_denied");
+        bridge.anchorSlot(name, page.anchored_slots[name]!, rect, search);
+      } else if (message.method === "voice" || message.method === "muteVoice") {
+        if (!bridge.voice || !page.voice_authorization || !page.commands.includes(page.voice_authorization) || !bridge.scope.projectId)
+          throw new Error("page_capability_unavailable");
+        if (message.method === "muteVoice") {
+          if (typeof message.handle !== "string" || typeof message.muted !== "boolean") throw new Error("page_request_invalid");
+          bridge.voice.mute(message.handle, message.muted);
+        } else {
+          if ((message.mode !== "dictation" && message.mode !== "voice") || typeof message.conversation !== "string" ||
+            !/^[A-Za-z0-9_-]{1,128}$/.test(message.conversation)) throw new Error("page_request_invalid");
+          await bridge.voice.start(message.mode, message.conversation, controller.signal, event => {
+            if (!controller.signal.aborted && !bridge.isRetired?.()) reply(id, {type: "event", value: event});
+          });
+        }
+      } else if (message.method === "reviewDevice") {
+        if (bridge.target !== "desktop-renderer" || !bridge.device || !page.device_tools.length || !bridge.reviewDevice)
+          throw new Error("page_capability_unavailable");
+        await bridge.reviewDevice(controller.signal);
       } else if (message.method === "openPage") {
-        const { pluginId, pageId } = message;
+        const { pluginId, pageId, destination } = message;
         if (
           typeof pluginId !== "string" || typeof pageId !== "string" ||
           pluginId.includes("/") || pageId.includes("/") ||
+          (destination !== undefined && (typeof destination !== "string" || destination.length > 8192 || /[\\\u0000-\u001f]/.test(destination))) ||
           !page.page_links?.includes(pluginId + "/" + pageId) || !bridge.openPage
         ) throw new Error("page_navigation_denied");
-        bridge.openPage(pluginId, pageId);
+        bridge.openPage(pluginId, pageId, destination);
       } else if (message.method === "navigate") {
         const path = message.path;
         if (
@@ -113,7 +150,7 @@ export function connectPage(
         )
           throw new Error("page_request_invalid");
         let operation: Operation;
-        if (message.method === "invoke" && page.commands.includes(name))
+        if ((message.method === "invoke" || message.method === "exportCsv") && page.commands.includes(name))
           operation = bridge.invoke;
         else if (
           message.method === "device" &&
@@ -136,6 +173,13 @@ export function connectPage(
           controller.signal,
           progress,
         );
+        if (message.method === "exportCsv") {
+          if (controller.signal.aborted || bridge.isRetired?.()) throw new Error("page_release_retired");
+          if (!bridge.saveCsv || !value || typeof value !== "object" || !("csv" in value) || typeof value.csv !== "string")
+            throw new Error("page_export_unavailable");
+          await bridge.saveCsv(value.csv, controller.signal);
+          value = undefined;
+        }
       }
       if (!controller.signal.aborted) reply(id, { type: "result", value });
     } catch (error) {
@@ -151,18 +195,23 @@ export function connectPage(
   }
 
   port.onmessage = (event) => {
-    if (event.data?.type === "page.loaded") bridge.status(true);
+    if (event.data?.type === "page.pointerCapture" && page.anchored_slots && !bridge.isRetired?.()) {
+      if (typeof event.data.active === "boolean") bridge.pointerCapture?.(event.data.active);
+    }
+    else if (event.data?.type === "page.loaded") bridge.status(true);
     else if (event.data?.type === "page.failed") bridge.status(false);
     else void handle(event.data);
   };
   port.postMessage({ type: "ready" });
   const root = typeof document !== "undefined" && document.documentElement;
+  const viewport = root && root.ownerDocument.defaultView;
   const theme = () => {
     if (root)
       port.postMessage({
         type: "appearance",
         dark: root.dataset.theme === "dark" || root.classList.contains("dark"),
         highContrast: root.classList.contains("high-contrast"),
+        hostViewportWidth: viewport ? viewport.innerWidth : undefined,
         lang: bridge.locale,
       });
   };
@@ -170,6 +219,7 @@ export function connectPage(
     page.workbench && root ? new MutationObserver(theme) : undefined;
   if (observer && root) {
     theme();
+    if (viewport) viewport.addEventListener("resize", theme);
     observer.observe(root, {
       attributes: true,
       attributeFilter: ["class", "data-theme", "lang"],
@@ -177,6 +227,7 @@ export function connectPage(
   }
   return () => {
     observer?.disconnect();
+    if (observer && viewport) viewport.removeEventListener("resize", theme);
     closed = true;
     for (const call of pending.values()) call.abort();
     pending.clear();

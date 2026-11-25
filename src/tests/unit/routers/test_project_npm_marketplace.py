@@ -198,3 +198,36 @@ def test_npm_semver_precedence():
     assert version_key("1.0.0-alpha.10") > version_key("1.0.0-alpha.2")
     assert version_key("1.0.0") > version_key("1.0.0-rc.9")
     assert version_key("1.0.0+build") == version_key("1.0.0+other")
+
+
+@pytest.mark.parametrize("scope", ["tenant", "project", "project_archive"])
+def test_signed_release_permission_review_accepts_full_device_request(scope):
+    from pydantic import ValidationError
+
+    from src.host.transport.project_marketplace import ApplyNpmRelease
+    from src.host.transport.tenant_packages import Apply
+    from src.infrastructure.adapters.primary.web.routers.optional_business_http_v2 import (
+        OptionalBusinessInstallV2,
+    )
+
+    model = {
+        "tenant": Apply,
+        "project": ApplyNpmRelease,
+        "project_archive": OptionalBusinessInstallV2,
+    }[scope]
+    body = {"tenant_id": "tenant", "expected_revision": 0, "expected_digest": "sha256:" + "a" * 64}
+    if scope != "tenant":
+        body["project_id"] = "project"
+    if scope == "project_archive":
+        body["archive_base64"] = "YQ=="
+    else:
+        body.update(package_name="@memstack/environments", version="1.5.8")
+    approvals = [f"permission.{i}" for i in range(35)]
+    assert (
+        model.model_validate({**body, "approved_permissions": approvals}).approved_permissions
+        == approvals
+    )
+    with pytest.raises(ValidationError, match="at most 100"):
+        model.model_validate(
+            {**body, "approved_permissions": [f"permission.{i}" for i in range(101)]}
+        )

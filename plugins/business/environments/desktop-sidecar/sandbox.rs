@@ -1,33 +1,5 @@
 // Compatibility endpoints for the full desktop profile.
 
-async fn get_sandbox(Path(project_id): Path<String>) -> Json<Value> {
-    Json(sandbox_value(project_id))
-}
-
-async fn ensure_sandbox(Path(project_id): Path<String>) -> LocalJsonResult {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "detail": "isolated local sandbox is not configured",
-            "sandbox": sandbox_value(project_id),
-        })),
-    ))
-}
-
-async fn proxy_auth_cookie() -> Json<Value> {
-    Json(json!({ "ok": true }))
-}
-
-async fn start_desktop(Path(project_id): Path<String>) -> LocalJsonResult {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "detail": "isolated local desktop is not configured",
-            "sandbox": sandbox_value(project_id),
-        })),
-    ))
-}
-
 async fn desktop_proxy() -> Html<&'static str> {
     Html(
         r#"<!doctype html><html><body style="margin:0;background:#111;color:#ddd;font:14px system-ui;display:grid;place-items:center;height:100vh"><div>Local desktop mode uses the native Electron window.</div></body></html>"#,

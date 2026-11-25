@@ -194,6 +194,7 @@ function ScopedMarket(props: PluginMarketProps) {
       reload();
       props.onChanged?.();
       props.onSelect(review.plugin_id);
+      props.onActivated?.(active);
     }
   }
   const result = catalog?.data;

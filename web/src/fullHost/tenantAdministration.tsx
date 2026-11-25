@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 import { Navigate, Route } from 'react-router-dom';
 
+import { ProjectBusinessRoute } from '../projectPackages/ProjectBusinessRoute';
 import { CompatibilityPage } from './compatibility';
 
 const Users = lazy(() =>
@@ -28,6 +29,14 @@ export function tenantAdministrationRoutes() {
         <Route path="audit" element={<OrganizationAudit />} />
         <Route path="smtp" element={<Smtp />} />
         <Route path="registry" element={<Registry />} />
+        <Route
+          path="clusters"
+          element={
+            <ProjectBusinessRoute insideWorkbench matchesFullRoute={() => false}>
+              <CompatibilityPage />
+            </ProjectBusinessRoute>
+          }
+        />
         <Route path="*" element={<CompatibilityPage />} />
       </Route>
     </Route>

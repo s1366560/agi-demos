@@ -1,11 +1,17 @@
 import guestSource from "./richPageGuest.js?raw";
 
+import type { SidebarBindings } from "./sidebar";
+
 export type PageTarget = "web" | "desktop-renderer";
 export type PageScope = Readonly<{
   tenantId: string;
   projectId: string | null;
 }>;
 export interface PackagePage {
+  readonly query_params?: readonly string[];
+  readonly sidebar?: SidebarBindings;
+  readonly navigation_actions?: readonly ("primary-create" | "group-create")[];
+  readonly anchored_slots?: Readonly<Record<string, string>>;
   readonly workbench?: boolean;
   readonly home?: boolean;
   readonly slots?: readonly string[];
@@ -21,6 +27,8 @@ interface Asset {
   readonly bytes_base64: string;
 }
 export interface RichPage {
+  readonly voice_authorization?: string;
+  readonly anchored_slots?: Readonly<Record<string, string>>;
   readonly workbench?: boolean;
   readonly schema: "memstack.rich-page/1";
   readonly id: string;
@@ -87,6 +95,11 @@ export async function verifyPageDocument(
     (page.resources !== undefined &&
       (!Array.isArray(page.resources) || page.resources.length > 64)) ||
     (page.query_params !== undefined && !isStringList(page.query_params)) ||
+    (page.anchored_slots !== undefined && (!page.anchored_slots || typeof page.anchored_slots !== "object" ||
+      Array.isArray(page.anchored_slots) || Object.entries(page.anchored_slots).length > 8 ||
+      Object.entries(page.anchored_slots).some(([name, target]) =>
+        !/^[a-z][a-z0-9-]{0,63}@[1-9][0-9]{0,3}$/.test(name) || typeof target !== "string" ||
+        !/^[a-z][a-z0-9.-]{0,127}\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(target)))) ||
     (page.page_links !== undefined && !isStringList(page.page_links)) ||
     (page.navigation_routes !== undefined &&
       !isStringList(page.navigation_routes))
@@ -136,8 +149,10 @@ export async function verifyPageDocument(
     ? "data:"
     : "'none'";
   const guest = btoa(guestSource);
+  // The full Web layout inherits the original application typography below the shell.
+  const workbenchTypography = target === "web" ? "#root{font-size:14px;line-height:22px}:where(h1,h2,h3,h4,h5,h6){font-size:inherit;line-height:inherit}" : "";
   const baseStyle = page.workbench
-    ? "<style>html,body,#root{margin:0;width:100%;height:100%}html{font:16px/1.5 system-ui}*{box-sizing:border-box}</style>"
+    ? "<style>html,body,#root{margin:0;width:100%;height:100%}html{font:16px/1.5 system-ui}*{box-sizing:border-box}" + workbenchTypography + "</style>"
     : "<style>html{font:16px/1.5 system-ui;color-scheme:light dark}body{margin:0;padding:1.25rem}main{max-width:72rem;margin:auto}form,label{display:grid;gap:.5rem}form{gap:1rem;margin-bottom:1rem}input,textarea,select,button{max-width:100%;box-sizing:border-box;font:inherit;padding:.45rem}button{cursor:pointer}fieldset{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:start;padding:.4rem .65rem}</style>";
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +

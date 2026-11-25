@@ -123,6 +123,7 @@ async fn generation_replacement_waits_for_processing_before_disposing_storage() 
     ));
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn internal_entry_uses_verified_workspace_policy_and_existing_provider_binding() {
     use crate::local_runtime::{local_router, workspace_core_bridge};

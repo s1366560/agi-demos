@@ -727,7 +727,9 @@ function authorizeAgentUrl(target: URL): void {
 function authorizeVoiceUrl(target: URL, scope: CloudSocketScope): void {
   if (
     target.pathname !== '/api/v1/voice/chat' ||
-    !exactQuery(target.searchParams, ['project_id', 'conversation_id'])
+    !(exactQuery(target.searchParams, ['project_id', 'conversation_id']) ||
+      (target.searchParams.get('package_session') === '1' &&
+       exactQuery(target.searchParams, ['project_id', 'conversation_id','package_session'])))
   ) {
     throw new Error('cloud voice socket URL is invalid');
   }

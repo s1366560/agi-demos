@@ -733,13 +733,21 @@ async fn aborted_operation_releases_its_real_signed_generation_lease() {
     assert!(set.prepare(&escaped).await.is_empty());
 }
 
+#[cfg(feature = "legacy-business")]
 #[path = "local_plugin_continuation_v2_tests.rs"]
 mod continuation_authority_tests;
 #[path = "local_plugin_operation_v2_tests.rs"]
 mod operation_authority_tests;
+#[cfg(feature = "legacy-business")]
 #[path = "local_execution_selection_patch_tests.rs"]
 mod selection_patch_tests;
 #[path = "local_skill_discovery_v2_tests.rs"]
 mod skill_discovery_tests;
 #[path = "local_plugin_timeline_v2_tests.rs"]
 mod timeline_metadata_tests;
+
+#[path = "local_plugin_http_route_tests.rs"]
+mod http_routes;
+
+#[path = "local_plugin_workspace_http_tests.rs"]
+mod workspace_http_routes;

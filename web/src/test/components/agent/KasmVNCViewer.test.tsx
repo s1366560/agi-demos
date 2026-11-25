@@ -15,6 +15,7 @@ import { KasmVNCViewer } from '@business/environments/ui/web/components/sandbox/
 const rfbMocks = vi.hoisted(() => ({
   close: vi.fn(),
   construct: vi.fn(),
+  setWebRTC: vi.fn(),
   disconnect: vi.fn(),
 }));
 
@@ -29,6 +30,9 @@ vi.mock('@/vendor/kasmvnc/core/rfb.js', () => ({
     clipViewport = false;
     background = '';
     qualityLevel = 0;
+    set enableWebRTC(value: boolean) {
+      rfbMocks.setWebRTC(value);
+    }
 
     constructor(...args: unknown[]) {
       rfbMocks.construct(...args);
@@ -138,6 +142,15 @@ describe('KasmVNCViewer', () => {
     });
     expect(rfbMocks.disconnect).toHaveBeenCalledTimes(1);
     expect(Socket.instances[0]?.readyState).toBe(Socket.CLOSED);
+  });
+
+  it('uses only the admitted transport for a signed RFB session', async () => {
+    const openSocket = () => new WebSocket('ws://test.invalid');
+    render(<KasmVNCViewer {...props} openSocket={openSocket} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(rfbMocks.setWebRTC).toHaveBeenCalledWith(false);
   });
 
   it('does not create an RFB session after unmounting', async () => {

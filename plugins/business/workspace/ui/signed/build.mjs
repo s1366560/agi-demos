@@ -12,9 +12,12 @@ await buildPackagePages({
   root: fileURLToPath(new URL('../../', import.meta.url)),
   sourceDirectory: 'ui/signed',
   entries: {
-    ...Object.fromEntries(['detail','settings','workspace-members','workspace-posts','workspace-tasks'].map(id=>[id,{ web: 'BlackboardPage.tsx', 'desktop-renderer': 'DesktopBoardPage.tsx' }])),
-    directory: { web: 'WebDirectoryPage.tsx', 'desktop-renderer': 'DesktopDirectoryPage.tsx' },
-    create: { web: 'WebCreatePage.tsx', 'desktop-renderer': 'DesktopCreatePage.tsx' },
+    "agent-collab": "GroupChatPage.tsx",
+    ...Object.fromEntries(['detail','settings','workspace-members','workspace-posts','workspace-tasks'].map(id=>[id,'BlackboardPage.tsx'])),
+    'workspace-task-detail': 'BlackboardPage.tsx',
+    overview: 'OverviewWeb.tsx',
+    directory: 'WebDirectoryPage.tsx',
+    create: 'WebCreatePage.tsx',
   },
   plugins: [
     {
@@ -32,6 +35,12 @@ await buildPackagePages({
           },
           ({ path }) => ({ path: require.resolve(path) }),
         );
+        if (build.initialOptions.entryPoints.includes(resolve(directory, 'GroupChatPage.tsx'))) {
+          build.onResolve(
+            { filter: /^(@business\/workspace\/ui\/web\/stores\/workspace|@\/stores\/auth)$/ },
+            () => ({ path: resolve(directory, 'groupChatStore.ts') }),
+          );
+        }
         const sources = {
           '@/services/client/httpClient': './blackboardTransport.ts',
           '@/utils/logger': './logger.ts',
@@ -70,7 +79,7 @@ await buildPackagePages({
         });
         build.onResolve({ filter: /^\.\/openPlanPreview$/ }, () => ({ path: resolve(directory, './externalCapabilities.ts') }));
         build.onLoad(
-          { filter: /(blackboard|workspace(Create|Directory))\.css$/ },
+          { filter: /(blackboard|workspace(Create|Directory|Overview))\.css$/ },
           async ({ path }) => {
             const result = await postcss([tailwind({ base: directory, optimize: true })]).process(
               await readFile(path, 'utf8'),

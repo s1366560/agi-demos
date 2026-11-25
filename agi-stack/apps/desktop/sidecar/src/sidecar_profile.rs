@@ -7,13 +7,14 @@ use serde::Deserialize;
 pub(crate) enum SidecarProfile {
     #[default]
     PackageHost,
-    #[cfg_attr(not(any(test, feature = "legacy-business")), serde(skip_deserializing))]
     Full,
+    #[cfg_attr(not(feature = "legacy-business"), serde(skip_deserializing))]
+    Compat,
 }
 
 impl SidecarProfile {
     pub(crate) fn allows_command(self, command: &str) -> bool {
-        self == Self::Full
+        self != Self::PackageHost
             || matches!(
                 command,
                 "local_run_execute"

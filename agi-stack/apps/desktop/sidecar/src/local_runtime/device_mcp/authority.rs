@@ -152,6 +152,52 @@ impl CloudOwner {
         Self::resolve_in_snapshot(broker, installation, tenant, project, snapshot).await
     }
 
+    /// Authenticate the caller against the current vault epoch before any cloud request.
+    pub(in crate::local_runtime) async fn resolve_project_http(
+        broker: &TrustedSessionBroker,
+        installation: &str,
+        project: &str,
+        bearer: &str,
+    ) -> Result<Option<Self>, String> {
+        let snapshot = broker
+            .snapshot()
+            .map_err(|_| "device_plugin_session_required")?;
+        let Some(record) = snapshot.record.as_ref() else {
+            return Ok(None);
+        };
+        if record.runtime_mode != TrustedSessionRuntimeMode::Cloud
+            || !crate::local_runtime::workspace_core_bridge::secret_matches(
+                &record.credential,
+                bearer,
+            )
+        {
+            return Ok(None);
+        }
+        let base = cloud_base(&snapshot)?;
+        crate::plugin_data_plane_credential_v2::validate_base_url_v2(&base)
+            .map_err(|_| "device_plugin_tls_required")?;
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|_| "device_mcp_cloud_authority_unavailable")?;
+        let context = read_json(
+            &client,
+            &format!("{base}/api/v1/workspace-context"),
+            &record.credential,
+        )
+        .await?;
+        if context["context"]["project_id"] != project {
+            return Err("device_mcp_scope_mismatch".into());
+        }
+        let tenant = context["context"]["tenant_id"]
+            .as_str()
+            .ok_or("device_mcp_cloud_authority_invalid")?;
+        Self::resolve_in_snapshot(broker, installation, tenant, project, snapshot)
+            .await
+            .map(Some)
+    }
+
     async fn resolve_in_snapshot(
         broker: &TrustedSessionBroker,
         installation: &str,

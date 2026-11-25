@@ -106,7 +106,8 @@ def test_installed_schedule_lifecycle(target):
         expect(old.locator(".ant-table")).to_have_count(0)
         _back(page, "automation")
         apply(page, business_release("automation"))
-        expect(_open(page, "Project schedules").locator(".ant-table").first).to_be_visible()
+        selector = ".ant-table"
+        expect(_open(page, "Project schedules").locator(selector).first).to_be_visible()
 
 
 def test_installed_native_billing_lifecycle():
@@ -120,10 +121,11 @@ def test_installed_native_billing_lifecycle():
         active = _details(page, "billing")
         install_previous(page, "1.2.0")
         apply(page, business_release("billing"))
-        billing = _open(page, "Tenant billing").locator('[data-tenant-admin-route="billing"]')
-        expect(billing.locator(":scope > dl dd").first).to_have_text(owner["tenant_id"])
-        expect(billing.get_by_role("heading", name=re.compile("Usage|用量"))).to_be_visible()
-        baseline = billing.locator(":scope > dl dd").last.inner_text()
+        billing = _open(page, "Tenant billing")
+        assert billing.locator("html").evaluate("async () => (await memstack.scope()).tenantId") == owner["tenant_id"]
+        expect(billing.get_by_role("heading", name=re.compile("Current Plan|当前计划"))).to_be_visible(timeout=60000)
+        plan = billing.get_by_role("heading", name=re.compile("^(free|pro|enterprise)$", re.I))
+        baseline = plan.inner_text().lower()
         _back(page, "billing")
         more(page, "Roll back|回退|回滚")
         expect(active).to_have_text("1.2.0", timeout=60000)
@@ -131,9 +133,9 @@ def test_installed_native_billing_lifecycle():
         old.get_by_role("button", name=re.compile("View tenant account|查看租户账户")).click()
         expect(
             old.get_by_text(re.compile("^(Current plan|当前套餐)$")).locator("+ dd")
-        ).to_have_text(baseline)
+        ).to_have_text(baseline, timeout=60000)
         _back(page, "billing")
         apply(page, business_release("billing"))
         expect(
-            _open(page, "Tenant billing").locator('[data-tenant-admin-route="billing"]')
-        ).to_be_visible()
+            _open(page, "Tenant billing").get_by_role("heading", name=re.compile("Current Plan|当前计划"))
+        ).to_be_visible(timeout=60000)

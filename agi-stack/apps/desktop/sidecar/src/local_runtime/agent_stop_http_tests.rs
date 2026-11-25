@@ -134,16 +134,19 @@ async fn stop_planning_http(stage: ResponseStage) {
     server.abort();
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn composer_stop_websocket_closes_planning_http_headers_and_rejects_stale_turns() {
     stop_planning_http(ResponseStage::Headers).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn composer_stop_websocket_closes_partial_planning_sse_without_late_finish() {
     stop_planning_http(ResponseStage::SseBody).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn composer_planning_stop_rejects_authoritative_run_and_wrong_context() {
     let (state, conversation) = routed_state("http://127.0.0.1:1/v1").await;

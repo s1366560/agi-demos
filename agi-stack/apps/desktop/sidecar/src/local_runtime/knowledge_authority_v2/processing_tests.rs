@@ -12,6 +12,7 @@ use tokio::sync::Notify;
 mod community;
 #[path = "processing_lifecycle_tests.rs"]
 mod lifecycle;
+#[cfg(feature = "legacy-business")]
 #[path = "processing_rpc_entry_tests.rs"]
 mod rpc;
 

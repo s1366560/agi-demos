@@ -6,6 +6,12 @@ import type {
   ClusterHealthResponse,
 } from '../web/services/clusterService';
 
+import type {
+  ACPRunnerPool,
+  ACPRunnerTokenResponse,
+  UpsertACPRunnerPoolRequest,
+} from '../../../../../web/src/types/acp';
+
 interface ClusterRow extends Omit<ClusterResponse, 'credentials_encrypted' | 'provider_config'> {
   provider_config?: Record<string, unknown>;
 }
@@ -37,6 +43,29 @@ export const clusterService = {
       id,
     })) as { item: ClusterRow };
     return item(result.item);
+  },
+  async listAcpRunnerPools(id: string) {
+    const result = (await window.memstack.invoke('list-runner-pools', { id })) as {
+      items: ACPRunnerPool[];
+    };
+    return result.items;
+  },
+  async createAcpRunnerPool(id: string, data: UpsertACPRunnerPoolRequest & { poolKey: string }) {
+    const result = (await window.memstack.invoke('create-runner-pool', { id, data })) as {
+      item: ACPRunnerPool;
+    };
+    return result.item;
+  },
+  createAcpRunnerToken(
+    id: string,
+    poolKey: string,
+    data: { name?: string; expiresInHours?: number }
+  ) {
+    return window.memstack.invoke('register-runner', {
+      id,
+      pool_key: poolKey,
+      data,
+    }) as Promise<ACPRunnerTokenResponse>;
   },
   async getHealth(id: string, signal?: AbortSignal) {
     const result = (await window.memstack.invoke(

@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-import {
-  packageBase,
-  packageScope,
-} from '../../../agi-stack/packages/plugin-marketplace-ui/src/pluginMarketTypes';
 import type { MarketplaceTransport } from '../../../agi-stack/packages/plugin-marketplace-ui/src/client';
 import type { SidebarData } from '../components/layout/TenantSidebarView';
 import type { LinkItem } from './navigation';
+import { ownerFor } from './sidebarSlots';
+import { useSidebarSlot } from './useSidebarSlot';
 
 type Surface = Pick<SidebarData, 'workspaces' | 'currentWorkspace' | 'workspaceTasks'>;
 const empty: Surface = { workspaces: [], currentWorkspace: null, workspaceTasks: [] };
@@ -17,35 +14,9 @@ export function useWorkspaceSidebar(
   items: LinkItem[],
   transport: MarketplaceTransport
 ) {
-  const release = items.find(
-    (item) => item.plugin === 'memstack-workspace' && item.projectId === project
-  );
-  const digest = release?.digest;
-  const canRead = release?.commands?.includes('read-workspace');
-  const canList = release?.commands?.includes('list-directory');
-  const canReadTasks = release?.commands?.includes('list-tasks');
-
-  const scope = useRef<AbortController | null>(null);
+  const owner = ownerFor(items, project, 'groups');
+  const command = useSidebarSlot(tenant, project, owner, transport);
   const detailRequest = useRef(0);
-  const command = useCallback(
-    (name: string, payload: Record<string, unknown>, signal: AbortSignal) => {
-      if (!tenant || !project || !digest) throw new Error('page_scope_expired');
-      return transport<Record<string, unknown>>(
-        packageBase(project) + '/memstack-workspace/commands',
-        {
-          method: 'POST',
-          signal,
-          body: {
-            ...packageScope(tenant, project),
-            expected_digest: digest,
-            command_id: name,
-            payload,
-          },
-        }
-      );
-    },
-    [tenant, project, digest, transport]
-  );
   const [snapshot, setSnapshot] = useState<{ owner: typeof command; data: Surface } | null>(null);
   const surface = snapshot?.owner === command ? snapshot.data : empty;
   const publish = useCallback(
@@ -56,66 +27,56 @@ export function useWorkspaceSidebar(
       })),
     [command]
   );
+  const list = useCallback(
+    async (slot: 'groups' | 'children', id?: string, signal?: AbortSignal) => {
+      const items: { id: string; name: string }[] = [];
+      for (let offset = 0; ; offset += 100) {
+        const { rows, count } = await command(slot, { id, offset, limit: 100 }, signal);
+        for (const row of rows)
+          if (typeof row.id === 'string' && typeof row.label === 'string')
+            items.push({ id: row.id, name: row.label });
+        if (
+          count < 100 ||
+          !owner?.sidebar?.[slot]?.inputs ||
+          !Object.values(owner.sidebar[slot].inputs).includes('offset')
+        )
+          return items;
+      }
+    },
+    [command, owner]
+  );
   useEffect(() => {
     const controller = new AbortController();
-    scope.current = controller;
-    async function readDirectory() {
-      const workspaces: Surface['workspaces'] = [];
-      for (let offset = 0; !controller.signal.aborted; offset += 100) {
-        const { rows } = await command(
-          'list-directory',
-          { offset, limit: 100, cards: true },
-          controller.signal
-        );
-        if (!Array.isArray(rows)) throw new Error('invalid_workspace_directory');
-        for (const row of rows) {
-          if (
-            row?.tenant_id === tenant &&
-            row.project_id === project &&
-            typeof row.id === 'string' &&
-            typeof row.name === 'string' &&
-            !row.is_archived
-          )
-            workspaces.push({ id: row.id, name: row.name });
-        }
-        if (rows.length < 100) break;
-      }
-      if (!controller.signal.aborted) publish({ workspaces });
-    }
-    if (canList) void readDirectory().catch(() => {});
+    if (owner)
+      void list('groups', undefined, controller.signal)
+        .then((workspaces) => {
+          if (!controller.signal.aborted) publish({ workspaces });
+        })
+        .catch(() => {});
     return () => controller.abort();
-  }, [canList, command, tenant, project, publish]);
+  }, [list, owner, publish]);
   const loadWorkspaceSurface = useCallback(
-    async (owner: string, id: string, workspace: string) => {
-      const signal = scope.current?.signal;
-      if (!canRead || tenant !== owner || project !== id || !signal || signal.aborted) return;
-      const request = ++detailRequest.current;
-      const detail = await command('read-workspace', { workspace_id: workspace }, signal);
-      if (detail.id !== workspace || typeof detail.name !== 'string')
-        throw new Error('invalid_workspace_detail');
-      const currentWorkspace = { id: workspace, name: detail.name };
-      const workspaceTasks: Surface['workspaceTasks'] = [];
-      if (canReadTasks)
-        for (let offset = 0; !signal.aborted && request === detailRequest.current; offset += 100) {
-          const { items: tasks } = await command(
-            'list-tasks',
-            { workspace_id: workspace, offset, limit: 100 },
-            signal
-          );
-          if (!Array.isArray(tasks)) throw new Error('invalid_workspace_tasks');
-          for (const task of tasks)
-            if (
-              task?.workspace_id === workspace &&
-              typeof task.id === 'string' &&
-              typeof task.title === 'string'
-            )
-              workspaceTasks.push({ id: task.id, workspace_id: workspace, title: task.title });
-          if (tasks.length < 100) break;
-        }
-      if (!signal.aborted && request === detailRequest.current)
-        publish({ currentWorkspace, workspaceTasks });
+    async (tenantId: string, projectId: string, id: string) => {
+      if (!owner?.sidebar?.group || tenantId !== tenant || projectId !== project) return;
+      const seq = ++detailRequest.current;
+      const [detail, children] = await Promise.all([
+        command('group', { id }),
+        owner.sidebar.children ? list('children', id) : [],
+      ]);
+      const row = detail.rows[0];
+      if (row?.id !== id || typeof row.label !== 'string')
+        throw new Error('invalid_sidebar_result');
+      if (seq === detailRequest.current)
+        publish({
+          currentWorkspace: { id, name: row.label },
+          workspaceTasks: children.map((child) => ({
+            id: child.id,
+            title: child.name,
+            workspace_id: id,
+          })),
+        });
     },
-    [canRead, canReadTasks, command, tenant, project, publish]
+    [owner, tenant, project, command, list, publish]
   );
   return useMemo(() => ({ ...surface, loadWorkspaceSurface }), [surface, loadWorkspaceSurface]);
 }

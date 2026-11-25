@@ -1,6 +1,6 @@
 # Billing
 
-The [desktop billing controls](ui/desktop/tenant-admin) own the client, controller, route and view model. [InvoiceTable](ui/shared/InvoiceTable.tsx) is shared with the independently built account page.
+Both clients use the [signed billing page](ui/shared/WebBillingPage.tsx) and [invoice table](ui/shared/InvoiceTable.tsx).
 
 The installable identity is `memstack-billing`. Start with [package.json](package.json) for the default signed quote release and [build.py](build.py) for a release with a digest-pinned invoice worker. A single worker release exports quotes, invoices, page actions, and CLI commands together.
 
@@ -8,7 +8,7 @@ The installable identity is `memstack-billing`. Start with [package.json](packag
 | --- | --- |
 | Create, list, or read a project invoice | [Worker implementation](workers/invoice_worker.py) and [operation schemas](workers/invoice_contract.py) |
 | Change the tenant billing API | [HTTP handlers](backend/http.py), [tenant authorization](backend/authority.py), and [tenant invoices and entitlements](backend/service.py) |
-| Change pages | [Web billing view](ui/web/BillingView.tsx), [desktop billing view](ui/desktop/tenant-admin/TenantBillingPage.tsx), and [project invoice actions](ui/shared/ProjectInvoiceActions.tsx) |
+| Change pages | [shared billing view](ui/web/BillingView.tsx) and [project invoice actions](ui/shared/ProjectInvoiceActions.tsx) |
 | Change stored invoice data | [Tenant invoice model](backend/invoices.py), [package migrations](migrations/), and [worker record contract](invoice_record.py) |
 | Run package tests | `uv run pytest plugins/business/billing/tests` and `pnpm -C web exec vitest run ../plugins/business/billing/tests/Billing.test.tsx` |
 
@@ -17,7 +17,7 @@ The plan catalog in `plans.json` supplies the `quote` Wasm guest used by the ten
 
 The tenant marketplace can install Billing in a tenant with zero projects. Its signed page at `/tenant/:tenantId/billing` reads tenant usage and invoice history. Tenant administrators approve its exact release digest and permissions independently of project installations. The project marketplace mounts its own selected version at `/billing`. `app.billing.account.read` requires tenant billing access. The owner can confirm a plan change with `app.billing.plan.write`. Both commands use the same scoped entitlement and billing services as tenant HTTP. Project-issued invoices use the package worker and stay within the selected project.
 
-The signed archive includes two entries for the same route. [WebBillingPage](ui/shared/WebBillingPage.tsx) mounts the Web billing view. [DesktopBillingPage](ui/shared/DesktopBillingPage.tsx) mounts the native billing view and controller. Each entry bundles React and binds its data access to the approved commands for the selected release. To regenerate its checked-in browser artifact and resource digest after editing it, run `corepack pnpm --dir plugins/business/billing/ui/shared install --frozen-lockfile` followed by `corepack pnpm --dir plugins/business/billing/ui/shared run build`. The Python publisher includes the prepared artifact without a Node toolchain.
+Web and Electron mount the same [Billing page](ui/shared/WebBillingPage.tsx) and stylesheet. The page binds tenant and project actions to the approved commands for the selected release. To regenerate its checked-in browser artifact and resource digest after editing it, run `corepack pnpm --dir plugins/business/billing/ui/shared install --frozen-lockfile` followed by `corepack pnpm --dir plugins/business/billing/ui/shared run build`. The Python publisher includes the prepared artifact without a Node toolchain.
 
 ## Publish a release
 

@@ -3,6 +3,11 @@ import { graphService as maintenance } from './optimize';
 
 export const graphService = {
   ...maintenance,
+  advancedSearch: (parameters: Record<string, unknown>) => search('advanced', parameters),
+  searchByGraphTraversal: (parameters: Record<string, unknown>) => search('graph-traversal', parameters),
+  searchByCommunity: (parameters: Record<string, unknown>) => search('community', parameters),
+  searchTemporal: (parameters: Record<string, unknown>) => search('temporal', parameters),
+  searchWithFacets: (parameters: Record<string, unknown>) => search('faceted', parameters),
   getGraphData({ limit = 100 }: { limit?: number }) {
     return window.memstack.invoke('read-graph', { limit }) as Promise<GraphData>;
   },
@@ -14,3 +19,8 @@ export const graphService = {
     return window.memstack.invoke('read-subgraph', { node_uuids, include_neighbors, limit }) as Promise<GraphData>;
   },
 };
+
+
+function search(mode: string, parameters: Record<string, unknown>) {
+  return window.memstack.invoke('search-project', { mode, parameters });
+}

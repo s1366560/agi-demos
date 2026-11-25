@@ -1,7 +1,7 @@
 mod llm_tool_contracts;
+mod plan_tool_contract;
 #[cfg(test)]
 mod profile_tests;
-mod plan_tool_contract;
 #[cfg(test)]
 mod tool_contract_tests;
 mod visual_input_llm;
@@ -105,19 +105,21 @@ mod execution_selection_patch;
 mod fan_out_tool_host;
 mod hitl_model_response;
 mod knowledge_authority_v2;
+#[cfg(feature = "legacy-business")]
+mod legacy_http;
 mod local_feature_authority_v2;
 mod local_history_retirement;
 mod local_plugin_instances_v2;
 mod local_plugin_routes_v2;
 mod local_plugin_tool_host_v2;
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-business"))]
 mod local_route_parity_tests;
 mod local_run_upload_command;
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-business"))]
 mod managed_resource_tests;
 mod mcp_agent_tool_host;
 mod mcp_app_automation;
-#[cfg(any(test, feature = "legacy-business"))]
+#[cfg(feature = "legacy-business")]
 mod mcp_app_static;
 #[cfg(test)]
 mod mcp_remote_transport_tests;
@@ -126,11 +128,11 @@ mod mcp_supervisor;
 mod mcp_supervisor_tests;
 mod message_display;
 mod model_request_replay_v2;
-#[cfg(any(test, feature = "legacy-business"))]
-mod legacy_http;
-#[cfg(any(test, feature = "legacy-business"))]
+mod signed_project_http;
+mod workspace_read;
+#[cfg(feature = "legacy-business")]
 use legacy_http::*;
-#[cfg_attr(not(any(test, feature = "legacy-business")), path = "package_mcp_contract.rs")]
+#[cfg_attr(not(feature = "legacy-business"), path = "package_mcp_contract.rs")]
 mod parity_routes;
 mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
@@ -168,7 +170,7 @@ mod subagent_control;
 mod subagent_runtime;
 mod subagent_scope;
 mod task_session;
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-business"))]
 mod terminal_generation_v2_tests;
 mod terminal_pty_v2;
 mod timeline_presentation;
@@ -266,7 +268,6 @@ impl LocalRuntimeService {
             eprintln!("failed to sweep expired browser action audit rows: {error}");
         }
         let speech_credential_vault = credential_vault.clone();
-        #[cfg(any(test, feature = "legacy-business"))]
         let mcp_credential_vault = credential_vault.clone();
         let provider_credentials =
             ProviderCredentialBroker::native(credential_vault, session_store.installation_id())
@@ -287,17 +288,20 @@ impl LocalRuntimeService {
             .map_err(|_| "speech_vault_unavailable")? = Some(speech_credential_vault);
         state.app_data_dir = Some(app_data_dir.clone());
         state.local_knowledge_acceptance = local_knowledge_acceptance;
-        #[cfg(any(test, feature = "legacy-business"))]
-        if profile == SidecarProfile::Full {
-            state.config.lock().expect("local runtime config").browser_bridge =
-                browser_preferences::load(&app_data_dir)?;
+        if profile != SidecarProfile::PackageHost {
+            state
+                .config
+                .lock()
+                .expect("local runtime config")
+                .browser_bridge = browser_preferences::load(&app_data_dir)?;
         }
         let state = Arc::new(state);
-        #[cfg(any(test, feature = "legacy-business"))]
-        if profile == SidecarProfile::Full {
-            if crate::workspace_core_cutover::load_cutover_marker(&app_data_dir.join("workspace-core"))
-                .await?
-                .is_some_and(|marker| marker.state.is_cutover())
+        if profile != SidecarProfile::PackageHost {
+            if crate::workspace_core_cutover::load_cutover_marker(
+                &app_data_dir.join("workspace-core"),
+            )
+            .await?
+            .is_some_and(|marker| marker.state.is_cutover())
             {
                 workspace_core_bridge::mark_workspace_core_cutover(&state);
             }
@@ -305,11 +309,13 @@ impl LocalRuntimeService {
                 .mcp_supervisor
                 .install_credential_vault(mcp_credential_vault)
                 .map_err(|error| error.to_string())?;
-            plugin_marketplace_v3::recover(&state)?;
             state
                 .mcp_supervisor
                 .prepare_startup_recovery()
                 .map_err(|error| error.to_string())?;
+        }
+        if profile == SidecarProfile::Compat {
+            plugin_marketplace_v3::recover(&state)?;
             state.reconcile_recovered_runs_from_checkpoints().await?;
             state.start_automation_worker_with_config(
                 automation_worker::AutomationWorkerConfig::local_default(),
@@ -321,8 +327,7 @@ impl LocalRuntimeService {
             .map_err(|error| error.to_string())?;
         let addr = listener.local_addr().map_err(|error| error.to_string())?;
         let api_base_url = format!("http://{addr}");
-        #[cfg(any(test, feature = "legacy-business"))]
-        if profile == SidecarProfile::Full {
+        if profile != SidecarProfile::PackageHost {
             state.reconcile_browser_bridge(
                 &state
                     .config
@@ -1352,7 +1357,11 @@ impl LocalRuntimeState {
         )?);
         let site_credentials = provider_credentials.site_credential_broker();
         Ok(Self {
-            profile: SidecarProfile::Full,
+            profile: if cfg!(feature = "legacy-business") {
+                SidecarProfile::Compat
+            } else {
+                SidecarProfile::Full
+            },
             api_token,
             workspace_root: Mutex::new(workspace_root),
             tool_host: Mutex::new(tool_host),
@@ -3606,30 +3615,81 @@ fn bounded_identifier(value: &str) -> bool {
     !value.is_empty() && value == value.trim() && value.len() <= 512
 }
 
-#[cfg(any(test, feature = "legacy-business"))]
-include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../plugins/business/workspace/desktop-sidecar/workspaces.rs"));
-#[cfg(any(test, feature = "legacy-business"))]
-include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../plugins/business/agent/desktop-sidecar/providers.rs"));
-#[cfg(any(test, feature = "legacy-business"))]
-include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../plugins/business/agent/desktop-sidecar/conversations.rs"));
-#[cfg(any(test, feature = "legacy-business"))]
-include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../plugins/business/environments/desktop-sidecar/sandbox.rs"));
+#[cfg(feature = "legacy-business")]
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../../plugins/business/workspace/desktop-sidecar/workspaces.rs"
+));
+#[cfg(feature = "legacy-business")]
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../../plugins/business/agent/desktop-sidecar/providers.rs"
+));
+#[cfg(feature = "legacy-business")]
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../../plugins/business/agent/desktop-sidecar/conversations.rs"
+));
+#[cfg(feature = "legacy-business")]
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../../plugins/business/environments/desktop-sidecar/sandbox.rs"
+));
+
+// Both profiles use the production router with mandatory generation admission here.
+#[cfg(all(test, not(feature = "legacy-business")))]
+use local_router as local_router_with_generation_required;
 
 fn local_router(state: Arc<LocalRuntimeState>) -> Router {
-    #[cfg(any(test, feature = "legacy-business"))]
-    if state.profile == SidecarProfile::Full {
+    #[cfg(feature = "legacy-business")]
+    if state.profile == SidecarProfile::Compat {
         #[cfg(test)]
         {
-            let admission = PlatformPluginRouteAdmissionV2::optional_for_unit_tests(Arc::clone(&state));
+            let admission =
+                PlatformPluginRouteAdmissionV2::optional_for_unit_tests(Arc::clone(&state));
             return local_router_with_generation_admission(state, admission);
         }
         #[cfg(not(test))]
         return local_router_with_generation_required(state);
     }
-    Router::new()
-        .route("/health", get(|| async { StatusCode::NO_CONTENT }))
-        .route_layer(middleware::from_fn_with_state(Arc::clone(&state), require_launch_capability))
-        .with_state(state)
+    let health = Router::new().route("/health", get(|| async { StatusCode::NO_CONTENT }));
+    let public_routes = if state.profile == SidecarProfile::Full {
+        let scoped = Router::new()
+            .merge(local_plugin_routes_v2::router())
+            .merge(local_plugin_instances_v2::router())
+            .fallback(signed_project_http::dispatch)
+            .layer(middleware::from_fn_with_state(
+                PlatformPluginRouteAdmissionV2::required(Arc::clone(&state)),
+                platform_plugin_route_admission_v2::require_generation_v2,
+            ))
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_active_scope,
+            ))
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_user_session,
+            ))
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                signed_project_http::cloud,
+            ));
+        health.merge(scoped)
+    } else {
+        health
+    };
+    let app = public_routes
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            require_launch_capability,
+        ))
+        .layer(local_cors_layer())
+        .with_state(Arc::clone(&state));
+    if state.profile == SidecarProfile::Full {
+        app.merge(workspace_core_bridge::router(state))
+    } else {
+        app
+    }
 }
 
 fn local_cors_origins(renderer_origin: Option<&str>) -> Vec<HeaderValue> {
@@ -4311,7 +4371,7 @@ struct LocalLlmProviderModelsResponse {
     source: Option<&'static str>,
 }
 
-#[cfg(any(test, feature = "legacy-business"))]
+#[cfg(feature = "legacy-business")]
 fn static_local_roster(provider_type: &str) -> LocalLlmProviderModels {
     const ROSTER_JSON: &str =
         include_str!("../../../../../../src/infrastructure/llm/static_provider_models.json");
@@ -8762,23 +8822,6 @@ struct McpToolCallBody {
     arguments: Value,
 }
 
-fn sandbox_value(project_id: String) -> Value {
-    json!({
-        "sandbox_id": format!("local-{project_id}"),
-        "project_id": project_id,
-        "tenant_id": "local",
-        "status": "unavailable",
-        "endpoint": null,
-        "websocket_url": null,
-        "desktop_port": null,
-        "terminal_port": null,
-        "desktop_url": null,
-        "terminal_url": null,
-        "is_healthy": false,
-        "error_message": "isolated local sandbox is not configured",
-    })
-}
-
 struct LocalTimelineObserver {
     state: Arc<LocalRuntimeState>,
     conversation_id: String,
@@ -9504,6 +9547,7 @@ mod tests {
         include!("conversation_history_tests.rs");
     }
 
+    #[cfg(feature = "legacy-business")]
     mod conversation_llm_route_tests {
         use super::*;
         include!("conversation_llm_route_tests.rs");
@@ -9522,6 +9566,7 @@ mod tests {
         include!("provider_audio_failover_tests.rs");
     }
 
+    #[cfg(feature = "legacy-business")]
     mod provider_request_timeout_tests {
         use super::*;
         include!("provider_request_timeout_tests.rs");
@@ -9540,6 +9585,7 @@ mod tests {
         include!("provider_embedding_declaration_tests.rs");
     }
 
+    #[cfg(feature = "legacy-business")]
     mod provider_management_tests {
         use super::*;
         include!("provider_management_tests.rs");
@@ -10490,6 +10536,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn browser_origin_grant_routes_list_and_revoke() {
         let state = test_state("browser-grant-secret");
@@ -10579,6 +10626,7 @@ mod tests {
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn browser_capability_grant_routes_list_and_revoke() {
         let state = test_state("browser-capability-secret");
@@ -10670,6 +10718,7 @@ mod tests {
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn browser_site_credential_routes_round_trip_without_password_exposure() {
         let state = test_state("browser-credential-secret");
@@ -10829,6 +10878,7 @@ mod tests {
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn browser_action_audit_route_lists_newest_first_with_filters() {
         let state = test_state("browser-audit-secret");
@@ -10904,6 +10954,7 @@ mod tests {
         assert_eq!(entries[0]["tool_name"], "browser_cdp_raw");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_messages_api_paginates_with_exclusive_tuple_cursors() {
         let state = test_state("timeline-secret");
@@ -11002,6 +11053,7 @@ mod tests {
         assert_eq!(forward["has_more"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_messages_api_validates_project_limit_and_cursors() {
         let state = test_state("timeline-validation-secret");
@@ -11053,6 +11105,7 @@ mod tests {
         assert_eq!(wrong_project.status(), StatusCode::FORBIDDEN);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn identity_catalogs_match_the_cloud_pagination_contract() {
         let app = local_router(test_state("identity-pagination-secret"));
@@ -11114,6 +11167,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_catalog_filters_unbound_sessions_before_pagination() {
         let state = test_state("unbound-catalog-secret");
@@ -11160,6 +11214,7 @@ mod tests {
         assert_eq!(unbound["next_offset"], Value::Null);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn router_requires_launch_capability_for_http_and_websocket_upgrade() {
         let state = test_state("launch-secret");
@@ -11230,6 +11285,7 @@ mod tests {
         assert_eq!(authorized.status(), axum::http::StatusCode::OK);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_auth_me_exposes_structured_non_superuser_authority() {
         let app = local_router(test_state("launch-secret"));
@@ -11249,6 +11305,7 @@ mod tests {
         assert_eq!(body["global_roles"], json!([]));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_session_and_workspace_context_require_two_credentials_and_revoke_cleanly() {
         let state = test_state_without_session("launch-secret");
@@ -11356,6 +11413,7 @@ mod tests {
         assert_eq!(revoked.status(), axum::http::StatusCode::UNAUTHORIZED);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn signout_retries_after_response_loss_without_revoking_other_sessions() {
         let state = test_state_without_session("launch-secret");
@@ -11515,6 +11573,7 @@ mod tests {
         assert_eq!(active.status(), axum::http::StatusCode::OK);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_login_routes_are_not_registered() {
         let app = local_router(test_state_without_session("launch-secret"));
@@ -11545,6 +11604,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_types_declare_supported_local_auth_methods() {
         let state = test_state("provider-types-secret");
@@ -11589,6 +11649,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_auth_requests_reject_unknown_and_mutually_exclusive_fields() {
         let mutation_cases = [
@@ -11714,6 +11775,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn no_auth_provider_is_credential_configured_even_while_disabled() {
         let state = test_state("provider-no-auth-status");
@@ -11763,6 +11825,7 @@ mod tests {
         assert_eq!(provider["health_status"], "disabled");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn missing_provider_credentials_are_not_reported_as_network_probes() {
         let state = test_state("provider-missing-credential-status");
@@ -11827,6 +11890,7 @@ mod tests {
         assert_eq!(health["provider"]["health_status"], "needs_credentials");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn environment_provider_references_are_limited_to_provider_credentials() {
         let _environment_lock = PROVIDER_ENVIRONMENT_TEST_LOCK.lock().await;
@@ -11944,6 +12008,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn loopback_environment_provider_probe_sends_resolved_credential() {
         const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
@@ -11987,6 +12052,7 @@ mod tests {
         provider_shutdown.send(()).ok();
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn environment_provider_reference_never_persists_the_resolved_value() {
         const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
@@ -12047,6 +12113,7 @@ mod tests {
         assert!(runtime.configured_credentials.contains(&key));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn environment_provider_can_be_re_enabled_after_disable() {
         const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
@@ -12135,6 +12202,7 @@ mod tests {
         assert!(runtime.configured_credentials.contains(&key));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn environment_provider_reference_survives_restart_without_persisting_the_value() {
         const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
@@ -12264,6 +12332,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove environment restart test root");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_model_catalog_is_static_structured_and_source_attributed() {
         let state = test_state("provider-catalog-secret");
@@ -12329,6 +12398,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_put_health_and_usage_routes_match_desktop_client_contract() {
         let (provider_base_url, provider_shutdown) =
@@ -12463,6 +12533,7 @@ mod tests {
         provider_shutdown.send(()).ok();
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn draft_provider_probe_discovers_models_without_persisting() {
         let _environment_lock = PROVIDER_ENVIRONMENT_TEST_LOCK.lock().await;
@@ -12605,6 +12676,7 @@ mod tests {
         provider_shutdown.send(()).ok();
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn unavailable_credential_store_rejects_provider_update_without_mutating_runtime_or_db() {
         let root = test_root();
@@ -12712,6 +12784,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_endpoints_reject_invalid_or_unsafe_transport_before_persistence() {
         let state = test_state("provider-endpoint-secret");
@@ -12811,6 +12884,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_mutation_is_revision_guarded_and_never_reuses_another_provider_key() {
         let state = test_state("provider-secret");
@@ -12997,6 +13071,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_connection_update_requires_explicit_idempotent_runtime_selection() {
         let state = test_state("explicit-provider-selection-secret");
@@ -13098,6 +13173,7 @@ mod tests {
         assert_eq!(local["runtime_selected"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn runtime_status_is_sorted_and_never_exposes_provider_transport_or_credentials() {
         let state = test_state("runtime-provider-projection-secret");
@@ -13237,6 +13313,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn signout_preserves_runtime_selection_for_the_next_local_session() {
         let state = test_state("selection-signout-secret");
@@ -13312,6 +13389,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn active_provider_connection_does_not_appear_in_runtime_status_before_selection() {
         let state = test_state("unselected-runtime-status-secret");
@@ -13347,6 +13425,7 @@ mod tests {
         assert_eq!(error, "Workspace Core policy authority is unavailable");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn stale_provider_update_cannot_clear_authoritative_runtime_selection() {
         let state = test_state("stale-provider-selection-secret");
@@ -13422,6 +13501,7 @@ mod tests {
         assert_eq!(providers[0]["is_active"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn routed_endpoint_change_requires_replacement_credential_atomically() {
         let state = test_state("atomic-provider-credential-secret");
@@ -13526,6 +13606,7 @@ mod tests {
         assert!(!persisted.to_string().contains("new-provider-key"));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn runtime_selection_route_allows_electron_put_preflight() {
         let response = local_router(test_state("selection-cors-secret"))
@@ -13552,6 +13633,7 @@ mod tests {
             .is_some_and(|methods| methods.split(',').any(|method| method.trim() == "PUT")));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn workspace_reconfigure_preserves_provider_credentials_and_selection_state() {
         let state = test_state("workspace-config-provider-secret");
@@ -13630,6 +13712,7 @@ mod tests {
         assert_eq!(selected["runtime_selected"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn runtime_selection_and_provider_credential_survive_restart_without_secret_exposure() {
         let root = test_root();
@@ -13806,6 +13889,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove restart test root");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn active_provider_without_selection_row_is_not_inferred_as_runtime() {
         let root = test_root();
@@ -14036,6 +14120,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn tenant_members_can_list_but_cannot_mutate_or_validate_providers() {
         let state = test_state("member-provider-secret");
@@ -14095,6 +14180,7 @@ mod tests {
         assert_eq!(validate.status(), axum::http::StatusCode::FORBIDDEN);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn opaque_agent_resources_are_rejected_outside_active_workspace_context() {
         let state = test_state_without_session("launch-secret");
@@ -14224,6 +14310,7 @@ mod tests {
         assert_eq!(active_conversation["project_id"], "local-project");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn cors_allows_electron_origin_and_rejects_web_origin() {
         let app = local_router(test_state("launch-secret"));
@@ -14528,6 +14615,7 @@ mod tests {
         assert_eq!(assistant_messages, 2);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn lost_response_retry_replays_without_a_second_agent_execution() {
         let state = test_state("client-turn-retry-secret");
@@ -14622,6 +14710,7 @@ mod tests {
             .is_empty());
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn client_turn_idempotency_distinguishes_structured_workload_roles() {
         let state = test_state("client-turn-role-secret");
@@ -14659,6 +14748,7 @@ mod tests {
         assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn concurrent_client_turn_replays_start_one_agent_execution() {
         let state = test_state("client-turn-concurrent-secret");
@@ -14708,6 +14798,7 @@ mod tests {
         assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn invalid_client_message_ids_have_no_side_effects() {
         let state = test_state("client-turn-validation-secret");
@@ -15219,6 +15310,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove test root");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn plan_task_route_returns_only_the_requested_conversation_plan() {
         let state = test_state("launch-secret");
@@ -15328,6 +15420,7 @@ mod tests {
         assert_eq!(projected["metadata"]["run"]["status"], "queued");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_session_projection_returns_one_authoritative_snapshot() {
         let state = test_state("session-projection-secret");
@@ -15414,6 +15507,7 @@ mod tests {
             .is_some_and(|updated_at| !updated_at.is_empty()));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_session_projection_requires_the_exact_query_scope() {
         let state = test_state("session-scope-secret");
@@ -15480,6 +15574,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_session_projection_supports_standalone_scope() {
         let state = test_state("standalone-session-secret");
@@ -15519,6 +15614,7 @@ mod tests {
         assert_eq!(snapshot["conversation"]["workspace_id"], Value::Null);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn plan_mode_route_persists_the_conversation_authority_boundary() {
         let state = test_state("launch-secret");
@@ -15565,6 +15661,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn new_conversations_start_in_plan_mode() {
         let state = test_state("launch-secret");
@@ -15620,6 +15717,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn my_work_route_is_project_scoped_and_uses_run_status_without_text_inference() {
         let state = test_state("launch-secret");
@@ -15741,6 +15839,7 @@ mod tests {
         assert_eq!(payload["items"][0]["required_action"], "review_approval");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_automation_mutations_are_persistent_revision_guarded_and_project_scoped() {
         let state = test_state("automation-read-secret");
@@ -16005,6 +16104,7 @@ mod tests {
         assert_eq!(foreign_project.status(), StatusCode::FORBIDDEN);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_automation_run_v2_returns_one_durable_receipt_and_history_record() {
         let state = test_state("automation-run-v2-secret");
@@ -16182,6 +16282,7 @@ mod tests {
         assert_eq!(replay_after_shutdown["duplicate"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_automation_run_fails_closed_without_a_live_worker_and_does_not_enqueue() {
         let state = test_state("automation-run-unavailable-secret");
@@ -16246,6 +16347,7 @@ mod tests {
         assert_eq!(response_json(history).await["total"], 0);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_automation_never_selects_the_first_workspace_for_an_unscoped_job() {
         let state = test_state("automation-unscoped-secret");
@@ -16315,6 +16417,7 @@ mod tests {
         state.stop_automation_worker().await;
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_capability_can_switch_without_losing_workspace_linkage() {
         let state = test_state("launch-secret");
@@ -16371,6 +16474,7 @@ mod tests {
         assert_eq!(stored.workspace_id, None);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_mode_patch_distinguishes_missing_null_and_value_workspace_id() {
         let state = test_state("conversation-mode-patch-secret");
@@ -17673,6 +17777,7 @@ mod tests {
         assert_eq!(decision["decision"], "request_changes");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn artifact_api_persists_review_and_records_delivery_only_when_the_file_exists() {
         let state = test_state("artifact-secret");
@@ -17842,6 +17947,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn hitl_response_resumes_authoritative_run_and_preserves_status_boundaries() {
         let state = test_state("launch-secret");
@@ -18185,6 +18291,7 @@ mod tests {
         assert_eq!(conflicting_replay.status(), StatusCode::CONFLICT);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn env_var_hitl_rejects_plaintext_without_mutating_checkpoint() {
         let state = test_state("launch-secret");
@@ -18256,6 +18363,7 @@ mod tests {
             .contains("must-not-persist"));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn a2ui_hitl_enforces_persisted_surface_action_authority_and_redacts_history() {
         use agistack_core::agent::types::{A2uiActionAuthority, A2uiAllowedAction, HitlRequest};
@@ -18806,6 +18914,7 @@ mod tests {
             .0
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn review_approval_completes_the_same_authoritative_run() {
         let state = test_state("launch-secret");
@@ -18857,6 +18966,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn paused_run_can_cancel_without_restarting_execution() {
         let state = test_state("launch-secret");
@@ -18922,6 +19032,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn pause_rejects_a_running_record_without_an_attached_execution() {
         let state = test_state("launch-secret");
@@ -18952,6 +19063,7 @@ mod tests {
         assert_eq!(stored.revision, running.revision);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn steer_now_persists_before_ack_and_applies_without_advancing_run_revision() {
         let state = test_state("launch-secret");
@@ -19029,6 +19141,7 @@ mod tests {
         state.release_agent_run(&conversation.id);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn queue_next_waits_through_review_then_promotes_once_to_a_plan_turn() {
         let state = test_state("launch-secret");
@@ -19216,6 +19329,7 @@ mod tests {
         assert_eq!(conflict.status(), StatusCode::CONFLICT);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn pause_route_signals_the_attached_execution_without_faking_run_state() {
         let state = test_state("launch-secret");
@@ -19270,6 +19384,7 @@ mod tests {
         state.release_agent_run(&conversation.id);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn resume_continues_the_same_paused_run_from_its_checkpoint() {
         let state = test_state("launch-secret");
@@ -19340,6 +19455,7 @@ mod tests {
         assert_eq!(final_run.expect("resumed run reaches review").id, paused.id);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn reconnect_starts_a_recovered_unstarted_run_once_with_the_original_authority() {
         let state = test_state("launch-secret");
@@ -19488,6 +19604,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn recovered_unstarted_run_cancels_without_a_core_checkpoint() {
         let state = test_state("launch-secret");
@@ -19542,6 +19659,7 @@ mod tests {
         assert_eq!(checkpoint.goal, interrupted.request_message);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn recovered_unstarted_run_cancels_a_seeded_launch_checkpoint() {
         let state = test_state("launch-secret");
@@ -19740,6 +19858,7 @@ mod tests {
         state.release_agent_run_if_control(&conversation.id, &reclaimed);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn disconnect_after_running_commit_reconnects_from_seeded_launch_checkpoint() {
         let state = test_state("launch-secret");
@@ -20008,6 +20127,7 @@ mod tests {
         assert_eq!(stored_fork.revision, running_fork.revision + 2);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn startup_quarantines_checkpoint_authority_mismatch_before_reconnect() {
         let state = test_state("launch-secret");
@@ -20158,6 +20278,7 @@ mod tests {
         assert_eq!(stored.error, quarantined.error);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn review_changes_reopens_the_same_run_with_human_feedback() {
         let state = test_state("launch-secret");
@@ -20223,6 +20344,7 @@ mod tests {
         }));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn terminal_grant_is_single_use_and_rechecks_authoritative_run_identity() {
         let state = test_state("launch-secret");
@@ -20379,6 +20501,7 @@ mod tests {
         assert_eq!(stale.0, StatusCode::CONFLICT);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn mcp_tool_call_rejects_requests_without_an_authoritative_run_scope() {
         let state = test_state("launch-secret");
@@ -20693,6 +20816,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn sandbox_execute_never_falls_back_to_the_host_shell() {
         let state = test_state("launch-secret");
@@ -21036,6 +21160,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn reconnect_never_restarts_a_terminalized_launch_checkpoint() {
         let state = test_state("launch-secret");
@@ -21303,6 +21428,7 @@ mod tests {
         assert_eq!(stored.revision, quarantined.revision);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn transferred_started_source_controls_never_cross_the_core_checkpoint_boundary() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -21319,6 +21445,7 @@ mod tests {
         .await;
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn transferred_unstarted_source_controls_never_cross_the_core_checkpoint_boundary() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -21335,6 +21462,7 @@ mod tests {
         .await;
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn transferred_source_new_recovery_key_has_zero_prepare_db_or_event_side_effects() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -21503,6 +21631,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn busy_conversation_recovery_fork_claim_fails_before_prepare_or_insert() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -21748,6 +21877,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn post_transfer_resume_failure_removes_created_worktree_run_and_events() {
         let state = test_state("launch-secret");
@@ -21945,6 +22075,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove rollback fixture");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn transferred_source_same_queued_recovery_key_replays_without_source_preflight() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -22044,6 +22175,7 @@ mod tests {
             .is_some_and(|authority| authority.matches_run(&forked)));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn old_source_cancel_never_terminalizes_fork_checkpoint_after_authority_transfer() {
         let state = test_state("launch-secret");
@@ -22119,6 +22251,7 @@ mod tests {
         state.release_agent_run_if_control(&conversation.id, &control);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn old_source_resume_never_reopens_fork_checkpoint_after_authority_transfer() {
         let state = test_state("launch-secret");

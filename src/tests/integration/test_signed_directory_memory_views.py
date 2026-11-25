@@ -35,7 +35,7 @@ def _open_web(playwright):
     origin = os.getenv("MEMSTACK_QA_MARKET_FULL_ORIGIN", "http://127.0.0.1:3000")
     assert urlsplit(origin).hostname in {"localhost", "127.0.0.1", "::1"}
     account = json.loads(Path(owner).read_bytes())
-    page = playwright.chromium.launch().new_page(locale="en-US")
+    page = playwright.chromium.launch().new_context(locale="en-US").new_page()
     page.set_default_timeout(60000)
     open_market(page, "full", origin, account)
     base = f"{origin}/tenant/{account['tenant_id']}/project/{account['project_id']}"

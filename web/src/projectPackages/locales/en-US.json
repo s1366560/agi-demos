@@ -315,5 +315,20 @@
         "packageInvalid": "The signed package could not be verified"
       }
     }
+  },
+  "agent": {
+    "executionTarget": {
+      "all": "All",
+      "local": "This computer",
+      "cloud": "Cloud",
+      "filterLabel": "Execution location",
+      "defaultEnvironment": "Default environment",
+      "localDirectory": "Local directory"
+    },
+    "executionPlacement": {
+      "directoryUnavailable": "This directory is unavailable on this computer.",
+      "targetLabel": "Execution location",
+      "webLocalReadonly": "This session ran on a computer. The web composer can only view it."
+    }
   }
 }

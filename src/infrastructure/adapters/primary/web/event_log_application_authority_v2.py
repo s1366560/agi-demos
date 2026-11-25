@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -44,6 +45,14 @@ async def event_log_application_authority_dependency_v2(
 ) -> AsyncIterator[EventLogApplicationAuthorityV2]:
     """Yield event-log query services from the generation pinned to this request."""
     tenant_id = _scope_id_v2(request.query_params.get("tenant_id"))
+    async with event_log_scope(request, current_user, db, tenant_id) as authority:
+        yield authority
+
+
+@asynccontextmanager
+async def event_log_scope(
+    request: Request, current_user: User, db: AsyncSession, tenant_id: str | None
+) -> AsyncIterator[EventLogApplicationAuthorityV2]:
     scope = (
         ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=tenant_id)
         if tenant_id is not None

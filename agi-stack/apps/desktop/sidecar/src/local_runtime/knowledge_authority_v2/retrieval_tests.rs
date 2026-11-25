@@ -8,6 +8,7 @@ use agistack_core::knowledge::{
 mod agent_access_tests;
 #[path = "retrieval_lifecycle_tests.rs"]
 mod lifecycle;
+#[cfg(feature = "legacy-business")]
 #[path = "retrieval_rpc_tests.rs"]
 mod rpc;
 

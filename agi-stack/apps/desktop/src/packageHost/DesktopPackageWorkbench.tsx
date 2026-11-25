@@ -1,4 +1,5 @@
-import { RichPackagePages } from '../../../../packages/plugin-marketplace-ui/src/RichPackagePages';
+import { openVoiceSocket } from './voiceSocket';
+import { RichPackagePages } from './DesktopRichPackagePages';
 import { devicePageCall } from './device';
 import { transport, streamCommand } from './transport';
 import type { SignedWorkbench } from './useSignedWorkbench';
@@ -42,6 +43,7 @@ export function DesktopPackageWorkbench({
           target="desktop-renderer"
           locale={locale}
           transport={transport}
+          openVoiceSocket={openVoiceSocket}
           streamCommand={streamCommand}
           invokeDevice={
             workbench.route.projectId
@@ -49,13 +51,7 @@ export function DesktopPackageWorkbench({
               : undefined
           }
           navigate={(path, options) => {
-            const scope = workbench.route.projectId ? 'project' : 'tenant';
-            const query = new URLSearchParams({
-              marketScope: scope,
-              marketPlugin: options?.pluginId ?? workbench.route.pluginId,
-              marketPage: path,
-            });
-            const hash = '#/tenant/' + encodeURIComponent(tenant) + '/plugins?' + query;
+            const hash = '#' + path;
             if (options?.replace) window.location.replace(hash);
             else window.location.hash = hash;
           }}

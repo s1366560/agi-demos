@@ -16,7 +16,19 @@
       "app.agent.interactions",
       "app.agent.respond",
       "app.agent.attachments",
-      "app.agent.attachments.turn"
+      "app.agent.attachments.turn",
+      "app.agent.activity.read",
+      "app.agent.activity.receipts",
+      "app.agent.review.latest",
+      "app.agent.review.details",
+      "app.agent.composer.read",
+      "app.agent.composer.save",
+      "app.agent.composer.models",
+      "app.agent.composer.context",
+      "app.agent.composer.welcome",
+      "app.agent.lifecycle.control",
+      "app.agent.voice.authorize",
+      "ui.media.microphone"
     ]
   },
   {
@@ -35,7 +47,8 @@
       "app.knowledge.memories.optimize",
       "app.knowledge.memories.index_status",
       "app.knowledge.graph.read",
-      "app.knowledge.graph.subgraph"
+      "app.knowledge.graph.subgraph",
+      "app.knowledge.search"
     ]
   },
   {
@@ -54,7 +67,10 @@
       "app.workspace.tasks.read",
       "app.workspace.tasks.write",
       "app.workspace.blackboard.read",
-      "app.workspace.blackboard.write"
+      "app.workspace.blackboard.write",
+      "app.workspace.overview.read",
+      "app.workspace.chat.read",
+      "app.workspace.chat.send"
     ]
   },
   {
@@ -71,7 +87,14 @@
       "app.automation.schedules.delete",
       "storage.read",
       "storage.write",
-      "app.automation.verdicts.read"
+      "app.automation.verdicts.read",
+      "app.automation.conversations.read",
+      "app.automation.events.read",
+      "app.automation.events.types",
+      "app.automation.webhooks.create",
+      "app.automation.webhooks.delete",
+      "app.automation.webhooks.read",
+      "app.automation.webhooks.update"
     ]
   },
   {
@@ -88,7 +111,30 @@
       "app.environments.sandbox.restart",
       "app.environments.sandbox.terminate",
       "app.environments.desktop.interact",
-      "app.environments.terminal.interact"
+      "app.environments.terminal.interact",
+      "app.environments.deploys.read",
+      "app.environments.deploys.write",
+      "app.environments.templates.read",
+      "app.environments.templates.write",
+      "app.environments.instances.create",
+      "app.environments.pool.read",
+      "app.environments.pool.control",
+      "app.environments.pool.tier",
+      "app.environments.runners.create",
+      "app.environments.runners.read",
+      "app.environments.runners.register",
+      "desktop.http.get.sandbox",
+      "desktop.http.get.sandbox.capabilities",
+      "desktop.http.get.sandbox.files",
+      "desktop.http.get.sandbox.files.content",
+      "desktop.http.get.sandbox.files.download",
+      "desktop.http.post.sandbox",
+      "desktop.http.post.sandbox.desktop",
+      "desktop.http.post.sandbox.proxy-auth-cookie",
+      "device.workspace.read.directory",
+      "device.workspace.read.download",
+      "device.workspace.read.status",
+      "device.workspace.read.text"
     ]
   },
   {

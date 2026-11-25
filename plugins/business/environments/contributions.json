@@ -232,6 +232,105 @@
       ],
       "payload": {},
       "accepts_input": true
+    },
+    {
+      "id": "list-runner-pools",
+      "host_operation": "app.environments.runners.read",
+      "permissions": [
+        "app.environments.runners.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "create-runner-pool",
+      "host_operation": "app.environments.runners.create",
+      "permissions": [
+        "app.environments.runners.create"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "register-runner",
+      "host_operation": "app.environments.runners.register",
+      "permissions": [
+        "app.environments.runners.register"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "read-deploys",
+      "host_operation": "app.environments.deploys.read",
+      "permissions": [
+        "app.environments.deploys.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "change-deploy",
+      "host_operation": "app.environments.deploys.write",
+      "permissions": [
+        "app.environments.deploys.write"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "read-instance-templates",
+      "host_operation": "app.environments.templates.read",
+      "permissions": [
+        "app.environments.templates.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "change-instance-template",
+      "host_operation": "app.environments.templates.write",
+      "permissions": [
+        "app.environments.templates.write"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "create-runtime-instance",
+      "host_operation": "app.environments.instances.create",
+      "permissions": [
+        "app.environments.instances.create"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "read-runtime-pool",
+      "host_operation": "app.environments.pool.read",
+      "permissions": [
+        "app.environments.pool.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "control-runtime-pool",
+      "host_operation": "app.environments.pool.control",
+      "permissions": [
+        "app.environments.pool.control"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "set-runtime-pool-tier",
+      "host_operation": "app.environments.pool.tier",
+      "permissions": [
+        "app.environments.pool.tier"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -262,7 +361,7 @@
       ],
       "entry": {
         "path": "ui/project-sandbox.js",
-        "digest": "sha256:0cfaa3a45c1d63713d333a8d9b7033243680f630656aa06caf0ef00ea03a7e5e"
+        "digest": "sha256:1546e5c9cca98de0adf5253a8e8be2849cf49e9bc4d8371f70e7ffd9c63dfda3"
       },
       "commands": [
         "sandbox-status",
@@ -302,7 +401,9 @@
       "scope": "tenant",
       "routes": [
         "/tenant/:tenantId/environments/instances",
-        "/tenant/:tenantId/environments/instances/:resourceId"
+        "/tenant/:tenantId/environments/instances/:resourceId",
+        "/tenant/:tenantId/instances",
+        "/tenant/:tenantId/instances/:resourceId"
       ],
       "targets": [
         "web",
@@ -326,11 +427,12 @@
         "/tenant/:tenantId/clusters"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "entry": {
         "path": "ui/clusters-web.js",
-        "digest": "sha256:d86622ee4fc9a7ead6a5b148f6d6ad10e011073e44f6d22db5eac298df9444f0"
+        "digest": "sha256:b2bb173880c68efb77220e13d61e9758278c803a5da336e7fee2c10a2e264dfe"
       },
       "commands": [
         "environment-inventory",
@@ -342,44 +444,40 @@
         "page",
         "page_size",
         "search",
-        "status"
+        "status",
+        "highlight"
       ],
       "workbench": true,
       "style": {
         "path": "ui/clusters-web.css",
-        "digest": "sha256:0e8c64cbc37d3ceb39aee8663667118e350268f040fe77925425e97c8966d68c"
+        "digest": "sha256:94c7358dbba3eb6a3499fe63e59ff0ff2c7f3e1888f91950b7fdb6b70a59a1aa"
       }
     },
     {
-      "id": "tenant-clusters",
-      "title": "Clusters",
+      "id": "org-clusters",
+      "title": "Organization clusters",
       "scope": "tenant",
       "routes": [
-        "/tenant/:tenantId/environments/clusters",
-        "/tenant/:tenantId/clusters"
+        "/tenant/:tenantId/org-settings/clusters"
       ],
       "targets": [
+        "web",
         "desktop-renderer"
       ],
       "entry": {
-        "path": "ui/clusters-desktop.js",
-        "digest": "sha256:bf2e2e85eb6b845f31fd5e3f12507c3d53bbb9f7f11a81e51e135ae49be8b8c5"
+        "path": "ui/clusters-web.js",
+        "digest": "sha256:b2bb173880c68efb77220e13d61e9758278c803a5da336e7fee2c10a2e264dfe"
       },
       "commands": [
         "environment-inventory"
       ],
       "device_tools": [],
-      "query_params": [
-        "page",
-        "page_size",
-        "search",
-        "status"
-      ],
+      "query_params": [],
+      "workbench": true,
       "style": {
-        "path": "ui/clusters-desktop.css",
-        "digest": "sha256:565347ec032ff0793862e31518503031f519850942f33f8d7c8329c264a028fa"
-      },
-      "workbench": true
+        "path": "ui/clusters-web.css",
+        "digest": "sha256:94c7358dbba3eb6a3499fe63e59ff0ff2c7f3e1888f91950b7fdb6b70a59a1aa"
+      }
     },
     {
       "id": "cluster-details",
@@ -394,13 +492,24 @@
         "desktop-renderer"
       ],
       "entry": {
-        "path": "ui/inventory.js",
-        "digest": "sha256:8a2a35efc5a42756e7a0033b8b175f72739f1417457382deff27c5cb72d20bee"
+        "path": "ui/clusters-web.js",
+        "digest": "sha256:b2bb173880c68efb77220e13d61e9758278c803a5da336e7fee2c10a2e264dfe"
       },
       "commands": [
-        "environment-inventory"
+        "environment-inventory",
+        "write-cluster",
+        "delete-cluster",
+        "list-runner-pools",
+        "create-runner-pool",
+        "register-runner"
       ],
-      "device_tools": []
+      "device_tools": [],
+      "query_params": [],
+      "workbench": true,
+      "style": {
+        "path": "ui/clusters-web.css",
+        "digest": "sha256:94c7358dbba3eb6a3499fe63e59ff0ff2c7f3e1888f91950b7fdb6b70a59a1aa"
+      }
     },
     {
       "id": "sandbox-runtime",
@@ -438,11 +547,11 @@
       "workbench": true,
       "entry": {
         "path": "ui/interaction.js",
-        "digest": "sha256:659eb08fb7035de6c83d6fa45bfaf947a7990e94d463093cb3694ae311ba5513"
+        "digest": "sha256:3274a315356a43e0fec2f0e6cd19c4158913f77ceb9f35c319e7f3920a441094"
       },
       "style": {
         "path": "ui/interaction.css",
-        "digest": "sha256:379c6be7aedcc5d0400469fd280cdee798939ef25a02adbf6a52ae385491320c"
+        "digest": "sha256:915e202132d1de283bb3fc8522173b392d6a32c255831541b3a7c6c3d6d80323"
       },
       "commands": [
         "sandbox-status",
@@ -455,6 +564,152 @@
         "run_id",
         "revision"
       ]
+    },
+    {
+      "id": "deployments",
+      "title": "Deployments",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/deploy",
+        "/tenant/:tenantId/deploy/:deployId",
+        "/tenant/:tenantId/instances/:instanceId/deploy"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-deploy.js",
+        "digest": "sha256:1478c4931aaf8505d999a759a4717ad8ac0eb15405d2f440bfecab4e0aea9fec"
+      },
+      "style": {
+        "path": "ui/tenant-deploy.css",
+        "digest": "sha256:a4b990c4ffaa8b082ffa769445e290c5b41df87a7d25bf3cae2470d54e5b0323"
+      },
+      "commands": [
+        "read-deploys",
+        "change-deploy"
+      ],
+      "device_tools": [],
+      "workbench": true
+    },
+    {
+      "id": "instance-templates",
+      "title": "Instance templates",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/instance-templates",
+        "/tenant/:tenantId/instance-templates/:templateId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-deploy.js",
+        "digest": "sha256:1478c4931aaf8505d999a759a4717ad8ac0eb15405d2f440bfecab4e0aea9fec"
+      },
+      "style": {
+        "path": "ui/tenant-deploy.css",
+        "digest": "sha256:a4b990c4ffaa8b082ffa769445e290c5b41df87a7d25bf3cae2470d54e5b0323"
+      },
+      "commands": [
+        "read-instance-templates",
+        "change-instance-template"
+      ],
+      "device_tools": [],
+      "workbench": true
+    },
+    {
+      "id": "create-instance",
+      "title": "Create instance",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/instances/create"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-deploy.js",
+        "digest": "sha256:1478c4931aaf8505d999a759a4717ad8ac0eb15405d2f440bfecab4e0aea9fec"
+      },
+      "style": {
+        "path": "ui/tenant-deploy.css",
+        "digest": "sha256:a4b990c4ffaa8b082ffa769445e290c5b41df87a7d25bf3cae2470d54e5b0323"
+      },
+      "commands": [
+        "create-runtime-instance",
+        "read-instance-templates",
+        "environment-inventory"
+      ],
+      "device_tools": [],
+      "workbench": true,
+      "query_params": [
+        "templateId"
+      ]
+    },
+    {
+      "id": "runtime-pool",
+      "title": "Runtime pool",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/pool"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/runtime-pool.js",
+        "digest": "sha256:b76b8bde811a42ac3878dde88467e8945b802ed094df279bb7aa730a2ea1bd49"
+      },
+      "style": {
+        "path": "ui/runtime-pool.css",
+        "digest": "sha256:94c7358dbba3eb6a3499fe63e59ff0ff2c7f3e1888f91950b7fdb6b70a59a1aa"
+      },
+      "commands": [
+        "read-runtime-pool",
+        "control-runtime-pool",
+        "set-runtime-pool-tier"
+      ],
+      "device_tools": [],
+      "workbench": true,
+      "query_params": [
+        "page",
+        "tier"
+      ]
+    },
+    {
+      "id": "agent-code",
+      "title": "Terminal and remote desktop",
+      "routes": [],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "workbench": true,
+      "entry": {
+        "path": "ui/interaction.js",
+        "digest": "sha256:3274a315356a43e0fec2f0e6cd19c4158913f77ceb9f35c319e7f3920a441094"
+      },
+      "style": {
+        "path": "ui/interaction.css",
+        "digest": "sha256:915e202132d1de283bb3fc8522173b392d6a32c255831541b3a7c6c3d6d80323"
+      },
+      "commands": [
+        "sandbox-status",
+        "project-terminal",
+        "project-desktop",
+        "authorize-run-terminal"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "run_id",
+        "revision"
+      ],
+      "contributes_to": "memstack-agent/code@1"
     }
   ]
 }

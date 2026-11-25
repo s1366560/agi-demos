@@ -71,8 +71,9 @@ pub(super) fn record_attempt(
         "UPDATE desktop_cloud_device_plugins_v2
          SET selection=json_set(selection,'$.last_invoked_at',COALESCE(?1,json_extract(selection,'$.last_invoked_at')),'$.last_error',?2)
          WHERE owner=?3 AND bundle_id=?4 AND json_extract(selection,'$.grant_id')=?5
-             AND json_extract(selection,'$.generation_id')=?6",
-        params![invoked_at,error_code,owner,selection.reference.bundle_id,selection.grant_id,selection.generation_id],
+             AND json_extract(selection,'$.generation_id')=?6
+             AND json_extract(selection,'$.reference.digest')=?7",
+        params![invoked_at,error_code,owner,selection.reference.bundle_id,selection.grant_id,selection.generation_id,selection.reference.digest],
     )
     .map_err(|_| "device_plugin_store_unavailable")?;
     Ok(())

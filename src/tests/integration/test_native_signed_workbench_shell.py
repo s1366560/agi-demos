@@ -37,7 +37,7 @@ def test_settings_market_opens_signed_page_in_the_original_workbench() -> None:
             "button", name="Project schedules", exact=True
         ).click()
         frame = workbench.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
-        expect(frame.locator(".ant-table").first).to_be_visible(timeout=30000)
+        expect(frame.get_by_role("heading", name=re.compile("Scheduled Tasks|定时任务"))).to_be_visible(timeout=30000)
 
         toggle = page.locator(".desktop-titlebar-button").first
         original = toggle.get_attribute("aria-pressed")

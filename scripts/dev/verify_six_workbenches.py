@@ -5,6 +5,7 @@ The development API and npm registry are on localhost:8000 and localhost:4873.
 """
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -16,7 +17,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -27,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TESTS = "src/tests/integration/"
 PACKAGES = ("workspace", "knowledge", "automation", "billing", "environments", "agent")
 API = "http://127.0.0.1:8000"
-SIDECAR = ROOT / "agi-stack/target/debug/agistack-desktop-sidecar"
+SIDECAR = Path("agi-stack/target/debug/agistack-desktop-sidecar")
 CORE = ROOT / ".cache/avernet-bcs/target/debug/memstack-workspace-core"
 
 
@@ -54,6 +55,10 @@ def tests_for(package: str, target: str) -> list[str]:
         expression = (
             f"(restore_original_release and {package} and {target}) or {exercises[package, target]}"
         )
+        if package == "workspace":
+            expression += f" or ((original_task_details_bookmark or original_project_overview_bookmark) and {target})"
+        if package == "knowledge":
+            expression += f" or (advanced_search_bookmark and {target})"
         return [TESTS + "test_installed_original_boards.py", "-k", expression]
     if package == "automation":
         tests = [
@@ -77,7 +82,7 @@ def tests_for(package: str, target: str) -> list[str]:
             TESTS
             + f"test_signed_sandbox_interactions.py::test_installed_terminal_and_remote_desktop[{renderer}]"
         ]
-    return [TESTS + "test_signed_agent_interactions.py"]
+    return [TESTS + "test_signed_agent_interactions.py", TESTS + "test_installed_agent_dashboard.py"]
 
 
 def file_digest(path: Path) -> bytes:
@@ -85,10 +90,25 @@ def file_digest(path: Path) -> bytes:
         return hashlib.file_digest(data, "sha256").digest()
 
 
+def verify_served_web(artifacts: Path, origin: str) -> None:
+    root = artifacts / "web/dist"
+    with httpx.Client(base_url=origin.rstrip("/") + "/") as client:
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(root).as_posix()
+            response = client.get(relative)
+            response.raise_for_status()
+            if hashlib.sha256(response.content).digest() != file_digest(path):
+                raise RuntimeError(f"Static server returned a different build for {relative}")
+
+
 def fingerprint(artifacts: Path, targets: list[str]) -> dict[str, str]:
     result = {}
     if "desktop" in targets:
-        result.update(sidecar=file_digest(SIDECAR).hex(), workspace_core=file_digest(CORE).hex())
+        result.update(
+            sidecar=file_digest(artifacts / SIDECAR).hex(), workspace_core=file_digest(CORE).hex()
+        )
     for target, name, entry in [
         ("web", "web/dist", "index.html"),
         ("desktop", "agi-stack/apps/desktop/out", "main/index.js"),
@@ -106,6 +126,40 @@ def fingerprint(artifacts: Path, targets: list[str]) -> dict[str, str]:
                 tree.update(file_digest(path))
         result[name] = tree.hexdigest()
     return result
+
+
+def verify_sidecar_process(browser_pid: int, expected: Path) -> None:
+    """Check the running browser's child using the OS executable path."""
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        table = subprocess.check_output(["ps", "-axo", "ppid=,pid=,comm="], text=True)
+        for line in table.splitlines():
+            parent, pid, command = line.strip().split(None, 2)
+            if int(parent) != browser_pid or Path(command).name != expected.name:
+                continue
+            if sys.platform == "darwin":
+                # proc_pidpath reads the executable from the kernel, including paths
+                # containing spaces. Unlike argv[0] it cannot be renamed by the app.
+                import ctypes
+
+                buffer = ctypes.create_string_buffer(4096)
+                length = ctypes.CDLL("/usr/lib/libproc.dylib").proc_pidpath(
+                    int(pid), buffer, len(buffer)
+                )
+                if length <= 0:
+                    raise RuntimeError("Cannot resolve the native Sidecar executable")
+                executable = Path(os.fsdecode(buffer.value))
+            else:
+                executable = Path(f"/proc/{pid}/exe").resolve(strict=True)
+            if not executable.samefile(expected):
+                raise RuntimeError(f"Electron launched an unexpected Sidecar: {executable}")
+            print(
+                f"Electron Sidecar pid={pid} {executable} SHA-256={file_digest(executable).hex()}",
+                flush=True,
+            )
+            return
+        time.sleep(0.25)
+    raise RuntimeError("The isolated Sidecar was not found among Electron's children")
 
 
 @contextmanager
@@ -127,7 +181,7 @@ def native_window(
             "AGISTACK_DESKTOP_PROFILE": "full",
             "AGISTACK_DESKTOP_FIXED_BUILD": "1",
             "DESKTOP_APP_DIR": str(artifacts / "agi-stack/apps/desktop"),
-            "AGISTACK_SIDECAR_PATH": str(SIDECAR),
+            "AGISTACK_SIDECAR_PATH": str(artifacts / SIDECAR),
             "AGISTACK_WORKSPACE_CORE_PATH": str(CORE),
             "AGISTACK_DESKTOP_QA_PROFILE_DIR": profile,
             "AGISTACK_WORKSPACE_ROOT": workspace,
@@ -153,7 +207,12 @@ def native_window(
             else:
                 raise RuntimeError(f"Electron did not start. See {log}")
             with sync_playwright() as pw:
-                context = pw.chromium.connect_over_cdp(cdp).contexts[0]
+                browser = pw.chromium.connect_over_cdp(cdp)
+                processes = browser.new_browser_cdp_session().send("SystemInfo.getProcessInfo")
+                browser_pid = next(
+                    p["id"] for p in processes["processInfo"] if p["type"] == "browser"
+                )
+                context = browser.contexts[0]
                 page = context.pages[0] if context.pages else context.wait_for_event("page")
                 page.set_default_timeout(60000)
                 page.locator("input[type=url]").fill(API)
@@ -162,6 +221,7 @@ def native_window(
                 page.locator("button[type=submit]").click()
                 menu = page.get_by_role("button", name=re.compile("^(全部功能|All features)$"))
                 expect(menu).to_be_visible(timeout=60000)
+                verify_sidecar_process(browser_pid, artifacts / SIDECAR)
                 if marketplace:
                     menu.click()
                     page.locator("[role=dialog] button").filter(
@@ -202,6 +262,17 @@ def qa_sandbox(owner: dict[str, str]) -> Iterator[None]:
                     client.delete(path).raise_for_status()
 
 
+@contextmanager
+def installation_lock(tenant: str, scope: str, package: str) -> Iterator[None]:
+    # A Web and a native QA account can select the very same installation.
+    key = hashlib.sha256(json.dumps([tenant, scope, package]).encode()).hexdigest()
+    directory = ROOT / ".cache/fixed-workbench-qa/locks"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (directory / f"{key}.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
 def run(
     package: str, target: str, args: argparse.Namespace, accounts: dict[str, dict[str, str]]
 ) -> None:
@@ -231,7 +302,16 @@ def run(
     )
     sandbox = qa_sandbox(owner) if package == "environments" else nullcontext()
     print(f"Running {package} {target}", flush=True)
-    with sandbox, display as cdp, log.open("w") as output:
+    # The original Workspace overview reads recent memories from the active Knowledge release.
+    # Keep its prerequisites installed for the business-operation assertions. Independent
+    # switching is exercised separately with a deliberately pinned neighbouring page.
+    required = ("agent", "knowledge", "workspace") if package == "workspace" else (package,)
+    with ExitStack() as stack:
+        for dependency in required:
+            stack.enter_context(installation_lock(owner["tenant_id"], scope, dependency))
+        stack.enter_context(sandbox)
+        cdp = stack.enter_context(display)
+        output = stack.enter_context(log.open("w"))
         if cdp:
             for key in CDP_VARIABLES:
                 env[key] = cdp
@@ -269,11 +349,7 @@ def main() -> bool:
                 ["corepack", "pnpm", "exec", "install-electron", "--no"], cwd=desktop, check=True
             )
     if "web" in targets:
-        index = (args.artifacts / "web/dist/index.html").read_bytes()
-        served = httpx.get(args.origin.rstrip("/") + "/index.html")
-        served.raise_for_status()
-        if served.content != index:
-            raise RuntimeError("The Web server must serve the supplied static build")
+        verify_served_web(args.artifacts, args.origin)
     initial = fingerprint(args.artifacts, targets)
     accounts = json.loads(args.accounts.read_bytes())
     failures = []
@@ -284,9 +360,13 @@ def main() -> bool:
             except Exception as exc:
                 print(f"{package} {target}: {type(exc).__name__}: {exc}", flush=True)
                 failures.append((package, target))
-    if fingerprint(args.artifacts, targets) != initial:
+    if "web" in targets:
+        verify_served_web(args.artifacts, args.origin)
+    final = fingerprint(args.artifacts, targets)
+    print("Initial hosts SHA-256", json.dumps(initial, sort_keys=True), flush=True)
+    print("Final hosts SHA-256", json.dumps(final, sort_keys=True), flush=True)
+    if final != initial:
         raise RuntimeError("Host binaries changed during acceptance")
-    print("Fixed hosts SHA-256", json.dumps(initial, sort_keys=True), flush=True)
     return bool(failures)
 
 

@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PluginMarket } from '../../../agi-stack/packages/plugin-marketplace-ui/src/PluginMarket';
 
+import { installationDestination } from '../../../agi-stack/packages/plugin-marketplace-ui/src/installationReturn';
 import { SignedPackageFeature } from './SignedPackageFeature';
 
 import type { MarketplaceTransport } from '../../../agi-stack/packages/plugin-marketplace-ui/src/client';
@@ -28,6 +29,7 @@ export function WebProjectMarket({
 }: Props) {
   const { i18n } = useTranslation();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   return (
     <PluginMarket
       tenantId={tenantId}
@@ -66,6 +68,15 @@ export function WebProjectMarket({
           canExecute={canExecute}
         />
       )}
+      onActivated={(installation) => {
+        const destination = installationDestination(
+          params.get('returnTo'),
+          { tenantId, projectId },
+          installation,
+          'web'
+        );
+        if (destination) void navigate(destination, { replace: true });
+      }}
       onOpen={onOpen}
     />
   );

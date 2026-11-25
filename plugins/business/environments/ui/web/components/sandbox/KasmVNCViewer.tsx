@@ -242,6 +242,9 @@ export function KasmVNCViewer({
         try {
           owned = new RFB(target, touchInput, socket, { shared: true });
           const rfb = owned;
+          // The signed transport carries RFB traffic through the granted channel.
+          // A peer upgrade would send its SDP into the RFB authentication exchange.
+          if (openSocket) rfb.enableWebRTC = false;
           const check = () => {
             if (!current() || disposed) throw new DOMException('Kasm view retired', 'AbortError');
             attempt.check();

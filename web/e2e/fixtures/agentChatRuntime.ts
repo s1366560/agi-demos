@@ -13,6 +13,10 @@ export function agentChatRuntime(log: HTMLElement, deviceError: string | undefin
     log.textContent = JSON.stringify(calls);
   };
   const device: DevicePageCall = ({ tool, payload, digest }) => {
+    if (payload.action === 'placement') {
+      if (deviceError) throw new Error(deviceError);
+      return Promise.resolve({ local_root_label: 'QA Workspace' });
+    }
     record({ tool, payload, digest });
     if (deviceError) throw new Error(deviceError);
     if (payload.action === 'stop') {

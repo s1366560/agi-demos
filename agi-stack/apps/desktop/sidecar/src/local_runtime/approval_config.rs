@@ -37,6 +37,7 @@ where
 mod tests {
     use super::super::{session_store::DesktopSessionStore, ConversationConfigBody};
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn approval_config_patch_preserves_model_route_and_renders_saved_mode() {
         use axum::{

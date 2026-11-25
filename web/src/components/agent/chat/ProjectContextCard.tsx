@@ -52,7 +52,7 @@ export const ProjectContextCard = memo<ProjectContextCardProps>(({ projectId }) 
   if (!stats) {
     return (
       <div
-        className="flex items-center gap-4 px-4 py-3 bg-slate-50/80 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/60"
+        className="flex flex-wrap items-center gap-4 px-4 py-3 bg-slate-50/80 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/60"
         aria-hidden="true"
       >
         {[0, 1, 2, 3].map((i) => (
@@ -92,7 +92,7 @@ export const ProjectContextCard = memo<ProjectContextCardProps>(({ projectId }) 
   ];
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 bg-slate-50/80 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+    <div className="flex flex-wrap items-center gap-4 px-4 py-3 bg-slate-50/80 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
       {items.map((item) => (
         <div key={item.label} className="flex items-center gap-2">
           {item.icon}

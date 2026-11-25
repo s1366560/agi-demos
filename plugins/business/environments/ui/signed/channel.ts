@@ -9,7 +9,7 @@ export class SandboxChannel extends EventTarget {
   onerror: ((event: Event) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
-  private channel?: string;
+  private channel: string | undefined;
   private abort = new AbortController();
   private writes = Promise.resolve();
   private backlog = 0;

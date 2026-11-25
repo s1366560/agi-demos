@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import {
   Alert,
@@ -52,7 +52,18 @@ const RUNS_PAGE_SIZE = 10;
 const formatDurationMs = (ms: number): string =>
   ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${String(ms)} ms`;
 
-export const CronJobs: React.FC = () => {
+export interface ScheduleConversation {
+  id: string;
+  title: string;
+  workspaceId: string;
+}
+
+interface CronJobsProps {
+  conversations?: readonly ScheduleConversation[];
+  openConversation?: (conversation: ScheduleConversation) => void;
+}
+
+export const CronJobs: React.FC<CronJobsProps> = ({ conversations, openConversation }) => {
   const { projectId } = useParams<{ projectId: string }>();
   const { t } = useTranslation();
   const {
@@ -74,6 +85,7 @@ export const CronJobs: React.FC = () => {
   const submitting = useCronSubmitting();
   const {
     fetchJobs,
+    fetchJob,
     createJob,
     updateJob,
     deleteJob,
@@ -83,11 +95,30 @@ export const CronJobs: React.FC = () => {
     setFilters,
   } = useCronActions();
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [runsOpen, setRunsOpen] = useState(false);
-  const [editingJob, setEditingJob] = useState<CronJobResponse | null>(null);
-  const [runsJobId, setRunsJobId] = useState<string | null>(null);
-  const [runsPage, setRunsPage] = useState(1);
+  const [params] = useSearchParams();
+  const { pathname, hash } = useLocation();
+  const navigate = useNavigate();
+  const panel = params.get('panel');
+  const jobId = params.get('job');
+  const runsJobId = panel === 'runs' ? jobId : null;
+  const runsOpen = Boolean(runsJobId);
+  const requestedPage = Number(params.get('runsPage'));
+  const runsPage = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const [loadedJob, setLoadedJob] = useState<CronJobResponse | null>(null);
+  const editingJob =
+    panel === 'edit' && jobId
+      ? (jobs.find((job) => job.id === jobId) ?? (loadedJob?.id === jobId ? loadedJob : null))
+      : null;
+  const formOpen =
+    (panel === 'new' && canCreate) || (panel === 'edit' && canEdit && Boolean(editingJob));
+  const showPanel = (nextPanel?: 'new' | 'edit' | 'runs', id?: string, page = 1) => {
+    const next = new URLSearchParams(params);
+    for (const key of ['panel', 'job', 'runsPage']) next.delete(key);
+    if (nextPanel) next.set('panel', nextPanel);
+    if (id) next.set('job', id);
+    if (page > 1) next.set('runsPage', String(page));
+    void navigate({ pathname, search: next.toString(), hash }, { replace: true });
+  };
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [nameSearch, setNameSearch] = useState('');
 
@@ -136,24 +167,32 @@ export const CronJobs: React.FC = () => {
     void loadInitialJobs();
   }, [projectId, fetchJobs, t]);
 
+  useEffect(() => {
+    if (runsJobId) void loadRuns(runsJobId, runsPage);
+  }, [runsJobId, runsPage, loadRuns]);
+
+  useEffect(() => {
+    if (!projectId || !canEdit || panel !== 'edit' || !jobId || editingJob) return;
+    let active = true;
+    void fetchJob(projectId, jobId)
+      .then((job) => {
+        if (active) setLoadedJob(job);
+      })
+      .catch(() => {
+        if (active) setJobsError(t('project.cronJobs.loadFailed', 'Failed to load cron jobs.'));
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectId, panel, jobId, editingJob, canEdit, fetchJob, t]);
+
   const handleCreateNew = () => {
-    if (!canCreate) return;
-    setEditingJob(null);
-    setFormOpen(true);
+    if (canCreate) showPanel('new');
   };
-
   const handleEdit = (job: CronJobResponse) => {
-    if (!canEdit) return;
-    setEditingJob(job);
-    setFormOpen(true);
+    if (canEdit) showPanel('edit', job.id);
   };
-
-  const handleViewRuns = (jobId: string) => {
-    setRunsJobId(jobId);
-    setRunsPage(1);
-    void loadRuns(jobId, 1);
-    setRunsOpen(true);
-  };
+  const handleViewRuns = (id: string) => showPanel('runs', id);
 
   const handleFormSubmit = async (values: CronJobCreate | CronJobUpdate) => {
     if (!projectId) return;
@@ -168,7 +207,7 @@ export const CronJobs: React.FC = () => {
         await createJob(projectId, values as CronJobCreate);
         message.success(t('project.cronJobs.createSuccess'));
       }
-      setFormOpen(false);
+      showPanel();
     } catch (_err) {
       message.error(t('project.cronJobs.saveFailed'));
       // Rethrow so CronJobForm keeps the entered values instead of resetting.
@@ -224,10 +263,7 @@ export const CronJobs: React.FC = () => {
   const handleRunsTableChange: TableProps<CronJobRunResponse>['onChange'] = (pagination) => {
     const nextPage = pagination.current ?? runsPage;
 
-    setRunsPage(nextPage);
-    if (runsJobId) {
-      void loadRuns(runsJobId, nextPage);
-    }
+    if (runsJobId) showPanel('runs', runsJobId, nextPage);
   };
 
   const getStatusColor = (status?: CronRunStatus) => {
@@ -395,6 +431,17 @@ export const CronJobs: React.FC = () => {
       key: 'error_message',
       render: (val: string | null) => (val ? <span className="text-red-500">{val}</span> : '-'),
     },
+    ...(conversations && openConversation ? [{
+      title: t('project.cronJobs.boundConversation'),
+      dataIndex: 'conversation_id',
+      key: 'conversation',
+      render: (id: string | null) => {
+        const choice = conversations.find((item) => item.id === id);
+        return choice
+          ? <Button type="link" onClick={() => openConversation(choice)}>{choice.title}</Button>
+          : id;
+      },
+    }] : []),
   ];
 
   const jobsPagination =
@@ -512,9 +559,10 @@ export const CronJobs: React.FC = () => {
       <CronJobForm
         open={formOpen}
         onClose={() => {
-          setFormOpen(false);
+          showPanel();
         }}
         onSubmit={handleFormSubmit}
+        conversations={conversations}
         initialData={editingJob}
         isSubmitting={submitting}
       />
@@ -522,16 +570,8 @@ export const CronJobs: React.FC = () => {
       <Drawer
         title={t('project.cronJobs.runHistoryTitle')}
         size="large"
-        onClose={() => {
-          setRunsOpen(false);
-        }}
+        onClose={() => showPanel()}
         open={runsOpen}
-        afterOpenChange={(open) => {
-          if (!open) {
-            setRunsJobId(null);
-            setRunsPage(1);
-          }
-        }}
       >
         <Table
           dataSource={runs}

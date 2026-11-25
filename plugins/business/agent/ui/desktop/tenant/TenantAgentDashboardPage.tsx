@@ -25,7 +25,9 @@ export function TenantAgentDashboardPage({
   model,
   controller,
   onRetry,
+  editableHooks = true,
 }: Readonly<{
+  editableHooks?: boolean;
   model: TenantAgentDashboardViewModel;
   controller: TenantAgentDashboardController | null;
   onRetry: () => void;
@@ -67,7 +69,7 @@ export function TenantAgentDashboardPage({
             {t(
               model.state === 'conflict'
                 ? 'tenantAgentDashboard.state.conflict'
-                : 'tenantAgentDashboard.state.stale',
+                : 'tenantAgentDashboard.state.stale'
             )}
           </span>
           <code>{model.reasonCode}</code>
@@ -94,6 +96,7 @@ export function TenantAgentDashboardPage({
       ) : null}
       {editing && model.config && controller ? (
         <ConfigEditor
+          editableHooks={editableHooks}
           config={model.config}
           hookCatalog={model.hookCatalog}
           busy={model.busyAction === 'update'}
@@ -171,9 +174,7 @@ function ConfigPanel({
           value={
             model.runtimeInfo
               ? t(
-                  model.runtimeInfo.failurePersistenceEnabled
-                    ? 'common.enabled'
-                    : 'common.disabled',
+                  model.runtimeInfo.failurePersistenceEnabled ? 'common.enabled' : 'common.disabled'
                 )
               : '—'
           }
@@ -233,7 +234,7 @@ function RunSection({
   const { t } = useI18n();
   const statuses = useMemo(
     () => [...new Set(model.runs.map((run) => run.status))].sort(),
-    [model.runs],
+    [model.runs]
   );
   return (
     <section className="tenant-agent-dashboard-runs">
@@ -323,6 +324,7 @@ function RunCard({
 }
 
 function ConfigEditor({
+  editableHooks,
   config,
   hookCatalog,
   busy,
@@ -330,6 +332,7 @@ function ConfigEditor({
   onSave,
 }: Readonly<{
   config: TenantAgentConfig;
+  editableHooks: boolean;
   hookCatalog: TenantAgentDashboardViewModel['hookCatalog'];
   busy: boolean;
   onClose: () => void;
@@ -427,12 +430,14 @@ function ConfigEditor({
             }
           />
         </div>
-        <TenantAgentDashboardHookEditor
-          configuredHooks={config.runtimeHooks}
-          catalog={hookCatalog}
-          onValidityChange={setHooksValid}
-          onChange={(runtimeHooks) => setDraft((current) => ({ ...current, runtimeHooks }))}
-        />
+        {editableHooks && (
+          <TenantAgentDashboardHookEditor
+            configuredHooks={config.runtimeHooks}
+            catalog={hookCatalog}
+            onValidityChange={setHooksValid}
+            onChange={(runtimeHooks) => setDraft((current) => ({ ...current, runtimeHooks }))}
+          />
+        )}
         <footer>
           <Button type="button" color="gray" variant="soft" onClick={onClose}>
             {t('common.cancel')}
@@ -535,7 +540,7 @@ function splitTools(value: string): readonly string[] {
       value
         .split(/[\n,]/u)
         .map((tool) => tool.trim())
-        .filter(Boolean),
+        .filter(Boolean)
     ),
   ];
 }

@@ -1,7 +1,8 @@
+import { openVoiceSocket } from './voiceSocket';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { RichPackagePages } from '../../../../packages/plugin-marketplace-ui/src/RichPackagePages';
+import { RichPackagePages } from './DesktopRichPackagePages';
 import { desktopNativeCloudAuthClient } from '../api/nativeCloudAuthClient';
 import {
   desktopCloudSessionProjectionClient,
@@ -126,7 +127,8 @@ function ProjectHost({
               else location.hash = next;
             }}
             transport={transport}
-            streamCommand={streamCommand}
+            openVoiceSocket={openVoiceSocket}
+          streamCommand={streamCommand}
             managementLabel={t.packages}
             management={
               <PackageManagement

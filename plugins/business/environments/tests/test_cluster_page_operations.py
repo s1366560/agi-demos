@@ -1,12 +1,15 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pydantic import ValidationError
 
-from plugins.business.environments.backend import cluster_operations as ops
+from plugins.business.environments.backend import (
+    cluster_operations as ops,
+    cluster_runner_operations as runner_ops,
+)
 from plugins.business.environments.backend.inventory_operations import project_inventory_row
 from src.application.schemas.cluster_schemas import ClusterResponse
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
@@ -68,3 +71,44 @@ async def test_delete_rechecks_tenant_admin_and_forbids_extra_selectors(cluster)
     assert await ops.delete_cluster(ctx, {"id": "c"}, None) == {}
     check.assert_awaited_once_with(ctx.db, ctx.user, "t", require_admin=True)
     ops.clusters.delete_cluster.assert_awaited_once_with("c", auth)
+
+
+@pytest.mark.parametrize(
+    ("operation", "handler", "payload", "admin"),
+    [
+        (runner_ops.list_pools, "list_cluster_acp_runner_pools", {"id": "c"}, False),
+        (
+            runner_ops.create_pool,
+            "create_cluster_acp_runner_pool",
+            {"id": "c", "data": {"name": "dev", "poolKey": "dev"}},
+            True,
+        ),
+        (
+            runner_ops.issue_token,
+            "create_cluster_acp_runner_registration_token",
+            {"id": "c", "pool_key": "dev", "data": {"expiresInHours": 1}},
+            True,
+        ),
+    ],
+)
+async def test_runner_commands_use_original_tenant_authority(
+    cluster, monkeypatch, operation, handler, payload, admin
+):
+    ctx, check, authority, _ = cluster
+    monkeypatch.setattr(runner_ops, "require_tenant_access", check)
+    monkeypatch.setattr(
+        runner_ops,
+        "cluster_application_authority_dependency_v2",
+        ops.cluster_application_authority_dependency_v2,
+    )
+    row = Mock()
+    row.model_dump.return_value = {"id": "record"}
+    underlying = AsyncMock(return_value=row if admin else [row])
+    monkeypatch.setattr(runner_ops.clusters, handler, underlying)
+    with pytest.raises(ValidationError):
+        await operation(ctx, {**payload, "tenant_id": "other"}, None)
+    await operation(ctx, payload, None)
+    check.assert_awaited_once_with(ctx.db, ctx.user, "t", require_admin=admin)
+    assert underlying.await_args.args[0] == "c"
+    assert underlying.await_args.args[-1] is authority
+    row.model_dump.assert_called_once_with(mode="json", by_alias=True)

@@ -46,6 +46,7 @@ const { TextArea } = Input;
 const { Text } = Typography;
 
 interface TenantAgentConfigEditorProps {
+  editableHooks?: boolean;
   tenantId: string;
   open: boolean;
   onClose: () => void;
@@ -166,6 +167,7 @@ export function TenantAgentConfigEditor({
   onClose,
   onSave,
   initialConfig,
+  editableHooks = true,
 }: TenantAgentConfigEditorProps) {
   const { t } = useTranslation();
   const [form] = Form.useForm<FormValues>();
@@ -373,7 +375,7 @@ export function TenantAgentConfigEditor({
         tool_timeout_seconds: values.tool_timeout_seconds,
         enabled_tools: parseToolList(values.enabled_tools),
         disabled_tools: parseToolList(values.disabled_tools),
-        runtime_hooks: [
+        ...(editableHooks ? {runtime_hooks: [
           ...serializeCustomRuntimeHooks(
             unmanagedRuntimeHooks.map(
               ({
@@ -385,7 +387,7 @@ export function TenantAgentConfigEditor({
             )
           ),
           ...serializeRuntimeHooks(runtimeHooks, hookCatalog),
-        ],
+        ]}: {}),
       };
 
       const write = await agentConfigService.updateConfigWithRevision(
@@ -701,7 +703,7 @@ export function TenantAgentConfigEditor({
               </div>
             </section>
 
-            <section className="rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+            {editableHooks && (            <section className="rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
               <SectionHeader
                 title={t('tenant.agentConfigEditor.runtimeHooks.title')}
                 description={t('tenant.agentConfigEditor.runtimeHooks.description')}
@@ -1252,7 +1254,7 @@ export function TenantAgentConfigEditor({
                   </div>
                 )}
               </div>
-            </section>
+            </section>)}
           </div>
         </Form>
       </LoadingOverlay>

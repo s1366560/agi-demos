@@ -1,6 +1,6 @@
 # Automation
 
-The full-client Cron form, store, jobs API, event, webhook and playbook clients live under [ui/web](ui/web). Desktop automation editing, playbook subscriptions, dead-letter queue controllers and tenant webhook presentation models live alongside their screens under [ui/desktop](ui/desktop).
+Both clients load the [signed page entries](ui/signed/build.mjs). The original Cron form, store, jobs API, event, webhook and playbook clients live under [ui/web](ui/web).
 
 [backend/](backend/) owns scheduling commands, automation projections and webhook configuration. The live scheduler and the isolated `next_scheduled_run` preview construct the same APScheduler trigger in [triggers.py](triggers.py). The preview accepts a timezone-aware starting timestamp and a normalized schedule. It returns one eligible instant or null for an expired one-shot schedule. It never registers a job or sends an event.
 
@@ -19,4 +19,4 @@ PYTHONPATH=.:sdk/memstack-plugin-sdk/src uv run python -m scripts.build_standard
 
 From the repository root run the scheduler regressions under `src/tests/unit/infrastructure/scheduler`. Run `OCI_WORKER_DOCKER_TESTS=1 uv run pytest src/tests/integration/test_automation_schedule_package.py` to verify the signed worker through both full and minimal HTTP hosts.
 
-The signed Playbooks pages render the original Web library and desktop project view using the `list-playbooks` and `list-verdicts` commands. The application runtime reads the authenticated project membership and the generation-bound playbook repository. Schedule previews run in the package worker independently of that runtime.
+The shared signed Playbooks page renders the original Web library in both clients using the `list-playbooks` and `list-verdicts` commands. The application runtime reads the authenticated project membership and the generation-bound playbook repository. Schedule previews run in the package worker independently of that runtime.

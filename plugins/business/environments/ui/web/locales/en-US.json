@@ -647,6 +647,36 @@
       "publishSuccess": "Template published successfully",
       "publishConfirmTitle": "Publish {{name}}?",
       "deleteConfirmTitle": "Delete {{name}}?"
+    },
+    "orgSettings": {
+      "clusters": {
+        "title": "Clusters",
+        "description": "Overview of organization clusters",
+        "manage": "Manage Clusters",
+        "viewDetails": "View Details",
+        "addCluster": "Add Cluster",
+        "noClusters": "No clusters configured",
+        "nodes": "Nodes",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "endpoint": "Endpoint",
+        "stats": {
+          "total": "Total",
+          "active": "Active",
+          "maintenance": "Maintenance",
+          "error": "Error"
+        },
+        "health": "Health",
+        "status": "Status",
+        "loadFailed": "Failed to load clusters",
+        "statusLabels": {
+          "active": "Active",
+          "maintenance": "Maintenance",
+          "error": "Error",
+          "inactive": "Inactive",
+          "unknown": "Unknown"
+        }
+      }
     }
   },
   "admin": {

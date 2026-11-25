@@ -16,7 +16,13 @@ import { RichPackagePages } from '../../../../agi-stack/packages/plugin-marketpl
 
 import type { Project } from '@/types/memory';
 
-export function PluginHubView({ integrationSettings }: { integrationSettings: React.ReactNode }) {
+export function PluginHubView({
+  integrationSettings,
+  onChanged,
+}: {
+  integrationSettings: React.ReactNode;
+  onChanged?: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const { tenantId: routeTenant } = useParams();
   const navigate = useNavigate();
@@ -98,6 +104,7 @@ export function PluginHubView({ integrationSettings }: { integrationSettings: Re
                   marketPage: null,
                   marketPlugin: null,
                   optionalPlugin: null,
+                  returnTo: null,
                 });
               }}
             >
@@ -153,7 +160,8 @@ export function PluginHubView({ integrationSettings }: { integrationSettings: Re
               change({ marketPage: path });
             }}
             transport={session.transport}
-            streamCommand={session.stream}
+            openVoiceSocket={session.openVoiceSocket}
+        streamCommand={session.stream}
           />
         ) : (
           <WebProjectMarket
@@ -162,9 +170,13 @@ export function PluginHubView({ integrationSettings }: { integrationSettings: Re
             projectId={projectId}
             transport={session.transport}
             scopeParams={projectId ? { projectId } : {}}
+            {...(onChanged ? { onChanged } : {})}
             onOpen={(path) => {
               const plugin = params.get('marketPlugin') ?? params.get('optionalPlugin');
-              if (plugin) void navigate(businessLocation(path, tenantId, projectId, plugin));
+              if (plugin)
+                void navigate(businessLocation(path, tenantId, projectId, plugin), {
+                  state: { fromPackageMarket: true },
+                });
             }}
           />
         )

@@ -1,3 +1,4 @@
+import { EmptyConversation } from '../chat/EmptyConversation';
 /**
  * MessageArea - Modern message display area with aggressive preloading
  *
@@ -295,25 +296,9 @@ const InternalEmpty: React.FC<_MessageAreaEmptyProps & { context: _MessageAreaCo
   subtitle,
   context,
 }) => {
-  const { t } = useTranslation();
-
   if (context.isLoading) return null;
   if (context.timeline.length > 0) return null;
-  return (
-    <div className="h-full flex items-center justify-center">
-      <div className="text-center text-slate-400">
-        <p>
-          {title || t('components.messageArea.emptyTitle', { defaultValue: 'No messages yet' })}
-        </p>
-        <p className="text-sm">
-          {subtitle ||
-            t('components.messageArea.emptySubtitle', {
-              defaultValue: 'Start a conversation to see messages here',
-            })}
-        </p>
-      </div>
-    </div>
-  );
+  return <EmptyConversation title={title} subtitle={subtitle} />;
 };
 
 // ========================================

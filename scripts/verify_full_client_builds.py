@@ -1,4 +1,4 @@
-"""Build the full clients without business package sources, optionally keeping them for UI tests."""
+"""Build Sidecar, full Web and Electron together without installed business package sources."""
 
 import argparse
 import os
@@ -12,8 +12,7 @@ DESKTOP = Path("agi-stack/apps/desktop")
 WEB = Path("web")
 SOURCES = (
     WEB,
-    DESKTOP,
-    Path("agi-stack/packages"),
+    Path("agi-stack"),
     Path("shared"),
     Path("sdk"),
     Path("package.json"),
@@ -44,7 +43,7 @@ def copy_client_sources(destination: Path) -> None:
                 raise ValueError(f"Source link leaves the build context: {relative}")
             target.symlink_to(link)
         else:
-            shutil.copyfile(source, target)
+            shutil.copy2(source, target)
 
 
 def install_dependencies(destination: Path) -> None:
@@ -67,6 +66,31 @@ def install_dependencies(destination: Path) -> None:
 
 def build_clients(checkout: Path) -> int:
     copy_client_sources(checkout)
+    for excluded in (
+        "plugins/business",
+        "agi-stack/target",
+        "web/dist",
+        "web/dist-compat",
+        "agi-stack/apps/desktop/out",
+        "agi-stack/apps/desktop/out-compat",
+    ):
+        if (checkout / excluded).exists():
+            raise RuntimeError(f"Unexpected input in isolated build: {excluded}")
+    subprocess.run(
+        [
+            "cargo",
+            "build",
+            "--locked",
+            "--target-dir",
+            str(checkout / "agi-stack/target"),
+            "--bin",
+            "agistack-desktop-sidecar",
+            "-p",
+            "agistack-desktop-sidecar",
+        ],
+        cwd=checkout / "agi-stack",
+        check=True,
+    )
     install_dependencies(checkout)
     results = []
     for package, script in ((WEB, "build:full"), (DESKTOP, "build:electron:full")):
@@ -81,11 +105,13 @@ def main() -> int:
     parser.add_argument(
         "--build-root",
         type=Path,
-        help="Create a new directory and retain the isolated checkout and both build outputs.",
+        help="Create a new directory and retain the isolated checkout and all three build outputs.",
     )
     args = parser.parse_args()
     if args.build_root is not None:
         checkout = args.build_root.resolve()
+        if checkout.is_relative_to(ROOT):
+            parser.error("Choose a build directory outside the repository")
         try:
             checkout.mkdir(parents=True, exist_ok=False)
         except FileExistsError:

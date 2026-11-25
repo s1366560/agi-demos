@@ -1,3 +1,5 @@
+import { AgentLifecycleControls } from '@business/agent/ui/web/chat/AgentLifecycleControls';
+import { AgentLifecycleBadge } from '@business/agent/ui/web/chat/AgentLifecycleBadge';
 /**
  * ProjectAgentStatusBar - Project ReAct Agent Lifecycle Status Bar
  *
@@ -27,17 +29,10 @@ import {
   Wifi,
   Loader2,
   CheckCircle2,
-  AlertCircle,
-  PauseCircle,
-  Power,
-  Cpu,
   Wrench,
   BrainCircuit,
   Activity,
   AlertTriangle,
-  Play,
-  Square,
-  RefreshCw,
   Plug,
   Flame,
   Cloud,
@@ -58,7 +53,7 @@ import { useAgentState, usePendingToolsStack } from '@business/agent/ui/web/stor
 import { useIsStreaming } from '@business/agent/ui/web/stores/agent/streamingStore';
 import { useAgentV3Store } from '@business/agent/ui/web/stores/agentV3';
 
-import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
+import { LazyTooltip, message } from '@/components/ui/lazyAntd';
 
 import {
   useUnifiedAgentStatus,
@@ -125,71 +120,6 @@ function mapPoolStatusToLifecycle(status: InstanceStatus | undefined): ProjectAg
  * Lifecycle state configuration. `label` and `description` store i18n keys —
  * translate them at the usage site via `t()`.
  */
-const lifecycleConfig: Record<
-  ProjectAgentLifecycleState,
-  {
-    label: string;
-    icon: LucideIcon;
-    color: string;
-    bgColor: string;
-    description: string;
-    animate?: boolean | undefined;
-  }
-> = {
-  uninitialized: {
-    label: 'agent.lifecycle.states.uninitialized',
-    icon: Power,
-    color: 'text-slate-600 dark:text-slate-300',
-    bgColor: 'bg-slate-100 dark:bg-slate-800',
-    description: 'agent.lifecycle.descriptions.uninitialized',
-  },
-  initializing: {
-    label: 'agent.lifecycle.states.initializing',
-    icon: Loader2,
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-100 dark:bg-blue-900/30',
-    description: 'agent.lifecycle.descriptions.initializing',
-    animate: true,
-  },
-  ready: {
-    label: 'agent.lifecycle.states.ready',
-    icon: CheckCircle2,
-    color: 'text-emerald-500',
-    bgColor: 'bg-emerald-100 dark:bg-emerald-900/30',
-    description: 'agent.lifecycle.descriptions.ready',
-  },
-  executing: {
-    label: 'agent.lifecycle.states.executing',
-    icon: Cpu,
-    color: 'text-amber-500',
-    bgColor: 'bg-amber-100 dark:bg-amber-900/30',
-    description: 'agent.lifecycle.descriptions.executing',
-    animate: true,
-  },
-  paused: {
-    label: 'agent.lifecycle.states.paused',
-    icon: PauseCircle,
-    color: 'text-orange-500',
-    bgColor: 'bg-orange-100 dark:bg-orange-900/30',
-    description: 'agent.lifecycle.descriptions.paused',
-  },
-  error: {
-    label: 'agent.lifecycle.states.error',
-    icon: AlertCircle,
-    color: 'text-red-500',
-    bgColor: 'bg-red-100 dark:bg-red-900/30',
-    description: 'agent.lifecycle.descriptions.error',
-  },
-  shutting_down: {
-    label: 'agent.lifecycle.states.shutting_down',
-    icon: Power,
-    color: 'text-slate-500',
-    bgColor: 'bg-slate-100 dark:bg-slate-800',
-    description: 'agent.lifecycle.descriptions.shutting_down',
-    animate: true,
-  },
-};
-
 /**
  * Tier configuration for pool-based management
  */
@@ -513,11 +443,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       ? mapPoolStatusToLifecycle(poolInstance?.status)
       : status.lifecycle;
 
-  const config = lifecycleConfig[lifecycleState];
   const error = enablePoolManagement ? poolError : wsError;
   const instanceKey = `${tenantId}:${projectId}:chat`;
 
-  const StatusIcon = config.icon;
   const isError = lifecycleState === 'error';
 
   // Check if agent can be stopped (is running)
@@ -763,36 +691,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             </div>
           </div>
         ) : (
-          <LazyTooltip
-            title={
-              <div className="space-y-2 max-w-xs">
-                <div className="font-medium">{t(config.label)}</div>
-                <div className="text-xs opacity-80">{t(config.description)}</div>
-                {error && (
-                  <div className="text-xs text-red-400 pt-1 border-t border-gray-600 mt-1">
-                    {t('agent.lifecycle.error.prefix')}: {error}
-                  </div>
-                )}
-              </div>
-            }
-          >
-            <div
-              className={`
-                flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium
-                ${config.bgColor} ${config.color}
-                transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 cursor-help
-              `}
-            >
-              <StatusIcon
-                size={12}
-                className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''}
-              />
-              <span className="hidden min-w-0 truncate sm:inline-block">{t(config.label)}</span>
-              {status.resources.activeCalls > 0 ? (
-                <span className="ml-0.5">({status.resources.activeCalls})</span>
-              ) : null}
-            </div>
-          </LazyTooltip>
+          <AgentLifecycleBadge lifecycle={lifecycleState} error={error} activeCalls={status.resources.activeCalls} />
         )}
 
         {/* Resources: Tools with detailed breakdown */}
@@ -1007,153 +906,22 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
 
       {/* Right: Lifecycle Controls & Connection */}
       <div className="flex items-center gap-2 text-xs flex-shrink-0">
-        {/* Lifecycle Control Buttons */}
-        <div className="flex items-center gap-1.5">
-          {/* Pause Button - pool mode only, shown when agent is ready */}
-          {canPause && (
-            <LazyTooltip title={t('agent.lifecycle.controls.pause')}>
-              <button
-                type="button"
-                aria-label={t('agent.lifecycle.controls.pause')}
-                onClick={() => {
-                  void handlePauseAgent();
-                }}
-                disabled={isActionPending}
-                className={`
-                  rounded-md p-1 transition-colors duration-150
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
-                  disabled:cursor-not-allowed disabled:opacity-40
-                  ${
-                    isActionPending
-                      ? 'text-slate-400'
-                      : 'text-orange-500 hover:bg-orange-100 dark:hover:bg-orange-900/30'
-                  }
-                `}
-              >
-                {isActionPending ? (
-                  <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <PauseCircle size={14} />
-                )}
-              </button>
-            </LazyTooltip>
-          )}
-
-          {/* Resume Button - pool mode only, shown when agent is paused */}
-          {canResume && (
-            <LazyTooltip title={t('agent.lifecycle.controls.resume')}>
-              <button
-                type="button"
-                aria-label={t('agent.lifecycle.controls.resume')}
-                onClick={() => {
-                  void handleResumeAgent();
-                }}
-                disabled={isActionPending}
-                className={`
-                  rounded-md p-1 transition-colors duration-150
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
-                  disabled:cursor-not-allowed disabled:opacity-40
-                  ${
-                    isActionPending
-                      ? 'text-slate-400'
-                      : 'text-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
-                  }
-                `}
-              >
-                {isActionPending ? (
-                  <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Play size={14} />
-                )}
-              </button>
-            </LazyTooltip>
-          )}
-
-          {/* Stop Button - shown when agent is running */}
-          {canStop && (
-            <LazyPopconfirm
-              title={t('agent.lifecycle.controls.stopAgent')}
-              description={
-                enablePoolManagement && poolEnabled
-                  ? t('agent.lifecycle.controls.confirmTerminate')
-                  : t('agent.lifecycle.controls.confirmStop')
-              }
-              onConfirm={handleStopAgent}
-              okText={t('agent.lifecycle.controls.stop')}
-              cancelText={t('agent.lifecycle.controls.cancel')}
-              okButtonProps={{ danger: true }}
-            >
-              <LazyTooltip
-                title={
-                  enablePoolManagement && poolEnabled
-                    ? t('agent.lifecycle.controls.terminateInstance')
-                    : t('agent.lifecycle.controls.stopAgent')
-                }
-              >
-                <button
-                  type="button"
-                  aria-label={
-                    enablePoolManagement && poolEnabled
-                      ? t('agent.lifecycle.controls.terminateInstance')
-                      : t('agent.lifecycle.controls.stopAgent')
-                  }
-                  disabled={isActionPending}
-                  className={`
-                    rounded-md p-1 transition-colors duration-150
-                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
-                    disabled:cursor-not-allowed disabled:opacity-40
-                    ${
-                      isActionPending
-                        ? 'text-slate-400'
-                        : 'text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30'
-                    }
-                  `}
-                >
-                  {isActionPending ? (
-                    <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
-                  ) : (
-                    <Square size={14} />
-                  )}
-                </button>
-              </LazyTooltip>
-            </LazyPopconfirm>
-          )}
-
-          {/* Restart Button - shown when agent exists */}
-          {canRestart && (
-            <LazyPopconfirm
-              title={t('agent.lifecycle.controls.restart')}
-              description={t('agent.lifecycle.controls.confirmRestart')}
-              onConfirm={handleRestartAgent}
-              okText={t('agent.lifecycle.controls.restart')}
-              cancelText={t('agent.lifecycle.controls.cancel')}
-            >
-              <LazyTooltip title={t('agent.lifecycle.controls.restartAgent')}>
-                <button
-                  type="button"
-                  aria-label={t('agent.lifecycle.controls.restartAgent')}
-                  disabled={isActionPending}
-                  className={`
-                    rounded-md p-1 transition-colors duration-150
-                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
-                    disabled:cursor-not-allowed disabled:opacity-40
-                    ${
-                      isActionPending
-                        ? 'text-slate-400'
-                        : 'text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30'
-                    }
-                  `}
-                >
-                  {isActionPending ? (
-                    <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
-                  ) : (
-                    <RefreshCw size={14} />
-                  )}
-                </button>
-              </LazyTooltip>
-            </LazyPopconfirm>
-          )}
-        </div>
+        <AgentLifecycleControls
+          allowed={[
+            ...(canPause ? ['pause'] as const : []),
+            ...(canResume ? ['resume'] as const : []),
+            ...(canStop ? ['stop'] as const : []),
+            ...(canRestart ? ['restart'] as const : []),
+          ]}
+          isActionPending={isActionPending}
+          poolManaged={enablePoolManagement && poolEnabled}
+          onAction={action => ({
+            pause: handlePauseAgent,
+            resume: handleResumeAgent,
+            stop: handleStopAgent,
+            restart: handleRestartAgent,
+          })[action]()}
+        />
 
         {/* Separator */}
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />

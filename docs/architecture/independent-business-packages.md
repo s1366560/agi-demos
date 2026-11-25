@@ -102,6 +102,8 @@ Web 和 Electron 默认从当前项目已启用的发布版本读取页面贡献
 
 页面可以调用 `navigate(path)` 打开本包声明的路由。要打开其他包的页面，在发起页声明 `"page_links": ["memstack-agent/chat"]`，再调用 `window.memstack.openPage("memstack-agent", "chat")`。宿主从当前项目或租户在本端已安装的版本解析目标地址。目标未安装时返回 `page_destination_unavailable`，调用方可以在原页面显示原因。
 
+要在业务页面内嵌入另一个包，把插槽名和目标页写入来源页的 `anchored_slots`，例如 `{"collab@1": "memstack-workspace/agent-collab"}`。目标页以 `"contributes_to": "memstack-agent/collab@1"` 声明接受嵌入，`routes` 留空。来源页调用 `window.memstack.anchorSlot("collab@1", element, search)`，组件卸载时调用返回的清理函数。宿主在该元素的位置独立装载目标发布，为目标页过滤查询参数，并用目标包的项目、摘要和授权派发操作。拖动分栏时保留子页状态；卸载目标包会关闭其通道和待处理请求。[签名分栏与联合业务测试](../../src/tests/integration/test_installed_agent_panes.py)
+
 独立启动默认桌面客户端使用 `make -C agi-stack run-desktop`。完整旧客户端仍可通过显式 full 配置构建，供迁移中的旧页面使用。固定宿主的浏览器回归在宿主构建后签发未知包，检查深链接、版本切换和回退。[未知包发行与宿主集成测试](../../src/tests/integration/test_package_kernel_image.py) · [六包业务页面验收](../../src/tests/integration/test_standard_project_pages.py)
 
 需要应用数据的页面声明具名命令及对应权限，如项目目录、剧本、会话回放或运行终端。完整 API 使用已有的业务授权接口。最小 API 可通过 `PACKAGE_APPLICATION_RUNTIME_URL` 连接同一云身份及发布库的可信运行时。接收端再次核验用户、项目、命令及归档摘要。纯计算、本地检索和发票 worker 可在各自已声明目标独立执行。会话及工作区历史沿用 P5 云端记录。终端授权还需要项目对应的运行服务及有效 run revision。[云端能力转发](../../src/host/operations/remote_application_commands.py) · [终端运行授权](../../plugins/business/environments/README.md#project-sandbox-and-run-terminal)
@@ -110,7 +112,7 @@ Web 和 Electron 默认从当前项目已启用的发布版本读取页面贡献
 
 桌面开发和打包共同使用 `AGISTACK_DESKTOP_PROFILE`。默认安装包携带通用 Sidecar 和校验摘要。完整配置同时构建 Cargo 的 `legacy-business` 功能以及 Workspace Core 和原生辅助程序。macOS 正式版在签署运行时后记录二进制摘要，重新封装应用签名，再交由公证和更新器流程。[桌面打包](../../agi-stack/apps/desktop/scripts/desktop-package-profile.cjs)
 
-Agent 包给 Web 和 Electron 提供同一版本内的分端聊天页面。Web 可以回放本机运行。桌面执行需要当前发布声明 `device.local-chat`，项目批准安装后，用户还须在设备上批准工作目录和该发布摘要。目录绝对路径与本机模型凭据由设备保存。Sidecar 按运行登记、连续序号和批次幂等键向云端提交事件；取消期间可排空已经产生的事件，终态继续接受相同批次的幂等重投。[Agent 页面](../../plugins/business/agent/ui/signed/useChat.ts) · [设备执行](../../agi-stack/apps/desktop/sidecar/src/local_runtime/device_plugins/local_chat.rs) · [云端上传协议](../../src/application/services/local_run_protocol.py)
+Agent 包给 Web 和 Electron 提供同一份签名聊天页面和 Dashboard。Web 可以回放本机运行。桌面执行需要当前发布声明 `device.local-chat`，项目批准安装后，用户还须在设备上批准工作目录和该发布摘要。目录绝对路径与本机模型凭据由设备保存。Sidecar 按运行登记、连续序号和批次幂等键向云端提交事件；取消期间可排空已经产生的事件，终态继续接受相同批次的幂等重投。[Agent 页面](../../plugins/business/agent/ui/signed/useChat.ts) · [设备执行](../../agi-stack/apps/desktop/sidecar/src/local_runtime/device_plugins/local_chat.rs) · [云端上传协议](../../src/application/services/local_run_protocol.py)
 
 默认 Sidecar 只对其认证的控制通道开放设备宿主能力。旧业务 HTTP 路由由 `legacy-business` 编译特性启用；Agent、Workspace、Knowledge 和 Environments 的旧专属路由源码在各包的 `desktop-sidecar/` 下。通用运行状态中仍有为完整客户端保留的辅助实现。[无业务包源码构建检查](../../agi-stack/apps/desktop/scripts/verify-sidecar-package-host.py)
 

@@ -177,7 +177,7 @@ run-desktop: ## Launch the already built Electron host and Sidecar without chang
 	test -s $(DESKTOP_APP_DIR)/$(DESKTOP_PROFILE_OUTPUT)/main/index.js
 	test -s $(DESKTOP_APP_DIR)/$(DESKTOP_PROFILE_OUTPUT)/preload/index.cjs
 	test -s $(DESKTOP_APP_DIR)/$(DESKTOP_PROFILE_OUTPUT)/renderer/index.html
-	test -x "$(CURDIR)/target/debug/agistack-desktop-sidecar"
+	test -x "$${AGISTACK_SIDECAR_PATH:-$(CURDIR)/target/debug/agistack-desktop-sidecar}"
 	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- node node_modules/electron/cli.js $(DESKTOP_PROFILE_ENTRY)
 else
 ifneq ($(filter full compat,$(AGISTACK_DESKTOP_PROFILE)),)
@@ -187,7 +187,7 @@ desktop-full-workspace: desktop-deps
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
 endif
 run-desktop: desktop-deps ## 启动 Electron 原生客户端与 Rust sidecar
-	$(CARGO) build -p agistack-desktop-sidecar $(if $(filter full compat,$(AGISTACK_DESKTOP_PROFILE)),--features legacy-business)
+	$(CARGO) build -p agistack-desktop-sidecar $(if $(filter compat,$(AGISTACK_DESKTOP_PROFILE)),--features legacy-business)
 	cd $(DESKTOP_APP_DIR) && $(PNPM) exec install-electron --no
 	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- $(PNPM) run dev:electron $(if $(filter compat,$(AGISTACK_DESKTOP_PROFILE)),--entry $(DESKTOP_PROFILE_ENTRY))
 endif

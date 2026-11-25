@@ -46,7 +46,7 @@ import { formatDate, getStatusColor } from './utils/instanceUtils';
 
 import type { ACPRunnerPool, ACPRunnerTokenResponse } from '@/types/acp';
 
-import type { ClusterUpdate } from '../services/clusterService';
+import type { ClusterResponse, ClusterUpdate } from '../services/clusterService';
 
 const { Title, Text } = Typography;
 
@@ -79,7 +79,9 @@ const parseJsonObject = (value: string | undefined): Record<string, unknown> => 
   return parsed as Record<string, unknown>;
 };
 
-export const ClusterDetail: React.FC = () => {
+export const ClusterDetail: React.FC<{
+  loadEditableCluster?: (id: string) => Promise<ClusterResponse>;
+}> = ({ loadEditableCluster }) => {
   const { clusterId } = useParams<{ clusterId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -132,15 +134,24 @@ export const ClusterDetail: React.FC = () => {
     void navigate('..');
   };
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
     if (cluster) {
+      let editable = cluster;
+      if (loadEditableCluster) {
+        try {
+          editable = await loadEditableCluster(cluster.id);
+        } catch {
+          message.error(t('tenant.clusters.loadFailed'));
+          return;
+        }
+      }
       form.setFieldsValue({
-        name: cluster.name,
-        compute_provider: cluster.compute_provider,
-        proxy_endpoint: cluster.proxy_endpoint ?? undefined,
+        name: editable.name,
+        compute_provider: editable.compute_provider,
+        proxy_endpoint: editable.proxy_endpoint ?? undefined,
         provider_config:
-          Object.keys(cluster.provider_config).length > 0
-            ? JSON.stringify(cluster.provider_config, null, 2)
+          Object.keys(editable.provider_config).length > 0
+            ? JSON.stringify(editable.provider_config, null, 2)
             : '',
       });
       setEditModalVisible(true);

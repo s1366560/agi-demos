@@ -315,5 +315,20 @@
         "packageInvalid": "无法验证此签名包"
       }
     }
+  },
+  "agent": {
+    "executionTarget": {
+      "all": "全部",
+      "local": "此计算机",
+      "cloud": "云端",
+      "filterLabel": "执行位置",
+      "defaultEnvironment": "默认环境",
+      "localDirectory": "本地目录"
+    },
+    "executionPlacement": {
+      "directoryUnavailable": "此目录在这台计算机上不可用。",
+      "targetLabel": "执行位置",
+      "webLocalReadonly": "该会话在计算机上运行。网页端只能查看。"
+    }
   }
 }

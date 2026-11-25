@@ -1,6 +1,7 @@
+import { openVoiceSocket } from './voiceSocket';
 import { useState } from "react";
 
-import { RichPackagePages } from "../../../../packages/plugin-marketplace-ui/src/RichPackagePages";
+import { RichPackagePages } from "./DesktopRichPackagePages";
 import { useI18n } from "../i18nContext";
 import { devicePageCall } from "./device";
 import { transport, streamCommand } from "./transport";
@@ -31,7 +32,8 @@ export function InstalledRoutePage({
       pluginId={page.pluginId}
       invokeDevice={projectId ? devicePageCall(tenantId, projectId) : undefined}
       transport={transport}
-      streamCommand={streamCommand}
+      openVoiceSocket={openVoiceSocket}
+          streamCommand={streamCommand}
       navigate={(pathname, options) => {
         setPage({ pathname, pluginId: options?.pluginId ?? page.pluginId });
       }}

@@ -186,6 +186,32 @@
         "app.workspace.blackboard.write"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "read-project-overview",
+      "host_operation": "app.workspace.overview.read",
+      "permissions": [
+        "app.workspace.overview.read"
+      ],
+      "payload": {}
+    },
+    {
+      "id": "read-group-chat",
+      "host_operation": "app.workspace.chat.read",
+      "permissions": [
+        "app.workspace.chat.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "send-group-message",
+      "host_operation": "app.workspace.chat.send",
+      "permissions": [
+        "app.workspace.chat.send"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -208,14 +234,16 @@
       "title": "Workspace directory",
       "routes": [
         "/workspaces",
-        "/tenant/:tenantId/project/:projectId/workspaces"
+        "/tenant/:tenantId/project/:projectId/workspaces",
+        "/tenant/:tenantId/workspaces"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "entry": {
         "path": "ui/workspaces-web.js",
-        "digest": "sha256:fdf3f10abdd6736a60e49282d088db3d5b076a66017aa3def27a6de95b3e5af8"
+        "digest": "sha256:fdbaf67ffa8e57cc0a46393c65b20734db50407e889ca6ae4642622e7e242205"
       },
       "commands": [
         "list-directory"
@@ -229,36 +257,55 @@
       "query_params": [
         "q",
         "page"
-      ]
-    },
-    {
-      "id": "directory",
-      "title": "Workspace directory",
-      "routes": [
-        "/workspaces",
-        "/tenant/:tenantId/project/:projectId/workspaces"
       ],
-      "targets": [
-        "desktop-renderer"
-      ],
-      "entry": {
-        "path": "ui/workspaces-desktop.js",
-        "digest": "sha256:8b0d6f74a849cecf085d09988ad2e58b3df5fff9b6ef60631cd6c228e0e470f3"
-      },
-      "commands": [
-        "list-directory",
-        "create-workspace"
-      ],
-      "device_tools": [],
-      "style": {
-        "path": "ui/workspaces-desktop.css",
-        "digest": "sha256:05983bd31a7aba243a4492b9e6924a80b8e8aed874417d503068e5552678b389"
-      },
-      "workbench": true,
-      "query_params": [
-        "q",
-        "page"
-      ]
+      "sidebar": {
+        "groups": {
+          "command": "list-directory",
+          "inputs": {
+            "offset": "offset",
+            "limit": "limit"
+          },
+          "constants": {
+            "cards": true
+          },
+          "collection": "rows",
+          "fields": {
+            "id": "id",
+            "label": "name"
+          },
+          "match": {
+            "tenant_id": "tenant",
+            "project_id": "project",
+            "is_archived": "inactive"
+          }
+        },
+        "group": {
+          "command": "read-workspace",
+          "inputs": {
+            "workspace_id": "id"
+          },
+          "fields": {
+            "id": "id",
+            "label": "name"
+          }
+        },
+        "children": {
+          "command": "list-tasks",
+          "inputs": {
+            "workspace_id": "id",
+            "offset": "offset",
+            "limit": "limit"
+          },
+          "collection": "items",
+          "fields": {
+            "id": "id",
+            "label": "title"
+          },
+          "match": {
+            "workspace_id": "id"
+          }
+        }
+      }
     },
     {
       "id": "directory-export",
@@ -272,7 +319,7 @@
       ],
       "entry": {
         "path": "ui/directory.js",
-        "digest": "sha256:0e9eb4915cf7ac964f21ce9d826df5bba80b0d6ed5db5de1ec1cc20c30508195"
+        "digest": "sha256:493d0270660bbf5fab4f1ad23fe78c1ec9bd82d2211e752c4f58f4b235ad58d3"
       },
       "commands": [
         "export-csv",
@@ -296,19 +343,24 @@
         "desktop-renderer"
       ],
       "commands": [
-        "list-directory"
+        "read-project-overview"
       ],
       "entry": {
-        "path": "ui/overview.js",
-        "digest": "sha256:d9a76f49cad76cf1703843d6f41c7e94bc50d703579cbe3488a956d0e12559e5"
+        "path": "ui/project-overview-web.js",
+        "digest": "sha256:12bddbd123965a65f0fa0fd9ab4dcdf99a4dd2ddebaac4f59f214fc9a1f84d8b"
       },
       "device_tools": [],
       "style": {
-        "path": "ui/directory.css",
-        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
+        "path": "ui/project-overview-web.css",
+        "digest": "sha256:92f0b4393e49b3e6183e23af60bf1319a96dff2b1c47753a4e54b48678e7c27c"
       },
       "slots": [
         "recent-memories@1"
+      ],
+      "workbench": true,
+      "page_links": [
+        "memstack-knowledge/memories",
+        "memstack-knowledge/memory-detail"
       ]
     },
     {
@@ -321,11 +373,12 @@
         "/tenant/workspaces/new"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "entry": {
         "path": "ui/workspace-create-web.js",
-        "digest": "sha256:ad2ef86e7894517938cddbfe465d8a382ab183d77bf60432fad0a930fbf6a8a0"
+        "digest": "sha256:c7812295417e02a30053a0938e6aecc7fb6b7515eb90bac3f1016d8f1ccbae5b"
       },
       "commands": [
         "create-workspace"
@@ -335,66 +388,9 @@
         "path": "ui/workspace-create-web.css",
         "digest": "sha256:4ab38188dbf00b35acd443c86b6443d055c4c7534a2abf620f793aaf3c5ee5db"
       },
-      "workbench": true
-    },
-    {
-      "id": "create",
-      "title": "Create workspace",
-      "routes": [
-        "/workspaces/new",
-        "/tenant/:tenantId/project/:projectId/workspaces/new",
-        "/tenant/:tenantId/workspaces/new",
-        "/tenant/workspaces/new"
-      ],
-      "targets": [
-        "desktop-renderer"
-      ],
-      "entry": {
-        "path": "ui/workspace-create-desktop.js",
-        "digest": "sha256:31158f264f67cb2dfc2e0eb8f67da6aa4652bd44f7055987189eeb8cfb0d1fdb"
-      },
-      "commands": [
-        "create-workspace"
-      ],
-      "device_tools": [],
-      "style": {
-        "path": "ui/workspace-create-desktop.css",
-        "digest": "sha256:00fc0c857a71263a389982d222eae4b67b27362b290a99a096aff9fc492f3342"
-      },
-      "workbench": true
-    },
-    {
-      "id": "settings",
-      "title": "Workspace settings",
-      "routes": [
-        "/workspaces/:workspaceId/settings",
-        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/settings"
-      ],
-      "targets": [
-        "web"
-      ],
-      "commands": [
-        "blackboard-read",
-        "blackboard-change",
-        "list-directory"
-      ],
-      "entry": {
-        "path": "ui/blackboard-web.js",
-        "digest": "sha256:183b13df41d2d6d2d5603ad76e6b60f8d4099d96d6a77b2ccc62c13493a198eb"
-      },
-      "device_tools": [],
-      "style": {
-        "path": "ui/blackboard-web.css",
-        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
-      },
-      "query_params": [
-        "workspaceId",
-        "tab",
-        "conversationId"
-      ],
-      "page_links": [
-        "memstack-agent/chat",
-        "memstack-environments/sandbox-interaction"
+      "workbench": true,
+      "navigation_actions": [
+        "group-create"
       ]
     },
     {
@@ -405,6 +401,7 @@
         "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/settings"
       ],
       "targets": [
+        "web",
         "desktop-renderer"
       ],
       "commands": [
@@ -413,32 +410,36 @@
         "list-directory"
       ],
       "entry": {
-        "path": "ui/blackboard-desktop.js",
-        "digest": "sha256:99cdbaf2ba07294c7bd160acd1344852796947f4822637de2c4487227058b56a"
+        "path": "ui/blackboard-web.js",
+        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
       },
       "device_tools": [],
       "style": {
-        "path": "ui/blackboard-desktop.css",
-        "digest": "sha256:397c117d927cb6dbed204cc6301fb8fad4001679390093c2db56c80426b2e01a"
+        "path": "ui/blackboard-web.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
       },
       "query_params": [
         "workspaceId",
         "tab",
-        "conversationId"
+        "conversationId",
+        "taskId"
       ],
       "page_links": [
         "memstack-agent/chat",
         "memstack-environments/sandbox-interaction"
-      ]
+      ],
+      "workbench": true
     },
     {
       "id": "workspace-members",
       "title": "Workspace members",
       "routes": [
-        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/members"
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/members",
+        "/workspaces/:workspaceId/members"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "commands": [
         "blackboard-read",
@@ -447,7 +448,7 @@
       ],
       "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:183b13df41d2d6d2d5603ad76e6b60f8d4099d96d6a77b2ccc62c13493a198eb"
+        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
       },
       "device_tools": [],
       "style": {
@@ -457,54 +458,25 @@
       "query_params": [
         "workspaceId",
         "tab",
-        "conversationId"
+        "conversationId",
+        "taskId"
       ],
       "page_links": [
         "memstack-agent/chat",
         "memstack-environments/sandbox-interaction"
-      ]
-    },
-    {
-      "id": "workspace-members",
-      "title": "Workspace members",
-      "routes": [
-        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/members"
       ],
-      "targets": [
-        "desktop-renderer"
-      ],
-      "commands": [
-        "blackboard-read",
-        "blackboard-change",
-        "list-directory"
-      ],
-      "entry": {
-        "path": "ui/blackboard-desktop.js",
-        "digest": "sha256:99cdbaf2ba07294c7bd160acd1344852796947f4822637de2c4487227058b56a"
-      },
-      "device_tools": [],
-      "style": {
-        "path": "ui/blackboard-desktop.css",
-        "digest": "sha256:397c117d927cb6dbed204cc6301fb8fad4001679390093c2db56c80426b2e01a"
-      },
-      "query_params": [
-        "workspaceId",
-        "tab",
-        "conversationId"
-      ],
-      "page_links": [
-        "memstack-agent/chat",
-        "memstack-environments/sandbox-interaction"
-      ]
+      "workbench": true
     },
     {
       "id": "workspace-posts",
       "title": "Blackboard posts",
       "routes": [
-        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/posts"
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/posts",
+        "/workspaces/:workspaceId/posts"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "commands": [
         "blackboard-read",
@@ -513,7 +485,7 @@
       ],
       "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:183b13df41d2d6d2d5603ad76e6b60f8d4099d96d6a77b2ccc62c13493a198eb"
+        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
       },
       "device_tools": [],
       "style": {
@@ -523,20 +495,24 @@
       "query_params": [
         "workspaceId",
         "tab",
-        "conversationId"
+        "conversationId",
+        "taskId"
       ],
       "page_links": [
         "memstack-agent/chat",
         "memstack-environments/sandbox-interaction"
-      ]
+      ],
+      "workbench": true
     },
     {
-      "id": "workspace-posts",
-      "title": "Blackboard posts",
+      "id": "workspace-tasks",
+      "title": "Workspace tasks",
       "routes": [
-        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/posts"
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/tasks",
+        "/workspaces/:workspaceId/tasks"
       ],
       "targets": [
+        "web",
         "desktop-renderer"
       ],
       "commands": [
@@ -545,41 +521,8 @@
         "list-directory"
       ],
       "entry": {
-        "path": "ui/blackboard-desktop.js",
-        "digest": "sha256:99cdbaf2ba07294c7bd160acd1344852796947f4822637de2c4487227058b56a"
-      },
-      "device_tools": [],
-      "style": {
-        "path": "ui/blackboard-desktop.css",
-        "digest": "sha256:397c117d927cb6dbed204cc6301fb8fad4001679390093c2db56c80426b2e01a"
-      },
-      "query_params": [
-        "workspaceId",
-        "tab",
-        "conversationId"
-      ],
-      "page_links": [
-        "memstack-agent/chat",
-        "memstack-environments/sandbox-interaction"
-      ]
-    },
-    {
-      "id": "workspace-tasks",
-      "title": "Workspace tasks",
-      "routes": [
-        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/tasks"
-      ],
-      "targets": [
-        "web"
-      ],
-      "commands": [
-        "blackboard-read",
-        "blackboard-change",
-        "list-directory"
-      ],
-      "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:183b13df41d2d6d2d5603ad76e6b60f8d4099d96d6a77b2ccc62c13493a198eb"
+        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
       },
       "device_tools": [],
       "style": {
@@ -589,20 +532,24 @@
       "query_params": [
         "workspaceId",
         "tab",
-        "conversationId"
+        "conversationId",
+        "taskId"
       ],
       "page_links": [
         "memstack-agent/chat",
         "memstack-environments/sandbox-interaction"
-      ]
+      ],
+      "workbench": true
     },
     {
-      "id": "workspace-tasks",
-      "title": "Workspace tasks",
+      "id": "workspace-task-detail",
+      "title": "Task details",
       "routes": [
-        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/tasks"
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/tasks/:taskId",
+        "/workspaces/:workspaceId/tasks/:taskId"
       ],
       "targets": [
+        "web",
         "desktop-renderer"
       ],
       "commands": [
@@ -611,23 +558,25 @@
         "list-directory"
       ],
       "entry": {
-        "path": "ui/blackboard-desktop.js",
-        "digest": "sha256:99cdbaf2ba07294c7bd160acd1344852796947f4822637de2c4487227058b56a"
+        "path": "ui/blackboard-web.js",
+        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
       },
       "device_tools": [],
       "style": {
-        "path": "ui/blackboard-desktop.css",
-        "digest": "sha256:397c117d927cb6dbed204cc6301fb8fad4001679390093c2db56c80426b2e01a"
+        "path": "ui/blackboard-web.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
       },
       "query_params": [
         "workspaceId",
         "tab",
-        "conversationId"
+        "conversationId",
+        "taskId"
       ],
       "page_links": [
         "memstack-agent/chat",
         "memstack-environments/sandbox-interaction"
-      ]
+      ],
+      "workbench": true
     },
     {
       "id": "detail",
@@ -636,10 +585,13 @@
         "/workspaces/:workspaceId",
         "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId",
         "/tenant/:tenantId/project/:projectId/blackboard",
-        "/project/:projectId/blackboard"
+        "/project/:projectId/blackboard",
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/files",
+        "/workspaces/:workspaceId/files"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "commands": [
         "blackboard-read",
@@ -648,7 +600,7 @@
       ],
       "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:183b13df41d2d6d2d5603ad76e6b60f8d4099d96d6a77b2ccc62c13493a198eb"
+        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
       },
       "device_tools": [],
       "style": {
@@ -659,7 +611,8 @@
       "query_params": [
         "workspaceId",
         "tab",
-        "conversationId"
+        "conversationId",
+        "taskId"
       ],
       "page_links": [
         "memstack-agent/chat",
@@ -667,40 +620,31 @@
       ]
     },
     {
-      "id": "detail",
-      "title": "Workspace details",
-      "routes": [
-        "/workspaces/:workspaceId",
-        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId",
-        "/tenant/:tenantId/project/:projectId/blackboard",
-        "/project/:projectId/blackboard"
-      ],
+      "id": "agent-collab",
+      "title": "Workspace chat",
+      "contributes_to": "memstack-agent/collab@1",
+      "routes": [],
       "targets": [
+        "web",
         "desktop-renderer"
       ],
+      "workbench": true,
+      "entry": {
+        "path": "ui/group-chat.js",
+        "digest": "sha256:90ef27f52ae419587060b10d77cd558f9b90c1556ac4aba0299176327cc5eba4"
+      },
+      "style": {
+        "path": "ui/group-chat.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
+      },
       "commands": [
-        "blackboard-read",
-        "blackboard-change",
+        "read-group-chat",
+        "send-group-message",
         "list-directory"
       ],
-      "entry": {
-        "path": "ui/blackboard-desktop.js",
-        "digest": "sha256:99cdbaf2ba07294c7bd160acd1344852796947f4822637de2c4487227058b56a"
-      },
       "device_tools": [],
-      "style": {
-        "path": "ui/blackboard-desktop.css",
-        "digest": "sha256:397c117d927cb6dbed204cc6301fb8fad4001679390093c2db56c80426b2e01a"
-      },
-      "workbench": true,
       "query_params": [
-        "workspaceId",
-        "tab",
-        "conversationId"
-      ],
-      "page_links": [
-        "memstack-agent/chat",
-        "memstack-environments/sandbox-interaction"
+        "workspaceId"
       ]
     }
   ]

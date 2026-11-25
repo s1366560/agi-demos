@@ -24,7 +24,10 @@ const generatedOutputWatchIgnores = [
 
 export default defineConfig(({ command }) => ({
   main: {
-    define: { __AGISTACK_FULL_DESKTOP__: JSON.stringify(fullDesktopProfile) },
+    define: {
+      __AGISTACK_FULL_DESKTOP__: JSON.stringify(fullDesktopProfile),
+      __AGISTACK_COMPAT_DESKTOP__: JSON.stringify(compatibilityProfile),
+    },
     build: {
       outDir: resolve(desktopRoot, desktopOutput, 'main'),
       // `build.watch` is dev-only input for electron-vite; enabling it in a

@@ -138,6 +138,7 @@ export function MarketDetailView(props: DetailProps) {
     setReview(null);
     props.onChanged?.();
     props.reload();
+    if (review.action === 'apply') props.onActivated?.(response);
   }
   const activationTitle = old?.installed_version ? t.reviewUpdate : t.review;
   const confirmation =

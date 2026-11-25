@@ -50,7 +50,25 @@
       submit.click();
     }
   });
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.hidden = true;
+  save.textContent = label('Save CSV file', '保存 CSV 文件');
+  let exportedRows;
+  save.onclick = async () => {
+    if (!exportedRows) return;
+    save.disabled = true;
+    try {
+      await window.memstack.exportCsv('export-csv', {header: true, rows: exportedRows});
+    } catch (error) {
+      output.textContent = String(error);
+    } finally {
+      save.disabled = false;
+    }
+  };
+  form.addEventListener('input', () => { save.hidden = true; });
   submit.onclick = async () => {
+    save.hidden = true;
     if (!form.reportValidity()) return;
     submit.disabled = true;
     try {
@@ -60,6 +78,8 @@
       });
       const result = await window.memstack.invoke('export-csv', {header: true, rows: records});
       output.textContent = result.csv;
+      exportedRows = records;
+      save.hidden = typeof window.memstack.exportCsv !== 'function';
     } catch (error) {
       output.textContent = String(error);
     } finally {
@@ -105,5 +125,5 @@
   };
   root.append(link(label('Workspace directory', '工作区目录'), directory),
     Object.assign(document.createElement('h1'), { textContent: label('CSV export', '导出 CSV') }),
-    project, form, output, status);
+    project, form, output, save, status);
 })();

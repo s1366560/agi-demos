@@ -6,8 +6,17 @@ import type { MarketplaceTransport } from '../../../agi-stack/packages/plugin-ma
 const route = '/qa-page';
 let digest = 'sha256:' + 'a'.repeat(64);
 let corrupt = location.search === '?bad';
+const anchor = location.search === '?anchor';
+const child = { id: 'pane', title: 'Signed pane', contributes_to: 'qa/tools@1', routes: [], targets: ['web'], query_params: ['selection'] };
+let installed = true;
+if (anchor) {
+  const install = document.createElement('button');
+  install.textContent = 'Toggle pane installation';
+  install.onclick = () => { installed = !installed; window.dispatchEvent(new Event('focus')); };
+  document.body.append(install);
+}
 const chat = location.search.startsWith('?chat');
-const target = chat && location.search !== '?chat-web' ? 'desktop-renderer' : 'web';
+const target = chat && !location.search.startsWith('?chat-web') ? 'desktop-renderer' : 'web';
 // Electron loads its renderer and trusted frame as siblings in the application root.
 if (target === 'desktop-renderer') history.replaceState(null, '', '/index.html' + location.search);
 const descriptor = { id: 'test', title: 'QA', routes: [route], targets: [target] };
@@ -34,10 +43,20 @@ if (['?upgrade', '?drain'].includes(location.search)) {
 }
 const billing = location.search === '?billing';
 const sandbox = location.search.startsWith('?sandbox');
-const source = chat
-  ? (target === 'web' ? (await import('../../../plugins/business/agent/ui/chat-web.js?raw')).default : (await import('../../../plugins/business/agent/ui/chat-desktop.js?raw')).default)
+let terminalConnected = false;
+const source = anchor ? `
+  const input = document.createElement('input'); input.placeholder = 'Draft'; document.body.append(input);
+  const slot = document.createElement('div'); slot.style.cssText = 'margin:20px;width:280px;height:140px'; document.body.append(slot);
+  const handle = document.createElement('button'); handle.textContent = 'Drag divider';
+  handle.onpointerdown = event => handle.setPointerCapture(event.pointerId);
+  document.body.append(handle);
+  const close = window.memstack.anchorSlot('tools@1', slot, '?selection=first&ignored=1');
+  const toggle = document.createElement('button'); toggle.textContent = 'Close pane'; toggle.onclick = close; document.body.append(toggle);
+  const resize = document.createElement('button'); resize.textContent = 'Resize pane'; resize.onclick = () => slot.style.width='340px'; document.body.append(resize);
+` : chat
+  ? (await import('../../../plugins/business/agent/ui/chat-web.js?raw')).default
   : sandbox
-    ? (await import('../../../plugins/business/environments/ui/sandbox.js?raw')).default
+    ? (await import('../../../plugins/business/environments/ui/interaction.js?raw')).default
     : billing
       ? (await import('../../../plugins/business/billing/ui/web-billing.js?raw')).default
       : `
@@ -70,26 +89,45 @@ const transport: MarketplaceTransport = async <T,>(
     return {
       items: [
         { plugin_id: 'qa', actual_digest: digest, status: 'enabled', pages: [descriptor] },
+        ...(anchor && installed ? [{ plugin_id: 'child', actual_digest: digest, status: 'enabled', pages: [child] }] : []),
         ...(location.search === '?page-links' ? [{
           plugin_id: 'boards',
           actual_digest: digest,
           status: 'enabled',
-          pages: [{ ...descriptor, id: 'overview', routes: ['/project/:projectId/board'] }],
+          pages: [{ ...descriptor, id: 'overview', routes: ['/project/:projectId/board', '/project/:projectId/board/:card'], query_params:['tab'] }],
         }] : []),
       ],
     } as T;
+  if (path.includes('/child/ui?')) {
+    const guest = `
+      memstack.getContext().then(context => {
+        document.body.textContent = context.search;
+        for (const [label, command] of [['Operate','child-op'], ['Subscribe','wait']]) {
+          const button = document.createElement('button');
+          button.textContent = label;
+          button.onclick = () => memstack.invoke(command);
+          document.body.append(button);
+        }
+      });
+    `;
+    const bytes = new TextEncoder().encode(guest);
+    const sum = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n => n.toString(16).padStart(2,'0')).join('');
+    return { ...child, schema: 'memstack.rich-page/1', release_digest: digest, target, commands:['child-op','wait'], device_tools:[], entry:{path:'widget.js',bytes_base64:btoa(guest),digest:'sha256:'+sum} } as T;
+  }
   if (path.includes('/ui?'))
     return {
       ...descriptor,
       schema: 'memstack.rich-page/1',
-      page_links: ['boards/overview', 'uninstalled/overview'],
+      query_params: sandbox ? ['run_id', 'revision'] : ['conversationId'],
+      ...(anchor ? { anchored_slots: { 'tools@1':'child/pane' } } : {}),
+      page_links: ['boards/overview' , 'uninstalled/overview'],
       navigation_routes: [route, '/agent/chat/:conversationId', '/project/:projectId/details/:id'],
       release_digest: digest,
       target,
       commands: chat
         ? ['chat-create', 'chat-list', 'chat-history', 'chat-turn', 'chat-cancel']
         : sandbox
-          ? ['sandbox-status', 'prepare-sandbox', 'authorize-run-terminal']
+          ? ['sandbox-status', 'project-terminal', 'authorize-run-terminal']
           : billing
             ? ['quote-pro', 'list-invoices']
             : ['read', 'wait'],
@@ -103,25 +141,39 @@ const transport: MarketplaceTransport = async <T,>(
       },
     } as T;
   const body = options.body as { command_id: string; payload?: unknown };
+  if (body.command_id === 'child-op') {
+    log.textContent = path + ':' + JSON.stringify(body);
+    return {} as T;
+  }
   if (chat)
     return chatRuntime.command(body.command_id, body.payload as Record<string, unknown>) as T;
   if (body.command_id === 'sandbox-status') {
-    const degraded = location.search === '?sandbox-degraded';
-    return {
-      sandbox: { sandbox_id: 'dev', status: 'running' },
-      terminal: {
-        availability: degraded ? 'degraded' : 'available',
-        reason_code: degraded ? 'terminal_authority_unavailable' : null,
-      },
-    } as T;
+    return { sandbox: { sandbox_id: 'dev', status: 'running' } } as T;
   }
   if (body.command_id === 'authorize-run-terminal') {
     log.textContent = JSON.stringify(body.payload);
-    return { expires_at: '2030-10-01T00:00:00Z' } as T;
+    if (location.search === '?sandbox-degraded') throw new Error('terminal_authority_unavailable');
+    return { channel: 'fixture-channel' } as T;
+  }
+  if (body.command_id === 'project-terminal') {
+    const payload = body.payload as { action: string; channel: string };
+    if (payload.channel !== 'fixture-channel' || location.search === '?sandbox-degraded') {
+      log.textContent = 'unexpected channel use';
+      throw new Error('unknown channel');
+    }
+    if (payload.action !== 'read') return {} as T;
+    if (!terminalConnected) {
+      terminalConnected = true;
+      return { message: JSON.stringify({ type: 'connected', session_id: 'qa-run-2' }) } as T;
+    }
+    return new Promise((_resolve, reject) => {
+      options.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    });
   }
   if (body.command_id === 'quote-pro') return { storage_limit: 65536 } as T;
   if (body.command_id === 'list-invoices')
     return { invoices: [{ id: 'INV-123', amount: 1250, currency: 'USD', status: 'pending' }] } as T;
+  if (body.command_id === 'wait' && anchor) log.textContent = 'subscribed';
   if (body.command_id === 'wait')
     return new Promise((resolve, reject) => {
       if (location.search === '?drain' && digest.includes('aaaa')) {
@@ -155,10 +207,11 @@ createRoot(document.getElementById('root')!).render(
           }
         : undefined
     }
-    pathname={route}
+    pathname={sandbox ? route + '?run_id=run-2&revision=8' : chat && location.search !== '?chat-desktop' ? route + '?conversationId=' +
+      (location.search === '?chat-web-cloud' ? 'cloud' : 'local') : route}
     transport={transport}
     navigate={(path) => {
-      log.textContent = path;
+      if (!chat) log.textContent = path;
     }}
   />
 );

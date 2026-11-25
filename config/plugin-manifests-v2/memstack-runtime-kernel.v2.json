@@ -15018,7 +15018,7 @@
       },
       "contract_digest": "sha256:8f0fca0bd5f717517f49b5be97078ee6a6e9b695e8e5d4d73b7429fd90cd712b",
       "artifact": {
-        "digest": "sha256:0bbb78cb69496c8d1c60302074e9dd127503d328682f4c37469d9e2c1683bd76",
+        "digest": "sha256:8833511623023cf69dd272dcf256a27be0c04cf50b3f07051d36fe2da43732b7",
         "source": "repo+python://plugins/business/agent/backend/application_adapter.py"
       }
     },
@@ -15051,7 +15051,7 @@
       },
       "contract_digest": "sha256:8277ed5bbfbcd4cd2dc438259bcc27e71848bb4eba45427051bfb18b63ff9cdb",
       "artifact": {
-        "digest": "sha256:9e267f2481869fff2beeafb27a0c5af4b3d1b187a4c5a3b073c326382df653a0",
+        "digest": "sha256:989669fe070fda2f2b74b2344af08e1110ef13ccd284b347d56672e8280676a5",
         "source": "repo+python://plugins/business/automation/backend/application_adapter.py"
       }
     },
@@ -15117,7 +15117,7 @@
       },
       "contract_digest": "sha256:e2ae5c4f558cce5a3cb94163f7297676138945d7d836cad6b526b5db206c332c",
       "artifact": {
-        "digest": "sha256:3a3db1e3b38b78439cc3b507acaac2c583c66b0c0eeaa976fb03b92ee766f61a",
+        "digest": "sha256:0324637acab14f6073b5be78b8e1ab9a2074ebfd3e0ff69168718788e1a3730e",
         "source": "repo+python://plugins/business/environments/backend/application_adapter.py"
       }
     },
@@ -15150,7 +15150,7 @@
       },
       "contract_digest": "sha256:0bd5af327f1f3f424ba2339e5e0ad72472dd85e4f8f8c64e013d00fcf76264d3",
       "artifact": {
-        "digest": "sha256:74af1940f123d1e499027bf046a47d01de2e216b4f64bfce00eb047b341f6659",
+        "digest": "sha256:12df21553dc7d0a0aa4bc8c8fee90556117b270b451eae039781e438c5b71821",
         "source": "repo+python://plugins/business/knowledge/backend/application_adapter.py"
       }
     },
@@ -15183,7 +15183,7 @@
       },
       "contract_digest": "sha256:5393a4faba76802a3e0b95c2f4cab052573449b11eda0a55c31479b167c4ec5e",
       "artifact": {
-        "digest": "sha256:ef020a2bfc72f2529c8711bf1a634d17b37fabe3086d2077cb10dbdec3fd89c8",
+        "digest": "sha256:44b004d8ea703a03c29ebf042bd74dfacf64809a49547a46fc5bfb451b439f21",
         "source": "repo+python://plugins/business/workspace/backend/application_adapter.py"
       }
     }

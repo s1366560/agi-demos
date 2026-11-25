@@ -22,11 +22,15 @@ export type FullWorkbenchMatcher = (
 export function ProjectBusinessRoute({
   children,
   matchesFullRoute,
+  insideWorkbench = false,
 }: {
   children: ReactNode;
+  insideWorkbench?: boolean;
   matchesFullRoute: FullWorkbenchMatcher;
 }) {
-  const { pathname, search, hash } = useLocation();
+  const { pathname, search, hash, state } = useLocation();
+  const fromMarket = state?.fromPackageMarket === true;
+  const showMarketNavigation = !insideWorkbench || fromMarket;
   const current = useProjectStore((state) => state.currentProject);
   const params = new URLSearchParams(search);
   const selected = businessRouteScope(pathname, params, current);
@@ -36,6 +40,9 @@ export function ProjectBusinessRoute({
   const { t, i18n } = useTranslation();
   if (!token) return children;
   const tenantOwner = tenantPageScope(pathname, params);
+  const bookmark = pathname + search + hash;
+  const install = (url: string) =>
+    url + (url.includes('?') ? '&' : '?') + new URLSearchParams({ returnTo: bookmark });
   const fallback = selected ? projectPage(selected) : children;
   if (!tenantOwner) return fallback;
   const id = params.get('businessPackage');
@@ -53,10 +60,17 @@ export function ProjectBusinessRoute({
       locale={i18n.language}
       pathname={pathname + search + hash}
       {...(id ? { pluginId: id } : {})}
-      backToMarket={back}
-      unmatched={params.get('packageScope') === 'tenant' ? back : fallback}
+      backToMarket={showMarketNavigation ? back : null}
+      unmatched={
+        params.get('packageScope') === 'tenant' ? (
+          <Link to={install(market)}>{t('tenant.pluginHub.backToMarket')}</Link>
+        ) : (
+          fallback
+        )
+      }
       transport={session.transport}
-      streamCommand={session.stream}
+      openVoiceSocket={session.openVoiceSocket}
+        streamCommand={session.stream}
       navigate={(path, options) => {
         const owner = options?.pluginId ?? id;
         const bindings = {
@@ -64,7 +78,7 @@ export function ProjectBusinessRoute({
           packageScope: 'tenant',
           ...(owner ? { businessPackage: owner } : {}),
         };
-        void navigate(scopedPageLocation(path, bindings), options);
+        void navigate(scopedPageLocation(path, bindings), { ...options, state });
       }}
     />
   );
@@ -90,25 +104,34 @@ export function ProjectBusinessRoute({
         pathname={pathname + search + hash}
         {...(plugin ? { pluginId: plugin } : {})}
         backToMarket={
-          <>
-            <Link to={market}>{t('tenant.pluginHub.backToMarket')}</Link>
-            {canOpenFull && (
-              <Link to={{ pathname, hash, search: fullQuery.toString() }}>
-                {t('tenant.pluginHub.openFullWorkbench')}
-              </Link>
-            )}
-          </>
+          showMarketNavigation && (
+            <>
+              <Link to={market}>{t('tenant.pluginHub.backToMarket')}</Link>
+              {canOpenFull && (
+                <Link to={{ pathname, hash, search: fullQuery.toString() }}>
+                  {t('tenant.pluginHub.openFullWorkbench')}
+                </Link>
+              )}
+            </>
+          )
         }
         unmatched={
-          plugin ? <Link to={market}>{t('tenant.pluginHub.backToMarket')}</Link> : children
+          plugin ? (
+            <Link to={install(market.pathname + '?' + market.search)}>
+              {t('tenant.pluginHub.backToMarket')}
+            </Link>
+          ) : (
+            children
+          )
         }
         transport={session.transport}
+        openVoiceSocket={session.openVoiceSocket}
         streamCommand={session.stream}
         navigate={(path, options) => {
           const next: Record<string, string> = { tenant, project };
           const owner = options?.pluginId ?? plugin;
           if (owner) next.businessPackage = owner;
-          void navigate(scopedPageLocation(path, next), options);
+          void navigate(scopedPageLocation(path, next), { ...options, state });
         }}
       />
     );

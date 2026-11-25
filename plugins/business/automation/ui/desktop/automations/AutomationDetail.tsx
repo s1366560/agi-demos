@@ -48,7 +48,7 @@ export function AutomationDetail({
   loadError: string | null;
   mutationError: string | null;
   capabilities: AutomationCapabilities | null;
-  runtimeRunCapability: DesktopCapabilityView;
+  runtimeRunCapability: Pick<DesktopCapabilityView, 'available' | 'reason_code'>;
   busy: boolean;
   onEdit: () => void;
   onToggle: () => void;

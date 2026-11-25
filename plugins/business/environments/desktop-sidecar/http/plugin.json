@@ -1,0 +1,26 @@
+{
+  "target": "desktop-sidecar",
+  "tool_name": "project_sandbox_http",
+  "wasm": "sandbox-http.wasm",
+  "project_http_routes": {
+    "GET": [
+      "sandbox",
+      "sandbox/capabilities",
+      "sandbox/files",
+      "sandbox/files/content",
+      "sandbox/files/download"
+    ],
+    "POST": [
+      "sandbox",
+      "sandbox/desktop",
+      "sandbox/proxy-auth-cookie"
+    ]
+  },
+  "provenance": "repo://memstack/plugins/business/environments/desktop-sidecar/http",
+  "workspace_read_operations": [
+    "status",
+    "directory",
+    "text",
+    "download"
+  ]
+}

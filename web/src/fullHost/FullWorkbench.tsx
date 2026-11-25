@@ -57,6 +57,10 @@ function Layout() {
     </SignedSidebarProvider>
   );
 }
+function PackageHub() {
+  const { invalidate } = useFullNavigation();
+  return <PluginHubView integrationSettings={<CompatibilityPage />} onChanged={invalidate} />;
+}
 function BusinessPage() {
   const { tenant, project } = useFullNavigation();
   const market =
@@ -65,7 +69,7 @@ function BusinessPage() {
     '/plugins' +
     (project ? '?projectId=' + encodeURIComponent(project) : '');
   return (
-    <ProjectBusinessRoute matchesFullRoute={() => false}>
+    <ProjectBusinessRoute insideWorkbench matchesFullRoute={() => false}>
       <CompatibilityPage market={market} />
     </ProjectBusinessRoute>
   );
@@ -105,7 +109,16 @@ export function FullWorkbench() {
           <Route path="/force-change-password" element={<Password />} />
           <Route path="/" element={<Navigate to="/tenant" replace />} />
           {[
-            'clusters',
+            'clusters/*',
+            'deploy/*',
+            'instances/*',
+            'instance-templates/*',
+            'pool',
+            'events',
+            'webhooks',
+            'workspaces',
+            'workspaces/new',
+            'agent-workspace/*',
             'patterns',
             'billing',
             'plugins',
@@ -124,7 +137,7 @@ export function FullWorkbench() {
             <Route path="/tenant/:tenantId" element={<TenantEntry />} />
             <Route
               path="/tenant/:tenantId/plugins"
-              element={<PluginHubView integrationSettings={<CompatibilityPage />} />}
+              element={<PackageHub />}
             />
             <Route path="/tenant/:tenantId/projects" element={<Projects />} />
             <Route path="/tenant/:tenantId/projects/new" element={<NewProject />} />

@@ -52,6 +52,7 @@ export type WorkspaceCollaborationCanvasProps = {
   workspaceId: string;
   client: WorkspaceCollaborationClient;
   initialSurface?: WorkspaceCollaborationSurface;
+  onSurfaceChange?: (surface: WorkspaceCollaborationSurface) => void;
   createIdempotencyKey?: (
     surface: WorkspaceCollaborationSurface,
     action: string,
@@ -65,6 +66,7 @@ export function WorkspaceCollaborationCanvas({
   workspaceId,
   client,
   initialSurface = 'goals',
+  onSurfaceChange,
   createIdempotencyKey,
   authorityInvalidation = null,
 }: WorkspaceCollaborationCanvasProps) {
@@ -190,9 +192,10 @@ export function WorkspaceCollaborationCanvas({
       if (current.activeSurface === surface) return;
       abortSurface(current.activeSurface);
       commit(selectWorkspaceCollaborationTab(current, surface));
+      onSurfaceChange?.(surface);
       setMutationFailed(false);
     },
-    [abortSurface, commit],
+    [abortSurface, commit, onSurfaceChange],
   );
 
   const refresh = useCallback(() => {

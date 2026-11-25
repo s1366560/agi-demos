@@ -91,12 +91,35 @@
       "dispatchFailed": "投递失败：{{reason}}"
     },
     "activity": {
-      "usage": "{{tokens}} Token · {{cost}} {{currency}}"
+      "usage": "{{tokens}} Token · {{cost}} {{currency}}",
+      "open": "打开动态和我的工作",
+      "title": "动态和我的工作",
+      "markAllRead": "全部标为已读",
+      "empty": "目前没有需要关注的工作。",
+      "loadFailed": "无法加载动态。",
+      "syncPending": "连接恢复后将同步已读状态。",
+      "group": {
+        "running": "运行中",
+        "needs_input": "等待输入",
+        "needs_approval": "等待审批",
+        "ready_review": "待审阅"
+      }
     },
     "runReview": {
       "tokens": "{{count}} Token",
       "changeCount": "{{count}} 个文件已更改",
-      "checkCount": "{{passed}} 项通过 · {{failed}} 项失败"
+      "checkCount": "{{passed}} 项通过 · {{failed}} 项失败",
+      "title": "运行审阅",
+      "summary": "完成摘要",
+      "changes": "变更",
+      "scope": {
+        "turn": "当前轮次",
+        "run": "本次运行",
+        "session": "会话"
+      },
+      "summaryUnavailable": "未记录此运行的权威摘要。",
+      "loadFailed": "无法加载运行审阅。",
+      "unattributed": "未记录可归属于此运行的变更。"
     },
     "taskList": {
       "empty": "暂无任务。处理复杂请求时，Agent 会创建任务。",
@@ -1047,6 +1070,8 @@
       "localDirectory": "本地目录"
     },
     "executionPlacement": {
+      "reviewDevice": "设备设置",
+      "deviceApproval": "请在设备设置中选择目录并批准当前版本。",
       "targetLabel": "执行位置",
       "directoryUnavailable": "此目录在这台计算机上不可用。",
       "webLocalReadonly": "该会话在计算机上运行。网页端只能查看。"

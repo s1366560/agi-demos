@@ -495,7 +495,7 @@ export const TenantLayoutView: React.FC<ShellControls> = memo(
               onMobileMenuOpen={() => {
                 setMobileSidebarOpen(true);
               }}
-              projectId={projectId}
+              projectId={scope && !location.pathname.includes('/project/') ? params.projectId : projectId}
               onCommandPaletteOpen={() => {
                 setCommandPaletteOpen(true);
               }}
@@ -510,7 +510,7 @@ export const TenantLayoutView: React.FC<ShellControls> = memo(
               aria-label={isFullHeightPath ? undefined : t('common.pageContent')}
               tabIndex={isFullHeightPath ? undefined : 0}
             >
-              <div className={isFullHeightPath ? 'h-full' : 'max-w-full'}>
+              <div className={isFullHeightPath ? 'tenant-immersive-content h-full' : 'max-w-full'}>
                 <RouteErrorBoundary context="Tenant" fallbackPath="/tenant">
                   <Outlet />
                 </RouteErrorBoundary>

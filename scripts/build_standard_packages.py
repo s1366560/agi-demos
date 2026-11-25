@@ -33,6 +33,23 @@ def build_worker(package: Path, image: str, executable: str, signer: Ed25519Priv
             "entrypoint": executable,
         }
         (stage / config["worker"]).write_text(json.dumps(descriptor))
+        native_root = package / "desktop-sidecar" / "http"
+        if (native_root / "plugin.json").is_file():
+            native_config = json.loads((native_root / "plugin.json").read_bytes())
+            wasm = (native_root / native_config["wasm"]).resolve()
+            if not wasm.is_relative_to(native_root.resolve()):
+                raise ValueError("Native executable must be inside its package")
+            native_config["wasm"] = "native.wasm"
+            (stage / "native.wasm").write_bytes(wasm.read_bytes())
+            (stage / "native.json").write_text(json.dumps(native_config))
+            family = {
+                "kind": config["kind"],
+                "plugin_id": config["plugin_id"],
+                "version": config["version"],
+                "targets": {"python": "package.json", "desktop-sidecar": "native.json"},
+            }
+            (stage / "targets.json").write_text(json.dumps(family))
+            return build(stage / "targets.json", signer)
         return build(stage / "package.json", signer)
 
 

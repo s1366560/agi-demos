@@ -294,6 +294,20 @@ def test_multi_target_release_uses_one_signed_identity(tmp_path):
     changed = admit_package(build(spec, signer), (key,), frozenset({"tools.execute"}), None)
     assert changed.digest != package.digest
     assert changed.wasm == package.wasm
+    native_spec = tmp_path / root["targets"]["desktop-sidecar"]
+    config = json.loads(native_spec.read_bytes())
+    config["project_http_routes"] = {"GET": ["sandbox"], "POST": ["sandbox/desktop"]}
+    config["workspace_read_operations"] = ["text"]
+    native_spec.write_text(json.dumps(config))
+    routed = build(spec, signer)
+    route_grants = frozenset({"desktop.http.get.sandbox", "desktop.http.post.sandbox.desktop"})
+    route_grants |= {"device.workspace.read.text"}
+    approved = route_grants | {"tools.execute"}
+    assert admit_package(routed, (key,), approved, None).approved_permissions == approved
+    for required in route_grants:
+        with pytest.raises(ValueError, match="lacks approval"):
+            admit_package(routed, (key,), approved - {required}, None)
+
 
 
 def test_rich_release_binds_page_to_same_signed_device_tool(tmp_path):

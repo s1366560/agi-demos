@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from .compatibility import DEFAULT_RANGE, DESCRIPTOR, build_compatibility
 from .contract import ContributionDocument, parse_bound_slot_ui, parse_contribution, sha256_digest
 from .package_services import project_services
+from .project_http import route_permissions, workspace_permissions
 
 _QUOTAS = {
     "max_wasm_fuel": 1_000_000,
@@ -150,6 +151,8 @@ def _collect_contributions(
         files[f"ui/{item.path}"] = raw
     if contribution.pages:
         permissions.add("ui.slot")
+    if any(page.voice_authorization for page in contribution.pages):
+        permissions.add("ui.media.microphone")
     for page in contribution.pages:
         for asset in page.assets:
             files[f"pages/{asset.path}"] = asset.verify(_file(root, asset.path))
@@ -187,6 +190,12 @@ def build(config: Path, signer: Ed25519PrivateKey) -> bytes:
             children["python"],
             signer,
             device_archive=native,
+            device_routes=route_permissions(
+                "desktop-sidecar", children["desktop-sidecar"].get("project_http_routes")
+            )
+            | workspace_permissions(
+                "desktop-sidecar", children["desktop-sidecar"].get("workspace_read_operations")
+            ),
             device_tool=children["desktop-sidecar"]["tool_name"],
         )
     return _build_target(root, spec, signer)
@@ -198,6 +207,7 @@ def _build_target(
     signer: Ed25519PrivateKey,
     *,
     device_archive: bytes | None = None,
+    device_routes: set[str] | None = None,
     device_tool: str | None = None,
 ) -> bytes:
     if not isinstance(spec, dict) or spec.keys() - {
@@ -214,6 +224,8 @@ def _build_target(
         "compatibility",
         "services",
         "device_capability",
+        "project_http_routes",
+        "workspace_read_operations",
     }:
         raise ValueError("unknown package configuration field")
     plugin, version, target, tool = (
@@ -247,6 +259,11 @@ def _build_target(
     if device_archive is not None:
         files[device_path] = device_archive
     permissions, contribution = _collect_contributions(root, spec, files)
+    permissions.update(
+        workspace_permissions(target, spec.get("workspace_read_operations")),
+        route_permissions(target, spec.get("project_http_routes")),
+        device_routes or (),
+    )
     if "device_capability" in spec:
         from .device_capability import attach_device_capability
 

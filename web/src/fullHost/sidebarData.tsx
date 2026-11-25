@@ -2,33 +2,27 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 
+import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { ownerFor, rowNavigation } from './sidebarSlots';
+import { useSidebarSlot } from './useSidebarSlot';
 import { useWorkspaceSidebar } from './workspaceSidebar';
 import { useAuthStore } from '../stores/auth';
 import { useWebPackageSession } from '../projectPackages/useWebPackageSession';
 import { useFullNavigation } from './navigation';
 import type { SidebarConversation, SidebarData } from '../components/layout/TenantSidebarView';
-import {
-  packageBase,
-  packageScope,
-} from '../../../agi-stack/packages/plugin-marketplace-ui/src/pluginMarketTypes';
-
 const Sidebar = createContext<SidebarData | null>(null);
 export function useSignedSidebar() {
   const state = useContext(Sidebar);
   if (!state) throw new Error('Missing workbench sidebar');
   return state;
-}
-
-function unavailable(): Promise<never> {
-  return Promise.reject(new Error('package_command_unavailable'));
 }
 
 function row(value: unknown, project: string): SidebarConversation | null {
@@ -37,17 +31,35 @@ function row(value: unknown, project: string): SidebarConversation | null {
     !value ||
     !('id' in value) ||
     typeof value.id !== 'string' ||
-    !('title' in value) ||
-    typeof value.title !== 'string'
+    !('label' in value) ||
+    typeof value.label !== 'string' ||
+    ('hidden' in value && value.hidden === true)
   )
     return null;
   return {
     id: value.id,
-    title: value.title,
+    title: value.label,
     project_id: project,
-    ...('execution_target' in value &&
-    (value.execution_target === 'cloud' || value.execution_target === 'local')
-      ? { execution_target: value.execution_target }
+    slot: {
+      active: 'active' in value && value.active === true,
+      hidden: false,
+      ...('role' in value && typeof value.role === 'string' ? { role: value.role } : {}),
+    },
+    ...('updatedAt' in value && typeof value.updatedAt === 'string'
+      ? { updated_at: value.updatedAt }
+      : {}),
+    ...('createdAt' in value && typeof value.createdAt === 'string'
+      ? { created_at: value.createdAt }
+      : {}),
+    ...('group' in value && typeof value.group === 'string' ? { workspace_id: value.group } : {}),
+    ...('groupLabel' in value && typeof value.groupLabel === 'string'
+      ? { workspace_name: value.groupLabel }
+      : {}),
+    ...('child' in value && typeof value.child === 'string'
+      ? { linked_workspace_task_id: value.child }
+      : {}),
+    ...('target' in value && (value.target === 'cloud' || value.target === 'local')
+      ? { execution_target: value.target }
       : {}),
   };
 }
@@ -62,43 +74,37 @@ export function SignedSidebarProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const revision = useRef(0);
-  const release = items.find(
-    (i) =>
-      i.plugin === 'memstack-agent' && i.projectId === project && i.commands?.includes('chat-list')
+  const { pathname } = useLocation();
+  const release = ownerFor(items, project, 'rows', pathname);
+  const command = useSidebarSlot(tenant, project, release, transport);
+  const activeScope = useRef<typeof command | null>(null);
+  useLayoutEffect(() => {
+    activeScope.current = command;
+    return () => {
+      activeScope.current = null;
+    };
+  }, [command]);
+  const navigation = useMemo(
+    () => rowNavigation(release, tenant, project),
+    [release, tenant, project]
   );
-  const plugin = release?.plugin,
-    digest = release?.digest;
   const reset = useCallback(() => {
     revision.current++;
     setConversations([]);
     setBusy(false);
   }, []);
-  const command = useCallback(
-    async (id: string, name: string, payload: Record<string, unknown>, signal?: AbortSignal) => {
-      if (!token || !tenant || project !== id || !plugin || !digest)
-        throw new Error('package_command_unavailable');
-      return transport<Record<string, unknown>>(
-        packageBase(id) + '/' + encodeURIComponent(plugin) + '/commands',
-        {
-          method: 'POST',
-          body: { ...packageScope(tenant, id), expected_digest: digest, command_id: name, payload },
-          ...(signal ? { signal } : {}),
-        }
-      );
-    },
-    [token, tenant, project, plugin, digest, transport]
-  );
   const load = useCallback<SidebarData['loadConversations']>(
     async (id, options) => {
+      if (activeScope.current !== command) throw new Error('page_scope_expired');
       const seq = ++revision.current;
-      if (!plugin || !digest || project !== id) {
+      if (!release || project !== id) {
         setConversations([]);
         setBusy(false);
         return;
       }
       setBusy(true);
       try {
-        const { items: rows } = await command(id, 'chat-list', {}, options?.signal);
+        const { rows } = await command('rows', {}, options?.signal);
         if (seq !== revision.current || options?.signal?.aborted) return;
         const visible = (Array.isArray(rows) ? rows : [])
           .map((v) => row(v, id))
@@ -115,20 +121,21 @@ export function SignedSidebarProvider({ children }: { children: ReactNode }) {
         if (seq === revision.current) setBusy(false);
       }
     },
-    [command, project, plugin, digest]
+    [command, project, release]
   );
-  useEffect(() => {
+  useLayoutEffect(() => {
     reset();
     setActive(null);
     const controller = new AbortController();
-    if (project && digest) void load(project, { signal: controller.signal }).catch(() => {});
+    if (project && release) void load(project, { signal: controller.signal }).catch(() => {});
     return () => {
       revision.current++;
       controller.abort();
     };
-  }, [tenant, project, digest, load, reset]);
+  }, [tenant, project, release, load, reset]);
   const state = useMemo<SidebarData>(
     () => ({
+      navigation,
       conversations,
       conversationsLoading: busy,
       activeConversationId: active,
@@ -138,28 +145,44 @@ export function SignedSidebarProvider({ children }: { children: ReactNode }) {
       hasMoreConversations: false,
       loadMoreConversations: async () => {},
       ...workspace,
-      removeConversationLocal: () => {},
-      restoreConversationLocal: () => {},
-      canCreate: release?.commands?.includes('chat-create') ?? false,
-      canRename: release?.commands?.includes('chat-rename') ?? false,
-      canDelete: false,
-      createNewConversation: async (id) => {
-        const result = await command(id, 'chat-create', {
-          title: t('commandPalette.actions.newConversation', 'New conversation'),
+      removeConversationLocal: (id) => {
+        if (activeScope.current === command)
+          setConversations((previous) => previous.filter((row) => row.id !== id));
+      },
+      restoreConversationLocal: (row) => {
+        if (activeScope.current === command)
+          setConversations((previous) =>
+            previous.some((item) => item.id === row.id) ? previous : [row, ...previous]
+          );
+      },
+      canCreate: !!release?.commands?.includes(release.sidebar?.create?.command ?? ''),
+      canRename: !!release?.commands?.includes(release.sidebar?.rename?.command ?? ''),
+      canDelete: !!release?.commands?.includes(release.sidebar?.delete?.command ?? ''),
+      createNewConversation: async (id, group) => {
+        if (id !== project) throw new Error('page_scope_expired');
+        const result = await command('create', {
+          ...(group ? { group } : {}),
+          label: t('commandPalette.actions.newConversation', 'New conversation'),
         });
-        const created = row(result, id);
-        if (!created) throw new Error('invalid_conversation');
+        const created = result.rows[0];
+        if (!created || typeof created.id !== 'string') throw new Error('invalid_conversation');
         await load(id);
+        if (activeScope.current !== command) throw new Error('page_scope_expired');
         setActive(created.id);
         return created.id;
       },
       renameConversation: async (conversation, id, title) => {
-        await command(id, 'chat-rename', { conversation_id: conversation, title });
+        if (id !== project) throw new Error('page_scope_expired');
+        await command('rename', { id: conversation, label: title });
         await load(id);
       },
-      deleteConversation: unavailable,
+      deleteConversation: async (id, projectId) => {
+        if (projectId !== project) throw new Error('page_scope_expired');
+        await command('delete', { id });
+        await load(projectId);
+      },
     }),
-    [conversations, busy, active, load, reset, release, command, workspace, t]
+    [conversations, busy, active, load, reset, release, command, workspace, navigation, project, t]
   );
   return <Sidebar.Provider value={state}>{children}</Sidebar.Provider>;
 }

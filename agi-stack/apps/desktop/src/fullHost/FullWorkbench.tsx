@@ -13,6 +13,7 @@ import { messages } from '../packageHost/messages';
 import { transport } from '../packageHost/transport';
 import { HostSettings, type HostSettingsTab } from './HostSettings';
 import { matchPage, useInstalledPages } from './pages';
+import { useNavigationRows, type NavigationRow } from './useNavigationRows';
 import './style.css';
 
 function subscribe(listener: () => void) {
@@ -69,19 +70,18 @@ export function FullWorkbench({
   const base = '/tenant/' + encodeURIComponent(tenant);
   const market = base + '/plugins';
   const root = hash === '' || hash === '/';
-  const newTaskPath = base + '/agent-workspace';
-  const newTask = matchPage(entries, tenant, newTaskPath);
+  const newTask = entries.find(
+    (entry) => entry.enabled && entry.page.navigation_actions?.includes('primary-create') && entry.path,
+  )?.path;
   const home = entries.find((entry) => entry.page.home && entry.path);
-  const address = root ? (home?.path ?? (newTask ? newTaskPath : '')) : hash;
+  const address = root ? (home?.path ?? newTask ?? '') : hash;
   const inMarket = hash.split('?')[0] === market;
   const selected = matchPage(entries, tenant, address);
-  const createWorkspace =
-    project &&
-    matchPage(
-      entries,
-      tenant,
-      base + '/project/' + encodeURIComponent(project) + '/workspaces/new',
-    );
+  const rowsOwner = selected?.page.sidebar?.rows ? selected : entries.find(entry => entry.enabled && entry.page.sidebar?.rows);
+  const rowsSlot = useNavigationRows(tenant, project, rowsOwner, address);
+  const createWorkspace = entries.find(
+    (entry) => entry.enabled && entry.page.navigation_actions?.includes('group-create') && entry.path,
+  )?.path;
   const tenantName =
     session?.tenants.find((item) => item.id === tenant)?.name ??
     memberships.find((item) => item.tenant_id === tenant)?.name ??
@@ -154,6 +154,9 @@ export function FullWorkbench({
         entry.pluginId,
         () => navigate(entry.path!),
       );
+  for (const row of rowsSlot.rows) {
+    item(JSON.stringify([rowsOwner?.pluginId, row.id]), row.label, rowsOwner!.page.title, () => navigate(row.path));
+  }
   const primary = entries.filter(
     (entry) => entry.path && (entry.page.workbench || entry.page.home),
   );
@@ -182,14 +185,11 @@ export function FullWorkbench({
           onNavigate={() => navigate('')}
           onOpenFeatureDirectory={openDirectory}
           onOpenSearch={() => openDirectory()}
-          onCreateWorkspace={
-            createWorkspace
-              ? () =>
-                  navigate(base + '/project/' + encodeURIComponent(project!) + '/workspaces/new')
-              : undefined
-          }
+          onCreateWorkspace={createWorkspace ? () => navigate(createWorkspace) : undefined}
           newTaskDisabledReason={newTask ? null : t('desktopProductionRouter.unavailable.title')}
-          onNewTask={() => navigate(base + '/agent-workspace')}
+          onNewTask={() => {
+            if (newTask) navigate(newTask);
+          }}
           onOpenAccountSettings={() => setSettings('account')}
           onSwitchWorkspace={() => setSettings('workspace')}
           onSignOut={signOut}
@@ -206,6 +206,9 @@ export function FullWorkbench({
                   <span>{entry.page.title}</span>
                 </button>
               ))}
+              {rowsSlot.error && <p role="alert">{rowsSlot.error}</p>}
+              <NavigationGroups key={JSON.stringify([tenant, project, rowsOwner?.pluginId])}
+                rows={rowsSlot.rows} address={address}/>
             </nav>
           }
         />
@@ -264,7 +267,9 @@ export function FullWorkbench({
                 {loading ? (
                   <p role="status">{messages.loading}</p>
                 ) : tenant ? (
-                  <button type="button" onClick={() => navigate(market)}>
+                  <button type="button" onClick={() =>
+                    navigate(root ? market : market + '?' + new URLSearchParams({ returnTo: address }))
+                  }>
                     {t('nav.plugins')}
                   </button>
                 ) : (
@@ -309,4 +314,21 @@ export function FullWorkbench({
       )}
     </div>
   );
+}
+
+function NavigationGroups({ rows, address }: { rows: NavigationRow[]; address: string }) {
+  const groups = new Map<string | null, NavigationRow[]>();
+  for (const row of rows) {
+    const siblings = groups.get(row.group);
+    if (siblings) siblings.push(row);
+    else groups.set(row.group, [row]);
+  }
+  return Array.from(groups, ([id, entries]) => {
+    const buttons = entries.map(row =>
+      <button key={row.path} type="button" aria-current={address === row.path ? 'page' : undefined}
+        onClick={() => navigate(row.path)}><span>{row.label}</span></button>
+    );
+    if (id === null) return buttons;
+    return <details key={id} open><summary>{entries[0]?.groupLabel || id}</summary>{buttons}</details>;
+  });
 }

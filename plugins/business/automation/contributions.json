@@ -514,6 +514,69 @@
         "app.automation.verdicts.read"
       ],
       "payload": {}
+    },
+    {
+      "id": "read-events",
+      "host_operation": "app.automation.events.read",
+      "permissions": [
+        "app.automation.events.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "event-types",
+      "host_operation": "app.automation.events.types",
+      "permissions": [
+        "app.automation.events.types"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "list-webhooks",
+      "host_operation": "app.automation.webhooks.read",
+      "permissions": [
+        "app.automation.webhooks.read"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "create-webhook",
+      "host_operation": "app.automation.webhooks.create",
+      "permissions": [
+        "app.automation.webhooks.create"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "update-webhook",
+      "host_operation": "app.automation.webhooks.update",
+      "permissions": [
+        "app.automation.webhooks.update"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "delete-webhook",
+      "host_operation": "app.automation.webhooks.delete",
+      "permissions": [
+        "app.automation.webhooks.delete"
+      ],
+      "payload": {},
+      "accepts_input": true
+    },
+    {
+      "id": "schedule-conversations",
+      "host_operation": "app.automation.conversations.read",
+      "permissions": [
+        "app.automation.conversations.read"
+      ],
+      "payload": {},
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -535,7 +598,9 @@
       "id": "workflow",
       "title": "Schedule workflow",
       "routes": [
-        "/automation"
+        "/automation",
+        "/tenant/:tenantId/project/:projectId/automation",
+        "/project/:projectId/automation"
       ],
       "targets": [
         "web",
@@ -543,7 +608,7 @@
       ],
       "entry": {
         "path": "ui/workflow.js",
-        "digest": "sha256:b937a7bd28df6ce40d885d3976eaf677514434f332b413ff0e68283584218025"
+        "digest": "sha256:ff5256fd54f34648585638098726ef8a2a28744ca02c4143c398a3e617eb4a54"
       },
       "commands": [
         "run-workflow",
@@ -551,7 +616,11 @@
         "list-workflows",
         "execute-workflow"
       ],
-      "device_tools": []
+      "device_tools": [],
+      "query_params": [
+        "workflow",
+        "revision"
+      ]
     },
     {
       "id": "playbooks",
@@ -561,11 +630,12 @@
         "/tenant/:tenantId/project/:projectId/playbooks"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "entry": {
         "path": "ui/playbooks-web.js",
-        "digest": "sha256:7fbbef4e67cd47de0ea0942229980b0829deb597f86c19e43c1a44738e081756"
+        "digest": "sha256:3e73fb3057aa15c3628fbe7384a4855020b57b9fc2b4a96ce60fa4c99cc3c8f2"
       },
       "commands": [
         "list-playbooks",
@@ -576,27 +646,6 @@
         "path": "ui/playbooks-web.css",
         "digest": "sha256:37bcb83a78e3be3ba5622e81964c6176580fe2595ef32470da3935434d720522"
       },
-      "workbench": true
-    },
-    {
-      "id": "playbooks",
-      "title": "Project playbooks",
-      "routes": [
-        "/playbooks",
-        "/tenant/:tenantId/project/:projectId/playbooks"
-      ],
-      "targets": [
-        "desktop-renderer"
-      ],
-      "entry": {
-        "path": "ui/playbooks-desktop.js",
-        "digest": "sha256:b5e019c97c8edf2baed7d5853641a15c18308fa599d0b6a0de10228b6fa59693"
-      },
-      "commands": [
-        "list-playbooks",
-        "list-verdicts"
-      ],
-      "device_tools": [],
       "workbench": true
     },
     {
@@ -612,20 +661,29 @@
       ],
       "entry": {
         "path": "ui/cron-jobs.js",
-        "digest": "sha256:a55bb4cdf7887c325adb4e9c24b7429d1a186ba3f22ecc0b26c6b036ffe42b47"
+        "digest": "sha256:103a0b13979b7de7e0d49d6e4ee79fc745740c1ce580a5428aab6006416de32e"
       },
       "commands": [
         "list-schedules",
         "save-schedule",
         "run-schedule",
-        "delete-schedule"
+        "delete-schedule",
+        "schedule-conversations"
       ],
       "device_tools": [],
       "style": {
         "path": "ui/cron-jobs.css",
         "digest": "sha256:7d380871b1400ac64fb1442ee3c03147c5518b69f78eeee48cd76cc5f5974170"
       },
-      "workbench": true
+      "workbench": true,
+      "query_params": [
+        "panel",
+        "job",
+        "runsPage"
+      ],
+      "page_links": [
+        "memstack-agent/chat"
+      ]
     },
     {
       "id": "workflow-patterns",
@@ -640,7 +698,7 @@
       ],
       "entry": {
         "path": "ui/workflow-patterns.js",
-        "digest": "sha256:173098764be4a936ac7354d0a6c6efad54d23278aa8711aefb773cb37f0d22c8"
+        "digest": "sha256:0ca4adc2868021e666a2d05d36b85278de3568c2db57dc7e59d44a88c8e8a482"
       },
       "style": {
         "path": "ui/workflow-patterns.css",
@@ -651,6 +709,64 @@
         "delete-pattern"
       ],
       "device_tools": []
+    },
+    {
+      "id": "events",
+      "title": "Events",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/events"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-activity.js",
+        "digest": "sha256:855738aeceffe533c9edc007b90216bf74091f2981211c8c996ae6ed320cc749"
+      },
+      "style": {
+        "path": "ui/tenant-activity.css",
+        "digest": "sha256:e5b352de54f2be43f9310c1fa9ca5fcdaf0372b292917b872d5baf528937daf3"
+      },
+      "commands": [
+        "read-events",
+        "event-types"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "page",
+        "type"
+      ]
+    },
+    {
+      "id": "webhooks",
+      "title": "Webhooks",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/webhooks"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-activity.js",
+        "digest": "sha256:855738aeceffe533c9edc007b90216bf74091f2981211c8c996ae6ed320cc749"
+      },
+      "style": {
+        "path": "ui/tenant-activity.css",
+        "digest": "sha256:e5b352de54f2be43f9310c1fa9ca5fcdaf0372b292917b872d5baf528937daf3"
+      },
+      "commands": [
+        "event-types",
+        "list-webhooks",
+        "create-webhook",
+        "update-webhook",
+        "delete-webhook"
+      ],
+      "device_tools": [],
+      "query_params": []
     }
   ],
   "storage": {

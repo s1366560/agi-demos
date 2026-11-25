@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ClarificationForm } from "../desktop/chat/ClarificationForm";
 import type { PendingRequest } from "./useInteractions";
 import { useTranslation } from "react-i18next";
@@ -90,11 +90,17 @@ export function InteractionPanel({
   active,
   enabled,
   desktop,
+  section = "all",
+  emptyCanvas,
+  emptyActivity,
 }: {
   conversation: string;
   active: boolean;
   enabled: boolean;
   desktop: boolean;
+  section?: "all" | "canvas" | "activity";
+  emptyCanvas?: ReactNode;
+  emptyActivity?: ReactNode;
 }) {
   const { t } = useTranslation();
   const { events, requests, respond, failure } = useInteractions(
@@ -117,7 +123,8 @@ export function InteractionPanel({
   return (
     <>
       {failure && <div role="alert">{failure}</div>}
-      {desktop ? (
+      {!failure && !events.length && !requests.length && emptyActivity}
+      {section !== "canvas" && (desktop ? (
         <ToolActivityList
           items={tools}
           t={(key, params) =>
@@ -153,8 +160,9 @@ export function InteractionPanel({
             )}
           </details>
         ))
-      )}
-      {[...blocks.entries()].map(([id, block]) => {
+      ))}
+      {section === "canvas" && blocks.size === 0 && emptyCanvas}
+      {section !== "activity" && [...blocks.entries()].map(([id, block]) => {
         const request = requests.find(
           (r) => r.request_type === "a2ui_action" && r.block_id === id,
         );
@@ -186,7 +194,7 @@ export function InteractionPanel({
           </section>
         );
       })}
-      {requests
+      {section !== "canvas" && requests
         .filter((r) => r.request_type !== "a2ui_action")
         .map((r) => {
           const type = r.request_type;

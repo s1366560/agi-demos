@@ -30,6 +30,7 @@ PERMISSIONS = frozenset(
         "skills.register",
         "subagents.register",
         "ui.slot",
+        "ui.media.microphone",
         "storage.read",
         "storage.write",
     }
@@ -90,6 +91,7 @@ class UiContribution:
 
 @dataclass(frozen=True, kw_only=True)
 class CommandContribution:
+    scope: str = "shared"
     accepts_input: bool = False
     command_id: str
     host_operation: str | None = None
@@ -182,6 +184,11 @@ def parse_contribution(payload: dict[str, Any]) -> ContributionDocument:
         pages = parse_rich_pages(payload.get("pages", []), {c.command_id for c in commands})
     except ValueError as error:
         raise ContractError("rich_page", str(error)) from error
+    scopes = {command.command_id: command.scope for command in commands}
+    if len(scopes) != len(commands):
+        raise ContractError("command", "duplicate command id")
+    if any(scopes[key] not in ("shared", page.scope) for page in pages for key in page.commands):
+        raise ContractError("rich_page", "command unavailable in page installation scope")
     return ContributionDocument(
         pages=pages,
         tools=tools,
@@ -328,10 +335,14 @@ def _command(value: object) -> CommandContribution:
         raise ContractError("command", "command id or tool is invalid")
     if not isinstance(payload, dict):
         raise ContractError("command", "command payload must be an object")
+    scope = value.get("scope", "shared")
+    if scope not in ("project", "tenant", "shared"):
+        raise ContractError("command", "unknown command installation scope")
     accepts_input = value.get("accepts_input", False)
     if not isinstance(accepts_input, bool):
         raise ContractError("command", "accepts_input must be boolean")
     return CommandContribution(
+        scope=scope,
         accepts_input=accepts_input,
         command_id=command_id,
         host_operation=operation,

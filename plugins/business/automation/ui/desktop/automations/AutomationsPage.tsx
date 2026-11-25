@@ -21,8 +21,8 @@ import { AutomationDetail } from './AutomationDetail';
 import {
   automationRunAttemptKey,
   settleAutomationRunAttempt,
-  type DesktopAutomationApi,
-} from './automationClient';
+} from './automationRunAttempt';
+import type { DesktopAutomationApi } from './automationClient';
 import {
   automationActionAvailability,
   automationCapabilityReasonCode,
@@ -42,7 +42,9 @@ type AutomationsPageProps = {
   projectId: string;
   projectName?: string | null;
   conversations?: readonly AutomationConversationChoice[];
-  runCapability: DesktopCapabilityView;
+  runCapability: Pick<DesktopCapabilityView, 'available' | 'reason_code'>;
+  bookmark?: { job: string | null; panel: string | null };
+  onBookmark?: (job: string | null, panel: string | null) => void;
   onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
   onOpenConversation?: (choice: AutomationConversationChoice) => void;
@@ -54,19 +56,22 @@ export function AutomationsPage({
   projectName,
   conversations = EMPTY_AUTOMATION_CONVERSATIONS,
   runCapability,
+  bookmark,
+  onBookmark,
   onOpenConversation,
   onOpenProjectSettings,
 }: AutomationsPageProps) {
   const { locale, t } = useI18n();
   const [jobs, setJobs] = useState<AutomationJob[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState('');
+  const [selectedJobId, setSelectedJobId] = useState(bookmark?.job ?? '');
   const [runs, setRuns] = useState<AutomationRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [runsLoading, setRunsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [runsError, setRunsError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<AutomationCapabilities | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(bookmark?.panel === 'create');
+  const restoreEdit = useRef(bookmark?.panel === 'edit' ? bookmark.job : null);
   const [editorJob, setEditorJob] = useState<AutomationJob | null>(null);
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -95,6 +100,12 @@ export function AutomationsPage({
       try {
         const response = await api.listAutomations(projectId, signal);
         setJobs(response.items);
+        const restored = restoreEdit.current && response.items.find((item) => item.id === restoreEdit.current);
+        if (restored) {
+          restoreEdit.current = null;
+          setEditorJob(restored);
+          setEditorOpen(true);
+        }
         setSelectedJobId((current) =>
           response.items.some((job) => job.id === current)
             ? current
@@ -173,9 +184,10 @@ export function AutomationsPage({
         : null;
   };
 
-  const setEditorOpenWithFocusReturn = (open: boolean) => {
+  const setEditorOpenWithFocusReturn = (open: boolean, activeJob = selectedJob?.id ?? null) => {
     setEditorOpen(open);
     if (open) return;
+    onBookmark?.(activeJob, null);
     const target = editorFocusReturnRef.current;
     editorFocusReturnRef.current = null;
     if (!target) return;
@@ -189,6 +201,7 @@ export function AutomationsPage({
   };
 
   const openCreate = () => {
+    onBookmark?.(selectedJob?.id ?? null, 'create');
     rememberEditorFocusReturn();
     setEditorJob(null);
     setMutationError(null);
@@ -196,6 +209,7 @@ export function AutomationsPage({
   };
 
   const openEdit = (job: AutomationJob) => {
+    onBookmark?.(job.id, 'edit');
     rememberEditorFocusReturn();
     setEditorJob(job);
     setMutationError(null);
@@ -229,7 +243,7 @@ export function AutomationsPage({
           : [saved, ...current];
       });
       setSelectedJobId(saved.id);
-      setEditorOpenWithFocusReturn(false);
+      setEditorOpenWithFocusReturn(false, saved.id);
     } catch (caught) {
       setMutationError(caught instanceof Error ? caught.message : String(caught));
       if (caught instanceof DesktopApiError && caught.status === 409) void loadJobs();
@@ -282,6 +296,7 @@ export function AutomationsPage({
       );
       setJobs((current) => current.filter((item) => item.id !== job.id));
       setSelectedJobId('');
+      onBookmark?.(null, null);
     } catch (caught) {
       setMutationError(caught instanceof Error ? caught.message : String(caught));
       if (caught instanceof DesktopApiError && caught.status === 409) void loadJobs();
@@ -405,7 +420,7 @@ export function AutomationsPage({
                 key={job.id}
                 job={job}
                 selected={job.id === selectedJob?.id}
-                onSelect={() => setSelectedJobId(job.id)}
+                onSelect={() => { setSelectedJobId(job.id); onBookmark?.(job.id, null); }}
               />
             ))}
           </div>

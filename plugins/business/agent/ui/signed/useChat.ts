@@ -11,8 +11,14 @@ export interface Conversation {
   id: string;
   title: string;
   execution_target: Target;
+  workspace_id?: string;
+  local_root_label?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 export interface Message {
+  timestamp?: number;
+  eventTimeUs?: number;
   files?: MessageFile[];
   id: string;
   role: 'user_message' | 'assistant_message';
@@ -33,7 +39,10 @@ export function useChat(scope: RichPageContext) {
   const local = scope.platform === 'desktop-renderer';
   const hasDevice = local && scope.deviceTools.includes('local_chat');
   const [list, setList] = useState<Conversation[]>([]);
-  const linked = scope.pathname.match(/\/(?:agent-workspace|agent\/chat)\/([^/]+)\/?$/)?.[1];
+  const query = new URLSearchParams(scope.search);
+  const workspace = query.get('workspaceId');
+  const segment = scope.pathname.match(/\/(?:agent-workspace|agent\/chat)\/([^/]+)\/?$/)?.[1];
+  const linked = query.get('conversationId') || (segment ? decodeURIComponent(segment) : null);
   const [selected, setSelected] = useState(linked ?? '');
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
@@ -114,11 +123,21 @@ export function useChat(scope: RichPageContext) {
   }
   useEffect(() => {
     const controller = new AbortController();
-    void command<{ items: Conversation[] }>('chat-list', {}, { signal: controller.signal })
+    void command<{ items: Conversation[] }>(
+      'chat-list',
+      {
+        workbench: true,
+        ...(linked ? { conversation_id: linked } : {}),
+        ...(workspace ? { workspace_id: workspace } : {}),
+      },
+      { signal: controller.signal }
+    )
       .then(({ items }) => {
         if (controller.signal.aborted) return;
         setList(items);
-        const id = linked || items[0]?.id;
+        if (linked && !items.some((row) => row.id === linked))
+          throw new Error('conversation_unavailable');
+        const id = linked;
         if (id) {
           setSelected(id);
           return read(id, undefined, items.find((row) => row.id === id)?.execution_target);
@@ -135,7 +154,7 @@ export function useChat(scope: RichPageContext) {
       controller.abort();
       revision.current++;
     };
-  }, [linked, scope.projectId, scope.tenantId]);
+  }, [linked, workspace, scope.projectId, scope.tenantId]);
 
   async function perform(action: () => Promise<void>) {
     if (locked.current) return;
@@ -154,6 +173,7 @@ export function useChat(scope: RichPageContext) {
   async function createRow() {
     const row = await command<Conversation>('chat-create', {
       title: heading,
+      ...(workspace ? { workspace_id: workspace } : {}),
       ...(local && target === 'local' ? { execution_target: 'local' } : {}),
     });
     revision.current++;
@@ -168,8 +188,17 @@ export function useChat(scope: RichPageContext) {
   function create() {
     return perform(async () => {
       const row = await createRow();
+      await sdk.navigate(conversationPath(row.id));
       await read(row.id);
     });
+  }
+  function conversationPath(id: string) {
+    const tenantRoute = scope.pathname.match(/^\/tenant\/[^/]+\/agent-workspace(?:\/|$)/);
+    const base = tenantRoute ? tenantRoute[0].replace(/\/$/, '') : '/agent/chat';
+    const query = new URLSearchParams(scope.search);
+    query.delete('conversationId');
+    const search = query.toString();
+    return base + '/' + encodeURIComponent(id) + (search ? '?' + search : '');
   }
   function rename(title: string) {
     return perform(async () => {
@@ -182,21 +211,29 @@ export function useChat(scope: RichPageContext) {
       );
     });
   }
-  function attach(file: File) {
+  function attachFiles(items: File[]) {
     return perform(async () => {
+      if (!items.length) return;
+      if (files.length + items.length > 10)
+        throw new Error(label('Attach up to 10 files.', '最多可添加 10 个附件。'));
       const row = selectedRow ?? (await createRow());
       if (row.execution_target !== 'cloud')
         throw new Error(label('Select a cloud conversation', '请选择云端会话'));
-      const item = await uploadAttachment(row.id, file, (payload) =>
-        command('chat-upload', payload)
-      );
-      setFiles((old) => [...old, item]);
+      for (const file of items) {
+        const item = await uploadAttachment(row.id, file, (payload) =>
+          command('chat-upload', payload)
+        );
+        setFiles((old) => [...old, item]);
+      }
     });
   }
-  function send(prompt?: string) {
+  function attach(file: File) {
+    return attachFiles([file]);
+  }
+  function send(prompt?: string, skill?: string) {
     return perform(async () => {
       const text = (prompt ?? draft).trim();
-      if (!text) return;
+      if (!text || ((selectedRow?.execution_target ?? target) === 'local' && !hasDevice)) return;
       const row = selectedRow ?? (await createRow());
       if (row.execution_target === 'local' && !hasDevice) {
         throw new Error(
@@ -237,13 +274,19 @@ export function useChat(scope: RichPageContext) {
           const id = crypto.randomUUID();
           setMessages((old) => [
             ...old,
-            { id: crypto.randomUUID(), role: 'user_message', content: text, files },
+            {
+              id: crypto.randomUUID(),
+              role: 'user_message',
+              content: text,
+              files,
+            },
           ]);
           await command(
             files.length ? 'chat-attached-turn' : 'chat-turn',
             {
               conversation_id: conversation,
               message: text,
+              ...(skill ? {forced_skill_name:skill} : {}),
               ...(files.length ? { attachment_ids: files.map((file) => file.id) } : {}),
               message_id: crypto.randomUUID(),
             },
@@ -289,6 +332,7 @@ export function useChat(scope: RichPageContext) {
         setStopping(false);
       }
       await read(conversation);
+      if (!linked) await sdk.navigate(conversationPath(conversation), { replace: true });
     });
   }
   async function stop() {
@@ -325,20 +369,21 @@ export function useChat(scope: RichPageContext) {
     }
   }
   function choose(id: string) {
-    if (!busy)
-      void perform(async () => {
-        await sdk.navigate('/agent/chat/' + encodeURIComponent(id));
-        setSelected(id);
-        setMessages([]);
-        setFiles([]);
-        setDraft('');
-        await read(id);
-      });
+    if (busy || selected === id) return;
+    void perform(async () => {
+      await sdk.navigate(conversationPath(id));
+      setSelected(id);
+      setMessages([]);
+      setFiles([]);
+      setDraft('');
+      await read(id);
+    });
   }
   return {
     label,
     files,
     attach,
+    attachFiles,
     removeFile: (id: string) => setFiles((old) => old.filter((file) => file.id !== id)),
     list,
     selected,

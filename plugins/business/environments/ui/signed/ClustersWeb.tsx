@@ -3,10 +3,12 @@ import { createInstance } from 'i18next';
 import { createRoot } from 'react-dom/client';
 import { I18nextProvider } from 'react-i18next';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { ClusterDetail } from '../web/tenant/ClusterDetail';
 import { ClusterList } from '../web/tenant/ClusterList';
 import en from '../web/locales/en-US.json';
 import zh from '../web/locales/zh-CN.json';
 import { clusterService } from './clusterService';
+import { OrgClustersView } from '../web/tenant/org-settings/OrgClustersView';
 
 async function mount() {
   const host = window.memstack;
@@ -23,19 +25,34 @@ async function mount() {
   const router = createMemoryRouter(
     [
       {
-        path: context.pathname,
-        element: <ClusterList loadEditableCluster={clusterService.getEditable} />,
+        path: '/tenant/:tenantId/org-settings/clusters',
+        element: <OrgClustersView tenantId={context.tenantId} />,
       },
+      ...['/tenant/:tenantId/clusters', '/tenant/:tenantId/environments/clusters'].map((path) => ({
+        path,
+        children: [
+          {
+            index: true,
+            element: <ClusterList loadEditableCluster={clusterService.getEditable} />,
+          },
+          {
+            path: ':clusterId',
+            element: <ClusterDetail loadEditableCluster={clusterService.getEditable} />,
+          },
+        ],
+      })),
       { path: '*', element: null },
     ],
-    { initialEntries: [context.pathname + context.search] }
+    { initialEntries: [context.pathname + context.search + context.hash] }
   );
-  let current = context.pathname + context.search;
+  let current = context.pathname + context.search + context.hash;
   router.subscribe(({ location }) => {
-    const next = location.pathname + location.search;
+    const next = location.pathname + location.search + location.hash;
     if (current !== next) {
       current = next;
-      void host.navigate(next, { replace: location.pathname === context.pathname });
+      void host.navigate(next, {
+        replace: location.pathname === context.pathname,
+      });
     }
   });
   createRoot(document.getElementById('root')!).render(

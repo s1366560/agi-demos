@@ -20,6 +20,7 @@ export interface CronJobFormProps {
   onSubmit: (values: CronJobCreate | CronJobUpdate) => Promise<void>;
   initialData?: CronJobResponse | null;
   isSubmitting?: boolean;
+  conversations?: readonly { id: string; title: string }[];
 }
 
 const toFiniteNumber = (value: unknown): number | undefined => {
@@ -140,10 +141,12 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
   onSubmit,
   initialData,
   isSubmitting = false,
+  conversations,
 }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
   const scheduleKind = Form.useWatch(['schedule', 'kind'], form) as string | undefined;
+  const conversationMode = Form.useWatch('conversation_mode', form);
   const payloadKind = Form.useWatch(['payload', 'kind'], form) as string | undefined;
 
   useEffect(() => {
@@ -158,6 +161,7 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
           payload: initialData.payload,
           delivery: initialData.delivery,
           conversation_mode: initialData.conversation_mode,
+          conversation_id: initialData.conversation_id,
           stagger_seconds: initialData.stagger_seconds,
           timeout_seconds: initialData.timeout_seconds,
           max_retries: initialData.max_retries,
@@ -387,6 +391,16 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
             ]}
           />
         </Form.Item>
+
+        {conversations && conversationMode === 'reuse' && (
+          <Form.Item name="conversation_id" label={t('project.cronJobs.boundConversation')}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              options={conversations.map(({ id, title }) => ({ value: id, label: title }))}
+            />
+          </Form.Item>
+        )}
 
         <Form.Item name={['delivery', 'kind']} label={t('project.cronJobs.formDeliveryMethod')}>
           <Select

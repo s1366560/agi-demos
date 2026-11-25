@@ -256,6 +256,7 @@ async fn followup_http_provider_wire_contains_previous_user_and_answer() {
     server.abort();
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn display_content_is_persisted_while_provider_receives_raw_planning_prompt() {
     let state = test_state("display-test");
@@ -306,6 +307,7 @@ fn display_content_http_schema_rejects_non_string_blank_and_oversized_values() {
     assert!(serde_json::from_value::<RunConversationBody>(json!({"message":"legacy"})).is_ok());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn display_content_websocket_validates_and_persists_explicit_user_text() {
     use futures_util::{SinkExt, StreamExt};
@@ -422,31 +424,37 @@ async fn assert_websocket_client_turn_identity(first_http: bool, changed_field: 
     }
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn websocket_client_turn_replay_after_completion_does_not_execute_again() {
     assert_websocket_client_turn_identity(false, None, false).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn websocket_client_turn_replay_after_http_completion_does_not_execute_again() {
     assert_websocket_client_turn_identity(true, None, false).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn websocket_client_turn_same_id_different_display_is_a_conflict() {
     assert_websocket_client_turn_identity(false, Some("display_content"), false).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn websocket_client_turn_same_id_different_raw_content_is_a_conflict() {
     assert_websocket_client_turn_identity(false, Some("message"), false).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn websocket_client_turn_can_be_replayed_through_http_without_execution() {
     assert_websocket_client_turn_identity(false, None, true).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn websocket_client_turn_invalid_message_ids_have_no_side_effects() {
     use futures_util::{SinkExt, StreamExt};
@@ -480,6 +488,7 @@ async fn websocket_client_turn_invalid_message_ids_have_no_side_effects() {
     server.abort();
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn websocket_client_turn_conflict_does_not_overwrite_execution_selection() {
     assert_websocket_client_turn_identity(false, Some("agent_id"), false).await;

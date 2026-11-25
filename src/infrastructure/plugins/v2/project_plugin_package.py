@@ -1,6 +1,7 @@
 """Admit a closed publisher archive to the project business runtime."""
 
 import json
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from jsonschema import Draft202012Validator
@@ -23,7 +24,9 @@ from src.domain.model.plugins.generated_v2 import (
 )
 from src.infrastructure.plugins.sdk_path import ensure_plugin_sdk_path
 from src.infrastructure.plugins.v2.bundle_archive import (
+    BundleArchiveV2Error,
     VerifiedBundleArchiveV2,
+    declared_bundle_permissions_v2,
     parse_bundle_archive_v2,
 )
 from src.infrastructure.plugins.v2.plugin_namespace_store_v2 import SUPPORTED_SCHEMA_VERSION
@@ -46,6 +49,39 @@ if TYPE_CHECKING:
 
 
 def admit_package(
+    raw: bytes, keys: tuple[str, ...], approved: frozenset[str], binding: TenantBindingV2 | None
+) -> SignedPackageBytesV2:
+    if not isinstance(binding, ScopeBindingV2):
+        return _verify_package(raw, keys, approved, binding)
+    signed_permissions = declared_bundle_permissions_v2(raw)
+    package = _verify_package(raw, keys, signed_permissions, binding)
+    source = package.contribution
+    commands = tuple(command for command in source.commands if command.scope != "tenant")
+    pages = tuple(page for page in source.pages if page.scope == "project")
+    project = replace(source, commands=commands, pages=pages)
+    exclusively_tenant = frozenset(
+        permission
+        for command in source.commands
+        if command.scope == "tenant"
+        for permission in command.permissions
+    ) - declared_permissions(project)
+    # Device permissions belong to the nested signed target, even if a tenant command
+    # also names one. Only application operation names may be scoped out at this boundary.
+    removable = exclusively_tenant & {
+        command.host_operation for command in source.commands if command.host_operation
+    }
+    missing = signed_permissions - removable - approved
+    if missing:
+        raise BundleArchiveV2Error(
+            "bundle_permission_not_approved",
+            f"project package lacks approval for {', '.join(sorted(missing))}",
+        )
+    return replace(
+        package, contribution=project, approved_permissions=package.approved_permissions - removable
+    )
+
+
+def _verify_package(
     raw: bytes, keys: tuple[str, ...], approved: frozenset[str], binding: TenantBindingV2 | None
 ) -> SignedPackageBytesV2:
     from memstack_plugin_sdk.compatibility import DESCRIPTOR, require_compatible
@@ -77,7 +113,7 @@ def admit_package(
     kind = json.loads(artifacts.get("release-kind.json", b'{"kind":"business"}'))
     if kind not in ({"kind": "business"}, {"kind": "adapter"}):
         raise OptionalBusinessError("invalid_package", "invalid release kind")
-    targets, device_tool, device_permission = _device_target(artifacts, plugin, keys)
+    targets, device_tool, device_permissions = _device_target(artifacts, plugin, keys, approved)
     require_compatible(artifacts.get(DESCRIPTOR))
     wasm, worker = _executable(archive, plugin, module, artifacts, binding)
     if "contributions.json" not in artifacts:
@@ -89,8 +125,8 @@ def admit_package(
     validate_device_tools(contribution.pages, device_tool)
     files = _ui_files(contribution, artifacts)
     entry = _bound_entry(bundle, plugin, binding)
-    granted = _package_grants(plugin, entry, approved, contribution, device_permission)
-    if device_permission and device_permission not in granted:
+    granted = _package_grants(plugin, entry, approved, contribution, device_permissions)
+    if not device_permissions <= granted:
         raise OptionalBusinessError("forbidden", "device host capability requires approval")
     _check_loop_driver(granted, contribution, worker is not None)
     if chat_grants := granted.intersection(CHAT_ADAPTER_GRANTS):
@@ -137,14 +173,19 @@ def admit_package(
 
 
 def _device_target(
-    artifacts: dict[str, bytes], plugin: PluginManifestV2, keys: tuple[str, ...]
-) -> tuple[tuple[str, ...], object, str | None]:
+    artifacts: dict[str, bytes],
+    plugin: PluginManifestV2,
+    keys: tuple[str, ...],
+    approved: frozenset[str],
+) -> tuple[tuple[str, ...], object, frozenset[str]]:
     from memstack_plugin_sdk.device_capability import (
         DESCRIPTOR as DEVICE_DESCRIPTOR,
         LOCAL_CHAT,
         device_capability_tool,
     )
+    from memstack_plugin_sdk.project_http import is_route_permission, is_workspace_permission
 
+    device_permissions: frozenset[str] = frozenset()
     targets: tuple[str, ...] = ("python",)
     device_tool: object = None
     device_bytes = artifacts.get("targets/desktop-sidecar.mspkg")
@@ -153,7 +194,12 @@ def _device_target(
             device_bytes,
             source="device-target",
             trusted_public_keys=keys,
-            approved_permissions=frozenset({"tools.execute"}),
+            approved_permissions=frozenset(
+                p
+                for p in plugin.permissions
+                if p in approved
+                and (p == "tools.execute" or is_route_permission(p) or is_workspace_permission(p))
+            ),
             require_signature=True,
         ).manifest
         if (
@@ -169,18 +215,25 @@ def _device_target(
             raise OptionalBusinessError("invalid_package", "invalid device release target")
         if len(native.layers) != 1 or len(native.layers[0].entries) != 1:
             raise OptionalBusinessError("invalid_package", "expected one device module entry")
-        device_tool = native.layers[0].entries[0].config.get("tool_name")
+        native_entry = native.layers[0].entries[0]
+        device_permissions = frozenset(
+            p
+            for p in native.manifests[0].permissions
+            if is_route_permission(p) or is_workspace_permission(p)
+        )
+        if not device_permissions <= frozenset(native_entry.permissions):
+            raise OptionalBusinessError("forbidden", "device route lacks an executable entry grant")
+        device_tool = native_entry.config.get("tool_name")
         targets = ("python", "desktop-sidecar")
-    device_permission = None
     if (descriptor := artifacts.get(DEVICE_DESCRIPTOR)) is not None:
         if device_bytes is not None or LOCAL_CHAT not in plugin.permissions:
             raise OptionalBusinessError(
                 "invalid_package", "conflicting or unapproved device capability"
             )
         device_tool = device_capability_tool(descriptor)
-        device_permission = LOCAL_CHAT
+        device_permissions = frozenset({LOCAL_CHAT})
         targets = ("python", "desktop-sidecar")
-    return targets, device_tool, device_permission
+    return targets, device_tool, device_permissions
 
 
 def _package_grants(
@@ -188,13 +241,12 @@ def _package_grants(
     entry: ProfileEntryV2,
     approved: frozenset[str],
     contribution: "ContributionDocument",
-    device_permission: str | None = None,
+    device_permissions: frozenset[str] = frozenset(),
 ) -> frozenset[str]:
     from memstack_plugin_sdk.contract import PERMISSIONS
 
     named = {command.host_operation for command in contribution.commands if command.host_operation}
-    if device_permission:
-        named.add(device_permission)
+    named.update(device_permissions)
     if not set(plugin.permissions) <= PERMISSIONS | named:
         raise OptionalBusinessError("invalid_package", "unsupported package permission")
     granted = frozenset(plugin.permissions) & frozenset(entry.permissions) & approved

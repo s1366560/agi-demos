@@ -22,15 +22,3 @@
 .sandbox-interaction > nav button[aria-pressed='true'] {
   background: var(--accent-4);
 }
-.sandbox-interaction .desktop-interactive-terminal,
-.sandbox-interaction .remote-desktop-surface {
-  flex: 1;
-  min-height: 280px;
-}
-.sandbox-interaction .remote-desktop-surface__frame {
-  min-height: 300px;
-  flex: 1;
-}
-.sandbox-interaction .remote-desktop-surface__frame > div {
-  height: 100%;
-}

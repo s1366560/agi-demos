@@ -32,7 +32,7 @@ packages = [
 package-dir = {"plugins.business.agent" = "."}
 
 [tool.setuptools.package-data]
-"plugins.business.agent" = ["package.json", "contributions.json", "ui/settings.json", "ui/skill.js", "ui/chat-web.js", "ui/chat-web.css", "ui/chat-desktop.js", "ui/chat-desktop.css"]
+"plugins.business.agent" = ["package.json", "contributions.json", "ui/settings.json", "ui/skill.js", "ui/chat-web.js", "ui/chat-web.css", "ui/web-dashboard.js", "ui/web-dashboard.css"]
 
 [tool.pyright]
 extraPaths = ["../../../sdk/memstack_cli", "../../../sdk/memstack-plugin-sdk/src"]

@@ -185,7 +185,8 @@ function ProjectPicker({ token }: { token: string }) {
             revision={catalogRevision}
             pathname={location.pathname + location.search + location.hash}
             transport={session.transport}
-            streamCommand={session.stream}
+            openVoiceSocket={session.openVoiceSocket}
+        streamCommand={session.stream}
             managementLabel={t('projectPackages.manage')}
             navigate={(path, options) => {
               void navigate(

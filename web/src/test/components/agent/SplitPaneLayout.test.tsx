@@ -36,6 +36,27 @@ describe('SplitPaneLayout', () => {
     expect(rightPane?.style.getPropertyValue('--split-pane-min-width')).toBe('320px');
   });
 
+  it('captures a pointer until the resize ends across an embedded pane', () => {
+    const change = vi.fn();
+    renderLayout(change);
+    const handle = screen.getByRole('slider');
+    const capture = vi.fn();
+    Object.defineProperty(handle, 'setPointerCapture', { value: capture });
+    Object.defineProperty(handle.parentElement, 'offsetWidth', { value: 1000 });
+    const pointer = (type: string, x: number) => {
+      const event = new MouseEvent(type, { bubbles: true, button: 0, clientX: x });
+      Object.defineProperty(event, 'pointerId', { value: 3 });
+      fireEvent(handle, event);
+    };
+    pointer('pointerdown', 400);
+    expect(capture).toHaveBeenCalledWith(3);
+    pointer('pointermove', 500);
+    expect(change).toHaveBeenLastCalledWith(0.5);
+    pointer('lostpointercapture', 500);
+    pointer('pointermove', 600);
+    expect(change).toHaveBeenCalledTimes(1);
+  });
+
   it('preserves keyboard resizing behavior on the drag handle', () => {
     const onSplitRatioChange = vi.fn();
     renderLayout(onSplitRatioChange);

@@ -8,6 +8,25 @@
     if (ready) channel.port1.postMessage(message);
     else queued.push(message);
   }
+  // In Electron a captured pointer can cross into another renderer process.
+  // Ask the shell to pass hits through its sibling panes until capture ends.
+  let captured = null;
+  function reportCapture(event) {
+    if (captured !== null) return;
+    if (event.composedPath().some(node => node.hasPointerCapture?.(event.pointerId))) {
+      captured = event.pointerId;
+      send({ type: "page.pointerCapture", active: true });
+    }
+  }
+  function releaseCapture(event) {
+    if (captured === null || (event.pointerId !== undefined && captured !== event.pointerId)) return;
+    captured = null;
+    send({ type: "page.pointerCapture", active: false });
+  }
+  addEventListener("pointerdown", reportCapture);
+  addEventListener("gotpointercapture", reportCapture);
+  for (const event of ["pointerup", "pointercancel", "lostpointercapture", "blur"])
+    addEventListener(event, releaseCapture, true);
   let failed = false;
   function pageError() {
     if (!failed) send({ type: "page.failed" });
@@ -58,6 +77,14 @@
       root.dataset.theme = data.dark ? "dark" : "light";
       root.style.colorScheme = root.dataset.theme;
       root.lang = data.lang;
+      // Workbench controls share the shell's responsive breakpoints even in a narrow iframe.
+      if (Number.isFinite(data.hostViewportWidth)) {
+        const breakpoints = { sm: 640, md: 768, lg: 1024, xl: 1280, "2xl": 1536 };
+        root.dataset.hostBreakpoints = Object.entries(breakpoints)
+          .filter(([, width]) => data.hostViewportWidth >= width)
+          .map(([name]) => name)
+          .join(" ");
+      }
       return;
     }
     const call = calls.get(data?.id);
@@ -77,11 +104,43 @@
     value: Object.freeze({
       scope,
       getContext: scope,
+      reviewDevice: () => request("reviewDevice"),
+      voice: (mode, conversation, options) => request("voice", { mode, conversation }, options),
+      muteVoice: (handle, muted) => request("muteVoice", { handle, muted }),
+      anchorSlot(name, element, search = "", onError) {
+        let active = true, scheduled = 0, previous = "";
+        const update = () => {
+          scheduled = 0;
+          if (!active) return;
+          const { left, top, width, height } = element.getBoundingClientRect();
+          const rect = [left, top, width, height];
+          const signature = rect.join(",");
+          if (signature === previous) return;
+          previous = signature;
+          request("anchorSlot", { name, search, rect }).catch(error => {
+            if (active) onError?.(error.message);
+          });
+        };
+        const schedule = () => { if (!scheduled) scheduled = requestAnimationFrame(update); };
+        const observer = new ResizeObserver(schedule);
+        observer.observe(element);
+        addEventListener("scroll", schedule, true);
+        addEventListener("resize", schedule);
+        update();
+        return () => {
+          active = false;
+          observer.disconnect();
+          cancelAnimationFrame(scheduled);
+          removeEventListener("scroll", schedule, true);
+          removeEventListener("resize", schedule);
+          request("anchorSlot", { name, rect: null }).catch(() => {});
+        };
+      },
       assetUrl(path) {
         if (!Object.hasOwn(resources, path)) throw new Error("page_resource_unavailable");
         return resources[path];
       },
-      openPage: (pluginId, pageId) => request("openPage", { pluginId, pageId }),
+      openPage: (pluginId, pageId, destination) => request("openPage", { pluginId, pageId, destination }),
       navigate: (path, options) => request("navigate", { path, replace: options?.replace === true }),
       invoke: (name, payload, options = {}) =>
         request(
@@ -93,6 +152,7 @@
           },
           options,
         ),
+      exportCsv: (name, payload, options = {}) => request("exportCsv", { name, payload }, options),
       device: (name, payload = {}, options = {}) =>
         request("device", { name, payload }, options),
     }),

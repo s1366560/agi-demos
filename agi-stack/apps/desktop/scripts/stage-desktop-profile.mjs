@@ -2,10 +2,11 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const full = process.env.AGISTACK_DESKTOP_PROFILE === 'full';
+const profile = process.env.AGISTACK_DESKTOP_PROFILE;
+const full = profile === 'full' || profile === 'compat';
 if (process.argv.includes('--build-sidecar')) {
   const args = ['build', '--manifest-path', 'sidecar/Cargo.toml', '--release'];
-  if (full) args.push('--features', 'legacy-business');
+  if (profile === 'compat') args.push('--features', 'legacy-business');
   execFileSync('cargo', args, { stdio: 'inherit' });
 } else {
   await stage();

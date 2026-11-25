@@ -11,13 +11,8 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
-export type AgentPermissionMode = 'ask' | 'auto_edit' | 'full_access';
-
-export const PERMISSION_MODES: readonly AgentPermissionMode[] = [
-  'ask',
-  'auto_edit',
-  'full_access',
-] as const;
+import { PERMISSION_MODES, type AgentPermissionMode } from '../../chat/composerOptions';
+export { PERMISSION_MODES, type AgentPermissionMode } from '../../chat/composerOptions';
 
 export function isAgentPermissionMode(value: unknown): value is AgentPermissionMode {
   return typeof value === 'string' && PERMISSION_MODES.includes(value as AgentPermissionMode);

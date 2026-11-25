@@ -248,20 +248,6 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
                 expected_unavailable_contract(&route);
             assert_eq!(payload["availability"], expected_availability);
             assert_eq!(payload["reason_code"], expected_reason_code);
-        } else if route.authority == "sandbox_capabilities" {
-            assert_eq!(
-                response.status(),
-                StatusCode::OK,
-                "{} {} must expose the explicit local sandbox capability snapshot",
-                route.method,
-                route.uri
-            );
-            let payload = response_json(response).await;
-            assert_eq!(payload["contract_version"], 2);
-            assert_eq!(payload["terminal_interactive"]["availability"], "available");
-            assert_eq!(payload["terminal_resume"]["availability"], "unavailable");
-            assert_eq!(payload["files"]["availability"], "available");
-            assert_eq!(payload["kasm_vnc"]["availability"], "not_applicable");
         } else if route.authority == "native_workspace" {
             assert_eq!(
                 response.status(),

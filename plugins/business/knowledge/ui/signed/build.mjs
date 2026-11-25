@@ -7,17 +7,24 @@ import postcss from 'postcss';
 import { buildPackagePages } from '../../../../../sdk/memstack-plugin-sdk/buildPages.mjs';
 
 const directory = fileURLToPath(new URL('.', import.meta.url));
+// Bundle the original Web design tokens with the signed page. Host styles do not
+// cross the iframe boundary, and importing the whole shell would include its layout.
+const webStyles = postcss.parse(await readFile(resolve(directory, '../../../../../web/src/index.css'), 'utf8'));
+const webTheme = webStyles.nodes.find((node) => node.type === 'atrule' && node.name === 'theme');
+if (!webTheme) throw new Error('The original Web theme is missing');
+
 await buildPackagePages({
   root: fileURLToPath(new URL('../../', import.meta.url)),
   sourceDirectory: 'ui/signed',
   contribution: 'workers/graph_projection/contributions.json',
   entries: {
-    graph: { web: 'GraphPage.tsx', 'desktop-renderer': 'DesktopGraphPage.tsx' },
-    memories: { web: 'MemoriesPage.tsx', 'desktop-renderer': 'DesktopMemoriesPage.tsx' },
-    'memory-editor': { web: 'MemoriesPage.tsx', 'desktop-renderer': 'DesktopMemoriesPage.tsx' },
-    'desktop-memory-editor': 'DesktopMemoriesPage.tsx',
+    'project-search': 'SearchPage.tsx',
+    graph: 'GraphPage.tsx',
+    memories: 'MemoriesPage.tsx',
+    'memory-editor': 'MemoriesPage.tsx',
+    'desktop-memory-editor': 'MemoriesPage.tsx',
     'memory-detail': 'MemoriesPage.tsx',
-    entities: { web: 'EntitiesPage.tsx', 'desktop-renderer': 'DesktopEntitiesPage.tsx' },
+    entities: 'EntitiesPage.tsx',
   },
   plugins: [
     {
@@ -35,6 +42,8 @@ await buildPackagePages({
             '../../../../../web/src/hooks/useUnsavedChangesWarning.ts',
           '@/services/taskStream': './indexTask.ts',
           '@/utils/date': '../../../../../sdk/memstack-plugin-sdk/ui/localDate.ts',
+          '@/stores/project': './searchProject.ts',
+          '@/utils/downloadJson': '../../../../../web/src/utils/downloadJson.ts',
           '@/stores/theme': './graphAppearance.ts',
           '@/components/shared/ui/StateDisplay': '../../../../../web/src/components/shared/ui/StateDisplay.tsx',
           '@business/knowledge/ui/web/services/graphService': './graphApi.ts',
@@ -70,9 +79,10 @@ await buildPackagePages({
             ),
           }),
         );
-        build.onLoad({ filter: /(entities|memories|graph-web)\.css$/ }, async ({ path }) => {
+        build.onLoad({ filter: /(entities|memories|graph-web|search-page)\.css$/ }, async ({ path }) => {
+          const stylesheet = await readFile(path, 'utf8');
           const result = await postcss([tailwind({ base: directory, optimize: true })]).process(
-            await readFile(path, 'utf8'),
+            path.endsWith('search-page.css') ? stylesheet + '\n' + webTheme.toString() : stylesheet,
             { from: path },
           );
           return { contents: result.css, loader: 'css' };

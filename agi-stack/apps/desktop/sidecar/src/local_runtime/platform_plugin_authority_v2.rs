@@ -222,6 +222,15 @@ impl fmt::Debug for ActivePlatformPluginGenerationLeaseV2 {
 }
 
 impl ActivePlatformPluginGenerationLeaseV2 {
+    pub(super) fn operation_lease(
+        &self,
+    ) -> Result<GenerationLeaseV2, agistack_plugin_host::RuntimeV2Error> {
+        self._release_guard
+            .lease
+            .as_ref()
+            .ok_or(agistack_plugin_host::RuntimeV2Error::GenerationRetired)?
+            .child()
+    }
     pub(super) fn resolve_service<T: std::any::Any + Send + Sync>(
         &self,
         service: &str,
@@ -290,13 +299,14 @@ impl ActivePlatformPluginGenerationLeaseV2 {
 }
 
 struct GenerationReleaseGuardV2 {
-    release_tx: Option<oneshot::Sender<()>>,
+    release_tx: Option<oneshot::Sender<GenerationLeaseV2>>,
+    lease: Option<GenerationLeaseV2>,
 }
 
 impl Drop for GenerationReleaseGuardV2 {
     fn drop(&mut self) {
-        if let Some(release_tx) = self.release_tx.take() {
-            let _ = release_tx.send(());
+        if let (Some(release_tx), Some(lease)) = (self.release_tx.take(), self.lease.take()) {
+            let _ = release_tx.send(lease);
         }
     }
 }
@@ -544,9 +554,9 @@ fn runtime_generation_matches_projection(
 }
 
 fn spawn_release_owner(lease: GenerationLeaseV2) -> GenerationReleaseGuardV2 {
-    let (release_tx, release_rx) = oneshot::channel();
+    let (release_tx, release_rx) = oneshot::channel::<GenerationLeaseV2>();
     tokio::spawn(async move {
-        let _ = release_rx.await;
+        let Ok(lease) = release_rx.await else { return };
         if let Err(error) = lease.release().await {
             tracing::error!(
                 error_code = error.code(),
@@ -556,6 +566,7 @@ fn spawn_release_owner(lease: GenerationLeaseV2) -> GenerationReleaseGuardV2 {
     });
     GenerationReleaseGuardV2 {
         release_tx: Some(release_tx),
+        lease: Some(lease),
     }
 }
 

@@ -11,8 +11,9 @@ import asyncio
 import logging
 import re
 import uuid
-from collections.abc import AsyncGenerator
-from contextlib import AsyncExitStack, aclosing
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, aclosing
+from functools import partial
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
@@ -20,11 +21,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.config import get_settings
 from src.domain.model.audio_session import AudioMode
+from src.host.identity.application_scope import application_tenant_for
+from src.host.operations.package_voice_lease import (
+    PackageVoiceLease,
+    VoiceGrantDenied,
+    approved_voice_frame,
+)
+from src.host.operations.voice_scope import voice_conversation_tenant
 from src.infrastructure.adapters.primary.web.websocket.auth import (
     authenticate_websocket,
     extract_websocket_api_key,
+    select_websocket_auth_subprotocol,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
 from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
@@ -73,10 +82,18 @@ async def voice_chat_endpoint(
     if not auth_result:
         await websocket.close(code=4003, reason="Authentication failed")
         return
-    user_id, tenant_id = auth_result
-
-    # 2. Accept WebSocket
-    await websocket.accept()
+    user_id, _ = auth_result
+    tenant_id = await voice_conversation_tenant(
+        db,
+        user_id=user_id,
+        tenant_id=application_tenant_for(user_id),
+        project_id=project_id,
+        conversation_id=conversation_id,
+    )
+    if not tenant_id:
+        await websocket.close(code=4003, reason="Conversation unavailable")
+        return
+    await websocket.accept(subprotocol=select_websocket_auth_subprotocol(websocket))
     logger.info(
         "[Voice WS] Connected user=%s tenant=%s conv=%s",
         user_id[:8],
@@ -93,7 +110,7 @@ async def voice_chat_endpoint(
         await websocket.close(code=4000)
         return
 
-    if config_msg.get("type") != "voice_config":
+    if not isinstance(config_msg, dict) or config_msg.get("type") != "voice_config":
         await _send_error(websocket, "First message must be type 'voice_config'")
         await websocket.close(code=4000)
         return
@@ -104,6 +121,33 @@ async def voice_chat_endpoint(
         await _send_error(websocket, "Unsupported voice mode")
         await websocket.close(code=4000)
         return
+    # The trusted package host uses an explicit socket mode. An ordinary voice client
+    # never gains a package-backed grant by supplying extra configuration fields.
+    lease_query = None
+    if "package_session" in websocket.query_params or "package_ticket" in config_msg:
+        try:
+            if websocket.query_params.get("package_session") != "1" or mode not in {
+                AudioMode.VOICE,
+                AudioMode.DICTATION,
+            }:
+                raise VoiceGrantDenied()
+            lease = PackageVoiceLease.admit(
+                config_msg.get("package_ticket"),
+                user=user_id,
+                tenant=tenant_id,
+                project=project_id,
+                conversation=conversation_id,
+            )
+            lease_query = lease.authorization_query()
+            async with (
+                async_session_factory() as lease_db,
+                approved_voice_frame(lease_db, lease_query),
+            ):
+                pass
+        except VoiceGrantDenied:
+            await _send_error(websocket, "voice_grant_revoked")
+            await websocket.close(code=4003)
+            return
     _sample_rate: int = config_msg.get("sample_rate", 16000)
     speaker: str = config_msg.get("speaker", "zh_female_tianmeixiaoyuan_moon_bigtts")
 
@@ -145,6 +189,7 @@ async def voice_chat_endpoint(
     shutdown_event = asyncio.Event()
     tasks: list[asyncio.Task[None]] = []
 
+    frame_db = async_session_factory() if lease_query is not None else None
     try:
         # Connect ASR client
         await asr_client.connect()
@@ -152,7 +197,15 @@ async def voice_chat_endpoint(
         # 6. Launch concurrent tasks
         tasks = [
             asyncio.create_task(
-                _audio_receiver(websocket, asr_client, shutdown_event, interrupts=interrupts),
+                _audio_receiver(
+                    websocket,
+                    asr_client,
+                    shutdown_event,
+                    interrupts=interrupts,
+                    frame_authority=partial(approved_voice_frame, frame_db, lease_query)
+                    if frame_db is not None and lease_query is not None
+                    else None,
+                ),
                 name="audio_receiver",
             ),
             asyncio.create_task(
@@ -224,6 +277,9 @@ async def voice_chat_endpoint(
         if tasks:
             _ = await asyncio.gather(*tasks, return_exceptions=True)
 
+        if frame_db is not None:
+            await frame_db.close()
+
         # Close ASR client
         try:
             await asr_client.close()
@@ -251,10 +307,12 @@ async def _audio_receiver(
     shutdown: asyncio.Event,
     *,
     interrupts: asyncio.Queue[None] | None = None,
+    frame_authority: Callable[[], AbstractAsyncContextManager[None]] | None = None,
 ) -> None:
     """Receive binary PCM audio frames from browser and forward to ASR client."""
     frame_count = 0
     total_bytes = 0
+    grant_valid = True
     try:
         while not shutdown.is_set():
             message = await websocket.receive()
@@ -283,7 +341,17 @@ async def _audio_receiver(
                     frame_count,
                     total_bytes,
                 )
-            await asr_client.send_audio(data, is_last=False)
+            if frame_authority is None:
+                await asr_client.send_audio(data, is_last=False)
+            else:
+                # The frame holds only indexed read locks, bounded until provider admission.
+                async with asyncio.timeout(3), frame_authority():
+                    await asr_client.send_audio(data, is_last=False)
+    except VoiceGrantDenied:
+        grant_valid = False
+        shutdown.set()
+        await _send_error(websocket, "voice_grant_revoked")
+        await websocket.close(code=4003)
     except WebSocketDisconnect:
         logger.info(
             "[Voice WS] Audio receiver: client disconnected (frames=%d bytes=%d)",
@@ -302,7 +370,11 @@ async def _audio_receiver(
         )
         # Signal end of audio to ASR
         try:
-            await asr_client.send_audio(b"", is_last=True)
+            if frame_authority is None:
+                await asr_client.send_audio(b"", is_last=True)
+            elif grant_valid:
+                async with asyncio.timeout(3), frame_authority():
+                    await asr_client.send_audio(b"", is_last=True)
         except Exception:
             pass
         shutdown.set()

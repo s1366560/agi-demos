@@ -1049,6 +1049,8 @@
       "localDirectory": "Local directory"
     },
     "executionPlacement": {
+      "reviewDevice": "Device settings",
+      "deviceApproval": "Choose a directory and approve this release in device settings.",
       "targetLabel": "Execution location",
       "directoryUnavailable": "This directory is unavailable on this computer.",
       "webLocalReadonly": "This session ran on a computer. The web composer can only view it."

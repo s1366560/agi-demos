@@ -134,7 +134,7 @@ export function DevicePluginSettings({
           ...(preview.workspace && {
             workspace_token: preview.workspace.token,
           }),
-          ...(preview.workspace &&
+          ...(preview.declared_permissions.includes('device.local-chat') &&
             (modelName || modelUrl) && {
               local_model: { base_url: modelUrl, model: modelName },
             }),
@@ -223,27 +223,31 @@ export function DevicePluginSettings({
               >
                 {t('localPlugins.chooseDirectory')}
               </button>
-              <p>{t('localPlugins.deviceModelDescription')}</p>
-              <label>
-                {t('localPlugins.deviceModelOrigin')}
-                <input
-                  value={modelUrl}
-                  onChange={(e) => {
-                    setApproved(false);
-                    setModelUrl(e.target.value);
-                  }}
-                />
-              </label>
-              <label>
-                {t('localPlugins.deviceModelName')}
-                <input
-                  value={modelName}
-                  onChange={(e) => {
-                    setApproved(false);
-                    setModelName(e.target.value);
-                  }}
-                />
-              </label>
+              {preview.declared_permissions.includes('device.local-chat') && (
+                <>
+                  <p>{t('localPlugins.deviceModelDescription')}</p>
+                  <label>
+                    {t('localPlugins.deviceModelOrigin')}
+                    <input
+                      value={modelUrl}
+                      onChange={(e) => {
+                        setApproved(false);
+                        setModelUrl(e.target.value);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    {t('localPlugins.deviceModelName')}
+                    <input
+                      value={modelName}
+                      onChange={(e) => {
+                        setApproved(false);
+                        setModelName(e.target.value);
+                      }}
+                    />
+                  </label>
+                </>
+              )}
             </fieldset>
           )}
           <label>

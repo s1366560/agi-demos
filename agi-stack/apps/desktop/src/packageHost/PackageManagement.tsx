@@ -1,10 +1,12 @@
+import { openVoiceSocket } from './voiceSocket';
+import { installationDestination } from '../../../../packages/plugin-marketplace-ui/src/installationReturn';
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { createMarketplaceClient } from '../../../../packages/plugin-marketplace-ui/src/client';
 import { marketText } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketText';
 import type { Installation } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketTypes';
 import { CloudBusinessPage } from '../features/settings/CloudBusinessPage';
 import { PluginMarket } from '../../../../packages/plugin-marketplace-ui/src/PluginMarket';
-import { RichPackagePages } from '../../../../packages/plugin-marketplace-ui/src/RichPackagePages';
+import { RichPackagePages } from './DesktopRichPackagePages';
 import { pluginArchiveBase64 } from '../api/localPluginClient';
 import { openFilesWithDesktopDialog } from '../features/runtime/nativeFileBridge';
 import { DevicePluginSettings } from '../features/settings/DevicePluginSettings';
@@ -137,6 +139,7 @@ export function PackageManagement({
           navigate={open}
           locale={locale}
           transport={transport}
+          openVoiceSocket={openVoiceSocket}
           streamCommand={streamCommand}
           invokeDevice={scopeProject ? devicePageCall(tenant, scopeProject) : undefined}
         />
@@ -172,6 +175,15 @@ export function PackageManagement({
         importArchive={importArchive}
         deviceSettings={scopeProject ? device : undefined}
         declarativePage={scopeProject ? declarativePage : undefined}
+        onActivated={(installation) => {
+          const destination = installationDestination(
+            params.get('returnTo'),
+            { tenantId: tenant, projectId: scopeProject },
+            installation,
+            'desktop-renderer',
+          );
+          if (destination) window.location.replace('#' + destination);
+        }}
         onChanged={refresh}
       />
     </>

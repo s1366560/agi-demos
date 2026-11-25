@@ -1,16 +1,18 @@
 @import 'tailwindcss' source(none);
 @source './WebChatPage.tsx';
+@source './ChatExecutionPlacement.tsx';
 @source '../web/chat';
 @source '../web/canvas';
 @source '../web/hitl';
 @source './InteractionPanel.tsx';
 @custom-variant dark (&:where(.dark, .dark *));
+/* The original 80rem window has a 16rem sidebar. At its resulting 64rem
+   content width the action labels fit alongside the rest of the composer. */
 @theme {
-  --color-primary: #262626;
-  --color-primary-600: #171717;
-  --color-content-tertiary: #64748b;
-  --tracking-label: 0.06em;
+  --breakpoint-xl: 64rem;
 }
+@source '../../../../../web/src/components/agent/activity';
+@source '../../../../../web/src/components/agent/review';
 html,
 body,
 #root {
@@ -30,4 +32,30 @@ body,
 }
 .chat-history-viewport [data-timeline-anchor-id] {
   margin-block: 0.875rem;
+}
+@source './Web*.tsx';
+@source '../../../../../web/src/components/agent/chat/OnboardingTour.tsx';
+@source '../../../../../web/src/components/agent/chat/{ChatSearch,ProjectContextCard,TrendingEntities,RecentSkills,ShortcutOverlay}.tsx';
+@source '../../../../../web/src/components/agent/{EmptyState,SplitPaneLayout,TaskList}.tsx';
+@source '../../../../../web/src/components/layout/Resizer.tsx';
+@source '../../../../../web/src/components/execution-target/*.tsx';
+.chat-history-viewport { height: 100%; }
+.chat-history-viewport > div { min-height: 100%; }
+
+@source '../../../../../web/src/components/agent/context/ContextStatusIndicator.tsx';
+
+@source '../../../../../web/src/components/agent/chat/MessageActionBar.tsx';
+/* The workbench SDK supplies an unlayered heading reset for generic pages.
+   Let this page's original Tailwind heading utilities determine size and leading. */
+html :where(h1, h2, h3, h4, h5, h6) {
+  font-size: revert-layer;
+  line-height: revert-layer;
+}
+
+@source '../../../../../web/src/components/agent/SlashCommandDropdown.tsx';
+
+
+/* Keep the draft editable when a native side panel leaves less than 10rem. */
+#agent-message-input {
+  min-width: min(10rem, 100%);
 }

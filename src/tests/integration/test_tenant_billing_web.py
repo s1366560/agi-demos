@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from src.tests.integration.marketplace_browser import apply, business_release, more
+from src.tests.integration.marketplace_browser import apply, business_release, confirm, more
 
 pytestmark = [
     pytest.mark.integration,
@@ -53,6 +53,21 @@ def _select_plan(page, frame, plan, choice):
     )
 
 
+def _install_from_original_bookmark(page, base):
+    bookmark = base + "/billing?view=history#invoices"
+    page.goto(bookmark)
+    page.get_by_role(
+        "link", name=re.compile("返回插件市场|Back to (plugin )?market", re.I)
+    ).click()
+    page.locator("#pm-card-memstack-billing").click()
+    page.locator(".pm-spec select").select_option("1.2.0")
+    page.locator(".pm-detail-actions").get_by_role(
+        "button", name=re.compile("^(Install|安装)")
+    ).click()
+    confirm(page)
+    expect(page).to_have_url(bookmark, timeout=60000)
+
+
 def test_empty_tenant_billing_via_market_and_direct_url():
     account = json.loads(Path(os.environ["MEMSTACK_QA_EMPTY_TENANT_OWNER"]).read_text())
     assert account["tenant_name"] == "Signed tenant billing without projects"
@@ -79,7 +94,8 @@ def test_empty_tenant_billing_via_market_and_direct_url():
         if current.inner_text() not in ("Inactive", "未运行"):
             more(page, "Uninstall|卸载")
             expect(current).to_have_text(re.compile("Inactive|未运行"), timeout=60000)
-        apply(page, "1.2.0")
+        _install_from_original_bookmark(page, base)
+        details()
         apply(page, business_release("billing"))
         page.goto(base + "/billing")
         _check_original_billing_view(page)

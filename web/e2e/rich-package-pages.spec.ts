@@ -99,23 +99,16 @@ test('published React Billing page renders the same invoice table as the desktop
   await expect(guest.getByRole('cell')).toHaveText(['INV-123', 'USD 1250', 'pending']);
 });
 
-test('sandbox page binds terminal requests to the run revision and disables a degraded authority', async ({
-  page,
-}) => {
-  await page.goto('/e2e/fixtures/rich-package-host.html?sandbox-degraded');
+test('signed terminal uses the admitted run revision and cannot connect with a degraded authority', async ({ page }) => {
+  const request = JSON.stringify({ run_id: 'run-2', expected_run_revision: 8, open_channel: true });
   const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
-  const authorize = guest.getByRole('button', { name: 'Request terminal authorization' });
-  await expect(authorize).toBeDisabled();
-  await expect(guest.getByText('terminal_authority_unavailable')).toBeVisible();
+  await page.goto('/e2e/fixtures/rich-package-host.html?sandbox-degraded');
+  await expect(page.locator('#host-log')).toHaveText(request);
+  await expect(guest.getByRole('button', { name: 'Reconnect' })).toBeVisible();
+  await expect(guest.getByText(/qa-run-2/)).toHaveCount(0);
   await page.goto('/e2e/fixtures/rich-package-host.html?sandbox');
-  await expect(authorize).toBeEnabled();
-  await guest.getByLabel('Run ID').fill('run-2');
-  await guest.getByLabel('Current run revision').fill('8');
-  await authorize.click();
-  await expect(page.locator('#host-log')).toHaveText(
-    JSON.stringify({ run_id: 'run-2', expected_run_revision: 8 })
-  );
-  await expect(guest.getByText('Authorized through 2030-10-01T00:00:00Z')).toBeVisible();
+  await expect(page.locator('#host-log')).toHaveText(request);
+  await expect(guest.getByText(/qa-run-2/)).toBeVisible();
 });
 
 test('failed resource preparation preserves the previously mounted rich page', async ({ page }) => {
@@ -179,6 +172,11 @@ test('a signed page link opens only the declared installed destination in its ow
   const body = guest.locator('body');
   await body.evaluate(() => window.memstack.openPage('boards', 'overview'));
   await expect(page.locator('#host-log')).toHaveText('/project/p/board');
+  await body.evaluate(() => window.memstack.openPage('boards','overview','/project/p/board/42?tab=files&unknown=a#x'));
+  await expect(page.locator('#host-log')).toHaveText('/project/p/board/42?tab=files#x');
+  for (const destination of ['/project/other/board/42', '/settings', '/project/p/board?tenant=x']) {
+    expect(await body.evaluate((_element, path) => window.memstack.openPage('boards','overview',path).catch(e=>e.message),destination)).toBe('page_navigation_denied');
+  }
   expect(await body.evaluate(() =>
     window.memstack.openPage('uninstalled', 'overview').catch((e) => e.message)
   )).toBe('page_destination_unavailable');
@@ -193,10 +191,10 @@ test('signed Agent page keeps local replay read-only on Web and routes cloud tur
   await page.goto('/e2e/fixtures/rich-package-host.html?chat-web');
   const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
   await expect(guest.getByText('Saved local')).toBeVisible();
-  await expect(guest.getByText('Local conversations are read-only on the web.')).toBeVisible();
-  await expect(guest.locator('textarea')).toHaveCount(0);
+  await expect(guest.locator('[data-surface=web]')).toHaveAttribute('data-readonly', 'true');
+  await expect(guest.getByTestId('chat-input')).toBeDisabled();
   await expect(guest.getByLabel('New conversation location')).toBeHidden();
-  await guest.getByRole('link', {name: 'Cloud conversation'}).click();
+  await page.goto('/e2e/fixtures/rich-package-host.html?chat-web-cloud');
   await expect(guest.getByText('Saved cloud')).toBeVisible();
   await expect(guest.getByRole('table').getByText('signed')).toBeVisible();
   await expect(guest.locator('pre').getByText('const value = 1;', {exact:false})).toBeVisible();
@@ -212,16 +210,14 @@ test('desktop Agent page binds execute and stop to the same local turn and repla
 }) => {
   await page.goto('/e2e/fixtures/rich-package-host.html?chat-desktop');
   const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
-  await expect(guest.getByRole('combobox')).toHaveText('Local');
-  await guest.getByRole('button', { name: 'Search conversation' }).click();
-  await guest.getByRole('searchbox').fill('Saved local');
-  await expect(guest.getByRole('search')).toContainText('1/1');
-  await expect(guest.locator('.chat-search-highlight')).toContainText('Saved local');
-  await guest.getByRole('button', { name: 'Close search' }).click();
-  await guest.getByRole('button', { name: 'New conversation', exact: true }).click();
-  await expect(guest.getByText('Saved new')).toBeVisible();
+  const target = guest.getByRole('combobox', { name: 'Execution location' });
+  await expect(target).toHaveValue('local');
+  await expect(guest.getByText('QA Workspace')).toBeVisible();
+  await target.selectOption('cloud');
+  await expect(guest.getByText('Default environment')).toBeVisible();
+  await target.selectOption('local');
   await guest.locator('textarea').fill('hello device');
-  await guest.getByRole('button', { name: 'Send message' }).click();
+  await guest.getByTestId('send-button').click();
   await guest.getByRole('button', { name: 'Stop' }).click();
   await expect(guest.getByText('Device turn cancelled')).toBeVisible();
   const [create, execute, stop] = JSON.parse(await page.locator('#host-log').innerText());
@@ -249,10 +245,10 @@ test('desktop Agent page preserves the draft and retry key when device settings 
   const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
   await expect(guest.getByText('Saved local')).toBeVisible();
   await guest.locator('textarea').fill('private draft');
-  await guest.getByRole('button', { name: 'Send message' }).click();
+  await guest.getByTestId('send-button').click();
   await expect(guest.getByRole('alert')).toContainText('Choose a workspace in device settings');
   await expect(guest.locator('textarea')).toHaveValue('private draft');
-  await guest.getByRole('button', { name: 'Send message' }).click();
+  await guest.getByTestId('send-button').click();
   await expect
     .poll(async () => JSON.parse(await page.locator('#host-log').innerText()).length)
     .toBe(2);
@@ -267,7 +263,7 @@ test('desktop Agent page surfaces a revoked release grant and retains the draft'
   const guest = page.frameLocator('iframe[data-page-ready="true"]').frameLocator('iframe');
   await expect(guest.getByText('Saved local')).toBeVisible();
   await guest.locator('textarea').fill('retry when approved');
-  await guest.getByRole('button', { name: 'Send message' }).click();
+  await guest.getByTestId('send-button').click();
   await expect(guest.getByRole('alert')).toHaveText(
     'Approve this Agent release in device settings. device_plugin_grant_revoked'
   );
@@ -316,6 +312,11 @@ test('the project opens its signed home, keeps deep links, and exposes managemen
           },
         ],
       });
+    if (url.pathname.endsWith('/npm/catalog')) {
+      return request.fulfill({ json: {
+        source: 'local npm', source_error: null, can_manage: true, total: 0, items: [],
+      } });
+    }
     if (url.pathname.endsWith('/ui')) {
       const descriptor = pages.find((item) => item.id === url.searchParams.get('page_id'));
       return request.fulfill({
@@ -349,12 +350,12 @@ test('the project opens its signed home, keeps deep links, and exposes managemen
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await expect(page).toHaveURL(/\/tasks\?/);
   await expect(guest.getByText('Signed application running')).toBeVisible();
-  await expect(page.getByTestId('optional-business-panel')).toHaveCount(0);
+  await expect(page.getByTestId('plugin-market')).toHaveCount(0);
   const menu = page.getByRole('combobox', { name: 'Applications' });
   await menu.selectOption('/overview');
   await expect(page).toHaveURL(/\/overview\?/);
   await page.getByRole('button', { name: 'Manage plugins' }).click();
-  await expect(page.getByTestId('optional-business-panel')).toBeVisible();
+  await expect(page.getByTestId('plugin-market')).toBeVisible();
   await expect(page.locator('iframe[data-page-ready]')).toHaveCount(0);
   await page.goBack();
   await expect(menu).toHaveValue('/overview');
@@ -367,23 +368,26 @@ test('the project opens its signed home, keeps deep links, and exposes managemen
   pages = [];
   await page.goto('/');
   await expect(page.getByText('This project has no available application pages.')).toBeVisible();
-  await expect(page.getByTestId('optional-business-panel')).toHaveCount(0);
+  await expect(page.getByTestId('plugin-market')).toHaveCount(0);
   await page.getByRole('button', { name: 'Manage plugins' }).click();
-  await expect(page.getByTestId('optional-business-panel')).toBeVisible();
+  await expect(page.getByTestId('plugin-market')).toBeVisible();
 });
 
 test('npm source previews the signed release and installs its reviewed permissions only on approval', async ({
   page,
 }) => {
   const scope = { tenant_id: 't', project_id: 'p' };
-  const preview = {
-    plugin_id: 'memstack-sample',
-    version: '2.1.0',
-    digest: 'sha256:' + 'a'.repeat(64),
-    permissions: ['tools.execute'],
-    archive_base64: 'dGVzdA==',
+  const item = {
+    plugin_id: 'memstack-sample', package_name: '@memstack/sample', display_name: { en: 'Sample' },
+    description: { en: 'Sample package' }, icon: null, latest_version: '2.1.1',
+    targets: ['web'], installation: null, update_available: false,
   };
-  let resolves = 0;
+  const versions = ['2.1.1', '2.1.0'];
+  const releases = versions.map((version, index) => ({
+    version, digest: 'sha256:' + (index ? 'a' : 'b').repeat(64),
+    permissions: index ? ['tools.execute'] : ['tools.read'], commands: [], pages: [], targets: ['web'],
+  }));
+  const candidate = releases[1]!;
   let installs = 0;
   await page.route('**/api/v1/**', async (request) => {
     const path = new URL(request.request().url()).pathname;
@@ -405,23 +409,27 @@ test('npm source previews the signed release and installs its reviewed permissio
           },
         ],
       });
-    if (path.endsWith('/npm/resolve')) {
-      expect(request.request().postDataJSON()).toEqual({
-        ...scope,
-        package_name: '@memstack/sample',
-        version: '2.1.0',
-      });
-      resolves++;
-      return request.fulfill({ json: preview });
+    if (path.endsWith('/npm/catalog')) {
+      return request.fulfill({ json: { source: 'local npm', source_error: null, items: [item], total: 1, can_manage: true } });
     }
-    if (path.endsWith('/install')) {
+    if (path.endsWith('/npm/detail')) {
+      const query = new URL(request.request().url()).searchParams;
+      expect(query.get('plugin_id')).toBe(item.plugin_id);
+      const version = query.get('version') ?? item.latest_version;
+      return request.fulfill({ json: {
+        ...item, versions, release: releases.find((r) => r.version === version),
+        source: 'local npm', source_error: null, release_error: null, can_manage: true, can_execute: true,
+        desired_revision: 4, previous_version: null, current_permissions: [],
+      } });
+    }
+    if (path.endsWith('/npm/apply')) {
       expect(request.request().postDataJSON()).toEqual({
-        ...scope,
-        archive_base64: preview.archive_base64,
-        approved_permissions: preview.permissions,
+        ...scope, package_name: item.package_name, version: candidate.version,
+        expected_revision: 4, expected_digest: candidate.digest, approved_permissions: candidate.permissions,
       });
       installs++;
-      return request.fulfill({ json: { status: 'recorded' } });
+      return request.fulfill({ json: { plugin_id: item.plugin_id, actual_digest: candidate.digest,
+        desired_revision: 5, installed_version: candidate.version, running_version: candidate.version } });
     }
     return request.fulfill({ json: { items: [] } });
   });
@@ -429,26 +437,61 @@ test('npm source previews the signed release and installs its reviewed permissio
   await page.getByLabel('Email', { exact: true }).fill('admin@example.test');
   await page.getByLabel('Password', { exact: true }).fill('test-only');
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
-  const name = page.getByLabel('npm package name');
-  const version = page.getByLabel('Exact npm version');
-  const resolve = page.getByRole('button', { name: 'Preview signed package' });
-  const install = page.getByTestId('optional-business-install');
-  await name.fill('https://invalid.example/package.tgz');
-  await version.fill('2.1.0');
-  await expect(resolve).toBeDisabled();
-  await name.fill('@memstack/sample');
-  await version.fill('latest');
-  await expect(resolve).toBeDisabled();
-  await version.fill('2.1.0');
-  await resolve.click();
-  await expect(page.getByText(preview.digest, { exact: false })).toContainText('tools.execute');
-  await expect(install).toBeEnabled();
+  await page.locator('#pm-card-memstack-sample').click();
+  const version = page.getByRole('combobox', { name: 'Select version' });
+  await expect(version).toHaveValue('2.1.1');
+  await version.selectOption(candidate.version);
+  await expect(page.locator('.pm-spec .pm-digest')).toHaveText(candidate.digest);
+  await page.getByRole('button', { name: 'Install', exact: true }).click();
+  const review = page.getByRole('dialog');
+  await expect(review).toContainText(candidate.version);
+  await expect(review).toContainText(candidate.digest);
+  await expect(review).toContainText('tools.execute');
+  await expect(review).not.toContainText('tools.read');
   expect(installs).toBe(0);
-  await version.fill('2.1.1');
-  await expect(install).toBeDisabled();
-  await version.fill('2.1.0');
-  await resolve.click();
-  await install.click();
+  await review.getByRole('button', { name: 'Approve and enable' }).click();
   await expect.poll(() => installs).toBe(1);
-  expect(resolves).toBe(2);
+});
+
+test('anchored signed pane keeps source input and uses the installed child scope', async ({ page }) => {
+  await page.goto('/e2e/fixtures/rich-package-host.html?anchor');
+  const guest = page.frameLocator('iframe[data-page-ready="true"]').first().frameLocator('iframe');
+  await guest.getByPlaceholder('Draft').fill('unsent');
+  const section = page.getByRole('region', {name:'Signed pane'});
+  const child = section.frameLocator('iframe').frameLocator('iframe');
+  await expect(child.locator('body')).toContainText('?selection=first');
+  await expect(child.locator('body')).not.toContainText('ignored');
+  const denied = await guest.locator('body').evaluate(() =>
+    window.memstack.invoke('child-op').then(() => '', error => error.message)
+  );
+  expect(denied).toBe('page_capability_unavailable');
+  const unavailable = await guest.locator('body').evaluate(element => new Promise<string>(resolve => {
+    const close = window.memstack.anchorSlot('unknown@1', element, '', reason => { close(); resolve(reason); });
+  }));
+  expect(unavailable).toBe('page_slot_denied');
+  await child.getByRole('button', {name:'Operate'}).click();
+  await expect(page.locator('#host-log')).toContainText('/child/commands');
+  await expect(page.locator('#host-log')).toContainText('"project_id":"p"');
+  await expect(section).toHaveCSS('width','280px');
+  await guest.getByRole('button', { name: 'Drag divider' }).hover();
+  await page.mouse.down();
+  await expect(section).toHaveCSS('pointer-events', 'none');
+  const box = await section.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.up();
+  await expect(section).toHaveCSS('pointer-events', 'auto');
+  await guest.getByRole('button',{name:'Resize pane'}).click();
+  await expect(section).toHaveCSS('width','340px');
+  await child.getByRole('button',{name:'Subscribe'}).click();
+  await expect(page.locator('#host-log')).toHaveText('subscribed');
+  await page.getByRole('button',{name:'Toggle pane installation'}).click();
+  await expect(section).toHaveCount(0);
+  await expect(page.locator('#host-log')).toHaveText('cancelled');
+  await expect(page.getByRole('status').filter({hasText:'child/pane'})).toBeVisible();
+  await page.getByRole('button',{name:'Toggle pane installation'}).click();
+  await expect(child.getByRole('button',{name:'Operate'})).toBeVisible();
+  await guest.getByRole('button',{name:'Close pane'}).click();
+  await expect(section).toHaveCount(0);
+  await expect(guest.getByPlaceholder('Draft')).toHaveValue('unsent');
 });

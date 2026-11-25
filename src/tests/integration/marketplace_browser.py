@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
+import pytest
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout, expect
 
 
@@ -42,6 +43,14 @@ def confirm(page: Page) -> None:
     if scope:
         expect(dialog).to_contain_text(scope)
     dialog.locator(".pm-actions button").last.click()
+    page.wait_for_function(
+        """() => !document.querySelector("dialog.pm-dialog[open]") ||
+                 document.querySelector("dialog.pm-dialog .pm-error") !== null""",
+        timeout=120000,
+    )
+    error = dialog.locator(".pm-error")
+    if error.count():
+        pytest.fail("Package change was rejected: " + error.inner_text())
 
 
 def install_previous(page: Page, previous: str) -> None:

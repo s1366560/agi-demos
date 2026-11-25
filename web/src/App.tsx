@@ -60,9 +60,12 @@ function BusinessRoutes({
   children: ReactNode;
   matchesFullRoute: FullWorkbenchMatcher;
 }) {
-  const { pathname } = useLocation();
-  if (enabled && isTenantPackageBookmark(pathname)) return <TenantPackageBookmark />;
+  const { pathname, search } = useLocation();
   const routes = <Routes>{children}</Routes>;
+  // Explicit legacy bookmarks in the compatibility build exercise its original route tree.
+  if (import.meta.env.MODE === 'compat' && new URLSearchParams(search).get('workbench') === 'full')
+    return routes;
+  if (enabled && isTenantPackageBookmark(pathname)) return <TenantPackageBookmark />;
   return enabled ? (
     <ProjectBusinessRoute matchesFullRoute={matchesFullRoute}>{routes}</ProjectBusinessRoute>
   ) : (

@@ -122,18 +122,16 @@ impl Prepared {
             _ => Err("device_plugin_grant_denied".into()),
         };
         operation.close().await.map_err(|e| e.to_string())?;
-        if authority.selection.generation_id.starts_with('p') {
-            authority
-                .device
-                .check(
-                    &authority.owner,
-                    &authority.selection.reference,
-                    &authority.selection.generation_id,
-                    &authority.selection.approved_permissions,
-                    Some(&authority.selection.grant_id),
-                )
-                .await?;
-        }
+        authority
+            .device
+            .check(
+                &authority.owner,
+                &authority.selection.reference,
+                &authority.selection.generation_id,
+                &authority.selection.approved_permissions,
+                Some(&authority.selection.grant_id),
+            )
+            .await?;
         authority.current()?;
         result
     }

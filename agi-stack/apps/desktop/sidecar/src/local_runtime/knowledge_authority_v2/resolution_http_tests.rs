@@ -44,6 +44,7 @@ async fn resolve(
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
 }
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn native_resolution_uses_typed_choice_scope_and_trusted_session_without_cloud_write() {
     let directory = TestDirectory::new();
@@ -133,6 +134,7 @@ async fn native_resolution_uses_typed_choice_scope_and_trusted_session_without_c
     state.platform_plugin_authority_v2.deactivate().await;
     server.abort();
 }
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn session_clear_rotate_aba_and_expiry_cannot_resolve_a_conflict_after_verification_started()
 {

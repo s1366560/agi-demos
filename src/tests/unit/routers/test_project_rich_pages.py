@@ -36,15 +36,29 @@ def page(script=b"app.mount(1)"):
         {"routes": ["//elsewhere"]},
         {"routes": ["/LOGIN/callback/:who"]},
         {"routes": ["/tenant/:tenantId/plugins/manage"]},
+        {"routes": ["/tenant/:tenantId/org-settings/info"]},
+        {"routes": ["/tenant/:tenantId/org-settings/:tab"]},
         {"routes": ["/tenant/:wrong/project/:projectId/ok"]},
         {"routes": ["/:unbounded"]},
         {"commands": ["undeclared"]},
+        {"voice_authorization": "unlisted"},
+        {"commands": None, "voice_authorization": "ping"},
+        {"commands": [], "voice_authorization": "ping"},
+        {"scope": "tenant", "routes": ["/tenant/:tenantId/account"], "voice_authorization": "ping"},
         {"routes": ["/:id/:id"]},
         {"targets": []},
         {"home": "true"},
         {"workbench": "true"},
+        {"navigation_actions": ["undefined"]},
+        {"navigation_actions": ["primary-create", "primary-create"]},
+        {"sidebar": {"rename": {"command": "unlisted"}}},
+        {"sidebar": {"rows": {"command": "ping", "row_route": "/login"}}},
+        {"sidebar": {"rows": {"command": "ping", "inputs": {"token": []}}}},
         {"page_links": ["other/../page"]},
         {"page_links": ["other/page", "other/page"]},
+        {"anchored_slots": {"bad": "child/pane"}},
+        {"anchored_slots": {"pane@1": "child/../pane"}},
+        {"slots": ["pane@1"], "anchored_slots": {"pane@1": "child/pane"}},
         {"contributes_to": "unversioned"},
         {"routes": [], "contributes_to": "pkg/status@1", "slots": ["nested@1"]},
         {"routes": [], "contributes_to": "pkg/status@1", "home": True},
@@ -74,6 +88,16 @@ def test_signed_embedded_views_use_versioned_slots_and_have_no_navigation_route(
     assert not widget.routes
 
 
+def test_voice_is_exposed_only_by_a_declared_project_authorization_command():
+    (entry,) = parse_rich_pages([{**page(), "voice_authorization": "ping"}], {"ping"})
+    assert entry.descriptor()["voice_authorization"] == "ping"
+
+
+def test_anchored_slot_binds_versioned_position_to_specific_child():
+    (owner,) = parse_rich_pages([{**page(), "anchored_slots": {"side@1": "child/panel"}}], {"ping"})
+    assert owner.descriptor()["anchored_slots"] == {"side@1": "child/panel"}
+
+
 def test_workbench_layout_is_opt_in_per_target():
     web, desktop = parse_rich_pages(
         [
@@ -84,6 +108,11 @@ def test_workbench_layout_is_opt_in_per_target():
     )
     assert web.descriptor()["workbench"] is True
     assert "workbench" not in desktop.descriptor()
+
+
+def test_shell_actions_do_not_require_specific_command_or_route_names():
+    (entry,) = parse_rich_pages([{**page(), "navigation_actions": ["group-create"]}], {"ping"})
+    assert entry.descriptor()["navigation_actions"] == ("group-create",)
 
 
 def test_link_destination_is_bound_to_a_package_and_page():
@@ -154,7 +183,11 @@ async def test_signed_page_lifecycle(http, publisher, tmp_path):  # noqa: F811
     async def activate(plugin, version, code):
         script = code.encode()
         (tmp_path / "app.js").write_bytes(script)
-        body, digest = publisher[1](version, plugin_id=plugin, pages=[page(script)])
+        body, digest = publisher[1](
+            version,
+            plugin_id=plugin,
+            pages=[{**page(script), "sidebar": {"rows": {"command": "ping"}}}],
+        )
         assert (await client.post(BASE + "/install", json=body, headers=headers)).is_success
         enabled = await client.post(f"{BASE}/{plugin}/enable", json=scope, headers=headers)
         return digest, enabled
@@ -170,6 +203,7 @@ async def test_signed_page_lifecycle(http, publisher, tmp_path):  # noqa: F811
     assert enabled.is_success
     overview = await client.get(BASE + "/", params=scope, headers=headers)
     assert overview.json()["items"][0]["pages"][0]["routes"] == ["/notes/:project"]
+    assert overview.json()["items"][0]["pages"][0]["sidebar"]["rows"] == {"command": "ping"}
     for target in ("web", "desktop-renderer"):
         item = (await read(first, target)).json()
         assert item["release_digest"] == first

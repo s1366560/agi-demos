@@ -38,7 +38,9 @@ def tenant_package(
     if not pages:
         raise OptionalBusinessError("invalid_package", "Release has no tenant entry")
     commands = tuple(
-        c for c in source.commands if any(c.command_id in page.commands for page in pages)
+        c
+        for c in source.commands
+        if c.scope != "project" and any(c.command_id in page.commands for page in pages)
     )
     tools = tuple(
         t for t in source.tools if any(not c.host_operation and c.tool == t.name for c in commands)

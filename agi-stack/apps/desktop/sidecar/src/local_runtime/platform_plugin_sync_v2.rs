@@ -142,16 +142,27 @@ impl PlatformPluginControlPlaneReconcilerV2 {
         let profile = state.profile;
         let mut reconciler = desktop_reconciler(&state);
         let (mode, active_authority) = match profile {
-            crate::sidecar_profile::SidecarProfile::PackageHost => {
+            crate::sidecar_profile::SidecarProfile::PackageHost
+            | crate::sidecar_profile::SidecarProfile::Full => {
                 (PlatformPluginAuthorityModeV2::Cloud, None)
             }
-            crate::sidecar_profile::SidecarProfile::Full => {
-                activate_authority_source(&state, &mut reconciler, &DesktopAuthoritySourceV2::Local)
-                    .await?;
-                (PlatformPluginAuthorityModeV2::Local, Some(DesktopAuthoritySourceV2::Local))
+            crate::sidecar_profile::SidecarProfile::Compat => {
+                activate_authority_source(
+                    &state,
+                    &mut reconciler,
+                    &DesktopAuthoritySourceV2::Local,
+                )
+                .await?;
+                (
+                    PlatformPluginAuthorityModeV2::Local,
+                    Some(DesktopAuthoritySourceV2::Local),
+                )
             }
         };
-        let selection = Arc::new(Mutex::new(PlatformPluginAuthoritySelectionV2 { mode, epoch: 0 }));
+        let selection = Arc::new(Mutex::new(PlatformPluginAuthoritySelectionV2 {
+            mode,
+            epoch: 0,
+        }));
         let (shutdown, shutdown_rx) = watch::channel(false);
         let (selection_tx, selection_rx) = mpsc::channel(SELECTION_COMMAND_CAPACITY);
         let task = tokio::spawn(reconcile_loop(
@@ -1829,8 +1840,9 @@ mod tests {
         state.platform_plugin_authority_v2.deactivate().await;
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
-    async fn local_bootstrap_is_active_before_control_plane_start_returns() {
+    async fn compat_local_bootstrap_is_active_before_control_plane_start_returns() {
         let state = test_state();
         let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
 

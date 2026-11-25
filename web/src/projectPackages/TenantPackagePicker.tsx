@@ -69,7 +69,8 @@ export function TenantPackagePicker({ token }: { token: string }) {
           revision={revision}
           pathname={location.pathname + location.search + location.hash}
           transport={session.transport}
-          streamCommand={session.stream}
+          openVoiceSocket={session.openVoiceSocket}
+        streamCommand={session.stream}
           managementLabel={t('projectPackages.manage')}
           navigate={(path, options) => void navigate(scopedPageLocation(path, bindings), options)}
           management={

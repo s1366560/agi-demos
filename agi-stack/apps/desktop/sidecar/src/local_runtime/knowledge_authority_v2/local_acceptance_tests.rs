@@ -63,6 +63,7 @@ fn scope(state: &LocalRuntimeState) -> Value {
     json!(operation_scope(&authenticated(state), &lease))
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn qualified_host_publishes_local_actions_and_durable_crud_through_real_loader() {
     let directories = AcceptanceDirectories::new();
@@ -137,6 +138,7 @@ async fn qualified_host_publishes_local_actions_and_durable_crud_through_real_lo
     restarted.shutdown().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn local_acceptance_keeps_sync_and_workspace_escape_closed() {
     let directories = AcceptanceDirectories::new();
@@ -200,6 +202,7 @@ async fn acceptance_profile_without_host_qualification_is_rejected_before_storag
     assert!(!directories.data.join("knowledge").exists());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn late_directory_replacement_revokes_observation_and_storage_access() {
     let directories = AcceptanceDirectories::new();
@@ -224,6 +227,7 @@ async fn late_directory_replacement_revokes_observation_and_storage_access() {
     control.shutdown().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn host_qualification_cannot_authorize_an_alternate_snapshot_digest() {
     let directories = AcceptanceDirectories::new();
@@ -260,6 +264,7 @@ async fn host_qualification_cannot_authorize_an_alternate_snapshot_digest() {
     state.platform_plugin_authority_v2.deactivate().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn ordinary_host_retains_disabled_default_profile_and_no_knowledge_storage() {
     let directories = AcceptanceDirectories::new();
@@ -273,6 +278,7 @@ async fn ordinary_host_retains_disabled_default_profile_and_no_knowledge_storage
     control.shutdown().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn explicit_sync_host_uses_separate_profile_and_requires_exact_cloud_descriptor() {
     let directories = AcceptanceDirectories::new();

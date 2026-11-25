@@ -46,7 +46,14 @@ export function CompatibilityPage({ market }: { market?: string }) {
     <section className="space-y-4 p-6">
       <h1 className="text-xl font-semibold">{t('fullHost.unavailable')}</h1>
       {market && (
-        <Link className="text-primary" to={market}>
+        <Link
+          className="text-primary"
+          to={
+            market +
+            (market.includes('?') ? '&' : '?') +
+            new URLSearchParams({ returnTo: location.pathname + location.search + location.hash })
+          }
+        >
           {t('tenant.pluginHub.backToMarket')}
         </Link>
       )}

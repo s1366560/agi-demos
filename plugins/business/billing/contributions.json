@@ -125,7 +125,8 @@
         "/billing"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "entry": {
         "path": "ui/web-billing.js",
@@ -147,41 +148,14 @@
       }
     },
     {
-      "id": "account",
-      "title": "Plans and invoices",
-      "routes": [
-        "/billing"
-      ],
-      "targets": [
-        "desktop-renderer"
-      ],
-      "entry": {
-        "path": "ui/desktop-billing.js",
-        "digest": "sha256:093cdc0831e117b8ab9d7031c287939fcef331e35b35b4ac48db14d68ed3b342"
-      },
-      "commands": [
-        "quote-free",
-        "quote-pro",
-        "quote-enterprise",
-        "tenant-account",
-        "change-plan",
-        "billing-details"
-      ],
-      "device_tools": [],
-      "workbench": true,
-      "style": {
-        "path": "ui/desktop-billing.css",
-        "digest": "sha256:e5e8a978770bf7ffc632b5e5087a3f5b4e96573f6d96ecc5cadf5a67fc7c2004"
-      }
-    },
-    {
       "id": "tenant-account",
       "title": "Tenant billing",
       "routes": [
         "/tenant/:tenantId/billing"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "entry": {
         "path": "ui/web-billing.js",
@@ -197,31 +171,6 @@
       "style": {
         "path": "ui/web-billing.css",
         "digest": "sha256:f65b452421a1914d5d870dff29882e0f033e536103d9e4b26b3ded8c1945cd13"
-      }
-    },
-    {
-      "id": "tenant-account",
-      "title": "Tenant billing",
-      "routes": [
-        "/tenant/:tenantId/billing"
-      ],
-      "targets": [
-        "desktop-renderer"
-      ],
-      "entry": {
-        "path": "ui/desktop-billing.js",
-        "digest": "sha256:093cdc0831e117b8ab9d7031c287939fcef331e35b35b4ac48db14d68ed3b342"
-      },
-      "commands": [
-        "billing-details",
-        "change-plan"
-      ],
-      "device_tools": [],
-      "scope": "tenant",
-      "workbench": true,
-      "style": {
-        "path": "ui/desktop-billing.css",
-        "digest": "sha256:e5e8a978770bf7ffc632b5e5087a3f5b4e96573f6d96ecc5cadf5a67fc7c2004"
       }
     }
   ]

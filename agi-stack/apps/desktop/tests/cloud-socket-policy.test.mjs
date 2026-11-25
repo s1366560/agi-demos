@@ -101,6 +101,11 @@ test('main policy supports exact terminal legacy, v2, and voice contracts withou
     },
     dependencies()
   );
+  const packageVoice = {kind: 'voice', url: voice.url + '&package_session=1', scope};
+  assert.equal((await authorizeVaultBoundCloudSocket(packageVoice, dependencies())).url, packageVoice.url);
+  for (const suffix of ['&package_session=0','&package_session=1&extra=1']) {
+    await assert.rejects(authorizeVaultBoundCloudSocket({...packageVoice, url: voice.url + suffix}, dependencies()));
+  }
   assert.deepEqual(voice.protocols, ['memstack.auth', trustedSession.credential]);
   assert.deepEqual(voice.binary, {
     client_to_server: true,

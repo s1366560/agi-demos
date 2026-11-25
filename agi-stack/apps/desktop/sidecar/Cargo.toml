@@ -57,6 +57,8 @@ agistack-local-run-upload = { path = "../../../crates/local-run-upload" }
 agistack-adapters-mem = { path = "../../../crates/adapters-mem" }
 agistack-adapters-wasmtime = { path = "../../../crates/adapters-wasmtime" }
 agistack-plugin-host = { path = "../../../crates/plugin-host", features = ["external-wasm-v2"] }
+cap-std = "3"
+cap-fs-ext = "3"
 
 [dev-dependencies]
 ring = "0.17.14"

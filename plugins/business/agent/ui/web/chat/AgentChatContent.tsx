@@ -1,3 +1,4 @@
+import { quoteMessage, stripSubAgentDelegationPrefix } from './messageDraft';
 /**
  * AgentChatContent - Agent Chat content with multi-mode layout
  *
@@ -31,7 +32,6 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { App, Dropdown, Modal } from 'antd';
 import {
-  GripHorizontal,
   Download,
   ChevronDown,
   GitCompareArrows,
@@ -103,7 +103,7 @@ import { InputBar } from '@/components/agent/InputBar';
 import { LayoutModeSelector } from '@/components/agent/layout/LayoutModeSelector';
 import { MessageArea } from '../transcript/MessageArea';
 import { ProjectAgentStatusBar } from '@/components/agent/ProjectAgentStatusBar';
-import { Resizer } from '@/components/layout/Resizer';
+import { AgentChatColumn, AgentStatusFrame } from './AgentChatColumn';
 import { RunReviewDrawer } from '@/components/agent/review/RunReviewDrawer';
 import { SplitPaneLayout } from '@/components/agent/SplitPaneLayout';
 import { ICON_BUTTON_CLASSES, LAYOUT_BG_CLASSES } from './styles';
@@ -138,24 +138,9 @@ interface AgentChatContentProps {
   loadConversationList?: boolean | undefined;
 }
 
-// Constants for resize constraints
-const INPUT_MIN_HEIGHT = 160;
-const INPUT_MAX_HEIGHT = 560;
-const INPUT_DEFAULT_HEIGHT = 160;
-
 function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   const value = metadata?.[key];
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
-}
-
-// Matches the prefix injected by handleSend for forced SubAgent delegation;
-// stripped back out when a user message is edited or retried.
-const SUBAGENT_DELEGATION_PREFIX_RE =
-  /^\[System Instruction: Delegate this task strictly to SubAgent "[^"]+"\]\n/;
-
-function stripSubAgentDelegationPrefix(content: string): string {
-  const match = content.match(SUBAGENT_DELEGATION_PREFIX_RE);
-  return match ? content.slice(match[0].length) : content;
 }
 
 function workspaceNodeIdFromConversationId(
@@ -485,7 +470,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     );
 
     // Local UI state
-    const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
     const [chatSearchVisible, setChatSearchVisible] = useState(false);
     const [loadEarlierFailed, setLoadEarlierFailed] = useState(false);
     const [selectedAgentSessionId, setSelectedAgentSessionId] = useState<string | null>(null);
@@ -810,14 +794,8 @@ ${content}`;
           : 'fullText' in event && typeof event.fullText === 'string'
             ? event.fullText
             : '';
-      const trimmed = raw.trim();
-      if (!trimmed) return;
-      const excerpt = trimmed.length > 500 ? `${trimmed.slice(0, 500)}…` : trimmed;
-      const quoted = excerpt
-        .split('\n')
-        .map((line) => `> ${line}`)
-        .join('\n');
-      requestComposerRefill(`${quoted}\n\n`);
+      const reply = quoteMessage(raw);
+      if (reply) requestComposerRefill(reply);
     }, []);
 
     // Retry: resend the nearest preceding user message.
@@ -1004,18 +982,16 @@ ${content}`;
     }, [activeConversationId, conversationId, isPlanMode, message, t]);
 
     const chatColumn = (
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
-        {(headerExtra || runInputAuthority.activeRun) && (
-          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white dark:bg-slate-900 px-4 py-2 flex items-center gap-2">
+      <AgentChatColumn
+        header={(headerExtra || runInputAuthority.activeRun) && <>
             {headerExtra}
             <RunReviewDrawer
               run={runInputAuthority.activeRun}
               latestTurnId={runInputAuthority.activeRun?.turn_id ?? null}
             />
-          </div>
-        )}
-        {(currentConversation || activeAgentNode?.name) && (
-          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/40 px-4 py-2 flex items-center gap-2 min-w-0">
+
+        </>}
+        identity={(currentConversation || activeAgentNode?.name) && <>
             <ConversationAgentBadge conversation={currentConversation} />
             <ExecutionTargetBadge
               executionTarget={
@@ -1056,9 +1032,9 @@ ${content}`;
                 {activeAgentNode.name}
               </span>
             )}
-          </div>
-        )}
-        <div className="flex-1 overflow-hidden relative min-h-0">
+
+        </>}
+        timeline={<>
           {messageArea}
           <ChatSearch
             timeline={timeline}
@@ -1067,27 +1043,10 @@ ${content}`;
               setChatSearchVisible(false);
             }}
           />
-        </div>
-        <div
-          className="relative flex flex-shrink-0 flex-col border-t border-slate-200/60 bg-white shadow-[0_-1px_2px_rgba(15,23,42,0.025)] dark:border-slate-700/50 dark:bg-slate-900"
-          style={{ minHeight: inputHeight }}
-        >
-          <div className="absolute -top-2 left-0 right-0 z-20 flex justify-center">
-            <Resizer
-              direction="vertical"
-              currentSize={inputHeight}
-              minSize={INPUT_MIN_HEIGHT}
-              maxSize={INPUT_MAX_HEIGHT}
-              onResize={setInputHeight}
-              position="top"
-            />
-            <div className="pointer-events-none absolute top-1 flex items-center gap-1 text-slate-400">
-              <GripHorizontal size={12} />
-            </div>
-          </div>
-          <div className="px-4 pt-3">
-            <WebComposerExecutionPlacement placement={composerPlacement} />
-          </div>
+
+        </>}
+        placement={<WebComposerExecutionPlacement placement={composerPlacement} />}
+        composer={
           <InputBar
             ref={inputBarRef}
             onSend={(...args) => {
@@ -1114,8 +1073,9 @@ ${content}`;
             promotingRunInputId={runInputAuthority.promotingInputId}
             onPromoteRunInput={runInputAuthority.promote}
           />
-        </div>
-      </div>
+
+        }
+      />
     );
 
     // Export conversation as Markdown
@@ -1245,14 +1205,15 @@ ${content}`;
     ]);
 
     const statusBarWithLayout = (
-      <div className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 min-w-0">
-        <div className="flex items-center min-w-0">
+      <AgentStatusFrame
+        slots={
           <WorkspaceStatusBar
             {...workspaceStatusSlots}
             className="min-w-0 flex-shrink border-0 bg-transparent px-2 py-0"
           />
-          <div className="flex-1 min-w-0 overflow-hidden">{statusBar}</div>
-          <div className="flex items-center gap-1 sm:gap-2 pr-2 sm:pr-3 flex-shrink-0">
+        }
+        status={statusBar}
+        actions={<>
             {conversationArtifacts.length > 0 && (
               <button
                 type="button"
@@ -1317,9 +1278,8 @@ ${content}`;
             )}
             <AppLauncher variant="status" />
             <LayoutModeSelector hasWorkspace={!!effectiveWorkspaceId} />
-          </div>
-        </div>
-      </div>
+        </>}
+      />
     );
 
     // Comparison mode: side-by-side conversation view

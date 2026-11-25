@@ -341,6 +341,142 @@
       "permissions": [
         "app.agent.attachments.turn"
       ]
+    },
+    {
+      "id": "activity-list",
+      "host_operation": "app.agent.activity.read",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.activity.read"
+      ]
+    },
+    {
+      "id": "activity-mark",
+      "host_operation": "app.agent.activity.receipts",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.activity.receipts"
+      ]
+    },
+    {
+      "id": "review-latest",
+      "host_operation": "app.agent.review.latest",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.review.latest"
+      ]
+    },
+    {
+      "id": "review-details",
+      "host_operation": "app.agent.review.details",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.review.details"
+      ]
+    },
+    {
+      "id": "dashboard-read",
+      "host_operation": "app.agent.dashboard.read",
+      "payload": {},
+      "permissions": [
+        "app.agent.dashboard.read"
+      ],
+      "accepts_input": true,
+      "scope": "tenant"
+    },
+    {
+      "id": "dashboard-trace",
+      "host_operation": "app.agent.dashboard.trace",
+      "payload": {},
+      "permissions": [
+        "app.agent.dashboard.trace"
+      ],
+      "accepts_input": true,
+      "scope": "tenant"
+    },
+    {
+      "id": "dashboard-configure",
+      "host_operation": "app.agent.dashboard.configure",
+      "payload": {},
+      "permissions": [
+        "app.agent.dashboard.configure"
+      ],
+      "accepts_input": true,
+      "scope": "tenant"
+    },
+    {
+      "id": "chat-composer-read",
+      "host_operation": "app.agent.composer.read",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.read"
+      ],
+      "scope": "project"
+    },
+    {
+      "id": "chat-composer-save",
+      "host_operation": "app.agent.composer.save",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.save"
+      ],
+      "scope": "project"
+    },
+    {
+      "id": "chat-models",
+      "host_operation": "app.agent.composer.models",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.models"
+      ],
+      "scope": "project"
+    },
+    {
+      "id": "chat-project-context",
+      "host_operation": "app.agent.composer.context",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.context"
+      ],
+      "scope": "project"
+    },
+    {
+      "id": "chat-welcome",
+      "host_operation": "app.agent.composer.welcome",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.welcome"
+      ],
+      "scope": "project"
+    },
+    {
+      "id": "chat-lifecycle-control",
+      "host_operation": "app.agent.lifecycle.control",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.lifecycle.control"
+      ],
+      "scope": "project"
+    },
+    {
+      "id": "chat-voice-authorize",
+      "host_operation": "app.agent.voice.authorize",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.voice.authorize"
+      ],
+      "scope": "project"
     }
   ],
   "ui": [
@@ -382,53 +518,18 @@
       "home": true,
       "title": "Agent chat",
       "routes": [
-        "/agent/chat",
         "/tenant/:tenantId/agent-workspace",
         "/tenant/:tenantId/agent-workspace/:conversationId",
+        "/agent/chat",
         "/agent/chat/:conversationId"
       ],
       "targets": [
-        "web"
-      ],
-      "entry": {
-        "path": "ui/chat-web.js",
-        "digest": "sha256:752b0ec4a0e3ac0a5380cc406430cab11c1d5e77e98fddad0286401a8eaa4202"
-      },
-      "commands": [
-        "chat-list",
-        "chat-create",
-        "chat-history",
-        "chat-turn",
-        "chat-cancel",
-        "chat-rename",
-        "chat-interactions",
-        "chat-respond",
-        "chat-upload",
-        "chat-attached-turn"
-      ],
-      "device_tools": [],
-      "style": {
-        "path": "ui/chat-web.css",
-        "digest": "sha256:d56f97a39324fdf1b8e8ee553c555fc1986522ca424bdd9920a2d5aa228cb787"
-      },
-      "workbench": true
-    },
-    {
-      "id": "chat",
-      "home": true,
-      "title": "Agent chat",
-      "routes": [
-        "/agent/chat",
-        "/tenant/:tenantId/agent-workspace",
-        "/tenant/:tenantId/agent-workspace/:conversationId",
-        "/agent/chat/:conversationId"
-      ],
-      "targets": [
+        "web",
         "desktop-renderer"
       ],
       "entry": {
-        "path": "ui/chat-desktop.js",
-        "digest": "sha256:ba37f51a0c052eaef2ef19219634a5b69eb0dafddcc41a84f724293d192b3da9"
+        "path": "ui/chat-web.js",
+        "digest": "sha256:12b25764a80ea196c30bf2cf496a6a89fb6a075d7d3106cf9c5bf4a6e1936953"
       },
       "commands": [
         "chat-list",
@@ -440,16 +541,114 @@
         "chat-interactions",
         "chat-respond",
         "chat-upload",
-        "chat-attached-turn"
+        "chat-attached-turn",
+        "activity-list",
+        "activity-mark",
+        "review-latest",
+        "review-details",
+        "chat-composer-read",
+        "chat-composer-save",
+        "chat-models",
+        "chat-project-context",
+        "chat-welcome",
+        "chat-lifecycle-control",
+        "chat-voice-authorize"
       ],
       "device_tools": [
         "local_chat"
       ],
       "style": {
-        "path": "ui/chat-desktop.css",
-        "digest": "sha256:13a682109dc57396afea2b7a089a632d3c0174a33d09f813f372c0fe11c7996b"
+        "path": "ui/chat-web.css",
+        "digest": "sha256:0660da829fd284d121cdef54036bbb0aa54d1d3c432a352c76bb9415863c0e69"
       },
-      "workbench": true
+      "workbench": true,
+      "sidebar": {
+        "rows": {
+          "command": "chat-list",
+          "collection": "items",
+          "fields": {
+            "id": "id",
+            "label": "title",
+            "target": "execution_target",
+            "group": "workspace_id",
+            "child": "linked_workspace_task_id",
+            "groupLabel": "workspace_name",
+            "updatedAt": "updated_at",
+            "createdAt": "created_at",
+            "active": "sidebar_active",
+            "role": "sidebar_role",
+            "hidden": "sidebar_hidden"
+          },
+          "route": "/tenant/:tenantId/agent-workspace",
+          "row_route": "/tenant/:tenantId/agent-workspace/:conversationId",
+          "row_param": "conversationId",
+          "group_query": "workspaceId",
+          "constants": {
+            "workbench": true,
+            "limit": 10
+          }
+        },
+        "create": {
+          "command": "chat-create",
+          "inputs": {
+            "title": "label",
+            "workspace_id": "group"
+          },
+          "fields": {
+            "id": "id"
+          }
+        },
+        "rename": {
+          "command": "chat-rename",
+          "inputs": {
+            "conversation_id": "id",
+            "title": "label"
+          }
+        }
+      },
+      "query_params": [
+        "workspaceId",
+        "conversationId"
+      ],
+      "page_links": [
+        "memstack-environments/sandbox-interaction",
+        "memstack-workspace/workspace-posts"
+      ],
+      "navigation_actions": [
+        "primary-create"
+      ],
+      "anchored_slots": {
+        "code@1": "memstack-environments/agent-code",
+        "collab@1": "memstack-workspace/agent-collab"
+      },
+      "voice_authorization": "chat-voice-authorize"
+    },
+    {
+      "id": "dashboard",
+      "title": "Multi-agent dashboard",
+      "routes": [
+        "/tenant/:tenantId/agents"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "dashboard-read",
+        "dashboard-trace",
+        "dashboard-configure"
+      ],
+      "device_tools": [],
+      "scope": "tenant",
+      "workbench": true,
+      "entry": {
+        "path": "ui/web-dashboard.js",
+        "digest": "sha256:730dd4992f99018b128f4f2af6503b6d41e1b8fa21478df8631446b76a6ab6cd"
+      },
+      "style": {
+        "path": "ui/web-dashboard.css",
+        "digest": "sha256:a32c89968de9f123aa740afea2c3acd6b0eaf82cf5f1d80077f9fd07cd680f9e"
+      }
     }
   ]
 }

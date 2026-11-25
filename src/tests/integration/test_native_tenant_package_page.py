@@ -6,7 +6,7 @@ import re
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from src.tests.integration.marketplace_browser import apply
+from src.tests.integration.marketplace_browser import apply, business_release, more
 
 
 @pytest.mark.integration
@@ -108,14 +108,59 @@ def test_native_original_billing_respects_plan_authority():
             if plan.inner_text() != before:
                 billing.get_by_role("button", name=before, exact=True).click()
                 expect(plan).to_have_text(before, timeout=30000)
-        page.get_by_role("button", name=re.compile("^返回工作台$|^Back to workspace$", re.I)).click()
+        page.get_by_role(
+            "button", name=re.compile("^返回工作台$|^Back to workspace$", re.I)
+        ).click()
         close = page.get_by_role("button", name=re.compile("^关闭设置$|^Close settings$", re.I))
         if close.is_visible():
             close.click()
         page.get_by_role("button", name=re.compile("^全部功能$|^All features$", re.I)).click()
-        page.locator('[role="dialog"] button').filter(has_text=re.compile("账单|Billing")).first.click()
+        page.locator('[role="dialog"] button').filter(
+            has_text=re.compile("账单|Billing")
+        ).first.click()
         expect(billing).to_be_visible(timeout=30000)
         expect(billing.locator(":scope > dl dd").first).to_have_text(
             os.environ["MEMSTACK_QA_NATIVE_BILLING_TENANT"]
         )
         expect(plan).to_have_text(before)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not os.getenv("MEMSTACK_QA_NATIVE_ENVIRONMENTS"),
+    reason="requires a disposable native tenant and published Environments release",
+)
+def test_native_deployments_templates_and_pool():
+    from src.tests.integration.test_fixed_workbench_market import _back, _details, _open
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.connect_over_cdp(
+            os.environ["MEMSTACK_QA_BUSINESS_MARKET_CDP"]
+        )
+        page = browser.contexts[0].pages[0]
+        page.set_default_timeout(60000)
+        page.locator(".package-market-scope select").select_option("tenant")
+        active = _details(page, "environments")
+        previous = active.inner_text()
+        current = business_release("environments")
+        if previous != current:
+            apply(page, current)
+        try:
+            templates = _open(page, "Instance templates")
+            expect(templates.locator("#instance-templates-title")).to_be_visible()
+            create = templates.locator(".instance-templates-header button").last
+            create.click()
+            expect(templates.get_by_role("dialog").locator("input").first).to_be_visible()
+            _back(page, "environments")
+            deployments = _open(page, "Deployments")
+            expect(deployments.locator("#runtime-deployments-title")).to_be_visible()
+            _back(page, "environments")
+            pool = _open(page, "Runtime pool")
+            expect(pool.locator(".ant-statistic").first).to_be_visible()
+        finally:
+            _back(page, "environments")
+            if previous != current:
+                if previous in {"Inactive", "未运行"}:
+                    more(page, "Uninstall|卸载")
+                else:
+                    apply(page, previous)

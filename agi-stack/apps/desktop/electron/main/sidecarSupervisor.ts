@@ -1,4 +1,4 @@
-import { fullDesktop } from '../desktopProfile';
+import { fullDesktop, sidecarRuntimeProfile } from '../desktopProfile';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -515,7 +515,7 @@ export class SidecarSupervisor {
           workspaceRoot: this.#options.workspaceRoot,
           localKnowledgeAcceptance: this.#options.localKnowledgeAcceptance,
           workspaceCoreBinaryPath: this.#options.workspaceCoreBinaryPath,
-          runtimeProfile: fullDesktop ? 'full' : 'package-host',
+          runtimeProfile: sidecarRuntimeProfile,
           legacyDataDirectories: this.#options.legacyDataDirectories,
         })}\n`,
         (error) => {

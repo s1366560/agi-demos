@@ -3,6 +3,12 @@
 declare const __AGISTACK_FULL_DESKTOP__: boolean;
 export const fullDesktop = typeof __AGISTACK_FULL_DESKTOP__ === 'undefined' || __AGISTACK_FULL_DESKTOP__;
 
+declare const __AGISTACK_COMPAT_DESKTOP__: boolean;
+export const sidecarRuntimeProfile =
+  typeof __AGISTACK_COMPAT_DESKTOP__ !== 'undefined' && __AGISTACK_COMPAT_DESKTOP__
+    ? 'compat'
+    : fullDesktop ? 'full' : 'package-host';
+
 export const packageCommands = new Set([
   'frontend_ready', 'device_plugin_manage_v2', 'cloud_request', 'cloud_request_cancel',
   'cloud_session_presence', 'cloud_session_projection', 'cloud_auth_password',

@@ -1,6 +1,6 @@
 # Workspace
 
-The legacy Web directory, task queue client, task state, blackboard hooks and collaboration views live together under [ui/web](ui/web). The desktop directory, overview, support and blackboard controllers live alongside their pages under [ui/desktop](ui/desktop). The signed project directory uses the scoped application capability and package worker described below.
+Web and Electron render the directory, tasks, overview, group chat and blackboard from the same signed [page entries](ui/signed/build.mjs). Edit their original components in [ui/web](ui/web). The chat page also mounts inside the Agent collaboration pane. CSV exports use a project-scoped command and the host's download or native save dialog.
 
 Workspace Core owns membership, task and collaboration transactions. The independently installable Workspace package contributes the directory, workspace creation, project overview, workspace details, general settings, member management, blackboard posts, task editing and CSV export. Code under `backend/` authorizes and projects the request. `src/lib.rs` formats the CSV in a Wasm guest. Run `uv run pytest plugins/business/workspace/tests` for the boundary tests.
 

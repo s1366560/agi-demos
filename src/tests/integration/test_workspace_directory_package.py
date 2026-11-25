@@ -22,6 +22,7 @@ import docker
 from alembic import command
 from plugins.business.workspace.backend.blackboard_surface import change_surface, read_surface
 from plugins.business.workspace.backend.collaboration import WORKSPACE_COLLABORATION_OPERATIONS
+from plugins.business.workspace.backend.group_chat import read_chat, send_chat
 from plugins.business.workspace.backend.workspace_directory_export import (
     create_workspace_operation,
     read_directory_operation,
@@ -184,6 +185,8 @@ async def _project_host(http, db_session, core, public, monkeypatch):
     app.state.workspace_core_client = core
     app.state.package_operations_v1 = {
         **WORKSPACE_COLLABORATION_OPERATIONS,
+        "app.workspace.chat.read": read_chat,
+        "app.workspace.chat.send": send_chat,
         "app.workspace.blackboard.read": read_surface,
         "app.workspace.blackboard.write": change_surface,
         "app.workspace.create": create_workspace_operation,
@@ -251,11 +254,14 @@ async def test_directory_exports_only_actual_core_memberships(  # noqa: PLR0915
                     "project_id": "p",
                     "approved_permissions": [
                         *WORKSPACE_COLLABORATION_OPERATIONS,
+                        "app.workspace.chat.read",
+                        "app.workspace.chat.send",
                         "app.workspace.blackboard.read",
                         "app.workspace.blackboard.write",
                         "ui.slot",
                         "tools.execute",
                         "app.workspace.directory.read",
+                        "app.workspace.overview.read",
                         "app.workspace.detail.read",
                         "app.workspace.create",
                         "app.workspace.settings.update",
@@ -271,6 +277,7 @@ async def test_directory_exports_only_actual_core_memberships(  # noqa: PLR0915
             )
             assert enabled.is_success, enabled.text
             await _verify_directory_command(api, base, actor, visible)
+            await _verify_group_chat(api, base, actor, visible, other)
 
             await _verify_detail_command(api, base, actor, viewer, visible, other, title)
             response = await report(list_path, actor)
@@ -599,6 +606,14 @@ async def _create_workspace_task(page, guest, expect):
     await page.reload()
     await guest.get_by_role("tab", name=re.compile("Goals")).click()
     await expect(guest.get_by_text("Follow up", exact=True).first).to_be_visible(timeout=30000)
+    await guest.get_by_role("button", name="Open task details").first.click()
+    close_task = guest.get_by_role("button", name="Close task details")
+    await expect(close_task).to_be_visible()
+    await expect(page).to_have_url(re.compile(r"(?:/tasks/|[?&]taskId=)[^&#?]+"))
+    await page.reload()
+    await expect(close_task).to_be_visible()
+    await close_task.click()
+    await expect(close_task).to_have_count(0)
 
 
 async def _update_workspace_settings(page, guest, expect):
@@ -629,3 +644,41 @@ async def _update_workspace_settings(page, guest, expect):
     await guest.get_by_role("tab", name=re.compile("Settings")).click()
     await expect(guest.locator("#workspace-name")).to_have_value("Release council")
     await expect(guest.locator("#workspace-archive")).to_have_attribute("aria-checked", "true")
+
+
+async def _verify_group_chat(api, base, actor, workspace, other):
+    async def invoke(command_id, payload):
+        return await api.post(
+            f"{base}/{PACKAGE}/commands",
+            headers=actor,
+            json={
+                "tenant_id": "t",
+                "project_id": "p",
+                "command_id": command_id,
+                "payload": payload,
+            },
+        )
+
+    roster = await invoke("read-group-chat", {"workspace_id": workspace, "view": "roster"})
+    assert roster.is_success and isinstance(roster.json()["members"], list), roster.text
+    text = "Group message " + uuid4().hex
+    fields = {
+        "workspace_id": workspace,
+        "content": text,
+        "mentions": [],
+        "request_id": str(uuid4()),
+    }
+    message = await invoke("send-group-message", fields)
+    assert message.is_success, message.text
+    replay = await invoke("send-group-message", fields)
+    assert replay.json()["message"]["id"] == message.json()["message"]["id"]
+    history = await invoke("read-group-chat", {"workspace_id": workspace, "view": "messages"})
+    assert history.is_success
+    assert len([msg for msg in history.json()["messages"] if msg["content"] == text]) == 1
+    foreign = await invoke("read-group-chat", {"workspace_id": other, "view": "messages"})
+    assert foreign.status_code in (403, 404)
+    assert message.json()["message"]["sender_id"] == history.json()["principal_id"]
+    denied = await invoke("send-group-message", {**fields, "workspace_id": other})
+    assert denied.status_code in (403, 404)
+    invalid = await invoke("send-group-message", {**fields, "sender_id": "someone-else"})
+    assert invalid.status_code == 400

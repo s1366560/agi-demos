@@ -41,7 +41,7 @@ class Archive(TenantBody):
 
 
 class Approval(TenantBody):
-    approved_permissions: list[str] = Field(max_length=32)
+    approved_permissions: list[str] = Field(max_length=100)
     expected_revision: Revision
     expected_digest: Digest
 

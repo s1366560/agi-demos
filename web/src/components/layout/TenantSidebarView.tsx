@@ -35,6 +35,7 @@ import type {
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDistanceToNow } from '@/utils/date';
 import {
+  getDefaultProject,
   lastProjectIdStorageKey,
   lastProjectSelectionSourceStorageKey,
   MANUAL_PROJECT_SELECTION_SOURCE,
@@ -59,7 +60,7 @@ import { Resizer } from '../layout/Resizer';
 
 import type { Conversation as FullConversation } from '@/types/agent';
 export type SidebarConversation = Pick<FullConversation, 'id' | 'title' | 'project_id'> &
-  Partial<FullConversation>;
+  Partial<FullConversation> & { slot?: { role?: string; active: boolean; hidden: boolean } };
 type Conversation = SidebarConversation;
 import type { Project } from '@/types/memory';
 
@@ -171,6 +172,7 @@ function readMetadataString(
 }
 
 function workspaceIdFromConversation(conversation: Conversation): string | null {
+  if (conversation.slot) return conversation.workspace_id ?? null;
   if (conversation.workspace_id) {
     return conversation.workspace_id;
   }
@@ -186,6 +188,7 @@ function workspaceIdFromConversation(conversation: Conversation): string | null 
 }
 
 function workspaceNodeIdFromConversation(conversation: Conversation): string | null {
+  if (conversation.slot) return conversation.linked_workspace_task_id ?? null;
   if (conversation.linked_workspace_task_id) {
     return conversation.linked_workspace_task_id;
   }
@@ -203,6 +206,7 @@ function workspaceNodeIdFromConversation(conversation: Conversation): string | n
 }
 
 function isDerivedAgentConversation(conversation: Conversation): boolean {
+  if (conversation.slot) return conversation.slot.hidden;
   if (conversation.parent_conversation_id) {
     return true;
   }
@@ -306,6 +310,16 @@ function buildConversationDisplay(
 ) {
   const fallbackTitle = t('agent.sidebar.untitled', 'Untitled Conversation');
   const rawTitle = conversation.title || fallbackTitle;
+  if (conversation.slot) {
+    return {
+      contextLabel: conversation.workspaceName ?? conversation.projectName,
+      displayTitle: conversation.workspaceTaskTitle || rawTitle,
+      isWorkspaceConversation: !!conversation.workspace_id,
+      roleLabel: conversation.slot.role,
+      taskTitle: conversation.workspaceTaskTitle || rawTitle,
+      timeAgo,
+    };
+  }
   const roleLabel = workspaceRoleLabel(conversation, rawTitle, t);
   const isWorkspaceConversation = Boolean(roleLabel || workspaceIdFromConversation(conversation));
   const taskTitle = isWorkspaceConversation
@@ -420,7 +434,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
             localRootLabel={conversation.local_root_label}
           />
         }
-        active={conversation.status === 'active'}
+        active={conversation.slot?.active ?? conversation.status === 'active'}
         onRename={onRename}
         onDelete={onDelete}
       />
@@ -482,6 +496,11 @@ export interface TenantChatSidebarProps {
 }
 
 export interface SidebarData {
+  navigation?: {
+    groupQuery?: string | undefined;
+    link: (id?: string, group?: string | null) => string | null;
+    match(path: string): { active: boolean; id: string | null } | null;
+  };
   activeConversationId: string | null;
   setActiveConversation: (id: string | null) => void;
   loadConversations: (
@@ -615,6 +634,7 @@ export const TenantSidebarView: React.FC<
     canDelete,
     canCreate,
     canRename,
+    navigation: signedNavigation,
   } = useSidebarData();
   const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore(
     useShallow((state) => ({
@@ -726,11 +746,13 @@ export const TenantSidebarView: React.FC<
     projectSearchPage > 0 &&
     projectSearchTotal === 0;
   const tenantBasePath = normalizedTenantId ? `/tenant/${normalizedTenantId}` : '/tenant';
+  const slotLocation = signedNavigation?.match(location.pathname);
   const isAgentWorkspaceRoute =
-    location.pathname === '/agent/chat' ||
-    location.pathname.startsWith('/agent/chat/') ||
-    location.pathname === `${tenantBasePath}/agent-workspace` ||
-    location.pathname.startsWith(`${tenantBasePath}/agent-workspace/`);
+    slotLocation?.active ??
+    (location.pathname === '/agent/chat' ||
+      location.pathname.startsWith('/agent/chat/') ||
+      location.pathname === `${tenantBasePath}/agent-workspace` ||
+      location.pathname.startsWith(`${tenantBasePath}/agent-workspace/`));
   const queryProjectId = useMemo(
     () =>
       new URLSearchParams(location.search).get('projectId') ??
@@ -739,9 +761,11 @@ export const TenantSidebarView: React.FC<
   );
   const workspaceIdFromQuery = useMemo(() => {
     if (!location.search) return null;
-    return new URLSearchParams(location.search).get('workspaceId');
-  }, [location.search]);
+    const key = signedNavigation ? signedNavigation.groupQuery : 'workspaceId';
+    return key ? new URLSearchParams(location.search).get(key) : null;
+  }, [location.search, signedNavigation]);
   const routeConversationId = useMemo(() => {
+    if (slotLocation) return slotLocation.id;
     const marker = '/agent-workspace/';
     const markerIndex = location.pathname.indexOf(marker);
     if (markerIndex === -1) {
@@ -756,7 +780,20 @@ export const TenantSidebarView: React.FC<
     } catch {
       return encodedId;
     }
-  }, [location.pathname]);
+  }, [location.pathname, slotLocation]);
+  const rowPath = useCallback(
+    (params: Parameters<typeof buildAgentWorkspacePath>[0]) => {
+      if (!signedNavigation) return buildAgentWorkspacePath(params);
+      if (params.projectId === selectedProjectId) {
+        const signed = signedNavigation.link(params.conversationId, params.workspaceId);
+        if (signed) return signed;
+      }
+      return params.projectId
+        ? tenantBasePath + '/project/' + encodeURIComponent(params.projectId)
+        : tenantBasePath + '/projects';
+    },
+    [signedNavigation, selectedProjectId, tenantBasePath]
+  );
   const selectedConversationId = routeConversationId ?? activeConversationId;
   const isProjectScopedPath = location.pathname.includes('/project/');
   const contextualProjectId =
@@ -896,6 +933,7 @@ export const TenantSidebarView: React.FC<
       const project =
         (storedManualProjectId ? projectById.get(storedManualProjectId) : undefined) ??
         (currentProject ? projectById.get(currentProject.id) : undefined) ??
+        getDefaultProject(uniqueProjects) ??
         uniqueProjects[0];
       if (!project) return;
       if (selectedProjectId === project.id) {
@@ -1208,7 +1246,7 @@ export const TenantSidebarView: React.FC<
     const newId = await createNewConversation(selectedProjectId, workspaceIdFromQuery);
     if (newId) {
       void navigate(
-        buildAgentWorkspacePath({
+        rowPath({
           tenantId,
           conversationId: newId,
           projectId: selectedProjectId,
@@ -1216,7 +1254,7 @@ export const TenantSidebarView: React.FC<
         })
       );
     }
-  }, [selectedProjectId, createNewConversation, navigate, tenantId, workspaceIdFromQuery]);
+  }, [selectedProjectId, createNewConversation, navigate, tenantId, workspaceIdFromQuery, rowPath]);
 
   // Delete confirmation + optimistic-undo state
   const [deleteTarget, setDeleteTarget] = useState<ConversationWithProject | null>(null);
@@ -1248,7 +1286,7 @@ export const TenantSidebarView: React.FC<
     // Navigate away if we deleted the active conversation
     if (activeConversationId === conversationId) {
       void navigate(
-        buildAgentWorkspacePath({
+        rowPath({
           tenantId,
           projectId: selectedProjectId,
           workspaceId: workspaceIdFromQuery,
@@ -1308,6 +1346,7 @@ export const TenantSidebarView: React.FC<
     navigate,
     tenantId,
     workspaceIdFromQuery,
+    rowPath,
     messageApi,
     deleteConversation,
     t,
@@ -1363,11 +1402,11 @@ export const TenantSidebarView: React.FC<
         setSelectedProject(project);
         setCurrentProject(project);
       }
-      void navigate(buildAgentWorkspacePath({ tenantId, projectId }));
+      void navigate(rowPath({ tenantId, projectId }));
       // NOTE: loadConversations is called by useEffect when selectedProjectId changes
       // Do NOT call it here to avoid duplicate requests
     },
-    [navigate, projectById, resolvedTenantId, setCurrentProject, tenantId]
+    [navigate, projectById, resolvedTenantId, setCurrentProject, tenantId, rowPath]
   );
 
   const handleProjectSearch = useCallback(
@@ -1891,7 +1930,7 @@ export const TenantSidebarView: React.FC<
                               conversation={conv}
                               grouped
                               isActive={conv.id === selectedConversationId}
-                              href={buildAgentWorkspacePath({
+                              href={rowPath({
                                 tenantId,
                                 conversationId: conv.id,
                                 projectId: conv.projectId,

@@ -214,7 +214,7 @@ async fn inspect(
     let scope = scope(&state, &auth, &request.tenant_id, &request.project_id)?;
     let keys = keys(&state)?;
     let bytes = decode(&request.archive_base64)?;
-    let archive = tokio::task::spawn_blocking(move || packages::inspect(&bytes, &keys))
+    let (_, archive) = tokio::task::spawn_blocking(move || packages::desktop_target(bytes, &keys))
         .await
         .map_err(verification)?
         .map_err(verification)?;
@@ -239,6 +239,10 @@ async fn import(
     }
     let keys = keys(&state)?;
     let bytes = decode(&request.archive_base64)?;
+    let (bytes, target) = packages::desktop_target(bytes, &keys).map_err(verification)?;
+    if target.reference() != &request.reference {
+        return Err(verification("Reviewed desktop target changed"));
+    }
     let _guard = MUTATION.lock().await;
     let archive = verify_signed_bundle_archive_v2(
         &bytes,
@@ -269,8 +273,31 @@ async fn import(
         ));
     }
     self::scope(&state, &auth, &request.tenant_id, &request.project_id)?;
+    let mut db = manager_connection(&state, &auth)?;
+    let tx = db.transaction().map_err(storage)?;
+    if request
+        .approved_permissions
+        .iter()
+        .any(|p| p.starts_with("device.workspace.read."))
+    {
+        let root = state
+            .workspace_root
+            .lock()
+            .map_err(storage)?
+            .canonicalize()
+            .map_err(storage)?;
+        let name = root
+            .to_str()
+            .ok_or_else(|| invalid("Workspace root is unavailable"))?;
+        tx.execute("INSERT INTO desktop_local_plugin_workspace_roots (tenant_id,project_id,bundle_id,root)
+            VALUES (?1,?2,?3,?4) ON CONFLICT(tenant_id,project_id,bundle_id) DO UPDATE SET root=excluded.root",
+            rusqlite::params![request.tenant_id,request.project_id,request.reference.bundle_id,name]).map_err(storage)?;
+    } else {
+        tx.execute("DELETE FROM desktop_local_plugin_workspace_roots WHERE tenant_id=?1 AND project_id=?2 AND bundle_id=?3",
+            rusqlite::params![request.tenant_id,request.project_id,request.reference.bundle_id]).map_err(storage)?;
+    }
     store::install(
-        &*manager_connection(&state, &auth)?,
+        &tx,
         &keys,
         &scope,
         &request.reference,
@@ -278,6 +305,7 @@ async fn import(
         &request.approved_permissions,
     )
     .map_err(verification)?;
+    tx.commit().map_err(storage)?;
     state.local_plugin_changes.notify_one();
     Ok(Json(
         json!({"reference":request.reference,"scope":scope,"status":"installed"}),

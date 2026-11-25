@@ -11,14 +11,8 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
-export type AgentThinkingLevel = 'default' | 'low' | 'medium' | 'high';
-
-export const THINKING_LEVELS: readonly AgentThinkingLevel[] = [
-  'default',
-  'low',
-  'medium',
-  'high',
-] as const;
+import { THINKING_LEVELS, type AgentThinkingLevel } from '../../chat/composerOptions';
+export { THINKING_LEVELS, type AgentThinkingLevel } from '../../chat/composerOptions';
 
 /** Wire value for a level; `undefined` means "remove the override". */
 export function thinkingLevelToEffort(

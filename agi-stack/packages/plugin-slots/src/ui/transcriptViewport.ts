@@ -72,7 +72,8 @@ function ownsNestedScroll(target: EventTarget | null, viewport: HTMLElement) {
 export function mountTranscriptViewport(
   viewport: HTMLElement,
   onFollowingChange: (following: boolean) => void,
-  onHistoryEdge: () => void
+  onHistoryEdge: () => void,
+  allowHistoryNavigation?: () => boolean
 ) {
   let following = true;
   const { schedule, cancel: cancelFrame } = timelineScrollFrame(reconcile);
@@ -250,7 +251,10 @@ export function mountTranscriptViewport(
     lastTop = viewport.scrollTop;
     const source = moved < 0 ? 'backward' : 'forward';
     if (tabPressed && viewport.contains(viewport.ownerDocument.activeElement)) direction = source;
-    if (dragging || direction === source) {
+    // A browser can scroll a focused disclosure or a search match into view
+    // without a wheel gesture. A completed Web transcript is readable history.
+    const browsingHistory = source === 'backward' && allowHistoryNavigation?.();
+    if (dragging || direction === source || browsingHistory) {
       if (source === direction) gestureMoved = true;
       setFollowing(sessionTimelineFollowIntent(following, source, viewport));
       reading = following ? null : captureReadingPosition(viewport);

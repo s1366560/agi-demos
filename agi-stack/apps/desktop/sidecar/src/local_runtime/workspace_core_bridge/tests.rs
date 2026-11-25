@@ -438,6 +438,7 @@ async fn create_policy_read_server() -> (String, mpsc::Receiver<(String, HeaderM
     (url, receiver)
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn workspace_proxy_requires_desktop_auth_and_forwards_scope_without_service_token_leak() {
     let state = state();
@@ -539,6 +540,7 @@ async fn workspace_proxy_classifies_transport_failures_without_exposing_request_
     assert_eq!(workspace_core_transport_error_kind(&error), "connect");
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn workspace_proxy_forwards_core_only_workspaces_and_rejects_cross_context_paths() {
     let state = state();
@@ -596,6 +598,7 @@ async fn workspace_proxy_forwards_core_only_workspaces_and_rejects_cross_context
     assert!(observations.try_recv().is_err());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn agent_conversation_list_accepts_core_only_workspace_scope() {
     let state = state();
@@ -629,6 +632,7 @@ async fn agent_conversation_list_accepts_core_only_workspace_scope() {
     assert_eq!(payload["items"], json!([]));
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn conversation_binding_uses_core_workspace_authority_without_legacy_rows() {
     let state = state();
@@ -678,6 +682,7 @@ async fn conversation_binding_uses_core_workspace_authority_without_legacy_rows(
     assert!(body.is_empty());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn workspace_proxy_owns_exact_roster_routes_when_core_authority_is_installed() {
     let state = state();
@@ -712,6 +717,7 @@ async fn workspace_proxy_owns_exact_roster_routes_when_core_authority_is_install
     assert!(observations.try_recv().is_err());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn workspace_proxy_forwards_topology_routes_when_core_authority_is_installed() {
     let state = state();
@@ -746,6 +752,7 @@ async fn workspace_proxy_forwards_topology_routes_when_core_authority_is_install
     assert!(observations.try_recv().is_err());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn workspace_proxy_forwards_attention_list_and_retry_with_trusted_identity_headers() {
     let state = state();
@@ -851,6 +858,7 @@ async fn workspace_proxy_forwards_attention_list_and_retry_with_trusted_identity
     assert!(observations.try_recv().is_err());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn workspace_proxy_forwards_routing_policy_queries_and_mutations_to_core() {
     let state = state();
@@ -1864,6 +1872,7 @@ async fn cleared_authority_never_restores_legacy_workspace_routes_after_cutover(
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn task_sessions_are_core_owned_and_fail_closed_when_authority_is_lost() {
     let state = state();
@@ -1942,6 +1951,7 @@ async fn task_sessions_are_core_owned_and_fail_closed_when_authority_is_lost() {
     assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn task_session_plugin_context_pins_generation_until_core_operation_finishes() {
     let state = state();
@@ -2031,6 +2041,7 @@ async fn task_session_plugin_context_pins_generation_until_core_operation_finish
     assert_eq!(disposals.load(Ordering::SeqCst), 1);
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn task_sessions_use_the_private_core_atomic_command_contract() {
     let state = state();
@@ -2125,6 +2136,7 @@ async fn task_sessions_use_the_private_core_atomic_command_contract() {
     assert!(core_request.get("conversation").is_none());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn task_session_core_failure_does_not_create_a_local_conversation_projection() {
     let state = state();
@@ -2175,6 +2187,7 @@ async fn task_session_core_failure_does_not_create_a_local_conversation_projecti
         .is_empty());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn task_session_persists_and_replays_explicit_llm_route() {
     let state = state();
@@ -2322,6 +2335,7 @@ async fn task_session_persists_and_replays_explicit_llm_route() {
     assert!(observations.try_recv().is_err());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn task_session_without_explicit_policy_does_not_infer_an_active_provider_route() {
     let state = state();
@@ -2377,6 +2391,7 @@ async fn task_session_without_explicit_policy_does_not_infer_an_active_provider_
     );
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn task_session_replay_reuses_the_local_conversation_projection() {
     let state = state();
@@ -2451,6 +2466,7 @@ async fn task_session_replay_reuses_the_local_conversation_projection() {
     assert!(observations.try_recv().is_err());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn task_session_core_conflict_maps_to_the_desktop_idempotency_contract() {
     let state = state();
@@ -2495,6 +2511,7 @@ async fn task_session_core_conflict_maps_to_the_desktop_idempotency_contract() {
     assert_eq!(body["detail"], "Core failure");
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn task_session_non_idempotency_conflict_remains_distinct() {
     let state = state();
@@ -2541,6 +2558,7 @@ async fn task_session_non_idempotency_conflict_remains_distinct() {
     assert_eq!(body["detail"], "Core failure");
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn malformed_core_task_session_does_not_poison_the_local_receipt() {
     let state = state();

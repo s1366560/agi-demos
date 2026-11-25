@@ -299,6 +299,7 @@ async fn invalid_authorized_subagent_profile_is_reported_instead_of_silently_hid
     assert!(error.contains("allowed_tools"));
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn explicit_skill_and_subagent_execute_with_structured_lifecycle_evidence() {
     let state = test_state("execution-profile-secret");

@@ -17,6 +17,9 @@ mod tests;
 use grant::Device;
 use store::Selection;
 pub(super) const SCHEMA: &str = store::SCHEMA;
+// Each invocation prepares a fresh Wasmtime instance. Bound their aggregate memory separately
+// from the installation lock so a running guest cannot delay a grant withdrawal.
+static WASM_EXECUTION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -117,10 +120,194 @@ fn device_target(
     Ok((reference, target))
 }
 
+fn context_token(owner: &CloudOwner, generation: &str) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&json!([owner.token, generation]))
+                .map_err(|_| "device_plugin_context_invalid")?
+        )
+    ))
+}
+
+pub(super) struct ProjectHttpGrant {
+    owner: CloudOwner,
+    selection: store::Selection,
+}
+
+impl ProjectHttpGrant {
+    pub(super) async fn read(
+        &self,
+        state: &Arc<LocalRuntimeState>,
+        plan: super::workspace_read::Plan,
+        uri: axum::http::Uri,
+        head: bool,
+    ) -> Result<axum::response::Response, String> {
+        read_with_device_grant(state, &self.owner, &self.selection, plan, uri, head).await
+    }
+}
+async fn read_with_device_grant(
+    state: &Arc<LocalRuntimeState>,
+    owner: &CloudOwner,
+    selection: &store::Selection,
+    plan: super::workspace_read::Plan,
+    uri: axum::http::Uri,
+    head: bool,
+) -> Result<axum::response::Response, String> {
+    let root = local_chat::current_workspace(state)?;
+    if !selection.approved_permissions.contains(plan.permission())
+        || selection.workspace.as_deref() != Some(root.as_path())
+    {
+        return Err("device_local_workspace_review_required".into());
+    }
+    let reply = plan.respond(root.clone(), uri, head).await;
+    Device::current(state)?
+        .check(
+            owner,
+            &selection.reference,
+            &selection.generation_id,
+            &selection.approved_permissions,
+            Some(&selection.grant_id),
+        )
+        .await?;
+    owner.fence(|| require_generation(state, &selection.generation_id))?;
+    if local_chat::current_workspace(state)? != root {
+        return Err("device_local_workspace_review_required".into());
+    }
+    Ok(reply)
+}
+
+async fn file_tool_response(
+    state: &Arc<LocalRuntimeState>,
+    authority: &runtime::Authority,
+    raw: Value,
+    input: &Value,
+) -> Result<Value, String> {
+    use base64::Engine as _;
+    let method = input["method"]
+        .as_str()
+        .ok_or("device_plugin_request_invalid")?;
+    let path = input["path"]
+        .as_str()
+        .ok_or("device_plugin_request_invalid")?;
+    let permission = super::signed_project_http::route_permission(method, path)
+        .ok_or("device_plugin_request_invalid")?;
+    if input["project_id"] != authority.owner.project
+        || input
+            .get("tenant_id")
+            .is_some_and(|v| v != &authority.owner.tenant)
+        || method != "GET"
+        || !authority
+            .selection
+            .approved_permissions
+            .contains(&permission)
+    {
+        return Err("device_plugin_grant_denied".into());
+    }
+    let query = input
+        .get("query")
+        .map(|q| q.as_str().ok_or("device_plugin_request_invalid"))
+        .transpose()?
+        .unwrap_or("");
+    if query.len() > 8192 || query.contains('#') {
+        return Err("device_plugin_request_invalid".into());
+    }
+    let uri = format!(
+        "/api/v1/projects/{}/{path}?{query}",
+        authority.owner.project
+    )
+    .parse()
+    .map_err(|_| "device_plugin_request_invalid")?;
+    let plan = serde_json::from_value(raw).map_err(|_| "project_route_response_invalid")?;
+    let response = read_with_device_grant(
+        state,
+        &authority.owner,
+        &authority.selection,
+        plan,
+        uri,
+        false,
+    )
+    .await?;
+    let (parts, body) = response.into_parts();
+    let bytes = axum::body::to_bytes(body, 25 * 1024 * 1024)
+        .await
+        .map_err(|_| "project_route_response_invalid")?;
+    let headers: std::collections::BTreeMap<_, _> = parts
+        .headers
+        .iter()
+        .map(|(k, v)| v.to_str().map(|v| (k.as_str(), v)))
+        .collect::<Result<_, _>>()
+        .map_err(|_| "project_route_response_invalid")?;
+    if parts.headers.contains_key("content-disposition") {
+        return Ok(
+            json!({"status":parts.status.as_u16(),"headers":headers,"body_base64":base64::engine::general_purpose::STANDARD.encode(bytes)}),
+        );
+    }
+    let body: Value =
+        serde_json::from_slice(&bytes).map_err(|_| "project_route_response_invalid")?;
+    Ok(json!({"status":parts.status.as_u16(),"headers":headers,"body":body}))
+}
+
+pub(super) async fn project_http(
+    state: &Arc<LocalRuntimeState>,
+    broker: &TrustedSessionBroker,
+    owner: CloudOwner,
+    permission: &str,
+    input: Value,
+) -> Result<Option<(Value, ProjectHttpGrant)>, String> {
+    let installed = {
+        let db = state
+            .session_store
+            .connection()
+            .map_err(|_| "device_plugin_store_unavailable")?;
+        store::list(&db, &owner.scope.project_id)?
+    };
+    let mut matches = installed
+        .iter()
+        .filter(|item| item.approved_permissions.contains(permission));
+    let Some(selection) = matches.next() else {
+        return Ok(None);
+    };
+    if matches.next().is_some() {
+        return Err("project_route_conflict".into());
+    }
+    let [tool] = selection.tools.as_slice() else {
+        return Err("project_route_conflict".into());
+    };
+    let token = context_token(&owner, &selection.generation_id)?;
+    let plugin = selection
+        .generation_id
+        .starts_with('p')
+        .then_some(&selection.reference.bundle_id);
+    let payload = json!({"tenant_id":owner.tenant,"project_id":owner.project,"plugin_id":plugin,
+        "context_token":token,"operation":{"action":"invoke","grant_id":selection.grant_id,
+        "reference":selection.reference,"tool":tool,"input":input}});
+    // The regular device executor checks the fresh project selection, authenticated owner,
+    // executable digest and online grant. No device capability is minted by the HTTP adapter.
+    let output = execute(state, broker, payload, true).await?;
+    Ok(Some((
+        output,
+        ProjectHttpGrant {
+            owner,
+            selection: selection.clone(),
+        },
+    )))
+}
+
 pub(super) async fn operation(
     state: &Arc<LocalRuntimeState>,
     broker: &TrustedSessionBroker,
     input: Value,
+) -> Result<Value, String> {
+    execute(state, broker, input, false).await
+}
+
+async fn execute(
+    state: &Arc<LocalRuntimeState>,
+    broker: &TrustedSessionBroker,
+    input: Value,
+    http_response: bool,
 ) -> Result<Value, String> {
     let request: Request =
         serde_json::from_value(input).map_err(|_| "device_plugin_request_invalid")?;
@@ -140,16 +327,7 @@ pub(super) async fn operation(
         Some(selection) => selection.generation_id.clone(),
         None => generation_id(state)?,
     };
-    let context_token = {
-        use sha2::{Digest, Sha256};
-        format!(
-            "{:x}",
-            Sha256::digest(
-                serde_json::to_vec(&json!([owner.token, generation]))
-                    .map_err(|_| "device_plugin_context_invalid")?
-            )
-        )
-    };
+    let context_token = context_token(&owner, &generation)?;
     if !matches!(request.operation, Action::List)
         && request.context_token.as_ref() != Some(&context_token)
     {
@@ -165,8 +343,6 @@ pub(super) async fn operation(
         .local_plugin_signing_keys
         .as_ref()
         .map_err(|_| "device_plugin_trust_unavailable")?;
-    // Serialize installs and calls, including their final authorization check.
-    let _mutation = super::local_plugin_routes_v2::MUTATION.lock().await;
     owner.fence(|| require_generation(state, &generation))?;
     match request.operation {
         Action::List => {
@@ -217,6 +393,8 @@ pub(super) async fn operation(
             workspace_token,
             local_model,
         } => {
+            // Order approvals and selection changes across concurrent installers.
+            let _mutation = super::local_plugin_routes_v2::MUTATION.lock().await;
             let bytes = archive_bytes(state, &archive_id)?;
             let (reviewed, archive) = device_target(&bytes, keys)?;
             if let Some(selection) = &selected {
@@ -229,7 +407,7 @@ pub(super) async fn operation(
                 return Err("device_local_workspace_review_required".into());
             }
             if let Some(model) = &local_model {
-                if workspace.is_none() {
+                if !permissions.contains(local_chat::PERMISSION) {
                     return Err("device_plugin_review_changed".into());
                 }
                 model.validate()?;
@@ -311,7 +489,6 @@ pub(super) async fn operation(
                 {
                     return Err("device_plugin_review_changed".into());
                 }
-                drop(_mutation);
                 return local_chat::invoke(state.clone(), owner, device, selection, input).await;
             }
             if reviewed != reference
@@ -319,6 +496,7 @@ pub(super) async fn operation(
             {
                 return Err("device_plugin_review_changed".into());
             }
+            let _execution = WASM_EXECUTION.lock().await;
             let executable = archive.reference().clone();
             let prepared = runtime::Prepared::stage(&scope, archive).await?;
             let authority = Arc::new(runtime::Authority {
@@ -330,8 +508,16 @@ pub(super) async fn operation(
                 executable,
                 tool,
             });
-            let result = prepared.call(authority.clone(), input).await;
+            let result = prepared.call(authority.clone(), input.clone()).await;
             prepared.close().await;
+            drop(_execution);
+            let result = match result {
+                Ok(mut value) if !http_response && value.get("workspace_read").is_some() => {
+                    file_tool_response(state, &authority, value["workspace_read"].take(), &input)
+                        .await
+                }
+                other => other,
+            };
             authority.owner.fence(|| {
                 let db = state
                     .session_store

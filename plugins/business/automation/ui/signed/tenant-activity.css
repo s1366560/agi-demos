@@ -1,0 +1,3 @@
+@import 'tailwindcss' source(none);
+@source '../web/tenant/Events.tsx';
+@source '../web/tenant/Webhooks.tsx';

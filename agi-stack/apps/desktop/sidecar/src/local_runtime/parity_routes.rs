@@ -27,11 +27,6 @@ mod project_overview;
 #[cfg(test)]
 #[path = "../../../../../../plugins/business/workspace/desktop-sidecar/project_overview_tests.rs"]
 mod project_overview_tests;
-#[path = "../../../../../../plugins/business/environments/desktop-sidecar/sandbox_files.rs"]
-mod sandbox_files;
-#[cfg(test)]
-#[path = "../../../../../../plugins/business/environments/desktop-sidecar/sandbox_files_tests.rs"]
-mod sandbox_files_tests;
 #[path = "../../../../../../plugins/business/knowledge/desktop-sidecar/search.rs"]
 mod search;
 #[cfg(test)]
@@ -230,7 +225,6 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
                 .patch(retired_platform_plugin_v1)
                 .delete(retired_platform_plugin_v1),
         )
-        .merge(sandbox_files::router())
 }
 
 async fn retired_managed_plugin_v1_read(

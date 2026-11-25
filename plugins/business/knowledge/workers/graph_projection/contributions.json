@@ -291,6 +291,15 @@
         "app.knowledge.graph.subgraph"
       ],
       "accepts_input": true
+    },
+    {
+      "id": "search-project",
+      "host_operation": "app.knowledge.search",
+      "payload": {},
+      "permissions": [
+        "app.knowledge.search"
+      ],
+      "accepts_input": true
     }
   ],
   "ui": [
@@ -337,11 +346,12 @@
         "/project/:projectId/graph"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "entry": {
         "path": "ui/graph-web.js",
-        "digest": "sha256:59db36fe901368add142196fb10f36498f68370b14d7c2c7966e49b248785647"
+        "digest": "sha256:6cadc243c203e439ba87f6e574ddb02147ff5286fe9e648484e68d84c0e37e86"
       },
       "style": {
         "path": "ui/graph-web.css",
@@ -354,32 +364,6 @@
       "workbench": true
     },
     {
-      "id": "graph",
-      "title": "Knowledge graph",
-      "routes": [
-        "/tenant/:tenantId/project/:projectId/graph",
-        "/project/:projectId/graph"
-      ],
-      "targets": [
-        "desktop-renderer"
-      ],
-      "entry": {
-        "path": "ui/graph-desktop.js",
-        "digest": "sha256:0f0df8ebaae817c5a18e02aba36fe8da4d5303860b96244d815229e4edd44e77"
-      },
-      "style": {
-        "path": "ui/graph-desktop.css",
-        "digest": "sha256:b451b1ea0dd4caf3d2ad3b2d7fc47e226f11fc255cc31df65d6fe7cae029a9a5"
-      },
-      "commands": [
-        "read-graph",
-        "read-subgraph",
-        "list-memories",
-        "read-memory"
-      ],
-      "workbench": true
-    },
-    {
       "id": "memories",
       "title": "Project memories",
       "routes": [
@@ -388,11 +372,12 @@
         "/tenant/:tenantId/project/:projectId/memories"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:751e804537951277cb3fab1f01a96642d2241f90f5be3d1725a686fca32f8ef2"
+        "digest": "sha256:3e0a5161a0add508fedaf1dadbed126db0879e2e06ff60a98bf52cd0206f7aae"
       },
       "commands": [
         "list-memories",
@@ -416,37 +401,8 @@
       ]
     },
     {
-      "id": "memories",
-      "title": "Project memories",
-      "routes": [
-        "/memories",
-        "/project/:projectId/memories",
-        "/tenant/:tenantId/project/:projectId/memories"
-      ],
-      "targets": [
-        "desktop-renderer"
-      ],
-      "entry": {
-        "path": "ui/memories-desktop.js",
-        "digest": "sha256:6974f9509cd046d6fd1e157566c44050302af59bf86b41dc943538ab8fe0c17e"
-      },
-      "commands": [
-        "list-memories",
-        "read-memory",
-        "save-memory",
-        "reindex-memory",
-        "delete-memory",
-        "index-status"
-      ],
-      "workbench": true,
-      "style": {
-        "path": "ui/memories-desktop.css",
-        "digest": "sha256:c1edc7e2ecc71693746ee206afb07ca9deabae7b1b51886fda8a4a1f3eccf831"
-      }
-    },
-    {
       "id": "desktop-memory-editor",
-      "title": "Memory editor",
+      "title": "Memory details",
       "routes": [
         "/tenant/:tenantId/project/:projectId/memory/:memoryId",
         "/project/:projectId/memory/:memoryId"
@@ -455,8 +411,8 @@
         "desktop-renderer"
       ],
       "entry": {
-        "path": "ui/memories-desktop.js",
-        "digest": "sha256:6974f9509cd046d6fd1e157566c44050302af59bf86b41dc943538ab8fe0c17e"
+        "path": "ui/memories-web.js",
+        "digest": "sha256:3e0a5161a0add508fedaf1dadbed126db0879e2e06ff60a98bf52cd0206f7aae"
       },
       "commands": [
         "read-memory",
@@ -464,13 +420,17 @@
         "list-memories",
         "reindex-memory",
         "delete-memory",
-        "index-status"
+        "index-status",
+        "optimize-content"
       ],
+      "workbench": true,
       "style": {
-        "path": "ui/memories-desktop.css",
-        "digest": "sha256:c1edc7e2ecc71693746ee206afb07ca9deabae7b1b51886fda8a4a1f3eccf831"
+        "path": "ui/memories-web.css",
+        "digest": "sha256:5656722b83fd77b9b7e12a09c5b4dccf5c28efa5cca702a66193219b34c43ae4"
       },
-      "workbench": true
+      "query_params": [
+        "tab"
+      ]
     },
     {
       "id": "memory-detail",
@@ -484,7 +444,7 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:751e804537951277cb3fab1f01a96642d2241f90f5be3d1725a686fca32f8ef2"
+        "digest": "sha256:3e0a5161a0add508fedaf1dadbed126db0879e2e06ff60a98bf52cd0206f7aae"
       },
       "commands": [
         "read-memory",
@@ -530,7 +490,8 @@
         "/tenant/:tenantId/project/:projectId/entities"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "commands": [
         "list-entities",
@@ -554,26 +515,6 @@
       "workbench": true
     },
     {
-      "id": "entities",
-      "title": "Graph entities",
-      "routes": [
-        "/entities",
-        "/project/:projectId/entities",
-        "/tenant/:tenantId/project/:projectId/entities"
-      ],
-      "targets": [
-        "desktop-renderer"
-      ],
-      "commands": [
-        "list-entities"
-      ],
-      "entry": {
-        "path": "ui/entities-desktop.js",
-        "digest": "sha256:4963f133b58722910f16b03cb4de64b31660e178333c31775a9ca2276a69438f"
-      },
-      "workbench": true
-    },
-    {
       "id": "memory-editor",
       "title": "Memory editor",
       "routes": [
@@ -581,11 +522,12 @@
         "/project/:projectId/memories/new"
       ],
       "targets": [
-        "web"
+        "web",
+        "desktop-renderer"
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:751e804537951277cb3fab1f01a96642d2241f90f5be3d1725a686fca32f8ef2"
+        "digest": "sha256:3e0a5161a0add508fedaf1dadbed126db0879e2e06ff60a98bf52cd0206f7aae"
       },
       "commands": [
         "read-memory",
@@ -603,32 +545,38 @@
       }
     },
     {
-      "id": "memory-editor",
-      "title": "Memory editor",
-      "routes": [
-        "/tenant/:tenantId/project/:projectId/memories/new",
-        "/project/:projectId/memories/new"
-      ],
+      "id": "project-search",
+      "title": "Advanced search",
       "targets": [
+        "web",
         "desktop-renderer"
       ],
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/advanced-search",
+        "/tenant/:tenantId/project/:projectId/search",
+        "/project/:projectId/advanced-search",
+        "/project/:projectId/search"
+      ],
       "entry": {
-        "path": "ui/memories-desktop.js",
-        "digest": "sha256:6974f9509cd046d6fd1e157566c44050302af59bf86b41dc943538ab8fe0c17e"
+        "path": "ui/project-search.js",
+        "digest": "sha256:216fb819703f2291fe75a4cdbecb2cbcf097c4604315cb9955fcec8ab0cfa9b5"
+      },
+      "style": {
+        "path": "ui/project-search.css",
+        "digest": "sha256:95b89ba1726a48d5f414704bd9f90af551d78e80e08fbc9676fee7d170b5ee45"
       },
       "commands": [
-        "read-memory",
-        "save-memory",
-        "list-memories",
-        "reindex-memory",
-        "delete-memory",
-        "index-status"
+        "search-project",
+        "read-graph",
+        "read-subgraph"
       ],
-      "workbench": true,
-      "style": {
-        "path": "ui/memories-desktop.css",
-        "digest": "sha256:c1edc7e2ecc71693746ee206afb07ca9deabae7b1b51886fda8a4a1f3eccf831"
-      }
+      "query_params": [
+        "q",
+        "mode",
+        "start",
+        "community"
+      ],
+      "workbench": true
     }
   ]
 }

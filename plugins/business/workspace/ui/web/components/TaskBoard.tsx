@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 
 import { App, Button, Input, Select, Switch, Tooltip } from 'antd';
 import {
@@ -162,7 +163,14 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
   const [blockerReason, setBlockerReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutonomyTicking, setIsAutonomyTicking] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const selectedTaskId = params.get('taskId');
+  const setSelectedTaskId = (id: string | null) => {
+    const next = new URLSearchParams(params);
+    if (id) next.set('taskId', id);
+    else next.delete('taskId');
+    setParams(next, {replace: id === null});
+  };
   const [selectedExperience, setSelectedExperience] =
     useState<WorkspaceTaskExperienceSummary | null>(null);
   const [selectedExecutionSession, setSelectedExecutionSession] =
@@ -211,7 +219,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
     if (!selectedTaskId || selectedTask) {
       return;
     }
-    setSelectedTaskId(null);
     setSelectedExperience(null);
     setSelectedExecutionSession(null);
   }, [selectedTask, selectedTaskId]);

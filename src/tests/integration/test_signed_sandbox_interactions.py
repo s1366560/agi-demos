@@ -25,15 +25,13 @@ pytestmark = [
 ]
 
 
-def _exercise_viewer(page, native, owner):
+def _exercise_viewer(page, owner):
     frame = page.frame_locator("iframe[data-page-ready=true]").frame_locator("iframe")
     selector = frame.locator(".xterm-helper-textarea").first
     expect(selector).to_have_count(1, timeout=90000)
-    expect(
-        frame.locator(".desktop-interactive-terminal[data-connected=true]")
-        if native
-        else frame.get_by_text(re.compile(r"^(Terminal|终端)\s*[（(]")).first
-    ).to_be_visible(timeout=90000)
+    expect(frame.get_by_text(re.compile(r"^(Terminal|终端)\s*[（(]")).first).to_be_visible(
+        timeout=90000
+    )
     assert (
         frame.locator("html").evaluate("async ()=> (await memstack.scope()).projectId")
         == owner["project_id"]
@@ -43,15 +41,9 @@ def _exercise_viewer(page, native, owner):
     page.keyboard.press("Enter")
     expect(frame.locator(".xterm-rows")).to_contain_text("156723", timeout=60000)
     frame.get_by_role("button", name=re.compile("^Remote desktop$|^远程桌面$")).click()
-    if native:
-        frame.get_by_role("button", name=re.compile("Start desktop|启动桌面")).first.click()
-        expect(frame.locator('.remote-desktop-surface[data-frame-status="ready"]')).to_be_visible(
-            timeout=120000
-        )
-    else:
-        expect(frame.get_by_text(re.compile("^Connected$|^已连接$")).first).to_be_visible(
-            timeout=120000
-        )
+    expect(frame.get_by_text(re.compile("^Connected$|^已连接$")).first).to_be_visible(
+        timeout=120000
+    )
     canvas = frame.locator("canvas:visible").first
     expect(canvas).to_be_visible(timeout=30000)
     canvas.click(position={"x": 60, "y": 60})
@@ -125,10 +117,10 @@ def test_installed_terminal_and_remote_desktop(client):
         expect(entry()).to_have_count(0)
         apply(page, current)
         entry().click()
-        _exercise_viewer(page, native, owner)
+        _exercise_viewer(page, owner)
         details(returning=True)
         more(page, "Roll back to|回退至")
-        expect(page.locator(".pm-spec dd").first).to_have_text("1.4.0")
+        expect(page.locator(".pm-spec dd").first).to_have_text("1.4.0", timeout=60000)
         expect(entry()).to_have_count(0)
         apply(page, current)
         expect(entry()).to_be_visible()

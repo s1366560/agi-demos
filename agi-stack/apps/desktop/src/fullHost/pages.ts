@@ -13,6 +13,9 @@ import { splitPageLocation } from '../../../../packages/plugin-slots/src/pageLoc
 import { transport } from '../packageHost/transport';
 
 export type InstalledPage = {
+  enabled: boolean;
+  digest: string;
+  commands: readonly string[];
   projectId: string | null;
   pluginId: string;
   page: PackagePage;
@@ -64,7 +67,10 @@ export function useInstalledPages(tenantId: string, projectId: string | null) {
                 menuPath(route, { tenantId, projectId: id }),
               );
               return {
+                enabled: release.status === 'enabled',
                 pluginId: release.plugin_id,
+                commands: release.commands ?? [],
+                digest: release.actual_digest!,
                 projectId: id,
                 page,
                 path:

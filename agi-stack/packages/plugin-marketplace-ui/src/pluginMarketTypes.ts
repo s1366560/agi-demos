@@ -71,6 +71,7 @@ export interface PluginMarketProps {
     digest: string | null,
     release?: { packageName: string; version: string }
   ): ReactNode;
+  onActivated?(installation: Installation): void;
   onChanged?(): void;
 }
 export const MARKET_BASE = '/api/v1/platform-plugins/v2/optional-business';

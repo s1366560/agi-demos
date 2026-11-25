@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 const DESCRIPTOR: &str = "targets/desktop-capability.json";
-const PERMISSION: &str = "device.local-chat";
+pub(super) const PERMISSION: &str = "device.local-chat";
 pub(super) const TOOL: &str = "local_chat";
 
 pub(super) fn declares(archive: &VerifiedBundleArchiveV2) -> Result<bool, String> {
@@ -86,7 +86,7 @@ impl Workspace {
 fn digest(data: &Value) -> String {
     format!("{:x}", Sha256::digest(data.to_string().as_bytes()))
 }
-fn current_workspace(state: &LocalRuntimeState) -> Result<PathBuf, String> {
+pub(super) fn current_workspace(state: &LocalRuntimeState) -> Result<PathBuf, String> {
     let root = state
         .workspace_root
         .lock()
@@ -122,7 +122,17 @@ pub(super) async fn review(
     let prepared = runtime::Prepared::stage(scope, archive).await?;
     let tools = prepared.names();
     prepared.close().await;
-    Ok((permissions, tools, None))
+    let workspace = if permissions
+        .iter()
+        .any(|p| p.starts_with("device.workspace.read."))
+    {
+        let root = current_workspace(state)?;
+        let token = digest(&json!([context, release, root]));
+        Some(Workspace { root, token })
+    } else {
+        None
+    };
+    Ok((permissions, tools, workspace))
 }
 
 #[derive(Deserialize)]
@@ -249,6 +259,23 @@ pub(super) async fn invoke(
     selection: Selection,
     input: Value,
 ) -> Result<Value, String> {
+    let a = Arc::new(Admission {
+        state: state.clone(),
+        owner,
+        device,
+        selection,
+    });
+    a.check().await?;
+    if input == json!({"action": "placement"}) {
+        let label = a
+            .selection
+            .workspace
+            .as_deref()
+            .and_then(Path::file_name)
+            .and_then(|name| name.to_str())
+            .ok_or("device_local_workspace_required")?;
+        return Ok(json!({"local_root_label": label}));
+    }
     let call: Call =
         serde_json::from_value(input).map_err(|_| "device_local_chat_input_invalid")?;
     let (conversation, key) = match &call {
@@ -272,13 +299,6 @@ pub(super) async fn invoke(
     {
         return Err("device_local_chat_input_invalid".into());
     }
-    let a = Arc::new(Admission {
-        state: state.clone(),
-        owner,
-        device,
-        selection,
-    });
-    a.check().await?;
     let (base, bearer) = a.owner.local_run_session(conversation).await?;
     let run_key = digest(&json!([
         a.selection.reference.digest,

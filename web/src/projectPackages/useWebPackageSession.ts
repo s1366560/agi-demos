@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { OpenVoiceSocket, VoiceSocket } from '../../../agi-stack/packages/plugin-slots/src/pageVoice';
 
 import { clearAuthState, getAuthToken } from '@/utils/tokenResolver';
 
@@ -41,8 +42,18 @@ export function useWebPackageSession(token: string | null) {
       path: string,
       options: Parameters<MarketplaceTransport>[1]
     ) => (await (await request(path, options)).json()) as T;
+    const openVoiceSocket: OpenVoiceSocket = async (scope, signal) => {
+      signal.throwIfAborted();
+      if (!token || getAuthToken() !== token) throw new Error('page_scope_expired');
+      const url = new URL('/api/v1/voice/chat', location.origin);
+      url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      url.searchParams.set('project_id', scope.projectId);
+      url.searchParams.set('conversation_id', scope.conversationId);
+  url.searchParams.set('package_session', '1');
+      return new WebSocket(url, ['memstack.auth', token]) as unknown as VoiceSocket;
+    };
     return {
-      transport,
+      transport, openVoiceSocket,
       stream: async (
         path: string,
         body: Record<string, unknown>,

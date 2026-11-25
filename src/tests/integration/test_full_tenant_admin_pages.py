@@ -74,18 +74,3 @@ def test_tenant_administration_scoped_reads(full_page):
     ):
         page.goto(f"{origin}/tenant/{tenant}/org-settings/{tab}")
         assert_reads(page.locator(f'a[href="/tenant/{tenant}/{link}"]').last.click, suffixes)
-
-
-def test_compatibility_login_restores_scoped_path_query_and_fragment(full_page):
-    page, origin, owner = full_page
-    path = f"/tenant/{owner['tenant_id']}/org-settings/clusters?qa=readonly#node"
-    page.goto(origin + path)
-    link = page.locator('a[href*=":3001/"]')
-    destination = link.get_attribute("href")
-    assert destination == f"http://{urlsplit(origin).hostname}:3001{path}"
-    link.click()
-    expect(page.get_by_test_id("login-submit-button")).to_be_visible()
-    sign_in(page, owner)
-    expect(page).to_have_url(destination)
-    expect(page.get_by_role("heading", name="Clusters", exact=True)).to_be_visible(timeout=30000)
-    expect(page.get_by_role("button", name="Manage Clusters")).to_be_visible()

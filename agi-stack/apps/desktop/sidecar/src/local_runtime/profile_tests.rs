@@ -82,8 +82,9 @@ async fn package_host_mounts_diagnostics_and_never_restores_local_business_autho
     std::fs::remove_dir_all(directory).unwrap();
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
-async fn full_profile_starts_existing_worker_and_mounts_authenticated_business_routes() {
+async fn compat_profile_starts_existing_worker_and_mounts_authenticated_business_routes() {
     let directory = std::env::temp_dir().join(format!("full-profile-{}", Uuid::new_v4()));
     let data = directory.join("application");
     let vault = ApplicationCredentialVault::open(&data).unwrap();
@@ -92,7 +93,7 @@ async fn full_profile_starts_existing_worker_and_mounts_authenticated_business_r
         directory.join("workspace"),
         vault,
         None,
-        SidecarProfile::Full,
+        SidecarProfile::Compat,
     )
     .await
     .unwrap();
@@ -132,4 +133,94 @@ fn default_control_plane_admits_device_and_cloud_history_only_for_supported_call
         assert!(!profile.allows_command(command));
         assert!(SidecarProfile::Full.allows_command(command));
     }
+}
+
+#[tokio::test]
+async fn full_profile_serves_signed_package_routes_and_workspace_core_callbacks() {
+    let directory = std::env::temp_dir().join(format!("full-package-profile-{}", Uuid::new_v4()));
+    let data = directory.join("application");
+    let vault = ApplicationCredentialVault::open(&data).unwrap();
+    let runtime = LocalRuntimeService::start(
+        data,
+        directory.join("workspace"),
+        vault.clone(),
+        None,
+        serde_json::from_value(json!("full")).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert!(!runtime.state.automation_worker_running());
+    let status = runtime.status();
+    let http = reqwest::Client::new();
+    for path in [
+        "/api/v1/local-plugins/v2/installations",
+        "/api/v1/local-plugins/v2/instances",
+    ] {
+        let response = http
+            .get(format!("{}{path}", status.api_base_url))
+            .header("x-agistack-launch", &status.api_token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+    let reconciler = runtime
+        .start_platform_plugin_control_plane_v2(
+            TrustedSessionBroker::native(vault.clone()),
+            PluginDataPlaneCredentialBrokerV2::native(vault),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        reconciler.selection_snapshot().unwrap().0,
+        PlatformPluginAuthorityModeV2::Cloud
+    );
+    reconciler
+        .select(PlatformPluginAuthorityModeV2::Local)
+        .await
+        .unwrap();
+    runtime
+        .state
+        .session_store
+        .seed_test_session("profile-session")
+        .unwrap();
+    let auth = runtime
+        .state
+        .session_store
+        .validate_session_credential("profile-session", Utc::now().timestamp_millis())
+        .unwrap()
+        .unwrap();
+    let installed = http
+        .get(format!(
+            "{}/api/v1/local-plugins/v2/installations",
+            status.api_base_url
+        ))
+        .header("x-agistack-launch", &status.api_token)
+        .bearer_auth("profile-session")
+        .query(&[
+            ("tenant_id", auth.workspace.tenant_id),
+            ("project_id", auth.workspace.project_id),
+        ])
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(installed["installations"], json!([]));
+    let callback = http
+        .post(format!(
+            "{}/internal/v1/workspace-core/agent-registry/resolve",
+            status.api_base_url
+        ))
+        .json(&json!({"tenant_id":"local","project_id":"sample","agent_id":"example"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(callback.status(), StatusCode::SERVICE_UNAVAILABLE);
+    reconciler.shutdown().await;
+    runtime.shutdown().await;
+    std::fs::remove_dir_all(directory).unwrap();
 }

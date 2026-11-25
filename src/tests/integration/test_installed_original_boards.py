@@ -3,10 +3,12 @@
 import json
 import os
 import re
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+import httpx
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
@@ -85,13 +87,24 @@ def test_restore_original_release(client, package, previous, entry):
         apply(page, RELEASES[package])
         button.click()
         if package == "knowledge":
-            selector = "#memory-title" if client == "web" else ".cloud-memory-editor input"
-            expect(guest.locator(selector)).to_be_visible(timeout=60000)
+            expect(guest.locator("#memory-title")).to_be_visible(timeout=60000)
         else:
-            _open_first_workspace(guest, client)
+            _open_first_workspace(guest, "web")
             expect(guest.get_by_role("tab", name=re.compile("Discussion|讨论"))).to_be_visible(
                 timeout=60000
             )
+            if client == "desktop":
+                page.bring_to_front()
+                create = page.locator(".desktop-workspace-heading-actions").get_by_role(
+                    "button",
+                    name=re.compile("New workspace|Create workspace|新建工作空间|创建工作区", re.I),
+                )
+                create.click()
+                expect(page).to_have_url(re.compile(r"(?:/|%2F)workspaces(?:/|%2F)new(?:[?#&]|$)", re.I), timeout=30000)
+                creation = page.frame_locator(
+                    'iframe[title="Create workspace"][data-page-ready=true]'
+                ).frame_locator("iframe")
+                expect(creation.get_by_role("heading", level=1)).to_be_visible(timeout=90000)
 
 
 def _open_first_workspace(guest, client):
@@ -122,31 +135,22 @@ def test_native_memory_create_reindex_and_delete():
         page = _client(pw, "desktop")
         _page_button(page, "knowledge", RELEASES["knowledge"], "Memory editor").click()
         guest = _guest(page)
-        editor = guest.locator(".cloud-memory-editor")
-        title = "QA signed native memory " + uuid4().hex[:8]
-        editor.locator("input").fill(title)
-        editor.locator("textarea").fill("Created in the original native form.")
-        editor.locator("button[type=submit]").click()
-        row = guest.locator("li").filter(has_text=title)
-        expect(row.locator("h2")).to_have_text(title, timeout=60000)
-        retry = row.get_by_role("button", name=re.compile("Reindex|重新索引", re.I))
-        for _ in range(40):
-            if retry.is_enabled():
-                break
-            page.wait_for_timeout(3000)
-            guest.get_by_role("button", name=re.compile("^(Refresh|刷新)$")).click()
-            expect(guest.get_by_role("button", name=re.compile("^(Refresh|刷新)$"))).to_be_enabled(
-                timeout=60000
-            )
+        title = "QA signed desktop memory " + uuid4().hex[:8]
+        guest.locator("#memory-title").fill(title)
+        guest.locator("textarea").fill("Created from the shared form in Electron.")
+        guest.get_by_role("button", name=re.compile(r"^(Save Memory|保存记忆)$")).click()
+        expect(page).to_have_url(re.compile(r"(?:/|%2F)memories(?:[?#&].*)?$", re.I), timeout=120000)
+        guest.get_by_text(title, exact=True).first.click()
+        expect(guest.get_by_role("heading", name=title)).to_be_visible(timeout=60000)
+        retry = guest.get_by_role("button", name=re.compile("Reprocess|Reindex|重新处理|重新索引", re.I))
+        expect(retry).to_be_enabled(timeout=120000)
         retry.click()
-        expect(retry).to_be_disabled(timeout=30000)
-        expect(guest.get_by_role("button", name=re.compile("^(Refresh|刷新)$"))).to_be_enabled(
-            timeout=60000
-        )
-        expect(guest.get_by_role("alert")).to_have_count(0)
-        row.get_by_role("button", name=re.compile("^(Delete|删除)$")).click()
-        editor.get_by_role("button", name=re.compile("Confirm delet|确认删除", re.I)).click()
-        expect(row).to_have_count(0, timeout=120000)
+        expect(guest.get_by_text(re.compile(r"^(Completed|已完成)$")).first).to_be_visible(timeout=120000)
+        page.reload()
+        guest.get_by_role("button", name=re.compile(r"^(Delete|删除|删\s+除)$")).click()
+        guest.get_by_role("dialog").get_by_role("button", name=re.compile(r"^(Delete|删除|删\s+除)$")).click()
+        expect(page).to_have_url(re.compile(r"(?:/|%2F)memories(?:[?#&].*)?$", re.I), timeout=60000)
+        expect(guest.get_by_text(title, exact=True)).to_have_count(0)
 
 
 def test_web_editor_reindex_and_delete_memory():
@@ -165,11 +169,11 @@ def test_web_editor_reindex_and_delete_memory():
             )
 
         with page.expect_response(accepted("save-memory"), timeout=60000) as saved:
-            guest.get_by_role("button", name="Save Memory", exact=True).click()
+            guest.get_by_role("button", name=re.compile(r"^(Save Memory|保存记忆)$")).click()
         assert saved.value.ok
         memory = saved.value.json()
         page.goto(base + "/memory/" + memory["id"])
-        retry = guest.get_by_role("button", name=re.compile("Reprocess|Reindex", re.I))
+        retry = guest.get_by_role("button", name=re.compile("Reprocess|Reindex|重新处理|重新索引", re.I))
         expect(retry).to_be_visible(timeout=60000)
         for _ in range(40):
             if retry.is_enabled():
@@ -180,14 +184,14 @@ def test_web_editor_reindex_and_delete_memory():
         with page.expect_response(accepted("reindex-memory"), timeout=60000) as indexing:
             retry.click()
         assert indexing.value.ok, indexing.value.status
-        completed = guest.get_by_text("Completed", exact=True).first
+        completed = guest.get_by_text(re.compile(r"^(Completed|已完成)$")).first
         expect(completed).to_be_visible(timeout=120000)
         # A reload reads the persisted memory and its revision through the installed package.
         page.reload()
         expect(completed).to_be_visible(timeout=60000)
-        guest.get_by_role("button", name="Delete", exact=True).click()
+        guest.get_by_role("button", name=re.compile(r"^(Delete|删除|删\s+除)$")).click()
         with page.expect_response(accepted("delete-memory"), timeout=60000) as removed:
-            guest.get_by_role("dialog").get_by_role("button", name="Delete", exact=True).click()
+            guest.get_by_role("dialog").get_by_role("button", name=re.compile(r"^(Delete|删除|删\s+除)$")).click()
         assert removed.value.ok, removed.value.status
 
 
@@ -196,16 +200,20 @@ def test_native_blackboard_post_is_retained():
         page = _client(pw, "desktop")
         _page_button(page, "workspace", RELEASES["workspace"], "Workspace directory").click()
         guest = _guest(page)
-        guest.locator(".tenant-workspaces-grid article").first.get_by_role("button").click()
+        guest.locator("li a[aria-label]").first.click()
         tab = guest.get_by_role("tab", name=re.compile("Discussion|讨论"))
         tab.click()
-        panel = guest.get_by_role("tabpanel")
+        panel = guest
         title = "QA signed native discussion " + uuid4().hex[:8]
-        panel.locator("form input").first.fill(title)
-        panel.locator("form textarea").first.fill(
-            "Posted from the installed native collaboration canvas."
-        )
-        panel.get_by_role("button", name=re.compile("Publish|发布")).first.click()
+        create = panel.get_by_role("button", name=re.compile(r"^\+.*(Thread|Post|讨论|发帖|帖子)", re.I))
+        back = panel.get_by_role("button", name=re.compile("Back|返回"))
+        expect(create.or_(back).first).to_be_visible(timeout=60000)
+        if back.is_visible():
+            back.click()
+        create.click()
+        panel.locator("#blackboard-post-title").fill(title)
+        panel.locator("#blackboard-post-content").fill("Posted from the shared workspace page.")
+        panel.locator("#blackboard-post-content").locator("xpath=ancestor::div[.//button][1]").get_by_role("button").click()
         expect(panel.get_by_text(title, exact=True).first).to_be_visible(timeout=120000)
         page.reload()
         tab.click()
@@ -242,10 +250,23 @@ def test_web_opens_installed_agent_from_original_board():
         _page_button(page, "workspace", RELEASES["workspace"], "Workspace directory").click()
         guest = _guest(page)
         guest.locator("li a[aria-label]").first.click()
-        guest.get_by_role("link", name="Open in Agent Workspace").click()
-        expect(page.locator('iframe[title="Agent chat"][data-page-ready=true]')).to_be_visible(
-            timeout=60000
-        )
+        open_chat = guest.get_by_role("link", name="Open in Agent Workspace")
+        expect(open_chat).to_be_visible(timeout=60000)
+        board_url = page.url
+        open_chat.click()
+        chat = page.locator('iframe[title="Agent chat"][data-page-ready=true]')
+        expect(chat).to_be_visible(timeout=60000)
+        chat_url = page.url
+        assert chat_url != board_url
+        page.go_back()
+        expect(page).to_have_url(board_url)
+        expect(open_chat).to_be_visible(timeout=60000)
+        page.go_forward()
+        expect(page).to_have_url(chat_url)
+        expect(chat).to_be_visible(timeout=60000)
+        page.reload()
+        expect(page).to_have_url(chat_url)
+        expect(chat).to_be_visible(timeout=60000)
 
 
 def test_web_graph_loads_through_installed_original_controls():
@@ -260,12 +281,12 @@ def test_web_graph_loads_through_installed_original_controls():
             and response.request.post_data_json.get("command_id") == "read-graph",
             timeout=60000,
         ) as pending:
-            view.get_by_role("button", name="Reload Data").click()
+            view.get_by_role("button", name=re.compile(r"Reload Data|重新加载数据")).click()
         response = pending.value
         assert response.ok, response.status
         elements = response.json()["elements"]
         assert isinstance(elements["nodes"], list) and isinstance(elements["edges"], list)
-        nodes = view.get_by_role("table", name="Graph nodes")
+        nodes = view.get_by_role("table", name=re.compile(r"Graph nodes|节点"))
         expect(nodes.locator("tbody tr")).to_have_count(len(elements["nodes"]))
 
 
@@ -273,14 +294,170 @@ def test_native_graph_refreshes_installed_original_projection():
     with sync_playwright() as pw:
         page = _client(pw, "desktop")
         _page_button(page, "knowledge", RELEASES["knowledge"], "Knowledge graph").click()
-        view = _guest(page).locator(".project-graph-page")
-        expect(
-            view.get_by_role("heading", name=re.compile("Knowledge graph|知识图谱"))
-        ).to_be_visible(timeout=60000)
-        counts = view.locator(".project-graph-summary strong")
-        expect(counts).to_have_count(2, timeout=60000)
-        refresh = view.get_by_role("button", name=re.compile("^(Refresh|刷新)$"))
-        refresh.click()
-        expect(refresh).to_be_enabled(timeout=60000)
-        expect(counts.first).to_have_text(re.compile(r"^\d+$"))
-        expect(counts.last).to_have_text(re.compile(r"^\d+$"))
+        view = _guest(page).get_by_test_id("memory-graph-page")
+        expect(view).to_be_visible(timeout=60000)
+        view.get_by_role("button", name=re.compile(r"Reload Data|重新加载数据")).click()
+        nodes = view.get_by_role("table", name=re.compile(r"Graph nodes|节点"))
+        expect(nodes.locator("tbody tr").first).to_be_visible(timeout=60000)
+
+
+@pytest.mark.parametrize("client", ["web", "desktop"])
+def test_installed_advanced_search_bookmark(client):
+    with sync_playwright() as pw:
+        page = _client(pw, client)
+        _page_button(page, "knowledge", RELEASES["knowledge"], "Advanced search").click()
+        guest = _guest(page)
+        field = guest.locator('input[type="search"][name="search"]')
+        expect(field).to_be_visible(timeout=60000)
+        graph = guest.locator("[class~='min-h-[420px]']").first
+        expect(graph.locator("canvas").first).to_be_visible(timeout=60000)
+        assert graph.evaluate("e => getComputedStyle(e).minHeight") == "420px"
+        loading = graph.get_by_text(re.compile("Loading graph|正在加载图谱", re.I))
+        expect(loading).to_have_count(0, timeout=90000)
+        viewport = graph.locator(".__________cytoscape_container").first
+        node_count = viewport.evaluate("e => e._cyreg.cy.nodes().length")
+        assert node_count > 0, "The search acceptance project must render its populated graph"
+        field.fill("signed-knowledge-search")
+        network = (
+            page.expect_response(
+                lambda response: response.url.endswith("/commands")
+                and response.request.method == "POST"
+                and response.request.post_data_json.get("command_id") == "search-project",
+                timeout=60000,
+            )
+            if client == "web"
+            else nullcontext()
+        )
+        with network as result:
+            field.press("Enter")
+        if result is not None:
+            assert result.value.ok, result.value.status
+            assert isinstance(result.value.json()["results"], list)
+        expect(page).to_have_url(re.compile("signed-knowledge-search"), timeout=30000)
+        page.reload()
+        expect(field).to_have_value("signed-knowledge-search", timeout=60000)
+
+
+def test_open_knowledge_session_survives_workspace_release_switches():
+    from scripts.dev.verify_six_workbenches import installation_lock
+
+    account = os.environ.get("MEMSTACK_QA_MARKET_FULL_OWNER")
+    if not account:
+        pytest.skip("requires an isolated project with both packages")
+    owner = json.loads(Path(account).read_bytes())
+    with ExitStack() as stack, sync_playwright() as pw:
+        for package in ("knowledge", "workspace"):
+            stack.enter_context(installation_lock(owner["tenant_id"], owner["project_id"], package))
+        market = _client(pw, "web")
+        knowledge = market.context.new_page()
+        knowledge.goto(market.url)
+        _page_button(knowledge, "knowledge", RELEASES["knowledge"], "Advanced search").click()
+        frame = knowledge.locator("iframe[data-page-ready=true]").first
+        expect(frame).to_be_visible(timeout=60000)
+        digest = frame.get_attribute("data-release-digest")
+        assert digest
+        search = _guest(knowledge).locator('input[type="search"][name="search"]')
+        market.locator("#pm-card-memstack-workspace").click()
+        install_previous(market, "1.4.1")
+        try:
+            apply(market, RELEASES["workspace"])
+            for tag in ("upgrade", "rollback"):
+                if tag == "rollback":
+                    more(market, r"Roll back to 1\.4\.1|回退至 1\.4\.1")
+                    expect(market.locator(".pm-spec dd").first).to_have_text("1.4.1", timeout=60000)
+                search.fill(tag + "-neighbor-search")
+                with knowledge.expect_response(
+                    lambda res: res.url.endswith("/commands")
+                    and res.request.method == "POST"
+                    and res.request.post_data_json.get("command_id") == "search-project",
+                    timeout=60000,
+                ) as operation:
+                    search.press("Enter")
+                assert operation.value.ok
+                assert isinstance(operation.value.json()["results"], list)
+                expect(frame).to_have_attribute("data-release-digest", digest)
+        finally:
+            if market.locator(".pm-spec dd").first.inner_text() != RELEASES["workspace"]:
+                apply(market, RELEASES["workspace"])
+            knowledge.close()
+
+
+@pytest.mark.parametrize("client", ["web", "desktop"])
+def test_original_task_details_bookmark(client):
+    from src.tests.integration.test_signed_sidebar import qa_workspace
+
+    with sync_playwright() as pw:
+        page = _client(pw, client)
+        owner = json.loads(Path(os.environ["MEMSTACK_QA_MARKET_FULL_OWNER"]).read_bytes())
+        _page_button(page, "workspace", RELEASES["workspace"], "Workspace directory")
+        with httpx.Client(base_url="http://127.0.0.1:8000/api/v1", timeout=60) as api:
+            login = api.post(
+                "/auth/token", data={"username": owner["email"], "password": owner["password"]}
+            )
+            login.raise_for_status()
+            api.headers["Authorization"] = "Bearer " + login.json()["access_token"]
+            workspace = qa_workspace(api, owner, name="Workspace task bookmark QA")
+            title = "Signed task detail " + uuid4().hex[:8]
+            response = api.post(f"/workspaces/{workspace}/tasks", json={"title": title})
+            response.raise_for_status()
+            task = response.json()["id"]
+        path = f"/tenant/{owner['tenant_id']}/project/{owner['project_id']}/workspaces/{workspace}/tasks/{task}"
+        if client == "web":
+            page.goto(os.environ["MEMSTACK_QA_MARKET_FULL_ORIGIN"] + path)
+        else:
+            page.evaluate("(path) => {location.hash = path}", path)
+        title_heading = _guest(page).locator("aside").get_by_role("heading", name=title, exact=True)
+        expect(title_heading).to_be_visible(timeout=90000)
+        page.reload()
+        expect(title_heading).to_be_visible(timeout=90000)
+
+
+@pytest.mark.parametrize("client", ["web", "desktop"])
+def test_original_project_overview_bookmark(client):
+    owner = json.loads(Path(os.environ["MEMSTACK_QA_MARKET_FULL_OWNER"]).read_bytes())
+    project, tenant = owner["project_id"], owner["tenant_id"]
+    route = f"/tenant/{tenant}/project/{project}"
+    title = "Project overview QA " + uuid4().hex[:10]
+    with (
+        sync_playwright() as pw,
+        httpx.Client(base_url="http://127.0.0.1:8000/api/v1", timeout=60) as api,
+    ):
+        login = api.post(
+            "/auth/token", data={"username": owner["email"], "password": owner["password"]}
+        )
+        login.raise_for_status()
+        api.headers["Authorization"] = "Bearer " + login.json()["access_token"]
+        project_info = api.get("/projects/" + project, params={"tenant_id": tenant})
+        project_info.raise_for_status()
+        name = project_info.json()["name"]
+        page = _client(pw, client)
+        _page_button(page, "workspace", RELEASES["workspace"], "Project overview")
+        response = api.post(
+            "/memories/",
+            json={
+                "project_id": project,
+                "title": title,
+                "content": "Project overview recent memory",
+            },
+        )
+        response.raise_for_status()
+        identifier = response.json()["id"]
+        try:
+            if client == "web":
+                page.goto(os.environ["MEMSTACK_QA_MARKET_FULL_ORIGIN"] + route)
+            else:
+                page.evaluate("(path) => {location.hash = path}", route)
+            frame = page.frame_locator(
+                'iframe[title="Project overview"][data-page-ready=true]'
+            ).frame_locator("iframe")
+            for restore in (False, True):
+                if restore:
+                    page.reload()
+                expect(frame.get_by_text(name, exact=False).first).to_be_visible(timeout=90000)
+                expect(frame.get_by_text(title, exact=True).first).to_be_visible(timeout=90000)
+            if client == "web":
+                frame.get_by_role("link", name=title).click()
+                expect(page).to_have_url(re.compile(re.escape(route + "/memory/" + identifier)))
+        finally:
+            deleted = api.delete("/memories/" + identifier)
+            assert deleted.is_success, deleted.status_code

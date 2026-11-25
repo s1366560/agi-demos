@@ -31,12 +31,14 @@ export function Transcript({
   render,
   welcome,
   search,
+  hidden,
   children,
 }: {
   children?: ReactNode;
   chat: Chat;
   render: (message: Message) => ReactNode;
   welcome: ReactNode;
+  hidden?: ReadonlySet<string>;
   search?: (
     navigate: (
       id: string,
@@ -44,6 +46,8 @@ export function Transcript({
     ) => () => void,
   ) => ReactNode;
 }) {
+  const readingHistory = useRef(false);
+  readingHistory.current = !chat.local && !chat.run && !chat.loading;
   const viewport = useRef<HTMLDivElement>(null);
   const controller = useRef<ReturnType<typeof mountTranscriptViewport> | null>(
     null,
@@ -57,6 +61,7 @@ export function Transcript({
       viewport.current,
       setFollowing,
       () => void loadOlder.current(),
+      () => readingHistory.current,
     );
     controller.current = current;
     return () => {
@@ -67,6 +72,7 @@ export function Transcript({
   useEffect(() => {
     controller.current?.schedule();
   }, [chat.messages]);
+  const messages = hidden ? chat.messages.filter(message => !hidden.has(message.id)) : chat.messages;
   return (
     <>
       {search?.(
@@ -74,8 +80,10 @@ export function Transcript({
           controller.current?.navigate(id, located) ?? (() => {}),
       )}
       <div
+        data-testid="message-container"
         className="chat-history-viewport"
         ref={viewport}
+        role="log" aria-live="polite"
         tabIndex={0}
         aria-busy={chat.loading}
       >
@@ -85,9 +93,9 @@ export function Transcript({
               {chat.label("Load older messages", "加载更早消息")}
             </button>
           )}
-          {chat.messages.length
-            ? chat.messages.map((message) => (
-                <div key={message.id} data-timeline-anchor-id={message.id}>
+          {messages.length
+            ? messages.map((message) => (
+                <div key={message.id} data-timeline-anchor-id={message.id} data-msg-id={message.id}>
                   {render(message)}
                 </div>
               ))

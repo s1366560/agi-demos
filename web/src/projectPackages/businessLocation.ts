@@ -1,17 +1,16 @@
+import { scopedPageLocation } from '../../../agi-stack/packages/plugin-slots/src/pageLocation';
+
 export function businessLocation(
   pathname: string,
   tenant: string,
   project: string | null,
   plugin: string
 ) {
-  return {
-    pathname,
-    search: new URLSearchParams({
-      tenant,
-      ...(project ? { project } : { packageScope: 'tenant' }),
-      businessPackage: plugin,
-    }).toString(),
-  };
+  return scopedPageLocation(pathname, {
+    tenant,
+    ...(project ? { project } : { packageScope: 'tenant' }),
+    businessPackage: plugin,
+  });
 }
 
 type Project = { id: string; tenant_id: string };
@@ -41,19 +40,22 @@ export function businessRouteScope(path: string, query: URLSearchParams, current
     )
   )
     return null;
-  if (['tenant', 'project', 'businessPackage'].some((name) => query.getAll(name).length > 1))
+  if (['tenant', 'project', 'projectId', 'businessPackage'].some((name) => query.getAll(name).length > 1))
+    return null;
+  const requestedProject = query.get('project') ?? query.get('projectId');
+  if (query.has('project') && query.has('projectId') && query.get('project') !== query.get('projectId'))
     return null;
   const scopedTenant = root === 'tenant' ? owner : null;
   const pathProject =
     root === 'project' ? owner : root === 'tenant' && section === 'project' ? scopedProject : null;
   if (
     (scopedTenant && query.has('tenant') && query.get('tenant') !== scopedTenant) ||
-    (pathProject && query.has('project') && query.get('project') !== pathProject)
+    (pathProject && requestedProject !== null && requestedProject !== pathProject)
   )
     return null;
   const project =
     pathProject ||
-    query.get('project') ||
+    requestedProject ||
     (scopedTenant && current?.tenant_id === scopedTenant ? current.id : null);
   const tenant =
     scopedTenant || query.get('tenant') || (current?.id === project ? current?.tenant_id : null);
@@ -68,6 +70,7 @@ export function tenantPageScope(path: string, query: URLSearchParams) {
   const [, root, owner, section] = path.split('/');
   if (root !== 'tenant' || !owner || !section || section === 'project') return null;
   if (
+    !(section === 'org-settings' && path.split('/').slice(4).join('/') === 'clusters') &&
     ['projects', 'users', 'plugins', 'org-settings', 'settings', 'profile', 'audit-logs'].includes(
       section
     )

@@ -1,6 +1,6 @@
 (async () => {
   const api = window.memstack;
-  const {locale, commands} = await api.scope();
+  const {locale, commands, pathname, search, hash} = await api.scope();
   const label = (en, zh) => locale.startsWith('zh') ? zh : en;
   const node = (tag, text) => Object.assign(document.createElement(tag), text === undefined ? {} : {textContent:text});
   const root = document.getElementById('root');
@@ -34,6 +34,18 @@
   }
   let selected = null, newId = '', cursor = null;
   const revisions = new Map();
+  const link = new URLSearchParams(search);
+  const workflow = link.get('workflow');
+  const revision = link.get('revision');
+  const bookmark = workflow && revision ? workflow + ':' + revision : null;
+  async function updateBookmark() {
+    const query = new URLSearchParams();
+    if (selected) {
+      query.set('workflow', selected.id);
+      query.set('revision', String(selected.revision));
+    }
+    await api.navigate(pathname + (query.size ? '?' + query : '') + (hash || ''), {replace:true});
+  }
   function values() { return Array.from(steps.querySelectorAll('input'), input => input.valueAsNumber); }
   function changed() {
     add.disabled = steps.children.length >= 16;
@@ -87,6 +99,7 @@
     if (!result.saved) throw new Error(label('A newer revision exists. Reload saved revisions.','已有更新版本，请重新载入。'));
     choice.value = show({...draft,revision:result.revision});
     select();
+    await updateBookmark();
     notice.textContent = label('Saved revision ','已保存版本 ') + result.revision;
   });
   function render(result) {
@@ -102,11 +115,22 @@
   });
   button(label('Reload saved revisions','重新载入版本'), () => load(true));
   save.disabled = !commands.includes('save-workflow');
-  choice.onchange = select;
+  choice.onchange = async () => { select(); await updateBookmark(); };
   name.oninput = changed;
   root.append(title,editor,notice,output);
   select();
   editor.disabled = true;
-  try { await load(true); } catch (error) { notice.textContent=String(error); }
+  try {
+    await load(true);
+    if (bookmark) {
+      while (cursor && !revisions.has(bookmark)) await load(false);
+      if (revisions.has(bookmark)) {
+        choice.value = bookmark;
+        select();
+      } else {
+        notice.textContent = label('Workflow revision unavailable', '工作流版本不可用');
+      }
+    }
+  } catch (error) { notice.textContent=String(error); }
   finally { editor.disabled = false; }
 })();

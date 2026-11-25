@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPath, useLocation } from 'react-router-dom';
 import { menuPath, type PackagePage } from '../../../agi-stack/packages/plugin-slots/src/richPage';
@@ -11,7 +19,11 @@ import { useWebPackageSession } from '../projectPackages/useWebPackageSession';
 import { useAuthStore } from '../stores/auth';
 import { useProjectStore } from '../stores/project';
 import { useTenantStore } from '../stores/tenant';
-import type { DerivedNavigationItem } from '../config/navigation';
+import {
+  deriveTopNavigationItems,
+  type DerivedNavigationItem,
+  type TopNavigationContext,
+} from '../config/navigation';
 
 export interface LinkItem {
   id: string;
@@ -21,11 +33,19 @@ export interface LinkItem {
   digest?: string;
   projectId?: string;
   commands?: readonly string[];
+  sidebar?: NonNullable<PackagePage['sidebar']>;
+  routes?: readonly string[];
 }
-const Navigation = createContext<{ tenant: string; project: string | null; items: LinkItem[] }>({
+const Navigation = createContext<{
+  tenant: string;
+  project: string | null;
+  items: LinkItem[];
+  invalidate: () => void;
+}>({
   tenant: '',
   project: null,
   items: [],
+  invalidate: () => {},
 });
 export const useFullNavigation = () => useContext(Navigation);
 
@@ -64,6 +84,11 @@ export function FullNavigation({ children }: { children: ReactNode }) {
     token: string;
     items: LinkItem[];
   } | null>(null);
+  const [generation, setGeneration] = useState(0);
+  const invalidate = useCallback(() => {
+    setResult(null);
+    setGeneration((previous) => previous + 1);
+  }, []);
   const items =
     result?.tenant === tenant && result.project === project && result.token === token
       ? result.items
@@ -99,6 +124,9 @@ export function FullNavigation({ children }: { children: ReactNode }) {
                   digest: release.actual_digest!,
                   ...(projectId ? { projectId } : {}),
                   commands: release.commands ?? [],
+                  ...(page.sidebar && release.status === 'enabled'
+                    ? { sidebar: page.sidebar, routes: page.routes }
+                    : {}),
                 },
               ];
             })
@@ -111,13 +139,23 @@ export function FullNavigation({ children }: { children: ReactNode }) {
       if (refreshing) return;
       refreshing = true;
       const results = await Promise.allSettled([load(null), ...(project ? [load(project)] : [])]);
-      if (!controller.signal.aborted)
-        setResult({
+      if (!controller.signal.aborted) {
+        const next = {
           tenant,
           project,
           token: identity,
           items: results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
-        });
+        };
+        setResult((previous) =>
+          previous &&
+          previous.tenant === tenant &&
+          previous.project === project &&
+          previous.token === identity &&
+          JSON.stringify(previous.items) === JSON.stringify(next.items)
+            ? previous
+            : next
+        );
+      }
       refreshing = false;
     }
     void refresh();
@@ -128,7 +166,7 @@ export function FullNavigation({ children }: { children: ReactNode }) {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [tenant, project, token, session.transport]);
+  }, [tenant, project, token, session.transport, generation]);
   const base = '/tenant/' + encodeURIComponent(tenant);
   const links = useMemo(
     () =>
@@ -159,19 +197,51 @@ export function FullNavigation({ children }: { children: ReactNode }) {
     [base, tenant, project, items, t]
   );
   return (
-    <Navigation.Provider value={{ tenant, project, items: links }}>{children}</Navigation.Provider>
+    <Navigation.Provider value={{ tenant, project, items: links, invalidate }}>
+      {children}
+    </Navigation.Provider>
   );
 }
 
-export function useHeaderItems(): readonly DerivedNavigationItem[] {
-  const { items } = useFullNavigation();
-  return items.map((i) => ({
-    ...i,
-    context: 'tenant',
-    displayRole: 'top-nav',
-    relativePath: i.path,
-    routeFamily: 'tenant',
-    groupId: 'tenant-core-operations',
-    groupLabel: 'nav.navigation',
-  }));
+/** Original menu positions apply only to entries the active installation exposes. */
+export function layoutHeaderItems(
+  items: readonly LinkItem[],
+  original: readonly DerivedNavigationItem[],
+  context: TopNavigationContext
+): DerivedNavigationItem[] {
+  const byPath = new Map(items.map((item) => [item.path.split('?')[0], item]));
+  const placed = new Set<string>();
+  const result: DerivedNavigationItem[] = [];
+  for (const slot of original) {
+    const item = byPath.get(slot.path.split('?')[0]);
+    if (!item || placed.has(item.id)) continue;
+    placed.add(item.id);
+    result.push({ ...slot, path: item.path });
+  }
+  for (const item of items) {
+    if (placed.has(item.id)) continue;
+    result.push({
+      ...item,
+      context,
+      displayRole: 'top-nav',
+      relativePath: item.path,
+      routeFamily: 'tenant',
+      groupId: 'tenant-extensions-integrations',
+      groupLabel: 'nav.extensionsIntegrations',
+    });
+  }
+  return result;
+}
+
+export function useHeaderItems(requested?: TopNavigationContext): readonly DerivedNavigationItem[] {
+  const { items, tenant, project } = useFullNavigation();
+  const context = requested ?? (project ? 'project' : 'tenant');
+  return layoutHeaderItems(
+    items,
+    deriveTopNavigationItems(context, {
+      tenantId: tenant,
+      projectId: project ?? undefined,
+    }),
+    context
+  );
 }

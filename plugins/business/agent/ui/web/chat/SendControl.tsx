@@ -37,14 +37,14 @@ export function SendControl({
       aria-label={t('agent.inputBar.send', 'Send message')}
       data-testid="send-button"
       className={`
-                rounded-lg flex items-center gap-1.5 h-8 px-2 min-[1280px]:px-3
+                rounded-lg flex items-center gap-1.5 h-8 px-2 xl:px-3
                 bg-primary hover:bg-primary-600
                 shadow-sm
                 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed
                 transition-colors duration-200
               `}
     >
-      <span className="hidden min-[1280px]:inline">{t('agent.inputBar.send', 'Send')}</span>
+      <span className="hidden xl:inline">{t('agent.inputBar.send', 'Send')}</span>
     </LazyButton>
   );
 }

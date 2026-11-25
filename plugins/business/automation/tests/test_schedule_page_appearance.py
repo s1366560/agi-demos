@@ -40,7 +40,7 @@ def test_signed_schedule_canvas_is_readable(host_theme, locale, placeholder, emp
         frame.set_content('<div id="root"></div>')
         frame.evaluate(
             """locale => {window.memstack = {
-                getContext: async () => ({locale, projectId:"project"}),
+                getContext: async () => ({locale, projectId:"project",commands:[],pathname:"/cron-jobs"}),
                 invoke: async (_, data) => data.view === "capabilities" ?
                     Object.fromEntries(["create","edit","toggle","run_now","delete"].map(action =>
                         [action,{allowed:true}])) : {items:[], total:0}

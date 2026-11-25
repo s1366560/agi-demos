@@ -98,7 +98,12 @@ export function useBlackboardActions({
   const { createObjective, deleteObjective, projectObjectiveToTask, deleteGene, updateGene } =
     workspaceActions;
 
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  // Undefined follows the initial pinned post. Null is the user's explicit return to the list.
+  const [requestedPostId, setSelectedPostId] = useState<string | null>();
+  const selectedPostId =
+    requestedPostId === undefined
+      ? (posts.find((post) => post.is_pinned)?.id ?? posts[0]?.id ?? null)
+      : requestedPostId;
   const [postTitle, setPostTitle] = useState('');
   const [postContent, setPostContent] = useState('');
   const [replyDraft, setReplyDraft] = useState('');
@@ -123,15 +128,6 @@ export function useBlackboardActions({
     setSelectedPostId(postId);
     setReplyDraft('');
   }, []);
-
-  useEffect(() => {
-    const fallbackPostId = posts.find((post) => post.is_pinned)?.id ?? posts[0]?.id ?? null;
-    const hasSelectedPost = posts.some((post) => post.id === selectedPostId);
-
-    if (!hasSelectedPost && fallbackPostId !== selectedPostId) {
-      selectPostId(fallbackPostId);
-    }
-  }, [posts, selectPostId, selectedPostId]);
 
   const handleLoadReplies = useCallback(
     async (postId: string, options?: { manual?: boolean }) => {

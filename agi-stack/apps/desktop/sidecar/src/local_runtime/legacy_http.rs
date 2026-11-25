@@ -234,18 +234,6 @@ pub(super) fn local_router_with_generation_admission(
         )
         .route("/api/v1/agent/ws", get(agent_ws))
         .route(
-            "/api/v1/projects/:project_id/sandbox",
-            get(get_sandbox).post(ensure_sandbox),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/proxy-auth-cookie",
-            post(proxy_auth_cookie),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/desktop",
-            post(start_desktop),
-        )
-        .route(
             "/api/v1/projects/:project_id/sandbox/desktop/proxy/",
             get(desktop_proxy),
         )
@@ -270,7 +258,7 @@ pub(super) fn local_router_with_generation_admission(
         .merge(computer_use_v2::router())
         .merge(knowledge_authority_v2::router())
         .merge(parity_routes::router())
-        .fallback(workspace_core_bridge::proxy_workspace_fallback)
+        .fallback(signed_project_http::dispatch)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             workspace_core_bridge::proxy_workspace_if_authoritative,

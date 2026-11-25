@@ -99,7 +99,7 @@ async def read_npm_market_release(
 
 
 class ApplyNpmRelease(NpmReleaseRequest):
-    approved_permissions: list[str] = Field(max_length=32)
+    approved_permissions: list[str] = Field(max_length=100)
     expected_revision: int = Field(ge=0, strict=True)
     expected_digest: str = Field(pattern="^sha256:[a-f0-9]{64}$")
 
