@@ -7,13 +7,8 @@ set -euo pipefail
 output="${1:?prelude output path}"
 mkdir -p "$(dirname "$output")"
 
-mapfile -t files < <(find src/tests/unit/infrastructure/plugins -name 'test_*.py' | sort)
-shard_count=0
-for i in "${!files[@]}"; do
-  if (( i % 16 == 6 )); then
-    shard_count=$((shard_count + 1))
-  fi
-done
+mapfile -t files < scripts/ci/plugins_g_files.txt
+shard_count="${#files[@]}"
 
 {
   echo "sha=$(git rev-parse HEAD)"

@@ -129,6 +129,9 @@ mod mcp_supervisor_tests;
 mod message_display;
 mod model_request_replay_v2;
 mod signed_project_http;
+#[cfg(test)]
+#[path = "../../../../../crates/plugin-host/tests/support/signed_wasm_runtime.rs"]
+mod signed_wasm_fixture;
 mod workspace_read;
 #[cfg(feature = "legacy-business")]
 use legacy_http::*;

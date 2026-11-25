@@ -1,4 +1,5 @@
 use super::*;
+use crate::local_runtime::signed_wasm_fixture as fixture;
 use crate::local_runtime::{
     self,
     authorized_tool_host::AuthorizedRunToolHost,
@@ -13,9 +14,6 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::json;
 use tower::ServiceExt;
-#[allow(dead_code)]
-#[path = "../../../../../crates/plugin-host/tests/support/signed_wasm_runtime.rs"]
-mod fixture;
 const MARKER: &str =
     "(module (func (export \"score\") (param i32) (result i32) i32.const 20260914))";
 const TOKEN: &str = "local-plugin-runtime-test-session";

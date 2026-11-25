@@ -93,7 +93,8 @@ test('electron-vite reuses the existing React renderer and isolates its output',
   assert.match(configSource, /root:\s*desktopRoot/);
   assert.match(configSource, /input:\s*\{\s*index:\s*resolve\(desktopRoot,\s*'index\.html'\)/);
   assert.match(configSource, /mcpApp:\s*resolve\(desktopRoot,\s*'mcp-app\.html'\)/);
-  assert.match(configSource, /outDir:\s*resolve\(desktopRoot,\s*'out\/renderer'\)/);
+  assert.match(configSource, /desktopOutput = compatibilityProfile \? 'out-compat' : 'out'/);
+  assert.match(configSource, /outDir:\s*resolve\(desktopRoot,\s*desktopOutput,\s*'renderer'\)/);
   assert.match(configSource, /plugins:\s*\[\s*rendererRootHotReload\(desktopRoot\),\s*react\(\),\s*richPageFramePlugin\(\)/);
   assert.match(ciWorkflow, /node-version: '22'/);
   assert.match(ciWorkflow, /make desktop-test/);

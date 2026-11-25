@@ -25,7 +25,7 @@ COVERAGE_FILE="coverage-plugins-g" \
     --timeout=120 \
     --timeout-method=signal \
     --durations=20 \
-    --cov=src \
+    --cov=src --cov=plugins/business --cov=plugins/adapters \
     --cov-report= \
     --cov-fail-under=0 \
     "${append[@]}" \

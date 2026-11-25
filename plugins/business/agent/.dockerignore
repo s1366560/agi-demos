@@ -17,8 +17,8 @@ ui/**
 !ui/skill.js
 !ui/chat-web.js
 !ui/chat-web.css
-!ui/chat-desktop.js
-!ui/chat-desktop.css
+!ui/web-dashboard.js
+!ui/web-dashboard.css
 !engine/
 !engine/__init__.py
 !engine/processor/

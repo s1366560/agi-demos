@@ -95,6 +95,7 @@ class ProjectPackageCapabilities:
                     pin,
                     "react_loop",
                     {"phase": phase, "outcome": outcome, "steps": steps},
+                    wait_for_slot=True,
                     run_pins=self.pins,
                     check_access=authorize,
                 )

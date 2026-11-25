@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.react import project_react_agent as project_react_agent_module
 from plugins.business.agent.engine.react.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
@@ -18,7 +19,6 @@ from plugins.business.agent.engine.react.project_react_agent import (
 from src.configuration.config import get_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent import core as core_package
-from src.infrastructure.agent.core import project_react_agent as project_react_agent_module
 from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
     AGENT_LIFECYCLE_CHANGED_EVENT_V2,
     AGENT_SUBAGENT_LIFECYCLE_EVENT_V2,

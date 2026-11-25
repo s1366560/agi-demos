@@ -51,6 +51,12 @@ test(
       assert.equal(status.api_base_url, identity.apiBaseUrl);
       assert.equal(status.api_token, identity.apiToken);
 
+      assert.equal(
+        await supervisor.invoke('platform_plugin_renderer_distribution_current_v2'),
+        null,
+        'a fresh full host waits for a cloud publication',
+      );
+      await supervisor.invoke('platform_plugin_authority_select_v2', { mode: 'local' });
       const rendererDistribution = await supervisor.invoke(
         'platform_plugin_renderer_distribution_current_v2',
       );

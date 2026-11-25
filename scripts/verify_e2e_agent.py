@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import time
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import urlencode
 
@@ -40,6 +42,43 @@ def _require_string(payload: Mapping[str, object], key: str, description: str) -
     if not isinstance(value, str) or not value:
         raise RuntimeError(f"Agent E2E fixture did not return {description}")
     return value
+
+
+def _install_agent_loop(
+    client: httpx.Client, base: str, headers: dict[str, str], scope: dict[str, str]
+) -> None:
+    archive = Path(os.environ["E2E_AGENT_PACKAGE"]).read_bytes()
+    root = f"{base}/api/v1/platform-plugins/v2/optional-business"
+    body = {**scope, "archive_base64": base64.b64encode(archive).decode("ascii")}
+    preview = client.post(f"{root}/inspect", json=body, headers=headers)
+    preview.raise_for_status()
+    manifest = preview.json()
+    if (
+        manifest["plugin_id"] != "memstack-agent"
+        or "agent.loop.drive" not in manifest["permissions"]
+    ):
+        raise RuntimeError("E2E archive does not provide the Agent loop")
+    record = client.post(
+        f"{root}/install",
+        headers=headers,
+        json={
+            **body,
+            "expected_revision": 0,
+            "expected_digest": manifest["digest"],
+            "approved_permissions": manifest["permissions"],
+        },
+    )
+    record.raise_for_status()
+    activation = client.post(
+        f"{root}/memstack-agent/enable",
+        headers=headers,
+        json={**scope, "expected_revision": record.json()["desired_revision"]},
+    )
+    activation.raise_for_status()
+    current = client.get(f"{root}/memstack-agent", params=scope, headers=headers)
+    current.raise_for_status()
+    if current.json()["actual_digest"] != manifest["digest"]:
+        raise RuntimeError("Agent E2E did not activate the signed loop")
 
 
 def _bootstrap_agent_fixture(api_base: str, client: httpx.Client) -> _AgentFixture:
@@ -77,6 +116,8 @@ def _bootstrap_agent_fixture(api_base: str, client: httpx.Client) -> _AgentFixtu
     _ = project_response.raise_for_status()
     project_payload = _require_mapping(cast("object", project_response.json()), "a project object")
     project_id = _require_string(project_payload, "id", "a project id")
+
+    _install_agent_loop(client, base, headers, {"tenant_id": tenant_id, "project_id": project_id})
 
     conversation_response = client.post(
         f"{base}/api/v1/agent/conversations",

@@ -527,6 +527,7 @@ class ProjectPluginInstallationService:
         payload: dict[str, Any],
         *,
         run_pins: tuple[AgentPackagePin, ...] | None = (),
+        wait_for_slot: bool = False,
         check_access: Callable[[], Awaitable[None]] | None = None,
     ) -> dict[str, Any]:
         from src.infrastructure.plugins.v2.project_package_execution import invoke_project_tool
@@ -540,6 +541,7 @@ class ProjectPluginInstallationService:
                 lambda: invoke_project_tool(package, self.scope, tool, payload),
                 recheck=lambda: self.pinned_package(pin),
                 run_pins=run_pins,
+                wait_for_slot=wait_for_slot,
                 check_access=check_access,
             )
 
@@ -612,15 +614,13 @@ class ProjectPluginInstallationService:
                 check_access=check_access,
             )
 
-    async def run_guest[T](
+    async def _acquire_guest_slot(
         self,
         package: SignedPackageBytesV2,
-        operation: Callable[[], Awaitable[T]],
-        *,
+        wait_for_slot: bool,
         recheck: Callable[[], Awaitable[SignedPackageBytesV2]],
-        run_pins: tuple[AgentPackagePin, ...] | None = None,
-        check_access: Callable[[], Awaitable[None]] | None = None,
-    ) -> T:
+        check_access: Callable[[], Awaitable[None]] | None,
+    ) -> None:
         # PostgreSQL owns the live call across API replicas. The scoped transaction
         # releases it when the request ends, including during process failure.
         if self.db.get_bind().dialect.name == "postgresql":
@@ -628,14 +628,34 @@ class ProjectPluginInstallationService:
                 [self.scope.tenant_id, self.scope.project_id, package.plugin_id, package.digest]
             )
             lock_id = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], signed=True)
-            acquired = await self.db.scalar(
-                select(
-                    func.pg_try_advisory_xact_lock(bindparam("lock_id", lock_id, type_=BigInteger))
-                )
-            )
-            if not acquired:
+            key = bindparam("lock_id", lock_id, type_=BigInteger)
+            if wait_for_slot:
+                # Concurrent turns share one signed loop. Queue its pure control step before
+                # dispatch so contention cannot duplicate tool effects or abort another turn.
+                try:
+                    async with asyncio.timeout(30):
+                        await self.db.scalar(select(func.pg_advisory_xact_lock(key)))
+                except TimeoutError as exc:
+                    raise OptionalBusinessError(
+                        "busy", "package concurrency limit reached"
+                    ) from exc
+                if check_access:
+                    await check_access()
+                await recheck()
+            elif not await self.db.scalar(select(func.pg_try_advisory_xact_lock(key))):
                 raise OptionalBusinessError("busy", "package concurrency limit reached")
 
+    async def run_guest[T](
+        self,
+        package: SignedPackageBytesV2,
+        operation: Callable[[], Awaitable[T]],
+        *,
+        recheck: Callable[[], Awaitable[SignedPackageBytesV2]],
+        wait_for_slot: bool = False,
+        run_pins: tuple[AgentPackagePin, ...] | None = None,
+        check_access: Callable[[], Awaitable[None]] | None = None,
+    ) -> T:
+        await self._acquire_guest_slot(package, wait_for_slot, recheck, check_access)
         pins = await self.resolve_service_pins(package, run_pins)
         tools = {service.alias: service.tool for service in package.services.requires}
 

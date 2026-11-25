@@ -294,7 +294,8 @@ jobs:
           }
           case "${{ matrix.shard }}" in
             plugins-a|plugins-b|plugins-c|plugins-d|plugins-e|plugins-f|plugins-g|plugins-h|plugins-i|plugins-j|plugins-k|plugins-l|plugins-m|plugins-n|plugins-o|plugins-p)
-              mapfile -t files < <(find src/tests/unit/infrastructure/plugins plugins/business plugins/adapters -name 'test_*.py' -not -path '*/target/*' -not -path '*/sandbox-mcp-server/*' | sort)
+              # The separately diagnosed plugins-g cases have their own named workflow steps.
+              mapfile -t files < <(find src/tests/unit/infrastructure/plugins plugins/business plugins/adapters -name 'test_*.py' -not -path '*/target/*' -not -path '*/sandbox-mcp-server/*' | LC_ALL=C sort | grep -Fvx -f scripts/ci/plugins_g_files.txt)
               ;;
             adapters-a|adapters-b)
               mapfile -t files < <(find src/tests/unit/infrastructure/adapters -name 'test_*.py' | sort)
@@ -310,22 +311,21 @@ jobs:
               ;;
           esac
           case "${{ matrix.shard }}" in
-            plugins-a) shard_files 0 16 "${files[@]}" ;;
-            plugins-b) shard_files 1 16 "${files[@]}" ;;
-            plugins-c) shard_files 2 16 "${files[@]}" ;;
-            plugins-d) shard_files 3 16 "${files[@]}" ;;
-            plugins-e) shard_files 4 16 "${files[@]}" ;;
-            plugins-f) shard_files 5 16 "${files[@]}" ;;
-            plugins-g) shard_files 6 16 "${files[@]}" ;;
-            plugins-h) shard_files 7 16 "${files[@]}" ;;
-            plugins-i) shard_files 8 16 "${files[@]}" ;;
-            plugins-j) shard_files 9 16 "${files[@]}" ;;
-            plugins-k) shard_files 10 16 "${files[@]}" ;;
-            plugins-l) shard_files 11 16 "${files[@]}" ;;
-            plugins-m) shard_files 12 16 "${files[@]}" ;;
-            plugins-n) shard_files 13 16 "${files[@]}" ;;
-            plugins-o) shard_files 14 16 "${files[@]}" ;;
-            plugins-p) shard_files 15 16 "${files[@]}" ;;
+            plugins-a) shard_files 0 15 "${files[@]}" ;;
+            plugins-b) shard_files 1 15 "${files[@]}" ;;
+            plugins-c) shard_files 2 15 "${files[@]}" ;;
+            plugins-d) shard_files 3 15 "${files[@]}" ;;
+            plugins-e) shard_files 4 15 "${files[@]}" ;;
+            plugins-f) shard_files 5 15 "${files[@]}" ;;
+            plugins-h) shard_files 6 15 "${files[@]}" ;;
+            plugins-i) shard_files 7 15 "${files[@]}" ;;
+            plugins-j) shard_files 8 15 "${files[@]}" ;;
+            plugins-k) shard_files 9 15 "${files[@]}" ;;
+            plugins-l) shard_files 10 15 "${files[@]}" ;;
+            plugins-m) shard_files 11 15 "${files[@]}" ;;
+            plugins-n) shard_files 12 15 "${files[@]}" ;;
+            plugins-o) shard_files 13 15 "${files[@]}" ;;
+            plugins-p) shard_files 14 15 "${files[@]}" ;;
             adapters-a) shard_files 0 2 "${files[@]}" ;;
             adapters-b) shard_files 1 2 "${files[@]}" ;;
             rest-a) shard_files 0 4 "${files[@]}" ;;

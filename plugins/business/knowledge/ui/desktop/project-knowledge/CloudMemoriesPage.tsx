@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useI18n } from '@desktop/i18n';
+import { cloudMemoriesEnUS, cloudMemoriesZhCN } from './locales/cloudMemoriesMessages';
 import { CloudMemoryEditor } from './CloudMemoryEditor';
 import type { CloudMemoriesController, CloudMemoriesModel } from './cloudMemoriesController';
 
 export function CloudMemoriesUnavailable() {
-  const { t } = useI18n();
+  const { t } = useI18n(cloudMemoriesEnUS, cloudMemoriesZhCN);
   return (
     <section className="cloud-memories-page">
       <h1>{t('cloudMemories.title')}</h1>
@@ -21,7 +22,7 @@ export function CloudMemoriesPage({
   controller: CloudMemoriesController;
   reindex?: (id: string) => Promise<unknown>;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(cloudMemoriesEnUS, cloudMemoriesZhCN);
   const [reindexing, setReindexing] = useState<string>();
   const [indexError, setIndexError] = useState(false);
   async function reindexMemory(id: string) {

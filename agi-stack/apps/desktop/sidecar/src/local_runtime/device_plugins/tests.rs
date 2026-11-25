@@ -1,4 +1,5 @@
 use super::*;
+use crate::local_runtime::signed_wasm_fixture as fixture;
 use crate::trusted_session::{
     TrustedSessionCredentialKind, TrustedSessionRecord, TrustedSessionRuntimeMode,
 };
@@ -19,10 +20,6 @@ use std::sync::{
 use tokio::sync::Notify;
 
 const GRANT_ID: &str = "6b28ce7b-d3c4-43cc-a618-a5c625002358";
-
-#[allow(dead_code)]
-#[path = "../../../../../../crates/plugin-host/tests/support/signed_wasm_runtime.rs"]
-mod fixture;
 
 #[derive(Default)]
 struct Remote {
@@ -201,7 +198,7 @@ async fn exercise_device_package(
     let broken_id = uuid::Uuid::new_v4().to_string();
     std::fs::write(transfers.join(&broken_id), broken).unwrap();
     let archive = uuid::Uuid::new_v4().to_string();
-    std::fs::write(transfers.join(archive.to_string()), bytes).unwrap();
+    std::fs::write(transfers.join(&archive), bytes).unwrap();
     let remote = Arc::new(Remote::default());
     *remote.user.lock().unwrap() = "owner".into();
     let app=Router::new().route("/api/v1/auth/me",get(me))

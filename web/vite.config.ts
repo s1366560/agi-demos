@@ -11,6 +11,7 @@ import { defineConfig } from 'vite';
 export default defineConfig(({ mode }) => {
   const packageHost = !['full', 'compat', 'test'].includes(mode);
   return {
+    cacheDir: path.resolve(__dirname, 'node_modules/.vite', mode),
     publicDir: packageHost ? false : 'public',
     plugins: [
       richPageFramePlugin(),

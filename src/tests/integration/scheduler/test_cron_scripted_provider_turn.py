@@ -16,11 +16,15 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from plugins.business.agent.release import build_release
 from src.configuration.config import get_settings
+from src.host.packages.project_plugin_installation import ProjectPluginInstallationService
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.legacy_cron_admission_model import (
     LegacyCronAdmissionModel,
@@ -40,6 +44,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     HITLRequest,
     MCPServer,
     Message,
+    PlatformPluginPackageModel,
     Project,
     ProjectSandbox,
     Skill,
@@ -53,6 +58,11 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.adapters.secondary.persistence.plugin_marketplace_models_v3 import (
     MarketplaceRecordV3,
 )
+from src.infrastructure.adapters.secondary.persistence.project_plugin_installation import (
+    AgentRunPackageSelection,
+    ProjectPluginInstallation,
+    ProjectPluginRelease,
+)
 from src.infrastructure.agent.plugins.skill_evolution.models import SkillEvolutionSession
 from src.infrastructure.persistence.llm_providers_models import (
     LLMProvider,
@@ -64,7 +74,9 @@ from src.infrastructure.plugins.v2.boundary import (
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.signed_optional_business_v2 import ScopeBindingV2
 from src.infrastructure.security.encryption_service import get_encryption_service
+from src.tests.integration.test_oci_mcp_worker_docker import disposable_worker_registry
 
 pytestmark = pytest.mark.integration
 _ROOT = Path(__file__).resolve().parents[4]
@@ -100,12 +112,32 @@ def _tables() -> tuple[Any, ...]:
         CronSchedulerOwnerModel.__table__,
         LegacyCronAdmissionModel.__table__,
         MarketplaceRecordV3.__table__,
+        PlatformPluginPackageModel.__table__,
+        ProjectPluginRelease.__table__,
+        ProjectPluginInstallation.__table__,
+        AgentRunPackageSelection.__table__,
     )
+
+
+@pytest.fixture
+def signed_agent(tmp_path, monkeypatch):
+    signer = Ed25519PrivateKey.generate()
+    public = signer.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    pem = tmp_path / "publisher.pem"
+    pem.write_bytes(public)
+    monkeypatch.setattr(get_settings(), "plugin_marketplace_trusted_key_files", (pem,))
+    with disposable_worker_registry() as (publish, registry, _):
+        monkeypatch.setattr(get_settings(), "plugin_worker_allowed_registries", (registry,))
+        image = publish(_ROOT / "plugins/business/agent")
+        yield public.decode(), build_release(image, "1.0.0", signer)
 
 
 @pytest.mark.asyncio
 async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa: PLR0915
     monkeypatch: pytest.MonkeyPatch,
+    signed_agent,
 ) -> None:
     schema = f"qa_cron_{uuid.uuid4().hex[:8]}"
     url = get_settings().postgres_url
@@ -334,6 +366,19 @@ async def test_system_event_and_agent_turn_reach_the_scripted_supplier(  # noqa:
                 )
             )
             await session.commit()
+            key, archive = signed_agent
+            packages = ProjectPluginInstallationService(
+                session, ScopeBindingV2(tenant_id=tenant_id, project_id=project_id), (key,)
+            )
+            reviewed = await packages.inspect(archive)
+            await packages.record_selection(
+                archive,
+                reviewed.approved_permissions,
+                user_id,
+                expected_revision=0,
+                expected_digest=reviewed.digest,
+                activate=True,
+            )
 
         import logging
 

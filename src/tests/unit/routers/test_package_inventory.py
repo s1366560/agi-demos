@@ -5,7 +5,10 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from plugins.business.environments.backend.inventory_operations import InventoryQuery, _project
+from plugins.business.environments.backend.inventory_operations import (
+    InventoryQuery,
+    project_inventory_row,
+)
 from src.application.schemas.cluster_schemas import ClusterResponse
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
@@ -21,15 +24,16 @@ def test_projected_cluster_excludes_operator_credentials_and_enforces_tenant():
         credentials_encrypted="fixture-only",
         created_at=datetime.now(UTC),
     )
-    assert set(_project(cluster, "tenant")) == {
+    assert set(project_inventory_row(cluster, "tenant")) == {
         "id",
         "name",
         "status",
         "compute_provider",
+        "proxy_endpoint",
         "created_at",
     }
     with pytest.raises(OptionalBusinessError, match="another tenant"):
-        _project(cluster, "another")
+        project_inventory_row(cluster, "another")
 
 
 @pytest.mark.unit

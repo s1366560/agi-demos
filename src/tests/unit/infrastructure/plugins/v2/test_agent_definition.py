@@ -33,6 +33,11 @@ from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_prof
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.tests.unit.routers.agent.test_chat_run_permission_guard_v2 import (  # noqa: F401
+    chat_guard_case,
+    staged,
+    verified,
+)
 
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
@@ -226,7 +231,7 @@ async def test_stream_requires_upstream_agent_id_before_route_side_effects(monke
 
 @pytest.mark.unit
 async def test_stream_rejects_explicit_missing_definition_without_builtin_fallback(
-    monkeypatch,
+    monkeypatch, chat_guard_case, test_user,  # noqa: F811
 ) -> None:
     agent = ReActAgent(model="test-model", tools={})
     route_event = {"type": "route"}
@@ -255,17 +260,18 @@ async def test_stream_rejects_explicit_missing_definition_without_builtin_fallba
         side_effect=AssertionError("builtin fallback must not be called"),
         create=True,
     ) as builtin_fallback:
-        events = agent.stream(
-            conversation_id="conversation-a",
-            user_message="hello",
-            project_id="project-a",
-            user_id="user-a",
-            tenant_id="tenant-a",
-            agent_id="missing-agent",
-        )
-        assert await anext(events) == route_event
-        with pytest.raises(RuntimeV2Error) as error:
-            await anext(events)
+        async with chat_guard_case() as (run, _):
+            events = agent.stream(
+                conversation_id=run.conversation_id,
+                user_message="hello",
+                project_id=run.project_id,
+                user_id=test_user.id,
+                tenant_id=run.tenant_id,
+                agent_id="missing-agent",
+            )
+            assert await anext(events) == route_event
+            with pytest.raises(RuntimeV2Error) as error:
+                await anext(events)
 
     assert error.value.code == "agent_definition_not_found"
     builtin_fallback.assert_not_called()

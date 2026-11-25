@@ -1,4 +1,5 @@
 import { useI18n } from '@desktop/i18n';
+import { cloudMemoriesEnUS, cloudMemoriesZhCN } from './locales/cloudMemoriesMessages';
 import type { CloudMemoriesController, CloudMemoriesModel } from './cloudMemoriesController';
 
 export function CloudMemoryEditor({
@@ -10,7 +11,7 @@ export function CloudMemoryEditor({
   controller: CloudMemoriesController;
   busy?: boolean;
 }>) {
-  const { t } = useI18n();
+  const { t } = useI18n(cloudMemoriesEnUS, cloudMemoriesZhCN);
   const locked = ['saving', 'uncertain', 'loading'].includes(model.phase);
   const editable = ['creating', 'editing'].includes(model.phase);
   return (
