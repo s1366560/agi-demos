@@ -65,7 +65,7 @@ describe('NewMemory', () => {
       tags: [],
     });
     expect(parsedDraft.savedAt).toEqual(expect.any(String));
-    expect(screen.getByText(/Draft saved at/)).toBeInTheDocument();
+    expect(await screen.findByText(/Draft saved at/)).toBeInTheDocument();
 
     unmount();
 
@@ -73,7 +73,7 @@ describe('NewMemory', () => {
 
     expect(await screen.findByDisplayValue('Planning notes')).toBeInTheDocument();
     expect(await screen.findByDisplayValue('Draft body for later.')).toBeInTheDocument();
-    expect(screen.getByText(/Draft saved at/)).toBeInTheDocument();
+    expect(await screen.findByText(/Draft saved at/)).toBeInTheDocument();
   });
 
   it('switches between split, edit, and preview editor modes', () => {

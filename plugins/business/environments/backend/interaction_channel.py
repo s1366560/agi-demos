@@ -11,6 +11,7 @@ from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from pydantic import Field, TypeAdapter
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import WebSocketException
+from websockets.typing import Subprotocol
 
 from src.configuration.config import get_settings
 from src.host.packages.release_pin import ACTIVE_APPLICATION_PIN
@@ -44,7 +45,9 @@ class _Write(_Handle):
     data: Annotated[str, Field(min_length=1, max_length=44_000)]
 
 
-_ACTION = TypeAdapter(Annotated[_Open | _Read | _Write, Field(discriminator="action")])
+_ACTION: TypeAdapter[_Open | _Read | _Write] = TypeAdapter(
+    Annotated[_Open | _Read | _Write, Field(discriminator="action")]
+)
 
 
 @dataclass
@@ -115,12 +118,12 @@ async def _connect(ctx: "PackageOperationContext", kind: Kind, resolution: str) 
         ):
             raise OptionalBusinessError("forbidden", "Desktop authority scope mismatch")
         path = "/desktop/proxy/websockify"
-        protocols = ["binary"]
+        protocols = [Subprotocol("binary")]
     return await _socket(ctx, path, protocols, "ephemeral=true" if kind == "terminal" else "")
 
 
 async def _socket(
-    ctx: "PackageOperationContext", path: str, protocols: list[str], query: str = ""
+    ctx: "PackageOperationContext", path: str, protocols: list[Subprotocol], query: str = ""
 ) -> ClientConnection:
     settings = get_settings()
     authority = urlsplit(
@@ -193,7 +196,7 @@ async def open_run_terminal(
             lambda: _socket(
                 ctx,
                 "/terminal/sessions/" + session_id + "/ws",
-                ["memstack.terminal-v2", resume_token],
+                [Subprotocol("memstack.terminal-v2"), Subprotocol(resume_token)],
             ),
         )
     except (WebSocketException, OSError, TimeoutError) as exc:

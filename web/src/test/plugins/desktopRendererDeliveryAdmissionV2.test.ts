@@ -7,17 +7,23 @@ it('blocks creation and submission until all overlapping identity transitions fi
   let releaseMutation!: () => void;
   const retirement = new Promise<void>((resolve) => { releaseRetirement = resolve; });
   const mutation = new Promise<void>((resolve) => { releaseMutation = resolve; });
-  const operation = vi.fn(() => mutation);
+  const order: string[] = [];
+  const operation = vi.fn(async () => {
+    await mutation;
+    order.push('first');
+  });
   const first = gate.transition(() => retirement, operation);
   expect(() => gate.assertAdmitted()).toThrow('desktop_renderer_authority_transition');
   expect(operation).not.toHaveBeenCalled();
   releaseRetirement();
-  await Promise.resolve();
-  expect(operation).toHaveBeenCalledOnce();
-  await gate.transition(async () => undefined, async () => undefined);
+  await vi.waitFor(() => expect(operation).toHaveBeenCalledOnce());
+  const nextOperation = vi.fn(async () => { order.push('second'); });
+  const second = gate.transition(async () => undefined, nextOperation);
+  expect(nextOperation).not.toHaveBeenCalled();
   expect(() => gate.assertAdmitted()).toThrow('desktop_renderer_authority_transition');
   releaseMutation();
-  await first;
+  await Promise.all([first, second]);
+  expect(order).toEqual(['first', 'second']);
   expect(() => gate.assertAdmitted()).not.toThrow();
 });
 

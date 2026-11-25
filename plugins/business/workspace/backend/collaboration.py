@@ -61,8 +61,16 @@ class Change(BaseModel):
     expected_revision: int = Field(ge=0)
 
 
-_PATHS = {"members": ("members",), "posts": ("blackboard", "posts"), "tasks": ("tasks",)}
-_FIELDS = {"members": MemberFields, "posts": PostFields, "tasks": TaskFields}
+_PATHS: dict[Topic, tuple[str, ...]] = {
+    "members": ("members",),
+    "posts": ("blackboard", "posts"),
+    "tasks": ("tasks",),
+}
+_FIELDS: dict[Topic, type[BaseModel]] = {
+    "members": MemberFields,
+    "posts": PostFields,
+    "tasks": TaskFields,
+}
 
 
 def _mutation(
@@ -149,6 +157,6 @@ def _operation(topic: Topic, *, write: bool) -> Callable[..., Awaitable[dict[str
 
 WORKSPACE_COLLABORATION_OPERATIONS = {
     f"app.workspace.{topic}.{verb}": _operation(topic, write=verb == "write")
-    for topic in ("members", "posts", "tasks")
+    for topic in _PATHS
     for verb in ("read", "write")
 }

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from fastapi import Request
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from src.host.operations.deployment_adapters import ApplicationHandler
     from src.infrastructure.adapters.secondary.persistence.models import User
     from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
         SignedPackageBytesV2,
@@ -50,10 +51,12 @@ async def tenant_command(
             if resolver := getattr(
                 ctx.request.app.state, "resolve_package_application_operation", None
             ):
-                handler = resolver(pkg.plugin_id, c.host_operation, ctx.scope)
+                handler: ApplicationHandler = resolver(pkg.plugin_id, c.host_operation, ctx.scope)
                 with application_actor_scope(ctx.user.id, ctx.scope.tenant_id):
                     return await handler(ctx, inputs, None)
-            operations = getattr(ctx.request.app.state, "tenant_package_operations_v1", {})
+            operations: dict[str, ApplicationHandler] = getattr(
+                ctx.request.app.state, "tenant_package_operations_v1", {}
+            )
             if c.host_operation in operations:
                 with application_actor_scope(ctx.user.id, ctx.scope.tenant_id):
                     return await operations[c.host_operation](ctx, inputs, None)

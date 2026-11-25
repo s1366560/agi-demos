@@ -6,6 +6,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict
 
+from src.host.operations.remote_application_commands import application_result
 from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
@@ -39,4 +40,4 @@ async def search(
         )
     if not response.is_success:
         raise HTTPException(response.status_code, _("Failed to search the project"))
-    return response.json()
+    return application_result(response.json())

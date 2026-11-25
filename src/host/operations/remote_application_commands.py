@@ -31,7 +31,7 @@ def application_runtime_origin(value: str) -> str:
     return value.rstrip("/")
 
 
-def _result(value: object) -> dict[str, Any]:
+def application_result(value: object) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise OptionalBusinessError("runtime_unavailable", "Invalid application response")
     return value
@@ -88,15 +88,15 @@ async def forward_command(
                     code, f"Application runtime returned HTTP {response.status_code}"
                 )
             if progress is None:
-                return _result(json.loads(await response.aread()))
+                return application_result(json.loads(await response.aread()))
             async for line in response.aiter_lines():
-                frame = _result(json.loads(line))
+                frame = application_result(json.loads(line))
                 if frame["type"] == "progress":
-                    await progress(_result(frame["data"]))
+                    await progress(application_result(frame["data"]))
                 elif frame["type"] == "error":
                     raise OptionalBusinessError("apply_failed", "Application operation failed")
                 elif frame["type"] == "result":
-                    return _result(frame["data"])
+                    return application_result(frame["data"])
             raise OptionalBusinessError(
                 "runtime_unavailable", "Application stream ended before its result"
             )

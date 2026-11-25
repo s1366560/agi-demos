@@ -7,6 +7,7 @@ from urllib.parse import quote
 import httpx
 from fastapi import HTTPException
 
+from src.host.operations.remote_application_commands import application_result
 from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 def _read(response: httpx.Response) -> dict[str, Any]:
     if not response.is_success:
         raise HTTPException(response.status_code, _("Project overview is unavailable"))
-    return response.json()
+    return application_result(response.json())
 
 
 def _recent(page: dict[str, Any], project: str) -> dict[str, Any]:

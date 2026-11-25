@@ -6,6 +6,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.host.operations.remote_application_commands import application_result
 from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
@@ -48,7 +49,7 @@ async def _read(ctx: "PackageOperationContext", path: str, query: _Query) -> dic
         )
     if not response.is_success:
         raise HTTPException(response.status_code, _("Failed to read the project graph"))
-    return response.json()
+    return application_result(response.json())
 
 
 async def list_entities(

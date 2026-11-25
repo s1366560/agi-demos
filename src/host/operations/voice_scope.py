@@ -43,4 +43,5 @@ async def voice_conversation_tenant(
     )
     if tenant_id is not None:
         query = query.where(Conversation.tenant_id == tenant_id)
-    return await db.scalar(query)
+    tenant: str | None = await db.scalar(query)
+    return tenant

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
-from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
@@ -19,6 +18,7 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation as DBConversation,
     Project as DBProject,
+    User,
     UserProject as DBUserProject,
     UserTenant as DBUserTenant,
 )
@@ -45,6 +45,9 @@ from .schemas import (
     TenantSubAgentRunListResponse,
     TraceChainResponse,
 )
+
+if TYPE_CHECKING:
+    from src.domain.model.auth.user import User as DomainUser
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +105,7 @@ async def _get_conversation(
 
 async def _get_accessible_conversation(
     db: AsyncSession,
-    current_user: User,
+    current_user: User | DomainUser,
     conversation_id: str,
 ) -> DBConversation:
     """Require access to a conversation before returning it."""

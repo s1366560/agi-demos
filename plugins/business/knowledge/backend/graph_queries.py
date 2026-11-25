@@ -6,6 +6,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.host.operations.remote_application_commands import application_result
 from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
@@ -56,4 +57,4 @@ async def _project_graph(ctx: "PackageOperationContext", query: GraphRead) -> di
             response = await client.get("/api/v1/graph/memory/graph", params=data)
     if not response.is_success:
         raise HTTPException(response.status_code, _("Failed to read the project graph"))
-    return response.json()
+    return application_result(response.json())

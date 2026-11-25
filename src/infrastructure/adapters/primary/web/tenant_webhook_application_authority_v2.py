@@ -11,8 +11,8 @@ from uuid import uuid4
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.auth.user import User
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,

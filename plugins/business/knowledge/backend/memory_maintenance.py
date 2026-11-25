@@ -7,6 +7,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.host.operations.remote_application_commands import application_result
 from src.infrastructure.i18n import gettext as _
 
 from .package_memory_editor import MemorySelection, _require_memory
@@ -26,7 +27,7 @@ async def delete_memory(
     args = DeleteMemory.model_validate(payload)
     UUID(args.change_id)
     path = f"/api/v1/memories/{args.id}"
-    query = {"project_id": ctx.scope.project_id, "version": args.version}
+    query: dict[str, str | int] = {"project_id": ctx.scope.project_id, "version": args.version}
     headers = {"Authorization": ctx.request.headers.get("Authorization", "")}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=ctx.request.app), base_url="http://localhost"
@@ -56,7 +57,7 @@ async def reindex_memory(
         )
     if not response.is_success:
         raise HTTPException(response.status_code, _("Memory operation failed"))
-    result = response.json()
+    result = application_result(response.json())
     if result["project_id"] != ctx.scope.project_id:
         raise HTTPException(502, _("Memory response scope mismatch"))
     return result

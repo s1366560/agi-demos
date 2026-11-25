@@ -7,6 +7,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.host.operations.remote_application_commands import application_result
 from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
@@ -63,7 +64,7 @@ async def _request(
         return {"forbidden": True}
     if not response.is_success:
         raise HTTPException(response.status_code, _("Runtime pool operation failed"))
-    return response.json()
+    return application_result(response.json())
 
 
 async def read(

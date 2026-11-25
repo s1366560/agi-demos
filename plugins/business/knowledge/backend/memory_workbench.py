@@ -6,6 +6,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.host.operations.remote_application_commands import application_result
 from src.infrastructure.i18n import gettext as _
 
 from .package_memory_editor import MemoryId
@@ -55,7 +56,7 @@ async def query_memory_workbench(
         )
     if not result.is_success:
         raise HTTPException(result.status_code, _("Memory operation failed"))
-    data = result.json()
+    data = application_result(result.json())
     rows = [data] if "detail" in payload else data["memories"]
     if any(item["project_id"] != project for item in rows):
         raise HTTPException(502, _("Memory response scope mismatch"))

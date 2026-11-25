@@ -251,22 +251,8 @@ function AutomationsQa() {
           ]}
           runCapability={
             state === 'unavailable'
-              ? {
-                  status: 'unavailable',
-                  available: false,
-                  reason_code: 'automation_capability_contract_unavailable',
-                  service_version: null,
-                  contract_version: null,
-                  minimum_contract_version: '2.0.0',
-                }
-              : {
-                  status: 'available',
-                  available: true,
-                  reason_code: null,
-                  service_version: '0.1.0',
-                  contract_version: '2.0.0',
-                  minimum_contract_version: '2.0.0',
-                }
+              ? { available: false, reason_code: 'automation_capability_contract_unavailable' }
+              : { available: true, reason_code: null }
           }
           onOpenProjectSettings={() => {}}
           onOpenConnection={() => {}}

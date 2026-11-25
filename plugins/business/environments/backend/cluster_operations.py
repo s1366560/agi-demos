@@ -53,7 +53,7 @@ async def write_cluster(
 ) -> dict[str, Any]:
     from pydantic import TypeAdapter
 
-    change = TypeAdapter(
+    change: _Create | _Edit | _Update = TypeAdapter(
         Annotated[_Create | _Edit | _Update, Field(discriminator="action")]
     ).validate_python(payload)
     tenant = ctx.scope.tenant_id

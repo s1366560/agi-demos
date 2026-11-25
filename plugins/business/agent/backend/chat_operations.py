@@ -154,7 +154,10 @@ async def _conversation_page(
         query["workspace_id"] = filters.workspace_id
     if not filters.workbench or filters.workspace_id:
         result = await _canonical(ctx, "GET", "conversations", query=query)
-        return result["items"]
+        items = result["items"]
+        if not isinstance(items, list) or any(not isinstance(row, dict) for row in items):
+            raise OptionalBusinessError("runtime_unavailable", "Invalid conversation list")
+        return items
 
     # The Web workbench initially loads two pages. The unbound list owns its
     # ordering and duplicates, then grouped rows contribute previously unseen IDs.

@@ -9,6 +9,9 @@ from sqlalchemy import select
 from src.host.operations.device_conversations import ConversationId
 from src.infrastructure.adapters.primary.web.routers import system
 from src.infrastructure.adapters.primary.web.routers.agent import config, trace_router
+from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
+    UpdateTenantAgentConfigRequest,
+)
 from src.infrastructure.adapters.secondary.persistence.models import Conversation
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
@@ -36,7 +39,7 @@ class Trace(DashboardInput):
 
 
 class Update(DashboardInput):
-    config: config.UpdateTenantAgentConfigRequest
+    config: UpdateTenantAgentConfigRequest
     expected_revision: int = Field(ge=1)
 
 
@@ -56,6 +59,7 @@ async def read_dashboard(
 ) -> dict[str, Any]:
     view = Read.model_validate(payload).view
     authority = _authority(ctx)
+    data: BaseModel
     try:
         match view:
             case "runs":

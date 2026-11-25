@@ -145,6 +145,7 @@ async def save(
             body={"conversation_id": data.conversation_id, "mode": data.mode},
         )
         return _settings(row, mode["mode"])
+    change: dict[str, object]
     if data.llm_overrides is not None:
         original = (row.get("agent_config") or {}).get("llm_overrides") or {}
         keep = {

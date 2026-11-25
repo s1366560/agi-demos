@@ -47,7 +47,7 @@ def voice_ticket(*, principal: str, tenant: str, project: str, conversation: str
     pin = ACTIVE_APPLICATION_PIN.get()
     if not pin or (pin.tenant_id, pin.project_id) != (tenant, project):
         raise OptionalBusinessError("forbidden", "A signed microphone capability is required")
-    return jwt.encode(
+    ticket: str = jwt.encode(
         {
             "aud": _AUDIENCE,
             "sub": principal,
@@ -63,6 +63,7 @@ def voice_ticket(*, principal: str, tenant: str, project: str, conversation: str
         _signing_key(),
         algorithm="HS256",
     )
+    return ticket
 
 
 @dataclass(frozen=True, slots=True)

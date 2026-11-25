@@ -3,7 +3,7 @@
 import base64
 import binascii
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import httpx
 from pydantic import Field
@@ -17,6 +17,8 @@ from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBu
 from .chat_operations import ConversationInput, Identifier, _own_conversation
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from httpx._types import RequestData, RequestFiles
     from redis.asyncio import Redis
 
@@ -77,7 +79,10 @@ async def storage(
         raise OptionalBusinessError(
             "apply_failed", f"Attachment storage returned HTTP {result.status_code}"
         )
-    return result.json()
+    reply = result.json()
+    if not isinstance(reply, dict):
+        raise OptionalBusinessError("apply_failed", "Invalid attachment storage response")
+    return reply
 
 
 def metadata(item: Mapping[str, Any]) -> dict[str, Any]:
@@ -134,7 +139,7 @@ async def multipart(ctx: "PackageOperationContext", payload: dict[str, Any]) -> 
             return await store_chunk(ctx, attachment, step, redis, key)
         parts = []
         for number in range(1, attachment.total_parts + 1):
-            etag = await redis.hget(key, f"etag:{number}")
+            etag = await cast("Awaitable[str | None]", redis.hget(key, f"etag:{number}"))
             if not etag:
                 raise OptionalBusinessError("conflict", "Incomplete attachment")
             parts.append({"part_number": number, "etag": etag})
@@ -158,21 +163,28 @@ async def store_chunk(
     raw = decode(step.content)
     if size <= 0 or step.offset % CHUNK_SIZE or len(raw) != min(CHUNK_SIZE, size - step.offset):
         raise OptionalBusinessError("apply_failed", "Unexpected attachment chunk")
-    if await redis.hexists(key, f"etag:{step.part_number}"):
+    if await cast("Awaitable[bool]", redis.hexists(key, f"etag:{step.part_number}")):
         return {"accepted": True}
-    if step.part_number > 1 and not await redis.hexists(key, f"etag:{step.part_number - 1}"):
+    if step.part_number > 1 and not await cast(
+        "Awaitable[bool]", redis.hexists(key, f"etag:{step.part_number - 1}")
+    ):
         raise OptionalBusinessError("conflict", "A previous attachment part is incomplete")
     field = f"chunk:{step.offset}"
-    previous = await redis.hget(key, field)
+    previous = await cast("Awaitable[str | None]", redis.hget(key, field))
     if previous is not None and previous != step.content:
         raise OptionalBusinessError("conflict", "Attachment chunk changed during retry")
     async with redis.pipeline() as pipe:
-        await pipe.hset(key, field, step.content).expire(key, 1800).execute()
+        pipe.hset(key, field, step.content)
+        pipe.expire(key, 1800)
+        await pipe.execute()
     if step.offset + len(raw) == size:
         offsets = [f"chunk:{offset}" for offset in range(0, size, CHUNK_SIZE)]
-        chunks = await redis.hmget(key, offsets)
-        if any(chunk is None for chunk in chunks):
-            raise OptionalBusinessError("conflict", "An attachment chunk is missing")
+        chunks = await cast("Awaitable[list[str | None]]", redis.hmget(key, offsets))
+        contents = bytearray()
+        for chunk in chunks:
+            if chunk is None:
+                raise OptionalBusinessError("conflict", "An attachment chunk is missing")
+            contents.extend(decode(chunk))
         reply = await storage(
             ctx,
             "part",
@@ -183,16 +195,14 @@ async def store_chunk(
             files={
                 "file": (
                     attachment.filename,
-                    b"".join(decode(chunk) for chunk in chunks),
+                    bytes(contents),
                     attachment.mime_type,
                 )
             },
         )
         async with redis.pipeline() as pipe:
-            await (
-                pipe.hset(key, f"etag:{step.part_number}", reply["etag"])
-                .hdel(key, *offsets)
-                .expire(key, 1800)
-                .execute()
-            )
+            pipe.hset(key, f"etag:{step.part_number}", reply["etag"])
+            pipe.hdel(key, *offsets)
+            pipe.expire(key, 1800)
+            await pipe.execute()
     return {"accepted": True}

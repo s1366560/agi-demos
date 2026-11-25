@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from fastapi import Request
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from src.host.operations.deployment_adapters import ApplicationHandler
     from src.infrastructure.adapters.secondary.persistence.models import User
     from src.infrastructure.plugins.v2.signed_optional_business_v2 import ScopeBindingV2
 
@@ -42,7 +43,7 @@ class PackageOperationContext:
         if resolver := getattr(
             self.request.app.state, "resolve_package_application_operation", None
         ):
-            handler = resolver(plugin, name, self.scope)
+            handler: ApplicationHandler = resolver(plugin, name, self.scope)
             with application_actor_scope(self.user.id, self.scope.tenant_id):
                 return await handler(self, payload, progress)
         operations: dict[str, Operation] = getattr(

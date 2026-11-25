@@ -85,11 +85,12 @@ async def call_actor_control(ctx: "PackageOperationContext", action: str) -> str
                 and event.get("action") == action
                 and event.get("project_id") == ctx.scope.project_id
             ):
-                if event.get("status") == "not_found":
+                status = event.get("status")
+                if status == "not_found":
                     raise OptionalBusinessError("conflict", "Project actor no longer exists")
-                if event.get("status") not in ("restarted", "stopping"):
+                if not isinstance(status, str) or status not in ("restarted", "stopping"):
                     raise OptionalBusinessError("apply_failed", "Unexpected actor response")
-                return event["status"]
+                return status
 
 
 async def _read_turn(
