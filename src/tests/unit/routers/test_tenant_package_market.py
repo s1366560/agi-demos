@@ -88,20 +88,7 @@ async def test_independent_billing_approval_before_first_project(
         "tenant",
         b["actual_digest"],
     )
-    assert {(p["id"], tuple(p["targets"])) for p in b["pages"]} == {
-        ("tenant-account", ("web",)),
-        ("tenant-account", ("desktop-renderer",)),
-    }
-    params = {
-        **scope,
-        "target": "web",
-        "expected_digest": b["actual_digest"],
-        "page_id": "tenant-account",
-    }
-    assert (await api.get(BILLING + "/ui", params=params)).json()["scope"] == "tenant"
-    assert (
-        await api.get(BILLING + "/ui", params={**params, "page_id": "account"})
-    ).status_code == 404
+    await assert_shared_tenant_account_page(api, scope, b)
 
     async def command(digest, name, payload=None):
         return await api.post(
@@ -135,3 +122,25 @@ async def test_independent_billing_approval_before_first_project(
             json={**scope, "expected_revision": restored.json()["desired_revision"]},
         )
     ).status_code == 403
+
+
+async def assert_shared_tenant_account_page(api, scope, release):
+    assert {(p["id"], tuple(p["targets"])) for p in release["pages"]} == {
+        ("tenant-account", ("desktop-renderer", "web")),
+    }
+    params = {
+        **scope,
+        "target": "web",
+        "expected_digest": release["actual_digest"],
+        "page_id": "tenant-account",
+    }
+    web = (await api.get(BILLING + "/ui", params=params)).json()
+    desktop = (
+        await api.get(BILLING + "/ui", params={**params, "target": "desktop-renderer"})
+    ).json()
+    assert web["scope"] == desktop["scope"] == "tenant"
+    assert web["entry"] == desktop["entry"]
+    assert web["style"] == desktop["style"]
+    assert (
+        await api.get(BILLING + "/ui", params={**params, "page_id": "account"})
+    ).status_code == 404

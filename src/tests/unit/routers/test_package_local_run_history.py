@@ -32,6 +32,16 @@ async def assert_history_scope(client, conversation_id, headers, viewer):
     assert listing.json()["total"] == 1 and listing.json()["items"] == [detail.json()]
 
 
+async def assert_replayed_messages(command, conversation_id, expected):
+    history = await command("history", {"conversation_id": conversation_id})
+    assert history["before"] is None
+    messages = history["messages"]
+    assert [{"role": row["role"], "content": row["content"]} for row in messages] == expected
+    assert len({row["id"] for row in messages}) == len(expected)
+    assert all(row["timestamp"] == row["eventTimeUs"] // 1000 for row in messages)
+    assert await command("history", {"conversation_id": conversation_id}) == history
+
+
 @pytest.mark.asyncio(loop_scope="session")
 @pytest.mark.parametrize("http", ["package-kernel"], indirect=True)
 async def test_two_device_turns_share_owned_signed_history(http, publisher):  # noqa: F811
@@ -117,7 +127,4 @@ async def test_two_device_turns_share_owned_signed_history(http, publisher):  # 
             {"role": event["kind"], "content": event["payload"]["text"]} for event in events
         )
 
-    assert await command("history", {"conversation_id": conversation_id}) == {
-        "messages": expected,
-        "before": None,
-    }
+    await assert_replayed_messages(command, conversation_id, expected)

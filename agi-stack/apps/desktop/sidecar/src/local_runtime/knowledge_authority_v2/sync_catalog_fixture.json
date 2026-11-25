@@ -35,6 +35,8 @@
           "refresh_interval": 24
         },
         "graph_config": {
+          "sync_projection": null,
+          "cohere_rerank_package": null,
           "layout_algorithm": "force-directed",
           "node_size": 20,
           "edge_width": 2,

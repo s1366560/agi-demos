@@ -14,6 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 @pytest.fixture
 def lifecycle(tmp_path: Path) -> tuple[Path, dict[str, str], list[str]]:
     (tmp_path / "Makefile").write_text((REPO_ROOT / "Makefile").read_text())
+    profile = tmp_path / "scripts/dev/profile.mk"
+    profile.parent.mkdir(parents=True)
+    profile.write_bytes((REPO_ROOT / "scripts/dev/profile.mk").read_bytes())
     tool = tmp_path / "tool.py"
     tool.write_text(
         """import json, os, pathlib, sys
@@ -58,6 +61,7 @@ with (state/'trace').open('a') as stream:
         f"DEV_SERVICES_CMD={sys.executable} {tool} services",
         f"DEV_COMPOSE_WAIT_CMD={sys.executable} {tool} wait",
         f"DEV_BUILD_CMD={sys.executable} {tool} build",
+        "MEMSTACK_DEV_PROFILE=full",
         "DEV_STARTUP_TIMEOUT=2",
     ]
     return tmp_path, env, args
