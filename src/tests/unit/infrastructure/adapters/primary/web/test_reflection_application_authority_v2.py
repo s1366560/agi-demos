@@ -248,7 +248,7 @@ async def test_package_playbooks_use_bound_scope_and_existing_membership(monkeyp
     monkeypatch.setattr(playbook_operation, "reflection_authority", authority)
     async with ctx.db:
         assert await playbook_operation.read_playbooks(ctx, {}, None) == {"items": []}
-        lookup.assert_awaited_once_with("signed-project", limit=100)
+        lookup.assert_awaited_once_with("signed-project", limit=200)
         membership.return_value = False
         with pytest.raises(HTTPException) as denied:
             await playbook_operation.read_playbooks(ctx, {}, None)
