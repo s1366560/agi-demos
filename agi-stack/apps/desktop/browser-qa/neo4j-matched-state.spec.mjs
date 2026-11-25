@@ -800,12 +800,8 @@ function knowledgeKind(method, path, command) {
     if (command === "read-graph") return "graph";
     if (command === "search-project") return "search";
   }
-  if (method === "GET" && path === "/api/v1/graph/entities/") return "entities";
   if (method === "GET" && path === "/api/v1/graph/communities/")
     return "communities";
-  if (method === "GET" && path === "/api/v1/graph/memory/graph") return "graph";
-  if (method === "POST" && path === "/api/v1/search-enhanced/advanced")
-    return "search";
   return null;
 }
 

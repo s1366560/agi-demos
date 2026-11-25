@@ -250,9 +250,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
-    _install_memory_update_recovery(app)
-
     try:
+        _install_memory_update_recovery(app)
         async with (
             worker_recovery(bool(settings.plugin_worker_allowed_registries)),
             recovery_loop(async_session_factory),
