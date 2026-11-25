@@ -18,7 +18,7 @@ futures-util = "0.3"
 base64 = "0.22"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 
-tokio = { version = "1", features = ["rt", "macros", "fs", "io-util"] }
+tokio = { version = "1", features = ["rt", "macros", "fs", "io-util", "sync"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync"] }

@@ -238,7 +238,7 @@ impl HttpLlm {
 
     /// Supply the transport for hosts that bind the model to a local origin.
     pub fn with_http_client(mut self, client: reqwest::Client) -> Self {
-        self.ep.client = client;
+        self.ep.set_http_client(client);
         self
     }
 
@@ -358,7 +358,12 @@ impl HttpLlm {
         };
         crate::request_log::record_request("openai.chat_completions", &body, async {
             let url = format!("{}/chat/completions", self.ep.base_url);
-            let mut req = self.ep.client.post(&url).json(&body);
+            let mut req = self
+                .ep
+                .http_client(CoreError::Llm)
+                .await?
+                .post(&url)
+                .json(&body);
             if let Some(key) = &self.ep.api_key {
                 req = req.bearer_auth(key);
             }
