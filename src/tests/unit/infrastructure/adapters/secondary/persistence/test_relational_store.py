@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plugins.business.billing.backend.invoices import Invoice
 from src.configuration.config import Settings
 from src.infrastructure.adapters.secondary.persistence import database
-from src.infrastructure.adapters.secondary.persistence.models import Tenant, User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    APIKey,
+    Base,
+    Tenant,
+    User,
+    UserSession,
+    WebhookModel,
+)
 from src.infrastructure.adapters.secondary.persistence.relational_store import (
     open_relational_store,
     select_relational_store,
@@ -193,6 +201,102 @@ def test_session_factory_service_publishes_the_selected_driver(
 
 
 @pytest.mark.unit
+def test_postgresql_partial_indexes_keep_sqlite_predicates() -> None:
+    missing = [
+        f"{table.name}.{index.name}"
+        for table in Base.metadata.tables.values()
+        for index in table.indexes
+        if index.dialect_options["postgresql"].get("where") is not None
+        and index.dialect_options["sqlite"].get("where") is None
+    ]
+
+    assert missing == []
+
+
+@pytest.mark.unit
+async def test_sqlite_keeps_partial_uniqueness_and_foreign_key_actions(tmp_path: Path) -> None:
+    settings = _settings(
+        tmp_path,
+        f"MEMSTACK_RELATIONAL_STORE=sqlite\nMEMSTACK_SQLITE_PATH={tmp_path / 'constraints.sqlite'}\n",
+    )
+    store = open_relational_store(settings)
+    try:
+        await database.initialize_database(store.engine)
+        async with store.session_factory() as session:
+            first_pragma = await session.scalar(text("PRAGMA foreign_keys"))
+            index_sql = await session.scalar(
+                text("SELECT sql FROM sqlite_master WHERE name = 'ix_webhooks_tenant_name'")
+            )
+            _insert_identity(session)
+            await session.flush()
+            session.add(
+                WebhookModel(
+                    id="wh-deleted",
+                    tenant_id="t1",
+                    name="billing",
+                    url="https://example.test/old",
+                    events=[],
+                    deleted_at=datetime.now(UTC),
+                )
+            )
+            session.add(
+                WebhookModel(
+                    id="wh-live",
+                    tenant_id="t1",
+                    name="billing",
+                    url="https://example.test/new",
+                    events=[],
+                )
+            )
+            await session.commit()
+        async with store.session_factory() as session:
+            second_pragma = await session.scalar(text("PRAGMA foreign_keys"))
+            session.add(
+                APIKey(
+                    id="k1",
+                    key_hash="hash",
+                    name="desktop",
+                    user_id="u1",
+                    permissions=[],
+                )
+            )
+            session.add(
+                UserSession(
+                    id="s1",
+                    user_id="u1",
+                    family_id="family",
+                    refresh_token_hash="a" * 64,
+                    access_api_key_id="k1",
+                    expires_at=datetime.now(UTC) + timedelta(hours=1),
+                )
+            )
+            await session.commit()
+            await session.execute(text("DELETE FROM api_keys WHERE id = 'k1'"))
+            await session.commit()
+            cleared = await session.scalar(
+                select(UserSession.access_api_key_id).where(UserSession.id == "s1")
+            )
+            session.add(
+                WebhookModel(
+                    id="wh-conflict",
+                    tenant_id="t1",
+                    name="billing",
+                    url="https://example.test/conflict",
+                    events=[],
+                )
+            )
+            with pytest.raises(IntegrityError):
+                await session.commit()
+        assert first_pragma == 1
+        assert second_pragma == 1
+        assert isinstance(index_sql, str)
+        assert "deleted_at IS NULL" in index_sql
+        assert cleared is None
+    finally:
+        await store.engine.dispose()
+
+
+@pytest.mark.unit
 def test_default_process_session_factory_stays_on_postgres() -> None:
     published = _publish(_Context())
 
@@ -202,7 +306,7 @@ def test_default_process_session_factory_stays_on_postgres() -> None:
     assert published.advisory_locks is True
 
 
-async def _insert_plugin_invoice(session: AsyncSession) -> None:
+def _insert_identity(session: AsyncSession) -> None:
     session.add(
         User(
             id="u1",
@@ -227,6 +331,13 @@ async def _insert_plugin_invoice(session: AsyncSession) -> None:
             max_storage=1,
         )
     )
+
+
+async def _insert_plugin_invoice(session: AsyncSession) -> None:
+    _insert_identity(session)
+    # Bare foreign keys do not order the unit of work, so the parent rows
+    # must exist before the invoice insert. PostgreSQL enforces the same rule.
+    await session.flush()
     now = datetime.now(UTC)
     session.add(
         Invoice(

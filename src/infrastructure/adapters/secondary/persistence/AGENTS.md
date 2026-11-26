@@ -55,4 +55,6 @@ Domain and DB field names sometimes differ:
 - `_eager_load_options()` default is empty -- N+1 queries if relationships accessed without it
 - `find_by_id` returns `Optional[T]` -- always handle None case
 - Soft deletes: some models have `deleted_at` column, some do hard delete -- check per entity
+- Partial unique indexes need both `postgresql_where` and `sqlite_where`. The sqlite driver creates tables from metadata, and a PostgreSQL-only predicate becomes an unconditional unique index.
+- The sqlite driver enables `PRAGMA foreign_keys=ON` on each connection. `ON DELETE` actions are part of that driver.
 - Bulk operations: use `_session.execute(insert(...))` for performance, not `save()` in loop

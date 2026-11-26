@@ -26,8 +26,9 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+from sqlalchemy import event
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
@@ -143,6 +144,7 @@ def open_relational_store(settings: Settings) -> RelationalStore:
             echo=settings.log_level.upper() == "DEBUG",
             poolclass=NullPool,
         )
+        _enable_sqlite_foreign_keys(engine)
         return RelationalStore(
             spec=spec,
             engine=engine,
@@ -171,6 +173,30 @@ def open_relational_store(settings: Settings) -> RelationalStore:
         read_engine=read_engine,
         read_session_factory=read_factory,
     )
+
+
+class _SqliteCursor(Protocol):
+    def execute(self, statement: str) -> object: ...
+
+    def close(self) -> None: ...
+
+
+class _SqliteConnection(Protocol):
+    def cursor(self) -> _SqliteCursor: ...
+
+
+def _enable_sqlite_foreign_keys(engine: AsyncEngine) -> None:
+    """Turn on referential actions for every fresh SQLite connection.
+
+    NullPool opens a new connection per checkout, and SQLite leaves
+    ``foreign_keys`` off unless each connection sets the pragma.
+    """
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_foreign_keys(dbapi_connection: _SqliteConnection, _connection_record: object) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 def register_sqlite_jsonb_compat() -> None:
