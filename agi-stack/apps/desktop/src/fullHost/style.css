@@ -14,17 +14,22 @@
 
 .desktop-workbench-header {
   grid-row: 1;
+  position: relative;
+  z-index: 6;
+  overflow: visible;
+  border-bottom: 1px solid var(--desktop-border);
+  background: var(--desktop-bg);
+}
+
+.desktop-workbench-header-scroll {
   display: flex;
   gap: 0.25rem;
   align-items: flex-start;
   overflow-x: auto;
   padding: 0.35rem 0.75rem;
-  border-bottom: 1px solid var(--desktop-border);
-  background: var(--desktop-bg);
 }
 
 .desktop-workbench-group {
-  position: relative;
   flex: 0 0 auto;
 }
 
@@ -42,11 +47,9 @@
   background: var(--desktop-sidebar-bg);
 }
 
-.desktop-workbench-group > div {
+.desktop-workbench-menu {
   position: absolute;
   z-index: 5;
-  top: calc(100% + 0.2rem);
-  inset-inline-start: 0;
   display: grid;
   min-width: 12rem;
   padding: 0.35rem;
@@ -56,7 +59,7 @@
   box-shadow: var(--desktop-shadow-popover);
 }
 
-.desktop-workbench-group > div > button {
+.desktop-workbench-menu > button {
   border: 0;
   background: transparent;
   color: inherit;
@@ -67,7 +70,7 @@
   cursor: pointer;
 }
 
-.desktop-workbench-group > div > button[aria-current='page'] {
+.desktop-workbench-menu > button[aria-current='page'] {
   background: var(--desktop-sidebar-bg);
 }
 

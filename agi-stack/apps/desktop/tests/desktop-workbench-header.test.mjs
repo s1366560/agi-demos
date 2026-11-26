@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -152,6 +153,35 @@ test('nested routes keep their section active and package extras do not', () => 
   };
   assert.equal(headerItemActive(extra, '/agent/skills'), true);
   assert.equal(headerItemActive(extra, '/tenant/t/plugins'), false);
+});
+
+test('the header menu sits outside the horizontal scrollport', () => {
+  const React = require('react');
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const { WorkbenchHeaderFrame } = require('/tmp/agistack-desktop-test-dist/src/fullHost/WorkbenchHeader.js');
+  const html = renderToStaticMarkup(
+    React.createElement(WorkbenchHeaderFrame, {
+      label: 'Features',
+      openId: 'core',
+      onToggle: () => {},
+      onSelect: () => {},
+      groups: [
+        {
+          id: 'core',
+          label: 'Core Operations',
+          current: true,
+          items: [{ id: 'projects', label: 'Projects', path: '/projects', active: true }],
+        },
+      ],
+    }),
+  );
+  const scrollAt = html.indexOf('desktop-workbench-header-scroll');
+  const menuAt = html.indexOf('desktop-workbench-menu');
+  assert.ok(scrollAt > -1 && menuAt > html.indexOf('</div>', scrollAt));
+  const css = readFileSync(new URL('../src/fullHost/style.css', import.meta.url), 'utf8');
+  const headerRule = css.match(/\.desktop-workbench-header \{[^}]*\}/u)?.[0] ?? '';
+  assert.doesNotMatch(headerRule, /overflow-x/);
+  assert.match(css, /\.desktop-workbench-header-scroll \{[^}]*overflow-x:\s*auto/u);
 });
 
 test('the shell lands on projects and lets signed clusters replace organization settings', () => {
