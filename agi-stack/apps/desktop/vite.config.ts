@@ -13,7 +13,7 @@ export default defineConfig({
     dedupe: ['@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm', "react", "react-dom", "@radix-ui/themes", "@radix-ui/react-icons"],
     alias: {
       "@desktop": path.resolve(__dirname, "src"),
-      ...(compatibilityProfile ? {"@business": path.resolve(__dirname, "../../../plugins/business")} : {}),
+      ...(fullDesktopProfile ? {"@business": path.resolve(__dirname, "../../../plugins/business")} : {}),
       "@agistack/plugin-runtime": path.resolve(
         __dirname,
         "../../packages/plugin-runtime/src/index.ts",

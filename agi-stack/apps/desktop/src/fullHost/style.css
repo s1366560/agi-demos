@@ -3,6 +3,12 @@
   min-height: 0;
 }
 
+/* Full workbench chrome matches the original web shell: 256px sidebar and 56px (h-14) header. */
+.app-shell:has(.desktop-workbench-header) {
+  --desktop-sidebar-preferred-width: 256px;
+  --desktop-sidebar-width: 256px;
+}
+
 .workbench:has(> .desktop-workbench-header) {
   grid-template-rows: auto minmax(0, 1fr);
 }
@@ -12,6 +18,8 @@
   position: relative;
   z-index: 6;
   overflow: visible;
+  box-sizing: border-box;
+  height: 56px;
   border-bottom: 1px solid var(--desktop-border);
   background: var(--desktop-bg);
 }
@@ -19,9 +27,11 @@
 .desktop-workbench-header-scroll {
   display: flex;
   gap: 0.25rem;
-  align-items: flex-start;
+  align-items: center;
   overflow-x: auto;
-  padding: 0.35rem 0.75rem;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 0 1rem;
 }
 
 .desktop-workbench-group {
