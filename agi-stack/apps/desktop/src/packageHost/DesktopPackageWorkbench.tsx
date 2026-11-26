@@ -22,17 +22,20 @@ export function DesktopPackageWorkbench({
   project,
   locale,
   onChanged,
-}: DesktopPackageWorkbenchProps) {
+  showBack = true,
+}: DesktopPackageWorkbenchProps & { showBack?: boolean }) {
   return (
     <main className="desktop-package-workbench">
-      <button
-        type="button"
-        onClick={() => {
-          window.location.hash = '';
-        }}
-      >
-        {messages.backToWorkspace}
-      </button>
+      {showBack ? (
+        <button
+          type="button"
+          onClick={() => {
+            window.location.hash = '';
+          }}
+        >
+          {messages.backToWorkspace}
+        </button>
+      ) : null}
       {workbench.kind === 'market' ? (
         <PackageManagement tenant={tenant} project={project} full canManage locale={locale} refresh={onChanged} />
       ) : (

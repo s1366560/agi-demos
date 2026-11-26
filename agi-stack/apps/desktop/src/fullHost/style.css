@@ -7,3 +7,79 @@
 .desktop-design-workspaces > .desktop-design-primary-nav button {
   flex-shrink: 0;
 }
+
+.workbench:has(> .desktop-workbench-header) {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.desktop-workbench-header {
+  grid-row: 1;
+  display: flex;
+  gap: 0.25rem;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--desktop-border);
+  background: var(--desktop-bg);
+}
+
+.desktop-workbench-group {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.desktop-workbench-group > button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.desktop-workbench-group > button[aria-current='true'] {
+  background: var(--desktop-sidebar-bg);
+}
+
+.desktop-workbench-group > div {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.2rem);
+  inset-inline-start: 0;
+  display: grid;
+  min-width: 12rem;
+  padding: 0.35rem;
+  border: 1px solid var(--desktop-border);
+  border-radius: 0.5rem;
+  background: var(--desktop-bg);
+  box-shadow: var(--desktop-shadow-popover);
+}
+
+.desktop-workbench-group > div > button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.desktop-workbench-group > div > button[aria-current='page'] {
+  background: var(--desktop-sidebar-bg);
+}
+
+.desktop-host-administration {
+  overflow: auto;
+  min-height: 0;
+  padding: 1rem 1.25rem 2rem;
+}
+
+.desktop-host-administration ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
