@@ -1,7 +1,8 @@
-import { useMemo, type ReactNode } from 'react';
-import { Modal } from 'antd';
+import { useMemo, useState, type ReactNode } from 'react';
+import { App, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { MessageActionBar } from '../../../../../web/src/components/agent/chat/MessageActionBar';
+import { SaveTemplateModal } from '../../../../../web/src/components/agent/chat/SaveTemplateModal';
 import { normalizeExecutionSummary } from '../../../../../web/src/utils/executionSummary';
 import { AssistantBubble } from '../web/chat/AssistantBubble';
 import { CodeBlock } from '../web/chat/CodeBlock';
@@ -31,10 +32,14 @@ interface WebChatMessageProps {
   pinned?: boolean;
   onPin?: () => void;
   fold?: MessageFold;
+  /** Keeps an answer as a prompt template, when the page may. */
+  saveTemplate?: (content: string, title: string, category: string) => Promise<void>;
 }
 
-export function WebChatMessage({message, chat, refill, openCode, hide, pinned, onPin, fold}: WebChatMessageProps) {
+export function WebChatMessage({message, chat, refill, openCode, hide, pinned, onPin, fold, saveTemplate}: WebChatMessageProps) {
   const {t} = useTranslation();
+  const toast = App.useApp().message;
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const user = message.role === 'user_message';
   const components = useMemo(() => ({
     pre: ({children}: {children?: ReactNode}) => <CodeBlock onOpenInCanvas={openCode} copyEnabled>{children}</CodeBlock>,
@@ -49,6 +54,7 @@ export function WebChatMessage({message, chat, refill, openCode, hide, pinned, o
     <MessageActionBar role={user ? 'user' : 'assistant'} content={message.content}
       onEdit={edit} onReply={writable ? () => refill(quoteMessage(message.content)) : undefined}
       onRetry={retry} isPinned={pinned} onPin={onPin}
+      onSaveAsTemplate={!user && saveTemplate ? () => setSavingTemplate(true) : undefined}
       onDelete={user ? () => {
         const excerpt = message.content.length > 80 ? message.content.slice(0, 80) + '…' : message.content;
         Modal.confirm({title: t('agent.actions.deleteMessageTitle', 'Delete this message?'),
@@ -83,9 +89,20 @@ export function WebChatMessage({message, chat, refill, openCode, hide, pinned, o
       )}
     </div>
   ) : (
+    <>
     <AssistantBubble timestamp={time} actions={chat.run && index === chat.messages.length - 1 ? null : actions}>
       <ExecutionSummaryPanel summary={normalizeExecutionSummary(message.summary)} />
       <div className={MARKDOWN_PROSE_CLASSES}><Answer components={components} text={message.content} /></div>
     </AssistantBubble>
+    {savingTemplate && saveTemplate && (
+      <SaveTemplateModal content={message.content} visible onClose={() => setSavingTemplate(false)}
+        onSave={(title, category) => {
+          // The modal closes at once; the outcome is reported apart from it.
+          void saveTemplate(message.content, title, category)
+            .then(() => toast.success(t('agent.templates.saved', {defaultValue: 'Template saved'})))
+            .catch((error: unknown) => toast.error(error instanceof Error ? error.message : String(error)));
+        }} />
+    )}
+    </>
   );
 }

@@ -3,7 +3,12 @@ import type { InlineHITLCardProps } from "../web/hitl/InlineHITLCard";
 
 export interface PendingRequest {
   id: string;
-  request_type: "decision" | "permission" | "clarification" | "a2ui_action";
+  request_type:
+    | "decision"
+    | "permission"
+    | "clarification"
+    | "a2ui_action"
+    | "env_var";
   question: string;
   options: NonNullable<InlineHITLCardProps["decisionData"]>["options"];
   created_at: string;
@@ -32,6 +37,9 @@ export interface InteractionEvent {
   execution_id?: string;
   call_id?: string;
   message_id?: string;
+  /** A request of the transcript carries its id and whether it was answered. */
+  requestId?: string;
+  answered?: boolean;
   /** Marks an argument draft of a call, which its execution replaces. */
   metadata?: { sourceEventType?: string };
   toolName?: string;

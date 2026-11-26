@@ -41,6 +41,7 @@ await buildPackagePages({
         // Only their pure parts are bundled: opening an MCP app needs the shell canvas,
         // and the card that tracks HITL state in the shell is the same card without it.
         build.onResolve({filter: /^@\/components\/agent\/styles$/}, () => ({path: join(directory, '../web/chat/styles.ts')}));
+        build.onResolve({filter: /^@\/components\/common$/}, () => ({path: join(webRoot, 'components/common/AppModal.tsx')}));
         build.onResolve({filter: /^@\/components\/agent\/InlineHITLCard$/}, () => ({path: join(directory, '../web/hitl/InlineHITLCard.tsx')}));
         build.onResolve({filter: /^\.\/useMCPAppOpen$/}, () => ({path: join(directory, 'noMCPAppOpen.ts')}));
         build.onResolve({filter: /^@\/utils\/hitlOptionDisplay$/}, () => ({path: join(directory, '../web/hitl/hitlOptionDisplay.ts')}));

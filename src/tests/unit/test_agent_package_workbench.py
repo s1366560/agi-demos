@@ -112,3 +112,91 @@ def test_history_projects_only_public_attachment_metadata():
             {"id": "a", "type": "assistant_message", "metadata": {"fileMetadata": [private]}},
         ]
     ) == {"u": [public]}
+
+
+async def test_answers_an_environment_variable_request_with_its_values(monkeypatch):
+    """The original workbench answers with plain values on the authenticated channel."""
+    ctx = context()
+    ctx.db.scalar.return_value = SimpleNamespace(user_id="owner", request_metadata={})
+    monkeypatch.setattr(workbench, "_own_conversation", AsyncMock())
+    canonical = AsyncMock(return_value={"success": True, "authority_revision": 4})
+    monkeypatch.setattr(workbench, "_canonical", canonical)
+
+    result = await workbench.respond(
+        ctx,
+        {
+            "conversation_id": "chat",
+            "request_id": "env",
+            "hitl_type": "env_var",
+            "expected_revision": 3,
+            "idempotency_key": "key-1",
+            "response_data": {"values": {"GITHUB_TOKEN": "fixture"}},
+        },
+        None,
+    )
+
+    assert result == {"success": True, "authority_revision": 4}
+    canonical.assert_awaited_once_with(
+        ctx,
+        "POST",
+        "hitl/respond",
+        body={
+            "request_id": "env",
+            "hitl_type": "env_var",
+            "expected_revision": 3,
+            "idempotency_key": "key-1",
+            "response_data": {"values": {"GITHUB_TOKEN": "fixture"}},
+            "contract_version": 2,
+        },
+    )
+
+
+async def test_saves_an_answer_as_a_prompt_template_of_the_project(monkeypatch):
+    """The original workbench keeps an answer as a template of its project."""
+    from plugins.business.agent.backend import composer_context
+
+    ctx = context()
+    canonical = AsyncMock(
+        return_value={
+            "id": "tpl-1",
+            "title": "Summary",
+            "category": "writing",
+            "content": "Answer text",
+            "created_by": "owner",
+        }
+    )
+    monkeypatch.setattr(composer_context, "_canonical", canonical)
+
+    result = await composer_context.save_template(
+        ctx, {"title": "Summary", "content": "Answer text", "category": "writing"}, None
+    )
+
+    assert result == {"id": "tpl-1", "title": "Summary", "category": "writing"}
+    canonical.assert_awaited_once_with(
+        ctx,
+        "POST",
+        "templates",
+        query={"tenant_id": "tenant"},
+        body={
+            "title": "Summary",
+            "content": "Answer text",
+            "category": "writing",
+            "project_id": "project",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"title": "", "content": "text"},
+        {"title": "x" * 201, "content": "text"},
+        {"title": "Title", "content": ""},
+        {"title": "Title", "content": "text", "category": "other"},
+    ],
+)
+def test_rejects_an_empty_or_unclassified_template(payload):
+    from plugins.business.agent.backend import composer_context
+
+    with pytest.raises(ValidationError):
+        composer_context.TemplateSave.model_validate(payload)

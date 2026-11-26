@@ -289,6 +289,15 @@
       ]
     },
     {
+      "id": "chat-follow",
+      "host_operation": "app.agent.follow",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.follow"
+      ]
+    },
+    {
       "id": "chat-cancel",
       "host_operation": "app.agent.cancel",
       "payload": {},
@@ -449,6 +458,16 @@
       "scope": "project"
     },
     {
+      "id": "chat-save-template",
+      "host_operation": "app.agent.templates.save",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.templates.save"
+      ],
+      "scope": "project"
+    },
+    {
       "id": "chat-welcome",
       "host_operation": "app.agent.composer.welcome",
       "payload": {},
@@ -529,13 +548,14 @@
       ],
       "entry": {
         "path": "ui/chat-web.js",
-        "digest": "sha256:c3fb6ab62ac41dd06de5577c3f73d9942ddab2bf404c7e7903d63125fc71f56c"
+        "digest": "sha256:2ce071eb8361f7c02620fa84ce50c22b368e98ce6ee4f6718c5dadcdcfab6290"
       },
       "commands": [
         "chat-list",
         "chat-create",
         "chat-history",
         "chat-turn",
+        "chat-follow",
         "chat-cancel",
         "chat-rename",
         "chat-interactions",
@@ -550,6 +570,7 @@
         "chat-composer-save",
         "chat-models",
         "chat-project-context",
+        "chat-save-template",
         "chat-welcome",
         "chat-lifecycle-control",
         "chat-voice-authorize"
@@ -559,7 +580,7 @@
       ],
       "style": {
         "path": "ui/chat-web.css",
-        "digest": "sha256:76751fae9078406635e580e473438f16a492f5de4365fbfeed196d429baa0f14"
+        "digest": "sha256:83f4c2e2e1c183ab6d44730dc9a4b3cf6825e95187d625e47ec8103c1dae52b6"
       },
       "workbench": true,
       "sidebar": {

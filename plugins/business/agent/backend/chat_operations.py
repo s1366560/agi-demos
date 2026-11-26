@@ -24,7 +24,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
 )
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
-from .chat_stream import stream_turn
+from .chat_stream import StreamIdle, stream_follow, stream_turn
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
@@ -52,6 +52,12 @@ class Turn(ConversationInput):
     message_id: Identifier
     forced_skill_name: str | None = Field(default=None, min_length=1, max_length=255)
     message: str = Field(min_length=1, max_length=32000)
+
+
+class Follow(ConversationInput):
+    # Events at or before this position were read by the page already.
+    from_time_us: int = Field(ge=0)
+    from_counter: int = Field(default=0, ge=0)
 
 
 class Cancel(ConversationInput):
@@ -452,11 +458,37 @@ async def cancel(
     return {"status": result["status"]}
 
 
+async def follow(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    """Follow the turn running in a conversation, as the original workbench does when opened."""
+    data = Follow.model_validate(payload)
+    await _own_conversation(ctx, data.conversation_id)
+    followed = None
+    while True:
+        active = (await _canonical(ctx, "GET", f"conversations/{data.conversation_id}/active-run"))[
+            "active_run"
+        ]
+        if not isinstance(active, dict) or not active.get("id"):
+            # A turn that was running and then went silent has ended.
+            if followed:
+                return {"status": "complete", "run_id": followed["id"]}
+            return {"status": "idle"}
+        followed = active
+        try:
+            # The run is tied to this page from here on, so it can be stopped from it.
+            return await stream_follow(ctx, data, active, progress)
+        except StreamIdle:
+            # Nothing came for a while: read again whether the turn still runs.
+            continue
+
+
 AGENT_OPERATIONS = {
     "app.agent.list": list_conversations,
     "app.agent.create": create,
     "app.agent.rename": rename,
     "app.agent.history": history,
     "app.agent.turn": turn,
+    "app.agent.follow": follow,
     "app.agent.cancel": cancel,
 }

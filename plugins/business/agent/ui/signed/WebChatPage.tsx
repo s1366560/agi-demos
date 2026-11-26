@@ -34,7 +34,7 @@ import english from '../web/locales/en-US.json';
 import chinese from '../web/locales/zh-CN.json';
 import { Transcript } from './ChatTranscriptView';
 import { InteractionPanel } from './InteractionPanel';
-import { SelectedRunReview } from './SelectedRunReview';
+import { SelectedRunReview, type RunProjection } from './SelectedRunReview';
 import { WebChatStatus } from './WebChatStatus';
 import { usePageDarkMode } from './chatContextAuthority';
 import { WebActivity } from './WebActivity';
@@ -189,6 +189,12 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
         .filter((row) => row.content),
     [pinned, chat.messages]
   );
+  // An answer can be kept as a prompt template of the project, as in the original workbench.
+  const saveTemplate = scope.commands.includes('chat-save-template')
+    ? async (content: string, title: string, category: string) => {
+        await invoke('chat-save-template', { title, content, category });
+      }
+    : undefined;
   const togglePin = (id: string) =>
     setPinned((current) => {
       const next = new Set(current);
@@ -196,6 +202,18 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
       else next.add(id);
       return next;
     });
+  // A conversation opened while its turn is running is followed from what was read.
+  const followed = useRef(-1);
+  const { selected, loading, run, page, ownPage } = chat;
+  const { messages, thoughts } = chat;
+  const { ready, events } = interactions;
+  useEffect(() => {
+    if (!selected || !ready || loading || run || page === ownPage || followed.current === page)
+      return;
+    followed.current = page;
+    const from = latestPosition([...messages, ...thoughts, ...events]);
+    if (from) void chat.follow(selected, from);
+  }, [selected, ready, loading, run, page, ownPage, messages, thoughts, events]);
   // Earlier history is read together with the tool steps of the same page.
   const loadOlder = () => {
     const before = chat.cursor;
@@ -256,7 +274,7 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
     <>
       <WebActivity scope={scope} onOpen={chat.choose} />
       <SelectedRunReview
-        renderContext={chat.local ? run => <DesktopRunContext run={run} /> : undefined}
+        {...(chat.local ? { renderContext: (run: RunProjection) => <DesktopRunContext run={run} /> } : {})}
         enabled={scope.commands.includes('review-latest')}
         conversation={chat.selected}
         busy={chat.busy}
@@ -339,6 +357,7 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
                 : undefined;
             },
             onExpand: turnCollapse.toggle,
+            ...(saveTemplate ? { saveTemplate } : {}),
           })}
         >
           <InteractionPanel

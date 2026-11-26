@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TaskList } from '../../../../../web/src/components/agent/TaskList';
 import type { AgentTask } from '../../../../../web/src/types/agent';
@@ -9,7 +9,6 @@ import {
   type EditableCanvasType,
 } from '../web/canvas/CanvasWelcome';
 import { InteractionPanel } from './InteractionPanel';
-import { invoke } from './reviewAuthority';
 import type { Chat } from './useChat';
 
 /** The task pane. The page reads the list once, for this pane and for the status bar. */

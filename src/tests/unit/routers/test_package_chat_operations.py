@@ -82,6 +82,7 @@ async def test_chat_operations_reject_cross_project_before_calling_handler(db_se
         (ops.history, {"conversation_id": "other"}),
         (ops.cancel, {"conversation_id": "other", "run_id": "run", "expected_revision": 1}),
         (ops.turn, {"conversation_id": "other", "message": "hi", "message_id": "m"}),
+        (ops.follow, {"conversation_id": "other", "from_time_us": 0}),
     ]:
         with pytest.raises(OptionalBusinessError, match="conversation unavailable"):
             await op(ctx, payload, None)
@@ -294,17 +295,42 @@ async def test_interactions_keep_every_event_in_order_and_show_only_what_a_trans
     async def canonical(_ctx, method, path, **_kwargs):
         assert method == "GET"
         if path.endswith("/pending"):
-            return {"requests": []}
+            return {
+                "requests": [
+                    {
+                        "id": "env-pending",
+                        "request_type": "env_var",
+                        "question": "",
+                        "options": [],
+                        "created_at": "2026-11-26T00:00:00",
+                        "expires_at": "2026-11-26T00:05:00",
+                        "authority_revision": 3,
+                        "context": {"requested_variables": ["TOKEN"]},
+                        "metadata": {"internal": "kept on the server"},
+                    },
+                    {
+                        "id": "native",
+                        "request_type": "permission",
+                        "native_binding": {"device_id": "private"},
+                    },
+                    {"id": "other", "request_type": "plan_approval"},
+                ]
+            }
         return {
             "timeline": [
                 {
                     "id": "u1",
                     "type": "user_message",
-                    "content": "question",
+                    "content": "private question",
                     "metadata": {"fileMetadata": [{"filename": "a.txt"}]},
                     "eventTimeUs": 1,
                 },
-                {"id": "t1", "type": "thought", "content": "reason", "eventTimeUs": 2},
+                {
+                    "id": "t1",
+                    "type": "thought",
+                    "content": "private reasoning",
+                    "eventTimeUs": 2,
+                },
                 {
                     # An argument draft of the call below. The transcript drops it
                     # once the execution is read, by the one field that marks it.
@@ -449,7 +475,19 @@ async def test_interactions_keep_every_event_in_order_and_show_only_what_a_trans
 
     execution = {"startTime": 1.0, "endTime": 2.0, "duration": 1000, "status": "success"}
     assert result == {
-        "requests": [],
+        # An environment-variable request waits here to be answered; a request bound
+        # to a device and one of another kind are not this page's to answer.
+        "requests": [
+            {
+                "id": "env-pending",
+                "request_type": "env_var",
+                "question": "",
+                "options": [],
+                "created_at": "2026-11-26T00:00:00",
+                "expires_at": "2026-11-26T00:05:00",
+                "authority_revision": 3,
+            }
+        ],
         "events": [
             {"id": "u1", "type": "user_message", "eventTimeUs": 1},
             {"id": "t1", "type": "thought", "eventTimeUs": 2},
@@ -565,8 +603,8 @@ async def test_interactions_keep_every_event_in_order_and_show_only_what_a_trans
     # Message text, event payloads and the values of an environment-variable answer
     # stay on the server.
     for kept in (
-        "question",
-        "reason",
+        "private question",
+        "private reasoning",
         "fileMetadata",
         "executionSummary",
         "payload",
@@ -584,3 +622,128 @@ async def test_interactions_keep_every_event_in_order_and_show_only_what_a_trans
         "internal",
     ):
         assert kept not in str(result)
+
+
+async def test_follow_streams_the_running_turn_and_ends_when_it_ends(monkeypatch):
+    """Opening a conversation while its turn runs follows it, as the original workbench does."""
+    from plugins.business.agent.backend import chat_operations as operations
+
+    app = FastAPI()
+    inbound = []
+
+    @app.websocket("/api/v1/agent/ws")
+    async def socket(ws: WebSocket):
+        await ws.accept()
+        await ws.send_json({"type": "connected", "data": {"user_id": "u"}})
+        inbound.append(await ws.receive_json())
+
+        async def send(kind, **fields):
+            await ws.send_json({"type": kind, "conversation_id": "c", **fields})
+
+        await send("ack", action="subscribe")
+        # Another conversation's events do not reach the page.
+        await ws.send_json(
+            {"type": "text_delta", "conversation_id": "other", "data": {"delta": "x"}}
+        )
+        await send("thought", data={"thought": "reason"})
+        await send("text_delta", data={"delta": "text"})
+        await send("complete")
+        await ws.receive()
+
+    frames = []
+
+    async def progress(frame):
+        frames.append(frame)
+
+    async def owned(*_args):
+        return None
+
+    requests = []
+
+    async def canonical(_ctx, method, path, **_kwargs):
+        requests.append((method, path))
+        return {"active_run": {"id": "r", "revision": 3, "status": "running"}}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    result = await operations.follow(
+        context(app), {"conversation_id": "c", "from_time_us": 5, "from_counter": 1}, progress
+    )
+
+    assert requests == [("GET", "conversations/c/active-run")]
+    assert inbound == [
+        {"type": "subscribe", "conversation_id": "c", "from_time_us": 5, "from_counter": 1}
+    ]
+    assert frames == [
+        {"type": "accepted", "run_id": "r", "revision": 3},
+        {"type": "thought", "text": "reason"},
+        {"type": "text_delta", "text": "text"},
+    ]
+    assert result == {"status": "complete", "run_id": "r"}
+
+
+async def test_follow_without_a_running_turn_returns_at_once(monkeypatch):
+    from plugins.business.agent.backend import chat_operations as operations
+
+    app = FastAPI()
+    opened = []
+
+    @app.websocket("/api/v1/agent/ws")
+    async def socket(ws: WebSocket):
+        opened.append(1)
+        await ws.accept()
+
+    async def owned(*_args):
+        return None
+
+    async def canonical(*_args, **_kwargs):
+        return {"active_run": None, "reason_code": "no_active_run"}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    result = await operations.follow(
+        context(app), {"conversation_id": "c", "from_time_us": 0}, None
+    )
+
+    assert result == {"status": "idle"}
+    assert opened == []
+
+
+async def test_follow_that_hears_nothing_checks_whether_the_turn_still_runs(monkeypatch):
+    """A turn can end between the status read and the subscription."""
+    from plugins.business.agent.backend import chat_operations as operations, chat_stream
+
+    app = FastAPI()
+    inbound = []
+
+    @app.websocket("/api/v1/agent/ws")
+    async def socket(ws: WebSocket):
+        await ws.accept()
+        await ws.send_json({"type": "connected", "data": {"user_id": "u"}})
+        inbound.append(await ws.receive_json())
+        # Nothing follows: the turn already ended.
+        await ws.receive()
+
+    async def owned(*_args):
+        return None
+
+    reads = []
+
+    async def canonical(*_args, **_kwargs):
+        reads.append(1)
+        running = len(reads) == 1
+        return {"active_run": {"id": "r", "revision": 1} if running else None}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+    monkeypatch.setattr(chat_stream, "FOLLOW_FIRST_IDLE_SECONDS", 0.05)
+
+    result = await operations.follow(
+        context(app), {"conversation_id": "c", "from_time_us": 0}, None
+    )
+
+    assert result == {"status": "complete", "run_id": "r"}
+    assert len(inbound) == 1
+    assert len(reads) == 2

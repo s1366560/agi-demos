@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from src.infrastructure.adapters.primary.web.routers.agent.templates import list_templates
 
@@ -95,3 +95,24 @@ async def project_context(
         }
     key = "entities" if query.view == "trending" else "skills"
     return {key: result[key]}
+
+
+class TemplateSave(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=200_000)
+    category: Literal["general", "analysis", "code", "writing"] = "general"
+
+
+async def save_template(
+    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+) -> dict[str, Any]:
+    """Keep an answer as a prompt template of the project, as the original workbench does."""
+    data = TemplateSave.model_validate(payload)
+    template = await _canonical(
+        ctx,
+        "POST",
+        "templates",
+        query={"tenant_id": ctx.scope.tenant_id},
+        body={**data.model_dump(), "project_id": ctx.scope.project_id},
+    )
+    return {key: template[key] for key in ("id", "title", "category")}

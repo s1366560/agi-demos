@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 class Answer(ConversationInput):
     request_id: Identifier
-    hitl_type: Literal["clarification", "decision", "permission", "a2ui_action"]
+    hitl_type: Literal["clarification", "decision", "permission", "a2ui_action", "env_var"]
     expected_revision: int = Field(ge=1)
     idempotency_key: Identifier
     response_data: dict[str, Any]
@@ -164,7 +164,7 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
     """What a transcript reads from a timeline row, placed where it happened."""
     kind = row.get("type")
     if kind == "canvas_updated":
-        block = row.get("block") or {}
+        block: dict[str, Any] = row.get("block") or {}
         return {
             **{key: row[key] for key in ROW_KEYS if key in row},
             "action": row["action"],
@@ -190,7 +190,7 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
     if kind == "act":
         # The transcript tells an argument draft of a call from its execution by
         # this one field; the rest of the metadata stays on the server.
-        source = (row.get("metadata") or {}).get("sourceEventType")
+        source: object = (row.get("metadata") or {}).get("sourceEventType")
         if isinstance(source, str):
             projected["metadata"] = {"sourceEventType": source}
     if isinstance(projected.get("memories"), list):
@@ -221,6 +221,7 @@ async def interactions(
             "decision",
             "clarification",
             "a2ui_action",
+            "env_var",
         }:
             continue
         meta = item.get("metadata") or {}

@@ -20,7 +20,7 @@ from .chat_operations import (
     _Input,
     _own_conversation,
 )
-from .composer_context import project_context
+from .composer_context import project_context, save_template
 from .lifecycle_control import control
 
 if TYPE_CHECKING:
@@ -208,4 +208,5 @@ COMPOSER_OPERATIONS = {
     "app.agent.composer.save": save,
     "app.agent.composer.models": models,
     "app.agent.composer.context": project_context,
+    "app.agent.templates.save": save_template,
 }
