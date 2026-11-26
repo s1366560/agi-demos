@@ -548,7 +548,7 @@
       ],
       "entry": {
         "path": "ui/chat-web.js",
-        "digest": "sha256:2ce071eb8361f7c02620fa84ce50c22b368e98ce6ee4f6718c5dadcdcfab6290"
+        "digest": "sha256:ea49155886d878b6672ea7d16ee20ccbb2da80f467c12eb7c2224739887b2427"
       },
       "commands": [
         "chat-list",
@@ -580,12 +580,15 @@
       ],
       "style": {
         "path": "ui/chat-web.css",
-        "digest": "sha256:83f4c2e2e1c183ab6d44730dc9a4b3cf6825e95187d625e47ec8103c1dae52b6"
+        "digest": "sha256:cbaee2d52fe5b554aae2e70b10ab2e0e8640a11e301c72907786b9e68fdee645"
       },
       "workbench": true,
       "sidebar": {
         "rows": {
           "command": "chat-list",
+          "inputs": {
+            "cursor": "cursor"
+          },
           "collection": "items",
           "fields": {
             "id": "id",
@@ -664,7 +667,7 @@
       "workbench": true,
       "entry": {
         "path": "ui/web-dashboard.js",
-        "digest": "sha256:09374c1f134fe5ebdab5bce569cbaee11a7a1a23f02659d6e8efaa93e60faccc"
+        "digest": "sha256:e313b8cde70f06371d8fb24154f1d95cb8ed1a539460459495919fd7b4fa7622"
       },
       "style": {
         "path": "ui/web-dashboard.css",

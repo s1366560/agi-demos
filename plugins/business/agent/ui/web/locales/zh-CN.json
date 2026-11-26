@@ -1394,6 +1394,16 @@
         "translate": "翻译",
         "summarize": "总结"
       },
+      "actionPrompts": {
+        "explain": "请解释下面的内容，只给出解释：\n\n{{content}}",
+        "optimize": "请优化下面的内容，只给出优化后的结果：\n\n{{content}}",
+        "addTests": "请为下面的内容补充测试，只给出测试代码：\n\n{{content}}",
+        "addComments": "请为下面的内容添加注释，只给出结果：\n\n{{content}}",
+        "improve": "请改进下面的内容，只给出结果：\n\n{{content}}",
+        "shorten": "请精简下面的内容，只给出结果：\n\n{{content}}",
+        "translate": "请把下面的内容翻译成中文，只给出译文：\n\n{{content}}",
+        "summarize": "请总结下面的内容，只给出总结：\n\n{{content}}"
+      },
       "resolvingMedia": "加载中…",
       "image": {
         "zoomIn": "放大",

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrainCircuit, Loader2, MessageSquare, Wifi, Wrench } from 'lucide-react';
 import { Tooltip } from 'antd';
@@ -12,6 +12,7 @@ import { AgentLifecycleBadge } from '../web/chat/AgentLifecycleBadge';
 import type { ProjectAgentLifecycleState } from '../web/hooks/useUnifiedAgentStatus';
 import type { RichPageContext } from '../../../../../sdk/memstack-plugin-sdk/src/pageRuntime';
 import { invoke } from './reviewAuthority';
+import { sandboxConnection, type ProjectSandbox, type SandboxConnection } from './sandboxStatus';
 
 interface LifecycleSnapshot {
   lifecycle_state: ProjectAgentLifecycleState;
@@ -71,6 +72,8 @@ export function WebChatStatus({
   conversation,
   count,
   tasks,
+  sandbox,
+  tool,
   running,
 }: {
   scope: RichPageContext;
@@ -78,9 +81,17 @@ export function WebChatStatus({
   /** Rows of the conversation timeline that are loaded. */
   count: number;
   tasks: readonly AgentTask[];
+  /** The sandbox of the project, as the context command last read it. */
+  sandbox: ProjectSandbox | null | undefined;
+  /** The sandbox tool that is running, if one is. */
+  tool: string | undefined;
   running: boolean;
 }) {
   const { t } = useTranslation();
+  // A state the original workbench does not name leaves the slot as it was.
+  const connection = useRef<SandboxConnection>('idle');
+  const named = sandboxConnection(sandbox);
+  if (named) connection.current = named;
   const taskProgress = deriveTaskProgress(tasks, running);
   const taskPercent =
     taskProgress.total > 0 ? Math.round((taskProgress.current / taskProgress.total) * 100) : 0;
@@ -162,6 +173,26 @@ export function WebChatStatus({
             }
             hint={taskProgress.label ?? t('agent.statusBar.slots.taskProgress', 'Task progress')}
             progressPercent={taskPercent}
+          />
+        )}
+        {running && (
+          <StatusSlot
+            label="LLM"
+            value={t('agent.statusBar.slots.streaming', 'streaming')}
+            tone="running"
+          />
+        )}
+        {connection.current !== 'idle' && (
+          <StatusSlot
+            label="Sandbox"
+            value={tool ? `${connection.current} · ${tool}` : connection.current}
+            tone={
+              connection.current === 'connected'
+                ? 'ok'
+                : connection.current === 'error'
+                  ? 'error'
+                  : 'running'
+            }
           />
         )}
         {snapshot && <AgentLifecycleBadge lifecycle={snapshot.lifecycle_state} error={failure} />}

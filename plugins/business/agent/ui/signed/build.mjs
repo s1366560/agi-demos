@@ -37,6 +37,10 @@ await buildPackagePages({
         }));
         build.onResolve({filter: /(?:agentConfigService|^@\/services\/(?:systemService|traceService))$/}, () => ({path: join(directory, "dashboardAuthority.ts")}));
         build.onResolve({filter: /^@\/utils\/date$/}, () => ({path: join(directory, "signedDate.ts")}));
+        // The canvas keeps its tabs and the layout in the stores of the Web workbench,
+        // which the page reads through the same modules.
+        build.onResolve({filter: /^@\/stores\/(?:canvasStore|layoutMode)$/}, ({path}) => ({path: join(webRoot, path.slice(2)) + ".ts"}));
+        build.onResolve({filter: /^@\/utils\/a2uiDataModel$/}, () => ({path: join(directory, '../web/canvas/a2uiDataModel.ts')}));
         // The original transcript pieces enter the page through these host modules.
         // Only their pure parts are bundled: opening an MCP app needs the shell canvas,
         // and the card that tracks HITL state in the shell is the same card without it.

@@ -1,8 +1,20 @@
-import type { SidebarBinding, SidebarBindings, SidebarSlot } from '../../plugin-slots/src/sidebar';
-import type { MarketplaceTransport } from './client';
-import { packageBase, packageScope } from './pluginMarketTypes';
+import type {
+  SidebarBinding,
+  SidebarBindings,
+  SidebarSlot,
+} from "../../plugin-slots/src/sidebar";
+import type { MarketplaceTransport } from "./client";
+import { packageBase, packageScope } from "./pluginMarketTypes";
 
 type Values = Record<string, unknown>;
+export interface SidebarSlotPage {
+  rows: Values[];
+  count: number;
+  // A command that pages its rows names where the next page starts; any other
+  // command has returned all of its rows.
+  hasMore: boolean;
+  cursor: string | null;
+}
 export interface SidebarOwner {
   plugin: string;
   digest: string;
@@ -18,7 +30,7 @@ export async function invokeSlot(
   owner: SidebarOwner | undefined,
   slot: SidebarSlot,
   context: Values,
-  signal: AbortSignal
+  signal: AbortSignal,
 ) {
   const binding = owner?.sidebar?.[slot];
   if (
@@ -29,13 +41,16 @@ export async function invokeSlot(
     !tenant ||
     signal.aborted
   )
-    throw new Error('package_command_unavailable');
+    throw new Error("package_command_unavailable");
   const values = { ...context, tenant, project, inactive: false };
-  const payload = { ...binding.constants, ...mapFields(binding.inputs, values) };
+  const payload = {
+    ...binding.constants,
+    ...mapFields(binding.inputs, values),
+  };
   const result = await transport<Values>(
-    packageBase(project) + '/' + encodeURIComponent(owner.plugin) + '/commands',
+    packageBase(project) + "/" + encodeURIComponent(owner.plugin) + "/commands",
     {
-      method: 'POST',
+      method: "POST",
       signal,
       body: {
         ...packageScope(tenant, project),
@@ -43,28 +58,35 @@ export async function invokeSlot(
         command_id: binding.command,
         payload,
       },
-    }
+    },
   );
   signal.throwIfAborted();
   const raw = binding.collection ? result[binding.collection] : [result];
-  if (!Array.isArray(raw)) throw new Error('invalid_sidebar_result');
+  if (!Array.isArray(raw)) throw new Error("invalid_sidebar_result");
   const rows = raw.flatMap((record: unknown) => {
-    if (!record || typeof record !== 'object') return [];
+    if (!record || typeof record !== "object") return [];
     const item = record as Values;
     if (
       !Object.entries(binding.match ?? {}).every(
-        ([key, source]) => Object.hasOwn(item, key) && item[key] === (values as Values)[source]
+        ([key, source]) =>
+          Object.hasOwn(item, key) && item[key] === (values as Values)[source],
       )
     )
       return [];
     return [mapFields(binding.fields, item)];
   });
-  return { rows, count: raw.length };
+  const page: SidebarSlotPage = {
+    rows,
+    count: raw.length,
+    hasMore: result.has_more === true,
+    cursor: typeof result.cursor === "string" ? result.cursor : null,
+  };
+  return page;
 }
-function mapFields(mapping: SidebarBinding['fields'], values: Values) {
+function mapFields(mapping: SidebarBinding["fields"], values: Values) {
   return Object.fromEntries(
     Object.entries(mapping ?? {}).flatMap(([dest, source]) =>
-      Object.hasOwn(values, source) ? [[dest, values[source]]] : []
-    )
+      Object.hasOwn(values, source) ? [[dest, values[source]]] : [],
+    ),
   ) as Values;
 }

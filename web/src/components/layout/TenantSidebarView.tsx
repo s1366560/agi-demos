@@ -505,7 +505,13 @@ export interface SidebarData {
   setActiveConversation: (id: string | null) => void;
   loadConversations: (
     project: string,
-    options?: { signal?: AbortSignal; executionTarget?: ExecutionTargetFilter; force?: boolean }
+    options?: {
+      signal?: AbortSignal;
+      executionTarget?: ExecutionTargetFilter;
+      force?: boolean;
+      /** Read the rows without showing that they are read. */
+      silent?: boolean;
+    }
   ) => Promise<void>;
   loadMoreConversations: (project: string) => Promise<void>;
   createNewConversation: (project: string, workspace?: string | null) => Promise<string | null>;

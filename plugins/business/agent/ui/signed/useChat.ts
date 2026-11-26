@@ -62,6 +62,8 @@ export function useChat(
   const workspace = query.get('workspaceId');
   const segment = scope.pathname.match(/\/(?:agent-workspace|agent\/chat)\/([^/]+)\/?$/)?.[1];
   const linked = query.get('conversationId') || (segment ? decodeURIComponent(segment) : null);
+  const linkedNow = useRef(linked);
+  linkedNow.current = linked;
   const [selected, setSelected] = useState(linked ?? '');
   const [messages, setMessages] = useState<Message[]>([]);
   const [thoughts, setThoughts] = useState<Thought[]>([]);
@@ -72,6 +74,10 @@ export function useChat(
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [run, setRun] = useState<Run>();
+  // Whether a turn is writing: reasoning or an answer of it arrives. A turn of the
+  // page writes from its start; one the page follows writes from its first arrival,
+  // and a turn that waits for a decision runs without writing.
+  const [writing, setWriting] = useState(false);
   const [cursor, setCursor] = useState<Cursor>();
   const [loading, setLoading] = useState(true);
   // Counts the reads that start a history over, so what was read before them is dropped.
@@ -84,6 +90,9 @@ export function useChat(
     reading = useRef(false),
     revision = useRef(0);
   const pending = useRef<{ id: string; text: string; key: string } | null>(null);
+  // The conversation the page holds without reading its history, as one it has just
+  // created. Its address arrives while a turn runs, and reads nothing again.
+  const held = useRef('');
   const label = (en: string, zh: string) => (scope.locale.startsWith('zh') ? zh : en);
   const selectedRow = list.find((row) => row.id === selected);
   const writable = !!selectedRow && (selectedRow.execution_target === 'cloud' || hasDevice);
@@ -159,7 +168,12 @@ export function useChat(
     }
   }
   useEffect(() => {
+    // The address caught up with a conversation the page holds already.
+    if (linked && linked === held.current) return;
     const controller = new AbortController();
+    following.current?.abort();
+    // What was read before belongs to another conversation.
+    revision.current++;
     void command<{ items: Conversation[] }>(
       'chat-list',
       {
@@ -177,6 +191,7 @@ export function useChat(
         const id = linked;
         if (id) {
           setSelected(id);
+          held.current = id;
           return read(id, undefined, items.find((row) => row.id === id)?.execution_target);
         }
         setLoading(false);
@@ -188,12 +203,16 @@ export function useChat(
           report(err);
         }
       });
-    return () => {
-      controller.abort();
+    // A read that started stays: the address can change to the conversation it reads.
+    return () => controller.abort();
+  }, [linked, workspace, scope.projectId, scope.tenantId]);
+  useEffect(
+    () => () => {
       following.current?.abort();
       revision.current++;
-    };
-  }, [linked, workspace, scope.projectId, scope.tenantId]);
+    },
+    []
+  );
 
   async function perform(action: () => Promise<void>) {
     if (locked.current) return;
@@ -223,13 +242,16 @@ export function useChat(
     setThoughts([]);
     setFiles([]);
     setCursor(undefined);
+    // The address names the conversation at once, and the page stays as it is: a
+    // turn that starts now is not cut off. A host that cannot keep it mounts the
+    // page again, and the turn is followed from there.
+    held.current = row.id;
+    void sdk.navigate(conversationPath(row.id), { keepMounted: true }).catch(() => {});
     return row;
   }
   function create() {
     return perform(async () => {
-      const row = await createRow();
-      await sdk.navigate(conversationPath(row.id));
-      await read(row.id);
+      await read((await createRow()).id);
     });
   }
   function conversationPath(id: string) {
@@ -276,6 +298,7 @@ export function useChat(
     if (event.type === 'accepted') {
       setRun({ target: 'cloud', conversation, id: event.run_id, revision: event.revision });
     }
+    if (written(event)) setWriting(true);
     if (event.type === 'thought') {
       // Reasoning arrives one piece at a time ahead of the answer it leads to.
       const after = latest?.();
@@ -296,6 +319,9 @@ export function useChat(
         return [...(last?.id === answer ? old.slice(0, -1) : old), next];
       });
     }
+  }
+  function written(event: StreamEvent) {
+    return ['thought', 'assistant_message', 'text_delta'].includes(event.type);
   }
   /**
    * Follow the turn that is running in a conversation when the page is opened,
@@ -325,7 +351,11 @@ export function useChat(
     } catch (error) {
       if (!controller.signal.aborted) report(error);
     } finally {
-      if (following.current === controller) following.current = null;
+      // What the page followed writes no more, whichever way the following ended.
+      if (following.current === controller) {
+        following.current = null;
+        setWriting(false);
+      }
       if (!controller.signal.aborted) {
         setRun((current) => (current?.conversation === id ? undefined : current));
         if (accepted) {
@@ -349,6 +379,7 @@ export function useChat(
         );
       }
       const conversation = row.id;
+      setWriting(true);
       try {
         if (row.execution_target === 'local') {
           if (pending.current?.id !== conversation || pending.current.text !== text)
@@ -412,11 +443,14 @@ export function useChat(
         throw error;
       } finally {
         setRun(undefined);
+        setWriting(false);
         setStopping(false);
       }
       await read(conversation);
       ownPage.current = pages.current;
-      if (!linked) await sdk.navigate(conversationPath(conversation), { replace: true });
+      // The address of the first turn of a conversation, when it did not follow at once.
+      if (!linkedNow.current)
+        await sdk.navigate(conversationPath(conversation), { replace: true, keepMounted: true });
     });
   }
   async function stop() {
@@ -455,12 +489,15 @@ export function useChat(
   function choose(id: string) {
     if (busy || selected === id) return;
     void perform(async () => {
-      await sdk.navigate(conversationPath(id));
+      await sdk.navigate(conversationPath(id), { keepMounted: true });
+      // The page holds this conversation, so the address that follows reads nothing again.
+      held.current = id;
       setSelected(id);
       setMessages([]);
       setThoughts([]);
       setFiles([]);
       setDraft('');
+      following.current?.abort();
       await read(id);
     });
   }
@@ -486,6 +523,7 @@ export function useChat(
     report,
     run,
     stopping,
+    writing,
     error,
     cursor,
     page,

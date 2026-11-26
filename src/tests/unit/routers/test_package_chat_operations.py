@@ -1,6 +1,9 @@
 """The package sees only text and receipts from its authenticated project and turn."""
 
+import base64
+import json
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi import FastAPI, Request, WebSocket
@@ -182,6 +185,122 @@ async def test_cloud_workspace_chat_uses_canonical_link_and_handles_deep_bookmar
         await ops.list_conversations(
             ctx, {"workspace_id": "other", "conversation_id": pinned}, None
         )
+
+
+def _conversation_row(identifier: str) -> dict[str, str]:
+    return {"id": identifier, "title": identifier.upper(), "execution_target": "cloud"}
+
+
+async def test_conversation_list_pages_through_both_lists_of_the_workbench(db_session, monkeypatch):
+    """The workbench lists unbound conversations first and grouped ones after, a page at a time."""
+    from plugins.business.agent.backend import chat_operations as operations
+
+    ctx = context(FastAPI(), db_session)
+
+    async def owned(*_args):
+        return None
+
+    requests: list[dict[str, str | int] | None] = []
+    unbound: dict[str, Any] = {
+        "items": [_conversation_row(f"u{i}") for i in range(10)],
+        "has_more": True,
+    }
+    grouped: dict[str, Any] = {
+        "items": [_conversation_row("g1"), _conversation_row("u3")],
+        "has_more": False,
+    }
+
+    async def canonical(_ctx, method, path, **kwargs):
+        assert (method, path) == ("GET", "conversations")
+        requests.append(kwargs.get("query"))
+        return grouped if kwargs["query"].get("group_by_workspace") else unbound
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    first = await operations.list_conversations(ctx, {"workbench": True, "limit": 10}, None)
+
+    # A grouped row that was already listed is not repeated.
+    assert [row["id"] for row in first["items"]] == [f"u{i}" for i in range(10)] + ["g1"]
+    assert first["has_more"] is True
+    assert isinstance(first["cursor"], str)
+    assert requests == [
+        {"limit": 10, "offset": 0, "unbound_only": "true"},
+        {"limit": 10, "offset": 0, "group_by_workspace": "true"},
+    ]
+
+    requests.clear()
+    unbound.clear()
+    unbound.update({"items": [_conversation_row("u10")], "has_more": False})
+    second = await operations.list_conversations(
+        ctx, {"workbench": True, "limit": 10, "cursor": first["cursor"]}, None
+    )
+
+    # Only the list that still had rows is asked again.
+    assert requests == [{"limit": 10, "offset": 10, "unbound_only": "true"}]
+    assert [row["id"] for row in second["items"]] == ["u10"]
+    assert second["has_more"] is False
+    assert second["cursor"] is None
+
+
+async def test_conversation_list_starts_over_from_a_cursor_that_cannot_be_read(
+    db_session, monkeypatch
+):
+    from plugins.business.agent.backend import chat_operations as operations
+
+    ctx = context(FastAPI(), db_session)
+
+    async def owned(*_args):
+        return None
+
+    requests: list[dict[str, str | int] | None] = []
+
+    async def canonical(_ctx, method, path, **kwargs):
+        requests.append(kwargs.get("query"))
+        return {"items": [], "has_more": False}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    result = await operations.list_conversations(
+        ctx, {"workbench": True, "limit": 10, "cursor": "not-a-cursor"}, None
+    )
+
+    assert result == {"items": [], "has_more": False, "cursor": None}
+    assert [request["offset"] for request in requests] == [0, 0]
+
+
+async def test_conversation_list_of_a_workspace_reports_whether_more_follow(
+    db_session, monkeypatch
+):
+    from plugins.business.agent.backend import chat_operations as operations
+
+    ctx = context(FastAPI(), db_session)
+
+    async def owned(*_args):
+        return None
+
+    async def canonical(_ctx, method, path, **kwargs):
+        assert kwargs["query"] == {"workspace_id": "mine", "offset": 20}
+        return {"items": [_conversation_row("w1")], "has_more": True}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    result = await operations.list_conversations(
+        ctx,
+        {
+            "workspace_id": "mine",
+            "cursor": base64.urlsafe_b64encode(
+                json.dumps({"o": [20, 20], "m": [True, True]}).encode()
+            ).decode("ascii"),
+        },
+        None,
+    )
+
+    assert result["items"][0]["id"] == "w1"
+    assert result["has_more"] is True
+    assert isinstance(result["cursor"], str)
 
 
 async def test_history_keeps_turn_order_and_reasoning_without_tool_arguments(
@@ -622,6 +741,232 @@ async def test_interactions_keep_every_event_in_order_and_show_only_what_a_trans
         "internal",
     ):
         assert kept not in str(result)
+
+
+def test_transcript_event_carries_what_the_canvas_opens_as_a_tab():
+    from plugins.business.agent.backend import workbench
+
+    row = {
+        "id": "canvas-1",
+        "type": "canvas_updated",
+        "eventTimeUs": 4,
+        "action": "created",
+        "block_id": "b1",
+        "block": {
+            "id": "b1",
+            "title": "Report",
+            "block_type": "code",
+            "content": "print(1)",
+            "metadata": {
+                "language": "python",
+                "surface_id": "s",
+                "internal": "kept on the server",
+            },
+            "position": 3,
+        },
+        "version": 1,
+    }
+    assert workbench.transcript_event(row) == {
+        "id": "canvas-1",
+        "type": "canvas_updated",
+        "eventTimeUs": 4,
+        "action": "created",
+        "block_id": "b1",
+        "block": {
+            "id": "b1",
+            "title": "Report",
+            "block_type": "code",
+            "content": "print(1)",
+            "metadata": {"language": "python", "surface_id": "s"},
+        },
+    }
+    # A block without metadata the canvas reads has no metadata at all.
+    bare = workbench.transcript_event({**row, "block": {"id": "b2", "block_type": "markdown"}})
+    assert bare["block"] == {"id": "b2", "block_type": "markdown"}
+
+
+def test_transcript_event_carries_what_the_card_of_a_file_reads():
+    from plugins.business.agent.backend import workbench
+
+    row = {
+        "id": "art-1",
+        "type": "artifact_created",
+        "eventTimeUs": 5,
+        "artifactId": "a1",
+        "filename": "report.pdf",
+        "mimeType": "application/pdf",
+        "category": "document",
+        "sizeBytes": 10,
+        "url": "",
+        "previewUrl": "",
+        "sourceTool": "export_artifact",
+        "sourcePath": "/tmp/report.pdf",
+        "metadata": {"internal": "kept on the server"},
+    }
+    # The address is left to the artifact view, which signs it anew.
+    assert workbench.transcript_event(row) == {
+        "id": "art-1",
+        "type": "artifact_created",
+        "eventTimeUs": 5,
+        "artifactId": "a1",
+        "filename": "report.pdf",
+        "mimeType": "application/pdf",
+        "category": "document",
+        "sizeBytes": 10,
+        "url": "",
+        "previewUrl": "",
+        "sourceTool": "export_artifact",
+    }
+
+
+async def test_artifact_of_a_conversation_is_signed_again_and_comes_as_a_picture(
+    db_session, monkeypatch
+):
+    from plugins.business.agent.backend import workbench
+
+    ctx = context(FastAPI(), db_session)
+    calls = []
+
+    async def owned(*_args):
+        return None
+
+    async def http(_ctx, method, path, **_kwargs):
+        calls.append((method, path))
+        if path == "/api/v1/artifacts/a1":
+            return {
+                "conversation_id": "c",
+                "project_id": "p",
+                "status": "ready",
+                "mime_type": "image/png",
+                "size_bytes": 12,
+            }
+        assert (method, path) == ("POST", "/api/v1/artifacts/a1/refresh-url")
+        return {"artifact_id": "a1", "url": "http://files/a1.png?X-Amz-Signature=new"}
+
+    async def pieces(_ctx, path):
+        assert path == "/api/v1/artifacts/a1/content/bytes"
+        return "image/png", b"\x89PNG"
+
+    monkeypatch.setattr(workbench, "_own_conversation", owned)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+    monkeypatch.setattr(workbench, "canonical_bytes", pieces)
+
+    result = await workbench.interactions(
+        ctx, {"conversation_id": "c", "view": "artifact", "artifact_id": "a1"}, None
+    )
+
+    assert result == {
+        "artifact": {
+            "id": "a1",
+            "status": "ready",
+            "url": "http://files/a1.png?X-Amz-Signature=new",
+            "preview": "data:image/png;base64," + base64.b64encode(b"\x89PNG").decode("ascii"),
+        }
+    }
+    assert calls == [
+        ("GET", "/api/v1/artifacts/a1"),
+        ("POST", "/api/v1/artifacts/a1/refresh-url"),
+    ]
+
+
+async def test_artifact_of_another_conversation_is_not_read(db_session, monkeypatch):
+    from plugins.business.agent.backend import workbench
+
+    ctx = context(FastAPI(), db_session)
+    calls = []
+
+    async def owned(*_args):
+        return None
+
+    async def http(_ctx, method, path, **_kwargs):
+        calls.append((method, path))
+        return {"conversation_id": "another", "project_id": "p", "status": "ready"}
+
+    async def pieces(*_args):
+        raise AssertionError("the bytes of another conversation are not read")
+
+    monkeypatch.setattr(workbench, "_own_conversation", owned)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+    monkeypatch.setattr(workbench, "canonical_bytes", pieces)
+
+    with pytest.raises(OptionalBusinessError) as refused:
+        await workbench.interactions(
+            ctx, {"conversation_id": "c", "view": "artifact", "artifact_id": "a1"}, None
+        )
+
+    assert refused.value.code == "forbidden"
+    assert calls == [("GET", "/api/v1/artifacts/a1")]
+
+
+@pytest.mark.parametrize(
+    ("row", "expected"),
+    [
+        ({"status": "pending", "mime_type": "image/png", "size_bytes": 10}, {"status": "pending"}),
+        ({"status": "error", "mime_type": "text/plain", "size_bytes": 10}, {"status": "error"}),
+        # A picture too large to carry is opened by its address instead.
+        (
+            {"status": "ready", "mime_type": "image/png", "size_bytes": 3_000_000},
+            {"status": "ready", "url": "http://files/a1.png?X-Amz-Signature=new"},
+        ),
+        (
+            {"status": "ready", "mime_type": "text/plain", "size_bytes": 10},
+            {"status": "ready", "url": "http://files/a1.png?X-Amz-Signature=new"},
+        ),
+    ],
+)
+async def test_artifact_that_cannot_be_shown_as_a_picture_is_only_named(
+    db_session, monkeypatch, row, expected
+):
+    from plugins.business.agent.backend import workbench
+
+    ctx = context(FastAPI(), db_session)
+    calls = []
+
+    async def owned(*_args):
+        return None
+
+    async def http(_ctx, method, path, **_kwargs):
+        calls.append((method, path))
+        if path == "/api/v1/artifacts/a1":
+            return {"conversation_id": "c", "project_id": "p", **row}
+        return {"artifact_id": "a1", "url": "http://files/a1.png?X-Amz-Signature=new"}
+
+    async def pieces(*_args):
+        raise AssertionError("only a small picture is carried into the page")
+
+    monkeypatch.setattr(workbench, "_own_conversation", owned)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+    monkeypatch.setattr(workbench, "canonical_bytes", pieces)
+
+    result = await workbench.interactions(
+        ctx, {"conversation_id": "c", "view": "artifact", "artifact_id": "a1"}, None
+    )
+
+    assert result == {"artifact": {"id": "a1", **expected}}
+    assert calls[0] == ("GET", "/api/v1/artifacts/a1")
+    assert len(calls) == (2 if row["status"] == "ready" else 1)
+
+
+async def test_artifact_view_names_a_file(db_session, monkeypatch):
+    from plugins.business.agent.backend import workbench
+
+    async def owned(*_args):
+        return None
+
+    async def http(*_args, **_kwargs):
+        raise AssertionError("no file was named, so nothing is read")
+
+    monkeypatch.setattr(workbench, "_own_conversation", owned)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+
+    with pytest.raises(OptionalBusinessError) as refused:
+        await workbench.interactions(
+            context(FastAPI(), db_session),
+            {"conversation_id": "c", "view": "artifact"},
+            None,
+        )
+
+    assert refused.value.code == "page_request_invalid"
 
 
 async def test_follow_streams_the_running_turn_and_ends_when_it_ends(monkeypatch):

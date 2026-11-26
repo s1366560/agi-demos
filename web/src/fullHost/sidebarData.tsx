@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -17,8 +18,19 @@ import { useWorkspaceSidebar } from './workspaceSidebar';
 import { useAuthStore } from '../stores/auth';
 import { useWebPackageSession } from '../projectPackages/useWebPackageSession';
 import { useFullNavigation } from './navigation';
+import type { ExecutionTargetFilter } from '../components/execution-target/executionTargetModel';
 import type { SidebarConversation, SidebarData } from '../components/layout/TenantSidebarView';
 const Sidebar = createContext<SidebarData | null>(null);
+// Where the rows a package returned end, when the package pages its rows.
+interface RowTail {
+  hasMore: boolean;
+  cursor: string | null;
+}
+const NO_TAIL: RowTail = { hasMore: false, cursor: null };
+
+function shown(target: ExecutionTargetFilter | undefined, row: SidebarConversation) {
+  return !target || target === 'all' || target === row.execution_target;
+}
 export function useSignedSidebar() {
   const state = useContext(Sidebar);
   if (!state) throw new Error('Missing workbench sidebar');
@@ -32,17 +44,18 @@ function row(value: unknown, project: string): SidebarConversation | null {
     !('id' in value) ||
     typeof value.id !== 'string' ||
     !('label' in value) ||
-    typeof value.label !== 'string' ||
-    ('hidden' in value && value.hidden === true)
+    typeof value.label !== 'string'
   )
     return null;
   return {
     id: value.id,
     title: value.label,
     project_id: project,
+    // A derived conversation stays in the list, counted as the original workbench
+    // counts it; the view leaves such rows out of what it shows.
     slot: {
       active: 'active' in value && value.active === true,
-      hidden: false,
+      hidden: 'hidden' in value && value.hidden === true,
       ...('role' in value && typeof value.role === 'string' ? { role: value.role } : {}),
     },
     ...('updatedAt' in value && typeof value.updatedAt === 'string'
@@ -71,7 +84,11 @@ export function SignedSidebarProvider({ children }: { children: ReactNode }) {
   const { transport } = useWebPackageSession(token);
   const workspace = useWorkspaceSidebar(tenant, project, items, transport);
   const [conversations, setConversations] = useState<SidebarConversation[]>([]);
+  const [tail, setTail] = useState<RowTail>(NO_TAIL);
   const [busy, setBusy] = useState(false);
+  const loadingMore = useRef(false);
+  const loading = useRef(false);
+  const target = useRef<ExecutionTargetFilter | undefined>(undefined);
   const [active, setActive] = useState<string | null>(null);
   const revision = useRef(0);
   const { pathname } = useLocation();
@@ -91,37 +108,79 @@ export function SignedSidebarProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => {
     revision.current++;
     setConversations([]);
+    setTail(NO_TAIL);
     setBusy(false);
   }, []);
   const load = useCallback<SidebarData['loadConversations']>(
     async (id, options) => {
       if (activeScope.current !== command) throw new Error('page_scope_expired');
+      // Rows that are being read are not read again on the side.
+      if (options?.silent && loading.current) return;
       const seq = ++revision.current;
       if (!release || project !== id) {
         setConversations([]);
+        setTail(NO_TAIL);
         setBusy(false);
         return;
       }
-      setBusy(true);
+      loading.current = true;
+      if (!options?.silent) setBusy(true);
       try {
-        const { rows } = await command('rows', {}, options?.signal);
+        const { rows, hasMore, cursor } = await command('rows', {}, options?.signal);
         if (seq !== revision.current || options?.signal?.aborted) return;
         const visible = (Array.isArray(rows) ? rows : [])
           .map((v) => row(v, id))
           .filter((v): v is SidebarConversation => v !== null);
-        setConversations(
-          visible.filter(
-            (v) =>
-              !options?.executionTarget ||
-              options.executionTarget === 'all' ||
-              options.executionTarget === v.execution_target
-          )
-        );
+        setConversations(visible.filter((v) => shown(options?.executionTarget, v)));
+        target.current = options?.executionTarget;
+        // Rows that cannot be found again are all there is.
+        setTail({ hasMore: hasMore && !!cursor, cursor });
       } finally {
-        if (seq === revision.current) setBusy(false);
+        loading.current = false;
+        if (seq === revision.current && !options?.silent) setBusy(false);
       }
     },
     [command, project, release]
+  );
+  // A conversation the page opened by its address, as one it has just created, is
+  // listed: the rows are read once more for it, without showing that they are read.
+  const addressed = navigation.match(pathname)?.id;
+  const listedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !addressed ||
+      !project ||
+      loading.current ||
+      listedFor.current === addressed ||
+      conversations.some((row) => row.id === addressed)
+    )
+      return;
+    listedFor.current = addressed;
+    void load(project, { silent: true }).catch(() => {});
+  }, [addressed, conversations, load, project]);
+  const loadMore = useCallback<SidebarData['loadMoreConversations']>(
+    async (id) => {
+      if (activeScope.current !== command || id !== project) return;
+      if (loadingMore.current || !tail.cursor) return;
+      loadingMore.current = true;
+      const seq = revision.current;
+      try {
+        const { rows, hasMore, cursor } = await command('rows', { cursor: tail.cursor });
+        if (seq !== revision.current) return;
+        const loaded = (Array.isArray(rows) ? rows : [])
+          .map((v) => row(v, id))
+          .filter((v): v is SidebarConversation => v !== null)
+          .filter((v) => shown(target.current, v));
+        setConversations((previous) => [
+          ...previous,
+          ...loaded.filter((v) => !previous.some((item) => item.id === v.id)),
+        ]);
+        setTail({ hasMore: hasMore && !!cursor, cursor });
+      } finally {
+        loadingMore.current = false;
+      }
+    },
+    [command, project, tail]
   );
   useLayoutEffect(() => {
     reset();
@@ -142,8 +201,8 @@ export function SignedSidebarProvider({ children }: { children: ReactNode }) {
       setActiveConversation: setActive,
       loadConversations: load,
       resetConversations: reset,
-      hasMoreConversations: false,
-      loadMoreConversations: async () => {},
+      hasMoreConversations: tail.hasMore,
+      loadMoreConversations: loadMore,
       ...workspace,
       removeConversationLocal: (id) => {
         if (activeScope.current === command)
@@ -182,7 +241,21 @@ export function SignedSidebarProvider({ children }: { children: ReactNode }) {
         await load(projectId);
       },
     }),
-    [conversations, busy, active, load, reset, release, command, workspace, navigation, project, t]
+    [
+      conversations,
+      tail,
+      busy,
+      active,
+      load,
+      loadMore,
+      reset,
+      release,
+      command,
+      workspace,
+      navigation,
+      project,
+      t,
+    ]
   );
   return <Sidebar.Provider value={state}>{children}</Sidebar.Provider>;
 }

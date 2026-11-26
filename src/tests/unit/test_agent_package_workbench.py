@@ -200,3 +200,60 @@ def test_rejects_an_empty_or_unclassified_template(payload):
 
     with pytest.raises(ValidationError):
         composer_context.TemplateSave.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("sandbox", "expected"),
+    [
+        (
+            {
+                "sandbox_id": "sandbox-1",
+                "project_id": "project",
+                "tenant_id": "tenant",
+                "status": "running",
+                "is_healthy": True,
+                "endpoint": "ws://sandbox.internal",
+                "error_message": None,
+            },
+            {"sandbox": {"status": "running", "is_healthy": True}},
+        ),
+        ({"sandbox_id": "sandbox-1", "status": "creating"}, {"sandbox": {"status": "creating"}}),
+    ],
+)
+async def test_reads_the_sandbox_of_the_project_for_the_status_bar(monkeypatch, sandbox, expected):
+    """The original status bar shows whether the project sandbox is connected."""
+    from plugins.business.agent.backend import composer_context
+
+    ctx = context()
+    canonical = AsyncMock(return_value=sandbox)
+    monkeypatch.setattr(composer_context, "_canonical", canonical)
+
+    result = await composer_context.project_context(ctx, {"view": "sandbox"}, None)
+
+    assert result == expected
+    canonical.assert_awaited_once_with(ctx, "GET", "sandbox", project_route=True)
+
+
+async def test_reports_no_sandbox_when_the_project_has_none(monkeypatch):
+    from plugins.business.agent.backend import composer_context
+    from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
+
+    ctx = context()
+    canonical = AsyncMock(side_effect=OptionalBusinessError("page_not_found", "HTTP 404"))
+    monkeypatch.setattr(composer_context, "_canonical", canonical)
+
+    assert await composer_context.project_context(ctx, {"view": "sandbox"}, None) == {
+        "sandbox": None
+    }
+
+
+async def test_passes_a_sandbox_that_cannot_be_read_to_the_page(monkeypatch):
+    from plugins.business.agent.backend import composer_context
+    from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
+
+    ctx = context()
+    canonical = AsyncMock(side_effect=OptionalBusinessError("forbidden", "HTTP 403"))
+    monkeypatch.setattr(composer_context, "_canonical", canonical)
+
+    with pytest.raises(OptionalBusinessError, match="HTTP 403"):
+        await composer_context.project_context(ctx, {"view": "sandbox"}, None)

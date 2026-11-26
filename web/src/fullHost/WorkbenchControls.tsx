@@ -35,7 +35,7 @@ export function FullPalette(props: CommandPaletteProps) {
       navigationItems={items}
       agentWorkspaceEnabled={canCreate}
       rowLink={navigation?.link}
-      conversations={conversations}
+      conversations={conversations.filter((conversation) => !conversation.slot?.hidden)}
     />
   );
 }

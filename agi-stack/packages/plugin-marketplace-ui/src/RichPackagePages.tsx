@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   pageSearch,
@@ -7,9 +7,12 @@ import {
 import { connectPage } from "../../plugin-slots/src/richPageBridge";
 import {
   menuPath,
+  pageDocumentWithStorage,
   routeRank,
   verifyPageDocument,
 } from "../../plugin-slots/src/richPage";
+import { createPageStorage, windowPageStorage } from "../../plugin-slots/src/pageStorage";
+import { arrived, type RequestedAddress } from "../../plugin-slots/src/pageArrival";
 import type {
   DevicePageCall,
   PackagePage,
@@ -18,6 +21,7 @@ import type {
   RichPage,
 } from "../../plugin-slots/src/richPage";
 import { savePageExport } from "./savePageExport";
+import { openPageAddress } from "./openPageAddress";
 import { createPageVoiceAuthority } from "./pageVoiceAuthority";
 import type { OpenVoiceSocket } from "../../plugin-slots/src/pageVoice";
 import type { MarketplaceTransport } from "./client";
@@ -36,7 +40,12 @@ export interface RichPackagePagesProps {
   pathname: string;
   navigate(
     path: string,
-    options?: { replace?: boolean; pluginId?: string },
+    options?: {
+      replace?: boolean;
+      /** The page asked to stay as it is at the new address. */
+      keepMounted?: boolean;
+      pluginId?: string;
+    },
   ): void;
   management?: ReactNode;
   pluginId?: string;
@@ -45,6 +54,8 @@ export interface RichPackagePagesProps {
   managementLabel?: string;
   invokeDevice?: DevicePageCall;
   saveNativeExport?(blob: Blob): Promise<unknown>;
+  /** Open an address of the web for a page. The workbench window is used unless a host has its own. */
+  openUrl?(url: string): void;
   reviewDevice?(pluginId: string, digest: string, signal: AbortSignal): Promise<void>;
   openVoiceSocket?: OpenVoiceSocket;
   streamCommand?: (
@@ -103,6 +114,17 @@ function PackageFrame(
     return () => stopVoice.current?.();
   }, [props.retired, props.pathname]);
   const dispose = useRef<(() => void) | undefined>(undefined);
+  // The address of the page can change while it stays loaded: a page that keeps
+  // itself mounted reads the new one through its listeners.
+  const contextListeners = useRef(new Set<() => void>());
+  useEffect(() => {
+    for (const notify of contextListeners.current) notify();
+  }, [props.pathname]);
+  // What the pages of this release stored in this tenant and project.
+  const storage = useMemo(
+    () => createPageStorage(windowPageStorage(), [tenantId, projectId, pluginId].join(":")),
+    [tenantId, projectId, pluginId],
+  );
   const [loaded, setLoaded] = useState<{ page: RichPage; html: string } | null>(
     null,
   );
@@ -262,6 +284,15 @@ function PackageFrame(
         openPage: (pluginId, pageId, destination) => current.current.openPage(pluginId, pageId, destination),
         navigate: (newPath, options) =>
           current.current.navigate(newPath, options),
+        contextChanged(listener) {
+          contextListeners.current.add(listener);
+          return () => contextListeners.current.delete(listener);
+        },
+        ...(storage ? { storage } : {}),
+        openUrl: (url, signal) => {
+          if (current.current.openUrl) return current.current.openUrl(url);
+          return openPageAddress(url, signal, current.current.locale || navigator.language, target);
+        },
         invoke(name, payload, signal, progress) {
           const body = {
             ...packageScope(tenantId, projectId),
@@ -293,7 +324,11 @@ function PackageFrame(
       host.port1.close();
     };
     frame.current.contentWindow.postMessage(
-      { type: "memstack.page.open", title: page.title, document: html },
+      {
+        type: "memstack.page.open",
+        title: page.title,
+        document: pageDocumentWithStorage(html, storage?.snapshot() ?? {}),
+      },
       "*",
       [host.port2],
     );
@@ -399,17 +434,23 @@ function PageDiagnostics({
   );
 }
 
-/** Preserve the last verified frame while a new release is loading in the same scope. */
-/** A guest replacing its own filters already holds the new view and keyboard focus. */
+/**
+ * A guest that replaces its own filters already holds the new view and keyboard
+ * focus, and a guest that keeps itself mounted holds them at any address of its
+ * page. Every other address change loads the page again.
+ */
 function RoutedPageRelease(props: Selected) {
   const { pathname, search, hash } = splitPageLocation(props.pathname);
   const address = pathname + pageSearch(search) + hash;
-  const requested = useRef<string | null>(null);
+  const requested = useRef<RequestedAddress | null>(null);
   const [view, setView] = useState({ address, generation: 0 });
   if (view.address !== address) {
-    const acknowledged = requested.current === address;
+    const arrival = requested.current;
     requested.current = null;
-    setView({ address, generation: view.generation + (acknowledged ? 0 : 1) });
+    setView({
+      address,
+      generation: view.generation + (arrived(arrival, address, performance.now()) ? 0 : 1),
+    });
   }
   return (
     <PageRelease
@@ -417,10 +458,17 @@ function RoutedPageRelease(props: Selected) {
       {...props}
       navigate={(path, options) => {
         const next = splitPageLocation(path);
-        if (options?.replace && next.pathname === pathname)
-          requested.current =
-            next.pathname + pageSearch(next.search) + next.hash;
-        props.navigate(path, options);
+        if (options?.keepMounted || (options?.replace && next.pathname === pathname))
+          requested.current = {
+            address: next.pathname + pageSearch(next.search) + next.hash,
+            at: performance.now(),
+          };
+        // The router learns replace or push; a host may keep the address shape of a page that stays.
+        props.navigate(path, {
+          ...(options?.replace ? { replace: true } : {}),
+          ...(options?.keepMounted ? { keepMounted: true } : {}),
+          ...(options?.pluginId ? { pluginId: options.pluginId } : {}),
+        });
       }}
     />
   );
@@ -703,7 +751,6 @@ function ScopedPackagePages(props: RichPackagePagesProps) {
             selected.pluginId,
             selected.page.id,
             props.locale,
-            pathname,
           ])}
           {...props}
           openPage={openPage}

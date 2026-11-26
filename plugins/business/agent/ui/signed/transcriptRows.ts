@@ -26,7 +26,9 @@ export type TranscriptRow =
   /** A human-in-the-loop card or an error notice, drawn from its event. */
   | { kind: "event"; id: string; event: InteractionEvent }
   /** A memory step of a turn: what was recalled or captured at that point. */
-  | { kind: "memory"; id: string; event: InteractionEvent };
+  | { kind: "memory"; id: string; event: InteractionEvent }
+  /** A file the agent produced, as the card of the original transcript shows it. */
+  | { kind: "artifact"; id: string; event: InteractionEvent };
 
 /** Event time and counter locate a row inside the conversation timeline. */
 type Position = [time: number, counter: number];
@@ -49,6 +51,7 @@ const DRAWN = new Set([
   "clarification_answered",
   "decision_answered",
   "env_var_provided",
+  "artifact_created",
   ...MEMORY,
 ]);
 
@@ -82,7 +85,11 @@ function compare(a: Position, b: Position): number {
 function drawnRow(event: InteractionEvent): TranscriptRow | undefined {
   if (!DRAWN.has(event.type)) return undefined;
   return {
-    kind: MEMORY.has(event.type) ? "memory" : "event",
+    kind: MEMORY.has(event.type)
+      ? "memory"
+      : event.type === "artifact_created"
+        ? "artifact"
+        : "event",
     id: event.id,
     event,
   };

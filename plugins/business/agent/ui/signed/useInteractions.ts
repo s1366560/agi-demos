@@ -60,6 +60,16 @@ export interface InteractionEvent {
     title?: string;
     content?: string;
   };
+  /** A file the agent produced. Its address is signed anew by the `artifact` view. */
+  artifactId?: string;
+  filename?: string;
+  mimeType?: string;
+  category?: string;
+  sizeBytes?: number;
+  url?: string;
+  previewUrl?: string;
+  sourceTool?: string;
+  error?: string;
 }
 type View = { events: InteractionEvent[]; requests: PendingRequest[] };
 const empty: View = { events: [], requests: [] };

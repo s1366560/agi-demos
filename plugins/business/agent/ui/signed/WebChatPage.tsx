@@ -21,7 +21,7 @@ import { ShortcutOverlay } from '../../../../../web/src/components/agent/chat/Sh
 import { ExecutionTargetBadge } from '../../../../../web/src/components/execution-target/ExecutionTargetBadge';
 import { ChatExecutionPlacement } from './ChatExecutionPlacement';
 import { DesktopRunContext } from './DesktopRunContext';
-import type { LayoutMode } from '../../../../../web/src/stores/layoutMode';
+import { useLayoutModeStore, type LayoutMode } from '../../../../../web/src/stores/layoutMode';
 import type { TimelineEvent } from '../../../../../web/src/types/agent';
 import { AgentChatColumn, AgentStatusFrame } from '../web/chat/AgentChatColumn';
 import { AgentComposerCard, AgentDraftSurface } from '../web/chat/AgentComposerCard';
@@ -38,18 +38,15 @@ import { SelectedRunReview, type RunProjection } from './SelectedRunReview';
 import { WebChatStatus } from './WebChatStatus';
 import { usePageDarkMode } from './chatContextAuthority';
 import { WebActivity } from './WebActivity';
-import {
-  LinkedPackagePanel,
-  SignedCanvas,
-  SignedTaskList,
-  type CanvasDraft,
-} from './WebChatPanels';
+import { LinkedPackagePanel, openSnippet, SignedCanvas, SignedTaskList } from './WebChatPanels';
+import { useCanvasBlocks } from './useCanvasBlocks';
 import { WebComposerControls } from './WebComposerControls';
 import { useChat } from './useChat';
 import { useInteractions } from './useInteractions';
 import { latestPosition, timelineCount, transcriptRows } from './transcriptRows';
 import { foldTurns, foldableTurns } from './foldTurns';
 import { useConversationTasks } from './useConversationTasks';
+import { runningSandboxTool, useProjectSandbox } from './sandboxStatus';
 import { useTurnCollapse } from '../web/transcript/message/useTurnCollapse';
 import { PinnedMessages } from '../web/transcript/message/PinnedMessages';
 import { chatTranscriptItems } from './WebChatTranscript';
@@ -127,17 +124,21 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
       });
     return () => controller.abort();
   }, [scope]);
-  const [mode, setMode] = useState<LayoutMode>('chat');
-  const [ratio, setRatio] = useState(0.5);
+  // The layout is the one of the original workbench, and it is kept from one load
+  // to the next, as it is there.
+  const mode = useLayoutModeStore((s) => s.mode);
+  const ratio = useLayoutModeStore((s) => s.splitRatio);
+  const setMode = useLayoutModeStore((s) => s.setMode);
+  const setSplitRatio = useLayoutModeStore((s) => s.setSplitRatio);
   const [search, setSearch] = useState(false);
-  const [draftCanvas, setDraftCanvas] = useState<CanvasDraft | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  // A code block of the transcript opens as a document of the canvas, as in the
+  // original workbench.
   const openCode = useCallback((content: string, language?: string) => {
-    setDraftCanvas({ type: 'code', title: language ? 'snippet.' + language : 'snippet.txt', content });
+    openSnippet(content, language);
     setMode('canvas');
-    setRatio(0.35);
-  }, []);
+  }, [setMode]);
   const refill = (value: string) => {
     chat.setDraft(value);
     input.current?.focus();
@@ -146,6 +147,8 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
     chat.selectedRow?.execution_target === 'cloud' &&
     scope.commands.includes('chat-interactions');
   const interactions = useInteractions(chat.selected, !!chat.run, interactionsEnabled, chat.page);
+  // Canvas blocks of the conversation open as tabs of the canvas.
+  useCanvasBlocks(chat.selected, interactions.events);
   useEffect(() => {
     read.current = latestPosition(interactions.events);
   }, [interactions.events]);
@@ -158,6 +161,14 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
     chat.selected,
     !!chat.run,
     scope.commands.includes('chat-project-context')
+  );
+  // The sandbox of the project, and the sandbox tool that is running, for the status bar.
+  const sandbox = useProjectSandbox(scope, chat.writing);
+  // As in the original status bar, a sandbox tool is named while a turn runs, and
+  // not for a call of the history that was refused and never returned.
+  const tool = useMemo(
+    () => (chat.run ? runningSandboxTool(interactions.events) : undefined),
+    [chat.run, interactions.events]
   );
   // Rows of the timeline the way the original workbench counts them.
   const count = useMemo(
@@ -262,14 +273,11 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
     return () => window.removeEventListener('keydown', shortcuts);
   }, []);
   useEffect(() => {
-    setDraftCanvas(null);
     setHidden(new Set());
     setPinned(new Set());
   }, [chat.selected]);
-  const setLayout = (next: LayoutMode) => {
-    setMode(next);
-    setRatio(next === 'canvas' ? 0.35 : next === 'collab' ? 0.55 : 0.5);
-  };
+  // The original workbench keeps the division of a layout only for the session.
+  const setLayout = (next: LayoutMode) => setMode(next);
   const header = (
     <>
       <WebActivity scope={scope} onOpen={chat.choose} />
@@ -340,6 +348,7 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
           items={chatTranscriptItems({
             entries,
             chat,
+            scope,
             streaming: !!chat.run,
             refill,
             openCode,
@@ -487,7 +496,9 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
           conversation={chat.selected}
           count={count}
           tasks={tasks.tasks}
-          running={!!chat.run}
+          sandbox={sandbox}
+          tool={tool}
+          running={chat.writing}
         />
       }
       actions={<ChatLayoutSelector mode={mode} setMode={setLayout} hasWorkspace={!!workspace} />}
@@ -520,7 +531,7 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
           <SplitPaneLayout
             leftContent={column}
             splitRatio={ratio}
-            onSplitRatioChange={setRatio}
+            onSplitRatioChange={setSplitRatio}
             statusBar={status}
             handleAccentColor={
               mode === 'canvas' ? 'violet' : mode === 'task' ? 'purple' : 'primary'
@@ -532,8 +543,8 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
                 <SignedCanvas
                   scope={scope}
                   chat={chat}
-                  draft={draftCanvas}
-                  change={setDraftCanvas}
+                  interactions={interactions}
+                  back={() => setMode('chat')}
                 />
               ) : (
                 <LinkedPackagePanel mode={mode} workspace={workspace} report={chat.report} />
@@ -563,8 +574,14 @@ async function mount() {
     </I18nextProvider>
   );
 }
-function PageTheme({ scope }: { scope: RichPageContext }) {
+function PageTheme({ scope: loaded }: { scope: RichPageContext }) {
   const dark = usePageDarkMode();
+  // A page that keeps itself mounted learns the address it moved to.
+  const [scope, setScope] = useState(loaded);
+  useEffect(
+    () => window.memstack.onContextChange?.((next) => setScope(next)),
+    []
+  );
   return (
     <ConfigProvider
       locale={scope.locale.startsWith('zh') ? zhCN : enUS}

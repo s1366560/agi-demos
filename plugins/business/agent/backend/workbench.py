@@ -1,5 +1,6 @@
 """Conversation-bound capabilities used by the original chat workbench."""
 
+import base64
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
@@ -15,8 +16,10 @@ from .chat_operations import (
     Identifier,
     Turn,
     _canonical,
+    _canonical_http,
     _own_conversation,
     _turn,
+    canonical_bytes,
 )
 
 if TYPE_CHECKING:
@@ -56,7 +59,9 @@ async def respond(
 
 
 class TimelineReview(History):
-    view: Literal["workbench", "attachments"] = "workbench"
+    view: Literal["workbench", "attachments", "artifact"] = "workbench"
+    # The file of the `artifact` view, as the timeline names it.
+    artifact_id: Identifier | None = None
 
 
 # A step is placed among the messages of its turn, so every row keeps its position.
@@ -133,6 +138,25 @@ CARD_KEYS = {
     "env_var_provided": ("requestId", "toolName", "variableNames"),
 }
 ERROR_KEYS = ("message", "code")
+# What the card of a file the agent produced reads. Its address is signed by the
+# storage and runs out; the card asks the `artifact` view for a new one.
+ARTIFACT_KEYS = (
+    "artifactId",
+    "filename",
+    "mimeType",
+    "category",
+    "sizeBytes",
+    "url",
+    "previewUrl",
+    "sourceTool",
+    "error",
+)
+# A picture is shown inside the page, which reaches no storage of its own. Larger
+# files are opened by their address.
+PREVIEW_IMAGE_BYTES = 1_048_576
+# What the canvas reads from the metadata of a block: the language of a file, and
+# the surface and the request of an A2UI block.
+BLOCK_METADATA_KEYS = ("language", "mime_type", "surface_id", "hitl_request_id")
 # What the memory steps of a transcript read. A recalled memory is shown with its
 # text, score, source and category; the rest of the retrieval record stays.
 RECALLED_KEYS = ("content", "score", "source", "category")
@@ -165,13 +189,23 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
     kind = row.get("type")
     if kind == "canvas_updated":
         block: dict[str, Any] = row.get("block") or {}
+        metadata = block.get("metadata")
         return {
             **{key: row[key] for key in ROW_KEYS if key in row},
             "action": row["action"],
             "block_id": row["block_id"],
             "block": {
                 key: block[key] for key in ("id", "title", "block_type", "content") if key in block
-            },
+            }
+            | (
+                {}
+                if not isinstance(metadata, dict)
+                else {
+                    "metadata": {
+                        key: metadata[key] for key in BLOCK_METADATA_KEYS if key in metadata
+                    }
+                }
+            ),
         }
     keys: tuple[str, ...]
     if kind in {"act", "observe"}:
@@ -180,6 +214,8 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
         keys = CARD_KEYS[kind]
     elif kind == "error":
         keys = ERROR_KEYS
+    elif kind == "artifact_created":
+        keys = ARTIFACT_KEYS
     elif kind in MEMORY_KEYS:
         keys = MEMORY_KEYS[kind]
     else:
@@ -202,11 +238,45 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
+async def artifact(
+    ctx: "PackageOperationContext", conversation_id: str, artifact_id: str
+) -> dict[str, Any]:
+    """A file the agent produced in a conversation, as the page can show it.
+
+    The application is asked in the caller's own name, and names the conversation
+    the file belongs to. The address of the file is signed anew, and a small
+    picture comes as the page can draw it.
+    """
+    base = f"/api/v1/artifacts/{artifact_id}"
+    row = await _canonical_http(ctx, "GET", base)
+    if (
+        row.get("conversation_id") != conversation_id
+        or row.get("project_id") != ctx.scope.project_id
+    ):
+        raise OptionalBusinessError("forbidden", "Artifact unavailable for this conversation")
+    result: dict[str, Any] = {"id": artifact_id, "status": row.get("status")}
+    if row.get("status") != "ready":
+        return result
+    result["url"] = (await _canonical_http(ctx, "POST", base + "/refresh-url"))["url"]
+    mime = str(row.get("mime_type") or "")
+    if mime.startswith("image/") and (row.get("size_bytes") or 0) <= PREVIEW_IMAGE_BYTES:
+        content_type, content = await canonical_bytes(ctx, base + "/content/bytes")
+        if content and content_type.startswith("image/"):
+            result["preview"] = (
+                f"data:{content_type};base64,{base64.b64encode(content).decode('ascii')}"
+            )
+    return result
+
+
 async def interactions(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
     data = TimelineReview.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
+    if data.view == "artifact":
+        if data.artifact_id is None:
+            raise OptionalBusinessError("page_request_invalid", "No file was named")
+        return {"artifact": await artifact(ctx, data.conversation_id, data.artifact_id)}
     base = f"conversations/{data.conversation_id}"
     query = data.model_dump(exclude={"conversation_id", "view"}, exclude_none=True)
     timeline = await _canonical(ctx, "GET", base + "/messages", query=query)

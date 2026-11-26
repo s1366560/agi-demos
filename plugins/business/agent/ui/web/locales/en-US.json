@@ -1373,6 +1373,16 @@
         "translate": "Translate",
         "summarize": "Summarize"
       },
+      "actionPrompts": {
+        "explain": "Explain the following. Reply with the explanation only:\n\n{{content}}",
+        "optimize": "Optimize the following. Reply with the result only:\n\n{{content}}",
+        "addTests": "Add tests for the following. Reply with the tests only:\n\n{{content}}",
+        "addComments": "Add comments to the following. Reply with the result only:\n\n{{content}}",
+        "improve": "Improve the following. Reply with the result only:\n\n{{content}}",
+        "shorten": "Shorten the following. Reply with the result only:\n\n{{content}}",
+        "translate": "Translate the following into English. Reply with the translation only:\n\n{{content}}",
+        "summarize": "Summarize the following. Reply with the summary only:\n\n{{content}}"
+      },
       "resolvingMedia": "Loading…",
       "image": {
         "zoomIn": "Zoom in",

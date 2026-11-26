@@ -1,5 +1,6 @@
 import type { PageScope, PageTarget, RichPage } from "./richPage";
 import { pageSearch, splitPageLocation } from "./pageLocation";
+import { PAGE_STORAGE_KEY, type PageStorage } from "./pageStorage";
 import { routeRank } from "./richPage";
 
 type Operation = (
@@ -20,7 +21,13 @@ export interface PageBridge {
   anchorSlot?(name: string, target: string, rect: number[] | null, search: string): void;
   reviewDevice?(signal: AbortSignal): Promise<void>;
   openPage?(pluginId: string, pageId: string, destination?: string): void;
-  navigate(path: string, options?: { replace?: boolean }): void;
+  navigate(path: string, options?: { replace?: boolean; keepMounted?: boolean }): void;
+  /** Call the listener whenever the address of this page changes while it stays loaded. */
+  contextChanged?(listener: () => void): () => void;
+  /** What the page keeps between its loads, when the workbench document has a storage. */
+  storage?: PageStorage;
+  /** Open an address of the web for the page, until the page stops asking. */
+  openUrl?(url: string, signal: AbortSignal): void | Promise<void>;
   voice?: {
     start(mode: "dictation" | "voice", conversation: string, signal: AbortSignal, emit: (event: unknown) => void): Promise<void>;
     mute(id: string, muted: boolean): void;
@@ -39,6 +46,34 @@ export function connectPage(
   let closed = false;
   function reply(id: string, value: Record<string, unknown>) {
     if (!closed) port.postMessage({ id, ...value });
+  }
+  // What the page reads as its context, from the address it is at now.
+  const context = () => {
+    const location = splitPageLocation(bridge.pathname);
+    return {
+      ...bridge.scope,
+      ...location,
+      search: pageSearch(location.search, false, page.query_params ?? []),
+      target: bridge.target,
+      platform: bridge.target,
+      locale: bridge.locale,
+      commands: page.commands,
+      voiceAvailable: !!(page.voice_authorization && bridge.voice && bridge.scope.projectId),
+      deviceTools: bridge.target === "desktop-renderer" && bridge.device ? page.device_tools : [],
+    };
+  };
+
+  // The page changes its storage as it runs, without waiting for an answer. A
+  // change the workbench has no room for is dropped: the page reads it again
+  // only at its next load.
+  function store(data: Record<string, unknown>) {
+    if (closed || !bridge.storage || bridge.isRetired?.()) return;
+    const key = data.key;
+    if (data.type === "storage.clear") bridge.storage.clear();
+    else if (typeof key !== "string" || !PAGE_STORAGE_KEY.test(key)) return;
+    else if (data.type === "storage.set")
+      bridge.storage.write(key, typeof data.value === "string" ? data.value : "");
+    else bridge.storage.remove(key);
   }
 
   async function handle(data: unknown) {
@@ -71,18 +106,7 @@ export function connectPage(
     try {
       let value: unknown;
       if (message.method === "scope") {
-        const location = splitPageLocation(bridge.pathname);
-        value = {
-          ...bridge.scope,
-          ...location,
-          search: pageSearch(location.search, false, page.query_params ?? []),
-          target: bridge.target,
-          platform: bridge.target,
-          locale: bridge.locale,
-          commands: page.commands,
-          voiceAvailable: !!(page.voice_authorization && bridge.voice && bridge.scope.projectId),
-          deviceTools: bridge.target === "desktop-renderer" && bridge.device ? page.device_tools : [],
-        };
+        value = context();
       } else if (message.method === "anchorSlot") {
         const { name, rect, search = "" } = message;
         if (typeof name !== "string" || !page.anchored_slots ||
@@ -136,7 +160,28 @@ export function connectPage(
           )
         )
           throw new Error("page_navigation_denied");
-        bridge.navigate(path, { replace: message.replace === true });
+        bridge.navigate(path, {
+          replace: message.replace === true,
+          keepMounted: message.keepMounted === true,
+        });
+      } else if (message.method === "openUrl") {
+        let address: URL;
+        try {
+          address = new URL(message.url as string);
+        } catch {
+          throw new Error("page_navigation_denied");
+        }
+        // Only the open web. Another scheme, or an address that carries credentials, is not opened.
+        if (
+          typeof message.url !== "string" ||
+          message.url.length > 8192 ||
+          (address.protocol !== "https:" && address.protocol !== "http:") ||
+          address.username ||
+          address.password ||
+          !bridge.openUrl
+        )
+          throw new Error("page_navigation_denied");
+        await bridge.openUrl(address.href, controller.signal);
       } else {
         const name = message.name,
           payload = message.payload;
@@ -198,11 +243,21 @@ export function connectPage(
     if (event.data?.type === "page.pointerCapture" && page.anchored_slots && !bridge.isRetired?.()) {
       if (typeof event.data.active === "boolean") bridge.pointerCapture?.(event.data.active);
     }
+    else if (event.data?.type === "storage.set" || event.data?.type === "storage.remove" || event.data?.type === "storage.clear") {
+      try {
+        store(event.data as Record<string, unknown>);
+      } catch {
+        // Storage that cannot be written is lost at the next load, not reported.
+      }
+    }
     else if (event.data?.type === "page.loaded") bridge.status(true);
     else if (event.data?.type === "page.failed") bridge.status(false);
     else void handle(event.data);
   };
   port.postMessage({ type: "ready" });
+  const stopContext = bridge.contextChanged?.(() => {
+    if (!closed) port.postMessage({ type: "context", value: context() });
+  });
   const root = typeof document !== "undefined" && document.documentElement;
   const viewport = root && root.ownerDocument.defaultView;
   const theme = () => {
@@ -229,6 +284,7 @@ export function connectPage(
     observer?.disconnect();
     if (observer && viewport) viewport.removeEventListener("resize", theme);
     closed = true;
+    stopContext?.();
     for (const call of pending.values()) call.abort();
     pending.clear();
     port.close();

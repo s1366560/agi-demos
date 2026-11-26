@@ -44,6 +44,9 @@ export function ProjectBusinessRoute({
   if (!token) return children;
   const tenantOwner = tenantPageScope(pathname, params);
   const bookmark = pathname + search + hash;
+  // The package named in the address narrows the pages that can be opened. It is
+  // not part of what loads them again: a page that names its conversation in the
+  // address has that name added, and stays as it is.
   const install = (url: string) =>
     url + (url.includes('?') ? '&' : '?') + new URLSearchParams({ returnTo: bookmark });
   const fallback = selected ? projectPage(selected) : children;
@@ -57,7 +60,7 @@ export function ProjectBusinessRoute({
   const back = <Link to={market}>{t('tenant.pluginHub.backToMarket')}</Link>;
   return (
     <RichPackagePages
-      key={JSON.stringify([tenantOwner, id, token])}
+      key={JSON.stringify([tenantOwner, token])}
       scope={{ tenantId: tenantOwner, projectId: null }}
       target="web"
       locale={i18n.language}
@@ -75,7 +78,7 @@ export function ProjectBusinessRoute({
       }
       transport={session.transport}
       openVoiceSocket={session.openVoiceSocket}
-        streamCommand={session.stream}
+      streamCommand={session.stream}
       navigate={(path, options) => {
         const owner = options?.pluginId ?? id;
         const bindings = {
@@ -102,7 +105,7 @@ export function ProjectBusinessRoute({
     };
     return (
       <RichPackagePages
-        key={JSON.stringify([tenant, project, plugin, token])}
+        key={JSON.stringify([tenant, project, token])}
         scope={{ tenantId: tenant, projectId: project }}
         target="web"
         locale={i18n.language}
@@ -135,8 +138,12 @@ export function ProjectBusinessRoute({
         openVoiceSocket={session.openVoiceSocket}
         streamCommand={session.stream}
         navigate={(path, options) => {
-          const next: Record<string, string> = { tenant, project };
+          const next: Record<string, string> = { tenant };
           const owner = options?.pluginId ?? plugin;
+          // A page opened under an address that does not name its project, and that
+          // keeps itself mounted, stays under that address: the name would move the
+          // page to another view of the host, which loads it again.
+          if (project && !(options?.keepMounted && !params.has('project'))) next.project = project;
           if (owner) next.businessPackage = owner;
           void navigate(scopedPageLocation(path, next), { ...options, state });
         }}

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { RichPageContext } from "../../../../../sdk/memstack-plugin-sdk/src/pageRuntime";
 
 import { ExecutionTimeline } from "../web/transcript/timeline/ExecutionTimeline";
 import { JitContextCard } from "../web/transcript/timeline/JitContextCard";
@@ -20,6 +21,7 @@ import type { Chat } from "./useChat";
 import type { TranscriptEntry } from "./foldTurns";
 import { hasBubble, type TranscriptRow } from "./transcriptRows";
 import { WebChatMessage, type MessageFold } from "./WebChatMessage";
+import { SignedArtifactCard } from "./SignedArtifactCard";
 
 /** The text column of a message, without its avatar, so that steps align with message text. */
 function TextColumn({ children }: { children: ReactNode }) {
@@ -51,9 +53,11 @@ export function chatTranscriptItems({
   foldFor,
   onExpand,
   saveTemplate,
+  scope,
 }: {
   entries: readonly TranscriptEntry[];
   chat: Chat;
+  scope: RichPageContext;
   streaming: boolean;
   refill: (value: string) => void;
   openCode: (text: string, language?: string) => void;
@@ -133,6 +137,14 @@ export function chatTranscriptItems({
           <TextColumn>
             <InlineEvent event={row.event as unknown as InlineEventFields} />
           </TextColumn>,
+        );
+      case "artifact":
+        return item(
+          <SignedArtifactCard
+            event={row.event}
+            conversation={chat.selected}
+            scope={scope}
+          />,
         );
       case "memory":
         return item(

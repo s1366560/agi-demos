@@ -13,6 +13,12 @@ export interface RichPageContext {
   readonly deviceTools: readonly string[];
 }
 
+export interface RichPageNavigateOptions {
+  readonly replace?: boolean | undefined;
+  /** The page keeps its view and state at the new address. */
+  readonly keepMounted?: boolean | undefined;
+}
+
 export interface RichPageCallOptions {
   readonly signal?: AbortSignal | undefined;
   readonly onEvent?: (value: unknown) => void;
@@ -27,7 +33,23 @@ export interface RichPageRuntime {
   getContext(): Promise<RichPageContext>;
   reviewDevice?(): Promise<void>;
   openPage(pluginId: string, pageId: string, destination?: string): Promise<void>;
-  navigate(path: string, options?: { replace?: boolean }): Promise<void>;
+  /** Move to another route of this page. With `keepMounted` the page is not loaded again. */
+  navigate(path: string, options?: RichPageNavigateOptions): Promise<void>;
+  /**
+   * Call the listener whenever the context changes while the page stays loaded, as the
+   * address does after a navigation with `keepMounted`. Returns what ends the calls.
+   * A host of an earlier version has none; read it as optional.
+   */
+  onContextChange?(listener: (context: RichPageContext) => void): () => void;
+  /**
+   * Open an address of the web (http or https) for the page in a new tab or the
+   * system browser. Other schemes are refused. A host of an earlier version has
+   * none; read it as optional.
+   *
+   * The page also finds its own `localStorage` and `sessionStorage`: what it stores
+   * in the first is kept by the workbench for this tenant, project and package.
+   */
+  openUrl?(url: string): Promise<void>;
   exportCsv(name: string, payload: Record<string, unknown>, options?: Pick<RichPageCallOptions, "signal">): Promise<void>;
   invoke(
     command: string,
