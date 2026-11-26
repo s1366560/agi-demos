@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { createPath, useLocation } from 'react-router-dom';
 import { menuPath, type PackagePage } from '../../../agi-stack/packages/plugin-slots/src/richPage';
 import { scopedPageLocation } from '../../../agi-stack/packages/plugin-slots/src/pageLocation';
+import { layoutWorkbenchHeader } from '../../../agi-stack/packages/plugin-slots/src/workbenchHeader';
 import {
   packageBase,
   packageScope,
@@ -39,65 +40,6 @@ export interface LinkItem {
   routes?: readonly string[];
 }
 
-/**
- * Section order of the original workbench header. That workbench applies navigation
- * features in identity order, which puts integrations before operations.
- * `headerOrder.test` keeps both lists equal to its header.
- */
-const ORIGINAL_HEADER_ORDER: Record<'tenant' | 'project', readonly string[]> = {
-  tenant: [
-    'acp',
-    'agent-bindings',
-    'agent-definitions',
-    'agent-workspace',
-    'agent-configuration',
-    'analytics',
-    'audit-logs',
-    'billing',
-    'clusters',
-    'dead-letter-queue',
-    'decision-records',
-    'deploy',
-    'events',
-    'evolution',
-    'genes',
-    'instance-templates',
-    'instances',
-    'mcp-servers',
-    'org-settings',
-    'overview',
-    'patterns',
-    'plugins',
-    'pool',
-    'projects',
-    'providers',
-    'runtimes',
-    'settings',
-    'skills',
-    'tasks',
-    'templates',
-    'trust-policies',
-    'users',
-    'webhooks',
-    'workspaces',
-  ],
-  project: [
-    'blackboard',
-    'channels',
-    'communities',
-    'cron-jobs',
-    'entities',
-    'graph',
-    'maintenance',
-    'memories',
-    'overview',
-    'schema',
-    'search',
-    'settings',
-    'team',
-    'workspaces',
-  ],
-};
 const Navigation = createContext<{
   tenant: string;
   project: string | null;
@@ -110,8 +52,6 @@ const Navigation = createContext<{
   invalidate: () => {},
 });
 export const useFullNavigation = () => useContext(Navigation);
-
-const withoutSearch = (path: string) => path.split('?')[0] ?? path;
 
 /** Destinations the host itself serves. Each keeps the path of its original section. */
 export function hostLinks(
@@ -136,16 +76,6 @@ export function hostLinks(
     },
     { id: 'settings', label: t('nav.settings', 'Settings'), path: `${base}/settings` },
   ];
-}
-
-/** Address that owns a section and the pages nested below it. */
-function sectionRoot(slot: DerivedNavigationItem): string | null {
-  const path = withoutSearch(slot.path);
-  const segment = slot.relativePath.split('/').filter(Boolean)[0];
-  // The index section owns the whole scope, so it cannot adopt sibling pages.
-  if (!segment) return null;
-  const scope = path.slice(0, Math.max(0, path.length - slot.relativePath.length));
-  return `${scope.replace(/\/$/, '')}/${segment}`;
 }
 
 interface Release {
@@ -295,70 +225,7 @@ export function layoutHeaderItems(
   original: readonly DerivedNavigationItem[],
   context: TopNavigationContext
 ): DerivedNavigationItem[] {
-  const projectHeader = context === 'project';
-  const order = context === 'agent' ? [] : ORIGINAL_HEADER_ORDER[context];
-  const rank = new Map(order.map((id, index) => [id, index]));
-  const unranked = original.length;
-  const position = (id: string) => rank.get(id) ?? unranked;
-  const ranked = [...original].sort((a, b) => position(a.id) - position(b.id));
-  // Groups keep the order of their first section in the original workbench, whichever
-  // sections the active installation exposes.
-  const groupRank = new Map<string, number>();
-  for (const slot of ranked) {
-    const group = slot.groupId ?? 'ungrouped';
-    if (!groupRank.has(group)) groupRank.set(group, groupRank.size);
-  }
-  const groupPosition = (item: DerivedNavigationItem) =>
-    groupRank.get(item.groupId ?? 'ungrouped') ?? groupRank.size;
-  // A project header lists project pages. A tenant header lists tenant pages and the
-  // project pages its own sections open.
-  const candidates = projectHeader ? items.filter((item) => item.projectId) : items;
-  const addresses = (item: LinkItem) => (item.paths ?? [item.path]).map(withoutSearch);
-  const byAddress = new Map<string, LinkItem>();
-  for (const item of candidates)
-    for (const address of addresses(item))
-      if (!byAddress.has(address)) byAddress.set(address, item);
-  const placed = new Set<string>();
-  const sections: string[] = [];
-  const result: DerivedNavigationItem[] = [];
-  for (const slot of ranked) {
-    const section = withoutSearch(slot.path);
-    const item = byAddress.get(section);
-    if (!item || placed.has(item.id)) continue;
-    placed.add(item.id);
-    const root = sectionRoot(slot);
-    if (root) sections.push(root);
-    result.push({
-      ...slot,
-      path: addresses(item).includes(section)
-        ? ((item.paths ?? [item.path]).find((path) => withoutSearch(path) === section) ?? item.path)
-        : item.path,
-    });
-  }
-  for (const item of candidates) {
-    if (placed.has(item.id)) continue;
-    // A page below an installed section belongs to that section, like creating an instance.
-    if (
-      addresses(item).some((address) =>
-        sections.some((section) => address.startsWith(section + '/'))
-      )
-    )
-      continue;
-    if (!projectHeader && item.projectId) continue;
-    placed.add(item.id);
-    result.push({
-      ...item,
-      context,
-      displayRole: 'top-nav',
-      relativePath: item.path,
-      routeFamily: 'tenant',
-      groupId: 'tenant-extensions-integrations',
-      groupLabel: 'nav.extensionsIntegrations',
-    });
-  }
-  return result.sort(
-    (a, b) => groupPosition(a) - groupPosition(b) || position(a.id) - position(b.id)
-  );
+  return layoutWorkbenchHeader(items, original, context);
 }
 
 export function useHeaderItems(requested?: TopNavigationContext): readonly DerivedNavigationItem[] {

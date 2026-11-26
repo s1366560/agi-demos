@@ -12,8 +12,19 @@ import { DesktopPackageWorkbench } from '../packageHost/DesktopPackageWorkbench'
 import { messages } from '../packageHost/messages';
 import { transport } from '../packageHost/transport';
 import { HostSettings, type HostSettingsTab } from './HostSettings';
+import { HostAdministration } from './HostAdministration';
 import { matchPage, useInstalledPages } from './pages';
 import { useNavigationRows, type NavigationRow } from './useNavigationRows';
+import { WorkbenchHeader } from './WorkbenchHeader';
+import {
+  assembleWorkbenchHeader,
+  headerItemActive,
+  hostSection,
+  isShellRoot,
+  pathnameOf,
+  selectWorkbenchSurface,
+  shellLanding,
+} from './workbenchModel';
 import './style.css';
 
 function subscribe(listener: () => void) {
@@ -69,14 +80,15 @@ export function FullWorkbench({
   const { entries, error, loading, refresh } = useInstalledPages(tenant, project);
   const base = '/tenant/' + encodeURIComponent(tenant);
   const market = base + '/plugins';
-  const root = hash === '' || hash === '/';
+  const pathname = pathnameOf(hash);
+  const root = isShellRoot(pathname, tenant);
   const newTask = entries.find(
     (entry) => entry.enabled && entry.page.navigation_actions?.includes('primary-create') && entry.path,
   )?.path;
-  const home = entries.find((entry) => entry.page.home && entry.path);
-  const address = root ? (home?.path ?? newTask ?? '') : hash;
-  const inMarket = hash.split('?')[0] === market;
+  const address = root && tenant ? shellLanding(tenant) : hash;
   const selected = matchPage(entries, tenant, address);
+  const surface = tenant ? selectWorkbenchSurface(pathnameOf(address), tenant, Boolean(selected)) : 'empty';
+  const header = tenant ? assembleWorkbenchHeader(entries, tenant, project, pathnameOf(address)) : [];
   const rowsOwner = selected?.page.sidebar?.rows ? selected : entries.find(entry => entry.enabled && entry.page.sidebar?.rows);
   const rowsSlot = useNavigationRows(tenant, project, rowsOwner, address);
   const createWorkspace = entries.find(
@@ -107,6 +119,9 @@ export function FullWorkbench({
   useEffect(() => {
     if (directory) input.current?.focus();
   }, [directory]);
+  useEffect(() => {
+    if (tenant && root) navigate(shellLanding(tenant));
+  }, [tenant, root]);
   const previousHash = useRef(hash);
   useEffect(() => {
     if (previousHash.current.startsWith(market) && !hash.startsWith(market)) refresh();
@@ -146,22 +161,22 @@ export function FullWorkbench({
     () => setSettings('account'),
     <GearIcon />,
   );
-  for (const entry of entries)
-    if (entry.path)
-      item(
-        JSON.stringify([entry.projectId, entry.pluginId, entry.page.id]),
-        entry.page.title,
-        entry.pluginId,
-        () => navigate(entry.path!),
-      );
+  for (const entry of header)
+    item(entry.id, t(entry.label), t(entry.groupLabel ?? 'featureDirectory.open'), () =>
+      navigate(entry.path),
+    );
   for (const row of rowsSlot.rows) {
     item(JSON.stringify([rowsOwner?.pluginId, row.id]), row.label, rowsOwner!.page.title, () => navigate(row.path));
   }
-  const primary = entries.filter(
-    (entry) => entry.path && (entry.page.workbench || entry.page.home),
-  );
-  const visible = primary.length ? primary : entries.filter((entry) => entry.path);
-  const props = { tenant, project, locale };
+  const props = { tenant, project, locale, showBack: false as const };
+  const activeHeader = header.find((entry) => headerItemActive(entry, pathnameOf(address)));
+  const contextTitle =
+    surface === 'market'
+      ? t('nav.plugins')
+      : activeHeader
+        ? t(activeHeader.label)
+        : (selected?.page.title ?? projectName);
+  const administration = tenant ? hostSection(pathnameOf(address), tenant) : null;
   return (
     <div
       className={
@@ -170,7 +185,7 @@ export function FullWorkbench({
       }
     >
       <DesktopTitlebar
-        contextTitle={inMarket ? t('nav.plugins') : (selected?.page.title ?? projectName)}
+        contextTitle={contextTitle}
         sidebarCollapsed={collapsed}
         rightSidebarOpen={false}
         rightSidebarAvailable={false}
@@ -195,17 +210,6 @@ export function FullWorkbench({
           onSignOut={signOut}
           workspaceDock={
             <nav className="desktop-design-primary-nav">
-              {visible.map((entry) => (
-                <button
-                  key={JSON.stringify([entry.projectId, entry.pluginId, entry.page.id])}
-                  className={selected === entry ? 'active' : ''}
-                  onClick={() => navigate(entry.path!)}
-                  type="button"
-                >
-                  <CubeIcon />
-                  <span>{entry.page.title}</span>
-                </button>
-              ))}
               {rowsSlot.error && <p role="alert">{rowsSlot.error}</p>}
               <NavigationGroups key={JSON.stringify([tenant, project, rowsOwner?.pluginId])}
                 rows={rowsSlot.rows} address={address}/>
@@ -213,14 +217,25 @@ export function FullWorkbench({
           }
         />
         <section className="workbench">
+          {tenant ? (
+            <WorkbenchHeader items={header} pathname={pathnameOf(address)} onNavigate={navigate} />
+          ) : null}
           <div className="workbench-content">
-            {inMarket && tenant ? (
+            {surface === 'market' && tenant ? (
               <DesktopPackageWorkbench
                 {...props}
                 workbench={{ kind: 'market' }}
                 onChanged={refresh}
               />
-            ) : selected ? (
+            ) : surface === 'host' && tenant && administration && administration !== 'plugins' ? (
+              <HostAdministration
+                section={administration}
+                tenant={tenant}
+                project={project}
+                session={session}
+                reload={reload}
+              />
+            ) : surface === 'page' && selected ? (
               <DesktopPackageWorkbench
                 {...props}
                 workbench={{

@@ -52,50 +52,69 @@ export function useInstalledPages(tenantId: string, projectId: string | null) {
     if (!tenantId) return;
     const controller = new AbortController();
     const scopes = projectId ? [projectId, null] : [null];
-    void Promise.allSettled(
-      scopes.map(async (id) => {
-        const query = new URLSearchParams(packageScope(tenantId, id));
-        const result = await transport<{
-          items: (Installation & { status: string })[];
-        }>(packageBase(id) + '/?' + query, { signal: controller.signal });
-        return result.items.flatMap((release) => {
-          if (!release.actual_digest || !['enabled', 'failed'].includes(release.status)) return [];
-          return (release.pages ?? [])
-            .filter((page) => page.targets.includes('desktop-renderer') && page.routes.length > 0)
-            .map((page) => {
-              const paths = page.routes.map((route) =>
-                menuPath(route, { tenantId, projectId: id }),
-              );
-              return {
-                enabled: release.status === 'enabled',
-                pluginId: release.plugin_id,
-                commands: release.commands ?? [],
-                digest: release.actual_digest!,
-                projectId: id,
-                page,
-                path:
-                  paths.find((path) => path?.startsWith('/tenant/')) || paths.find(Boolean) || null,
-              };
+    let refreshing = false;
+    async function load() {
+      if (refreshing || controller.signal.aborted) return;
+      refreshing = true;
+      try {
+        const results = await Promise.allSettled(
+          scopes.map(async (id) => {
+            const query = new URLSearchParams(packageScope(tenantId, id));
+            const result = await transport<{
+              items: (Installation & { status: string })[];
+            }>(packageBase(id) + '/?' + query, { signal: controller.signal });
+            return result.items.flatMap((release) => {
+              if (!release.actual_digest || !['enabled', 'failed'].includes(release.status))
+                return [];
+              return (release.pages ?? [])
+                .filter((page) => page.targets.includes('desktop-renderer') && page.routes.length > 0)
+                .map((page) => {
+                  const paths = page.routes.map((route) =>
+                    menuPath(route, { tenantId, projectId: id }),
+                  );
+                  return {
+                    enabled: release.status === 'enabled',
+                    pluginId: release.plugin_id,
+                    commands: release.commands ?? [],
+                    digest: release.actual_digest!,
+                    projectId: id,
+                    page,
+                    path:
+                      paths.find((path) => path?.startsWith('/tenant/')) ||
+                      paths.find(Boolean) ||
+                      null,
+                  };
+                });
             });
+          }),
+        );
+        if (controller.signal.aborted) return;
+        setSnapshot({
+          key,
+          entries: results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
+          error:
+            results
+              .flatMap((result) => (result.status === 'rejected' ? [String(result.reason)] : []))
+              .join('\n') || null,
         });
-      }),
-    ).then((results) => {
-      if (controller.signal.aborted) return;
-      setSnapshot({
-        key,
-        entries: results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
-        error:
-          results
-            .flatMap((result) => (result.status === 'rejected' ? [String(result.reason)] : []))
-            .join('\n') || null,
-      });
-    });
-    window.addEventListener('focus', refresh);
+      } finally {
+        refreshing = false;
+      }
+    }
+    void load();
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void load();
+    }, 5000);
+    const onFocus = () => {
+      if (!document.hidden) void load();
+    };
+    window.addEventListener('focus', onFocus);
     return () => {
       controller.abort();
-      window.removeEventListener('focus', refresh);
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
     };
-  }, [key, tenantId, projectId, revision, refresh]);
+  }, [key, tenantId, projectId, revision]);
   return {
     entries: snapshot?.key === key ? snapshot.entries : [],
     loading: !!tenantId && snapshot?.key !== key,

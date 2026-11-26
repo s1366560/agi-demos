@@ -545,6 +545,10 @@
     "src/plugins/desktopNativeKnowledgeProcessingHttpV2.ts",
     "src/api/deviceMcpClientV2.ts",
     "src/features/settings/mcpManagementLocationModel.ts",
-    "electron/main/deviceMcpManagementPolicy.ts"
+    "electron/main/deviceMcpManagementPolicy.ts",
+    "src/fullHost/workbenchCatalog.ts",
+    "src/fullHost/workbenchModel.ts",
+    "src/fullHost/WorkbenchHeader.tsx",
+    "../../packages/plugin-slots/src/raw.d.ts"
   ]
 }
