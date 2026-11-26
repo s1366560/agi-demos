@@ -17,7 +17,6 @@ from src.infrastructure.adapters.secondary.persistence.artifact_content_orphan_g
     MAX_ARTIFACT_ORPHAN_GC_BATCH_SIZE,
     ArtifactContentOrphanGcWorker,
 )
-from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import S3StorageAdapter
 
 from .runtime import (
@@ -50,9 +49,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, kw_only=True)
 class AsyncSessionFactoryServiceV2:
-    """Explicit process session-factory Provider value."""
+    """Process session factory plus the structural driver that opened it.
+
+    ``driver`` is ``postgres`` on the cloud host and ``sqlite`` on a desktop or
+    local host. Plugins branch on these fields instead of importing a cloud URL.
+    """
 
     factory: async_sessionmaker[AsyncSession]
+    driver: str = "postgres"
+    dialect: str = "postgresql"
+    advisory_locks: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -233,16 +239,27 @@ def _gc_config_v2(config: Mapping[str, Any]) -> ArtifactContentOrphanGcConfigV2:
 
 
 def async_session_factory_definition_v2() -> PluginDefinitionV2:
-    """Publish the SQLAlchemy process session factory through an explicit seam."""
+    """Publish the driver-selected SQLAlchemy session factory through an explicit seam."""
 
     def apply(context: ContextV2, config: Mapping[str, Any]) -> None:
         if config.get("strategy") != "sqlalchemy-async-sessionmaker":
             raise ValueError(
                 "async session factory requires strategy sqlalchemy-async-sessionmaker"
             )
+        # Imported at apply time so a host can select the driver before publication.
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory as process_session_factory,
+            relational_store as process_store,
+        )
+
         _ = context.provide(
             ASYNC_SESSION_FACTORY_SERVICE_V2,
-            AsyncSessionFactoryServiceV2(factory=async_session_factory),
+            AsyncSessionFactoryServiceV2(
+                factory=process_session_factory,
+                driver=process_store.kind,
+                dialect=process_store.dialect,
+                advisory_locks=process_store.supports_advisory_locks,
+            ),
             label="async-session-factory",
         )
 

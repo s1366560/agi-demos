@@ -2669,6 +2669,7 @@ class CronJobRunModel(Base):
             "runtime_execution_id",
             unique=True,
             postgresql_where=text("runtime_execution_id IS NOT NULL"),
+            sqlite_where=text("runtime_execution_id IS NOT NULL"),
         ),
         Index("ix_cron_job_runs_job_status", "job_id", "status"),
         Index("ix_cron_job_runs_project_started", "project_id", "started_at"),
@@ -2682,6 +2683,7 @@ class CronJobRunModel(Base):
             "ix_cron_job_runs_runtime_deadline",
             "deadline_at",
             postgresql_where=text("status IN ('running', 'waiting_human')"),
+            sqlite_where=text("status IN ('running', 'waiting_human')"),
         ),
     )
 
@@ -2747,6 +2749,7 @@ class CronOperationModel(Base):
             "run_id",
             unique=True,
             postgresql_where=text("run_id IS NOT NULL"),
+            sqlite_where=text("run_id IS NOT NULL"),
         ),
         Index(
             "uq_agistack_cron_operations_reconcile",
@@ -2755,6 +2758,7 @@ class CronOperationModel(Base):
             "schedule_revision",
             unique=True,
             postgresql_where=text("operation_kind = 'reconcile_schedule'"),
+            sqlite_where=text("operation_kind = 'reconcile_schedule'"),
         ),
         Index(
             "uq_agistack_cron_operations_scheduled_fire",
@@ -2762,6 +2766,7 @@ class CronOperationModel(Base):
             "scheduled_for",
             unique=True,
             postgresql_where=text("operation_kind = 'execute_run' AND trigger_type = 'scheduled'"),
+            sqlite_where=text("operation_kind = 'execute_run' AND trigger_type = 'scheduled'"),
         ),
         Index(
             "ix_agistack_cron_operations_claim",
@@ -4081,6 +4086,7 @@ class WebhookModel(Base):
             "name",
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
         ),
     )
 

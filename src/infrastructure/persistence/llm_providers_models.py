@@ -22,6 +22,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -125,12 +126,23 @@ class LLMProvider(Base):
         ),
         Index("idx_llm_providers_type", "provider_type"),
         Index("idx_llm_providers_operation", "operation_type"),
-        Index("idx_llm_providers_active", "is_active", postgresql_where=is_active),
-        Index("idx_llm_providers_default", "is_default", postgresql_where=is_default),
+        Index(
+            "idx_llm_providers_active",
+            "is_active",
+            postgresql_where=is_active,
+            sqlite_where=text("is_active"),
+        ),
+        Index(
+            "idx_llm_providers_default",
+            "is_default",
+            postgresql_where=is_default,
+            sqlite_where=text("is_default"),
+        ),
         Index(
             "idx_llm_providers_pool_enabled",
             "pool_enabled",
             postgresql_where=pool_enabled,
+            sqlite_where=text("pool_enabled"),
         ),
         CheckConstraint(
             "model_tier IS NULL OR model_tier IN ('small', 'medium', 'large')",
@@ -233,7 +245,12 @@ class ProviderHealth(Base):
             "status IN ('healthy', 'degraded', 'unhealthy')", name="provider_health_valid_status"
         ),
         Index("idx_provider_health_status", "provider_id", "last_check"),  # Use DESC in queries
-        Index("idx_provider_health_unhealthy", "status", postgresql_where="status != 'healthy'"),
+        Index(
+            "idx_provider_health_unhealthy",
+            "status",
+            postgresql_where="status != 'healthy'",
+            sqlite_where=text("status != 'healthy'"),
+        ),
         Index("idx_provider_health_retention", "last_check"),
     )
 
@@ -303,6 +320,7 @@ class LLMUsageLog(Base):
             "tenant_id",
             "created_at",
             postgresql_where="tenant_id IS NOT NULL",
+            sqlite_where=text("tenant_id IS NOT NULL"),
         ),
         Index("idx_llm_usage_operation", "operation_type", "created_at"),
         Index("idx_llm_usage_date", "created_at"),
