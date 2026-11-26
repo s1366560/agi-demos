@@ -20,10 +20,12 @@ import { useSignedSidebar } from './useSignedSidebar';
 import { WorkbenchHeader } from './WorkbenchHeader';
 import {
   assembleWorkbenchHeader,
+  explicitWorkbenchProject,
   headerItemActive,
   hostSection,
   isShellRoot,
   pathnameOf,
+  resolveWorkbenchScope,
   selectWorkbenchSurface,
   shellLanding,
 } from './workbenchModel';
@@ -65,14 +67,42 @@ export function FullWorkbench({
       });
     return () => controller.abort();
   }, [session]);
-  const linkedTenant = memberships.find(
-    (item) => hash.split('/')[2] === encodeURIComponent(item.tenant_id),
-  );
+  const sessionScope = session
+    ? {
+        tenantId: session.workspaceContext.tenantId,
+        projectId: session.workspaceContext.projectId,
+      }
+    : null;
+  const routed = resolveWorkbenchScope(hash, sessionScope);
   const tenant =
-    session?.workspaceContext.tenantId ??
-    linkedTenant?.tenant_id ??
+    routed.tenantId ||
     (chosenTenant || (memberships.length === 1 ? memberships[0]!.tenant_id : ''));
-  const project = session?.workspaceContext.projectId ?? null;
+  const project = routed.tenantId === tenant ? routed.projectId : null;
+  const explicitProject = explicitWorkbenchProject(hash);
+  const persistedScope = useRef('');
+  useEffect(() => {
+    if (!session || !explicitProject) return;
+    if (
+      explicitProject.tenantId === session.workspaceContext.tenantId &&
+      explicitProject.projectId === session.workspaceContext.projectId
+    ) {
+      return;
+    }
+    const key = explicitProject.tenantId + '/' + explicitProject.projectId;
+    if (persistedScope.current === key) return;
+    persistedScope.current = key;
+    void transport('/api/v1/workspace-context/switch', {
+      method: 'POST',
+      body: {
+        tenant_id: explicitProject.tenantId,
+        project_id: explicitProject.projectId,
+        expected_revision: session.workspaceContext.revision,
+        idempotency_key: crypto.randomUUID(),
+      },
+    })
+      .then(() => reload())
+      .catch(() => undefined);
+  }, [explicitProject, reload, session]);
   const [settings, setSettings] = useState<HostSettingsTab | null>(null);
   const [directory, setDirectory] = useState(false);
   const [collapsed, setCollapsed] = useState(
@@ -98,7 +128,9 @@ export function FullWorkbench({
     memberships.find((item) => item.tenant_id === tenant)?.name ??
     tenant;
   const projectName =
-    session?.projects.find((item) => item.id === project)?.name ?? t('settings.noProjectSelected');
+    session?.projects.find((item) => item.id === project)?.name ??
+    project ??
+    t('settings.noProjectSelected');
   const openDirectory = useCallback((button?: HTMLElement) => {
     trigger.current =
       button ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -233,6 +265,10 @@ export function FullWorkbench({
               onToggleWorkspace={sidebar.toggleWorkspace}
               onRetryProject={sidebar.reload}
               onRetryWorkspace={sidebar.reload}
+              workspaceHref={(workspaceId) => sidebar.workspacePath(workspaceId)}
+              conversationHref={(conversation, workspaceId) =>
+                sidebar.conversationPath(conversation.id, workspaceId)
+              }
               onSelectWorkspace={(_projectId, workspaceId) => {
                 const path = sidebar.workspacePath(workspaceId);
                 if (path) navigate(path);
@@ -288,7 +324,13 @@ export function FullWorkbench({
               />
             ) : (
               <main className="desktop-package-workbench">
-                <h1>{project ? projectName : tenantName || messages.tenant}</h1>
+                <h1>
+                  {!root && !loading && !error
+                    ? t('fullHost.unavailable')
+                    : project
+                      ? projectName
+                      : tenantName || messages.tenant}
+                </h1>
                 {!session && memberships.length > 0 && (
                   <label>
                     {messages.tenant}
@@ -313,9 +355,6 @@ export function FullWorkbench({
                   </label>
                 )}
                 {tenantError && <p role="alert">{tenantError}</p>}
-                {!root && !loading && !error && (
-                  <p role="status">{t('desktopProductionRouter.unavailable.description')}</p>
-                )}
                 {error && <p role="alert">{error}</p>}
                 {loading ? (
                   <p role="status">{messages.loading}</p>
@@ -323,7 +362,7 @@ export function FullWorkbench({
                   <button type="button" onClick={() =>
                     navigate(root ? market : market + '?' + new URLSearchParams({ returnTo: address }))
                   }>
-                    {t('nav.plugins')}
+                    {t('fullHost.backToMarket')}
                   </button>
                 ) : (
                   <button type="button" onClick={() => setSettings('workspace')}>

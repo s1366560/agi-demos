@@ -172,3 +172,88 @@ export function selectWorkbenchSurface(
 export function pathnameOf(address: string): string {
   return splitPageLocation(address).pathname;
 }
+
+const HOST_SECTIONS = new Set([
+  'plugins',
+  'users',
+  'profile',
+  'org-settings',
+  'settings',
+  'audit-logs',
+  'projects',
+]);
+
+function decodePart(value: string | undefined): string {
+  if (!value) return '';
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return '';
+  }
+}
+
+function singleParam(params: URLSearchParams, key: string): string | null {
+  const values = params.getAll(key);
+  if (values.length !== 1 || !values[0]) return null;
+  return values[0];
+}
+
+/**
+ * Project named by the address itself. Host administration pages stay on the
+ * persisted workspace until the user picks a project. Mirrors the web host:
+ * path `/project/:id`, otherwise `project` / `projectId`, and conflicting
+ * copies are ignored.
+ */
+export function explicitWorkbenchProject(
+  address: string,
+): { tenantId: string; projectId: string } | null {
+  const { pathname, search } = splitPageLocation(address);
+  const params = new URLSearchParams(search);
+  if (['tenant', 'project', 'projectId'].some((key) => params.getAll(key).length > 1)) return null;
+  const [root, owner, section, scoped] = pathname
+    .split('/')
+    .slice(1)
+    .map((part) => decodePart(part));
+  const pathTenant = root === 'tenant' && owner ? owner : '';
+  const pathProject =
+    root === 'project' && owner
+      ? owner
+      : root === 'tenant' && section === 'project' && scoped
+        ? scoped
+        : '';
+  const queryTenant = singleParam(params, 'tenant');
+  const queryProject = singleParam(params, 'project');
+  const queryProjectId = singleParam(params, 'projectId');
+  if (queryProject && queryProjectId && queryProject !== queryProjectId) return null;
+  const requested = queryProject ?? queryProjectId;
+  if (
+    (pathTenant && queryTenant && queryTenant !== pathTenant) ||
+    (pathProject && requested && requested !== pathProject)
+  ) {
+    return null;
+  }
+  if (pathTenant && !pathProject && HOST_SECTIONS.has(section ?? '')) return null;
+  const tenantId = pathTenant || queryTenant || '';
+  const projectId = pathProject || requested || '';
+  return tenantId && projectId ? { tenantId, projectId } : null;
+}
+
+/** Active tenant and project for signed pages, the sidebar, and the title. */
+export function resolveWorkbenchScope(
+  address: string,
+  fallback: { tenantId: string; projectId: string | null } | null,
+): { tenantId: string; projectId: string | null } {
+  const explicit = explicitWorkbenchProject(address);
+  const pathTenant = decodePart(splitPageLocation(address).pathname.split('/')[2]);
+  const rooted = splitPageLocation(address).pathname.split('/')[1] === 'tenant';
+  const tenantId =
+    explicit?.tenantId || (rooted && pathTenant ? pathTenant : '') || fallback?.tenantId || '';
+  if (explicit && explicit.tenantId === tenantId) {
+    return { tenantId, projectId: explicit.projectId };
+  }
+  return {
+    tenantId,
+    projectId: fallback && fallback.tenantId === tenantId ? fallback.projectId : null,
+  };
+}
+
