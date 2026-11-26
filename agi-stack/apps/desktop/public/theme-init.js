@@ -14,6 +14,8 @@
     theme = 'dark';
   }
   document.documentElement.dataset.theme = theme;
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  document.documentElement.style.colorScheme = theme;
   // Keep the browser chrome color in sync with the resolved theme background
   // (#080c12 dark / #ffffff light, matching --desktop-bg).
   var themeColorMeta = document.querySelector('meta[name="theme-color"]');

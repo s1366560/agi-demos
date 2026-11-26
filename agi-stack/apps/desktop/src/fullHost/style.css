@@ -3,10 +3,51 @@
   min-height: 0;
 }
 
-/* Full workbench chrome matches the original web shell: 256px sidebar and 56px (h-14) header. */
+/* Full workbench chrome matches the installed web shell. Thin and compat keep 220px. */
 .app-shell:has(.desktop-workbench-header) {
   --desktop-sidebar-preferred-width: 256px;
-  --desktop-sidebar-width: 256px;
+  --desktop-bg: #0a0a0a;
+  --desktop-sidebar-bg: #121212;
+  --desktop-text: #ededed;
+  --desktop-muted: #9c9c9c;
+  --desktop-border: #333333;
+  --desktop-nav-hover-bg: #1f1f1f;
+  --desktop-nav-active-bg: #1f1f1f;
+  position: relative;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--desktop-text);
+}
+
+:root[data-theme='light'] .app-shell:has(.desktop-workbench-header) {
+  --desktop-bg: #f7f7f7;
+  --desktop-sidebar-bg: #ffffff;
+  --desktop-text: #141414;
+  --desktop-muted: #4f4f4f;
+  --desktop-border: #e3e3e3;
+  --desktop-nav-hover-bg: #f2f2f2;
+  --desktop-nav-active-bg: #f7f7f7;
+}
+
+.app-shell:has(.desktop-workbench-header):not(.sidebar-collapsed) {
+  --desktop-sidebar-width: var(--desktop-sidebar-preferred-width);
+}
+
+@media (max-width: 767px) {
+  .app-shell:has(.desktop-workbench-header):not(.sidebar-collapsed) {
+    --desktop-sidebar-width: 0px;
+  }
+
+  .app-shell:has(.desktop-workbench-header):not(.sidebar-collapsed) .desktop-design-sidebar {
+    position: absolute;
+    z-index: 40;
+    top: 36px;
+    bottom: 0;
+    left: 0;
+    width: min(256px, calc(100vw - 2rem));
+    height: auto;
+    box-shadow: var(--desktop-shadow-popover);
+  }
 }
 
 .workbench:has(> .desktop-workbench-header) {
@@ -19,9 +60,10 @@
   z-index: 6;
   overflow: visible;
   box-sizing: border-box;
+  flex: none;
   height: 56px;
   border-bottom: 1px solid var(--desktop-border);
-  background: var(--desktop-bg);
+  background: var(--desktop-sidebar-bg);
 }
 
 .desktop-workbench-header-scroll {
@@ -29,6 +71,7 @@
   gap: 0.25rem;
   align-items: center;
   overflow-x: auto;
+  overflow-y: hidden;
   box-sizing: border-box;
   height: 100%;
   padding: 0 1rem;
@@ -59,8 +102,10 @@
   min-width: 12rem;
   padding: 0.35rem;
   border: 1px solid var(--desktop-border);
+  max-height: min(24rem, calc(100dvh - 36px - 56px - 1rem));
+  overflow: auto;
   border-radius: 0.5rem;
-  background: var(--desktop-bg);
+  background: var(--desktop-sidebar-bg);
   box-shadow: var(--desktop-shadow-popover);
 }
 

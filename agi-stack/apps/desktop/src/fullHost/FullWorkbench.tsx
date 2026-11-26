@@ -15,6 +15,7 @@ import { WorkspaceDock } from '../features/workspace/WorkspaceDock';
 import { HostSettings, type HostSettingsTab } from './HostSettings';
 import { HostAdministration } from './HostAdministration';
 import { matchPage, useInstalledPages } from './pages';
+import { NARROW_SHELL_QUERY } from './headerPresentation';
 import { useSignedSidebar } from './useSignedSidebar';
 import { WorkbenchHeader } from './WorkbenchHeader';
 import {
@@ -74,7 +75,9 @@ export function FullWorkbench({
   const project = session?.workspaceContext.projectId ?? null;
   const [settings, setSettings] = useState<HostSettingsTab | null>(null);
   const [directory, setDirectory] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(NARROW_SHELL_QUERY).matches,
+  );
   const [query, setQuery] = useState('');
   const trigger = useRef<HTMLElement | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -118,6 +121,12 @@ export function FullWorkbench({
   useEffect(() => {
     if (tenant && root) navigate(shellLanding(tenant));
   }, [tenant, root]);
+  useEffect(() => {
+    const media = window.matchMedia(NARROW_SHELL_QUERY);
+    const onChange = () => setCollapsed(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
   const previousHash = useRef(hash);
   useEffect(() => {
     if (previousHash.current.startsWith(market) && !hash.startsWith(market)) refresh();

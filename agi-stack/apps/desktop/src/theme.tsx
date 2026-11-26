@@ -76,6 +76,8 @@ export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.documentElement.dataset.theme = resolved;
+    document.documentElement.classList.toggle('dark', resolved === 'dark');
+    document.documentElement.style.colorScheme = resolved;
     // Mirror the resolved theme background (#080c12 dark / #ffffff light,
     // matching --desktop-bg) into the browser chrome meta tag.
     const themeColorMeta = document.querySelector('meta[name="theme-color"]');
