@@ -187,6 +187,16 @@ export function readGroupSources(rows: readonly Record<string, unknown>[]): { id
   });
 }
 
+/** A settled node lets an empty workspace read as empty instead of "load on expand". */
+export function settledWorkspaceNodes(
+  workspaceIds: readonly string[],
+  status: { loading: boolean; error: string },
+): Record<string, { loading: boolean; error: string | null }> {
+  return Object.fromEntries(
+    workspaceIds.map((id) => [id, { loading: status.loading, error: status.error || null }]),
+  );
+}
+
 export function buildSidebarTree(
   conversations: readonly ConversationSource[],
   groups: readonly { id: string; name: string }[],

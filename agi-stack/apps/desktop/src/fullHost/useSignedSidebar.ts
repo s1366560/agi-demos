@@ -14,6 +14,7 @@ import {
   linkForAction,
   readConversationSources,
   readGroupSources,
+  settledWorkspaceNodes,
   workspacePagePath,
   type ConversationSource,
   type ExecutionTargetFilter,
@@ -181,7 +182,10 @@ export function useSignedSidebar(tenant: string, project: string | null, entries
 
   const nodeState: RuntimeNodeLoadState = {
     projects: project ? { [project]: { loading, error: error || null } } : {},
-    workspaces: {},
+    workspaces: settledWorkspaceNodes(
+      tree.workspaces.map((workspace) => workspace.id),
+      { loading, error },
+    ),
   };
 
   return {

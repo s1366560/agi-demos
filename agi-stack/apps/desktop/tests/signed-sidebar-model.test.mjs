@@ -11,6 +11,7 @@ const {
   findSidebarOwner,
   linkForAction,
   readConversationSources,
+  settledWorkspaceNodes,
   signedDeepLink,
   workspacePagePath,
 } = require('/tmp/agistack-desktop-test-dist/src/fullHost/signedSidebarModel.js');
@@ -90,6 +91,37 @@ test('the tree keeps directory groups, local sessions, and unbound chats', () =>
   assert.deepEqual(
     Object.values(localOnly.conversationsByWorkspace).flat().map((conversation) => conversation.id),
     ['local-1'],
+  );
+});
+
+function sessionAvailability(state, count) {
+  if (count > 0 && state?.loading) return 'refreshing';
+  if (count > 0 && state?.error) return 'stale-error';
+  if (count > 0) return 'ready';
+  if (!state) return 'deferred';
+  if (state.loading) return 'loading';
+  if (state.error) return 'error';
+  return 'empty';
+}
+
+test('a finished workspace with no sessions is empty, not waiting to load', () => {
+  const filtered = buildSidebarTree(
+    readConversationSources([{ id: 'local-1', label: 'Local only', target: 'local', group: 'ws', groupLabel: 'Lab' }]),
+    [{ id: 'ws', name: 'Lab' }],
+    'cloud',
+    't',
+    'p',
+  );
+  assert.equal(filtered.conversationsByWorkspace.ws, undefined);
+  const settled = settledWorkspaceNodes(filtered.workspaces.map((workspace) => workspace.id), {
+    loading: false,
+    error: '',
+  });
+  assert.equal(sessionAvailability(undefined, 0), 'deferred');
+  assert.equal(sessionAvailability(settled.ws, 0), 'empty');
+  assert.equal(
+    sessionAvailability(settledWorkspaceNodes(['ws'], { loading: false, error: 'offline' }).ws, 0),
+    'error',
   );
 });
 
