@@ -1,19 +1,16 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useState, useRef, type CSSProperties } from 'react';
 import { useI18n } from '../i18n';
+import {
+  COMPACT_HEADER_QUERY,
+  presentHeaderGroups,
+  type HeaderGroupView,
+} from './headerPresentation';
 import { headerItemActive, workbenchHeaderGroups } from './workbenchModel';
 import type { WorkbenchHeaderSlot } from '../../../../packages/plugin-slots/src/workbenchHeader';
 
-export type WorkbenchHeaderGroupView = {
-  readonly id: string;
-  readonly label: string;
-  readonly current: boolean;
-  readonly items: readonly {
-    readonly id: string;
-    readonly label: string;
-    readonly path: string;
-    readonly active: boolean;
-  }[];
-};
+export type WorkbenchHeaderGroupView = HeaderGroupView;
+
+export { COMPACT_HEADER_QUERY, presentHeaderGroups };
 
 /**
  * The scrollport only contains the group buttons. Its dropdown is a sibling, so
@@ -103,7 +100,20 @@ export function WorkbenchHeader({
   const nav = useRef<HTMLElement>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>();
-  const groups = workbenchHeaderGroups(items).map((group) => ({
+  const [compact, setCompact] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(COMPACT_HEADER_QUERY).matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia(COMPACT_HEADER_QUERY);
+    const apply = () => {
+      setCompact(media.matches);
+      setOpen(null);
+    };
+    apply();
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, []);
+  const groups = presentHeaderGroups(workbenchHeaderGroups(items).map((group) => ({
     id: group.id,
     label: t(group.items[0]?.groupLabel ?? group.id),
     current: group.items.some((item) => headerItemActive(item, pathname)),
@@ -113,7 +123,9 @@ export function WorkbenchHeader({
       path: item.path,
       active: headerItemActive(item, pathname),
     })),
-  }));
+  })),
+  compact,
+);
   useEffect(() => {
     if (!open) return;
     const root = nav.current;

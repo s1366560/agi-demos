@@ -548,6 +548,8 @@
     "electron/main/deviceMcpManagementPolicy.ts",
     "src/fullHost/workbenchCatalog.ts",
     "src/fullHost/workbenchModel.ts",
+    "src/fullHost/signedSidebarModel.ts",
+    "src/fullHost/headerPresentation.ts",
     "src/fullHost/WorkbenchHeader.tsx",
     "../../packages/plugin-slots/src/raw.d.ts"
   ]

@@ -11,10 +11,12 @@ import { useI18n } from '../i18n';
 import { DesktopPackageWorkbench } from '../packageHost/DesktopPackageWorkbench';
 import { messages } from '../packageHost/messages';
 import { transport } from '../packageHost/transport';
+import { WorkspaceDock } from '../features/workspace/WorkspaceDock';
 import { HostSettings, type HostSettingsTab } from './HostSettings';
 import { HostAdministration } from './HostAdministration';
 import { matchPage, useInstalledPages } from './pages';
-import { useNavigationRows, type NavigationRow } from './useNavigationRows';
+import { NARROW_SHELL_QUERY } from './headerPresentation';
+import { useSignedSidebar } from './useSignedSidebar';
 import { WorkbenchHeader } from './WorkbenchHeader';
 import {
   assembleWorkbenchHeader,
@@ -73,7 +75,9 @@ export function FullWorkbench({
   const project = session?.workspaceContext.projectId ?? null;
   const [settings, setSettings] = useState<HostSettingsTab | null>(null);
   const [directory, setDirectory] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(NARROW_SHELL_QUERY).matches,
+  );
   const [query, setQuery] = useState('');
   const trigger = useRef<HTMLElement | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -82,18 +86,13 @@ export function FullWorkbench({
   const market = base + '/plugins';
   const pathname = pathnameOf(hash);
   const root = isShellRoot(pathname, tenant);
-  const newTask = entries.find(
-    (entry) => entry.enabled && entry.page.navigation_actions?.includes('primary-create') && entry.path,
-  )?.path;
   const address = root && tenant ? shellLanding(tenant) : hash;
   const selected = matchPage(entries, tenant, address);
   const surface = tenant ? selectWorkbenchSurface(pathnameOf(address), tenant, Boolean(selected)) : 'empty';
   const header = tenant ? assembleWorkbenchHeader(entries, tenant, project, pathnameOf(address)) : [];
-  const rowsOwner = selected?.page.sidebar?.rows ? selected : entries.find(entry => entry.enabled && entry.page.sidebar?.rows);
-  const rowsSlot = useNavigationRows(tenant, project, rowsOwner, address);
-  const createWorkspace = entries.find(
-    (entry) => entry.enabled && entry.page.navigation_actions?.includes('group-create') && entry.path,
-  )?.path;
+  const sidebar = useSignedSidebar(tenant, project, entries, address);
+  const newTask = sidebar.canCreate || sidebar.openChatPath;
+  const createWorkspace = sidebar.createWorkspacePath;
   const tenantName =
     session?.tenants.find((item) => item.id === tenant)?.name ??
     memberships.find((item) => item.tenant_id === tenant)?.name ??
@@ -122,6 +121,12 @@ export function FullWorkbench({
   useEffect(() => {
     if (tenant && root) navigate(shellLanding(tenant));
   }, [tenant, root]);
+  useEffect(() => {
+    const media = window.matchMedia(NARROW_SHELL_QUERY);
+    const onChange = () => setCollapsed(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
   const previousHash = useRef(hash);
   useEffect(() => {
     if (previousHash.current.startsWith(market) && !hash.startsWith(market)) refresh();
@@ -165,8 +170,9 @@ export function FullWorkbench({
     item(entry.id, t(entry.label), t(entry.groupLabel ?? 'featureDirectory.open'), () =>
       navigate(entry.path),
     );
-  for (const row of rowsSlot.rows) {
-    item(JSON.stringify([rowsOwner?.pluginId, row.id]), row.label, rowsOwner!.page.title, () => navigate(row.path));
+  for (const row of sidebar.palette) {
+    if (!row.path) continue;
+    item(row.id, row.label, row.groupLabel, () => navigate(row.path));
   }
   const props = { tenant, project, locale, showBack: false as const };
   const activeHeader = header.find((entry) => headerItemActive(entry, pathnameOf(address)));
@@ -203,17 +209,49 @@ export function FullWorkbench({
           onCreateWorkspace={createWorkspace ? () => navigate(createWorkspace) : undefined}
           newTaskDisabledReason={newTask ? null : t('desktopProductionRouter.unavailable.title')}
           onNewTask={() => {
-            if (newTask) navigate(newTask);
+            if (sidebar.canCreate) {
+              void sidebar.create().then((path) => {
+                if (path) navigate(path);
+              }).catch(() => undefined);
+              return;
+            }
+            if (sidebar.openChatPath) navigate(sidebar.openChatPath);
           }}
           onOpenAccountSettings={() => setSettings('account')}
           onSwitchWorkspace={() => setSettings('workspace')}
           onSignOut={signOut}
           workspaceDock={
-            <nav className="desktop-design-primary-nav">
-              {rowsSlot.error && <p role="alert">{rowsSlot.error}</p>}
-              <NavigationGroups key={JSON.stringify([tenant, project, rowsOwner?.pluginId])}
-                rows={rowsSlot.rows} address={address}/>
-            </nav>
+            <WorkspaceDock
+              workspaces={sidebar.workspaces}
+              conversationsByWorkspace={sidebar.conversationsByWorkspace}
+              nodeState={sidebar.nodeState}
+              currentProjectId={project ?? ''}
+              currentWorkspaceId={sidebar.currentWorkspaceId}
+              currentConversationId={sidebar.currentConversationId}
+              selectionMode={sidebar.selectionMode}
+              expandedWorkspaceIds={sidebar.expandedWorkspaceIds}
+              onToggleWorkspace={sidebar.toggleWorkspace}
+              onRetryProject={sidebar.reload}
+              onRetryWorkspace={sidebar.reload}
+              onSelectWorkspace={(_projectId, workspaceId) => {
+                const path = sidebar.workspacePath(workspaceId);
+                if (path) navigate(path);
+              }}
+              onSelectConversation={(_projectId, workspaceId, conversation) => {
+                const path = sidebar.conversationPath(conversation.id, workspaceId);
+                if (path) navigate(path);
+              }}
+              onRenameConversation={
+                sidebar.canRename
+                  ? async (_projectId, _workspaceId, conversation, title) => {
+                      await sidebar.rename(conversation.id, title);
+                    }
+                  : undefined
+              }
+              onCreateWorkspace={createWorkspace ? () => navigate(createWorkspace) : undefined}
+              executionTarget={sidebar.filter}
+              onExecutionTargetChange={sidebar.setFilter}
+            />
           }
         />
         <section className="workbench">
@@ -331,19 +369,3 @@ export function FullWorkbench({
   );
 }
 
-function NavigationGroups({ rows, address }: { rows: NavigationRow[]; address: string }) {
-  const groups = new Map<string | null, NavigationRow[]>();
-  for (const row of rows) {
-    const siblings = groups.get(row.group);
-    if (siblings) siblings.push(row);
-    else groups.set(row.group, [row]);
-  }
-  return Array.from(groups, ([id, entries]) => {
-    const buttons = entries.map(row =>
-      <button key={row.path} type="button" aria-current={address === row.path ? 'page' : undefined}
-        onClick={() => navigate(row.path)}><span>{row.label}</span></button>
-    );
-    if (id === null) return buttons;
-    return <details key={id} open><summary>{entries[0]?.groupLabel || id}</summary>{buttons}</details>;
-  });
-}

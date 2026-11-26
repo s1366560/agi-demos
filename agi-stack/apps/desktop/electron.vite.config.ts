@@ -80,7 +80,7 @@ export default defineConfig(({ command }) => ({
       dedupe: ['@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm', 'react', 'react-dom', '@radix-ui/themes', '@radix-ui/react-icons'],
       alias: {
         '@desktop': resolve(desktopRoot, 'src'),
-        ...(compatibilityProfile ? {'@business': resolve(desktopRoot, '../../../plugins/business')} : {}),
+        ...(fullDesktopProfile ? {'@business': resolve(desktopRoot, '../../../plugins/business')} : {}),
         '@agistack/plugin-runtime': resolve(
           desktopRoot,
           '../../packages/plugin-runtime/src/index.ts',
