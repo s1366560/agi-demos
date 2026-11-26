@@ -1,80 +1,31 @@
 import asyncio
 import logging
-import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from src.configuration.config import get_settings
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.relational_store import (
+    RelationalStoreSpec,
+    bootstrap_sqlite_relational_schema,
+    open_relational_store,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-_NULL_POOL_MODES = frozenset({"null", "none", "disabled"})
-
-
-def _postgres_engine_kwargs() -> dict[str, Any]:
-    pool_mode = os.getenv("MEMSTACK_POSTGRES_POOL_MODE", "").strip().lower()
-    common: dict[str, Any] = {
-        "echo": settings.log_level.upper() == "DEBUG",
-        "pool_recycle": settings.postgres_pool_recycle,
-        "pool_pre_ping": settings.postgres_pool_pre_ping,
-    }
-    if pool_mode in _NULL_POOL_MODES:
-        logger.info("Postgres NullPool enabled for this process")
-        return {**common, "poolclass": NullPool}
-    return {
-        **common,
-        "pool_size": settings.postgres_pool_size,
-        "max_overflow": settings.postgres_max_overflow,
-    }
-
-
-# Configure connection pool for high concurrency (1000+ users)
-# pool_size: Number of connections to maintain
-# max_overflow: Additional connections allowed beyond pool_size
-# pool_recycle: Recycle connections after this many seconds (prevents stale connections)
-# pool_pre_ping: Test connections before using them (detects stale connections)
-engine = create_async_engine(
-    settings.postgres_url,
-    **_postgres_engine_kwargs(),
-)
-
-async_session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-
-# Read replica support for read scaling (optional)
-# If a read replica is configured, create a separate engine for read operations
-read_engine: None | object = None
-read_session_factory: async_sessionmaker[AsyncSession] | None = None
-
-if settings.postgres_read_replica_host:
-    read_url = (
-        f"postgresql+asyncpg://{settings.postgres_user}:{settings.postgres_password}"
-        f"@{settings.postgres_read_replica_host}:{settings.postgres_read_replica_port}"
-        f"/{settings.postgres_db}"
-    )
-    read_engine = create_async_engine(
-        read_url,
-        **_postgres_engine_kwargs(),
-    )
-    read_session_factory = async_sessionmaker(
-        read_engine, expire_on_commit=False, class_=AsyncSession
-    )
-    logger.info(
-        f"Read replica enabled at {settings.postgres_read_replica_host}:{settings.postgres_read_replica_port}"
-    )
-else:
-    logger.info("No read replica configured, using primary for all operations")
+# The process driver is PostgreSQL in the cloud and embedded SQLite for a
+# desktop or local host. Plugins use the session factory, not this choice.
+_relational_store = open_relational_store(settings)
+relational_store: RelationalStoreSpec = _relational_store.spec
+engine = _relational_store.engine
+async_session_factory = _relational_store.session_factory
+read_engine: AsyncEngine | None = _relational_store.read_engine
+read_session_factory = _relational_store.read_session_factory
 
 
 async def get_db() -> AsyncGenerator[Any, None]:
@@ -112,8 +63,24 @@ async def get_read_db() -> AsyncGenerator[Any, None]:
         await session.close()
 
 
+def _dialect_name(target: AsyncEngine) -> str | None:
+    name = getattr(getattr(target, "dialect", None), "name", None)
+    return name if isinstance(name, str) else None
+
+
 async def initialize_database(target: AsyncEngine | None = None) -> None:
-    """Apply the complete Alembic schema, including tables owned outside the ORM."""
+    """Apply the schema for the selected relational driver.
+
+    PostgreSQL keeps the Alembic history. SQLite materializes the ORM schema
+    and the billing package migration without opening PostgreSQL.
+    """
+    active = target if target is not None else engine
+    if _dialect_name(active) == "sqlite":
+        logger.info("Applying embedded sqlite relational schema")
+        await bootstrap_sqlite_relational_schema(active)
+        logger.info("Embedded sqlite relational schema ready")
+        return
+
     from alembic.config import Config
 
     from alembic import command
@@ -126,7 +93,7 @@ async def initialize_database(target: AsyncEngine | None = None) -> None:
     # propagate migration failures so startup cannot report an incomplete schema.
     # Embedded migrations must not disable the application's already configured loggers.
     alembic_cfg.attributes["configure_logger"] = False
-    alembic_cfg.attributes["database_url"] = (target if target is not None else engine).url
+    alembic_cfg.attributes["database_url"] = active.url
     await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
     logger.info("Database migrations completed successfully")
 
@@ -144,6 +111,10 @@ async def update_agent_events_schema() -> None:
     from src.infrastructure.adapters.secondary.persistence.models import (
         AGENT_EXECUTION_EVENT_CORRELATION_ID_LENGTH,
     )
+
+    if _dialect_name(engine) == "sqlite":
+        logger.info("Skipping PostgreSQL agent event repair on the sqlite relational store")
+        return
 
     logger.info("Updating agent_execution_events schema...")
 

@@ -3,10 +3,13 @@
 Last checked against code: 2026-06-22
 
 ## Purpose
-~80 repository implementations + unified ORM model definitions. All PostgreSQL persistence.
+~80 repository implementations + unified ORM model definitions. The process
+relational driver is PostgreSQL in the cloud and embedded SQLite for a desktop
+or local host (`relational_store.py`). Plugins use the session factory.
 
 ## Key Files
 - `models.py` (~3824 lines) -- ALL SQLAlchemy ORM models (single file)
+- `relational_store.py` -- postgres/sqlite driver selection and sqlite schema bootstrap
 - `database.py` -- `async_session_factory`, `get_db` dependency
 - `sql_*.py` (~80 files) -- one repository per domain entity
 - `../common/base_repository.py` (~593 lines) -- generic CRUD base class
